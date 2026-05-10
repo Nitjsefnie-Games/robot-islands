@@ -41,8 +41,10 @@ const PAN_PX_PER_TICK = 8;
 const KEY_ZOOM_STEP = 1.1;
 /** Zoom step for wheel events. Multiplicative per wheel delta unit. */
 const WHEEL_ZOOM_STEP = 1.0015;
-/** World half-extent (tiles) for fog/grid rendering. Covers a generous area. */
-const WORLD_HALF_SIZE_TILES = 400;
+/** World half-extent (tiles) for fog/grid rendering. Covers the demo area
+ *  plus margin; with R=16 the cell grid still spans many cells. Larger
+ *  values blow up the fog render-group texture footprint at no benefit. */
+const WORLD_HALF_SIZE_TILES = 250;
 
 async function main(): Promise<void> {
   const mountEl = document.getElementById('app');
