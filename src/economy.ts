@@ -147,6 +147,17 @@ function inputAvail(
   return factor;
 }
 
+/** Aggregated electrical balance for an island this tick (§5.1). */
+export interface PowerBalance {
+  /** Total W produced by active producers. */
+  readonly produced: number;
+  /** Total W demanded by active consumers (at nominal full draw — output-stalled
+   *  consumers still count, only inputAvail = 0 disables them). */
+  readonly consumed: number;
+  /** `consumed === 0 ? 1 : min(1, produced / consumed)`. */
+  readonly factor: number;
+}
+
 /**
  * Compute per-building production rates given the current state.
  * Pure function — does not mutate state.
@@ -158,19 +169,25 @@ function inputAvail(
  *                 not net of consumption). Drives XP per §9.1.
  *   `net`: aggregated NET rate per resource (production minus consumption).
  *          Drives inventory updates and the event finder.
+ *   `power`: aggregated W produced/consumed and the resulting power_factor.
  */
 export function computeRates(state: IslandState): {
   byBuilding: ReadonlyArray<BuildingRate>;
   production: Record<ResourceId, number>;
   net: Record<ResourceId, number>;
+  power: PowerBalance;
 } {
-  // Pass 1: compute tentative base rate for each building considering ONLY
-  // output cap (binary outputAvail). Skip the input-availability check at
-  // this stage so producers that supply downstream consumers get to count
-  // their output in the supply pool. Buildings whose outputs are at cap
-  // stall out completely (back-propagation per §4.6: a cap-stalled building
-  // does not consume inputs).
-  const powerFactor = 1; // step 3 placeholder; §5.1 expansion lands later
+  // The §5.1 active flag depends on inputAvail, and inputAvail must be
+  // computed at NOMINAL rate (independent of powerFactor) to avoid a circular
+  // dependency. PowerFactor is then applied to consumers' final effective
+  // rate. As long as all consumers scale by the same factor, the relative
+  // supply/demand ratios — and therefore inputAvail — stay correct.
+  //
+  // Four passes:
+  //   1. Tentative baseRate considering only outputAvail (per-recipe cap stall).
+  //   2. inputAvail per recipe, using the supply pool from pass 1.
+  //   3. P_produced / P_consumed sums over `active` buildings; powerFactor.
+  //   4. Final effectiveRate = baseRate × inputAvail × (consumes-power ? powerFactor : 1).
   const buffStack = 1;
   interface Tentative {
     readonly building: Building;
@@ -189,7 +206,7 @@ export function computeRates(state: IslandState): {
       tentative.push({ building: b, recipe, baseRate: 0 });
       continue;
     }
-    const baseRate = (1 / recipe.cycleSec) * powerFactor * buffStack;
+    const baseRate = (1 / recipe.cycleSec) * buffStack;
     tentative.push({ building: b, recipe, baseRate });
     for (const [r, yld] of Object.entries(recipe.outputs)) {
       const id = r as ResourceId;
@@ -197,33 +214,69 @@ export function computeRates(state: IslandState): {
     }
   }
 
-  // Pass 2: for each tentative building, compute the input-availability
-  // factor using the supply pool from pass 1 (EXCLUDING this building's
-  // own output contribution — a building doesn't supply itself). The final
-  // effective rate is baseRate × inputAvail.
-  //
-  // A note on the supply-exclusion: in practice no step-3 recipe both
-  // produces and consumes the same resource, but the math stays principled
-  // if/when a building does (e.g., a battery that buffers electricity).
-  const byBuilding: BuildingRate[] = [];
-  const production: Record<ResourceId, number> = {} as Record<ResourceId, number>;
-  const net: Record<ResourceId, number> = {} as Record<ResourceId, number>;
-  for (const t of tentative) {
-    if (t.baseRate === 0) {
-      byBuilding.push({ building: t.building, recipe: t.recipe, effectiveRate: 0 });
-      continue;
-    }
-    // External supply = tentSupply minus this building's own contribution.
+  // Pass 2: input-availability factor per recipe, computed at the NOMINAL
+  // base rate (1 / cycleSec). For an output-stalled building (baseRate = 0),
+  // we still need to know its inputAvail because §5.1 active-ness — and
+  // therefore power consumption — depends on it independent of output cap.
+  // The supply pool excludes this building's own output contribution.
+  const inputAvailByIdx = new Array<number>(tentative.length);
+  for (let i = 0; i < tentative.length; i++) {
+    const t = tentative[i]!;
+    const nominalRate = (1 / t.recipe.cycleSec) * buffStack;
     const externalSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
     for (const r of Object.keys(tentSupply) as ResourceId[]) {
       externalSupply[r] = tentSupply[r] ?? 0;
     }
-    for (const [r, yld] of Object.entries(t.recipe.outputs)) {
-      const id = r as ResourceId;
-      externalSupply[id] = (externalSupply[id] ?? 0) - (yld ?? 0) * t.baseRate;
+    // Self-exclude only if pass 1 actually contributed (baseRate > 0).
+    if (t.baseRate > 0) {
+      for (const [r, yld] of Object.entries(t.recipe.outputs)) {
+        const id = r as ResourceId;
+        externalSupply[id] = (externalSupply[id] ?? 0) - (yld ?? 0) * t.baseRate;
+      }
     }
-    const ia = inputAvail(state, t.recipe, externalSupply, t.baseRate);
-    const effectiveRate = t.baseRate * ia;
+    inputAvailByIdx[i] = inputAvail(state, t.recipe, externalSupply, nominalRate);
+  }
+
+  // Pass 3: power balance. A building is `active` for §5.1 iff its recipe
+  // has inputAvail > 0 (gates are deferred — terrain/heat land later). A
+  // recipe-less building (e.g., Solar Panel) is unconditionally active.
+  // Output-stalled buildings (baseRate = 0 but inputAvail > 0) still count
+  // toward P_consumed: the lights are on even when the bin is full.
+  let powerProduced = 0;
+  let powerConsumed = 0;
+  for (const b of state.buildings) {
+    const recipe = RECIPES[b.kind];
+    let active: boolean;
+    if (!recipe) {
+      active = true;
+    } else {
+      const idx = tentative.findIndex((t) => t.building === b);
+      const ia = idx >= 0 ? (inputAvailByIdx[idx] ?? 0) : 0;
+      active = ia > 0;
+    }
+    if (!active) continue;
+    powerProduced += b.power?.produces ?? 0;
+    powerConsumed += b.power?.consumes ?? 0;
+  }
+  const powerFactor =
+    powerConsumed === 0 ? 1 : Math.min(1, powerProduced / powerConsumed);
+
+  // Pass 4: final effective rate. Apply powerFactor only to consumers
+  // (buildings declaring `power.consumes > 0`); producers and neutral
+  // buildings ignore it. Output-stalled buildings still finish at 0.
+  const byBuilding: BuildingRate[] = [];
+  const production: Record<ResourceId, number> = {} as Record<ResourceId, number>;
+  const net: Record<ResourceId, number> = {} as Record<ResourceId, number>;
+  for (let i = 0; i < tentative.length; i++) {
+    const t = tentative[i]!;
+    if (t.baseRate === 0) {
+      byBuilding.push({ building: t.building, recipe: t.recipe, effectiveRate: 0 });
+      continue;
+    }
+    const ia = inputAvailByIdx[i] ?? 0;
+    const consumesPower = (t.building.power?.consumes ?? 0) > 0;
+    const pf = consumesPower ? powerFactor : 1;
+    const effectiveRate = t.baseRate * ia * pf;
     byBuilding.push({ building: t.building, recipe: t.recipe, effectiveRate });
 
     if (effectiveRate === 0) continue;
@@ -240,7 +293,12 @@ export function computeRates(state: IslandState): {
     }
   }
 
-  return { byBuilding, production, net };
+  return {
+    byBuilding,
+    production,
+    net,
+    power: { produced: powerProduced, consumed: powerConsumed, factor: powerFactor },
+  };
 }
 
 /**

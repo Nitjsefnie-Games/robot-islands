@@ -270,8 +270,8 @@ async function main(): Promise<void> {
     // Recompute rates AFTER the tick so the HUD shows the current
     // post-advance state (e.g., a freshly-stalled building reads as
     // 0 rate, not the rate it was running at one event ago).
-    const { net } = computeRates(homeState);
-    hud.update(homeState, net);
+    const { net, power } = computeRates(homeState);
+    hud.update(homeState, net, power);
   });
 
   // Recenter the camera's reference point on resize so the world doesn't

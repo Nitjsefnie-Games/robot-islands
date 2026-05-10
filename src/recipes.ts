@@ -84,4 +84,11 @@ export const RECIPES: Partial<Record<BuildingKind, Recipe>> = {
     inputs: { iron_ore: 1, coal: 1 },
     outputs: { bolt: 1 },
   },
+  // Coal Gen burns 1 coal / 5s while active. Empty `outputs` is intentional —
+  // the W contribution is on building.power.produces (§5.1), not a resource.
+  coal_gen: {
+    cycleSec: 5,
+    inputs: { coal: 1 },
+    outputs: {},
+  },
 };

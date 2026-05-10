@@ -14,7 +14,7 @@ import { Container, Graphics } from 'pixi.js';
 
 import { TILE_PX } from './island.js';
 
-export type BuildingKind = 'solar' | 'workshop' | 'mine' | 'dock';
+export type BuildingKind = 'solar' | 'workshop' | 'mine' | 'dock' | 'coal_gen';
 
 export interface Building {
   readonly kind: BuildingKind;
@@ -25,17 +25,22 @@ export interface Building {
   readonly fill: number;
   readonly stroke: number;
   readonly label: string;
+  /** Per-§5.1 electrical contribution. Independent of `recipe`: a building may
+   *  produce, consume, both, or neither. Missing/undefined = no contribution. */
+  readonly power?: { readonly produces?: number; readonly consumes?: number };
 }
 
 export const HOME_ISLAND_BUILDINGS: ReadonlyArray<Building> = [
-  // Solar Panel — 1×1 sitting on grass near the center.
-  { kind: 'solar', x: 2, y: -1, width: 1, height: 1, fill: 0xf2c84b, stroke: 0x6a4a00, label: 'Solar' },
+  // Solar Panel — 1×1 sitting on grass near the center. Recipe-less producer.
+  { kind: 'solar', x: 2, y: -1, width: 1, height: 1, fill: 0xf2c84b, stroke: 0x6a4a00, label: 'Solar', power: { produces: 50 } },
   // Workshop — 2×2 just south of center, on grass.
-  { kind: 'workshop', x: -1, y: 1, width: 2, height: 2, fill: 0xe07b3a, stroke: 0x6b2f00, label: 'Workshop' },
+  { kind: 'workshop', x: -1, y: 1, width: 2, height: 2, fill: 0xe07b3a, stroke: 0x6b2f00, label: 'Workshop', power: { consumes: 60 } },
   // Mine — 2×2 sitting on the ore vein cluster at (-7, 2)..(-6, 3).
-  { kind: 'mine', x: -7, y: 2, width: 2, height: 2, fill: 0x9a9a9a, stroke: 0x222222, label: 'Mine' },
-  // Cargo Dock — 2×2 near the east edge, on grass.
+  { kind: 'mine', x: -7, y: 2, width: 2, height: 2, fill: 0x9a9a9a, stroke: 0x222222, label: 'Mine', power: { consumes: 40 } },
+  // Cargo Dock — 2×2 near the east edge, on grass. Power deferred to step 7.
   { kind: 'dock', x: 7, y: 1, width: 2, height: 2, fill: 0x3a7bd5, stroke: 0x0a2a55, label: 'Dock' },
+  // Coal Generator — 2×2 east of the workshop, burns 1 coal/5s for 100W while active.
+  { kind: 'coal_gen', x: 3, y: 4, width: 2, height: 2, fill: 0xd97a18, stroke: 0x4a2400, label: 'Coal Gen', power: { produces: 100 } },
 ];
 
 /**

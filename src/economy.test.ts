@@ -262,3 +262,153 @@ describe('computeRates', () => {
     expect(byBuilding[0]?.effectiveRate).toBe(0);
   });
 });
+
+// Building fixtures with §5.1 power fields. Mine and Workshop here override
+// the un-powered MINE/WORKSHOP fixtures above so the original tests stay
+// power-neutral; the new tests use these explicit-power versions.
+const SOLAR: Building = {
+  kind: 'solar',
+  x: 0, y: 0, width: 1, height: 1,
+  fill: 0, stroke: 0, label: 'Solar',
+  power: { produces: 50 },
+};
+const COAL_GEN: Building = {
+  kind: 'coal_gen',
+  x: 0, y: 0, width: 2, height: 2,
+  fill: 0, stroke: 0, label: 'Coal Gen',
+  power: { produces: 100 },
+};
+const MINE_PWR: Building = { ...MINE, power: { consumes: 40 } };
+const WORKSHOP_PWR: Building = { ...WORKSHOP, power: { consumes: 60 } };
+// Heavier-draw Mine for the partial-brownout test.
+const MINE_PWR_80: Building = { ...MINE, power: { consumes: 80 } };
+
+describe('power (§5.1)', () => {
+  it('powerFactor = 1 when there are no power consumers', () => {
+    // Bare mine, no power field → unchanged behaviour.
+    const state = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+    });
+    const { power, byBuilding } = computeRates(state);
+    expect(power.produced).toBe(0);
+    expect(power.consumed).toBe(0);
+    expect(power.factor).toBe(1);
+    expect(byBuilding[0]?.effectiveRate).toBeCloseTo(0.2, 9); // mine 1/5s
+  });
+
+  it('powerFactor = 1 when supply meets demand (Solar + Coal Gen feed Mine + Workshop)', () => {
+    // 50 + 100 = 150W produced; 40 + 60 = 100W consumed → factor = 1.
+    const state = makeState({
+      buildings: [SOLAR, COAL_GEN, MINE_PWR, WORKSHOP_PWR],
+      inventory: { ...blankInventory(), coal: 50 },
+    });
+    const { power, byBuilding, net } = computeRates(state);
+    expect(power.produced).toBe(150);
+    expect(power.consumed).toBe(100);
+    expect(power.factor).toBe(1);
+    // Mine still at full 0.2/s, Workshop at full 0.1/s.
+    const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
+    const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
+    expect(mineRate).toBeCloseTo(0.2, 9);
+    expect(wsRate).toBeCloseTo(0.1, 9);
+    // Coal Gen also burns coal at 1/5s = 0.2/s nominally.
+    expect(net.coal).toBeCloseTo(-0.1 - 0.2, 9); // workshop 0.1 + coal_gen 0.2
+  });
+
+  it('partial brownout: Coal Gen alone (100W) under-supplies Mine 80W + Workshop 60W → factor ≈ 0.714', () => {
+    // P_produced = 100, P_consumed = 140, factor = 100/140 ≈ 0.7142857.
+    const state = makeState({
+      buildings: [COAL_GEN, MINE_PWR_80, WORKSHOP_PWR],
+      inventory: { ...blankInventory(), coal: 50 },
+    });
+    const { power, byBuilding } = computeRates(state);
+    expect(power.produced).toBe(100);
+    expect(power.consumed).toBe(140);
+    expect(power.factor).toBeCloseTo(100 / 140, 9);
+    const expectedFactor = 100 / 140;
+    const mineRate = byBuilding.find((r) => r.building === MINE_PWR_80)?.effectiveRate;
+    const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
+    expect(mineRate).toBeCloseTo(0.2 * expectedFactor, 9);
+    expect(wsRate).toBeCloseTo(0.1 * expectedFactor, 9);
+  });
+
+  it('producer stalled (no fuel): Coal Gen drops out of P_produced when coal=0', () => {
+    // Coal Gen has no coal AND no flow-through producer → inputAvail=0
+    // → inactive → contributes 0 W. With ONLY Coal Gen as a power source
+    // and no Solar, P_produced = 0. Add a Mine consumer (40W) → factor = 0.
+    // (Workshop is omitted to avoid the shared-coal-pool conflict: with
+    // coal=0, Workshop would also be inactive and drop out, defeating the
+    // test of "factor < 1 because the producer stalled".)
+    const state = makeState({
+      buildings: [COAL_GEN, MINE_PWR],
+      inventory: { ...blankInventory(), coal: 0, iron_ore: 50 },
+    });
+    const { power, byBuilding } = computeRates(state);
+    expect(power.produced).toBe(0);
+    expect(power.consumed).toBe(40);
+    expect(power.factor).toBe(0); // 0/40 = 0
+    const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
+    expect(mineRate).toBe(0); // mine throttled to zero by powerFactor
+  });
+
+  it('Solar alone (50W) vs Mine + Workshop (100W) → factor = 0.5', () => {
+    // Independent test: when only Solar produces (no coal_gen in scene),
+    // 50W feeds 100W of demand. Both consumers throttled to 0.5×.
+    const state = makeState({
+      buildings: [SOLAR, MINE_PWR, WORKSHOP_PWR],
+      inventory: { ...blankInventory(), coal: 50, iron_ore: 50 },
+    });
+    const { power, byBuilding } = computeRates(state);
+    expect(power.produced).toBe(50);
+    expect(power.consumed).toBe(100);
+    expect(power.factor).toBe(0.5);
+    const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
+    const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
+    expect(mineRate).toBeCloseTo(0.2 * 0.5, 9);
+    expect(wsRate).toBeCloseTo(0.1 * 0.5, 9);
+  });
+
+  it('output-stalled consumer still draws power (lights on at full bin)', () => {
+    // Mine has iron_ore at cap (output-stalled, recipe rate 0) but is still
+    // active for §5.1 — its inputAvail is 1 (no inputs). It still counts
+    // 40W toward P_consumed. With Solar 50W producing and Mine 40W +
+    // Workshop 60W demanding = 100W → factor = 0.5. Workshop runs at half.
+    const state = makeState({
+      buildings: [SOLAR, MINE_PWR, WORKSHOP_PWR],
+      inventory: {
+        ...blankInventory(),
+        iron_ore: 100, // mine at cap → output-stalled but still drawing power
+        coal: 50,
+      },
+    });
+    const { power, byBuilding } = computeRates(state);
+    expect(power.produced).toBe(50);
+    expect(power.consumed).toBe(100); // mine still counts, even output-stalled
+    expect(power.factor).toBe(0.5);
+    const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
+    const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
+    expect(mineRate).toBe(0); // output-stalled
+    expect(wsRate).toBeCloseTo(0.1 * 0.5, 9); // half-rate
+  });
+
+  it('Coal Gen with empty outputs is never output-stalled (cap doesn\'t apply)', () => {
+    // The empty-outputs recipe path: no resource can be at cap because no
+    // resource is produced. Coal Gen should remain active as long as it has
+    // coal input. Verify with all inventories at cap except coal still > 0.
+    const allCapsAtMax: Record<ResourceId, number> = {} as Record<ResourceId, number>;
+    for (const r of ALL_RESOURCES) allCapsAtMax[r] = 100;
+    const state = makeState({
+      buildings: [COAL_GEN],
+      inventory: { ...allCapsAtMax }, // every resource at cap including coal
+    });
+    const { power, byBuilding } = computeRates(state);
+    // Coal Gen has inputAvail=1 (coal in stockpile), outputAvail=1 (no
+    // outputs to be capped), so it's active and produces 100W.
+    expect(power.produced).toBe(100);
+    expect(power.consumed).toBe(0);
+    expect(power.factor).toBe(1);
+    const cgRate = byBuilding.find((r) => r.building === COAL_GEN)?.effectiveRate;
+    expect(cgRate).toBeCloseTo(0.2, 9); // 1 cycle / 5s
+  });
+});
