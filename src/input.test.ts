@@ -105,8 +105,9 @@ describe('InputRegistry', () => {
     expect(reg.bindings.get('KeyW')).toBe('pan-up');
     expect(reg.bindings.get('KeyA')).toBe('pan-left');
     expect(reg.bindings.get('KeyS')).toBe('pan-down');
+    expect(reg.bindings.get('KeyD')).toBe('pan-right');
     expect(reg.bindings.get('ArrowRight')).toBe('pan-right');
-    expect(reg.bindings.get('KeyD')).toBe('toggle-grid');
+    expect(reg.bindings.get('KeyG')).toBe('toggle-grid');
     expect(reg.bindings.get('KeyH')).toBe('center-home');
     expect(reg.bindings.get('Equal')).toBe('zoom-in');
     expect(reg.bindings.get('Minus')).toBe('zoom-out');

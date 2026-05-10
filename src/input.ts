@@ -67,22 +67,21 @@ export function dispatchAction(reg: InputRegistry, name: ActionName): boolean {
 
 /**
  * Default bindings table. Pan/zoom/center/grid actions wired to keys per
- * task: WASD (pan), +/- (zoom), H (center on home), D (toggle grid). The
+ * task: WASD (pan), +/- (zoom), H (center on home), G (toggle grid). The
  * pan actions are also wired to the arrow keys as a convenience.
  */
 export function installDefaultBindings(reg: InputRegistry): void {
-  // WASD covers pan-up/left/down — but KeyD is reserved for toggle-grid per
-  // the task, so pan-right is reached via ArrowRight (and KeyL as a vim-ish
-  // alternative). Rebinding is one-liner away: e.g. `bind(reg, 'KeyD',
-  // 'pan-right')` swaps the conflict resolution.
+  // Full WASD pan (KeyD is pan-right). Toggle-grid moved to KeyG to free up
+  // KeyD; rebinding is one-liner away if a user wants the inverse layout.
   bind(reg, 'KeyW', 'pan-up');
   bind(reg, 'KeyA', 'pan-left');
   bind(reg, 'KeyS', 'pan-down');
+  bind(reg, 'KeyD', 'pan-right');
   bind(reg, 'ArrowUp', 'pan-up');
   bind(reg, 'ArrowLeft', 'pan-left');
   bind(reg, 'ArrowDown', 'pan-down');
   bind(reg, 'ArrowRight', 'pan-right');
-  bind(reg, 'KeyD', 'toggle-grid');
+  bind(reg, 'KeyG', 'toggle-grid');
   bind(reg, 'KeyH', 'center-home');
   bind(reg, 'Equal', 'zoom-in'); // '=' / '+' on US layouts
   bind(reg, 'NumpadAdd', 'zoom-in');

@@ -10,6 +10,15 @@
 // size — enough to space the demo islands out and exercise the cell-grid
 // overlay, but small enough that the home island's vision radius of 5 cells =
 // 80 tiles spans a few neighbours.
+//
+// Vision model (three states):
+//   - 'visible'    — populated, OR discovered AND inside some populated
+//                    island's vision radius. Rendered at full color/alpha.
+//   - 'discovered' — discovered but outside all vision radii. Rendered dimmed
+//                    (alpha + cool tint) to read as "known, but no current
+//                    info".
+//   - 'unknown'    — not discovered. Not rendered at all; the dark page
+//                    background shows through.
 
 import { Container } from 'pixi.js';
 
@@ -27,10 +36,10 @@ import {
 export const CELL_SIZE_TILES = 16;
 /** Vision radius from a populated island, in tiles. Placeholder: 5 cells. */
 export const VISION_RADIUS_TILES = 5 * CELL_SIZE_TILES;
-/** Soft edge: alpha ramps from 1 → 0 over this distance at the rim. */
-export const VISION_EDGE_TILES = 2;
 
 export type Biome = 'plains' | 'forest' | 'coast' | 'volcanic' | 'desert' | 'arctic';
+
+export type IslandRenderState = 'visible' | 'discovered' | 'unknown';
 
 export interface IslandSpec {
   readonly id: string;
@@ -41,8 +50,11 @@ export interface IslandSpec {
   /** Ellipse half-axes in tiles. */
   readonly majorRadius: number;
   readonly minorRadius: number;
-  /** Whether the island is populated (origin of vision). */
+  /** Whether the island is populated (origin of vision). Implies discovered. */
   readonly populated: boolean;
+  /** Whether the player knows this island exists at all. Populated → discovered
+   *  by definition (the classification function short-circuits on populated). */
+  readonly discovered: boolean;
   /** Buildings placed on this island, in island-local tile coords. */
   readonly buildings: ReadonlyArray<Building>;
   /** Terrain function in island-local coords. Defaults to grass everywhere. */
@@ -65,21 +77,37 @@ export function distSqTiles(ax: number, ay: number, bx: number, by: number): num
 }
 
 /**
- * Is the island (cx, cy) within `radiusTiles` of any populated island in
- * `populatedCentres`? Used to decide whether to render an island's terrain
- * and buildings.
+ * Classify a single island into one of three render states.
+ *
+ * Logic (the population short-circuit means we don't have to set
+ * `discovered: true` redundantly on populated islands — they're discovered
+ * by definition):
+ *
+ *   1. populated                                 → 'visible'
+ *   2. !discovered                               → 'unknown'
+ *   3. inside any populated island's vision      → 'visible'
+ *   4. otherwise                                 → 'discovered'
  */
-export function isIslandVisible(
+export function islandRenderState(
   spec: IslandSpec,
   populatedCentres: ReadonlyArray<{ cx: number; cy: number }>,
   radiusTiles: number,
-): boolean {
+): IslandRenderState {
+  if (spec.populated) return 'visible';
+  if (!spec.discovered) return 'unknown';
   const r2 = radiusTiles * radiusTiles;
   for (const p of populatedCentres) {
-    if (distSqTiles(spec.cx, spec.cy, p.cx, p.cy) <= r2) return true;
+    if (distSqTiles(spec.cx, spec.cy, p.cx, p.cy) <= r2) return 'visible';
   }
-  return false;
+  return 'discovered';
 }
+
+/** "Discovered, no current info" tint — cool desaturated blue-grey. Combined
+ *  with reduced alpha this reads as a ghost of the island against the dark
+ *  page background. */
+export const DISCOVERED_TINT = 0xa0b0c0;
+/** Alpha for the 'discovered' state. */
+export const DISCOVERED_ALPHA = 0.5;
 
 /**
  * Render a single island's terrain + buildings into a fresh container, with
@@ -87,10 +115,22 @@ export function isIslandVisible(
  * are drawn in island-local coordinates (matching `renderIslandTiles` /
  * `renderBuildings` from step 1), and the container translation handles the
  * world placement.
+ *
+ * The render state controls visual modulation:
+ *   - 'visible'    → full color / alpha 1
+ *   - 'discovered' → dimmed + cool tint (read as "ghost")
+ *   - 'unknown'    → null (caller skips it)
+ *
+ * Note: Container.tint in Pixi v8 multiplies through to child Graphics fills,
+ * so we apply both tint and alpha to the wrapper container and the tile +
+ * building children inherit. If a future Pixi upgrade breaks the propagation
+ * we'd need to switch to applying tint on the inner Graphics directly or
+ * use a ColorMatrixFilter.
  */
-export function renderIsland(spec: IslandSpec): Container {
+export function renderIsland(spec: IslandSpec, state: IslandRenderState = 'visible'): Container | null {
+  if (state === 'unknown') return null;
   const c = new Container();
-  c.label = `island:${spec.id}`;
+  c.label = `island:${spec.id}:${state}`;
   const tiles: Tile[] = computeIslandTiles(
     spec.majorRadius,
     spec.minorRadius,
@@ -100,16 +140,21 @@ export function renderIsland(spec: IslandSpec): Container {
   if (spec.buildings.length > 0) c.addChild(renderBuildings(spec.buildings));
   const px = tileToWorldPx(spec.cx, spec.cy);
   c.position.set(px.x, px.y);
+  if (state === 'discovered') {
+    c.alpha = DISCOVERED_ALPHA;
+    c.tint = DISCOVERED_TINT;
+  }
   return c;
 }
 
 /**
- * Hand-placed demo islands. Home is a Plains 14×14 at the origin (preserved
- * from step 1). Neighbours are picked to land inside and outside the home's
- * 80-tile vision radius for visual proof of fog clipping.
- *   - Forest 10×10 at (40, -10)   → distance √(40²+10²) ≈ 41 < 80, visible
- *   - Desert 12×12 at (-50, 30)   → distance √(50²+30²) ≈ 58 < 80, visible
- *   - Coast  14×7  at (180, 0)    → distance 180 > 80, fogged
+ * Hand-placed demo islands, laid out so the default view shows all three
+ * render states:
+ *
+ *   - home plains (0, 0) populated                            → 'visible'  (state a)
+ *   - forest-ne (40, -10) discovered, dist≈41 < 80 (vision)   → 'visible'  (state a, via vision)
+ *   - desert-far (80, 60) discovered, dist=100 > 80           → 'discovered' (state b, dimmed)
+ *   - coast-unknown (180, 0) !discovered                      → 'unknown'  (state c, not rendered)
  */
 export const DEMO_ISLANDS: ReadonlyArray<IslandSpec> = [
   {
@@ -120,6 +165,7 @@ export const DEMO_ISLANDS: ReadonlyArray<IslandSpec> = [
     majorRadius: 14,
     minorRadius: 14,
     populated: true,
+    discovered: true,
     buildings: HOME_ISLAND_BUILDINGS,
     terrainAt: defaultTerrainAt,
   },
@@ -131,28 +177,31 @@ export const DEMO_ISLANDS: ReadonlyArray<IslandSpec> = [
     majorRadius: 10,
     minorRadius: 10,
     populated: false,
+    discovered: true,
     buildings: [],
     terrainAt: () => 'grass',
   },
   {
-    id: 'desert-sw',
+    id: 'desert-far',
     biome: 'desert',
-    cx: -50,
-    cy: 30,
+    cx: 80,
+    cy: 60,
     majorRadius: 12,
     minorRadius: 12,
     populated: false,
+    discovered: true,
     buildings: [],
     terrainAt: () => 'stone',
   },
   {
-    id: 'coast-far',
+    id: 'coast-unknown',
     biome: 'coast',
     cx: 180,
     cy: 0,
     majorRadius: 14,
     minorRadius: 7,
     populated: false,
+    discovered: false,
     buildings: [],
     terrainAt: () => 'water',
   },

@@ -1,11 +1,16 @@
 // Robot Islands — step 2 bootstrap.
 //
-// Camera + multi-island map + vision/fog + config-driven input. The world
+// Camera + multi-island map + vision states + config-driven input. The world
 // container's position/scale is now driven by the camera state every frame;
-// no more "recenter on resize" call. Islands outside the home island's vision
-// radius are culled (their containers never enter the scene graph), and a
-// fog layer covers the rest of the visible world with a soft hole where
-// vision exists.
+// no more "recenter on resize" call.
+//
+// Vision model: each island is classified into one of three render states
+// (visible / discovered / unknown) and rendered accordingly:
+//   - visible    → full color/alpha
+//   - discovered → dimmed + cool tint (player knows it exists, no current info)
+//   - unknown    → not rendered (dark page background shows through)
+// A faint outline ring around each populated island marks the vision boundary
+// as a UI affordance.
 
 import { Application, Container } from 'pixi.js';
 
@@ -25,12 +30,12 @@ import {
   installDefaultBindings,
   makeRegistry,
 } from './input.js';
-import { renderFogLayer } from './fog.js';
 import { TILE_PX } from './island.js';
 import { mountUi } from './ui.js';
+import { renderVisionRings } from './vision.js';
 import {
   DEMO_ISLANDS,
-  isIslandVisible,
+  islandRenderState,
   renderIsland,
   VISION_RADIUS_TILES,
 } from './world.js';
@@ -41,9 +46,8 @@ const PAN_PX_PER_TICK = 8;
 const KEY_ZOOM_STEP = 1.1;
 /** Zoom step for wheel events. Multiplicative per wheel delta unit. */
 const WHEEL_ZOOM_STEP = 1.0015;
-/** World half-extent (tiles) for fog/grid rendering. Covers the demo area
- *  plus margin; with R=16 the cell grid still spans many cells. Larger
- *  values blow up the fog render-group texture footprint at no benefit. */
+/** World half-extent (tiles) for the cell-grid overlay. Covers the demo area
+ *  plus margin; with R=16 the cell grid still spans many cells. */
 const WORLD_HALF_SIZE_TILES = 250;
 
 async function main(): Promise<void> {
@@ -71,36 +75,35 @@ async function main(): Promise<void> {
   islandLayer.label = 'islands';
   world.addChild(islandLayer);
 
-  // Populated islands are vision sources; non-populated islands are visible
-  // only if they fall inside someone's vision radius. The home island is
-  // the sole populated island in step 2.
+  // Populated islands are vision sources. Each island is classified into
+  // visible/discovered/unknown and rendered accordingly. Unknown islands are
+  // skipped entirely (renderIsland returns null) so the dark page background
+  // shows through.
   const populated = DEMO_ISLANDS.filter((s) => s.populated);
   const populatedCentres = populated.map((s) => ({ cx: s.cx, cy: s.cy }));
-  let visibleCount = 0;
-  let totalTiles = 0;
+  const counts = { visible: 0, discovered: 0, unknown: 0 };
   for (const spec of DEMO_ISLANDS) {
-    if (!isIslandVisible(spec, populatedCentres, VISION_RADIUS_TILES)) continue;
-    const c = renderIsland(spec);
-    islandLayer.addChild(c);
-    visibleCount += 1;
-    // tile count, for the dev log
-    // (counting via the geometry layer would re-run computeIslandTiles; we
-    // accept a small duplication here so the diagnostic stays cheap.)
+    const state = islandRenderState(spec, populatedCentres, VISION_RADIUS_TILES);
+    counts[state] += 1;
+    const c = renderIsland(spec, state);
+    if (c) islandLayer.addChild(c);
   }
   if (import.meta.env.DEV) {
-    console.log(`[robot-islands] visible islands: ${visibleCount}/${DEMO_ISLANDS.length}`);
+    console.log(
+      `[robot-islands] islands: ${counts.visible} visible, ${counts.discovered} discovered, ${counts.unknown} unknown`,
+    );
   }
-  void totalTiles;
 
-  // Fog layer — covers world outside vision. Drawn on top of islands so
-  // anything inside vision shows through the eraser hole.
-  const fogLayer = renderFogLayer(
+  // Vision-ring overlay — faint outline circles at each populated island's
+  // vision radius, so the player can see where their "current info" boundary
+  // is. Above islands so it's never occluded by terrain.
+  const visionRingLayer = renderVisionRings(
     populated.map((s) => ({ cx: s.cx, cy: s.cy })),
-    WORLD_HALF_SIZE_TILES,
   );
-  world.addChild(fogLayer);
+  world.addChild(visionRingLayer);
 
-  // Cell grid (debug). Above fog so the lines are always visible when on.
+  // Cell grid (debug). Above vision rings so the lines are always visible
+  // when on.
   const gridLayer = renderCellGrid(WORLD_HALF_SIZE_TILES);
   world.addChild(gridLayer);
 
@@ -213,7 +216,7 @@ async function main(): Promise<void> {
 
   // UI overlay
   mountUi(document.body, reg, [
-    { label: 'Toggle Grid (D)', action: 'toggle-grid' },
+    { label: 'Toggle Grid (G)', action: 'toggle-grid' },
     { label: 'Center on Home (H)', action: 'center-home' },
   ]);
 
