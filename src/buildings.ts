@@ -14,7 +14,7 @@ import { Container, Graphics } from 'pixi.js';
 
 import { TILE_PX } from './island.js';
 
-export type BuildingKind = 'solar' | 'workshop' | 'mine' | 'dock' | 'coal_gen';
+export type BuildingKind = 'solar' | 'workshop' | 'mine' | 'dock' | 'coal_gen' | 'dronepad';
 
 export interface Building {
   readonly kind: BuildingKind;
@@ -41,6 +41,12 @@ export const HOME_ISLAND_BUILDINGS: ReadonlyArray<Building> = [
   { kind: 'dock', x: 7, y: 1, width: 2, height: 2, fill: 0x3a7bd5, stroke: 0x0a2a55, label: 'Dock' },
   // Coal Generator — 2×2 east of the workshop, burns 1 coal/5s for 100W while active.
   { kind: 'coal_gen', x: 3, y: 4, width: 2, height: 2, fill: 0xd97a18, stroke: 0x4a2400, label: 'Coal Gen', power: { produces: 100 } },
+  // Drone Pad — 1×1 on grass at (5, -3). Tier-gating (Drone Pad is T2 per
+  // SPEC §11.7) is deferred to step 9; for step 6 we hardcode placement on
+  // the home island, mirroring how Mine/Workshop are hardcoded above. No
+  // recipe — Drone Pad has no resource flow, only dispatch (handled in
+  // drones.ts). No power draw for step 6 (placeholder).
+  { kind: 'dronepad', x: 5, y: -3, width: 1, height: 1, fill: 0x4a6b78, stroke: 0x14222a, label: 'Drone Pad' },
 ];
 
 /**

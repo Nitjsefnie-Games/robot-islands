@@ -82,8 +82,10 @@ export interface IslandSpec {
   /** Whether the island is populated (origin of vision). Implies discovered. */
   readonly populated: boolean;
   /** Whether the player knows this island exists at all. Populated → discovered
-   *  by definition (the classification function short-circuits on populated). */
-  readonly discovered: boolean;
+   *  by definition (the classification function short-circuits on populated).
+   *  Mutable in step 6: drone returns flip this from false→true on revealed
+   *  islands. The rest of the spec stays readonly — only this flag changes. */
+  discovered: boolean;
   /** Buildings placed on this island, in island-local tile coords. */
   readonly buildings: ReadonlyArray<Building>;
   /** Terrain function in island-local coords. Defaults to grass everywhere. */
@@ -168,12 +170,20 @@ export function renderIsland(spec: IslandSpec, state: IslandRenderState = 'visib
 
 /**
  * Hand-placed demo islands, laid out so the default view shows all three
- * render states:
+ * render states AND has a reachable undiscovered island for the step-6 drone
+ * demo:
  *
  *   - home plains (0, 0) populated                            → 'visible'  (state a)
  *   - forest-ne (40, -10) discovered, dist≈41 < 80 (vision)   → 'visible'  (state a, via vision)
- *   - desert-far (80, 60) discovered, dist=100 > 80           → 'discovered' (state b, dimmed)
- *   - coast-unknown (180, 0) !discovered                      → 'unknown'  (state c, not rendered)
+ *   - desert-far (80, 60) discovered, dist=100 > 80           → 'discovered' (state b)
+ *   - coast-unknown (180, 0) !discovered                      → 'unknown'  (out of step-6 drone range)
+ *   - hidden-w (-50, 12) !discovered                          → 'unknown'  (within reach: 50 tiles SW)
+ *   - hidden-s (35, 70) !discovered                           → 'unknown'  (within reach: ~78 tiles south)
+ *
+ * The two `hidden-*` islands sit outside vision (>80 tiles from home in at
+ * least one), inside drone reach (max outbound 100 tiles at fuelLoaded=50,
+ * efficiency 4 — see `drones.ts`). They give the player something concrete
+ * to discover.
  */
 export const DEMO_ISLANDS: ReadonlyArray<IslandSpec> = [
   {
@@ -224,7 +234,64 @@ export const DEMO_ISLANDS: ReadonlyArray<IslandSpec> = [
     buildings: [],
     terrainAt: () => 'water',
   },
+  {
+    id: 'hidden-w',
+    biome: 'plains',
+    cx: -50,
+    cy: 12,
+    majorRadius: 9,
+    minorRadius: 9,
+    populated: false,
+    discovered: false,
+    buildings: [],
+    terrainAt: () => 'grass',
+  },
+  {
+    id: 'hidden-s',
+    biome: 'forest',
+    cx: 35,
+    cy: 70,
+    majorRadius: 8,
+    minorRadius: 8,
+    populated: false,
+    discovered: false,
+    buildings: [],
+    terrainAt: () => 'grass',
+  },
 ];
+
+/**
+ * Top-level world container introduced in step 6. Wraps the spec array (now
+ * with mutable `discovered` flags) and the in-flight drone fleet. Built once
+ * at startup via `makeInitialWorld`; mutations happen in-place when drones
+ * dispatch and return.
+ *
+ * `IslandState` (in `economy.ts`) is per-island runtime; `WorldState` lives
+ * alongside it. Drones live on `WorldState`, not on any single island state.
+ */
+export interface WorldState {
+  /** Mutable: `discovered` flag flips when drones return. The `IslandSpec`
+   *  objects themselves are reused — drone-discovery touches one field. */
+  islands: IslandSpec[];
+  /** Mutable: drones list grows on dispatch, shrinks on return. The
+   *  inline-import keeps this a type-only edge so `world.ts` doesn't take a
+   *  runtime dependency on `drones.ts` (the dependency goes the other way:
+   *  `drones.ts` consumes `WorldState`). */
+  drones: import('./drones.js').Drone[];
+}
+
+/**
+ * Build the working world from `DEMO_ISLANDS`. The seed array stays a
+ * `ReadonlyArray<IslandSpec>` so it's still safe to import as immutable
+ * data; we shallow-spread each spec into a fresh mutable copy here so
+ * later `discovered = true` writes don't trip strict-mode "assignment to
+ * readonly" errors. References to `buildings` and `terrainAt` stay shared
+ * (those are effectively immutable).
+ */
+export function makeInitialWorld(_nowMs: number): WorldState {
+  const islands: IslandSpec[] = DEMO_ISLANDS.map((s) => ({ ...s }));
+  return { islands, drones: [] };
+}
 
 // ---------------------------------------------------------------------------
 // Initial economy state
@@ -241,16 +308,21 @@ export const DEMO_ISLANDS: ReadonlyArray<IslandSpec> = [
 // `makeInitialIslandState` will be applied to each newly-populated spec.
 
 /**
- * Step-3 starting inventory. Coal is seeded at 50 so the Workshop chain
- * runs immediately at startup; once coal hits zero (~500s in) the Workshop
- * stalls and the player visibly sees the `inputAvail = 0` back-propagation.
- * That stall is intentional — step 3 has no coal producer, so demonstrating
- * the stall is part of the demo.
+ * Starting inventory.
+ * - Coal seeded at 50 (step 3 pattern): Workshop chain runs immediately;
+ *   once coal hits zero the Workshop stalls, demonstrating `inputAvail = 0`
+ *   back-propagation. No coal producer in current build — stall is
+ *   intentional demo behaviour.
+ * - Biofuel seeded at 50 (step 6 pattern, mirrors coal): there is no
+ *   biofuel producer yet, but the Drone Pad needs fuel. Player gets enough
+ *   for ~5 maximum-fuel drone launches before the chain stalls on biofuel,
+ *   at which point a future step's biofuel refinery becomes the unlock.
  */
 function startingInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
   for (const r of ALL_RESOURCES) inv[r] = 0;
   inv.coal = 50;
+  inv.biofuel = 50;
   return inv;
 }
 

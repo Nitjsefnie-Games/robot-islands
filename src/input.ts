@@ -85,6 +85,10 @@ export function installDefaultBindings(reg: InputRegistry): void {
   bind(reg, 'KeyH', 'center-home');
   bind(reg, 'KeyK', 'toggle-skill-tree');
   bind(reg, 'Escape', 'dismiss-skill-tree');
+  // J = "journey/jet" — toggles the drone-ops side dock. Side panels don't
+  // get an Escape binding (Escape is reserved for modal dismissal of the
+  // skill tree).
+  bind(reg, 'KeyJ', 'toggle-drones');
   bind(reg, 'Equal', 'zoom-in'); // '=' / '+' on US layouts
   bind(reg, 'NumpadAdd', 'zoom-in');
   bind(reg, 'Minus', 'zoom-out');

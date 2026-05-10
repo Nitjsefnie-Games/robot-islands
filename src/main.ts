@@ -43,12 +43,15 @@ import { renderOcean } from './ocean.js';
 import { mountSkillTreeUi } from './skilltree-ui.js';
 import { mountUi } from './ui.js';
 import {
-  DEMO_ISLANDS,
   islandRenderState,
   makeInitialIslandState,
+  makeInitialWorld,
   renderIsland,
   VISION_RADIUS_TILES,
+  type WorldState,
 } from './world.js';
+import { mountDronesUi } from './drones-ui.js';
+import { tickDrones } from './drones.js';
 
 /** Pan speed for keyboard input, in screen-pixels-per-frame. */
 const PAN_PX_PER_TICK = 8;
@@ -80,47 +83,67 @@ async function main(): Promise<void> {
   world.label = 'world';
   app.stage.addChild(world);
 
-  // Ocean layer (BOTTOM). Three-tier coloured field: unknown rect → discovered
-  // circles → vision circles. Added first so islands draw on top.
-  const oceanLayer = renderOcean(
-    DEMO_ISLANDS.map((s) => ({
-      cx: s.cx,
-      cy: s.cy,
-      discovered: s.discovered,
-      populated: s.populated,
-    })),
-    WORLD_HALF_SIZE_TILES,
-  );
-  world.addChild(oceanLayer);
+  // World state — mutable wrapper around the seed island data + the in-flight
+  // drone fleet. `discovered` flags flip when drones return; `drones` mutates
+  // on dispatch and tick. Renderer reads from here.
+  const worldState: WorldState = makeInitialWorld(performance.now());
 
-  // Island layer (terrain + buildings for each visible island).
-  const islandLayer = new Container();
-  islandLayer.label = 'islands';
+  // Ocean + island layers are baked from the current world state. They get
+  // rebuilt when discovery changes (drone return reveals new islands → new
+  // gradient sprites + new island terrain). `let` so the rebuild closure
+  // can reassign the references; we keep them at fixed Z by removing the
+  // old child + adding the new at the same index.
+  let oceanLayer = renderOceanFromState(worldState, WORLD_HALF_SIZE_TILES);
+  world.addChild(oceanLayer);
+  let islandLayer = renderIslandLayer(worldState);
   world.addChild(islandLayer);
 
-  // Populated islands are vision sources. Each island is classified into
-  // visible/discovered/unknown and rendered accordingly. Unknown islands are
-  // skipped entirely (renderIsland returns null) so the dark page background
-  // shows through.
-  const populated = DEMO_ISLANDS.filter((s) => s.populated);
-  const populatedCentres = populated.map((s) => ({ cx: s.cx, cy: s.cy }));
-  const counts = { visible: 0, discovered: 0, unknown: 0 };
-  for (const spec of DEMO_ISLANDS) {
-    const state = islandRenderState(spec, populatedCentres, VISION_RADIUS_TILES);
-    counts[state] += 1;
-    const c = renderIsland(spec, state);
-    if (c) islandLayer.addChild(c);
-  }
-  if (import.meta.env.DEV) {
-    console.log(
-      `[robot-islands] islands: ${counts.visible} visible, ${counts.discovered} discovered, ${counts.unknown} unknown`,
-    );
-  }
-
-  // Cell grid (debug). Top of the world container so lines are always visible
-  // when toggled on.
+  // Cell grid (debug). Above ocean+islands so lines stay visible when toggled.
   const gridLayer = renderCellGrid(WORLD_HALF_SIZE_TILES);
   world.addChild(gridLayer);
+
+  /** Helpers — bake an ocean layer from current world state. */
+  function renderOceanFromState(ws: WorldState, halfSize: number): Container {
+    return renderOcean(
+      ws.islands.map((s) => ({
+        cx: s.cx,
+        cy: s.cy,
+        discovered: s.discovered,
+        populated: s.populated,
+      })),
+      halfSize,
+    );
+  }
+  function renderIslandLayer(ws: WorldState): Container {
+    const layer = new Container();
+    layer.label = 'islands';
+    const populated = ws.islands.filter((s) => s.populated);
+    const populatedCentres = populated.map((s) => ({ cx: s.cx, cy: s.cy }));
+    for (const spec of ws.islands) {
+      const state = islandRenderState(spec, populatedCentres, VISION_RADIUS_TILES);
+      const c = renderIsland(spec, state);
+      if (c) layer.addChild(c);
+    }
+    return layer;
+  }
+  /** Rebuild ocean + island layers in place. Called when drones return and
+   *  reveal new islands. The PixiJS Texture cache for gradient sprites isn't
+   *  freed here — `oldOcean.destroy({ children: true, texture: true })` is
+   *  the explicit GPU-cleanup hook so the textures from the previous bake
+   *  don't leak across many discovery events. */
+  function rebuildWorldLayers(): void {
+    const oldOcean = oceanLayer;
+    const oldIslands = islandLayer;
+    oceanLayer = renderOceanFromState(worldState, WORLD_HALF_SIZE_TILES);
+    islandLayer = renderIslandLayer(worldState);
+    // Insert at the same Z slots: ocean at 0, islands at 1.
+    world.removeChild(oldOcean);
+    world.removeChild(oldIslands);
+    world.addChildAt(oceanLayer, 0);
+    world.addChildAt(islandLayer, 1);
+    oldOcean.destroy({ children: true, texture: true });
+    oldIslands.destroy({ children: true });
+  }
 
   // -----------------------------------------------------------------------
   // Camera + input
@@ -168,6 +191,9 @@ async function main(): Promise<void> {
   // action name is reserved here as a no-op stub so the binding never points
   // at an undefined action (dispatch would silently fail otherwise).
   defineAction(reg, 'toggle-skill-tree', () => undefined);
+  // Same pattern for drone ops: stub registered here, real handler bound
+  // after the UI is mounted (which needs `homeState`).
+  defineAction(reg, 'toggle-drones', () => undefined);
 
   // Map of "release" actions used to clear the held flag on keyup. The
   // action table itself is press-only; on keyup we resolve the binding and
@@ -195,17 +221,41 @@ async function main(): Promise<void> {
 
   // Mouse drag pan. Distinguish "drag" from "click" via a small movement
   // threshold so a stray click doesn't reset state.
+  //
+  // Step 6: launch-mode click disambiguation. While drone-ops launch mode is
+  // armed, a small click (total drag distance < CLICK_DRAG_PX_MAX) commits
+  // a launch target; a larger drag still pans. We track total drag distance
+  // (not displacement) so a circular gesture returning to the start still
+  // counts as a drag. The launch dispatch happens on mouseup, after we know
+  // the gesture wasn't a drag.
+  const CLICK_DRAG_PX_MAX = 5;
   let dragging = false;
   let lastX = 0;
   let lastY = 0;
+  let accumDrag = 0;
   app.canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     dragging = true;
     lastX = e.clientX;
     lastY = e.clientY;
+    accumDrag = 0;
   });
-  window.addEventListener('mouseup', () => {
+  window.addEventListener('mouseup', (e) => {
+    if (!dragging) return;
     dragging = false;
+    // Launch-click commit: only fire if the gesture was a click (total drag
+    // distance < threshold, NOT just net displacement — a circular gesture
+    // returning to start is still a drag) AND launch mode is armed AND the
+    // mousedown originated on the canvas (we only set `dragging = true` from
+    // the canvas mousedown, so a `dragging` mouseup IS a canvas-originated
+    // gesture).
+    if (accumDrag < CLICK_DRAG_PX_MAX && dronesUi.isLaunchMode()) {
+      const rect = app.canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const wp = screenToWorldTile(sx, sy);
+      dronesUi.attemptLaunch(wp.x, wp.y, performance.now());
+    }
   });
   window.addEventListener('mousemove', (e) => {
     if (!dragging) return;
@@ -213,7 +263,27 @@ async function main(): Promise<void> {
     const dy = e.clientY - lastY;
     lastX = e.clientX;
     lastY = e.clientY;
+    accumDrag += Math.abs(dx) + Math.abs(dy);
     panCam(cam, dx, dy);
+  });
+
+  /** Convert screen pixels (canvas-local) to world tile coordinates. The
+   *  camera maps world pixels → screen; world pixels → tiles is `/ TILE_PX`. */
+  function screenToWorldTile(screenX: number, screenY: number): { x: number; y: number } {
+    // Inverse of the camera transform.
+    const wpx = (screenX - cam.tx) / cam.zoom;
+    const wpy = (screenY - cam.ty) / cam.zoom;
+    return { x: wpx / TILE_PX, y: wpy / TILE_PX };
+  }
+  // Reticle follows the cursor while in launch mode. Mousemove on the canvas
+  // updates its screen position; mouseleave hides it.
+  app.canvas.addEventListener('mousemove', (e) => {
+    if (!dronesUi.isLaunchMode()) return;
+    const rect = app.canvas.getBoundingClientRect();
+    dronesUi.setReticleScreenPos(e.clientX - rect.left, e.clientY - rect.top);
+  });
+  app.canvas.addEventListener('mouseleave', () => {
+    dronesUi.hideReticle();
   });
 
   // Wheel zoom toward cursor. preventDefault keeps the page from scrolling.
@@ -238,18 +308,19 @@ async function main(): Promise<void> {
     { label: 'Toggle Grid (G)', action: 'toggle-grid' },
     { label: 'Center on Home (H)', action: 'center-home' },
     { label: 'Skill Tree (K)', action: 'toggle-skill-tree' },
+    { label: 'Drones (J)', action: 'toggle-drones' },
   ]);
 
   // -----------------------------------------------------------------------
-  // Economy state — step 3
+  // Economy state
   // -----------------------------------------------------------------------
   //
   // Only the home island carries a tick-loop state for now. Multi-island
   // economies land when other islands become populated (deferred to a
   // later step). `lastTick` is seeded with the current performance.now()
   // so the first frame's `advanceIsland` call sees a zero-length interval.
-  const homeSpec = DEMO_ISLANDS.find((s) => s.id === 'home');
-  if (!homeSpec) throw new Error('main: home island missing from DEMO_ISLANDS');
+  const homeSpec = worldState.islands.find((s) => s.id === 'home');
+  if (!homeSpec) throw new Error('main: home island missing from worldState');
   const homeState = makeInitialIslandState(homeSpec, performance.now());
 
   // HUD: bottom-right panel showing inventory, rates, and level. Updated
@@ -268,11 +339,30 @@ async function main(): Promise<void> {
     skillTree.hide();
   });
 
+  // Drone-ops side dock + canvas reticle + drone-dot layer.
+  const dronesUi = mountDronesUi(document.body, {
+    world: worldState,
+    home: homeState,
+    homeSpec,
+    screenToWorldTile,
+    onDiscoveryChanged: rebuildWorldLayers,
+  });
+  // Drone dots live in world space (between islands and the cell grid so
+  // they sit above land, below debug overlay).
+  world.addChildAt(dronesUi.droneLayer, 2);
+  // Reticle lives in screen space (NOT world container) so it stays a
+  // fixed-pixel crosshair regardless of zoom.
+  app.stage.addChild(dronesUi.reticleLayer);
+  defineAction(reg, 'toggle-drones', () => {
+    dronesUi.toggle();
+  });
+
   // Update tick: apply held pan flags + sync camera state to the world
-  // container, advance the home island's economy, and update the HUD.
-  // One pass per frame keeps the camera->container assignment cheap and
-  // predictable; `advanceIsland`'s piecewise integration handles whatever
-  // elapsed interval the frame brings (matters on tab-blur catch-up).
+  // container, advance the home island's economy, advance drone fleet,
+  // and update the HUD + side panels. One pass per frame keeps the
+  // camera→container assignment cheap and predictable; `advanceIsland`'s
+  // piecewise integration handles whatever elapsed interval the frame
+  // brings (matters on tab-blur catch-up).
   app.ticker.add(() => {
     let dx = 0;
     let dy = 0;
@@ -284,7 +374,16 @@ async function main(): Promise<void> {
     world.position.set(cam.tx, cam.ty);
     world.scale.set(cam.zoom);
 
-    advanceIsland(homeState, performance.now());
+    const now = performance.now();
+    advanceIsland(homeState, now);
+    // Drones tick AFTER economy so any biofuel changes from this frame
+    // are visible to the dispatch UI on the same frame; drone returns
+    // are processed independent of economy state.
+    const droneResult = tickDrones(worldState, now);
+    if (droneResult.newlyDiscoveredIslandIds.length > 0) {
+      rebuildWorldLayers();
+    }
+
     // Recompute rates AFTER the tick so the HUD shows the current
     // post-advance state (e.g., a freshly-stalled building reads as
     // 0 rate, not the rate it was running at one event ago).
@@ -295,6 +394,7 @@ async function main(): Promise<void> {
     // strictly need a per-frame call, but level-up while the panel is open
     // should be reflected in the points / xp counters live.
     skillTree.refresh();
+    dronesUi.refresh(now);
   });
 
   // Recenter the camera's reference point on resize so the world doesn't

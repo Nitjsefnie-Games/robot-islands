@@ -19,7 +19,7 @@
 
 import type { BuildingKind } from './buildings.js';
 
-export type ResourceId = 'wood' | 'iron_ore' | 'coal' | 'iron_ingot' | 'bolt';
+export type ResourceId = 'wood' | 'iron_ore' | 'coal' | 'iron_ingot' | 'bolt' | 'biofuel';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -28,6 +28,7 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'coal',
   'iron_ingot',
   'bolt',
+  'biofuel',
 ];
 
 /**
@@ -46,6 +47,10 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   coal: 1,
   iron_ingot: 3,
   bolt: 10,
+  // Biofuel is a T1 refined intermediate (§6.2). Step 6 has no producer for
+  // it — seeded on the home island via `startingInventory()` (mirrors the
+  // step-3 coal seed pattern). Producer arrives in a later step.
+  biofuel: 3,
 };
 
 /**
