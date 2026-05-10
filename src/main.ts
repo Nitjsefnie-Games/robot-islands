@@ -256,11 +256,16 @@ async function main(): Promise<void> {
   // once per frame inside the ticker after the economy advance.
   const hud = mountHud(document.body);
 
-  // Skill tree panel — modal-ish DOM overlay, dismissed via KeyK or its
-  // close button. Hooks the previously-stubbed `toggle-skill-tree` action.
+  // Skill tree panel — modal-ish DOM overlay, dismissed via KeyK, Escape,
+  // or its close button. Hooks the previously-stubbed `toggle-skill-tree`
+  // action. `dismiss-skill-tree` is hide-only (idempotent on closed) so
+  // Escape doesn't reopen a closed panel — standard modal etiquette.
   const skillTree = mountSkillTreeUi(document.body, homeState);
   defineAction(reg, 'toggle-skill-tree', () => {
     skillTree.toggle();
+  });
+  defineAction(reg, 'dismiss-skill-tree', () => {
+    skillTree.hide();
   });
 
   // Update tick: apply held pan flags + sync camera state to the world

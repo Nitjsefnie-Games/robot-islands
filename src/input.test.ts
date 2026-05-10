@@ -110,6 +110,7 @@ describe('InputRegistry', () => {
     expect(reg.bindings.get('KeyG')).toBe('toggle-grid');
     expect(reg.bindings.get('KeyH')).toBe('center-home');
     expect(reg.bindings.get('KeyK')).toBe('toggle-skill-tree');
+    expect(reg.bindings.get('Escape')).toBe('dismiss-skill-tree');
     expect(reg.bindings.get('Equal')).toBe('zoom-in');
     expect(reg.bindings.get('Minus')).toBe('zoom-out');
   });

@@ -19,7 +19,7 @@
 // payoff. DOM text rendering is also crisper at any zoom level than PixiJS
 // Text (which would need to be drawn at a fixed device pixel ratio).
 
-import { type IslandState, type PowerBalance, xpForLevel } from './economy.js';
+import { cap, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 
 /**
@@ -134,11 +134,13 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
     tailLines.push(`Inventory`);
     for (const r of ALL_RESOURCES) {
       const have = state.inventory[r] ?? 0;
-      const cap = state.storageCaps[r] ?? 0;
+      // cap() applies storageCapMul from any unlocked skills; reading
+      // state.storageCaps[r] directly would lie about the real cap.
+      const capVal = cap(state, r);
       const rate = net[r] ?? 0;
       const name = (r + ':').padEnd(11, ' ');
       const have5 = fmt(have).padStart(5, ' ');
-      const cap5 = fmt(cap).padStart(5, ' ');
+      const cap5 = fmt(capVal).padStart(5, ' ');
       tailLines.push(`  ${name}${have5} / ${cap5}  ${fmtRate(rate)}`);
     }
     postNode.textContent = '\n' + tailLines.join('\n');
