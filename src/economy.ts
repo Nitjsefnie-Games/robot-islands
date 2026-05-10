@@ -37,6 +37,18 @@ import {
 } from './specialization.js';
 
 /**
+ * Optional context object for `computeRates` and `advanceIsland`. Adding
+ * new parameters (heat, gates, …) extends this interface rather than
+ * growing positional arity.
+ */
+export interface RatesContext {
+  readonly modifierMul?: ModifierMultipliers;
+  readonly defs?: DefCatalog;
+  readonly specMul?: SpecializationMultipliers;
+  readonly ncBuff?: number;
+}
+
+/**
  * The mutable per-island runtime state. `IslandSpec` in world.ts is the
  * static definition (shape, terrain, building positions); `IslandState`
  * carries everything that changes during play. They reference each other
@@ -232,10 +244,7 @@ export interface PowerBalance {
  */
 export function computeRates(
   state: IslandState,
-  modifierMul: ModifierMultipliers = IDENTITY_MODIFIER_MULTIPLIERS,
-  defs: DefCatalog = BUILDING_DEFS,
-  specMul: SpecializationMultipliers = IDENTITY_SPECIALIZATION,
-  ncBuff: number = 1,
+  ctx?: RatesContext,
 ): {
   byBuilding: ReadonlyArray<BuildingRate>;
   production: Record<ResourceId, number>;
@@ -246,6 +255,12 @@ export function computeRates(
   net: Record<ResourceId, number>;
   power: PowerBalance;
 } {
+  const {
+    modifierMul = IDENTITY_MODIFIER_MULTIPLIERS,
+    defs = BUILDING_DEFS,
+    specMul = IDENTITY_SPECIALIZATION,
+    ncBuff = 1,
+  } = ctx ?? {};
   // The §5.1 active flag depends on inputAvail, and inputAvail must be
   // computed at NOMINAL rate (independent of powerFactor) to avoid a circular
   // dependency. PowerFactor is then applied to consumers' final effective
@@ -586,11 +601,9 @@ function levelUpIfReady(state: IslandState): void {
 export function advanceIsland(
   state: IslandState,
   nowMs: number,
-  modifierMul: ModifierMultipliers = IDENTITY_MODIFIER_MULTIPLIERS,
-  defs: DefCatalog = BUILDING_DEFS,
-  specMul: SpecializationMultipliers = IDENTITY_SPECIALIZATION,
-  ncBuff: number = 1,
+  ctx?: RatesContext,
 ): void {
+  const { specMul = IDENTITY_SPECIALIZATION } = ctx ?? {};
   if (nowMs <= state.lastTick) {
     state.lastTick = nowMs;
     return;
@@ -598,7 +611,7 @@ export function advanceIsland(
   let t = state.lastTick;
   for (let safety = 0; safety < 10000; safety++) {
     if (t >= nowMs) break;
-    const { production, consumption, net } = computeRates(state, modifierMul, defs, specMul, ncBuff);
+    const { production, consumption, net } = computeRates(state, ctx);
     const nextEventMs = findNextCapEvent(state, net, t, nowMs);
     // Clamp to nowMs; findNextCapEvent already returns nowMs when nothing
     // changes, but if all rates are zero we still need to exit the loop.

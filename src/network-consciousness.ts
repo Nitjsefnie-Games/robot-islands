@@ -11,6 +11,12 @@
 // the connectedness flag natively. Same approach as the §10.1 funnel
 // provenance FIXME in `economy.ts`.
 //
+// FIXME(§9.6): "Networked" is currently simplified to "populated at T3+",
+// which over-rewards: an isolated T3 colony with no inbound route still
+// receives the global NC buff. Spec requires route-graph reachability to
+// home. Lands in step 11 (settlement vehicles) — until then this is
+// player-observable behavioral debt, not an internal-only simplification.
+//
 // Thresholds and buff magnitudes are per §9.6:
 //   ≥3 T3+ islands  → milestone 1 / +5%
 //   ≥5             → milestone 2 / +10%

@@ -94,7 +94,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
       buildings: [MINE],
       inventory: { ...blankInventory(), iron_ore: 99 },
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(100, 9);
     // Cap is a hard ceiling, not just an integer floor — verify no overshoot.
     expect(state.inventory.iron_ore).toBeLessThanOrEqual(100);
@@ -107,7 +107,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
       buildings: [MINE],
       inventory: { ...blankInventory() },
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(2, 9);
   });
 
@@ -125,7 +125,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
       buildings: [MINE, WORKSHOP],
       inventory: { ...blankInventory(), coal: 50 },
     });
-    advanceIsland(state, 600_000, undefined, POWER_FREE);
+    advanceIsland(state, 600_000, { defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(70, 6);
     expect(state.inventory.coal).toBeCloseTo(0, 6);
     expect(state.inventory.bolt).toBeCloseTo(50, 6);
@@ -144,7 +144,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
         bolt: 100, // at cap
       },
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBe(50); // untouched
     expect(state.inventory.coal).toBe(50); // untouched
     expect(state.inventory.bolt).toBe(100); // still at cap
@@ -158,7 +158,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
       buildings: [WORKSHOP],
       inventory: { ...blankInventory(), coal: 50, iron_ore: 0 },
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.inventory.coal).toBe(50); // not eaten
     expect(state.inventory.bolt).toBe(0); // none produced
   });
@@ -172,7 +172,7 @@ describe('XP accrual', () => {
       buildings: [MINE],
       inventory: blankInventory(),
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.xp).toBeCloseTo(2, 9);
   });
 
@@ -187,7 +187,7 @@ describe('XP accrual', () => {
       buildings: [MINE, WORKSHOP],
       inventory: { ...blankInventory(), coal: 50 },
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.xp).toBeCloseTo(12, 6);
     // And verify the inventory looks right: iron_ore net = +0.1/s × 10 = 1
     expect(state.inventory.iron_ore).toBeCloseTo(1, 6);
@@ -200,7 +200,7 @@ describe('XP accrual', () => {
       buildings: [WORKSHOP],
       inventory: { ...blankInventory(), iron_ore: 0, coal: 50 }, // workshop stalls
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.xp).toBe(0);
   });
 });
@@ -223,7 +223,7 @@ describe('Level up', () => {
       inventory: blankInventory(),
       xp: threshold - 0.5,
     });
-    advanceIsland(state, 5_000, undefined, POWER_FREE);
+    advanceIsland(state, 5_000, { defs: POWER_FREE });
     expect(state.level).toBe(2);
     expect(state.unspentSkillPoints).toBe(1);
     expect(state.xp).toBeGreaterThanOrEqual(0);
@@ -252,7 +252,7 @@ describe('computeRates', () => {
       buildings: [MINE, WORKSHOP],
       inventory: { ...blankInventory(), coal: 50 },
     });
-    const { production, net } = computeRates(state, undefined, POWER_FREE);
+    const { production, net } = computeRates(state, { defs: POWER_FREE });
     expect(production.iron_ore).toBeCloseTo(0.2, 9);
     expect(production.bolt).toBeCloseTo(0.1, 9);
     expect(net.iron_ore).toBeCloseTo(0.1, 9); // +0.2 - 0.1
@@ -265,7 +265,7 @@ describe('computeRates', () => {
       buildings: [WORKSHOP],
       inventory: { ...blankInventory(), iron_ore: 0, coal: 50 },
     });
-    const { byBuilding } = computeRates(state, undefined, POWER_FREE);
+    const { byBuilding } = computeRates(state, { defs: POWER_FREE });
     expect(byBuilding[0]?.effectiveRate).toBe(0);
   });
 
@@ -274,7 +274,7 @@ describe('computeRates', () => {
       buildings: [MINE],
       inventory: { ...blankInventory(), iron_ore: 100 }, // at cap
     });
-    const { byBuilding } = computeRates(state, undefined, POWER_FREE);
+    const { byBuilding } = computeRates(state, { defs: POWER_FREE });
     expect(byBuilding[0]?.effectiveRate).toBe(0);
   });
 });
@@ -304,7 +304,7 @@ describe('power (§5.1)', () => {
       buildings: [MINE],
       inventory: blankInventory(),
     });
-    const { power, byBuilding } = computeRates(state, undefined, POWER_FREE);
+    const { power, byBuilding } = computeRates(state, { defs: POWER_FREE });
     expect(power.produced).toBe(0);
     expect(power.consumed).toBe(0);
     expect(power.factor).toBe(1);
@@ -336,7 +336,7 @@ describe('power (§5.1)', () => {
       buildings: [COAL_GEN, MINE_PWR_80, WORKSHOP_PWR],
       inventory: { ...blankInventory(), coal: 50 },
     });
-    const { power, byBuilding } = computeRates(state, undefined, MINE_HEAVY);
+    const { power, byBuilding } = computeRates(state, { defs: MINE_HEAVY });
     expect(power.produced).toBe(100);
     expect(power.consumed).toBe(140);
     expect(power.factor).toBeCloseTo(100 / 140, 9);
@@ -445,7 +445,7 @@ describe('skill-tree integration (§9.3)', () => {
       inventory: blankInventory(),
       unlockedNodes: new Set(['mining.1']),
     });
-    const { production } = computeRates(state, undefined, POWER_FREE);
+    const { production } = computeRates(state, { defs: POWER_FREE });
     expect(production.iron_ore).toBeCloseTo(0.21, 9);
   });
 
@@ -455,7 +455,7 @@ describe('skill-tree integration (§9.3)', () => {
       inventory: blankInventory(),
       unlockedNodes: new Set(['mining.1', 'mining.2']),
     });
-    const { production } = computeRates(state, undefined, POWER_FREE);
+    const { production } = computeRates(state, { defs: POWER_FREE });
     expect(production.iron_ore).toBeCloseTo(0.2 * 1.155, 9);
   });
 
@@ -467,7 +467,7 @@ describe('skill-tree integration (§9.3)', () => {
       inventory: { ...blankInventory(), iron_ore: 100 },
       unlockedNodes: new Set(['storage.1']),
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     // Mine ran for 10s before hitting the new cap (105). Time to fill from
     // 100 to 105 at 0.2/s = 25s; we ran 10s, so we picked up 2 units.
     expect(state.inventory.iron_ore).toBeCloseTo(102, 6);
@@ -491,7 +491,7 @@ describe('funneling — consumption drains pending bonus XP credit (§10)', () =
       inventory: { ...blankInventory(), iron_ore: 10, coal: 10 },
     });
     state.funnelPending.iron_ore = 5;
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     // Production XP: 0.1 bolt/s × 10s × 10 (xp_weight) = 10.
     // + funnel-drain XP: 0.5.
     expect(state.xp).toBeCloseTo(10.5, 6);
@@ -507,7 +507,7 @@ describe('funneling — consumption drains pending bonus XP credit (§10)', () =
       inventory: { ...blankInventory(), iron_ore: 10, coal: 10 },
     });
     state.funnelPending.iron_ore = 0.2;
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.xp).toBeCloseTo(10.2, 6);
     expect(state.funnelPending.iron_ore).toBeCloseTo(0, 6);
   });
@@ -520,8 +520,61 @@ describe('funneling — consumption drains pending bonus XP credit (§10)', () =
       inventory: { ...blankInventory(), iron_ore: 10, coal: 10, bolt: 100 },
     });
     state.funnelPending.iron_ore = 5;
-    advanceIsland(state, 10_000, undefined, POWER_FREE);
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.funnelPending.iron_ore).toBeCloseTo(5, 6);
+  });
+});
+
+describe('xpMul applies to funnel drain', () => {
+  // research_beacon role has xpMul = 1.5, globalRecipeRate = 0.75.
+  // Workshop with that role:
+  //   - recipe rate × 0.75 → consumes iron_ore at 0.1 × 0.75 = 0.075/s
+  //   - produces bolt at 0.1 × 0.75 = 0.075/s → production XP = 0.075 × 10 × 10s = 7.5
+  //   - funnel drain over 10s: 0.075 × 10 = 0.75 units consumed
+  //     → drain owed = 0.75 × xp_weight[iron_ore](1) × 0.5 = 0.375
+  //     → after xpMul(1.5): 0.375 × 1.5 = 0.5625 bonus XP from drain
+  //   - total XP = 7.5 × 1.5 (production) + 0.5625 (drain) = 11.25 + 0.5625 = 11.8125
+  //
+  // Baseline (no role, identity multipliers):
+  //   - consumes iron_ore at 0.1/s → 1 unit consumed → drain = 1 × 1 × 0.5 = 0.5 bonus XP
+  //   - production XP = 0.1 × 10 × 10s = 10; total = 10 + 0.5 = 10.5
+  //
+  // The drain component is larger for research_beacon (0.5625 vs 0.5) per UNIT
+  // of funnelPending consumed — specifically the ratio of total XP gain from drain
+  // between the two states reflects both the per-unit rate change AND the xpMul.
+  it('research_beacon role: funnel drain is also scaled by xpMul (1.5×)', () => {
+    const beaconMul = effectiveSpecializationMultipliers('research_beacon');
+    // Baseline state (no role)
+    const baseline = makeState({
+      buildings: [WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 10, coal: 10 },
+    });
+    baseline.funnelPending.iron_ore = 50; // plenty, won't be fully drained
+    advanceIsland(baseline, 10_000, { defs: POWER_FREE });
+    // baseline production XP: 0.1 bolt/s × 10s × 10 = 10; drain: 0.5
+    expect(baseline.xp).toBeCloseTo(10.5, 6);
+
+    // research_beacon state
+    const beacon = makeState({
+      buildings: [WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 10, coal: 10 },
+      specializationRole: 'research_beacon',
+    });
+    beacon.funnelPending.iron_ore = 50; // same large pool
+    advanceIsland(beacon, 10_000, { defs: POWER_FREE, specMul: beaconMul, ncBuff: 1 });
+    // production XP: 0.075/s × 10s × 10 × 1.5(xpMul) = 11.25
+    // drain component: 0.75 units consumed × 1 × 0.5 × 1.5(xpMul) = 0.5625
+    // total = 11.8125
+    expect(beacon.xp).toBeCloseTo(11.8125, 6);
+    // The drain alone (XP - production XP) is 1.5× larger per consumed unit
+    // versus the baseline: beacon's drain = 0.5625, baseline drain = 0.5.
+    // Both scale correctly with xpMul and per-rate differences.
+    const baselineDrain = baseline.xp - 10; // baseline production = 10
+    const beaconDrain = beacon.xp - 11.25;  // beacon production = 11.25
+    // xpMul scaled the drain as well — beacon drain > baseline drain
+    expect(beaconDrain).toBeGreaterThan(baselineDrain);
+    expect(beaconDrain).toBeCloseTo(0.5625, 6);
+    expect(baselineDrain).toBeCloseTo(0.5, 6);
   });
 });
 
@@ -535,7 +588,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
       inventory: blankInventory(),
     });
     const mul = effectiveModifierMultipliers(['mineral_rich']);
-    advanceIsland(state, 10_000, mul, POWER_FREE);
+    advanceIsland(state, 10_000, { modifierMul: mul, defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(2.5, 9);
   });
 
@@ -546,7 +599,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
       inventory: blankInventory(),
     });
     const mul = effectiveModifierMultipliers(['cursed_storms']);
-    advanceIsland(state, 10_000, mul, POWER_FREE);
+    advanceIsland(state, 10_000, { modifierMul: mul, defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(1.8, 9);
   });
 
@@ -556,7 +609,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
       inventory: blankInventory(),
     });
     const mul = effectiveModifierMultipliers(['fertile']);
-    advanceIsland(state, 10_000, mul, POWER_FREE);
+    advanceIsland(state, 10_000, { modifierMul: mul, defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(3, 9);
   });
 
@@ -566,7 +619,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
       inventory: blankInventory(),
     });
     const mul = effectiveModifierMultipliers(['stable']);
-    advanceIsland(state, 10_000, mul, POWER_FREE);
+    advanceIsland(state, 10_000, { modifierMul: mul, defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(2, 9);
   });
 
@@ -576,7 +629,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
       inventory: blankInventory(),
     });
     const mul = effectiveModifierMultipliers(['mineral_rich', 'cursed_storms']);
-    advanceIsland(state, 10_000, mul, POWER_FREE);
+    advanceIsland(state, 10_000, { modifierMul: mul, defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(0.2 * 1.25 * 0.9 * 10, 9);
   });
 
@@ -590,7 +643,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
       inventory: { ...blankInventory(), iron_ore: 10, coal: 10 },
     });
     const mul = effectiveModifierMultipliers(['cursed_storms']);
-    advanceIsland(state, 10_000, mul, POWER_FREE);
+    advanceIsland(state, 10_000, { modifierMul: mul, defs: POWER_FREE });
     expect(state.inventory.bolt).toBeCloseTo(0.9, 9);
   });
 
@@ -599,8 +652,8 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     // to the no-modifier path.
     const stateA = makeState({ buildings: [MINE], inventory: blankInventory() });
     const stateB = makeState({ buildings: [MINE], inventory: blankInventory() });
-    advanceIsland(stateA, 10_000, undefined, POWER_FREE);
-    advanceIsland(stateB, 10_000, effectiveModifierMultipliers(['high_wind']), POWER_FREE);
+    advanceIsland(stateA, 10_000, { defs: POWER_FREE });
+    advanceIsland(stateB, 10_000, { modifierMul: effectiveModifierMultipliers(['high_wind']), defs: POWER_FREE });
     expect(stateA.inventory.iron_ore).toBeCloseTo(stateB.inventory.iron_ore, 12);
   });
 
@@ -611,7 +664,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
       inventory: blankInventory(),
     });
     const mul = effectiveModifierMultipliers(['mineral_rich']);
-    const { byBuilding, production } = computeRates(state, mul, POWER_FREE);
+    const { byBuilding, production } = computeRates(state, { modifierMul: mul, defs: POWER_FREE });
     expect(byBuilding[0]!.effectiveRate).toBeCloseTo(0.25, 9);
     expect(production.iron_ore).toBeCloseTo(0.25, 9);
   });
@@ -639,7 +692,7 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
       buildings: [SMELTER],
       inventory: { ...blankInventory(), iron_ore: 50, coal: 50 },
     });
-    advanceIsland(state, 10_000, undefined, noSmelterPower);
+    advanceIsland(state, 10_000, { defs: noSmelterPower });
     expect(state.inventory.iron_ingot).toBeCloseTo(1.25, 6);
     expect(state.inventory.iron_ore).toBeCloseTo(48.75, 6);
     expect(state.inventory.coal).toBeCloseTo(48.75, 6);
@@ -703,7 +756,7 @@ describe('step-10 — specialization role integration (§9.4)', () => {
       inventory: { ...blankInventory(), iron_ore: 1000, coal: 1000 },
       storageCaps: blankCaps(10000),
     });
-    const { byBuilding } = computeRates(state, undefined, noPower, foundryMul, 1);
+    const { byBuilding } = computeRates(state, { defs: noPower, specMul: foundryMul, ncBuff: 1 });
     // Smelter base rate = 1/8 = 0.125/s. With foundry buff (×1.5) → 0.1875.
     // Workshop base rate = 1/10 = 0.1/s. With foundry penalty (×0.75) → 0.075.
     const smelterRate = byBuilding.find((b) => b.building.defId === 'smelter')!.effectiveRate;
@@ -722,7 +775,7 @@ describe('step-10 — specialization role integration (§9.4)', () => {
       inventory: blankInventory(),
       specializationRole: 'research_beacon',
     });
-    advanceIsland(state, 10_000, undefined, POWER_FREE, beaconMul, 1);
+    advanceIsland(state, 10_000, { defs: POWER_FREE, specMul: beaconMul, ncBuff: 1 });
     // Production: 0.15/s × 10s = 1.5 iron_ore.
     expect(state.inventory.iron_ore).toBeCloseTo(1.5, 9);
     // XP: 1.5 (units) × 1 (weight) × 1.5 (xpMul) = 2.25.
@@ -746,9 +799,9 @@ describe('step-10 — specialization role integration (§9.4)', () => {
       level: 15, // T3
     });
     // T1: caller passes ncBuff = 1 (gate closed).
-    advanceIsland(t1, 10_000, undefined, POWER_FREE, undefined, 1);
+    advanceIsland(t1, 10_000, { defs: POWER_FREE, ncBuff: 1 });
     // T3: caller passes ncBuff = 1.05 (gate open).
-    advanceIsland(t3, 10_000, undefined, POWER_FREE, undefined, NC_BUFF);
+    advanceIsland(t3, 10_000, { defs: POWER_FREE, ncBuff: NC_BUFF });
     // Mine produces 1 iron_ore / 5s = 0.2/s. T1 over 10s = 2.0 units; T3
     // over 10s = 2.0 × 1.05 = 2.1 units.
     expect(t1.inventory.iron_ore).toBeCloseTo(2.0, 9);

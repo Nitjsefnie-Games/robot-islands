@@ -476,7 +476,7 @@ async function main(): Promise<void> {
     // Each island's modifier set composes its own recipe-rate multipliers,
     // so we look up the precomputed bundle by id and pass it through.
     for (const s of islandStates.values()) {
-      advanceIsland(s, now, modifierMulFor(s.id), undefined, specMulFor(s), ncBuffFor(s));
+      advanceIsland(s, now, { modifierMul: modifierMulFor(s.id), specMul: specMulFor(s), ncBuff: ncBuffFor(s) });
     }
     // Drones tick AFTER economy so any biofuel changes from this frame
     // are visible to the dispatch UI on the same frame; drone returns
@@ -490,13 +490,11 @@ async function main(): Promise<void> {
     // Recompute rates AFTER the tick so the HUD shows the current
     // post-advance state (e.g., a freshly-stalled building reads as
     // 0 rate, not the rate it was running at one event ago).
-    const { net, power } = computeRates(
-      homeState,
-      modifierMulFor(homeState.id),
-      undefined,
-      specMulFor(homeState),
-      ncBuffFor(homeState),
-    );
+    const { net, power } = computeRates(homeState, {
+      modifierMul: modifierMulFor(homeState.id),
+      specMul: specMulFor(homeState),
+      ncBuff: ncBuffFor(homeState),
+    });
     hud.update(homeState, net, power, homeSpec, ncState);
     // Skill tree only repaints while visible — DOM writes are wasted
     // otherwise. show() also forces a paint on transition so we don't
