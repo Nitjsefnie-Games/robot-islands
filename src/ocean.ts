@@ -51,7 +51,7 @@ export interface OceanIsland {
  *  to transparent. Sized as an anti-aliasing band, not a visible gradient
  *  — the tier boundary should read as a crisp circle with the rim softened
  *  just enough to avoid pixel staircase. */
-const EDGE_FADE_PX = 16;
+const EDGE_FADE_PX = 24;
 
 /**
  * Build a radial-gradient texture: a square canvas of side `2 * radiusPx`
