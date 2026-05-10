@@ -1,0 +1,1798 @@
+# Robot Islands: Specification
+
+A browser-based 2D idle game. The player roleplays a self-expanding industrial robot intelligence growing across an infinite world of discrete islands. The robot discovers, develops, and networks islands into a production empire, climbing through five technology tiers culminating in post-physics transcendence.
+
+\---
+
+## 1\. Core Loop
+
+**Moment-to-moment:** view an island, place buildings, plan adjacency, dispatch drones, manage routes between islands, spend skill points.
+
+**Session-to-session:** islands accrue XP and resources while the player is offline. On return, the player spends accumulated skill points, redirects production, founds or funnels new colonies, pushes drones into unexplored regions, advances toward T4/T5 endgame artifacts.
+
+**Long-term:** drive as many islands as possible up the tier ladder; build a transcendent network governed by T5 constructs (Ascendant Core, Genesis Cell, Omniscient Lattice).
+
+\---
+
+## 2\. World Architecture
+
+### 2.1 Stratified Island Placement
+
+The world is partitioned into invisible square cells of side R (the discovery guarantee radius). Each cell contains at least one island, placed at a random point within the cell using a deterministic seed. The point is sampled uniformly over the cell's interior, with an edge buffer equal to the maximum possible biome major-radius (currently 14 for Plains) — guarantees every island fits entirely inside its cell with no boundary overhang. Additional islands appear via geometric decline (placeholder probabilities):
+
+* P(2nd island in cell) = 0.30
+* P(3rd | 2nd exists) = 0.30
+* P(4th | 3rd exists) = 0.30
+* Hard cap: 4 islands per cell
+
+Practical density: ~1.4 islands per cell on average. Within a cell containing multiple islands, each is placed at a distinct random point subject to a minimum-spacing rule — placeholder: distance between any two islands' centers must exceed the sum of their major radii plus 2 tiles, preventing unintentional joining at generation time.
+
+The player only sees discovered islands. The cell grid is invisible. From the player's perspective the world is procedurally random; from the engine's perspective it is fully seed-deterministic.
+
+### 2.2 Discovery via Drones
+
+Drones discover islands but cannot settle them. A discovered island appears on the world map but cannot be developed, built on, or used as a route endpoint until it has been populated by a settlement vehicle (see Section 2.3). Drones are dispatched from any island with a Drone Pad. Each launch specifies:
+
+* Origin island
+* Direction vector (normalized)
+* Fuel loaded (determines range)
+* Drone tier (determines speed, scan radius, special capabilities)
+
+Drones travel in real time. They scan for islands within a corridor along their path (corridor width determined by drone tier and scan radius). On return, they report all islands discovered.
+
+Drones can fail and never return. Failure modes (per §11.4): fuel exhaustion mid-journey, or destruction by weather (per-cell roll, see §2.6). Fuel is a real game resource produced by infrastructure on the launching island; fuel grade matches the launching island's tier per §11.7.
+
+**Drone tiers** are determined by the launching island's tier. Drone Pad is a T2 building (§8.8), so T2 is the lowest available drone tier — there is no T1 drone in the spec:
+
+* T2 drone: entry-level — modest range, modest scan corridor, biome-type detection at distance
+* T3 drone: long-range expedition, wider scan, multi-target (records all islands within capsule corridor)
+* T4 drone: omnidirectional pulse, launched from a Launch Tower — single disk scan of radius `R\_T4 = 3R` centered on the launch site, where `R` is the stratification cell side length (placeholder: T4 pulse covers a 3-cell-radius disk)
+
+### 2.3 Settlement
+
+Discovered islands are not usable until populated. Population is performed by sending a settlement vehicle (ship or helicopter) from a populated island to the target. On arrival, the target becomes a populated island at level 1, with no buildings except an automatically placed dock or helipad matching the arriving vehicle type. The island is then ready for development.
+
+**Ship**
+
+* Launched from a Shipyard (T1, requires coastal placement)
+* Slower travel
+* Larger cargo loadout, longer effective range per fuel unit
+* Drops a Cargo Dock on arrival (enables T1 cargo routes immediately)
+* Cheaper per settlement, but commits more time
+
+**Helicopter**
+
+* Launched from a Helipad (T2)
+* Faster travel
+* Smaller cargo loadout, shorter range per fuel unit
+* Higher fuel consumption
+* Drops a Helipad on arrival (enables drone and helicopter operation)
+* More expensive per settlement, but fast
+
+Both vehicles consume:
+
+* Fuel matching their tier
+* A Foundation Kit (a composite craftable: bundle of T1 raw materials used to establish initial infrastructure on arrival)
+
+Both vehicles can fail with low probability (lost at sea or crashed). On failure, the vehicle, its fuel, and its Foundation Kit are lost; the target island remains unpopulated and can be retried.
+
+**Vehicle tiers** track the launching island's tier:
+
+* T1 Cargo Ship / T2 Light Helicopter: short to medium range
+* T2 Heavy Freighter / T3 Heavy Lift Helicopter: longer range, larger loadout
+* T3 Industrial Carrier / T4 VTOL Tilt-Rotor: very long range, fast, large loadout
+* T5 Spacetime Anchor populates instantaneously and bypasses the vehicle stage entirely (one of its T5 unique abilities)
+
+**Discovery and settlement pipeline:**
+
+1. Drone scouts and discovers (cheap reconnaissance)
+2. Ship or helicopter settles (commits Foundation Kit + fuel + vehicle)
+3. Player develops via building, leveling, and funneling
+
+### 2.4 Inter-Island Routes
+
+Routes connect islands and move resources between them. Each route specifies:
+
+* Source island, destination island
+* Transport type (cargo, drone, cable, teleporter)
+* Capacity per second
+* Resource filter (specific resource or any)
+
+Per global tick, each route moves `min(capacity \* elapsed\_time, available\_at\_source, capacity\_at\_destination)` of the filtered resource.
+
+If multiple routes contend for the same resource at one source, the available amount is distributed proportionally to route capacity.
+
+**`filter = any` selection rule.** A route configured with `filter = any` also stores a player-defined priority list — an ordered list of resource IDs. Each tick, the route attempts to move resources in priority order: it moves as much of priority-1 as the per-tick capacity allows, then continues to priority-2 with remaining capacity, and so on. Resources not on the priority list are not moved by this route. The player edits the priority list at any time from the route configuration UI; reordering takes effect on the next tick. This makes "any" routes behave as configurable bulk movers rather than as undefined catch-alls.
+
+**Transit time.** Routes use a hybrid latency model:
+
+* T1 cargo, T2 drone cargo, T3 airship: resources have a real-time-of-flight equal to `distance / route\_speed` (route speeds per tier are placeholders in Appendix A). The §15.4 throughput formula gates dispatch (units only leave source if the destination has cap headroom at dispatch time). Units in flight then appear at destination on arrival.
+* T4 teleporter and T5 spacetime anchor: zero latency. Resources move instantly per tick, exactly as the basic throughput formula describes. No in-flight buffer.
+
+In-flight inventory is tracked per-route in the architecture data model (§15.1). When a route is destroyed mid-flight, all in-flight units on that route are lost.
+
+**Networked islands** (used elsewhere in this spec — §9.6 NC buff, §13.3 Omniscient Lattice — to define the buff target set): an island is networked if there exists a path of routes (any tier, any type) from it back to the home island. Routes form a directed graph; reachability is computed undirected (a route from A to B counts toward connectedness regardless of source-vs-destination role). Newly settled colonies start non-networked until the player builds an outbound route. Disconnected sub-graphs are independent, and only the connected component containing the home island counts as "the network".
+
+**Transport tiers:**
+
+* T1 cargo: short range, low throughput, slow travel
+* T2 drone cargo: longer range, higher throughput, fuel cost
+* T3 airship: very long range, high throughput, fuel + lubricant cost
+* T4 teleporter pad: instant, very high throughput, paired endpoints, high power draw
+* T5 spacetime anchor: links islands as one logical unit, ignores distance entirely
+
+### 2.5 Artificial Islands
+
+A T3+ island with a Foundry of Lands building (renamed: Platform Constructor) can construct an artificial island. Construction consumes large amounts of materials, scales with target size and biome.
+
+Artificial islands:
+
+* Start at level 1
+* Have a chosen biome (subject to constraints)
+* Have a chosen size (capped by founder's tier, expressed as ellipse radii — T3 founder caps at major=8, minor=8; T4 caps at 12,12; T5 caps at 16,16). Artificial islands are constructed circular and can be expanded into ovals via Land Reclamation just like natural islands.
+* Can have any starting layout because terrain is artificial
+* Cannot have rare-biome modifiers or unique-feature tiles (those are natural-only)
+
+### 2.6 Weather System
+
+The world has a dynamic weather system. Weather is partitioned into zones matching the stratification cell grid; each cell holds a weather state that evolves deterministically as a function `weather(seed, cx, cy, t) -> state`. The function is pure — no persistent state, no desync risk, replayable for offline simulation.
+
+**Forecast model.** Weather is generated by layered Perlin (or simplex) noise sampled over (cx, cy, t/dwell\_unit), composed at multiple frequencies:
+
+* **Low-frequency spatial component** (placeholder noise scale: ~5 cells per period) produces broad storm fronts spanning 3-6 contiguous cells. Adjacent cells are strongly correlated — the player observing one cell's current state can usually infer the next 1-2 cells' states with high confidence.
+* **Slow temporal component** governs how weather drifts. Each cell's state typically dwells 1-4 real-time hours (placeholder) before transitioning. Severe and Catastrophic events are shorter-lived (under 1 real-time hour each) and rarer.
+* **Biome modulation** shifts the cell's weather distribution toward thematic states based on the biome of the island in that cell (if any):
+  * Plains: baseline distribution
+  * Volcanic: storm frequency +50%
+  * Arctic: severe-storm frequency +30%; longer cold-storm dwell
+  * Coast: fog frequency +50%, storm frequency +20%
+  * Desert: Clear-baseline (storms rare); occasional sandstorm (treated as Storm)
+  * Forest: near-Plains, slightly elevated storm rate
+
+Empty cells (no island) follow the Plains baseline.
+
+Practical effect: a player observing one cell's current state can typically infer the next 1-2 cells' state with reasonable confidence (strong spatial correlation), and the next 1-2 hours' state at any cell (slow temporal drift). Forecast buildings (Advanced Weather Station, Scanner Sats) extend the confidence horizon beyond direct observation.
+
+**Weather states:**
+
+|State|Effect on vehicles|Effect on drone scan|
+|-|-|-|
+|Clear|None|Full scan radius|
+|Light fog|None|Scan radius -50%|
+|Storm|2% per-tile destruction chance|Scan radius -25%|
+|Severe storm|8% per-tile destruction chance|Scan radius -75%|
+|Catastrophic event (rare)|20% per-tile destruction chance|Scan effectively disabled|
+
+**Visibility:**
+
+The player only sees weather in cells within visibility range of any populated island. Default range R\_weather (placeholder: 5 cells in each direction). Outside this range, weather is unknown; the player must commit launches blind.
+
+Visibility is extended by:
+
+* Weather Station (T2): +3 cells from this island
+* Advanced Weather Station (T3): +6 cells, plus 1-cycle ahead forecasting
+
+**Vehicle vulnerability multipliers:**
+
+|Vehicle|Multiplier on base destruction chance|
+|-|-|
+|T2 drone|x1.5 (fragile, entry-level)|
+|T3 drone|x1.0|
+|T4 drone|x0.7 (sensors avoid worst)|
+|T5 path drone|x0.5 (robust, see Section 11.6)|
+|Cargo Ship (T1)|x1.0|
+|Heavy Freighter (T2)|x0.9|
+|Industrial Carrier (T3)|x0.8|
+|Light Helicopter (T2)|x1.2|
+|Heavy Lift (T3)|x1.0|
+|VTOL Tilt-Rotor (T4)|x0.7|
+
+Final per-tile destruction chance = state\_chance × vehicle\_multiplier, applied at each cell traversed.
+
+**Cell traversal rule.** The vehicle's flight path is rasterized into the ordered sequence of cells it crosses from source to destination. For each cell on that sequence, exactly one destruction roll happens — at the timestamp the path enters the cell. Dwell time within a cell does not increase destruction probability; only the act of entering counts. Per-cell entry timestamps are deterministic functions of the launch parameters (origin, direction, speed, fuel) so offline simulation produces identical resolutions to online play.
+
+**Weather and routes:**
+
+Established cargo routes (cargo, drone, airship, mass_driver) are not destroyed by weather, but storm-affected cells reduce route capacity temporarily: -50% during Storm cells, -90% during Severe. In addition, **in-flight cargo loses some units when its path crosses storm cells**: per-cell roll, scaled by storm severity (placeholder: 5% of in-flight units lost per Storm cell, 15% per Severe storm cell, 30% per Catastrophic cell). The route itself continues operating; only the units in flight at the time take losses. Teleporter Pad routes and T5 Spacetime Anchor are immune (no in-flight buffer to damage).
+
+**Satellites are immune to weather.** Per §14, satellites operate above the weather layer — they take no damage rolls from any weather state in their cell. The only damage source for satellites is orbital debris (§14.8). This makes the Scanner Sat's weather-visibility role especially valuable: it observes weather in cells without ever being affected by it.
+
+**Weather and offline math:**
+
+Vehicles in flight while the player is offline are resolved at return-time using the deterministic forecast. For each cell on the vehicle's path at the time it would have crossed, evaluate destruction probability and consume RNG. This produces a stable answer regardless of when the player logs back in.
+
+### 2.7 Day-Night Cycle
+
+The world has a 24-real-hour day-night cycle. Time-of-day is global — the same phase applies everywhere; there is no longitude variation. Time-of-day is computed as `phase = (world\_tick % seconds\_per\_real\_day) / seconds\_per\_real\_day`, normalized to [0, 1):
+
+* 0.00–0.25: Dawn
+* 0.25–0.50: Day
+* 0.50–0.75: Dusk
+* 0.75–1.00: Night
+
+**Solar buildings (Solar Panel, Sunspire, Solar cell production):**
+
+* Day: 100% output
+* Dusk: 50% output (linear ramp from 100 → 0)
+* Night: 0% output
+* Dawn: 50% output (linear ramp from 0 → 100)
+
+A solar-dependent island must plan for night-time stockpile via Battery (T2) or Singularity Battery (T5) reserves; otherwise its economy stalls during the night phase.
+
+**Weather modulation by phase:** severe-storm formation rate increases by ~25% during Night and Dawn (placeholder). Other states unchanged.
+
+The day-night cycle is global, so the player can plan around it: dispatch fuel-hungry tasks on solar-heavy islands during Day, schedule sensitive launches during Day or Dusk if solar power is the launch infrastructure's input. The cycle is purely time-driven and does not depend on the player's session — at offline resolution, day/night is just `phase(t)` evaluated at the relevant tick.
+
+\---
+
+## 3\. Island Specification
+
+### 3.1 Properties
+
+Each island has:
+
+* Unique ID
+* World coordinates
+* Biome type
+* Size: ellipse parameters (major radius, minor radius, rotation in degrees) — see §3.4. Merged islands store a list of constituent ellipses (see §3.6).
+* Modifier list (zero or more bonuses/hazards)
+* Terrain grid (static, derived from seed)
+* Building list (dynamic, placed by player)
+* Local inventory (per-resource stockpile)
+* Storage caps (derived from buildings)
+* Level (uncapped — 50 is a tier breakpoint, not a hard cap; the XP curve becomes exponential past 50, see §9.1)
+* XP
+* Unlocked skill tree nodes
+* Unspent skill points
+* Last-tick timestamp
+
+### 3.2 Biomes
+
+|Biome|Tile types|Power source|Notes|
+|-|-|-|-|
+|Plains|grass, stone, ore vein, coal vein|Solar Panel|Balanced, large grids — solar suits the open terrain and bootstraps without fuel (see §3.7)|
+|Forest|tree, dense forest, grass, water|Biomass Plant|Wood-rich, modest size|
+|Coast|water, sand, ore vein, saltwater shore|Wind Turbine|Maritime, narrow shapes|
+|Volcanic|rock, magma vent, rare ore|Geothermal Vent|Rich and dangerous, smaller|
+|Desert|sand, copper vein, rare crystal, quartz outcrop|Solar Panel|Scarce water, rare ores|
+|Arctic|ice, cryo deposit, rare bio|Cryogenic Generator (T2)|Specialty, hard to power|
+
+### 3.3 Tile Types
+
+* Grass (build anywhere)
+* Forest tree (logger required, or clear for grass)
+* Dense forest (T2 logger required, more wood)
+* Stone outcrop (quarry, or expensive clear)
+* Fresh water tile (well source, naval anchor)
+* Saltwater shore (coast only, desalination recipes)
+* Marsh (drain to grass, or build wetland recipes)
+* Cliff (terrain modification required to clear)
+* Sand (build, or quarry to sand resource)
+* Ore vein (mine required)
+* Coal vein (mine required)
+* Magma vent (volcanic only, geothermal output)
+* Cryo deposit (arctic only)
+* Rare crystal (desert only)
+* Quartz outcrop (desert only, high-purity silica source)
+
+### 3.4 Size, Shape, and Expansion
+
+Islands are ellipses on the tile grid. Each island has a major radius, a minor radius, and a rotation angle. A tile (x, y) — meaning the unit square from (x, y) to (x+1, y+1) — is part of the island if and only if all four corners of that square lie strictly inside the ellipse. Partial overlap does not qualify; only fully-inscribed tiles are buildable terrain. This produces a slightly puffy circular/oval outline at the tile-grid scale.
+
+Initial radii by biome (placeholders):
+
+|Biome|Major radius|Minor radius|Notes|
+|-|-|-|-|
+|Plains|14|14|Circular, balanced, large grids|
+|Forest|10|10|Circular, modest size|
+|Coast|14|7|Oval, narrow maritime profile|
+|Volcanic|7|7|Circular, smaller and dangerous|
+|Desert|12|12|Circular|
+|Arctic|10|10|Circular|
+
+Initial rotation is 0 for circular biomes. Coast islands generate with a biome-randomized rotation (multiples of 22.5 degrees from world seed).
+
+Maximum natural size, via Land Reclamation Hub at T2+ (placeholders):
+
+|Biome|Max major|Max minor|
+|-|-|-|
+|Plains|28|28|
+|Forest|20|20|
+|Coast|28|14|
+|Volcanic|14|14|
+|Desert|24|24|
+|Arctic|14|14|
+
+Each Land Reclamation expansion adds 1 to either the major or the minor radius (player-chosen) at material cost that scales superlinearly with current radius. Rotation cannot be changed after generation.
+
+### 3.5 Modifiers
+
+Each island has zero to three modifiers, rolled at generation via a two-step process:
+
+1. **Modifier count** is sampled from a weighted distribution (placeholder): 50% → 0 modifiers, 30% → 1, 15% → 2, 5% → 3.
+2. **Specific modifiers** are sampled from the table below, that many at a time, without replacement, weighted by per-modifier rarity.
+
+Biome-tagged modifiers only roll on matching biomes (Frozen Core only on Arctic; Geothermal Active is Volcanic-favored — its weight doubles on Volcanic islands and halves elsewhere).
+
+**Stable mutual exclusivity.** Stable is sampled only on the FIRST modifier draw of step 2. If the first draw lands on Stable, the island's modifier count is collapsed to 1 and the final set is `{Stable}` regardless of what the original count roll said. If the first draw is non-Stable, Stable is removed from the table for any remaining draws (count 2 or 3) — it cannot co-exist with other modifiers under any circumstance.
+
+|Modifier|Weight (placeholder)|Effect|
+|-|-|-|
+|High Wind|10|Wind power +50%, but all output has ±20% random variance|
+|Geothermal Active|6 (12 on Volcanic, 3 elsewhere)|Free heat to all buildings, no need for adjacent heat source|
+|Mineral Rich|10|+25% raw extraction|
+|Cursed Storms|3|-10% production overall, but rare resource finds doubled|
+|Stable|5|No negative modifiers, no random events; mutually exclusive with all others|
+|Aetheric Anomaly|1|T5 raw extraction efficiency +50% on this island (applies to all T5 extractors per §8.10) — very rare|
+|Frozen Core|6|Arctic-only; cryo recipes 2× efficient|
+|Fertile|6|Forestry +50% (no agricultural meaning, just bonus)|
+
+### 3.6 Joining
+
+Two islands merge into one when their footprint ellipses overlap. The trigger is geometric: each tick, the engine checks whether any pair of islands has overlapping ellipses. The most common cause is a player using Land Reclamation Hub on island A to expand its radius until A reaches a neighboring island B.
+
+**Multi-overlap ordering.** If a single tick produces multiple overlapping pairs (e.g., A simultaneously reaches both B and C), the engine processes one pair per tick to avoid ambiguous simultaneous merges. The pair with the largest combined tile count is processed first; smaller is absorbed into larger per the rules below. Remaining unmerged pairs re-evaluate on the next tick — by that point, the merged identity has new ellipses and may now overlap further targets, which then process the same way. Ties in combined tile count break deterministically by the lower-ID island's identity.
+
+When islands A and B touch:
+
+* The larger island absorbs the smaller. "Larger" is determined by current tile count; on tie, by level.
+* The merged island stores both ellipses as constituents. The union of two ellipses is generally not an ellipse, so the merged island's footprint is "the union of all constituent ellipses". A tile is part of the merged island if it is fully inscribed inside any constituent ellipse.
+* The smaller island's inventory transfers into the larger's inventory; overflow above the larger's storage caps is lost.
+* The smaller's spent and unspent skill points are refunded as unspent points on the merged island; the player may freely re-spec.
+* The smaller's level and XP are discarded; the merged island keeps the absorber's level and XP. Skill-point refund preserves the player's progression value; only the redundant level number is lost.
+* All buildings on both islands remain in place. Adjacency is recomputed across the seam — buildings near the boundary may gain new neighbors that weren't there before.
+* Routes targeting the absorbed island redirect to the merged island. Routes between A and B are deleted (they are now intra-island).
+* Drones in transit returning to the absorbed island return to the merged island.
+* The absorber's specialization role and modifiers are kept; the absorbed island's are voided.
+
+Joining is permanent — there is no un-merge.
+
+A merged island can continue to expand. If it grows to touch a third island, the same join procedure applies, accumulating ellipses.
+
+**Building coordinates after merge.** Each constituent ellipse retains its own coordinate origin via the `offsetX` / `offsetY` fields in the architecture data model (§15.1). Buildings on the absorbed island are stored at their original local (x, y) within their ellipse, but globally they live at `(x + offsetX, y + offsetY)` where (offsetX, offsetY) is the absorbed ellipse's offset relative to the absorber. By construction, two buildings can never land on the same global coordinate — the absorber's ellipse has offset (0, 0), and the absorbed ellipse's offset is the displacement between the two original islands' world positions, which is by definition non-zero (otherwise they would have been the same island). Footprint conflicts at merge time are impossible.
+
+### 3.7 Starting State
+
+A new game begins with:
+
+* One populated home island. Biome: Plains. Size: major radius 14, minor radius 14, rotation 0. (Effective tile area is the inscribed grid of that circle.)
+* No starting modifiers — Stable trait by default.
+* Empty building grid: no pre-placed buildings, no power, no extraction.
+* Empty inventory: no starter resources, no Foundation Kit.
+* Level 1, 0 XP, 0 skill points.
+* Dark world map: only the home island is known. No discovered neighbors.
+* No Drone Pad. The player cannot dispatch drones until the home island reaches level 5 (Tier 2) and a Drone Pad is built — see §11.
+
+Bootstrap loop: the player places a Solar Panel (Plains' default power source per §3.2 — works without fuel, day-cycle dependent per §2.7) on any buildable tile, then a Workshop / Logger / Mine on a suitable tile, accumulating XP through production. Solar produces nothing during night phase, so a fresh game's first night requires either patience or a Battery (T2, requires more progression). Once level 5 is reached, the Drone Pad becomes available; the player builds it and dispatches the first scouting drone into the dark map. The first drone return is the first multi-island moment.
+
+The starting world seed determines the home island's terrain (positions of ore veins, coal veins, water tiles within the ellipse) and the position and biome of every other island in the world (most of which are dark to the player at session 0).
+
+\---
+
+## 4\. Building System
+
+### 4.1 Footprint Shapes
+
+Buildings occupy 1x1 to 4x4 tiles. Shape is defined as a list of relative offsets from an anchor cell. Standard shapes include:
+
+* 1x1 (single tile)
+* 1x2, 2x1 (line)
+* 2x2 (square)
+* L-tromino, L-tetromino
+* T-tetromino
+* 1x3, 3x1 (long line)
+* 3x3 (large square)
+* 4x4 (very large)
+* Custom irregular masks for unique buildings
+
+### 4.2 Rotation
+
+All buildings support 4 rotations (0/90/180/270 degrees). The shape mask transforms according to standard 2D rotation: `(dx, dy) -> (-dy, dx)` for 90 degrees clockwise.
+
+
+### 4.3 Placement Rules
+
+A building can be placed if and only if:
+
+* Every tile in the rotated shape mask is within the island bounds (i.e. its unit square is fully inscribed inside one of the island's constituent ellipses; see §3.4 and §3.6)
+* Every tile in the rotated shape mask is buildable (not occupied by another building, not blocked by uncleared terrain, not requiring a specific tile type the building doesn't allow)
+* All terrain-tile requirements are satisfied (e.g. Mine requires every cell of its footprint to be on an ore/coal vein)
+
+### 4.4 Adjacency Rules
+
+Adjacency is computed using 4-neighbors. For a multi-tile building, the adjacent set is the union of tiles bordering any cell of the footprint, minus the footprint itself.
+
+### 4.5 Adjacency Effects
+
+Two categories:
+
+**Buff adjacency (capped stacking):** building gains a multiplier per matching neighbor, capped at N. Format: `+X% statKey per adjacent matchType, max N matches`.
+
+**Gating adjacency:** building cannot operate, or operates in a degraded mode, unless an adjacent requirement is met. Examples:
+
+* Smelter requires adjacent Heat Source; without one, output is zero
+* Refinery without adjacent Wastewater Treatment operates only on low-grade recipe (efficiency -50%)
+* Crystal Growth Lab adjacent to Cooling Tower unlocks rare crystal recipes
+* Chemical Reactor adjacent to another Chemical Reactor risks toxicity event: 5% per real-time hour per reactor that has at least one adjacent Chemical Reactor. On trigger, that specific reactor's throughput drops to 50% for 1 real-time hour, then auto-resolves. Adjacent reactors are unaffected unless they trigger their own roll. Player can mitigate by spacing reactors with non-reactor buildings between them.
+
+### 4.6 Storage Caps
+
+Storage is per-resource and assigned at placement. Buildings come in two flavors.
+
+**Specialized storage** holds resources of one category only:
+
+* Silo: dry goods (raw extractables — wood, stone, ore, coal, sand, salt, sulfur, phosphate, graphite, etc.)
+* Tank: liquids and gases (water, crude oil, natural gas, hydrogen, naphtha, heavy oil, lubricant, acids, fuels including Biofuel/Diesel/Aviation Kerosene/Cryogenic Hydrogen)
+* Cold Storage: temperature-sensitive (cryogenic compound, cryo-coolant, liquid nitrogen, certain plastics)
+* Component Warehouse: manufactured components (T2-T3 fabricated parts: Wire, Bolt, Bearing, Spring, Gear, Battery, Microchip, PCB, Solar cell, Glass panel, Sheet metal, Pipe, etc.)
+* Vault: rare/valuable (gold ore, silver ore, lithium, mercury, diamond ore, rare earth, uranium ore, helium-3, all T4-T6 components)
+
+A specialized building accepts only resources whose category matches. Categories are static, defined by the resource catalog (§6).
+
+**Generic storage** (Crate, Warehouse) holds one player-chosen resource per building. At placement, the player labels the building with the resource it will hold. Re-labeling is a free UI action and requires the building to be empty (or accepts a force-clear that destroys current contents).
+
+The cap for resource `r` on an island is the sum of:
+
+* Specialized buildings whose category includes `r`, contributing their full capacity to `r`
+* Generic buildings explicitly assigned to `r`, contributing their capacity to `r`
+
+When resource `r` hits its cap, only buildings actively producing `r` stall. Other recipes on the island continue to run. Stalled production back-propagates: a stalled building stops consuming its inputs, which accumulate against their own caps and may trigger further upstream stalls.
+
+If a storage building is destroyed (by launch failure, debris damage, demolition, etc.), its capacity disappears immediately. If current inventory of any affected resource now exceeds the reduced cap, the excess is lost — inventory clamps down to the new cap.
+
+### 4.7 Maintenance
+
+Every placed building has an internal operating-time counter that ticks at wall-clock real-time from the moment of placement until the moment of destruction. Idle buildings, stalled buildings, and inactive buildings (per §5.1) all accrue maintenance time the same as actively-producing ones — maintenance is a function of presence, not productivity. This is what gives Eternal Servitor conversion (§13.3) its long-term value: exempt-from-maintenance is exempt from a real ongoing cost regardless of how the building is used.
+
+Once accumulated operating time reaches the maintenance threshold for the building's tier (placeholder: T1 = 12h, T2 = 16h, T3 = 20h, T4 = 24h, T5 = 24h), the building enters a "needs maintenance" state.
+
+In that state, output efficiency degrades linearly from 100% to 50% over the next 4 real-time hours (placeholder). If still unmaintained at 50%, output stays at 50% indefinitely. Buildings do not stop entirely and are never randomly destroyed by neglect; they simply run at reduced rate.
+
+To restore the building to 100%, maintenance materials must be present in the island's inventory at maintenance-cycle time. The engine consumes materials and resets the timer automatically — the player does not manually trigger maintenance.
+
+|Building tier|Maintenance recipe (placeholder)|
+|-|-|
+|T1|2 Lubricant + 5 Bolt|
+|T2|3 Lubricant + 5 Bearing|
+|T3|5 Lubricant + 1 Electric motor + 1 Capacitor|
+|T4|10 Lubricant + 1 Exotic Alloy fragment + 1 Microchip|
+|T5|15 Lubricant + 1 Phase Converter + 1 Eldritch Processor|
+|T6|25 Lubricant + 1 Reality Anchor fragment + 1 Memetic Core|
+
+If maintenance materials are not present when due, the building stays in its degraded state. The instant materials become available, an automatic maintenance cycle runs and the building returns to 100%. The operating-time counter restarts from zero on each successful maintenance.
+
+The player's responsibility is to keep maintenance supplies flowing — plant Workshops and Assemblers producing Lubricant and tier-appropriate parts, route them to producing islands. A late-game island typically dedicates a small portion of its production capacity to its own (and its protégés') maintenance loop.
+
+**Eternal Servitor exemption.** Buildings converted into Eternal Servitors (§13.3) skip both maintenance and fuel-consumption checks entirely.
+
+\---
+
+## 5\. Power System
+
+### 5.1 Electrical Grid (Per-Island)
+
+Each island has a single local electrical grid. No inter-island electrical transmission below T4.
+
+Power buildings produce W. Machines consume W. The instantaneous balance is computed every tick:
+
+```
+P\_produced = sum of building.powerProduction for active buildings
+P\_consumed = sum of building.powerConsumption for active buildings
+power\_factor = P\_consumed == 0 ? 1 : min(1, P\_produced / P\_consumed)
+```
+
+`power\_factor` multiplies the production rate of every consumer on the island. This produces smooth brownout: under-supplied islands see proportional output reduction, never hard cutoffs or building damage.
+
+**`active` definition.** A building is `active` iff `inputAvail > 0` (per §15.3) AND all gates pass: terrain/tile requirement, adjacency requirement (heat, cooling, etc. per §5.2), and direct fuel-consumption stockpile if applicable. Solar-class buildings additionally require the current day-cycle phase (§2.7) to provide non-zero solar output. Otherwise inactive: contributes zero to `P\_produced` and `P\_consumed`.
+
+### 5.2 Heat (Adjacency-Based)
+
+Heat is not a grid. It is an adjacency requirement on specific recipes.
+
+A building requiring heat must have at least one adjacent Heat Source. The relationship is **N:1** — a single Heat Source can serve any number of adjacent heat-requiring buildings simultaneously. The Heat Source's fuel consumption multiplies by the number of heat consumers it currently serves: a Coal Furnace serving 4 Smelters burns 4× the coal of a Coal Furnace serving 1 Smelter. This rewards compact hot-zone layouts and makes the no-fuel Heat Sources (Geothermal Vent, Fusion Core) especially valuable when surrounded by many consumers.
+
+**Source priority when multiple are adjacent.** When a heat consumer borders multiple Heat Sources, free Heat Sources (Geothermal Vent, Fusion Core) take priority — they satisfy the consumer at zero fuel cost. Fuel-burning sources (Coal Furnace, Plasma Heater) bill only if no free source is adjacent to that specific consumer. If multiple fuel-burners are adjacent and no free source is, the source with the lowest cost-per-cycle bills (deterministic tie-break: lowest source building ID).
+
+**Assignment algorithm.** When N consumers and M sources share adjacency relationships, the engine walks consumers in ascending building-ID order; each consumer independently selects its assignment per the priority rule above. Two consumers may both bill the same Coal Furnace — the Furnace then multiplies its fuel use by the number of consumers it serves (per the N:1 rule). Consumers do NOT compete for free sources: a single Geothermal Vent serving 5 adjacent consumers serves all 5 at zero cost. Greedy per-consumer assignment is deterministic, predictable, and near-optimal in practice.
+
+Heat Sources include:
+
+* Coal Furnace (consumes coal, produces heat)
+* Geothermal Vent (free, requires magma vent tile, volcanic only)
+* Nuclear Core (T4, very high heat output, consumes uranium fuel)
+* Fusion Core (T5, free, very high output)
+
+### 5.3 Inter-Island Power (T4+)
+
+T4 unlocks Power Cable routes that transmit electrical power between islands. These routes use the same network mechanics as cargo routes, with capacity in W instead of items/sec.
+
+T5 Spacetime Anchor makes power transmission distance-independent.
+
+\---
+
+## 6\. Resource Catalog
+
+### 6.1 T0 Raw Materials
+
+Wood, Stone, Limestone, Sand, Clay, Quartz, Iron ore, Copper ore, Tin ore, Nickel ore, Chromium ore, Zinc ore, Coal, Bauxite, Lead ore, Manganese ore, Cobalt ore, Tungsten ore, Titanium ore, Sulfur, Phosphate, Salt, Graphite, Crude oil, Natural gas, Fresh water, Saltwater, Hydrogen (electrolysis output)
+
+### 6.2 T1 Refined Intermediates
+
+Lumber, Plank, Charcoal, Coke, Brick, Mortar, Cement, Concrete, Quicklime, Slaked lime, Iron ingot, Copper ingot, Tin ingot, Pig iron, Glass, Biofuel, Solder
+
+### 6.3 T2 Alloys, Refined, Components
+
+Steel, Carbon steel, Galvanized steel, Bronze, Brass, Aluminum, Alumina, Rigid plastic, Flexible plastic, Synthetic rubber, Lubricant, Sulfuric acid, Hydrochloric acid, Sodium hydroxide, Chlorine, Naphtha, Heavy oil, Tar, Asphalt, Diesel (T2 fuel for drones, vehicles, satellite launches — see §11.7), Wire, Heavy cable, Sheet metal, Steel beam, Pipe, Bolt, Bearing, Spring, Gear, Battery, Glass panel, Coolant, Ceramic insulator
+
+### 6.4 T3 Advanced Raw, Refined, Components
+
+Gold ore, Silver ore, Lithium, Mercury, Diamond ore, Cryogenic compound, Rare earth, Uranium ore, Helium-3, Stainless steel, Tool steel, Magnetic alloy, Carbon fiber, Silicon (high purity), Silicon wafer, Optical glass, Glass fiber, Optical fiber, Transistor, Capacitor, Resistor, PCB, Microchip, Circuit board, Memory module, Processor, Computing module, Magnet, Electric motor, Generator, Hydraulic actuator, Pneumatic actuator, Pump, Solar cell, Fuel cell, Cryo-coolant, Liquid nitrogen, Argon, Oxygen, Phosphor, Aviation Kerosene (T3 fuel — see §11.7)
+
+### 6.5 T4 Endgame
+
+Quantum chip, AI core, Antimatter capsule, Exotic alloy, Nuclear fuel rod, Plasma containment vessel, Particle accelerator core, Cryo containment unit, Singularity sensor, Self-replication module, Cryogenic Hydrogen (T4 fuel — see §11.7)
+
+### 6.6 T5 Transcendent
+
+**Raw:** Dark matter, Zero-point flux, Tachyon stream, Neutronium, Strange matter, Higgs flux, Casimir energy, Quantum foam, Aetheric current, Spacetime fragment
+
+**Refined / Components:** Reality Anchor, Probability Calculator, Dimensional Fold, Causal Regulator, Singularity Battery, Tachyonic Transmitter, Phase Converter, Memetic Core, Eldritch Processor, Plasma Charge (T5 fuel — see §11.7)
+
+**Endgame Artifacts:** Ascendant Core, Universe Editor, Reality Engine, Genesis Cell, Omniscient Lattice, Eternal Servitor, Aether Beacon, Probability Engine, Time Lock
+
+### 6.7 Byproducts
+
+Slag (from smelting), Ash (from combustion), Waste heat, Exhaust gas, Wastewater, Trace minerals (from slag reprocessing), Scrap (from demolishing buildings — see below)
+
+**Demolition recovery.** Demolishing any T1+ placed building produces Scrap proportional to its build cost (placeholder recovery rate: ~30% of the building's recipe ingredients, expressed as Scrap rather than the original components). Scrap is a T1 resource in the dry-goods storage category. Steel recipes accept Scrap as a substitute for fresh Pig iron at a 2:1 ratio (2 Scrap = 1 Pig iron's worth of steel input). This makes layout redesign less wasteful: demolishing a building isn't pure loss but a partial credit toward future builds.
+
+Byproducts must be handled. Untreated wastewater applies an efficiency penalty. Slag can be reprocessed for trace minerals (gold, silver, rare metals at low yield).
+
+\---
+
+## 7\. Recipe Chains
+
+Recipes are defined as `inputs -> outputs` with a cycle time, executed by a specific building type.
+
+### 7.1 Iron / Steel
+
+```
+Iron ore + Coal       -> Iron ingot           (Smelter, basic)
+Coal                  -> Coke                 (Coke Oven)
+Iron ingot + Coke     -> Pig iron             (Blast Furnace, requires heat)
+Pig iron + Scrap      -> Steel                (Steel Mill)
+Steel + Manganese     -> Carbon steel
+Steel + Chromium + Nickel -> Stainless steel
+Steel + Tungsten      -> Tool steel
+Steel + Zinc bath     -> Galvanized steel
+Steel rolling         -> Sheet metal, Beam, Pipe, Bolt, Bearing, Rebar
+```
+
+### 7.2 Copper / Brass
+
+```
+Copper ore           -> Copper ingot          (Smelter)
+Copper + Tin         -> Bronze
+Copper + Zinc        -> Brass
+Copper drawn         -> Wire, Heavy cable
+Copper rolled        -> Copper sheet
+Lead + Tin           -> Solder
+```
+
+### 7.3 Aluminum
+
+```
+Bauxite + chemistry  -> Alumina               (Chemical Reactor)
+Alumina + power      -> Aluminum              (Electrolyzer, very high power draw)
+Aluminum             -> Sheet, Foil, Frame
+```
+
+### 7.4 Oil / Petrochemical
+
+```
+Crude oil cracking   -> Naphtha + Diesel + Heavy oil + Asphalt + Tar  (Cracker)
+Naphtha              -> Plastic precursor + Solvents
+Heavy oil            -> Lubricant + Bitumen
+Plastic precursor    -> Rigid plastic, Flexible plastic, Synthetic rubber
+```
+
+### 7.5 Chemistry
+
+```
+Sulfur + water       -> Sulfuric acid
+Salt + power (electrolysis) -> Chlorine + Sodium hydroxide
+Limestone + heat     -> Quicklime
+Quicklime + water    -> Slaked lime
+Air separation (cryo)-> Oxygen + Nitrogen + Argon + Liquid nitrogen
+Phosphate + acid     -> Phosphor
+```
+
+### 7.6 Glass / Ceramics
+
+```
+Sand + Limestone + heat       -> Glass
+Quartz (high purity) + heat   -> Optical glass
+Clay + heat                   -> Ceramic insulator
+Glass + extreme heat          -> Glass fiber, Optical fiber
+```
+
+### 7.7 Electronics
+
+```
+Quartz                        -> Silica
+Silica + extreme purity       -> Silicon
+Silicon                       -> Silicon wafer
+Wafer + doping                -> Transistor, Capacitor, Resistor
+Wafer + photolithography      -> Microchip                     (Lithography Lab, T3)
+Copper sheet + Plastic        -> PCB
+PCB + Transistors + Capacitors + Resistors + Solder -> Circuit board
+Circuit board + Memory module + Processor -> Computing module
+Microchip + Rare earth doping + Cryo processing -> Quantum chip
+```
+
+### 7.8 Construction
+
+```
+Quicklime + Sand + Clay       -> Cement
+Cement + Sand + Water         -> Concrete
+Concrete + Steel rebar        -> Reinforced concrete
+```
+
+### 7.9 Power Components
+
+```
+Lithium + Electrolyte + Plastic casing      -> Battery
+Hydrogen + Catalyst + Polymer membrane      -> Fuel cell
+Doped silicon + Glass + Aluminum frame      -> Solar cell
+Magnet + Wire + Steel core                  -> Electric motor
+Magnet + Wire + Turbine blade               -> Generator
+Many capacitors + Chassis                   -> Capacitor bank
+```
+
+### 7.10 Mechanical Composites
+
+```
+Motor + Pipe + Valve + Casing               -> Pump
+Pipe + Lubricant + Cylinder + Piston        -> Hydraulic actuator
+Pipe + Compressed air + Piston              -> Pneumatic actuator
+```
+
+### 7.11 T4 Endgame
+
+```
+Quantum chip + Memory + Cryo cooling + Power conditioner -> AI core
+Particle accelerator + Electromagnetic containment       -> Antimatter capsule
+Tungsten + Cobalt + Rare earth + extreme conditions      -> Exotic alloy
+Lab quantum manipulation                                  -> Time crystal
+AI core + Drone parts + Manufacturing programming        -> Self-replication module
+```
+
+### 7.12 T5 Transcendent
+
+T5 recipes consume T4 components and T5 raws in extreme quantities with hour-long cycle times.
+
+```
+4 AI core + 1 Antimatter capsule + 1 Time crystal + 1 Exotic alloy + 24h cycle               -> Reality Anchor
+4 Reality Anchor + 1 Zero-point flux + 2 Causal Regulator + 1 Memetic Core + 24h cycle       -> Genesis Cell
+2 Reality Anchor + 4 Causal Regulator + 1 Memetic Core + 12h cycle                           -> Lattice Node
+N Lattice Nodes (one per networked T5 island, N = 20 = Network Consciousness threshold) + Spacetime fragment + 6h cycle  -> Omniscient Lattice activation
+1 Ascendant Core requires: T5 mastery on at least 3 islands
+```
+
+**T5 mastery** (Ascendant Core gate): a qualifying island has reached level 60+ AND has fully completed at least one T5-tier sub-path (see §9.3 — fully completed = every node in the sub-path purchased). Three such islands are required for the Ascendant Core craft.
+
+**T6 fuel — Antimatter Propellant** is produced at a Particle Accelerator (T4) located on a T6-mastered island:
+
+```
+1 Antimatter capsule + 1 Plasma containment vessel + 5 Cryogenic Hydrogen + 100 MW for 30 min cycle   ->  1 Antimatter Propellant
+```
+
+The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who has not built out T4 antimatter production cannot fuel T6 launches at any meaningful rate.
+
+\---
+
+## 8\. Building Catalog
+
+### 8.1 Extraction
+
+|Building|Footprint|Tier|Tile requirement|Power|Notes|
+|-|-|-|-|-|-|
+|Logger|1x1|T1|tree|none|Wood output|
+|Heavy Logger|2x2|T2|dense forest|medium|Wood output, higher rate|
+|Mine|2x2|T1|ore vein or coal vein|medium|Ore or coal output by tile|
+|Deep Mine|2x3|T2|ore vein|high|Higher rate, deeper veins, requires Mining sub-path|
+|Quarry|2x2|T1|stone or sand|low|Stone/sand output|
+|Well|1x1|T1|water|low|Fresh water output|
+|Pump Jack|2x2|T2|(placed near oil)|medium|Crude oil output|
+|Gas Extractor|2x2|T2|(placed near gas vent)|medium|Natural gas|
+|Drilling Rig|3x3|T3|(deep vein)|high|Rare earth, lithium, uranium|
+
+### 8.2 Smelting / Refining
+
+|Building|Footprint|Tier|Notes|
+|-|-|-|-|
+|Furnace|1x1|T1|Basic smelting, low throughput|
+|Smelter|2x2|T1|Standard ore -> ingot|
+|Coke Oven|2x2|T2|Coal -> coke|
+|Blast Furnace|3x3|T2|Iron + coke -> pig iron, requires adjacent Heat Source|
+|Steel Mill|3x3|T2|Pig iron -> steel|
+|Electric Arc Furnace|2x3|T3|High-tier alloys, electricity-driven|
+|Cracker|3x3|T2|Crude oil cracking, byproduct outputs|
+|Chemical Reactor|2x2|T2|Acid, plastic precursor, alumina|
+|Electrolyzer|2x2|T3|Aluminum electrolysis, very high power|
+|Air Separator|3x3|T3|Cryogenic distillation: O2, N2, Ar|
+|Lithography Lab|4x4|T3|Silicon wafer -> microchip|
+|Particle Accelerator|4x4|T4|Antimatter production, exotic alloys|
+|Cryo Lab|3x3|T3|Cryogenic compound processing|
+
+### 8.3 Manufacturing
+
+|Building|Footprint|Tier|Notes|
+|-|-|-|-|
+|Workshop|2x2|T1|Basic gears, bolts, simple components|
+|Assembler|2x2|T2|Multi-input components|
+|Fabricator|3x3|T3|Advanced components, motors, actuators|
+|Precision Lab|3x3|T3|Circuit boards, computing modules|
+|Singularity Forge|4x4|T4|T4 endgame artifacts|
+|Reality Forge|4x4|T5|T5 transcendent items|
+
+### 8.4 Storage
+
+|Building|Footprint|Tier|Notes|
+|-|-|-|-|
+|Crate|1x1|T1|+100 cap on one player-chosen resource (generic, see §4.6)|
+|Warehouse|3x3|T1|+1000 cap on one player-chosen resource (generic, see §4.6)|
+|Silo|2x2|T1|+2000 cap; specialized to dry goods category only|
+|Tank|2x2|T2|+2000 cap; specialized to liquids/gases category only|
+|Cold Storage|2x2|T2|+1500 cap; specialized to temperature-sensitive category only|
+|Component Warehouse|2x2|T2|+2000 cap; specialized to manufactured-components category (T2-T3 fabricated parts)|
+|Vault|3x3|T3|+5000 cap; specialized to rare/valuable category only|
+|Singularity Battery|2x2|T5|Effectively infinite electrical power storage (not a resource storage building)|
+
+### 8.5 Power Generation
+
+|Building|Footprint|Tier|Tile requirement|Notes|
+|-|-|-|-|-|
+|Wind Turbine|1x1|T1|coast tile|Free, low output|
+|Solar Panel|1x1|T1|open sand/grass|Free, medium output|
+|Coal Generator|2x2|T1|any|Consumes coal|
+|Biomass Plant|2x2|T1|any|Consumes wood|
+|Geothermal Vent|2x2|T1|magma vent|Free, high output|
+|Cryogenic Generator|2x2|T2|cryo deposit (arctic)|Cryo compound -> power|
+|Nuclear Reactor|4x4|T3|any|Uranium fuel rods, very high output|
+|Fusion Core|4x4|T4|any|Helium-3 fuel, massive output|
+|Casimir Tap|2x2|T5|any|Free vacuum energy|
+
+### 8.6 Heat Sources (used as adjacency)
+
+|Building|Footprint|Tier|Notes|
+|-|-|-|-|
+|Coal Furnace|1x1|T1|Consumes coal|
+|Geothermal Vent (also power)|2x2|T1|Volcanic, free|
+|Plasma Heater|2x2|T3|Power-driven, no fuel|
+|Fusion Core (also power)|4x4|T4|Free heat in addition to power|
+
+### 8.7 Cooling / Treatment
+
+|Building|Footprint|Tier|Notes|
+|-|-|-|-|
+|Cooling Tower|2x2|T2|Adjacency: required for some chemistry recipes|
+|Wastewater Treatment|2x2|T2|Adjacency: prevents efficiency penalty for chemistry|
+|Exhaust Scrubber|1x1|T2|Required for clean operation of high-emission buildings|
+
+### 8.8 Logistics
+
+|Building|Footprint|Tier|Notes|
+|-|-|-|-|
+|Cargo Dock|2x2|T1|Establishes T1 cargo route; auto-placed on ship-settled islands|
+|Shipyard|3x3|T1|Builds and launches ships for settlement and cargo; coastal placement required|
+|Helipad|2x2|T2|Builds and launches helicopters; auto-placed on helicopter-settled islands|
+|Drone Pad|1x1|T2|Drone scouting only (does not settle islands)|
+|Airship Dock|3x3|T3|T3 long-range airship routes|
+|Teleporter Pad|2x2|T4|T4 instant transport, paired endpoints|
+|Spacetime Anchor|2x2|T5|Logical island unification|
+|Power Substation|2x2|T4|Inter-island power cable endpoint|
+
+### 8.9 Special / Endgame
+
+|Building|Footprint|Tier|Notes|
+|-|-|-|-|
+|Land Reclamation Hub|3x3|T2|Expands island grid|
+|Terrain Modifier|2x2|T2|Clears or converts tiles|
+|Weather Station|2x2|T2|Extends weather visibility +3 cells from this island|
+|Advanced Weather Station|2x2|T3|Extends visibility +6 cells, adds 1-cycle forecasting|
+|Platform Constructor (Foundry of Lands)|4x4|T3|Builds artificial islands|
+|Patron Hub|2x2|T2|Manages funneling routes outbound|
+|Launch Tower|3x3|T4|T4 omnidirectional drone pulse|
+|Path Drone Foundry|3x3|T5|Required to launch T5 path-drawn drones|
+|Probability Engine|2x2|T5|Manipulates RNG outcomes for the island|
+|Genesis Chamber|4x4|T5|Creates raw matter from energy|
+|Lattice Node|2x2|T5|Network unity (one per island, requires N to activate)|
+|Universe Editor|3x3|T5|Rewrites local biome and tile mix|
+|Time Lock|3x3|T5|Banks offline-time stockpile per island; spends to accelerate any chosen island's tick rate (see §13.3)|
+
+### 8.10 T5 Raw Extraction (T5 only)
+
+T5 raw resources (§6.6) are extracted by specialized T5 buildings. Each requires T5 access on the island (level 50 + AI core, see §13.1) and draws extreme power per cycle. Extraction is slow — placeholder cycle times of 30 minutes to 4 hours per unit. Aetheric Anomaly islands (§3.5) extract at bonus efficiency.
+
+|Building|Footprint|Outputs|Notes|
+|-|-|-|-|
+|Casimir Tap|2x2|Casimir energy, Zero-point flux, plus electrical power|Doubles as T5 power source (also listed in §8.5). Each cycle taps vacuum to produce continuous bulk power and a discrete unit of Casimir energy or Zero-point flux. Inputs free; operation cost dominated by build cost rather than ongoing fuel.|
+|Aetheric Conduit|3x3|Aetheric current, Quantum foam|Channels exotic atmospheric phenomena. Continuous heavy power draw (placeholder: 60 MW).|
+|Spacetime Resonator|3x3|Spacetime fragment, Tachyon stream|Manipulates local spacetime to harvest fragments. Highest power cost of the T5 extractors (placeholder: 100 MW). Required for any Spacetime Anchor production or T5 Path-Drawn Drone construction.|
+|Eldritch Sieve|3x3|Dark matter, Strange matter, Higgs flux|Filters from cosmic background; produces exactly one of the three outputs per cycle, drawn at equal probability (1/3 each, deterministic given world seed + cycle index). Player does not pick. Heavy power draw (placeholder: 80 MW). Aetheric Anomaly modifier interaction: doubles cycle speed (more cycles → more outputs of all three) rather than biasing toward any specific output.|
+
+Neutronium (the remaining T5 raw) is not directly extracted — it is a refined product derived from combinations of the above raws via T5 refining recipes (§7.12).
+
+Aetheric Anomaly modifier (§3.5) provides +50% extraction efficiency on all four T5 extractors when present on the island.
+
+Total: \~75 building types.
+
+\---
+
+## 9\. Progression System
+
+### 9.1 Per-Island Levels
+
+Each island has an independent level from 1 to 50. There is no global tech tree.
+
+**XP gain is tier-weighted production.** Every resource has an `xp\_weight` constant scaling superlinearly with the resource's tier (placeholder: T0 raw = 1, T1 = 3, T2 = 10, T3 = 30, T4 = 100, T5 = 300, T6 = 1000). Per tick, the island gains:
+
+```
+xp\_per\_tick = sum over resources r of ( production\_rate\[r] \* xp\_weight\[r] ) + funneling\_bonus
+```
+
+The `production\_rate\[r]` figure already incorporates `power\_factor` (§5.1), so brownout under-supply reduces XP proportionally without a separate penalty layer.
+
+**Stalled production produces zero XP.** When a building is halted because its output bin has hit a storage cap or its inputs are unavailable, it produces no resources and earns no XP for that interval. The player must manage caps, build additional storage, or consume the bottlenecked resource downstream to keep progression moving.
+
+**Funneling bonus** is the second source — see §10.1 for the formula. It applies only while the island is below Tier 3.
+
+XP-to-level curve: superlinear, two-segment.
+
+* For levels 1 through 50, polynomial: `xp\_for\_level\_n = 100 \* n^2.2` (placeholder).
+* For levels past 50, exponential: `xp\_for\_level\_n (n > 50) = xp\_for\_level\_50 \* 1.2^(n - 50)` (placeholder multiplier 1.2).
+
+Levels are uncapped — 50 is the T5 access breakpoint (§13.1), not a hard ceiling. The exponential softcap past 50 means islands continue to accrue progression indefinitely but at a dramatically slowing pace: level 70 costs ~38× more XP per level than level 50, level 100 costs ~9100×. Practical effect: a fully-developed island never permanently stalls, but each new level past 50 represents a real long-haul commitment.
+
+Each level grants 1 skill point to spend. Because levels are uncapped, skill points eventually outpace the available skill-tree nodes (which are mutual-exclusively capped at ~25-30 accessible per island, see §9.3) — the post-cap excess accumulates and feeds late-game prestige-style spending (see §9.3).
+
+### 9.2 Tier Breakpoints
+
+Tiers are passive thresholds that gate building and recipe availability:
+
+* Tier 1: levels 1-5
+* Tier 2: levels 5-15 (crossing 5 unlocks T2 buildings, recipes, sub-paths)
+* Tier 3: levels 15-30 (crossing 15 unlocks T3, plus Specialization Passive)
+* Tier 4: levels 30-50 (crossing 30 unlocks T4, plus biome-locked uniques)
+* Tier 5: level 50 + AI core crafted (unlocks hidden T5 sub-band on the skill tree)
+* Tier 6: Ascendant Core crafted on this island + Spaceport built (unlocks Orbital sub-path under Logistics; satellite operations available — see Section 14)
+
+### 9.3 Skill Tree Structure
+
+Three branches, each with sub-paths.
+
+**Extraction**
+
+* Mining (ore output, vein depth, rare reveal)
+* Forestry (wood output, regrowth, exotic species)
+* Drilling (T2+, oil/gas/deep mineral)
+* Robotics (construction speed, parallel building, drone production efficiency)
+
+**Refinement**
+
+* Smelting (iron, copper, alloy chains)
+* Chemistry (oil cracking, polymers, acids)
+* Electronics (silicon, circuits, precision)
+* Power systems (efficiency, advanced generation)
+
+**Logistics**
+
+* Storage (caps, specialized vaults, rare material handling)
+* Transport (route capacity, drone fuel, airship range)
+* Network (teleporter, multi-hop, automation)
+
+**Orbital** (T6, see §14.9 for full sub-path details)
+
+* Launch (success rate, pad-explosion mitigation)
+* Communication (antenna and satellite comm range, store-and-forward bandwidth)
+* Discovery (Scanner Sat dwell ramp, coverage radius)
+* Resilience (debris-lodge slowdown reduction, onboard fuel reserve, repair-launch reliability)
+
+**Node depth and cost.** Each sub-path has 10 to 15 nodes ordered by depth (depth 1 = shallow and cheap; deepest = expensive and game-warping). Deeper nodes gate behind tier breakpoints (depth 1-2 require T2, depth 3 requires T3, depth 4 requires T4, depth 5-7 require T5, depth 8+ requires T6). Skill-point cost grows geometrically with depth — placeholder: `cost(depth) = 2^(depth - 1)`, so depth 1 costs 1 point, depth 5 costs 16, depth 10 costs 512, depth 15 costs ~16k. Combined with the exponential XP softcap past level 50 (§9.1), the deepest nodes are practically unreachable except by extremely-late-game islands.
+
+**Magnitude.** Effect magnitude doubles with depth through depth 5 — placeholder: depth 1 = +5%, depth 2 = +10%, depth 3 = +20%, depth 4 = +40%, depth 5 = +80% on the relevant stat. From depth 6 onward, magnitudes either continue geometric (for "more of the same") OR convert into unique unlocks: new recipes, structural rule changes, exotic adjacency effects, biome-locked content access without the biome. The mix between geometric scaling and unique unlocks is per-sub-path, tuned to keep deep investment interesting beyond just "+%".
+
+**Sub-path commitment.** Before commitment, the player can dabble across multiple sub-paths in a branch by picking depth-1 nodes freely. A sub-path becomes COMMITTED once the player has spent a threshold of points in it (placeholder: N = 3 points). Once committed, the sub-path is locked-in and must be completed before any OTHER sub-path in the same branch can be advanced.
+
+**Sequential sub-path unlocking within a branch.** Only one sub-path per branch can be in-progress (committed but incomplete) at a time. To advance another sub-path in the same branch, the player must first FULLY complete the currently-in-progress one (purchase every node in it). Across branches, sub-paths progress in parallel — the player can have one in-progress sub-path simultaneously in each of the 3 branches plus Orbital, for up to 4 active commitments at any time.
+
+This rule replaces the earlier "mutual exclusivity locks out other sub-paths permanently" framing. With uncapped levels (§9.1) and the exponential XP softcap past level 50, an island that grinds long enough can theoretically unlock every node — sequencing only governs the ORDER, not the eventual reach.
+
+**Practical reach by stage.**
+
+* Mid-game island (level ~25): 1 committed sub-path per branch, 10-15 nodes total (mostly depth 1-3 across active sub-paths)
+* Late-game island (level 50): 1-2 fully completed sub-paths per branch, 30-50 nodes total, reaching depth 5-6 in committed paths
+* Very-late-game island (level 70+): multiple fully-completed sub-paths per branch, 80-100+ nodes, depth 7-10 reachable in dedicated specializations
+* Extreme-late-game island (level 100+): trending toward complete tree mastery; depth 10+ unique unlocks accessible
+
+Per-node enumeration (specific names, exact magnitudes, recipe-unlock effects) is deferred to Appendix A as placeholders. The Orbital sub-path's representative nodes (§14.9) are the worked example — every other sub-path follows the same pattern: depth 1-2 are flat % bonuses, depth 3 introduces a structural change (new recipe, new behavior), depth 4-7 deepen the % bonuses geometrically, depth 8+ unlock unique-effect nodes (new mechanics, exotic adjacencies, biome-bypass access).
+
+Total nodes: ~150-200 designed across all branches and sub-paths. Reaching the deep end is a multi-real-week commitment per island given the exponential level cost past 50.
+
+### 9.4 Specialization Passive (T3+)
+
+From Tier 3 onward, an island MAY declare a role. Declaration is optional and can be deferred indefinitely; an island that never declares has no passive bonus and no penalty (an effective Generalist baseline).
+
+Roles (placeholder magnitudes):
+
+* Foundry Island: +50% smelt rate, -25% non-smelting production
+* Refinery Island: +50% chemistry, -25% non-chemistry
+* Mining Island: +75% raw extraction, -50% manufacturing
+* Logistics Hub: +100% route capacity, +50% storage cap, -25% production
+* Research Beacon: skill XP +50% on this island, base production -25%
+
+Declaration affects only the passive bonus and matching penalty in the role table. It does not unlock unique buildings or restrict skill-tree access — sub-path commitments (§9.3) remain independent of the role.
+
+**Buff/penalty scope is recipe-tagged.** Every recipe in §7 carries a category tag: `smelting`, `chemistry`, `extraction`, `manufacturing`, `construction`, `electronics`, `power`, etc. The role's buff multiplier applies to recipe outputs whose tag matches the role's category; the penalty multiplier applies to recipe outputs whose tag does NOT match. Examples:
+
+* Foundry Island (smelting role): buff applies to all `smelting`-tagged recipes (Smelter, Coke Oven, Blast Furnace, Steel Mill, Pyroforge's Exotic Alloy recipe, etc.); penalty applies to everything else.
+* Refinery Island (chemistry): buff to `chemistry`-tagged recipes (Chemical Reactor, Cracker, Air Separator); penalty to all others.
+* Mining Island (extraction): buff to `extraction`-tagged recipes (Mine, Logger, Quarry, Drilling Rig, Pump Jack, Gas Extractor); penalty to all others.
+
+Building-tagging would have produced edge cases (a Cracker is petrochemical, not strictly smelting); recipe-tagging avoids them by tagging the actual production unit. Per-recipe tags belong in the recipe data definitions (§7); placeholders are noted in Appendix A.
+
+A declared role is changed only via Tier Reset — see §9.7.
+
+### 9.5 Biome-Locked Uniques (T4)
+
+At Tier 4, biome-specific unique buildings unlock per island. These buildings are bottlenecks: each one is the only place in the world where its key resource can be produced. Endgame players must therefore colonize at least one island of every relevant biome to access the full T4 supply chain. Artificial islands cannot host biome-locked uniques (see §2.5).
+
+|Biome|Building|Footprint|Bottleneck output|Notes|
+|-|-|-|-|-|
+|Plains|Mass Driver|4x4|none — logistics|Establishes a permanent point-to-point cargo route (Route.type = `mass_driver` per §15.1) from this island to one chosen target. Lower maximum range than Airship Dock but vastly higher per-second throughput (placeholder: ~5× airship capacity). Consumes Diesel (T2 fuel grade) per dispatch volume. Weather-affected: storm cells along the path reduce capacity per §2.6 like other transport, but the route itself is not destroyed. One Mass Driver = one outbound route per island; only one Mass Driver per Plains island.|
+|Forest|Carbon Forge|3x3|Carbon Fiber, Glass Fiber, Optical Fiber|Only producer of T4-grade Carbon Fiber and the optical-fiber family. Forest's wood/charcoal abundance feeds the chain. Heavy power draw; requires adjacent Heat Source.|
+|Coast|Tidal Array|3x3|none — T4 renewable power|Massive constant electrical output (placeholder: 50 MW). No fuel cost. Requires a coastal water tile. Coast's signature T4 power option; alternative is Fusion Core (universal but Helium-3 fuel-hungry).|
+|Volcanic|Pyroforge|3x3|Exotic Alloy|Only producer of Exotic Alloy in the world. Exotic Alloy is required for Reality Anchor, Genesis Cell, satellite recipes (§14.10), and other T5/T6 components — Volcanic colonies are mandatory for T5/T6 progression. Massive heat draw; requires adjacent Geothermal Vent (Volcanic-only by §8.5).|
+|Desert|Sunspire|3x3|none — T4 renewable power|Peak solar output (placeholder: 60 MW). No fuel cost. Combined with Desert's standard Solar Panel synergies, Desert becomes the preferred long-term renewable-power biome.|
+|Arctic|Cryogenic Compute Center|4x4|AI Core|Only producer of AI Cores in the world. Arctic ambient cold halves this building's compute-recipe power draw — the cooling bonus is intrinsic to the biome and cannot be replicated by terraforming. AI Core is required for T5 mastery (§13.1), Self-Replication Module, and the Spaceport's satellite payloads (§14.10) — Arctic colonies are mandatory for T5/T6 progression.|
+
+A player who colonizes one island of each biome can run the complete T4 chain. Skipping a biome means giving up its bottleneck output.
+
+**One biome-unique per island.** Each island can host at most one biome-locked unique building. For natural islands this is the building matching the island's biome. A player owning multiple colonies of the same biome can run multiple instances of that biome's unique in parallel — three Volcanic colonies produce three Pyroforges' worth of Exotic Alloy. Wide colonization scales the bottleneck output linearly.
+
+**Cryogenic Hydrogen production (T4 fuel).** Cryogenic Hydrogen, the T4 fuel grade per §11.7, is produced by the Cryo Lab (T3, see §8.2) via the recipe `Hydrogen + Cryo-coolant + heavy power → Cryogenic Hydrogen`. It is not biome-locked. Arctic colonies produce T4 fuel more efficiently than other biomes because Cryo Lab benefits from cold ambient conditions, but any island with a Cryo Lab can produce it.
+
+### 9.6 Network Consciousness Milestone
+
+A wide-play goal visible from the start. The buffs below are recipe-production-rate multipliers applied to every networked T3+ island; they do NOT multiply XP gain, route capacity, or storage caps (those have their own scaling systems). "Networked" is defined in §2.4 — an island route-graph-connected to home.
+
+* 3 islands at Tier 3+: small global production buff (+5%)
+* 5 islands at Tier 3+: moderate global buff (+10%) and unlocks Robotics breadth nodes
+* 10 islands at Tier 3+: large global buff (+25%) and unlocks "Auto-Patronage" passive (see Auto-Patronage details below)
+* 20 islands at Tier 3+: Network Consciousness unlocked, which is a prerequisite for Omniscient Lattice (T5 endgame artifact)
+
+**Auto-Patronage details.** When a new colony is settled after the 10-island milestone is achieved, the engine automatically establishes three default funneling routes from the nearest Patron Hub island to the new colony:
+
+* Route 1: fuel matching the new colony's tier (e.g., Biofuel for a T1 colony, Diesel for T2, etc.) — T1 cargo tier, default capacity per route type
+* Route 2: Foundation Kit components — a multi-resource priority list `[Iron ingot, Brick, Lumber, Glass, Gear]` — T1 cargo tier, default capacity
+* Route 3: misc T1 raws — a multi-resource priority list `[Wood, Stone, Coal, Iron ore, Copper ore]` — T1 cargo tier, default capacity
+
+The Patron Hub island pays the routes' fuel costs from its own fuel reserves. If the Patron Hub runs out of fuel, the routes pause (consistent with normal route fuel rules). Player can manually delete or reconfigure these routes at any time after creation.
+
+**No-Hub case and tiebreak.** If no Patron Hub building exists in the player's network when the 10-island milestone is reached (or when a new colony is settled afterward), Auto-Patronage silently no-ops — newly-settled colonies get no automatic routes. The engine does not auto-build a Patron Hub for the player; that remains a manual decision. "Nearest Patron Hub" is computed as straight-line euclidean distance between island world coordinates; ties (rare, but possible when a new colony is equidistant from two Hubs) are broken deterministically by lower-ID Patron Hub island.
+
+### 9.7 Tier Reset
+
+A player may pay to revert an island to Tier 1, primarily to change a Specialization Passive declaration (§9.4) or to undo poorly-chosen sub-path commitments (§9.3). Available from Tier 3 onward — pre-T3 islands have nothing meaningful to reset.
+
+**Cost (placeholder):** a pile of T2-T3 components scaling with the island's current level (placeholder formula: cost proportional to level²). High-level resets represent serious production commitment, not casual undo.
+
+**Cleared by reset:**
+
+* Level → 1, XP → 0
+* All spent skill points refunded as unspent
+* Specialization role cleared (island returns to undeclared Generalist)
+* Sub-path commitments cleared
+* Tier breakpoint state reverts to T1 — T2+ buildings remain placed but stop operating until the island re-climbs into their tier band
+
+**Preserved by reset:**
+
+* All placed buildings (inactive if above current tier; the player may delete and rebuild during re-progression)
+* Terrain and tile types
+* Modifiers (rare modifiers do not re-roll)
+* Local inventory (full stockpile preserved)
+* Storage caps (derive from preserved buildings)
+
+**Cooldown:** placeholder 24 real-time hours between resets on the same island. Prevents spam-resets to grind funneling XP.
+
+**Merged islands:** a Tier Reset on a merged island (§3.6) operates on the entire merged identity. All constituent ellipses, all buildings on each, the unified inventory — all reset together. There is no way to "split" a merged island via Tier Reset; merge remains permanent.
+
+\---
+
+## 10\. Funneling (Patron-Protégé)
+
+### 10.1 Mechanic
+
+While a destination island is below Tier 3, resources it consumes from incoming routes generate bonus XP. For each unit of resource `r` actually consumed from an inbound route — meaning the destination's local recipes pulled it as input — the destination gains:
+
+```
+funneling\_xp\_per\_unit = xp\_weight\[r] \* funneling\_bonus\_percent
+```
+
+The same `xp\_weight[r]` table from §9.1 applies. This means the strategic value of a funneled resource scales with its tier: funneling T5 raws into a Tier-1 colony levels it dramatically faster than funneling wood, even at identical route capacity. Placeholder `funneling\_bonus\_percent` = 50%.
+
+When the destination crosses Tier 3, the funneling bonus zeroes out. Inbound resources continue to feed production normally (their primary purpose); they simply stop generating XP-on-import.
+
+Important: the bonus applies to imported-AND-consumed resources. A resource that arrives but sits in storage without being consumed by a recipe gives no bonus XP until it is actually used. Players cannot funnel-and-stockpile their way to free levels.
+
+### 10.2 Caps
+
+Funneling has no separate cap. Natural limits:
+
+* Route capacity per second (set by route type)
+* Destination's own per-second consumption (gated by its building count and active recipes)
+
+### 10.3 Patron Hub Building
+
+Optional convenience building. Enables visualization and management of outbound funneling routes. Not strictly required to funnel; ordinary routes work for funneling automatically.
+
+\---
+
+## 11\. Drones
+
+### 11.1 Launch
+
+Launched from Drone Pad (T2+) or Launch Tower (T4 only). Specify:
+
+* Direction vector (player-chosen)
+* Fuel loaded (player-chosen, gates range — fuel resource matches launching island's tier per §11.7; range = fuel × tier efficiency)
+
+### 11.2 Travel
+
+Drones travel in real time at speed determined by tier. They scan a **capsule-shaped corridor** along their flight path: the set of all points within scan radius `r` of any point on the path. In 2D this is a swept-disk shape (rectangle along the path with circular end-caps at launch and turnaround points). Islands whose centers fall inside the capsule are revealed on the drone's return.
+
+For T1-T3 drones, the path is a straight outbound line + return; for T5 path-drawn drones, the path follows the player-drawn waypoint sequence. T4 omnidirectional pulse is a special case — a single disk of radius R centered on the Launch Tower (no flight path).
+
+### 11.3 Return
+
+On return, the drone reports all islands found inside its scan corridor. New islands become visible on the world map. Discovered islands cannot be developed or used as route endpoints until populated by a settlement vehicle (see Section 12).
+
+### 11.4 Failure
+
+A drone is lost (does not return, fuel and unit consumed) if any of the following occur in transit:
+
+* Fuel exhausted mid-journey
+* Destroyed by weather (per-cell roll, see Section 2.6)
+
+### 11.5 Drone Tiers
+
+Tier matches the launching island's tier. T2 is the entry-level drone (Drone Pad is T2; there is no T1 drone in the spec):
+
+* T2: range R, scan corridor radius W (capsule shape per §11.2), biome-type detection at distance
+* T3: range 3R, scan corridor radius 2W, multi-target — records all islands within the capsule corridor
+* T4: omnidirectional pulse from Launch Tower — single disk of radius `R\_T4 = 3R` centered on origin (no flight path; not corridor-shaped). `R` is the stratification cell side length (§2.1), so T4 covers a 3-cell-radius disk per launch.
+* T5: path-drawn drone with dark-mode telemetry (see Section 11.6)
+
+### 11.6 T5 Path-Drawn Drone
+
+Available only on islands with Tier 5 access (level 50, AI core crafted, Path Drone Foundry built).
+
+**Launch process:**
+
+The player draws a path on the world map as a sequence of waypoints. The path can have arbitrary length up to a fuel-imposed limit. The drone follows the path at T5 speed, scanning a wide corridor along the entire route.
+
+**Telemetry and dark mode:**
+
+* Within visibility range of any populated island: the drone transmits live. Discovered islands appear on the map immediately as the drone passes them.
+* Beyond visibility range: the drone enters **dark mode**. It continues recording everything it scans, but transmits nothing. All findings are reported only on return.
+
+This makes long-range path drones high-risk, high-reward. The player commits fuel and a Foundation Kit equivalent of components to send a drone far. If it returns, it dumps a complete record of everything in its corridor. If it fails (fuel, weather), all that data is lost.
+
+**Use cases:**
+
+* Systematic area sweep: zigzag path covering a large region
+* Targeted long-range probe: straight line into deep unexplored space
+* Rare-feature hunt: search for unique-feature islands in remote areas
+
+**Failure modes:**
+
+* Fuel exhausted mid-path: lost, no data returned
+* Destroyed by weather (in dark mode the player may not learn for hours of real time that it failed)
+* Returns successfully: full data dump, including everything found in dark mode
+
+**Weather interaction:**
+
+T5 path drones have x0.5 destruction multiplier. They are still vulnerable in severe storms, especially over long paths. Weather visibility does not help once the drone is in dark mode: a storm developing in its corridor while it is out of range is unforeseeable.
+
+### 11.7 Fuel, Range, and Dispatch
+
+This section is the canonical reference for fuel, range, and dispatch behavior across all flying assets — drones, settlement vehicles, and T6 satellite launches.
+
+**Fuel by tier.** Each tier of dispatch consumes its own dedicated fuel resource:
+
+|Tier|Fuel resource|Catalog reference|
+|-|-|-|
+|T1|Biofuel|§6.2|
+|T2|Diesel|§6.3|
+|T3|Aviation Kerosene|§6.4|
+|T4|Cryogenic Hydrogen|§6.5|
+|T5|Plasma Charge|§6.6|
+|T6|Antimatter Propellant|§14.10|
+
+A craft of tier T can only burn tier-T fuel; it cannot fall back to a lower grade. Producing a higher-tier fuel requires the matching refining infrastructure, so expanding a high-tier island's reach requires investment in that island's fuel chain. An island that has reached T4 mechanically but neglected its fuel chain has T4 vehicles it cannot launch.
+
+**Range formula.** Range scales linearly with fuel loaded:
+
+```
+range\_in\_cells = fuel\_units \* tier\_efficiency
+```
+
+Where `tier\_efficiency` is a per-tier per-vehicle constant (placeholder, Appendix A). Higher-tier vehicles have higher efficiency — they go farther per unit of their (more expensive) fuel. A T3 drone burns more T3 fuel per range unit than a T1 drone burns T1 fuel in absolute material count, but its T3 fuel grade is harder to produce, so the effective economic cost ratio between tiers is what tuning targets.
+
+**Dispatch capacity.** One craft in flight per launch building:
+
+|Building|Concurrent slots|Notes|
+|-|-|-|
+|Drone Pad (T2+)|1 drone|Builds and launches scout drones|
+|Launch Tower (T4)|1 drone|Independent of Drone Pad on the same island; T4 omnidirectional pulse|
+|Path Drone Foundry (T5)|1 path-drawn drone|T5 only|
+|Shipyard (T1)|1 ship|Coastal placement required|
+|Helipad (T2)|1 helicopter||
+|Spaceport (T6)|1 satellite or 1 repair drone|Cannot dispatch a sat and a repair drone simultaneously|
+
+The player builds additional Pads, Shipyards, etc. (or develops more islands with their own buildings) to dispatch in parallel.
+
+**Failure notification.** The player only learns of a failed dispatch when the craft's expected return or arrival time elapses without the craft arriving.
+
+* While in flight, UI shows "in flight, expected back at T+Xh" (drones) or "in transit, expected to arrive at T+Xh" (settlement vehicles, satellites).
+* If T+Xh elapses without the event, UI flips to "lost". Fuel, payload (Foundation Kit / Orbital Insertion Package), and craft itself are all consumed.
+* The failure cell on the path is not revealed. The player does not learn anything about distant weather conditions from a failure event.
+
+This preserves the dark-zone experience: distant launches commit information-blind, the world resolves deterministically, and the player only learns the binary outcome at the planned end-of-flight timestamp. Internally, the deterministic weather model has already decided the craft's fate at launch time; failure resolution is a non-event from the player's perspective until the timer elapses.
+
+\---
+
+## 12\. Settlement Vehicles
+
+### 12.1 Lifecycle
+
+Identical to drones at the engine level: a launched vehicle has a source, direction, fuel, expected return/arrival time, and a tier. Differences are in destination and effect.
+
+* Drone returns to source after scanning. Adds discovered islands to the map.
+* Settlement vehicle (ship or helicopter) travels one-way to a specified discovered target island. On arrival, populates the target. Vehicle is consumed in the process.
+
+### 12.2 Launch Requirements
+
+To launch a settlement vehicle the source island must:
+
+* Have the appropriate launch building (Shipyard for ship, Helipad for helicopter)
+* Have sufficient fuel for the vehicle
+* Have a Foundation Kit in inventory
+
+Player specifies the target (must be a discovered, unpopulated island within range) and the vehicle tier.
+
+### 12.3 Foundation Kit
+
+A composite craftable item used as the "starter package" delivered on arrival. There are three tiered variants matching vehicle tier:
+
+```
+Standard Foundation Kit (T1-T2 vehicles):  50 Iron ingot + 20 Brick + 10 Lumber + 5 Glass + 5 Gear
+Enriched Foundation Kit (T3 vehicles):     1 Standard + 20 Steel + 10 Brick + 5 Wire + 2 Bearing
+Refined Foundation Kit  (T4 vehicles):     1 Enriched + 5 Microchip + 2 Magnet + 1 Aluminum frame + 5 Capacitor
+```
+
+T6 vehicles use the Orbital Insertion Package (§14.10) instead — orbital-grade payloads carry their own bootstrap mass, distinct from the Foundation Kit chain.
+
+Standard kits craft at a Workshop (T1) or Assembler (T2+). Enriched and Refined require an Assembler (T2+) and Fabricator (T3+) respectively. Each kit is stored as a single inventory item.
+
+**Vehicle-to-kit mapping:**
+
+|Vehicle|Required kit|Extra notes|
+|-|-|-|
+|T1 Cargo Ship|Standard||
+|T2 Light Helicopter|Standard||
+|T2 Heavy Freighter|Standard|Carries 1-2 kits per §12.6 loadout|
+|T3 Industrial Carrier|Enriched|Carries 2 kits — colony arrives at level ~5 due to the richer starter cargo (see §12.6)|
+|T3 Heavy Lift Helicopter|Enriched|Carries 1 kit + extras|
+|T4 VTOL Tilt-Rotor|Refined|Carries 2 kits|
+|T5 Spacetime Anchor|Refined|Skips the vehicle stage entirely; consumes one Refined kit but no fuel and no vehicle (per §12.6)|
+
+### 12.4 Travel and Arrival
+
+Travel time scales with distance and is determined by vehicle tier (helicopter is faster than ship at the same tier). On arrival:
+
+1. Target island is marked populated, set to level 1.
+2. A starting building is automatically placed at a default position: Cargo Dock for ships, Helipad for helicopters.
+3. The Foundation Kit is consumed.
+4. The island becomes available for full interaction (player can now place buildings, set up routes, dispatch its own drones once it has the supporting infrastructure).
+
+**Richer drop for T3+ carriers.** Higher-tier carriers consume their extra Foundation Kits (per §12.6 loadouts) to deliver a richer starting state on arrival. The level marker stays at 1 in all cases — XP is not directly granted; the "level ~5" framing in §12.6 is approximate, capturing the visible benefits without modifying the level/XP system.
+
+|Carrier|Pre-placed buildings (in addition to Cargo Dock / Helipad)|Starter inventory|Free skill points|
+|-|-|-|-|
+|T3 Industrial Carrier|1 Solar Panel + 1 Workshop + 1 Logger or Mine (matching dominant terrain tile)|Contents of one Enriched Foundation Kit|4|
+|T3 Heavy Lift Helicopter|1 Solar Panel + 1 Workshop|Contents of one Enriched Foundation Kit|3|
+|T4 VTOL Tilt-Rotor|1 Solar Panel + 1 Workshop + 1 Logger/Mine + 1 Coal Generator + 1 Storage Crate|Contents of two Refined Foundation Kits|6|
+
+Pre-placed buildings are placed by the engine at deterministic default positions (the Foundation Kit's "starter footprint" — corners of the buildable area, specific rules in implementation). Skill points are added to the new colony's `unspentPoints` total.
+
+**Foundation Kit decomposition on arrival.** The kit, which lives in source-island inventory as a single composite item per §12.3, decomposes into its raw constituent resources (50 Iron ingot + 20 Brick + 10 Lumber + 5 Glass + 5 Gear for Standard, etc.) the moment it arrives at the colony. A level-1 colony has no storage buildings, so the kit contents are held under a one-time **starter inventory grace cap** that allows the colony to hold the kit's raw contents even with zero specialized or generic storage. The grace cap shrinks resource-by-resource as the player builds proper storage (Crates, Silos, etc.) — once normal cap meets or exceeds current inventory for a given resource, that resource's grace allowance is removed. Resources still held under grace cannot exceed the kit-delivered quantities (player can't "fill" the grace bucket with more from routes; routes still respect normal caps).
+
+### 12.5 Failure
+
+Settlement vehicles can be lost in transit due to:
+
+* **Base mechanical failure:** small chance per voyage (placeholder: 2% for T1 ship, 1% for T1 helicopter, declining with vehicle tier). Represents critical malfunction.
+* **Weather destruction:** per-cell roll along the entire path, using the vehicle multiplier from Section 2.6.
+
+On failure (any cause):
+
+* Vehicle, fuel, and Foundation Kit are lost
+* Target island remains unpopulated (can be retried with another vehicle)
+
+Long routes through bad weather become genuinely risky, especially with low-tier vehicles. The player can mitigate by waiting for weather windows (visible only within Weather Station range), using higher-tier vehicles, or routing through known-clear cells.
+
+### 12.6 Vehicle Tiers
+
+|Vehicle|Tier|Speed|Loadout|Range|Notes|
+|-|-|-|-|-|-|
+|Cargo Ship|1|low|1 kit|medium|Coastal departure, slow|
+|Heavy Freighter|2|low|1-2 kits|long|Larger ship, can carry surplus T1/T2 starter materials|
+|Industrial Carrier|3|medium|2 kits|very long|Drops the colony at level \~5 due to richer starter cargo|
+|Light Helicopter|2|high|1 kit|short|Fast, fuel-hungry|
+|Heavy Lift|3|high|1 kit + extras|medium|Faster than freighter|
+|VTOL Tilt-Rotor|4|very high|2 kits|long|Late-game settlement vehicle|
+
+T5: Spacetime Anchor bypasses the vehicle stage. A T5 island can populate any discovered island instantly, consuming a Foundation Kit but no vehicle and no fuel.
+
+### 12.7 Interaction with Network Consciousness
+
+At Network Consciousness milestone of 10 islands at Tier 3+, "Auto-Patronage" passive activates: a newly populated island automatically receives default funneling routes from the nearest Patron Hub. This dramatically reduces manual setup for late-game expansion.
+
+\---
+
+## 13\. Tier 5: Transcendence
+
+### 13.1 Access
+
+T5 is a hidden fourth band on the skill tree. It appears on an island only after:
+
+* Island reaches level 50
+* Island has crafted at least one AI core (T4 endgame)
+
+### 13.2 T5 Buildings
+
+Listed in Section 8.5 (Casimir Tap), 8.4 (Reality Forge, Singularity Battery), 8.9 (Probability Engine, Genesis Chamber, Lattice Node, Universe Editor).
+
+### 13.3 T5 Capabilities Unlocked
+
+Mechanically:
+
+* **Time manipulation — Time Lock.** A T5 building (catalog entry in §8.9). Each Time Lock has its own banked-time stockpile (cap placeholder: 24 real-time-hours equivalent of banked time per Lock).
+
+  *Banking:* while the player is offline, the player can configure each Time Lock-equipped island to BANK its tick instead of advancing. A banked island sits paused for the offline period — it produces nothing, levels nothing — and the Time Lock accumulates 1 banked-time unit per real-time minute of offline on that island, up to the per-Lock cap. The trade-off is real: banking means giving up offline progression on that island in exchange for stockpiled time. The player picks per-island per-session whether to bank or to let the island advance.
+
+  Spending and banking units are symmetric: 1 banked unit = 1 real-time minute of offline accumulation = 1 real-time minute of 3× tick-rate acceleration when spent. A 24-hour offline window banks 1440 units (capped at the Time Lock's stockpile cap), which spends as 1440 minutes (24 hours) of 3× acceleration on a target island.
+
+  *Spending:* while the player is online, banked time is spent on demand from any Time Lock to accelerate any target island's tick rate. Placeholder conversion: 1 unit of banked time = 1 real-time minute of 3× tick-rate acceleration on the target island. During acceleration, every system on that island (production, XP gain, recipe cycles, drone construction) runs at 3× speed.
+
+  **Concurrency.** A target island can only be under one acceleration spell at a time. Multiple Time Locks pooling spend onto the same target stack their durations sequentially in a queue: the first Lock's duration runs to completion, then the next Lock's duration begins, then the next. The acceleration multiplier itself never compounds — always 3× regardless of how many Locks are spending on the target. This avoids inter-island flow conservation problems (a 9× island would pull 9× from routes that exist in real time, breaking other islands' inventories). To accelerate an island for longer, queue more spends; to accelerate two different islands in parallel, dispatch from different Locks to different targets simultaneously.
+
+  *Cap and waste:* banked-time stockpile above the per-Lock cap is wasted on the spot — the player must spend or lose. Players extend total capacity by building more Time Locks on more T5-mastered islands.
+
+* **Free creation — Genesis Chamber.** The player picks a target resource from the T1-T4 catalog. The Chamber consumes large amounts of electrical power continuously and outputs the chosen resource at a slow rate (placeholder cycle: 5 minutes per unit). Power draw scales superlinearly with target tier (placeholder: T1 ~50 kW, T2 ~500 kW, T3 ~5 MW, T4 ~50 MW). T5+ resources cannot be materialized — those still require natural extraction or T5 recipes. The Chamber bypasses missing chain inputs; it does not skip the high-tier endgame.
+
+* **Spacetime folding — Spacetime Anchor.** Links islands as one logical unit (zero-distance transport, see §2.4 transport tiers).
+
+* **Reality editing — Universe Editor.** The player picks a target biome from the standard list (§3.2). The island's biome is reassigned and its terrain regenerated according to the new biome's rules — ore vein positions, water tiles, etc. are re-rolled from the world seed under the new biome. Existing buildings remain placed but may become invalid due to changed underlying tiles (a Mine on what used to be an ore vein will halt if the regenerated tile no longer has the vein). Invalid buildings stop operating until the player clears them. **Modifiers are wiped on Universe Editor use** and re-rolled per the new biome's modifier distribution (§3.5) — but rare/natural-only modifiers (Aetheric Anomaly, Frozen Core, etc.) are excluded from the re-roll, since those remain natural-generation-only. An island losing Aetheric Anomaly to a Universe Editor pass is a real cost: the +50% T5 raw extraction efficiency goes with the modifier. Each use consumes substantial T5 components and is not instant; the building is reusable but each invocation is a heavy commitment.
+
+* **Probability control — Probability Engine.** While powered, every drone launched from this island gains a +X% chance to encounter rare or unique islands per scan (placeholder: +25%). Multiple Probability Engines on the same island stack with diminishing returns (placeholder: 2 Engines = +40%, 3 Engines = +50%, 4+ Engines = asymptotic toward +60%). Affects only drones launched from this island; does not affect drones launched from networked or non-Engine islands. Continuous heavy T5 power draw while the Engine is active. Turning the Engine off (cutting power) suspends the bias but does not unlearn discoveries already made.
+
+* **Network unity — Omniscient Lattice.** Activates when one Lattice Node is built on each of N T5-mastered islands (N = Network Consciousness threshold, default 20 from §9.6). Lattice Nodes are inert placeholders until the network reaches N; the moment the Nth Node is placed and active, the Lattice ignites globally. Once active:
+  * All networked islands share a unified inventory pool — any building on any networked island can draw any resource from the global pool, with no transport delay
+  * Cross-island adjacency applies through **Lattice Node portals**: a building 4-adjacent to its island's Lattice Node can claim adjacency from any building 4-adjacent to any OTHER Lattice Node on the network. The relationship is bidirectional and transitive — a Smelter adjacent to A's Lattice Node treats Heat Sources adjacent to B's, C's, etc. Lattice Nodes as if they were neighbors. Lattice Nodes therefore become spatial-puzzle anchors: the player clusters key shared resources (Heat Sources, Cooling Towers, Wastewater Treatments) adjacent to each Lattice Node to provide cross-network coverage. Buildings NOT adjacent to a Lattice Node retain only their normal local adjacency.
+  * Storage caps sum across the network (the unified pool's cap for each resource is the sum of all networked islands' caps for that resource)
+  * Routes between networked islands become redundant and may be deleted; transport to non-networked islands continues to use the route system as normal
+
+  Activating Omniscient Lattice is the late-game logistics endpoint. Once it fires, the player's networked production is effectively a single very large island for resource and adjacency purposes.
+
+* **Self-perpetuation — Eternal Servitor.** A T5 conversion mechanic. The player crafts a Servitor Conversion Kit at a Reality Forge and applies it to a placed building. The targeted building converts to its Eternal Servitor variant — permanently exempt from fuel consumption AND from the maintenance system (§4.7). Conversion is permanent; converted buildings cannot revert. Each Eternal Servitor is a per-building commitment using its own Conversion Kit.
+
+  Conversion Kit recipe = `1 Eldritch Processor + 1 Phase Converter + the contents of the target building's tier maintenance recipe` (per the table in §4.7). For a T4 building: 1 Eldritch Processor + 1 Phase Converter + 10 Lubricant + 1 Exotic Alloy fragment + 1 Microchip. Higher-tier buildings cost more to convert because their maintenance materials are pricier — Reusing the maintenance schema means there's no separate "parts" catalog to maintain.
+
+  Late-game players use Servitor conversion strategically — typically on the most-supplied or hardest-to-resupply buildings (Fusion Cores, Particle Accelerators, Path Drone Foundries).
+
+* **Path-drawn discovery:** T5 Path-Drawn Drone (see Section 11.6) allows arbitrary path tracing with dark-mode telemetry, enabling systematic remote-area sweeps and far-distant probing.
+
+### 13.4 Endgame Goals
+
+The "you have effectively mastered this universe" goals:
+
+* Craft the first **Genesis Cell**: build new islands without geographical constraint
+* Activate **Omniscient Lattice**: full network unity
+* Construct **Ascendant Core**: requires T5 mastery on at least 3 islands; final transcendence object
+
+No win screen. The game continues indefinitely after Ascendant Core; the player has effectively become a god-tier robot consciousness.
+
+\---
+
+## 14\. Tier 6: Orbital
+
+T6 is the post-Ascendant horizon. The Ascendant Core ends the T5 transcendence arc; T6 is what follows when a robot intelligence with no remaining terrestrial limits looks up.
+
+### 14.1 Access
+
+T6 unlocks on an island only after both:
+
+* An Ascendant Core has been crafted on this island (see 13.4)
+* A Spaceport has been built on this island (see 14.2)
+
+T6 mastery is per-island, like T5. T6 buildings, recipes, and skill nodes appear only on islands that meet both conditions.
+
+### 14.2 Buildings
+
+**Spaceport** (T6, footprint 4x4): single building serving as launch facility, ground-side communications antenna, and repair-launch facility. Tiers I / II / III progressively raise base launch success rate, comm range, and the maximum stat ceilings of satellites built from it.
+
+**In-place tier upgrade.** Spaceport upgrades are a single-building lifecycle — the same placed Spaceport advances from tier I to II to III by consuming upgrade-recipe components (placeholder: tier I → II requires `5 Phase Converter + 2 Memetic Core + 50 Cryogenic Hydrogen`; tier II → III requires `10 Reality Anchor fragment + 5 Memetic Core + 100 Antimatter Propellant`). Upgrade is one-way; downgrade is not supported. Satellites already deployed by the Spaceport are unaffected by an upgrade — they keep their original launch-time stats.
+
+If the Spaceport is destroyed by a pad explosion (§14.7), it returns at tier I — all upgrade investment is lost. Skill-tree progress and existing satellites in orbit are independent of Spaceport state and persist regardless. Players concerned about tier-loss risk should colocate their highest-tier Spaceport on islands with strong launch-success skill investment.
+
+**Orbital Tracking Station** (T6, footprint 3x3): ground-based radar. Detects orbital debris within a fixed range from the island. Without Tracking coverage, debris exists but is invisible to the player. Multiple Tracking Stations across multiple islands compose into a wider debris-detection network.
+
+### 14.3 Satellite Variants
+
+
+|Variant|Coverage radius|Comm range|Role|
+|-|-|-|-|
+|Scanner Sat|Large|Modest|Discovery + weather scan|
+|Sweeper Sat|Medium|Modest|Passive debris cleanup|
+|Relay Sat|None|Very large|Comm-graph extension only|
+|Repair Drone|N/A|N/A|Single-use maintenance, no orbital lock|
+
+Stat ceilings per variant scale with the launching Spaceport's tier. Final stats per launch = variant base × Spaceport-tier multiplier.
+
+### 14.4 Communication Network
+
+Each Spaceport and each satellite has a spherical communications radius. Two nodes form a comm link when `distance \<= max(range\_A, range\_B)` — only one node needs to reach the other.
+
+This asymmetric reach is justified by the satellites' AI Core: each satellite's onboard AI buffers data and forwards it store-and-forward when a peer comes into range, even if the originating node was out of range when the message was generated. The narrative is "neighbour leaves a packet at a known address; the addressee picks it up later."
+
+The communication graph is the union of all such links between Spaceports and satellites. Data (sat scan results, weather snapshots, debris detection) reaches the player only if a path exists through this graph from the satellite to a Spaceport on a populated island.
+
+If the graph is disconnected:
+
+* Disconnected satellites continue scanning and queue their data locally in a bounded buffer (placeholder cap: 100 entries per satellite). Each scan result (discovery, weather snapshot, debris detection) takes one entry.
+* When the buffer fills, the oldest entries are evicted FIFO to make room for new ones — recent observations always preserved over old.
+* Queued data delivers in bulk when (and if) the graph reconnects.
+* If a satellite is destroyed before reconnection, all queued data is lost.
+
+**Packet propagation through the connected graph (hand-off model).** A scan-result packet generated at satellite S moves through the comm graph one hop per tick toward any Spaceport. The next hop is chosen greedily — at each tick, the packet advances to the connected neighbor that has the shortest path to a Spaceport (BFS distance, ties broken by lower satellite ID). Packets do not duplicate: a single packet traverses one path. If the intermediate node holding a packet is destroyed before the next-hop tick, the packet is lost. If the intermediate node moves out of comm range of the packet's intended next hop before the hop occurs, the packet re-evaluates routing on the following tick (and may re-route through a different neighbor or buffer locally if no neighbor is in range).
+
+
+The first satellite from a fresh Spaceport must be launched within the Spaceport's own comm range to remain connected. Subsequent satellites can chain outward by remaining in range of any existing connected node.
+
+### 14.5 Coverage, Discovery, Weather
+
+A locked Scanner Sat provides:
+
+* **Weather visibility**: real-time weather state for every cell within coverage radius. Equivalent to a Weather Station at orbital scale, and immune to weather effects on itself.
+* **Discovery**: each tick, probability `p` of revealing any undiscovered island within coverage. `p` ramps from a low initial value toward an asymptote over real-time dwell on the cell. A few minutes catches most local islands; deep-orbit islands may take hours of continuous observation to surface. The dwell ramp is per-cell, so moving the satellite resets ramps in cells outside the new coverage.
+
+During transit (between launch and lock), the satellite scans at reduced effectiveness — coverage radius reduced and `p` lowered to a fraction of the locked rate. Useful but not optimal; transit is not a substitute for parking.
+
+### 14.6 Movement
+
+A locked satellite can be relocated by the player. Each satellite has an onboard maneuvering fuel reserve loaded at launch.
+
+* Issuing a move command spends fuel proportional to relocation distance
+* Move takes real time proportional to distance and thrust
+* Movement can fail with low probability — the satellite is lost in transit and may produce a debris field
+
+When the reserve depletes, the satellite cannot move further until a Repair Drone tops it up (Repair Drones serve double duty as repair and refuel).
+
+### 14.7 Launch and Failure
+
+Each Spaceport launch requires:
+
+* Sufficient fuel for the chosen variant
+* The variant's full recipe (in inventory)
+* An Orbital Insertion Package (T6 Foundation-Kit equivalent — see 14.10)
+
+Launch success is rolled against the island's current launch success rate, computed as additive percentages on probability with a hard cap:
+
+```
+success\_rate = clamp( base\[Spaceport tier] + sum(Orbital sub-path bonuses), 0.0, 0.99 )
+```
+
+Each skill node bonus is a flat additive value on the probability scale (a `+5%` node adds 0.05). Base rates per Spaceport tier are placeholders in Appendix A — for example, Spaceport I starts around 0.30, Spaceport III around 0.70. Cumulative Orbital sub-path bonuses can push success near 0.99 but never reach 1.0 — there is always a residual ~1% chance of failure for dramatic tension. Success rate is always visible to the player; every launch is informed risk.
+
+**Failure modes (probabilistic split, placeholder ~30 / ~70):**
+
+* **Pad explosion:** the Spaceport is destroyed in place. No surrounding terrain damage; no other building on the island is damaged. Fuel and the launch payload are lost. The Tracking Station and other satellites are unaffected (subject to debris consequences in 14.8).
+* **Orbit explosion:** the satellite reaches orbit but breaks up after lock. The Spaceport is preserved. A debris field is generated at the lock position.
+
+Both failure types preserve all other infrastructure on the island. The pad-explosion path is recoverable: rebuild the Spaceport and re-launch. Per-island skill-tree investment is independent of building state, so success-rate progress is not lost when a Spaceport is destroyed.
+
+### 14.8 Debris
+
+**Field representation.** Each debris field is anchored to a single stratification cell and stores a discrete fragment count for that cell. Hit probability per tick on any satellite within the cell is `fragments × hit_constant × satellite_cross_section_factor` (placeholders in Appendix A). Fields do not spread to neighboring cells and do not decay over real time. A field is removed only when its fragment count is reduced to zero by Sweeper Sat cleanup.
+
+**Generation:**
+
+* Orbit-explosion failures: a debris field forms in the cell containing the failed lock point. Initial fragment count placeholder: 20 fragments.
+* Destroyed satellites in flight or in orbit: a configurable amount of new fragments (placeholder: 10 fragments per destroyed satellite) added to the cell where the satellite was located. If that cell already has a debris field, fragments stack into the existing field; otherwise a new field is created.
+
+**Detection:**
+
+* Debris is invisible to the player unless covered by an Orbital Tracking Station's detection range.
+
+**Per-tick effect on satellites within a debris field:**
+
+Each tick, every satellite inside a debris field rolls for a hit. Hit probability is proportional to debris density and the satellite's orbital cross-section.
+
+On hit, two outcomes:
+
+* **High chance: lodge.** A randomly chosen sub-stat (scan refresh rate, weather refresh rate, or comm reliability) is permanently slowed by a small percentage. Lodges are cumulative across multiple hits; a satellite can carry several different sub-stat penalties simultaneously. A single Repair Drone delivery restores all slowdowns to 100%.
+* **Low chance: destruction.** The satellite is destroyed and new fragments are added to the field.
+
+**Kessler cascade:** because destruction generates more debris, a destroyed satellite in a debris field can hit other satellites, which can themselves destruct, which seed further fragments. A runaway cascade can render an orbital region effectively unusable until cleanup completes. Active management of debris is a real T6 problem.
+
+**Cleanup:** Sweeper Sats parked in a debris field passively clear fragments over real time at a fixed rate per Sweeper. Sustained presence is the only way to permanently clean a region; a single Sweeper in a heavy field clears slowly, multiple Sweepers stack.
+
+### 14.9 Orbital Skill Sub-path
+
+Orbital is the fourth top-level branch of the skill tree, parallel to Extraction / Refinement / Logistics (per §9.3). It contains four sub-paths: Launch, Communication, Discovery, Resilience. Sequential-completion rules from §9.3 apply within Orbital: the player can have one in-progress sub-path here at a time.
+
+Representative nodes (depth-ordered placeholders):
+
+* Launch Discipline — base launch success rate +X%
+* AI Stabilization — comm range of all satellites from this island +X%
+* Solid-State Insertion — pad-explosion share of failures halved
+* Orbital Reconnaissance — Scanner Sat dwell ramps faster (higher `p` per tick)
+* Orbital Maneuvering — onboard fuel reserve doubled
+* Cooperative Network — Relay Sat range +X%
+* Resilient Plating — debris-lodge slowdown magnitude halved
+* Hyperfine Optics — Scanner Sat coverage radius +X%
+
+Deep nodes unlock at higher tier breakpoints and cost more skill points.
+
+### 14.10 Recipes (placeholders)
+
+```
+Scanner Sat   = 4 Exotic Alloy + 2 AI core + 1 Spacetime fragment + 50 Aluminum + 1 Orbital Insertion Package
+Sweeper Sat   = 4 Exotic Alloy + 1 AI core + 100 Carbon Steel + 20 Magnet + 1 Orbital Insertion Package
+Relay Sat     = 6 Exotic Alloy + 1 AI core + 200 Optical Fiber + 1 Orbital Insertion Package
+Repair Drone  = 2 Exotic Alloy + 50 Carbon Steel + 1 Foundation Kit
+Orbital Insertion Package = 100 Iron ingot + 30 Brick + 20 Glass + 10 Carbon Fiber + 5 AI core
+```
+
+All values are placeholders to be tuned. Costs are deliberately heavy: a T6 launch must represent real production commitment, so launch failures land with weight.
+
+Each launch additionally consumes **Antimatter Propellant** (T6 fuel) proportional to the launch's intended range, per §11.7. Antimatter Propellant is produced at a Particle Accelerator (T4 building) on a T6-mastered island; recipe is defined in §7.12.
+
+### 14.11 Interactions with Other Tiers
+
+* **Weather (§2.6):** Scanner Sat coverage extends weather visibility well beyond ground Weather Stations and is immune to weather effects itself. Late-game players use Scanner Sats to plan long-distance vehicle dispatches that would otherwise commit blind.
+* **Drones (§11):** Drones remain the cheap-corridor scouting tool. Scanner Sats supplement, do not replace, drone discovery — drones are launched at any tier and carry corridor scans across regions where the player has no satellite presence.
+* **T5 Path Drones (§11.6):** Dark mode operates as before. Where Scanner Sat coverage overlaps a path drone's planned route, dark mode is partially mitigated — telemetry is live in covered cells. Far-distant uncovered probes remain blind.
+* **Mass Driver (§9.5):** Distinct from the Spaceport. Mass Driver is the Plains-locked T4 long-range cargo launcher. Spaceport is the orbital-launch facility, available on any biome at T6.
+
+### 14.12 Repair Drone Operations
+
+Repair Drones differ from the three persistent orbital sat variants in several important ways:
+
+* **Payload.** A Repair Drone consumes a Repair Pack instead of an Orbital Insertion Package. Placeholder recipe: `1 Repair Pack = 1 Exotic Alloy + 5 Lubricant + 5 Tier-matching parts of the target satellite's variant`. Significantly cheaper than an OIP, so repair launches are a routine maintenance operation rather than a heavy commitment.
+* **Fuel.** Same Antimatter Propellant as a satellite launch (T6 fuel per §11.7), but in a smaller load — roughly proportional to the rendezvous distance.
+* **Travel time.** Approximately 50% of a comparable satellite launch's travel time (placeholder). Smaller payload, faster rendezvous; encourages responsive maintenance.
+* **Targeting and lockout.** When the player dispatches a Repair Drone, the target satellite enters a "pending repair" state. While in this state, the satellite cannot be moved (§14.6 movement is blocked) — but everything else continues normally: the sat keeps scanning, relays comm packets through the graph, and is still vulnerable to debris hits in its current cell. If the satellite is destroyed by debris before the Repair Drone arrives, the inbound Repair Drone is lost in transit (its target no longer exists; drone, Repair Pack, and propellant all consumed; no debris generated by the lost drone). The lockout ends on drone arrival (success or in-flight mechanical failure) or on drone loss.
+* **Failure mode.** A single flat mechanical-failure roll pre-rendezvous (placeholder: 5%). On failure, the Repair Drone, its Repair Pack, and its propellant load are all lost; no debris is generated. Player simply dispatches another. Failure rate can be reduced by Orbital sub-path nodes (§14.9).
+* **Effect on success.** Restores all slowdown damage on the target satellite to 0% (clears every lodged-debris penalty). Tops off the target's onboard maneuvering fuel reserve to full. Resets the target's "needs maintenance" state if applicable.
+
+\---
+
+## 15\. Architecture
+
+### 15.1 Data Structures (TypeScript)
+
+```typescript
+interface World {
+  seed: string;
+  tick: number;
+  lastSaveTime: number;
+  islands: Map<IslandId, Island>;
+  routes: Route\[];
+  drones: Drone\[];
+  vehicles: SettlementVehicle\[];
+  discoveredCells: Set<string>;
+  networkConsciousnessLevel: number;
+  // Weather is computed deterministically from (seed, tick, cell). No persistent state.
+}
+
+interface Island {
+  id: IslandId;
+  position: { x: number; y: number };
+  biome: BiomeType;
+  modifiers: ModifierId\[];
+  size: {
+    ellipses: { major: number; minor: number; rotation: number; offsetX: number; offsetY: number }[];
+    // Initial: a single ellipse at offset (0, 0) with biome-default radii.
+    // Land Reclamation grows ellipses[0]'s radii. Joining (§3.6) appends new ellipses
+    // with offsets equal to the absorbed island's position relative to the absorber.
+  };
+  terrain: TerrainType\[]\[];
+  buildings: PlacedBuilding\[];
+  inventory: Record<ResourceId, number>;
+  storageCaps: Record<ResourceId, number>;
+  level: number;
+  xp: number;
+  unlockedNodes: Set<NodeId>;
+  unspentPoints: number;
+  specializationRole: RoleId | null;
+  declaredAt: number | null;
+  lastTick: number;
+  populated: boolean;  // false if discovered but not yet settled
+}
+
+interface PlacedBuilding {
+  id: string;
+  defId: BuildingDefId;
+  x: number; y: number;
+  rotation: 0 | 1 | 2 | 3;
+  state?: any;
+}
+
+interface BuildingDef {
+  id: BuildingDefId;
+  category: BuildingCategory;
+  tier: 1 | 2 | 3 | 4 | 5 | 6;
+  shape: { dx: number; dy: number }\[];
+  recipe?: { in: Record<ResourceId, number>; out: Record<ResourceId, number>; cycleSec: number };
+  power?: { produces?: number; consumes?: number };
+  heatSource?: boolean;
+  requiresHeat?: boolean;
+  storage?: Record<ResourceId, number>;
+  adjacencyEffects?: AdjacencyEffect\[];
+  requiredTile?: TerrainType\[];
+  requiredBiomes?: BiomeType\[];
+  requiredNodes?: NodeId\[];
+  artificialIslandAllowed?: boolean;
+  weatherVisibilityBonus?: number;  // Weather Station: +cells of visibility
+}
+
+interface AdjacencyEffect {
+  kind: 'buff' | 'gating' | 'recipe-unlock' | 'penalty';
+  match: BuildingDefId | TerrainType;
+  statKey?: string;
+  perMatch?: number;
+  cap?: number;
+  recipeId?: string;
+}
+
+interface Route {
+  id: string;
+  from: IslandId;
+  to: IslandId;
+  type: 'cargo' | 'drone' | 'airship' | 'mass\_driver' | 'teleporter' | 'cable' | 'spacetime';
+  capacityPerSec: number;
+  filter: ResourceId | null;
+  priorityList?: ResourceId[];      // ordered priority list when filter === null ("any") — see §2.4
+  transitTimeSec: number;           // 0 for teleporter/spacetime; positive for cargo/drone/airship
+  inFlight: { resourceId: ResourceId; amount: number; arrivalTick: number }[];  // batches currently in transit
+}
+
+interface Drone {
+  id: string;
+  from: IslandId;
+  fuelLoaded: number;
+  scanRadius: number;
+  speed: number;
+  launchTime: number;
+  expectedReturnTime: number;
+  tier: 1 | 2 | 3 | 4 | 5 | 6;
+  // T1-T4 use direction; T5 uses path waypoints
+  direction?: { dx: number; dy: number };
+  path?: { x: number; y: number }\[];  // T5 only: waypoints
+  // T5 dark-mode buffer: discoveries made out of visibility, transmitted on return
+  pendingDiscoveries?: IslandId\[];
+  weatherMultiplier: number;  // tier-based vulnerability factor
+}
+
+interface SettlementVehicle {
+  id: string;
+  kind: 'ship' | 'helicopter';
+  tier: 1 | 2 | 3 | 4;
+  from: IslandId;
+  target: IslandId;
+  fuelLoaded: number;
+  foundationKitCount: number;
+  speed: number;
+  launchTime: number;
+  expectedArrivalTime: number;
+  weatherMultiplier: number;
+}
+```
+
+**Weather is not stored.** Weather state for cell `(cx, cy)` at tick `t` is a pure function `weather(seed, cx, cy, t)`. This means weather is deterministic, never desyncs from save, costs zero storage, and offline simulation can replay it exactly. The forecast model (placeholder: layered noise function with time evolution) is implemented as a stateless function.
+
+### 15.2 Tick Model
+
+Two clocks:
+
+* Render tick (60Hz): visual updates only, no state mutation.
+* Game logic tick: there is no fixed background tick rate. State is advanced lazily on demand via `advanceIsland(island, now)`, which fast-forwards an island's state from its stored `lastTick` to `now` using the event-driven piecewise integration in §15.3.
+
+State is read (and therefore advanced) by:
+
+* Player actions that observe or mutate an island (viewing, building, dispatching, etc.)
+* Inbound events targeting the island (drone return, route arrival, vehicle arrival, satellite data delivery)
+* The periodic save (every 30s of wall-clock and on `visibilitychange`) — save reads each island, which advances it
+* Visibility recompute when the player pans the world map
+
+There is no automatic 1Hz / 30Hz / 60Hz background process advancing islands. Truly idle islands accumulate `now - lastTick` of pending advancement; the next read catches them up in one event-driven integration. This makes offline play and active play the same code path.
+
+### 15.3 Per-Island Advancement (Event-Driven Piecewise Integration)
+
+```typescript
+function advanceIsland(island: Island, now: number) {
+  let t = island.lastTick;
+  while (t < now) {
+    const rates = computeRates(island);
+    const nextEvent = findNextCapEvent(island, rates, t, now);
+    const dt = (nextEvent - t) / 1000;
+    applyRates(island, rates, dt);
+    accrueXp(island, rates, dt);
+    levelUpIfReady(island);
+    t = nextEvent;
+  }
+  island.lastTick = now;
+}
+
+function computeRates(island: Island) {
+  // Sum power
+  let powerProd = 0, powerCon = 0;
+  for (const b of island.buildings) {
+    const def = catalog\[b.defId];
+    if (def.power?.produces) powerProd += def.power.produces;
+    if (def.power?.consumes) powerCon += def.power.consumes;
+  }
+  const powerFactor = powerCon === 0 ? 1 : Math.min(1, powerProd / powerCon);
+
+  // Compute per-resource rates
+  const rates: Record<ResourceId, number> = {};
+  for (const b of island.buildings) {
+    const def = catalog\[b.defId];
+    if (!def.recipe) continue;
+
+    if (def.requiresHeat \&\& !hasAdjacentHeatSource(island, b)) continue;
+    const recipeOk = adjacencyGatesSatisfied(island, b);
+    if (!recipeOk) continue;
+
+    const adjBonus = computeAdjacencyBuff(island, b);
+    // All buffs (specialization role, modifiers, Network Consciousness) stack multiplicatively.
+    const buffStack = adjBonus
+                    \* computeSpecializationFactor(island, def.recipe)
+                    \* computeModifierBuffs(island, def.recipe)
+                    \* computeNetworkBuff(world, island);
+    const inputAvail = inputAvailabilityFactor(island, def.recipe);  // continuous [0,1]; 0 = stalled (no output, no XP)
+    const outputAvail = outputAvailabilityFactor(island, def.recipe); // binary; 0 = some output bin at cap; back-propagates upstream
+    const rate = (1 / def.recipe.cycleSec) \* powerFactor \* buffStack \* Math.min(inputAvail, outputAvail);
+    addToRates(rates, def.recipe, rate);
+  }
+  return rates;
+}
+```
+
+`findNextCapEvent` returns the timestamp at which any inventory hits its cap or empties given current rates, or `now` if nothing changes within the interval.
+
+### 15.4 Inter-Island Flow Resolution
+
+Per global tick, walk all routes:
+
+1. For each route, attempt to move `min(capacity \* elapsed, source\_inventory, dest\_remaining\_cap)` of `route.filter` from source to destination.
+2. If multiple routes contend for the same resource at one source, distribute proportionally to capacity.
+
+### 15.5 Offline Math
+
+Identical code path. When player returns, every island runs `advanceIsland(island, Date.now())`. Event-driven integration converges in milliseconds even for multi-day offline periods.
+
+### 15.6 Stack
+
+* **Build tool:** Vite
+* **Language:** TypeScript
+* **Renderer:** PixiJS 8 (canvas-based, sprite-batched)
+* **UI:** React (or Solid) overlaid as DOM on top of the Pixi canvas
+* **State:** Zustand store wrapping the World object
+* **Persistence:** IndexedDB via idb-keyval; serialize World to JSON, save every 30s and on `visibilitychange`
+* **No backend:** pure client-side
+
+### 15.7 Build Order
+
+1. Static single-island scene. 16x16 grid, place hardcoded buildings, no economy.
+2. Shape masks, rotation, adjacency. Validate placement with 4x4 shapes.
+3. Resources and tick loop. Single resource, then chains. `advanceIsland` working with offline-gain testing (mock-advance the clock).
+4. Power and brownouts. Add power buildings, smooth-degradation factor.
+5. Skill tree. UI, XP gain, node effects.
+6. World map and stratified placement. Multiple islands, drone dispatch, discovery.
+7. Inter-island routes. Funneling.
+8. Biomes and modifiers.
+9. Tier breakpoints, T2 and T3 content unlock.
+10. Specialization passive, Network Consciousness milestones.
+11. Artificial island construction.
+12. T4 endgame content.
+13. T5 transcendent content.
+14. Polish, balance, content expansion.
+
+Steps 1 to 5 yield a playable single-island sandbox. That is the first milestone for validating the core loop.
+
+\---
+
+## Appendix A: Placeholders for Tuning
+
+The following numeric values are placeholders to be set during prototype play:
+
+* XP curve coefficient and exponent (polynomial 1-50: `100 \* n^2.2`; exponential past 50: × `1.2^(n - 50)` placeholder)
+* xp_weight per resource (tier scaling: placeholder T0 raw = 1, T1 = 3, T2 = 10, T3 = 30, T4 = 100, T5 = 300, T6 = 1000)
+* Funneling XP bonus percentage (placeholder 50%; applied to imported-and-consumed resources only, while destination is below Tier 3)
+* Skill tree node effect magnitudes (geometric to depth 5: depth 1 = +5%, doubles each step; mixed thereafter — geometric continuation OR unique unlocks per sub-path)
+* Skill tree node count per sub-path (placeholder 10-15)
+* Skill tree node cost scaling (placeholder `cost(depth) = 2^(depth - 1)`)
+* Sub-path commitment threshold (placeholder N = 3 points spent in the sub-path)
+* Recipe cycle times
+* Recipe input/output ratios
+* Building power consumption/production values
+* Storage cap values per building
+* Drone fuel cost per range unit
+* Inter-island route capacities by transport type
+* Stratification cell side length R
+* Maximum island size by biome
+* Land Reclamation cost curve
+* Specialization passive magnitudes
+* Network Consciousness buff values (production-rate-only multipliers, applied across all networked T3+ islands)
+* Modifier roll count distribution (placeholder: 50/30/15/5 for 0/1/2/3 modifiers)
+* Per-modifier rarity weights (placeholder table in §3.5)
+* Stratification cell additional-island geometric decline rate (placeholder 0.30 per step, capped at 4)
+* Foundation Kit variant recipe ratios (Standard / Enriched / Refined)
+* T4/T5 recipe extreme costs
+* Time Lock banked-time cap per building (placeholder: 24 real-time-hour equivalent)
+* Time Lock banked-time spend conversion (placeholder: 1 unit banked = 1 minute of 3× acceleration)
+* Time Lock acceleration multiplier (placeholder: 3×)
+* Maintenance threshold per building tier (placeholder T1: 12h, T2: 16h, T3: 20h, T4-T5: 24h)
+* Maintenance degradation curve (placeholder: linear 100% → 50% over 4h after due)
+* Per-tier maintenance recipe ratios
+* Servitor Conversion Kit recipe ratios (per-tier scaling)
+* Base weather visibility radius (R\_weather)
+* Weather state per-tile destruction chance per state
+* Vehicle weather-vulnerability multipliers per tier
+* Weather forecast model parameters: low-frequency noise scale (placeholder ~5 cells); per-state dwell time (placeholder 1-4 hours typical, sub-hour for Severe/Catastrophic); biome modulation magnitudes; storm-front spatial extent (placeholder 3-6 cells)
+* Day-night cycle period (placeholder 24 real-time hours)
+* Solar output curve across day/dusk/night/dawn phases
+* Weather phase modulation (placeholder: +25% severe-storm rate during Night and Dawn)
+* T5 path drone fuel cost per waypoint and per cell
+* Settlement vehicle base mechanical failure rate per tier
+* Spaceport tier I/II/III base launch success rates
+* Pad-explosion vs orbit-explosion probability split on launch failure
+* Scanner / Sweeper / Relay Sat coverage radius and comm range per Spaceport tier
+* Scanner Sat dwell ramp parameters (initial p, asymptote, time constant)
+* Sweeper Sat fragment-clearance rate per real-time hour
+* Debris-lodge probability per satellite cross-section per tick
+* Lodge slowdown magnitude per hit
+* Lodge vs destruction probability ratio on debris hit
+* Debris fragments produced per destroyed satellite
+* Orbital Tracking Station detection radius
+* Satellite onboard maneuvering fuel reserve and consumption rate per distance
+* Repair Drone failure rate
+* Orbital sub-path skill node magnitudes
+* Orbital Insertion Package recipe ratios
+* Per-variant satellite recipe magnitudes (T4-T5 component counts)
+
+## Appendix B: Deferred Features
+
+Out of scope for first release; designed but not implemented:
+
+* Prestige (discover-and-relocate or other; revisit once core loop is mature)
+* Mechanical/Steam as a third power form
+* Blueprints (layout save/copy convenience)
+* Multi-device sync (would require backend)
+* Localization
+
