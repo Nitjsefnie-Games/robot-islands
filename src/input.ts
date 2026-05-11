@@ -73,9 +73,11 @@ export function dispatchAction(reg: InputRegistry, name: ActionName): boolean {
 export function installDefaultBindings(reg: InputRegistry): void {
   // Full WASD pan (KeyD is pan-right). Toggle-grid moved to KeyG to free up
   // KeyD; rebinding is one-liner away if a user wants the inverse layout.
+  //
+  // KeyS is reserved for the settings panel — ArrowDown still pans south,
+  // and a user who wants WASD-S-as-pan can rebind it from the settings UI.
   bind(reg, 'KeyW', 'pan-up');
   bind(reg, 'KeyA', 'pan-left');
-  bind(reg, 'KeyS', 'pan-down');
   bind(reg, 'KeyD', 'pan-right');
   bind(reg, 'ArrowUp', 'pan-up');
   bind(reg, 'ArrowLeft', 'pan-left');
@@ -116,6 +118,9 @@ export function installDefaultBindings(reg: InputRegistry): void {
   // moved here. Same modal pattern as buildings + skill tree; Escape
   // dismisses via the shared `dismiss-modal` action.
   bind(reg, 'KeyI', 'toggle-inventory');
+  // S = settings — rebind UI + save management. Modal-pattern panel; the
+  // shared `dismiss-modal` action (Escape) also closes it.
+  bind(reg, 'KeyS', 'toggle-settings');
   bind(reg, 'Equal', 'zoom-in'); // '=' / '+' on US layouts
   bind(reg, 'NumpadAdd', 'zoom-in');
   bind(reg, 'Minus', 'zoom-out');

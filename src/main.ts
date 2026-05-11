@@ -49,6 +49,7 @@ import {
 import { TILE_PX } from './island.js';
 import { renderOcean } from './ocean.js';
 import { loadWorld, saveWorld } from './persistence.js';
+import { mountSettingsUi } from './settings-ui.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { mountBuildingsUi } from './buildings-ui.js';
@@ -243,6 +244,9 @@ async function main(): Promise<void> {
   defineAction(reg, 'toggle-construction', () => undefined);
   // Step-19 inventory modal — bound below after the UI is mounted.
   defineAction(reg, 'toggle-inventory', () => undefined);
+  // Settings modal — bound below after the UI is mounted (needs the
+  // lastSaveAt closure variable and the world/state map).
+  defineAction(reg, 'toggle-settings', () => undefined);
   // Step-2.5 placement rotation — bound below after the placement UI is
   // mounted (it needs the home spec/state, which are constructed further
   // down). Stub here so KeyT presses don't silently drop while the UI is
@@ -503,6 +507,7 @@ async function main(): Promise<void> {
     { label: 'Routes (R)', action: 'toggle-routes' },
     { label: 'Settle (V)', action: 'toggle-settlement' },
     { label: 'Construct (C)', action: 'toggle-construction' },
+    { label: 'Settings (S)', action: 'toggle-settings' },
   ]);
 
   // -----------------------------------------------------------------------
@@ -857,6 +862,22 @@ async function main(): Promise<void> {
     inventoryUi.toggle();
   });
 
+  // Settings panel — rebind UI + save management. Toggled via KeyS;
+  // Escape routes through the shared `dismiss-modal` action below.
+  // `lastSaveAt` is forward-declared on the autosave block further down;
+  // the getter reads it lazily so the closure stays valid even though the
+  // binding currently holds `null` at mount time.
+  let lastSaveAt: number | null = null;
+  const settingsUi = mountSettingsUi(document.body, {
+    reg,
+    world: worldState,
+    islandStates,
+    getLastSavedAt: () => lastSaveAt,
+  });
+  defineAction(reg, 'toggle-settings', () => {
+    settingsUi.toggle();
+  });
+
   // Generic modal dismissal: hide whichever modal is open. All modal hide()
   // calls are idempotent, so the no-modal-open case is a free no-op.
   // Mutual-exclusion isn't enforced — if multiple modals happen to be open
@@ -868,6 +889,10 @@ async function main(): Promise<void> {
     buildingsUi.hide();
     constructionUi.hide();
     inventoryUi.hide();
+    // settingsUi is mounted later; the closure captures the binding which
+    // gets assigned before this action ever fires (panel-toggle happens
+    // through user input, not synchronously during bootstrap).
+    settingsUi.hide();
     placementUi.cancel();
     // §4 inspector: Escape also closes the inspector + clears the
     // selection outline. Idempotent; closing while already hidden is a
@@ -976,7 +1001,9 @@ async function main(): Promise<void> {
   // forget (`void`) so the timer / event handler doesn't await — failures
   // are swallowed by `saveWorld`'s try/catch.
   const SAVE_INTERVAL_MS = 30_000;
-  let lastSaveAt: number | null = null;
+  // `lastSaveAt` is declared earlier alongside the settings UI mount so the
+  // panel's getLastSavedAt closure can read the live value; this block
+  // owns the writes via triggerSave.
   const triggerSave = (): void => {
     void saveWorld(worldState, islandStates);
     lastSaveAt = performance.now();
@@ -993,6 +1020,7 @@ async function main(): Promise<void> {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') triggerSave();
   });
+
 
   // Update tick: apply held pan flags + sync camera state to the world
   // container, advance every populated island's economy, advance drone fleet,
@@ -1119,6 +1147,8 @@ async function main(): Promise<void> {
     dronesUi.refresh(now);
     routesUi.refresh(now);
     settlementUi.refresh(now);
+    // Settings panel — cheap when hidden (early-returns in refresh()).
+    settingsUi.refresh();
     // §4 inspector: refresh while open so the live rate / power / inventory
     // numbers track the per-frame economy. Cheap when closed (one branch).
     inspector.refresh();

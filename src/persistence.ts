@@ -40,7 +40,7 @@
 //   path that handles a 1-frame tick handles a 24-hour catchup. No new
 //   integration code; §15.5 catchup falls out for free.
 
-import { get, set } from 'idb-keyval';
+import { del, get, set } from 'idb-keyval';
 
 import { terrainAtForBiome } from './biomes.js';
 import type { IslandState } from './economy.js';
@@ -409,6 +409,52 @@ export async function saveWorld(
   } catch (err) {
     console.warn('[robot-islands] saveWorld failed:', err);
   }
+}
+
+/**
+ * Delete the saved snapshot from IndexedDB. Used by the Settings panel's
+ * "Clear save (start fresh)" affordance — the caller typically follows with
+ * `window.location.reload()` to boot a clean session.
+ *
+ * Swallows errors the same way `saveWorld` does so a delete failure can't
+ * crash the dismiss handler. Returns void.
+ */
+export async function clearSave(): Promise<void> {
+  try {
+    await del(STORAGE_KEY);
+  } catch (err) {
+    console.warn('[robot-islands] clearSave failed:', err);
+  }
+}
+
+/**
+ * Validate a deserialized JSON blob as a save snapshot. Used by the
+ * Settings panel's "Import save" flow before writing it back to IDB.
+ * The check is intentionally shallow — `v === SCHEMA_VERSION` plus the
+ * presence of the top-level fields. The full deserializer enforces the
+ * deeper shape on next load; a malformed inner shape will surface there
+ * as a thrown error caught by `loadWorld`, falling back to fresh world.
+ */
+export function isValidSaveSnapshot(value: unknown): value is SaveSnapshot {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (v['v'] !== SCHEMA_VERSION) return false;
+  if (typeof v['savedAt'] !== 'number') return false;
+  if (typeof v['savedAtPerf'] !== 'number') return false;
+  if (typeof v['world'] !== 'object' || v['world'] === null) return false;
+  if (!Array.isArray(v['islandStates'])) return false;
+  return true;
+}
+
+/**
+ * Write an externally-provided snapshot (e.g. from clipboard / file import)
+ * directly to IndexedDB. Caller is responsible for validation via
+ * `isValidSaveSnapshot` first; this function trusts its input. The
+ * standard follow-up is `window.location.reload()` to rehydrate world
+ * state from the imported snapshot.
+ */
+export async function importSave(snapshot: SaveSnapshot): Promise<void> {
+  await set(STORAGE_KEY, snapshot);
 }
 
 /**

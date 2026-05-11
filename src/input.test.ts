@@ -104,8 +104,10 @@ describe('InputRegistry', () => {
     installDefaultBindings(reg);
     expect(reg.bindings.get('KeyW')).toBe('pan-up');
     expect(reg.bindings.get('KeyA')).toBe('pan-left');
-    expect(reg.bindings.get('KeyS')).toBe('pan-down');
     expect(reg.bindings.get('KeyD')).toBe('pan-right');
+    // KeyS was reassigned to toggle-settings; pan-down stays on ArrowDown.
+    expect(reg.bindings.get('KeyS')).toBe('toggle-settings');
+    expect(reg.bindings.get('ArrowDown')).toBe('pan-down');
     expect(reg.bindings.get('ArrowRight')).toBe('pan-right');
     expect(reg.bindings.get('KeyG')).toBe('toggle-grid');
     expect(reg.bindings.get('KeyH')).toBe('center-home');
