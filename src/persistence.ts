@@ -127,12 +127,19 @@ export interface SerializedIslandStateEntry {
 
 /** World data minus the per-island closures. Drones, Routes, and Vehicles
  *  are already JSON-friendly (only numbers, strings, and arrays — see the
- *  respective types) and round-trip without transformation. */
+ *  respective types) and round-trip without transformation.
+ *
+ *  §11 telemetry: `revealedCells` is serialized as a sorted array of cell
+ *  keys (Sets don't survive JSON.stringify). Sorted for deterministic save
+ *  blob ordering — diff-friendly + smaller-on-disk than the unsorted iteration
+ *  order. Legacy saves (pre-§11) lack this field; the deserializer backfills
+ *  with cells under each populated island's footprint. */
 export interface SerializedWorld {
   readonly islands: ReadonlyArray<SerializedIslandSpec>;
   readonly drones: ReadonlyArray<Drone>;
   readonly routes: ReadonlyArray<Route>;
   readonly vehicles: ReadonlyArray<SettlementVehicle>;
+  readonly revealedCells?: ReadonlyArray<string>;
 }
 
 /** Top-level snapshot. The `v` field is the schema-version anchor: this
@@ -206,6 +213,9 @@ export function serializeWorld(
       })),
       // Vehicles are immutable records, no nested mutable state to deep-copy.
       vehicles: [...world.vehicles],
+      // §11 telemetry: snapshot the revealed-cell set as a sorted array.
+      // Sorted for deterministic blob output (diff-friendly between saves).
+      revealedCells: [...world.revealedCells].sort(),
     },
     islandStates: stateEntries,
   };
@@ -335,6 +345,14 @@ export function deserializeWorld(
           ? (v as { fuelResource: SettlementVehicle['fuelResource'] }).fuelResource
           : 'biofuel',
     })),
+    // §11 telemetry forward-compat backfill: legacy v3 saves predate the
+    // `revealedCells` field. Restore from the snapshot's array (Set form
+    // doesn't survive JSON); on a missing/empty array, seed every cell
+    // touched by a populated island's footprint so the player doesn't
+    // load into a pitch-dark world. The fresh-game seed in
+    // `makeInitialWorld` does the same thing; this just covers the
+    // "loaded a save written before §11 landed" case.
+    revealedCells: deserializeRevealedCells(islands, snapshot.world.revealedCells),
   };
 
   const islandStates = new Map<string, IslandState>();
@@ -448,6 +466,63 @@ export function deserializeWorld(
   if (constructionMax > 0) _seedConstructionCounter(constructionMax);
 
   return { world, islandStates };
+}
+
+/** Backfill the `revealedCells` Set on load. If the saved blob carries an
+ *  explicit array, use it verbatim (recent saves). If the field is missing
+ *  (legacy v3 save written before §11 landed) OR the array is empty,
+ *  reconstruct from each populated island's footprint cells so the player
+ *  doesn't load into a pitch-dark world.
+ *
+ *  We deliberately also re-seed populated-island cells when the saved array
+ *  is non-empty — a player's save retains whatever they explored, and the
+ *  populated-island cells are part of that set, but seeding them again is
+ *  idempotent (Set semantics) and protects against a future scenario where
+ *  someone manually trimmed `revealedCells` from a save blob. */
+function deserializeRevealedCells(
+  islands: ReadonlyArray<IslandSpec>,
+  saved: ReadonlyArray<string> | undefined,
+): Set<string> {
+  const out = new Set<string>(saved ?? []);
+  for (const spec of islands) {
+    // Seed cells for populated AND already-discovered islands. A legacy v3
+    // save that pre-dates §11 may carry `discovered: true` on islands that
+    // the player revealed via the old center-flip mechanic; without seeding
+    // their cells here the fog overlay would paint over them on load.
+    if (!spec.populated && !spec.discovered) continue;
+    const xMin = Math.floor(spec.cx - spec.majorRadius);
+    const xMax = Math.ceil(spec.cx + spec.majorRadius);
+    const yMin = Math.floor(spec.cy - spec.minorRadius);
+    const yMax = Math.ceil(spec.cy + spec.minorRadius);
+    const cellSize = 16; // mirrors CELL_SIZE_TILES in world.ts
+    const cMinX = Math.floor(xMin / cellSize);
+    const cMaxX = Math.floor(xMax / cellSize);
+    const cMinY = Math.floor(yMin / cellSize);
+    const cMaxY = Math.floor(yMax / cellSize);
+    for (let cy = cMinY; cy <= cMaxY; cy++) {
+      for (let cx = cMinX; cx <= cMaxX; cx++) {
+        out.add(`${cx},${cy}`);
+      }
+    }
+    if (spec.extraEllipses) {
+      for (const e of spec.extraEllipses) {
+        const exMin = Math.floor(spec.cx + e.offsetX - e.major);
+        const exMax = Math.ceil(spec.cx + e.offsetX + e.major);
+        const eyMin = Math.floor(spec.cy + e.offsetY - e.minor);
+        const eyMax = Math.ceil(spec.cy + e.offsetY + e.minor);
+        const ecMinX = Math.floor(exMin / cellSize);
+        const ecMaxX = Math.floor(exMax / cellSize);
+        const ecMinY = Math.floor(eyMin / cellSize);
+        const ecMaxY = Math.floor(eyMax / cellSize);
+        for (let cy = ecMinY; cy <= ecMaxY; cy++) {
+          for (let cx = ecMinX; cx <= ecMaxX; cx++) {
+            out.add(`${cx},${cy}`);
+          }
+        }
+      }
+    }
+  }
+  return out;
 }
 
 /** Parse the trailing integer suffix from an id like `drone-7` → 7. Returns

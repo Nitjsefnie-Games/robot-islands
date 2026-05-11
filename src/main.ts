@@ -48,7 +48,7 @@ import {
 } from './input.js';
 import { TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
-import { renderOcean } from './ocean.js';
+import { renderOcean, renderOceanFogOverlay } from './ocean.js';
 import { loadWorld, saveWorld } from './persistence.js';
 import { mountSettingsUi } from './settings-ui.js';
 import { BUILDING_DEFS } from './building-defs.js';
@@ -127,15 +127,21 @@ async function main(): Promise<void> {
   const restored = await loadWorld();
   const worldState: WorldState = restored ? restored.world : makeInitialWorld(performance.now());
 
-  // Ocean + island layers are baked from the current world state. They get
-  // rebuilt when discovery changes (drone return reveals new islands → new
-  // gradient sprites + new island terrain). `let` so the rebuild closure
-  // can reassign the references; we keep them at fixed Z by removing the
-  // old child + adding the new at the same index.
+  // Ocean + island + fog-overlay layers are baked from the current world
+  // state. They get rebuilt when discovery changes (drone-tick reveals new
+  // cells, drone returns flip an island's `discovered` flag, etc.). `let`
+  // so the rebuild closure can reassign the references; we keep them at
+  // fixed Z by removing the old child + adding the new at the same index.
+  //
+  // §11 telemetry: the post-island fog overlay masks unrevealed cells of
+  // partially-revealed islands so a drone that's only swept half of an
+  // island still renders the swept half but leaves the rest dark.
   let oceanLayer = renderOceanFromState(worldState, WORLD_HALF_SIZE_TILES);
   world.addChild(oceanLayer);
   let islandLayer = renderIslandLayer(worldState);
   world.addChild(islandLayer);
+  let fogOverlayLayer = renderFogOverlayFromState(worldState);
+  world.addChild(fogOverlayLayer);
 
   // Cell grid (debug). Above ocean+islands so lines stay visible when toggled.
   const gridLayer = renderCellGrid(WORLD_HALF_SIZE_TILES);
@@ -144,18 +150,25 @@ async function main(): Promise<void> {
   /** Helpers — bake an ocean layer from current world state. The vision
    *  layer reads the world's `VisionSource[]` (baseline padded ellipses +
    *  Lighthouse circles), pre-computed from the same populated set the
-   *  island classifier uses. */
+   *  island classifier uses. The discovered cells tier reads
+   *  `worldState.revealedCells` (the §11 per-cell discovery set). */
   function renderOceanFromState(ws: WorldState, halfSize: number): Container {
     const populated = ws.islands.filter((s) => s.populated);
     const visionSources = computeVisionSources(populated);
-    return renderOcean(
+    return renderOcean(ws.revealedCells, visionSources, halfSize);
+  }
+  /** Bake the post-island fog overlay. One UNKNOWN_BLUE square per cell
+   *  intersecting a discovered island's bbox that isn't in `revealedCells`. */
+  function renderFogOverlayFromState(ws: WorldState): Container {
+    return renderOceanFogOverlay(
       ws.islands.map((s) => ({
         cx: s.cx,
         cy: s.cy,
         discovered: s.discovered,
+        majorRadius: s.majorRadius,
+        minorRadius: s.minorRadius,
       })),
-      visionSources,
-      halfSize,
+      ws.revealedCells,
     );
   }
   function renderIslandLayer(ws: WorldState): Container {
@@ -170,23 +183,29 @@ async function main(): Promise<void> {
     }
     return layer;
   }
-  /** Rebuild ocean + island layers in place. Called when drones return and
-   *  reveal new islands. The PixiJS Texture cache for gradient sprites isn't
-   *  freed here — `oldOcean.destroy({ children: true, texture: true })` is
-   *  the explicit GPU-cleanup hook so the textures from the previous bake
-   *  don't leak across many discovery events. */
+  /** Rebuild ocean + island + fog-overlay layers in place. Called when
+   *  drones reveal new cells or return / flip island discovery. The PixiJS
+   *  Texture cache for gradient sprites isn't freed here —
+   *  `oldOcean.destroy({ children: true, texture: true })` is the explicit
+   *  GPU-cleanup hook so the textures from the previous bake don't leak
+   *  across many discovery events. */
   function rebuildWorldLayers(): void {
     const oldOcean = oceanLayer;
     const oldIslands = islandLayer;
+    const oldFog = fogOverlayLayer;
     oceanLayer = renderOceanFromState(worldState, WORLD_HALF_SIZE_TILES);
     islandLayer = renderIslandLayer(worldState);
-    // Insert at the same Z slots: ocean at 0, islands at 1.
+    fogOverlayLayer = renderFogOverlayFromState(worldState);
+    // Insert at the same Z slots: ocean at 0, islands at 1, fog at 2.
     world.removeChild(oldOcean);
     world.removeChild(oldIslands);
+    world.removeChild(oldFog);
     world.addChildAt(oceanLayer, 0);
     world.addChildAt(islandLayer, 1);
+    world.addChildAt(fogOverlayLayer, 2);
     oldOcean.destroy({ children: true, texture: true });
     oldIslands.destroy({ children: true });
+    oldFog.destroy({ children: true });
   }
 
   // -----------------------------------------------------------------------
@@ -969,9 +988,9 @@ async function main(): Promise<void> {
       }
     },
   });
-  // Drone dots live in world space (between islands and the cell grid so
-  // they sit above land, below debug overlay).
-  world.addChildAt(dronesUi.droneLayer, 2);
+  // Drone dots live in world space (above ocean + islands + fog overlay,
+  // below the cell grid).
+  world.addChildAt(dronesUi.droneLayer, 3);
   // Reticle lives in screen space (NOT world container) so it stays a
   // fixed-pixel crosshair regardless of zoom.
   app.stage.addChild(dronesUi.reticleLayer);
@@ -1017,7 +1036,7 @@ async function main(): Promise<void> {
       }
     },
   });
-  world.addChildAt(settlementUi.vehicleLayer, 3);
+  world.addChildAt(settlementUi.vehicleLayer, 4);
   app.stage.addChild(settlementUi.reticleLayer);
   // Hook the forward-declared cross-panel disarm callback to the now-
   // constructed settlement panel. Called by drones-ui when it arms launch.
@@ -1074,6 +1093,11 @@ async function main(): Promise<void> {
     world.scale.set(cam.zoom);
 
     const now = performance.now();
+    // Capture the previous frame's timestamp BEFORE we overwrite
+    // `lastFrameMs` — §11 telemetry's `tickDrones` needs the prev-tick
+    // time to compute the per-tick capsule corridor (drone position at
+    // prev → drone position at now).
+    const prevFrameMs = lastFrameMs;
     const elapsedSec = Math.max(0, (now - lastFrameMs) / 1000);
     lastFrameMs = now;
     // Compute Network Consciousness state once per frame from the current
@@ -1136,8 +1160,17 @@ async function main(): Promise<void> {
     // Drones tick AFTER economy so any biofuel changes from this frame
     // are visible to the dispatch UI on the same frame; drone returns
     // are processed independent of economy state.
-    const droneResult = tickDrones(worldState, now);
-    if (droneResult.newlyDiscoveredIslandIds.length > 0) {
+    //
+    // §11 telemetry: pass `lastFrameMs` so the tick can compute the
+    // per-tick capsule corridor from the drone's prev-tick position.
+    // Rebuild render layers when either an island flips `discovered` OR
+    // new cells got revealed (so the fog overlay / DISCOVERED_BLUE
+    // squares update mid-flight, not just on return).
+    const droneResult = tickDrones(worldState, now, prevFrameMs);
+    if (
+      droneResult.newlyDiscoveredIslandIds.length > 0 ||
+      droneResult.revealedCellsAdded > 0
+    ) {
       rebuildWorldLayers();
     }
     tickRoutes(worldState, islandStates, now, elapsedSec);

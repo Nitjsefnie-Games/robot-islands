@@ -79,7 +79,7 @@ function makeIslandSpec(over: Partial<IslandSpec>): IslandSpec {
 }
 
 function freshWorld(islands: IslandSpec[] = []): WorldState {
-  return { islands, drones: [], routes: [], vehicles: [] };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells: new Set() };
 }
 
 beforeEach(() => {

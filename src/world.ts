@@ -54,8 +54,12 @@ export const CELL_SIZE_TILES = 16;
  *  Distant scouting now requires Lighthouse infrastructure
  *  (`lighthouse.ts → computeVisionSources`). */
 export const VISION_PADDING_TILES = 10;
-/** Discovery aura radius around any discovered island, in tiles. Placeholder:
- *  ~1.5 cells. Drives the medium-blue ocean tier in `renderOcean`. */
+/** Discovery aura radius around any discovered island, in tiles.
+ *  DEPRECATED: §11 telemetry redesign moved the medium-blue ocean tier
+ *  from per-island halos to per-stratification-cell squares (see
+ *  `WorldState.revealedCells`). The constant is retained as exported data
+ *  for any external (debug/dev-tools) consumer that might query it; no
+ *  in-tree code reads it. */
 export const DISCOVERY_RADIUS_TILES = 24;
 
 // ---------------------------------------------------------------------------
@@ -677,6 +681,13 @@ export interface WorldState {
    *  tick when arrival fires. Same type-only-import discipline as drones
    *  and routes; the runtime dependency is `settlement.ts → world.ts`. */
   vehicles: import('./settlement.js').SettlementVehicle[];
+  /** §11 telemetry: set of stratification-cell keys (format `"cellX,cellY"`)
+   *  the player has revealed. Initially seeded with every cell touched by a
+   *  populated island's footprint (so home isn't pitch-dark). Mutated by
+   *  `tickDrones`: a drone inside an Antenna's signal range adds its current
+   *  scan-corridor cells to this set each tick. Persisted as a sorted array
+   *  of strings. Replaces the per-island-center-flip discovery model. */
+  revealedCells: Set<string>;
 }
 
 /** Default seed for the procedural world. Could later be made
@@ -733,7 +744,36 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   // a type-only edge, so the cycle is type-side and TS handles it.
   const generated = generateWorld({ ...DEFAULT_GEN_OPTS, existingIslands: islands });
   for (const g of generated) islands.push(g);
-  return { islands, drones: [], routes: [], vehicles: [] };
+  // §11 telemetry: seed revealedCells with every cell touched by a
+  // populated OR already-discovered island's footprint. Populated islands
+  // (home, forest-ne) need their own cells revealed so the player doesn't
+  // load into pitch-dark home. Discovered-but-unpopulated demo islands
+  // (e.g. desert-far in DEMO_ISLANDS) must ALSO get their cells seeded —
+  // otherwise the fog overlay paints UNKNOWN_BLUE on top of them and they
+  // disappear from view, violating the "discovered ⇔ any cell revealed"
+  // invariant. Static import of `discovery.ts` would create a cycle
+  // (`discovery.ts → world.ts`); we inline the cell math here, mirroring
+  // `islandCells` in discovery.ts.
+  const revealedCells = new Set<string>();
+  for (const spec of islands) {
+    if (!spec.populated && !spec.discovered) continue;
+    for (const c of islandConstituents(spec)) {
+      const xMin = Math.floor(spec.cx + c.offsetX - c.major);
+      const xMax = Math.ceil(spec.cx + c.offsetX + c.major);
+      const yMin = Math.floor(spec.cy + c.offsetY - c.minor);
+      const yMax = Math.ceil(spec.cy + c.offsetY + c.minor);
+      const cMinX = Math.floor(xMin / CELL_SIZE_TILES);
+      const cMaxX = Math.floor(xMax / CELL_SIZE_TILES);
+      const cMinY = Math.floor(yMin / CELL_SIZE_TILES);
+      const cMaxY = Math.floor(yMax / CELL_SIZE_TILES);
+      for (let cy = cMinY; cy <= cMaxY; cy++) {
+        for (let cx = cMinX; cx <= cMaxX; cx++) {
+          revealedCells.add(`${cx},${cy}`);
+        }
+      }
+    }
+  }
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells };
 }
 
 // ---------------------------------------------------------------------------

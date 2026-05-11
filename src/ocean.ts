@@ -1,24 +1,28 @@
 // Three-tier ocean colour rendering with soft tier boundaries.
 //
-// Replaces the old `vision.ts` outline ring. The boundary IS the colour step
-// between three discrete tiers — but the step is smoothed by radial-gradient
-// alpha at each circle's rim, so the user sees a soft fade rather than a
-// hard edge:
+// §11 telemetry redesign: the medium-blue "discovered ocean" tier is now
+// driven by the per-cell `revealedCells` set rather than per-island halos.
+// Rendering layout:
 //
-//   state a  — vision (full info)        — VISION_BLUE     (lightest)
-//   state b  — discovered, no current    — DISCOVERED_BLUE (medium)
-//   state c  — unknown                   — UNKNOWN_BLUE    (darkest, =page bg)
+//   1. one big rect filling the world bounds in UNKNOWN_BLUE (alpha 1) —
+//      the floor of the entire scene.
+//   2. one DISCOVERED_BLUE square sprite per cell in `revealedCells`
+//      (16×16 tiles, sprite-cloned from a single shared texture). This
+//      replaces the per-island radial-gradient aura — the cell-by-cell
+//      squares ARE the new "you've been here" tier.
+//   3. vision sources (ellipse + circle gradient sprites) — unchanged.
+//      Caller-side responsibility (`main.ts`): add the islands layer on
+//      top of the ocean container.
+//   4. (Outside this module: the islands draw on top of the ocean.)
+//   5. Fog overlay: a post-island layer paints UNKNOWN_BLUE squares on
+//      cells NOT in `revealedCells` whose AABB overlaps any rendered
+//      island's footprint bbox. This masks the unrevealed portion of each
+//      island so partial-reveal looks correct (the island's pixels under
+//      an unrevealed cell get covered by the fog square).
 //
-// Compositing is plain alpha layering — no filters, no blend modes:
-//
-//   1. one big rect filling the world bounds in UNKNOWN_BLUE (alpha 1)
-//   2. one radial-gradient sprite per *discovered* island in DISCOVERED_BLUE
-//      (solid centre with a small EDGE_FADE_PX anti-aliasing band at the
-//      rim — reads as a crisp tier circle, not a wash)
-//   3. one radial-gradient sprite per *populated* island in VISION_BLUE
-//      (same gradient profile, larger radius)
-//
-// Islands render on top of all three layers (handled by `main.ts` Z order).
+// Per-island legacy aura (24-tile soft circle around discovered islands)
+// is REMOVED — the cell-by-cell DISCOVERED_BLUE squares now carry that
+// indicator at finer granularity.
 //
 // The earlier fog attempt used Canvas2D radial gradients combined with
 // `blendMode: 'erase'` against an opaque sheet — the erase blend was the
@@ -27,24 +31,30 @@
 
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 
+import { CELL_SIZE_TILES } from './discovery.js';
 import { TILE_PX } from './island.js';
 import type { VisionSource } from './lighthouse.js';
 import {
   DISCOVERED_BLUE,
-  DISCOVERY_RADIUS_TILES,
   UNKNOWN_BLUE,
   VISION_BLUE,
 } from './world.js';
 
-/** Shape consumed by the discovery-aura layer. Only the medium-blue per-
- *  discovered-island halo reads from this; the vision tier is rendered from
- *  the separate `VisionSource[]` list (post-Lighthouse redesign). */
+/** Shape consumed by the fog-overlay layer (step 5 above). The renderer
+ *  computes each rendered island's AABB in world-tile coords from
+ *  `(cx, cy, majorRadius, minorRadius)` and paints UNKNOWN_BLUE on any
+ *  unrevealed cell intersecting that AABB. Discovered/populated flag is
+ *  retained for forward compatibility (and to let the caller drop
+ *  not-yet-discovered islands cheaply). */
 export interface OceanIsland {
   /** Centre of the island in world-tile coordinates. */
   readonly cx: number;
   readonly cy: number;
   /** Whether the player has discovered this island. (Populated → discovered.) */
   readonly discovered: boolean;
+  /** Ellipse semi-axes in tiles — used for the fog-overlay bbox. */
+  readonly majorRadius: number;
+  readonly minorRadius: number;
 }
 
 /** Width of the soft fade band at the rim, in pixels. The inner
@@ -158,30 +168,64 @@ function makeEllipseGradientSprite(
   return s;
 }
 
+/** Cell-size in world pixels. CELL_SIZE_TILES from discovery.ts × TILE_PX. */
+const CELL_PX = CELL_SIZE_TILES * TILE_PX;
+
+/** Build (lazily) a 1×1 white texture used as a sprite-clone base for the
+ *  16-tile cell squares. The actual colour is set via `sprite.tint` so a
+ *  single texture backs both the DISCOVERED_BLUE reveals AND the
+ *  UNKNOWN_BLUE fog squares. */
+let cellSquareTexture: Texture | null = null;
+function getCellSquareTexture(): Texture {
+  if (cellSquareTexture !== null) return cellSquareTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('getCellSquareTexture: 2D context unavailable');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 1, 1);
+  cellSquareTexture = Texture.from(canvas);
+  return cellSquareTexture;
+}
+
+/** Make a 16-tile-square cell-sized sprite tinted to `colorHex` and
+ *  positioned with its top-left at the cell's top-left world pixel. The
+ *  cell coord `(cx, cy)` covers world tiles `[cx*16, (cx+1)*16)`. */
+function makeCellSquare(cx: number, cy: number, colorHex: number): Sprite {
+  const s = new Sprite(getCellSquareTexture());
+  s.width = CELL_PX;
+  s.height = CELL_PX;
+  s.tint = colorHex;
+  s.position.set(cx * CELL_PX, cy * CELL_PX);
+  return s;
+}
+
+/** Parse a `"cx,cy"` cell key. Mirrors `discovery.ts → parseCellKey` but
+ *  avoids the import cycle (`ocean.ts` is the renderer, kept lightweight). */
+function parseKey(key: string): { cx: number; cy: number } {
+  const i = key.indexOf(',');
+  return { cx: Number(key.slice(0, i)), cy: Number(key.slice(i + 1)) };
+}
+
 /**
- * Build the layered ocean container.
+ * Build the bottom-of-the-stack ocean container.
  *
- * @param islands        All known islands with their discovered flag — drives
- *                       the steel-blue per-discovered-island aura. Populated
- *                       counts as discovered (per data model); the vision
- *                       sprites paint over those so we don't filter them.
- * @param visionSources  The world's vision sources — baseline padded ellipses
- *                       AND Lighthouse circles, pre-computed by
- *                       `lighthouse.ts → computeVisionSources`. One gradient
- *                       sprite is emitted per source; overpaint in
- *                       overlapping regions is harmless (soft edge fade) and
- *                       yields the union vision area without computing the
- *                       union silhouette explicitly.
+ * @param revealedCells  Set of cell keys (`"cellX,cellY"`) the player has
+ *                       revealed. Each gets a DISCOVERED_BLUE 16-tile square
+ *                       sprite painted over the unknown floor.
+ * @param visionSources  Vision sources from `lighthouse.ts → computeVisionSources`.
+ *                       Painted on top of the cell tier as gradient ellipses
+ *                       / circles.
  * @param halfSizeTiles  Half-extent of the unknown rectangle, in tiles.
- *                       Pass the same value used for the cell-grid overlay
- *                       so the ocean covers the full reachable area.
- * @returns A `Container` whose children draw, in this order, the unknown
- *          rectangle, then the discovery sprites, then the vision sprites.
- *          Add it as the first (bottom) child of your world container so
- *          islands render on top.
+ * @returns A `Container` to add as the first (bottom) child of your world
+ *          container so islands render on top. The matching fog overlay (the
+ *          UNKNOWN_BLUE squares that mask unrevealed portions of rendered
+ *          islands) is `renderOceanFogOverlay`, intended to be added AFTER
+ *          the islands layer.
  */
 export function renderOcean(
-  islands: ReadonlyArray<OceanIsland>,
+  revealedCells: ReadonlySet<string>,
   visionSources: ReadonlyArray<VisionSource>,
   halfSizeTiles: number,
 ): Container {
@@ -198,14 +242,13 @@ export function renderOcean(
   });
   layer.addChild(bg);
 
-  // Tier B — discovery sprites. One per discovered island. Populated counts
-  // as discovered (per data model); the larger vision sprite paints over
-  // those, so we don't bother filtering them out.
-  for (const isl of islands) {
-    if (!isl.discovered) continue;
-    layer.addChild(
-      makeGradientSprite(isl.cx, isl.cy, DISCOVERY_RADIUS_TILES, DISCOVERED_BLUE),
-    );
+  // Tier B — per-cell discovery squares. One DISCOVERED_BLUE 16-tile sprite
+  // per revealed cell. Replaces the old per-discovered-island aura — the
+  // per-cell granularity is what makes "I scanned here and found nothing"
+  // a visible piece of information.
+  for (const k of revealedCells) {
+    const { cx, cy } = parseKey(k);
+    layer.addChild(makeCellSquare(cx, cy, DISCOVERED_BLUE));
   }
 
   // Tier A — vision sprites. One per VisionSource. Baseline ellipses bake
@@ -231,5 +274,57 @@ export function renderOcean(
     }
   }
 
+  return layer;
+}
+
+/**
+ * Build the fog-overlay layer (the post-island unknown-blue mask).
+ *
+ * For each rendered island, compute its AABB in cell coords; for every cell
+ * in that AABB NOT in `revealedCells`, paint an UNKNOWN_BLUE 16-tile sprite.
+ * Add the returned container ABOVE the islands layer so the squares mask
+ * the unrevealed portion of each partially-revealed island.
+ *
+ * Cells that aren't part of any island bbox are left alone — they were
+ * already UNKNOWN_BLUE from the base rect, and a redundant overlay there
+ * would just be drawcalls for no visual change.
+ *
+ * @param islands         Islands to consider (skip 'unknown' islands which
+ *                        the renderer already short-circuits to null).
+ * @param revealedCells   Same Set used by `renderOcean`.
+ * @returns A `Container` carrying one Sprite per fogged cell.
+ */
+export function renderOceanFogOverlay(
+  islands: ReadonlyArray<OceanIsland>,
+  revealedCells: ReadonlySet<string>,
+): Container {
+  const layer = new Container();
+  layer.label = 'ocean-fog-overlay';
+  // Deduplicate cells across overlapping island bboxes — two islands sharing
+  // a bbox cell would otherwise emit two fog sprites at the same world
+  // position. Sprite-cloning is cheap but dedup saves drawcalls.
+  const fogCells = new Set<string>();
+  for (const isl of islands) {
+    if (!isl.discovered) continue;
+    const xMin = Math.floor(isl.cx - isl.majorRadius);
+    const xMax = Math.ceil(isl.cx + isl.majorRadius);
+    const yMin = Math.floor(isl.cy - isl.minorRadius);
+    const yMax = Math.ceil(isl.cy + isl.minorRadius);
+    const cMinX = Math.floor(xMin / CELL_SIZE_TILES);
+    const cMaxX = Math.floor(xMax / CELL_SIZE_TILES);
+    const cMinY = Math.floor(yMin / CELL_SIZE_TILES);
+    const cMaxY = Math.floor(yMax / CELL_SIZE_TILES);
+    for (let cy = cMinY; cy <= cMaxY; cy++) {
+      for (let cx = cMinX; cx <= cMaxX; cx++) {
+        const k = `${cx},${cy}`;
+        if (revealedCells.has(k)) continue;
+        fogCells.add(k);
+      }
+    }
+  }
+  for (const k of fogCells) {
+    const { cx, cy } = parseKey(k);
+    layer.addChild(makeCellSquare(cx, cy, UNKNOWN_BLUE));
+  }
   return layer;
 }

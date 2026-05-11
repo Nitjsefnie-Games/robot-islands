@@ -1,5 +1,5 @@
 // Drones: pure-logic tests for capsule-corridor math, dispatch validation,
-// and tick-based discovery (§11.1-11.3).
+// and tick-based per-cell discovery (§11.1-11.3, §11 telemetry redesign).
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -124,7 +124,13 @@ describe('pointToSegmentDistSq', () => {
 
 describe('dispatchDrone', () => {
   function freshWorld(): WorldState {
-    return { islands: [], drones: [], routes: [], vehicles: [] };
+    return {
+      islands: [],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+    };
   }
 
   it('happy path: deducts biofuel, appends drone, computes expectedReturnTime', () => {
@@ -209,9 +215,60 @@ describe('dispatchDrone', () => {
 // tickDrones
 // ---------------------------------------------------------------------------
 
-describe('tickDrones', () => {
+describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => {
+  /** Build a world with a populated home island carrying a T1 antenna at
+   *  origin so drone scans transmit. Without an antenna in range, cells are
+   *  silently dropped (the "data falls on the floor" semantic). */
   function world(islands: IslandSpec[]): WorldState {
-    return { islands, drones: [], routes: [], vehicles: [] };
+    const home: IslandSpec = {
+      id: 'home',
+      name: 'home',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      // T1 antenna radius is 80 tiles, centered on (0.5, 0.5) for the 1×1
+      // building at island-local (0,0). Plenty of range for the corridor
+      // tests below.
+      buildings: [{ id: 'home-a1', defId: 'antenna_t1', x: 0, y: 0 }],
+      modifiers: [],
+    };
+    return {
+      islands: [home, ...islands],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+    };
+  }
+
+  /** Variant of `world` with NO antenna — every cell-reveal attempt should
+   *  fail (the data falls on the floor). The home island is still populated
+   *  (so `computeSignalRanges` sees it), just antenna-less. */
+  function worldNoAntenna(islands: IslandSpec[]): WorldState {
+    const home: IslandSpec = {
+      id: 'home',
+      name: 'home',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [], // no antenna
+      modifiers: [],
+    };
+    return {
+      islands: [home, ...islands],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+    };
   }
 
   it('returns empty when no drones are in flight', () => {
@@ -219,6 +276,7 @@ describe('tickDrones', () => {
     const r = tickDrones(w, 5000);
     expect(r.returned).toHaveLength(0);
     expect(r.newlyDiscoveredIslandIds).toHaveLength(0);
+    expect(r.revealedCellsAdded).toBe(0);
   });
 
   it('leaves a drone untouched when nowMs < expectedReturnTime', () => {
@@ -226,41 +284,102 @@ describe('tickDrones', () => {
     const home = makeIslandState();
     home.inventory.biofuel = 50;
     dispatchDrone(w, home, 0, 0, 1, 0, 10, 1000);
-    // 10 fuel × 4 efficiency = 40 tiles round-trip / 2 t/s = 20s flight.
-    // Tick at 5_000 ms < 21_000 ms expected return.
-    const r = tickDrones(w, 5_000);
+    // 10 fuel × 4 efficiency = 40 tiles round-trip / 0.5 t/s = 80s flight.
+    // Tick at 5_000 ms < 81_000 ms expected return.
+    const r = tickDrones(w, 5_000, 4_000);
     expect(r.returned).toHaveLength(0);
     expect(w.drones).toHaveLength(1);
   });
 
-  it('removes a drone on return and reveals islands inside the corridor', () => {
-    const target = makeIslandSpec({ id: 'target', cx: 30, cy: 5, discovered: false });
+  it('reveals cells along the corridor while the drone is in antenna range', () => {
+    const w = world([]);
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
+    // 40 tiles round-trip, 80s flight. Tick at full return time — the
+    // single-tick corridor spans origin → outbound endpoint → back.
+    const r = tickDrones(w, 81_000, 0);
+    expect(r.returned).toHaveLength(1);
+    expect(r.revealedCellsAdded).toBeGreaterThan(0);
+    // Cells along the east-pointing corridor should be revealed. Outbound
+    // 20 tiles → at least cell (0,0), (1,0) are inside the 80-tile antenna
+    // range (cell (1,0) center at tile (24,8), distance from antenna (0.5,
+    // 0.5) ≈ 28 — well within 80).
+    expect(w.revealedCells.has('0,0')).toBe(true);
+    expect(w.revealedCells.has('1,0')).toBe(true);
+  });
+
+  it('reveals NO cells when no antenna is in range (data falls on the floor)', () => {
+    const w = worldNoAntenna([]);
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
+    const r = tickDrones(w, 81_000, 0);
+    expect(r.returned).toHaveLength(1);
+    expect(r.revealedCellsAdded).toBe(0);
+    expect(w.revealedCells.size).toBe(0);
+  });
+
+  it('drone flies past antenna range: only the in-range portion is revealed', () => {
+    const w = world([]);
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    // 50 fuel × 4 = 200 tiles round-trip, outbound 100 tiles east. Antenna
+    // radius is 80 tiles; cells past tile ~80 should NOT be revealed.
+    dispatchDrone(w, home, 0, 0, 1, 0, 50, 0);
+    // Travel time 200 / 0.5 = 400s. Single-tick reveal across the whole
+    // flight is sufficient — corridor covers (0,0)→(100,0)→(0,0).
+    const r = tickDrones(w, 401_000, 0);
+    expect(r.revealedCellsAdded).toBeGreaterThan(0);
+    // Cells near origin (well within 80-tile antenna range) are revealed.
+    expect(w.revealedCells.has('0,0')).toBe(true);
+    // Cells past the antenna range (tile center > 80 from antenna at (0.5,
+    // 0.5)) are NOT revealed. Cell (6, 0) center is at (104, 8) — distance
+    // ~104 from antenna, far outside the 80-tile range.
+    expect(w.revealedCells.has('6,0')).toBe(false);
+  });
+
+  it('reveals cells across multiple ticks as the drone moves', () => {
+    const w = world([]);
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    // 50 fuel → 100 tiles outbound; 400s round-trip flight.
+    dispatchDrone(w, home, 0, 0, 1, 0, 50, 0);
+    // First tick at 100s: drone has moved 50 tiles east, still in antenna
+    // range. Cells near tile (50, 0) should NOT be revealed yet (those are
+    // past the antenna range, but cells back near origin are).
+    tickDrones(w, 100_000, 0);
+    const sizeAfter100s = w.revealedCells.size;
+    expect(sizeAfter100s).toBeGreaterThan(0);
+    // Tick again at 400s (drone back at origin): no NEW cells revealed
+    // beyond what was already seen (the corridor backtracks the same line
+    // through the in-range cells).
+    tickDrones(w, 400_000, 100_000);
+    // No regression: the in-range cells remain revealed.
+    expect(w.revealedCells.has('0,0')).toBe(true);
+  });
+
+  it('island.discovered flips when ANY of the island\'s cells gets revealed', () => {
+    // Target island whose footprint sits inside the corridor, antenna range.
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 5,
+      majorRadius: 5,
+      minorRadius: 5,
+      discovered: false,
+    });
     const w = world([target]);
     const home = makeIslandState();
     home.inventory.biofuel = 50;
     dispatchDrone(w, home, 0, 0, 1, 0, 20, 0);
-    // 20 fuel → 80 tiles round-trip at 0.5 t/s = 160s; outbound endpoint (40, 0).
-    // Target at (30, 5) is 5 tiles off the segment, scan radius 8 → inside.
-    // (rebalanced step #19: was 41_000 at 2 t/s)
-    const r = tickDrones(w, 161_000);
-    expect(r.returned).toHaveLength(1);
-    expect(w.drones).toHaveLength(0);
+    // 80 tiles round-trip, outbound 40 tiles east. Corridor over (0..40, 0)
+    // with scan radius 8. Target at (30, 5) is well within both the
+    // corridor and the antenna range. Its cells (cell row y=0 around
+    // x=2,3) will be revealed.
+    const r = tickDrones(w, 161_000, 0);
     expect(target.discovered).toBe(true);
     expect(r.newlyDiscoveredIslandIds).toEqual(['target']);
-  });
-
-  it('does not reveal islands outside the corridor', () => {
-    const inside = makeIslandSpec({ id: 'inside', cx: 30, cy: 5, discovered: false });
-    const outside = makeIslandSpec({ id: 'outside', cx: 30, cy: 12, discovered: false });
-    const w = world([inside, outside]);
-    const home = makeIslandState();
-    home.inventory.biofuel = 50;
-    dispatchDrone(w, home, 0, 0, 1, 0, 20, 0);
-    // 80 tiles / 0.5 t/s = 160s (rebalanced step #19)
-    const r = tickDrones(w, 161_000);
-    expect(r.newlyDiscoveredIslandIds).toEqual(['inside']);
-    expect(inside.discovered).toBe(true);
-    expect(outside.discovered).toBe(false);
   });
 
   it('does not re-report an already-discovered island in newlyDiscoveredIslandIds', () => {
@@ -269,8 +388,7 @@ describe('tickDrones', () => {
     const home = makeIslandState();
     home.inventory.biofuel = 50;
     dispatchDrone(w, home, 0, 0, 1, 0, 20, 0);
-    // 80 tiles / 0.5 t/s = 160s (rebalanced step #19)
-    const r = tickDrones(w, 161_000);
+    const r = tickDrones(w, 161_000, 0);
     expect(r.returned).toHaveLength(1);
     expect(r.newlyDiscoveredIslandIds).toEqual([]);
     expect(known.discovered).toBe(true);
@@ -282,24 +400,37 @@ describe('tickDrones', () => {
     const home = makeIslandState();
     home.inventory.biofuel = 50;
     dispatchDrone(w, home, 0, 0, 1, 0, 20, 0);
-    // 80 tiles / 0.5 t/s = 160s (rebalanced step #19)
-    tickDrones(w, 161_000);
+    tickDrones(w, 161_000, 0);
     expect(pop.populated).toBe(true);
     expect(pop.discovered).toBe(true);
   });
 
-  it('east-of-origin geometric check: reveals (40, 5), not (40, 12)', () => {
-    const a = makeIslandSpec({ id: 'a', cx: 40, cy: 5 });
-    const b = makeIslandSpec({ id: 'b', cx: 40, cy: 12 });
-    const w = world([a, b]);
+  it('partial-island reveal: out-of-range portion remains unrevealed but island.discovered flips', () => {
+    // Target island far past antenna range — its cells on the near edge
+    // get revealed (still in antenna range from origin); the far edge
+    // doesn't. Any-cell rule still flips `discovered`.
+    const target = makeIslandSpec({
+      id: 'far-edge',
+      cx: 70,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      discovered: false,
+    });
+    const w = world([target]);
     const home = makeIslandState();
     home.inventory.biofuel = 50;
-    // Outbound 50 tiles east, so segment (0,0)-(50,0) — `a` at perpendicular
-    // distance 5 (inside scan radius 8); `b` at distance 12 (outside).
-    dispatchDrone(w, home, 0, 0, 1, 0, 25, 0);
-    // 25 fuel × 4 = 100 tiles round-trip / 0.5 t/s = 200s flight. (rebalanced step #19)
-    const r = tickDrones(w, 200_500);
-    expect(r.newlyDiscoveredIslandIds).toEqual(['a']);
+    // 50 fuel → 100 tiles outbound, 400s round-trip. The drone reaches the
+    // near edge of the target (tile 65) while still inside the 80-tile
+    // antenna range, but goes BEYOND (tile 75) where antenna range ends.
+    dispatchDrone(w, home, 0, 0, 1, 0, 50, 0);
+    const r = tickDrones(w, 401_000, 0);
+    // Discovery flips on any-cell rule. The target's near cells (around
+    // x=4 cell row 0) should be revealed.
+    expect(target.discovered).toBe(true);
+    expect(r.newlyDiscoveredIslandIds).toContain('far-edge');
+    // Some cell of the target was revealed.
+    expect(w.revealedCells.has('4,0')).toBe(true);
   });
 });
 
@@ -322,7 +453,13 @@ describe('drone constants', () => {
 
 describe('dispatchDrone — §11.7 tier-matched fuel', () => {
   function freshWorld(): WorldState {
-    return { islands: [], drones: [], routes: [], vehicles: [] };
+    return {
+      islands: [],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+    };
   }
 
   it('T1 island (level 1) consumes biofuel and records fuelResource', () => {

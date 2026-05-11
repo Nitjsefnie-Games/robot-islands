@@ -188,7 +188,21 @@ export type BuildingDefId =
   | 'lighthouse_t3'
   | 'lighthouse_t4'
   | 'lighthouse_t5'
-  | 'lighthouse_t6';
+  | 'lighthouse_t6'
+  // §11 telemetry redesign: Antennas are the signal-relay infrastructure for
+  // drone scan data. A drone outside any antenna's signal range throws away
+  // its scan results — see `antenna.ts → ANTENNA_SIGNAL_RADII` for radii.
+  // T1-T3 are 1×1; T4-T6 are 2×2 "comm towers". T1 is zero-power (basic
+  // beacon); T2+ consumes power proportional to tier. T6 doubles as a
+  // satellite dish for the §14 orbital launch chain (dish dual-role
+  // DEFERRED). Costs are placeholders — Antenna placeholder — tune in
+  // Appendix A.
+  | 'antenna_t1'
+  | 'antenna_t2'
+  | 'antenna_t3'
+  | 'antenna_t4'
+  | 'antenna_t5'
+  | 'antenna_t6';
 
 /**
  * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's
@@ -1595,6 +1609,98 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x504010,
     power: { consumes: 400 },
     glyph: '⛯',
+  },
+  // -------------------------------------------------------------------------
+  // §11 telemetry — Antenna family. Six tiers extending the drone-scan
+  // relay range. Signal radius (in tiles) lives in `antenna.ts →
+  // ANTENNA_SIGNAL_RADII`; the economy doesn't read it. Build costs are
+  // deferred to Appendix A.
+  //
+  //   T1: 1×1, radius 80,  zero-power (basic signal beacon)
+  //   T2: 1×1, radius 140, 5 W
+  //   T3: 1×1, radius 220, 25 W
+  //   T4: 2×2, radius 320, 60 W (comm tower)
+  //   T5: 2×2, radius 480, 150 W (exotic signal)
+  //   T6: 2×2, radius 700, 400 W (doubles as satellite dish — §14 dish dual-role DEFERRED)
+  //
+  // Antenna placeholder — tune in Appendix A.
+  antenna_t1: {
+    id: 'antenna_t1',
+    displayName: 'Antenna T1',
+    category: 'special',
+    tier: 1,
+    width: 1,
+    height: 1,
+    fill: 0xa0b0c0, // pale telemetry blue
+    stroke: 0x303848,
+    // Zero-power basic beacon. Antenna placeholder — tune in Appendix A.
+    glyph: '⟁',
+  },
+  antenna_t2: {
+    id: 'antenna_t2',
+    displayName: 'Antenna T2',
+    category: 'special',
+    tier: 2,
+    width: 1,
+    height: 1,
+    fill: 0x80a0c0,
+    stroke: 0x203048,
+    // Antenna placeholder — tune in Appendix A.
+    power: { consumes: 5 },
+    glyph: '⟁',
+  },
+  antenna_t3: {
+    id: 'antenna_t3',
+    displayName: 'Antenna T3',
+    category: 'special',
+    tier: 3,
+    width: 1,
+    height: 1,
+    fill: 0x6088c0,
+    stroke: 0x102038,
+    // Antenna placeholder — tune in Appendix A.
+    power: { consumes: 25 },
+    glyph: '⟁',
+  },
+  antenna_t4: {
+    id: 'antenna_t4',
+    displayName: 'Comm Tower (Antenna T4)',
+    category: 'special',
+    tier: 4,
+    width: 2,
+    height: 2,
+    fill: 0x4878c0,
+    stroke: 0x081830,
+    // Antenna placeholder — tune in Appendix A.
+    power: { consumes: 60 },
+    glyph: '⟁',
+  },
+  antenna_t5: {
+    id: 'antenna_t5',
+    displayName: 'Exotic Antenna (Antenna T5)',
+    category: 'special',
+    tier: 5,
+    width: 2,
+    height: 2,
+    fill: 0x9070c0, // exotic violet
+    stroke: 0x301050,
+    // Antenna placeholder — tune in Appendix A.
+    power: { consumes: 150 },
+    glyph: '⟁',
+  },
+  antenna_t6: {
+    id: 'antenna_t6',
+    displayName: 'Ascendant Antenna (Antenna T6)',
+    category: 'special',
+    tier: 6,
+    width: 2,
+    height: 2,
+    fill: 0xd8b840, // ascendant gold + antenna-blue blend
+    stroke: 0x483820,
+    // Antenna placeholder — tune in Appendix A. T6 antenna ALSO acts as the
+    // satellite dish for §14 orbital launches (dish dual-role DEFERRED).
+    power: { consumes: 400 },
+    glyph: '⟁',
   },
 };
 

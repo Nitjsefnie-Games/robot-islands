@@ -106,6 +106,13 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'lighthouse_t4',
   'lighthouse_t5',
   'lighthouse_t6',
+  // §11 telemetry antennas (Antenna placeholder — tune in Appendix A)
+  'antenna_t1',
+  'antenna_t2',
+  'antenna_t3',
+  'antenna_t4',
+  'antenna_t5',
+  'antenna_t6',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The

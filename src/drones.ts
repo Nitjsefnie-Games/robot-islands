@@ -15,11 +15,14 @@
 //     the Drone record. A T1 island launches with biofuel, a T3 island with
 //     aviation kerosene, etc. No fallback to lower grades.
 
+import { computeSignalRanges, pointInSignalRange } from './antenna.js';
+import { cellCenterTile, corridorCells, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
 import { tierForLevel } from './skilltree.js';
 import type { WorldState } from './world.js';
+import { islandConstituents, CELL_SIZE_TILES } from './world.js';
 
 /** Drone tier per §11.5. Step 6 only emits tier-2 drones; the field exists so
  *  future tiers can be added without reshaping the data model. */
@@ -207,50 +210,122 @@ export function dispatchDrone(
   return { ok: true, drone };
 }
 
-/** Result of a tick — drones that returned this frame and which (previously
- *  undiscovered) island ids they revealed. The renderer uses this to know
- *  when to rebuild the ocean / island layers. */
+/** Result of a tick — drones that returned this frame, ids of any islands
+ *  that flipped to `discovered` (because some cell of theirs got revealed
+ *  on this tick), and the count of newly-revealed cells. The renderer uses
+ *  the per-tick deltas to know when to rebuild the ocean / island layers. */
 export interface TickDronesResult {
   returned: Drone[];
   newlyDiscoveredIslandIds: string[];
+  /** Number of cells added to `world.revealedCells` this tick. */
+  revealedCellsAdded: number;
 }
 
 /**
- * Advance the drone fleet to `nowMs`. Any drone whose `expectedReturnTime`
- * has elapsed is removed from `world.drones` and runs its capsule-corridor
- * scan against the world's islands; previously-undiscovered islands inside
- * the corridor flip `discovered = true` and their ids are reported.
+ * Advance the drone fleet to `nowMs`.
  *
- * The corridor is a capsule from `(originX, originY)` to the outbound
- * endpoint, with half-width `scanRadius`. The drone retraces the same
- * segment on return, so the round-trip corridor IS the outbound corridor —
- * no separate return-leg geometry needed.
+ * Per-tick corridor reveal (§11 telemetry redesign):
+ *   1. For each in-flight drone, compute its previous-tick position and
+ *      current-tick position via `droneCurrentPosition`.
+ *   2. Enumerate the cells under the capsule corridor from prev → curr
+ *      (`corridorCells` with the drone's `scanRadius`).
+ *   3. For each such cell, if the cell center sits inside ANY current
+ *      Antenna signal range, add the cell key to `world.revealedCells`.
+ *      Out-of-range cells are dropped — there is no onboard buffer.
+ *   4. Drones whose `expectedReturnTime` has elapsed are removed from
+ *      `world.drones`.
+ *   5. After cell reveals, walk every island whose `discovered` is false;
+ *      if any of its footprint cells is now in `revealedCells`, flip
+ *      `discovered = true`. This is the new "any-cell" rule that replaces
+ *      the per-return island-center-flip from the legacy implementation.
  *
- * Populated islands are skipped (already on the map). Already-discovered
- * islands are not flipped or reported, so `newlyDiscoveredIslandIds`
- * contains only fresh reveals — the UI can light them up exactly once.
+ * Antenna ranges are recomputed every tick from the world's populated
+ * islands' Antenna buildings — antennas can be built / demolished mid-
+ * session and the range list must reflect that.
+ *
+ * `prevTickMs` is the wall-clock time of the previous tick (typically the
+ * last frame's `now`). For brand-new drones whose launch is between
+ * `prevTickMs` and `nowMs`, `droneCurrentPosition(d, prevTickMs)` clamps
+ * the elapsed time to ≥ 0 and returns the launch origin — i.e. the
+ * corridor of a freshly-launched drone starts at its launching island.
  */
-export function tickDrones(world: WorldState, nowMs: number): TickDronesResult {
+export function tickDrones(
+  world: WorldState,
+  nowMs: number,
+  prevTickMs: number = nowMs,
+): TickDronesResult {
   const returned: Drone[] = [];
   const newlyDiscoveredIslandIds: string[] = [];
   const remaining: Drone[] = [];
 
+  // Antenna signal ranges — recomputed every tick (antennas can be built /
+  // demolished mid-session). Cheap: one allocation + a walk over populated
+  // islands' buildings.
+  const populated = world.islands.filter((s) => s.populated);
+  const ranges = computeSignalRanges(populated);
+
+  let cellsAddedThisTick = 0;
   for (const d of world.drones) {
+    // 1) per-tick corridor reveal. The drone's path is piecewise-linear:
+    //    out from origin to the outbound endpoint, then back. Compute the
+    //    waypoints actually visited in [prevTickMs, nowMs] and union the
+    //    corridor across each linear segment between consecutive waypoints.
+    //
+    //    Clamping to [launchTime, expectedReturnTime] avoids the
+    //    degenerate "drone has been back at origin forever" case where
+    //    both endpoints fold to origin and the corridor collapses to a
+    //    point — which would silently lose reveals for the legitimate
+    //    "single tick spans the whole flight" case (the cell-test goes
+    //    over a one-tick flight from launch to return).
+    if (ranges.length > 0) {
+      const segStartMs = Math.max(prevTickMs, d.launchTime);
+      const segEndMs = Math.min(nowMs, d.expectedReturnTime);
+      if (segEndMs >= segStartMs) {
+        const apexMs =
+          d.launchTime + (d.outboundTiles / DRONE_SPEED_TILES_PER_SEC) * 1000;
+        const waypoints: Array<{ x: number; y: number }> = [];
+        waypoints.push(droneCurrentPosition(d, segStartMs));
+        // Include the outbound-endpoint waypoint if the apex falls strictly
+        // inside (segStartMs, segEndMs). On the boundary the linear segment
+        // to the next endpoint subsumes it.
+        if (apexMs > segStartMs && apexMs < segEndMs) {
+          waypoints.push(droneCurrentPosition(d, apexMs));
+        }
+        waypoints.push(droneCurrentPosition(d, segEndMs));
+        for (let i = 0; i + 1 < waypoints.length; i++) {
+          const a = waypoints[i]!;
+          const b = waypoints[i + 1]!;
+          const cells = corridorCells(a.x, a.y, b.x, b.y, d.scanRadius);
+          for (const k of cells) {
+            if (world.revealedCells.has(k)) continue;
+            const { cellX, cellY } = parseCellKey(k);
+            const center = cellCenterTile(cellX, cellY);
+            if (pointInSignalRange(ranges, center.x, center.y)) {
+              world.revealedCells.add(k);
+              cellsAddedThisTick++;
+            }
+          }
+        }
+      }
+    }
+
+    // 2) Removal on return. The return decision is decoupled from reveals —
+    //    a returned drone has already had its full flight scanned above
+    //    (the segStartMs..segEndMs clamp covers the entire trajectory if
+    //    the tick spans the flight).
     if (nowMs < d.expectedReturnTime) {
       remaining.push(d);
       continue;
     }
     returned.push(d);
-    const ax = d.originX;
-    const ay = d.originY;
-    const bx = ax + d.dirX * d.outboundTiles;
-    const by = ay + d.dirY * d.outboundTiles;
-    const r2 = d.scanRadius * d.scanRadius;
+  }
+
+  // 3) Walk undiscovered islands; any-cell rule flips `discovered`.
+  if (cellsAddedThisTick > 0) {
     for (const isl of world.islands) {
       if (isl.populated) continue;
       if (isl.discovered) continue;
-      const distSq = pointToSegmentDistSq(isl.cx, isl.cy, ax, ay, bx, by);
-      if (distSq <= r2) {
+      if (islandHasRevealedCell(isl, world.revealedCells)) {
         isl.discovered = true;
         newlyDiscoveredIslandIds.push(isl.id);
       }
@@ -261,7 +336,36 @@ export function tickDrones(world: WorldState, nowMs: number): TickDronesResult {
   world.drones.length = 0;
   for (const d of remaining) world.drones.push(d);
 
-  return { returned, newlyDiscoveredIslandIds };
+  return {
+    returned,
+    newlyDiscoveredIslandIds,
+    revealedCellsAdded: cellsAddedThisTick,
+  };
+}
+
+/** Whether any cell touched by `spec`'s footprint sits in `revealedCells`.
+ *  Walks the same tile-bbox-per-constituent shape `islandCells` (discovery.ts)
+ *  uses; short-circuits on the first hit. Pure. */
+function islandHasRevealedCell(
+  spec: import('./world.js').IslandSpec,
+  revealedCells: ReadonlySet<string>,
+): boolean {
+  for (const c of islandConstituents(spec)) {
+    const xMin = Math.floor(spec.cx + c.offsetX - c.major);
+    const xMax = Math.ceil(spec.cx + c.offsetX + c.major);
+    const yMin = Math.floor(spec.cy + c.offsetY - c.minor);
+    const yMax = Math.ceil(spec.cy + c.offsetY + c.minor);
+    const cMinX = Math.floor(xMin / CELL_SIZE_TILES);
+    const cMaxX = Math.floor(xMax / CELL_SIZE_TILES);
+    const cMinY = Math.floor(yMin / CELL_SIZE_TILES);
+    const cMaxY = Math.floor(yMax / CELL_SIZE_TILES);
+    for (let cy = cMinY; cy <= cMaxY; cy++) {
+      for (let cx = cMinX; cx <= cMaxX; cx++) {
+        if (revealedCells.has(`${cx},${cy}`)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**

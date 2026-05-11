@@ -114,6 +114,13 @@ export const HOME_ISLAND_BUILDINGS: PlacedBuilding[] = [
   // smelter(-4,6)..(-3,7), or dock(7,1)..(8,2). Coastal-tile gating
   // deferred — see §12.2 / building-defs.ts comment on `shipyard`.
   { id: 'home-shipyard-1',     defId: 'shipyard',      x: 4, y: 6 },
+  // §11 telemetry: home gets a T1 Antenna so the drone demo doesn't go
+  // dark. 80-tile signal radius matches the pre-§11-redesign vision intent
+  // (a drone trip out to ~80 tiles can transmit data on its full flight).
+  // 1×1 footprint at (5, -1) — inside the radius-14 ellipse, no overlap
+  // with dronepad(5,-3), workshop(-1,1)..(0,2), solar(2,-1)..(2,-1), or any
+  // other building.
+  { id: 'home-antenna-1',      defId: 'antenna_t1',    x: 5, y: -1 },
 ];
 
 /**
