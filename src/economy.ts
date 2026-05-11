@@ -27,6 +27,7 @@
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
+import { resolveHeatAssignments, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
 import { resolveRecipe, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type NodeId, type SubPathId } from './skilltree.js';
@@ -274,6 +275,10 @@ export function computeRates(
   consumption: Record<ResourceId, number>;
   net: Record<ResourceId, number>;
   power: PowerBalance;
+  /** §5.2 heat-assignment snapshot for this tick. Drives the consumer
+   *  gate + per-furnace coal multiplier within `computeRates`, and is
+   *  surfaced for the inspector UI's heat readout. */
+  heat: HeatAssignments;
 } {
   const {
     modifierMul = IDENTITY_MODIFIER_MULTIPLIERS,
@@ -300,6 +305,13 @@ export function computeRates(
   // one side is buffed). Power multipliers apply in pass 3.
   const skillMul = effectiveSkillMultipliers(state);
   const buffStack = 1;
+  // §5.2: resolve heat assignments BEFORE the per-recipe passes. A consumer
+  // with `requiresHeat` and no adjacent Heat Source is forced to baseRate=0
+  // in pass-1 (no recipe pickup → no rate, no consumption) and excluded
+  // from the pass-3 power balance (per §5.1 "active iff … all gates pass").
+  // Coal-source served counts drive a post-pass fuel-burn deduction folded
+  // directly into `consumption.coal` / `net.coal`.
+  const heat = resolveHeatAssignments(state.buildings);
   interface Tentative {
     readonly building: PlacedBuilding;
     readonly recipe: Recipe;
@@ -313,8 +325,17 @@ export function computeRates(
     // Tile-aware recipe pickup — see resolveRecipe in recipes.ts. For most
     // buildings this is the same as `RECIPES[def.id]`; Mine branches on
     // its footprint terrain when `terrainAt` is provided.
-    const recipe = resolveRecipe(defs[b.defId], b, terrainAt);
+    const def = defs[b.defId];
+    const recipe = resolveRecipe(def, b, terrainAt);
     if (!recipe) continue;
+    // §5.2 heat gate: a `requiresHeat` building with no adjacent source
+    // is fully stalled this tick — no production, no consumption, no power
+    // draw. Recorded as a tentative entry with baseRate=0 so pass-3's
+    // power-balance loop also skips it (matched via inputAvail = 0).
+    if (def.requiresHeat && heat.hasHeat.get(b.id) !== true) {
+      tentative.push({ building: b, recipe, baseRate: 0 });
+      continue;
+    }
     const oa = outputAvail(state, recipe);
     if (oa === 0) {
       tentative.push({ building: b, recipe, baseRate: 0 });
@@ -371,15 +392,21 @@ export function computeRates(
     inputAvailByIdx[i] = inputAvail(state, t.recipe, externalSupply, nominalRate);
   }
 
-  // Pass 3: power balance. A building is `active` for §5.1 iff its recipe
-  // has inputAvail > 0 (gates are deferred — terrain/heat land later). A
-  // recipe-less building (e.g., Solar Panel) is unconditionally active.
+  // Pass 3: power balance. A building is `active` for §5.1 iff:
+  //   - it has no recipe (Solar / Dock / Crate / Silo — passively active), OR
+  //   - its recipe has inputAvail > 0 AND its heat gate (if any) passes.
   // Output-stalled buildings (baseRate = 0 but inputAvail > 0) still count
-  // toward P_consumed: the lights are on even when the bin is full.
+  // toward P_consumed: the lights are on even when the bin is full. Heat-
+  // failed consumers, by contrast, are fully inactive — no power, no
+  // production, no consumption — per §5.1 "active iff all gates pass".
   let powerProduced = 0;
   let powerConsumed = 0;
   for (const b of state.buildings) {
     const def = defs[b.defId];
+    // §5.2: heat-required consumer with no adjacent source is INACTIVE
+    // (zero power draw). Checked before recipe lookup so the gate applies
+    // even if the building's recipe is somehow undefined for the variant.
+    if (def.requiresHeat && heat.hasHeat.get(b.id) !== true) continue;
     // Same tile-aware resolution as the pass-1 loop. `active` only checks
     // recipe presence here, so the variant chosen doesn't matter — but we
     // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
@@ -436,12 +463,36 @@ export function computeRates(
     }
   }
 
+  // §5.2 coal-furnace fuel burn. Per spec literal: "The Heat Source's fuel
+  // consumption multiplies by the number of heat consumers it currently
+  // serves." A Coal Furnace with N served consumers burns
+  // `coalPerCycle × N / cycleSec` coal per second; with N=0 it burns zero
+  // (no implicit "+1 for the furnace's own burn"). Folded into
+  // `consumption.coal` / `net.coal` as a post-recipe deduction so
+  // `findNextCapEvent` accounts for it when computing the next event.
+  // Fixed 30s cycle per §5.2 / §8.5 catalog convention; tied to the def's
+  // declared `coalPerCycle` for forward-compat with a future per-furnace
+  // efficiency variation.
+  const COAL_CYCLE_SEC = 30;
+  for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
+    if (servedCount <= 0) continue;
+    const furnace = state.buildings.find((b) => b.id === furnaceId);
+    if (!furnace) continue;
+    const def = defs[furnace.defId];
+    const coalPerCycle = def.heatSource?.coalPerCycle ?? 0;
+    if (coalPerCycle <= 0) continue;
+    const burnPerSec = (coalPerCycle * servedCount) / COAL_CYCLE_SEC;
+    consumption.coal = (consumption.coal ?? 0) + burnPerSec;
+    net.coal = (net.coal ?? 0) - burnPerSec;
+  }
+
   return {
     byBuilding,
     production,
     consumption,
     net,
     power: { produced: powerProduced, consumed: powerConsumed, factor: powerFactor },
+    heat,
   };
 }
 

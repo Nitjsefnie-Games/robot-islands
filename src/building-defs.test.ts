@@ -85,6 +85,10 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'plasma_forge',
   'eldritch_refiner',
   'phase_refiner',
+  // §5.2 / §8.6 Heat Sources
+  'coal_furnace',
+  'geothermal_vent',
+  'plasma_heater',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The

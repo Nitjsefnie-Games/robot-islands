@@ -31,10 +31,14 @@
 // rare-encounter bias is conceptually simpler and slots in cleanly later.
 // Probability Engine is reserved for step 14+.
 //
-// Heat-source adjacency (§5.2) is not yet implemented — Blast Furnace and
-// Pyroforge run without their required heat source; comment flags the
-// deferred constraint. T4 omnidirectional pulse mechanic (§11.5) for the
-// Launch Tower is also deferred — only the def is added in step 12.
+// Heat-source adjacency (§5.2) IS implemented. The economy passes consumer
+// recipes through `resolveHeatAssignments` (heat.ts) before rate computation:
+// a `requiresHeat` building with no adjacent Heat Source has its effective
+// rate forced to 0 and contributes 0 to P_consumed. Coal-burning sources
+// (Coal Furnace) burn `coalPerCycle × consumersServed` coal per cycle; free
+// sources (Geothermal Vent / Plasma Heater / Fusion Core) cost no fuel.
+// T4 omnidirectional pulse mechanic (§11.5) for the Launch Tower remains
+// deferred — only the def is added in step 12.
 //
 // No PixiJS imports, no DOM — `building-defs.ts` is pure data + the tier
 // gate + biome gate. `buildings.ts` consumes BUILDING_DEFS for rendering;
@@ -139,7 +143,15 @@ export type BuildingDefId =
   | 'eldritch_sieve'
   | 'plasma_forge'
   | 'eldritch_refiner'
-  | 'phase_refiner';
+  | 'phase_refiner'
+  // §5.2 / §8.6 Heat Sources. The economy reads `def.heatSource` to identify
+  // sources during heat-adjacency resolution. Each free source costs no fuel
+  // when serving consumers; coal_furnace burns `coalPerCycle × consumers` per
+  // cycle. (Fusion Core also acts as a free heat source — its `heatSource`
+  // flag is set on the existing T4 power def below.)
+  | 'coal_furnace'
+  | 'geothermal_vent'
+  | 'plasma_heater';
 
 /**
  * Per-kind static definition. Step 9 fills the fields needed by the
@@ -191,6 +203,26 @@ export interface BuildingDef {
    *  Every def MUST declare a glyph — the catalog completeness test in
    *  `building-defs.test.ts` enforces this. */
   readonly glyph: string;
+  /** §5.2 / §8.6 Heat Source declaration. Presence makes the building a
+   *  Heat Source for the adjacency resolver (`heat.ts`).
+   *    - `freeOrCoal: 'free'` — Geothermal Vent, Plasma Heater, Fusion Core.
+   *      Costs no fuel; can serve any number of adjacent consumers.
+   *    - `freeOrCoal: 'coal'` — Coal Furnace. Burns `coalPerCycle × consumers`
+   *      coal per 30s cycle. `coalPerCycle` is the per-consumer fuel cost
+   *      (base 1 in the only current coal source).
+   *  When undefined, the building is not a heat source. */
+  readonly heatSource?: {
+    readonly freeOrCoal: 'free' | 'coal';
+    readonly coalPerCycle?: number;
+  };
+  /** §5.2 heat-consumer declaration. When `true`, the building requires at
+   *  least one adjacent Heat Source in its 4-neighbor footprint border to
+   *  operate. Without heat, the economy zeroes its effective rate and skips
+   *  its power-consumption contribution (§5.1 inactive). Currently set on
+   *  Coke Oven, Blast Furnace, Electric Arc Furnace, and Pyroforge. NOT
+   *  set on the T1 Smelter — the basic smelter remains the bootstrap
+   *  unconditional iron→ingot link (a Smelter without heat is intentional). */
+  readonly requiresHeat?: boolean;
 }
 
 /** Read-only catalog. Keys = BuildingDefId; every defId MUST have an entry. */
@@ -347,6 +379,43 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { produces: 80 },
     glyph: '❀',
   },
+  // §5.2 / §8.6: Coal Furnace — T1 fuel-burning heat source. Burns
+  // `coalPerCycle × consumersServed` coal per 30s cycle (literal §5.2:
+  // "fuel consumption multiplies by the number of heat consumers it currently
+  // serves"). With 0 served consumers, burns no coal. No electrical
+  // contribution — the Coal Furnace is a pre-electricity hot box. The
+  // economy folds its served-count fuel burn directly into `consumption.coal`
+  // after the per-recipe rate pass.
+  coal_furnace: {
+    id: 'coal_furnace',
+    displayName: 'Coal Furnace',
+    category: 'special',
+    tier: 1,
+    width: 1,
+    height: 1,
+    fill: 0x4a2820, // dark ember
+    stroke: 0x1a0a08,
+    heatSource: { freeOrCoal: 'coal', coalPerCycle: 1 },
+    glyph: '♨',
+  },
+  // §5.2 / §8.6 / §3.5: Geothermal Vent — Volcanic-only T1 free heat source.
+  // Doubles as a power producer per §8.5 — the spec lists it under both
+  // "Power Generation" and "Heat Sources". Modeled here with a small (free)
+  // power contribution and the free heat-source flag.
+  geothermal_vent: {
+    id: 'geothermal_vent',
+    displayName: 'Geothermal Vent',
+    category: 'power',
+    tier: 1,
+    width: 2,
+    height: 2,
+    fill: 0xc04020, // magma orange
+    stroke: 0x401005,
+    power: { produces: 200 },
+    requiredBiomes: ['volcanic'],
+    heatSource: { freeOrCoal: 'free' },
+    glyph: '♨',
+  },
   // §12.3: Foundation Kit Assembler. A T1 manufacturing building dedicated
   // to crafting the Standard Foundation Kit consumed by §12 settlement
   // vehicles. Step-12 simplification: the spec lists Workshop (T1) and
@@ -410,6 +479,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6a5a48,
     stroke: 0x2a2014,
     power: { consumes: 60 },
+    // §5.2: Coke Oven is a heat-driven smelter. Marked `requiresHeat` so it
+    // needs an adjacent Coal Furnace / Geothermal Vent / Plasma Heater /
+    // Fusion Core to operate. Per §7.1 the coke-making chain is heat-driven
+    // ("Coal → Coke (Coke Oven)") in addition to the §8.2 catalog tagging.
+    requiresHeat: true,
     glyph: '▲',
   },
   blast_furnace: {
@@ -422,10 +496,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8a2a1a,
     stroke: 0x401005,
     power: { consumes: 100 },
-    // §5.2 / §8.2: spec requires an adjacent Heat Source (Coal Furnace,
-    // Geothermal Vent, etc.). The heat-adjacency system is not yet built
-    // (deferred — heat propagation lands with step 11/12). For step 9 the
-    // Blast Furnace runs unconditionally given inputs + power.
+    // §5.2 / §8.2: requires an adjacent Heat Source (Coal Furnace / Geothermal
+    // Vent / Plasma Heater / Fusion Core). The economy gates this building's
+    // effective rate on `resolveHeatAssignments`; without heat it stalls and
+    // contributes 0 to P_consumed.
+    requiresHeat: true,
     glyph: '△',
   },
   steel_mill: {
@@ -472,6 +547,23 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // -------------------------------------------------------------------------
   // T3 (levels 15-30)
   // -------------------------------------------------------------------------
+  // §5.2 / §8.6: Plasma Heater — T3 free heat source (power-driven, no fuel).
+  // Costs 200W to operate but serves any number of adjacent consumers at no
+  // additional cost. Bridges the gap between T1 Coal Furnace (cheap, fuel-
+  // intensive) and T4 Fusion Core (massive output, free).
+  plasma_heater: {
+    id: 'plasma_heater',
+    displayName: 'Plasma Heater',
+    category: 'special',
+    tier: 3,
+    width: 2,
+    height: 2,
+    fill: 0xa040a0, // plasma magenta
+    stroke: 0x401040,
+    power: { consumes: 200 },
+    heatSource: { freeOrCoal: 'free' },
+    glyph: '♨',
+  },
   electric_arc_furnace: {
     id: 'electric_arc_furnace',
     displayName: 'Electric Arc Furnace',
@@ -482,6 +574,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a8ae0,
     stroke: 0x1a3a78,
     power: { consumes: 200 },
+    // §5.2: T3 arc furnaces still rely on adjacent heat per the spec's
+    // smelting-category convention. Gated like Blast Furnace / Pyroforge.
+    requiresHeat: true,
     glyph: '△',
   },
   // §8.9: Platform Constructor (a.k.a. Foundry of Lands). T3 special building
@@ -505,9 +600,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // T4 (levels 30-50) — endgame chain per §6.5 / §8.5 / §9.5
   // -------------------------------------------------------------------------
   // §8.5: Fusion Core — universal T4 power source, Helium-3 fuel, massive
-  // output (5000W). Not biome-locked. Per §5.2 it also doubles as a free
-  // heat source; the heat system is deferred so only the power contribution
-  // is wired in step 12.
+  // output (5000W). Not biome-locked. Per §5.2 / §8.5 also acts as a free
+  // Heat Source — the `heatSource` flag below makes adjacent heat consumers
+  // operate at zero fuel cost, in addition to the building's electrical
+  // contribution.
   fusion_core: {
     id: 'fusion_core',
     displayName: 'Fusion Core',
@@ -518,11 +614,13 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a90c8, // cool electric blue
     stroke: 0x1a3050,
     power: { produces: 5000 },
+    heatSource: { freeOrCoal: 'free' },
     glyph: '⚡',
   },
   // §9.5: Pyroforge — Volcanic-unique. Only producer of Exotic Alloy in the
-  // world. §5.2 heat-source adjacency deferred — runs without an adjacent
-  // Geothermal Vent for step 12.
+  // world. §5.2 heat-source adjacency gated: a Pyroforge without an adjacent
+  // Heat Source stalls. Volcanic-only siting makes Geothermal Vents the
+  // natural pairing.
   pyroforge: {
     id: 'pyroforge',
     displayName: 'Pyroforge',
@@ -534,6 +632,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x2a0800,
     power: { consumes: 800 },
     requiredBiomes: ['volcanic'],
+    requiresHeat: true,
     glyph: '◉',
   },
   // §9.5: Cryogenic Compute Center — Arctic-unique. Only producer of AI
@@ -810,8 +909,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa8d0e0, // pane-cyan
     stroke: 0x305060,
     power: { consumes: 80 },
-    // §5.2: spec requires an adjacent heat source. Heat-adjacency system
-    // DEFERRED — Glassworks runs unconditionally given inputs + power.
+    // §5.2 mentions Glassworks heat dependence; this step's scope is the
+    // iron/steel chain. Glassworks runs without an adjacent heat source for
+    // now — `requiresHeat` left unset intentionally.
     glyph: '▲',
   },
   evaporator: {

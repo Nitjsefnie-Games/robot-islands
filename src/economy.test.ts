@@ -806,9 +806,12 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
       x: 0,
       y: 0,
     };
+    // Strip power AND `requiresHeat` so the test exercises a pure rate path
+    // without modelling the §5.2 heat gate (covered in heat.test.ts and the
+    // dedicated integration test below).
     const powerFreePyro = ((): DefCatalog => {
       const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
-      const { power: _p, ...rest } = base.pyroforge;
+      const { power: _p, requiresHeat: _h, ...rest } = base.pyroforge;
       base.pyroforge = rest as BuildingDef;
       return base;
     })();
@@ -847,6 +850,127 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
     expect(state.inventory.ai_core).toBeCloseTo(10, 6);
     expect(state.inventory.steel).toBeCloseTo(70, 6);
     expect(state.inventory.quantum_chip).toBeCloseTo(10, 6);
+  });
+});
+
+// -----------------------------------------------------------------------
+// §5.2 Heat adjacency — economy integration
+// -----------------------------------------------------------------------
+
+describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
+  // Blast Furnace consumes iron_ingot + coke and produces pig_iron on a
+  // 480s cycle. With an adjacent Coal Furnace, the BF runs at full rate AND
+  // the furnace burns coal at (consumers / 30s) per second. With no adjacent
+  // source, the BF's effective rate is zero — no production, no consumption,
+  // no power draw. Heat tests use power-free catalogs to avoid mixing the
+  // §5.1 brownout system into the §5.2 verification.
+  function powerFreeBfCfCatalog(): DefCatalog {
+    const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    {
+      const { power: _p, ...rest } = base.blast_furnace;
+      base.blast_furnace = rest as BuildingDef;
+    }
+    return base;
+  }
+
+  it('Blast Furnace with adjacent Coal Furnace → runs at full rate, furnace burns coal', () => {
+    const BF: PlacedBuilding = { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 };
+    // Coal furnace at (3,1) — east border of BF.
+    const CF: PlacedBuilding = { id: 'cf', defId: 'coal_furnace', x: 3, y: 1 };
+    const state = makeState({
+      buildings: [BF, CF],
+      // Plenty of iron_ingot + coke + coal so the BF can run multiple cycles
+      // and the coal-furnace fuel-burn doesn't choke the chain.
+      inventory: {
+        ...blankInventory(),
+        iron_ingot: 1000,
+        coke: 1000,
+        coal: 1000,
+      },
+      storageCaps: blankCaps(10_000),
+    });
+    // 10 BF cycles = 4800s. Expected pig_iron = 10; iron_ingot/coke down by 10
+    // each. Coal furnace burns (1 consumer × 1 coalPerCycle / 30s) × 4800s
+    // = 160 coal. Start 1000, end 840.
+    advanceIsland(state, 4_800_000, { defs: powerFreeBfCfCatalog() });
+    expect(state.inventory.pig_iron).toBeCloseTo(10, 6);
+    expect(state.inventory.iron_ingot).toBeCloseTo(990, 6);
+    expect(state.inventory.coke).toBeCloseTo(990, 6);
+    expect(state.inventory.coal).toBeCloseTo(840, 6);
+  });
+
+  it('Blast Furnace with no adjacent heat source → effective rate 0', () => {
+    const BF: PlacedBuilding = { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [BF],
+      inventory: {
+        ...blankInventory(),
+        iron_ingot: 100,
+        coke: 100,
+      },
+      storageCaps: blankCaps(10_000),
+    });
+    advanceIsland(state, 10_000_000, { defs: powerFreeBfCfCatalog() });
+    // No pig_iron produced; inputs untouched.
+    expect(state.inventory.pig_iron).toBe(0);
+    expect(state.inventory.iron_ingot).toBe(100);
+    expect(state.inventory.coke).toBe(100);
+  });
+
+  it('Blast Furnace with adjacent free Geothermal Vent → runs at full rate, no coal cost', () => {
+    const BF: PlacedBuilding = { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 };
+    const GV: PlacedBuilding = { id: 'gv', defId: 'geothermal_vent', x: 3, y: 0 };
+    // Strip power on geothermal_vent + blast_furnace to keep the test
+    // power-balance-independent.
+    const cat = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      {
+        const { power: _p, ...rest } = base.blast_furnace;
+        base.blast_furnace = rest as BuildingDef;
+      }
+      {
+        const { power: _p, ...rest } = base.geothermal_vent;
+        base.geothermal_vent = rest as BuildingDef;
+      }
+      return base;
+    })();
+    const state = makeState({
+      buildings: [BF, GV],
+      inventory: {
+        ...blankInventory(),
+        iron_ingot: 1000,
+        coke: 1000,
+        coal: 100, // intentionally low — verifies no coal is consumed
+      },
+      storageCaps: blankCaps(10_000),
+    });
+    advanceIsland(state, 4_800_000, { defs: cat });
+    expect(state.inventory.pig_iron).toBeCloseTo(10, 6);
+    expect(state.inventory.coal).toBe(100); // free source — no coal burn
+  });
+
+  it('two Blast Furnaces sharing one Coal Furnace → furnace burns 2× coal', () => {
+    const BF_A: PlacedBuilding = { id: 'bf-a', defId: 'blast_furnace', x: 0, y: 0 };
+    const BF_B: PlacedBuilding = { id: 'bf-b', defId: 'blast_furnace', x: 4, y: 0 };
+    const CF: PlacedBuilding = { id: 'cf', defId: 'coal_furnace', x: 3, y: 1 };
+    const state = makeState({
+      buildings: [BF_A, BF_B, CF],
+      inventory: {
+        ...blankInventory(),
+        iron_ingot: 1000,
+        coke: 1000,
+        coal: 1000,
+      },
+      storageCaps: blankCaps(10_000),
+    });
+    // 4800s integration. Each BF runs 10 cycles → 20 pig_iron total, 20
+    // iron_ingot + 20 coke consumed. Coal furnace burns 2 × 1 / 30 × 4800
+    // = 320 coal. Start 1000, end 680.
+    advanceIsland(state, 4_800_000, { defs: powerFreeBfCfCatalog() });
+    expect(state.inventory.pig_iron).toBeCloseTo(20, 6);
+    expect(state.inventory.iron_ingot).toBeCloseTo(980, 6);
+    expect(state.inventory.coke).toBeCloseTo(980, 6);
+    expect(state.inventory.coal).toBeCloseTo(680, 6);
   });
 });
 

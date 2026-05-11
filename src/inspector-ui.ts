@@ -435,6 +435,18 @@ export function mountInspectorUi(
   );
   storageSection.body.appendChild(storageLine);
 
+  // Heat section (§5.2) — only shown when the def is a heat consumer
+  // (`requiresHeat`) OR a heat source (`heatSource`). For a consumer, shows
+  // whether an adjacent source is currently assigned. For a source, shows
+  // how many consumers it serves this tick.
+  const heatSection = makeSection('Heat');
+  const heatLine = document.createElement('span');
+  styled(
+    heatLine,
+    [`color: ${FG}`, 'font-size: 11px', 'letter-spacing: 0.02em'].join(';'),
+  );
+  heatSection.body.appendChild(heatLine);
+
   // Constraints (requiredTile / requiredBiomes) — shown only when relevant.
   const constraintsSection = makeSection('Constraints');
   const constraintsLine = document.createElement('span');
@@ -512,6 +524,7 @@ export function mountInspectorUi(
   recipeSection.body.appendChild(effectiveRow);
   body.appendChild(powerSection.wrap);
   body.appendChild(storageSection.wrap);
+  body.appendChild(heatSection.wrap);
   body.appendChild(constraintsSection.wrap);
 
   panel.appendChild(header);
@@ -559,7 +572,19 @@ export function mountInspectorUi(
   function paint(): void {
     if (!target) return;
     const { spec, state, building } = target;
-    const def: { displayName: string; tier: number; category: BuildingCategory; width: number; height: number; power?: { produces?: number; consumes?: number }; storageCap?: number; requiredBiomes?: ReadonlyArray<string>; requiredTile?: ReadonlyArray<string> } = BUILDING_DEFS[building.defId as BuildingDefId];
+    const def: {
+      displayName: string;
+      tier: number;
+      category: BuildingCategory;
+      width: number;
+      height: number;
+      power?: { produces?: number; consumes?: number };
+      storageCap?: number;
+      requiredBiomes?: ReadonlyArray<string>;
+      requiredTile?: ReadonlyArray<string>;
+      requiresHeat?: boolean;
+      heatSource?: { freeOrCoal: 'free' | 'coal' };
+    } = BUILDING_DEFS[building.defId as BuildingDefId];
 
     nameEl.textContent = def.displayName;
     tierBadge.textContent = `T${def.tier}`;
@@ -641,6 +666,42 @@ export function mountInspectorUi(
       storageSection.wrap.style.display = '';
     } else {
       storageSection.wrap.style.display = 'none';
+    }
+
+    // Heat section (§5.2). Shown only for heat consumers / heat sources.
+    // One additional computeRates pass per paint — cheap; matches the
+    // existing inspector pattern of re-deriving rates per refresh rather
+    // than threading the snapshot in via deps.
+    if (def.requiresHeat || def.heatSource) {
+      const heat = computeRates(state, { terrainAt: spec.terrainAt }).heat;
+      if (def.requiresHeat) {
+        const has = heat.hasHeat.get(building.id) === true;
+        if (has) {
+          const src = heat.assignedSource.get(building.id) ?? '?';
+          heatLine.textContent = `✓ heat OK  ·  source: ${src}`;
+          heatLine.style.color = ACCENT;
+        } else {
+          heatLine.textContent = 'NO HEAT SOURCE ADJACENT';
+          heatLine.style.color = WARN;
+        }
+      } else if (def.heatSource) {
+        // Source: report served consumers. Free sources show their tag, coal
+        // sources also show the count (which drives fuel burn).
+        const served =
+          def.heatSource.freeOrCoal === 'coal'
+            ? (heat.coalConsumersByFurnace.get(building.id) ?? 0)
+            : // Free sources don't aggregate in coalConsumersByFurnace; count
+              // by scanning assignments. Cheap (≤ ~30 consumers per island).
+              Array.from(heat.assignedSource.values()).filter(
+                (sid) => sid === building.id,
+              ).length;
+        const tag = def.heatSource.freeOrCoal === 'free' ? 'free' : 'coal';
+        heatLine.textContent = `${tag} source  ·  serving ${served} consumer${served === 1 ? '' : 's'}`;
+        heatLine.style.color = FG;
+      }
+      heatSection.wrap.style.display = '';
+    } else {
+      heatSection.wrap.style.display = 'none';
     }
 
     // Constraints section — shown when requiredTile or requiredBiomes apply.

@@ -323,7 +323,9 @@ export type RecipeId = BuildingDefId | 'mine_on_ore' | 'mine_on_coal';
  *   T2 smelting / refining:
  *     coke_oven       -> 1 coke      / 10s from 1 coal
  *     blast_furnace   -> 1 pig_iron  / 12s from 1 iron_ingot + 1 coke
- *                        (§5.2 heat-source adjacency deferred)
+ *                        (§5.2 heat-source adjacency: requires adjacent
+ *                         Coal Furnace / Geothermal Vent / Plasma Heater /
+ *                         Fusion Core; see heat.ts)
  *     steel_mill      -> 1 steel     / 15s from 1 pig_iron
  *                        (§7.1 scrap co-input deferred)
  *
@@ -473,7 +475,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T4 biome-locked smelting — Volcanic-only Pyroforge produces Exotic Alloy
   // from Steel + Helium-3 fuel. Per §9.5, only producer of Exotic Alloy in
-  // the world. §5.2 heat-source adjacency deferred.
+  // the world. §5.2 heat-source adjacency required (see heat.ts).
   pyroforge: {
     cycleSec: 3600, // rebalanced for idle-game scale, step #19 (×60: was 60s)
     inputs: { steel: 5, helium_3: 1 },
@@ -590,8 +592,10 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { sand: 1 },
     outputs: { glass: 1 },
     category: 'manufacturing',
-    // §5.2 heat-source adjacency deferred — Glassworks runs without an
-    // adjacent Coal Furnace / Geothermal Vent.
+    // §5.2 mentions Glassworks as a heat-driven recipe; intentionally NOT
+    // marked `requiresHeat` in this step. Step's scope is the §5.2 iron/steel
+    // chain (Coke Oven / Blast Furnace / EAF / Pyroforge). Glassworks heat
+    // gating ships when chemistry recipes that depend on heat also do.
   },
   evaporator: {
     cycleSec: 150, // rebalanced for idle-game scale, step #19 (×10: was 15s)
