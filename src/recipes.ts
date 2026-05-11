@@ -293,6 +293,41 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
 };
 
 /**
+ * §11.7 fuel mapping: a craft launched from a tier-T island burns the
+ * tier-T fuel grade. Pure look-up; no fallback to lower grades (the
+ * spec is explicit — "cannot fall back to a lower grade").
+ *
+ *   T1 → biofuel               (§6.2)
+ *   T2 → diesel                (§6.3)
+ *   T3 → aviation_kerosene     (§6.4)
+ *   T4 → cryogenic_hydrogen    (§6.5)
+ *   T5 → plasma_charge         (§6.6)
+ *   T6 → antimatter_propellant (§14.10)
+ *
+ * Callers compute the tier from the launching island's level via
+ * `tierForLevel(state.level)` in `skilltree.ts`, then pass the result
+ * here. Lives in `recipes.ts` because the catalog of ResourceIds is
+ * authoritative here and both `drones.ts` and `settlement.ts` already
+ * import from this module.
+ */
+export function fuelForTier(t: 1 | 2 | 3 | 4 | 5 | 6): ResourceId {
+  switch (t) {
+    case 1:
+      return 'biofuel';
+    case 2:
+      return 'diesel';
+    case 3:
+      return 'aviation_kerosene';
+    case 4:
+      return 'cryogenic_hydrogen';
+    case 5:
+      return 'plasma_charge';
+    case 6:
+      return 'antimatter_propellant';
+  }
+}
+
+/**
  * Recipe categories per SPEC §7.0 / §9.4. Skill-tree effects and (later)
  * Specialization-passive buffs target recipes by category tag, not by
  * building kind — this keeps edge cases (Cracker is petrochemical, not

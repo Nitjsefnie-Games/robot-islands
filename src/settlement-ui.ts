@@ -31,6 +31,7 @@ import { Container, Graphics } from 'pixi.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { TILE_PX } from './island.js';
+import { fuelForTier } from './recipes.js';
 import {
   MAX_FUEL_PER_VEHICLE,
   MIN_FUEL_PER_VEHICLE,
@@ -40,6 +41,7 @@ import {
   type SettlementVehicle,
   type VehicleKind,
 } from './settlement.js';
+import { tierForLevel } from './skilltree.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -834,8 +836,12 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     }
     const originState = deps.islandStates.get(originSpec.id);
     if (!originState) return 'origin state missing';
-    const onhandFuel = inv(originState, 'biofuel');
-    if (onhandFuel < fuelLoaded) return `low biofuel: ${onhandFuel.toFixed(0)} on hand`;
+    // §11.7 tier-matched fuel — look up the appropriate grade by the
+    // launching island's tier, surface its friendly name in the reason.
+    const fuelResource = fuelForTier(tierForLevel(originState.level));
+    const onhandFuel = inv(originState, fuelResource);
+    const fuelLabel = fuelResource.replace(/_/g, ' ');
+    if (onhandFuel < fuelLoaded) return `low ${fuelLabel}: ${onhandFuel.toFixed(0)} on hand`;
     const onhandKits = inv(originState, 'foundation_kit');
     if (onhandKits < kitCount) return `low kits: ${onhandKits.toFixed(0)} on hand`;
     const t = tuningFor(kind);

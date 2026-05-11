@@ -291,6 +291,16 @@ export function deserializeWorld(
       ...d,
       launchTime: d.launchTime + perfShift,
       expectedReturnTime: d.expectedReturnTime + perfShift,
+      // §11.7 tier-matched fuel backfill. Legacy saves predate the
+      // `fuelResource` field — every in-flight drone written before the
+      // §11.7 patch was dispatched with biofuel (the previous hardcode),
+      // so default missing values to 'biofuel'. New saves carry the
+      // explicit value and round-trip unchanged. Mirrors the
+      // `ascendantCoreCrafted` backfill pattern below.
+      fuelResource:
+        'fuelResource' in d && typeof (d as { fuelResource?: unknown }).fuelResource === 'string'
+          ? (d as { fuelResource: Drone['fuelResource'] }).fuelResource
+          : 'biofuel',
     })),
     routes: snapshot.world.routes.map((r) => ({
       ...r,
@@ -310,6 +320,11 @@ export function deserializeWorld(
       ...v,
       launchTime: v.launchTime + perfShift,
       expectedArrivalTime: v.expectedArrivalTime + perfShift,
+      // §11.7 tier-matched fuel backfill — see drones above for rationale.
+      fuelResource:
+        'fuelResource' in v && typeof (v as { fuelResource?: unknown }).fuelResource === 'string'
+          ? (v as { fuelResource: SettlementVehicle['fuelResource'] }).fuelResource
+          : 'biofuel',
     })),
   };
 

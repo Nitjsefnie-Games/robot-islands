@@ -375,6 +375,7 @@ describe('id counter seeding', () => {
       expectedReturnTime: 11_000,
       tier: 2,
       fuelLoaded: 10,
+      fuelResource: 'biofuel',
     });
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
@@ -398,6 +399,7 @@ describe('id counter seeding', () => {
       launchTime: 1000,
       expectedArrivalTime: 11_000,
       weatherMultiplier: 1.0,
+      fuelResource: 'biofuel',
     });
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
@@ -435,6 +437,7 @@ describe('drone and route timestamp remapping', () => {
       expectedReturnTime: 1_510_000,
       tier: 2,
       fuelLoaded: 10,
+      fuelResource: 'biofuel',
     });
     const states = new Map<string, IslandState>();
     const savedAtWallMs = 100_000;
@@ -464,6 +467,7 @@ describe('drone and route timestamp remapping', () => {
       launchTime: 1_500_000,
       expectedArrivalTime: 1_510_000,
       weatherMultiplier: 1.0,
+      fuelResource: 'biofuel',
     });
     const states = new Map<string, IslandState>();
     const savedAtWallMs = 100_000;
@@ -512,6 +516,123 @@ describe('drone and route timestamp remapping', () => {
 // Type wiring sanity — make sure the test fixtures actually exercise the
 // non-trivial paths (Set, Map, closure rehydration) on a real demo world.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// §11.7 tier-matched fuelResource — round-trip + legacy backfill
+// ---------------------------------------------------------------------------
+
+describe('§11.7 tier-matched fuelResource persistence', () => {
+  it('preserves fuelResource on a drone round-trip (non-biofuel fuel)', () => {
+    const world = makeInitialWorld(0);
+    world.drones.push({
+      id: 'drone-1',
+      fromIslandId: 'home',
+      originX: 0,
+      originY: 0,
+      dirX: 1,
+      dirY: 0,
+      outboundTiles: 20,
+      scanRadius: 8,
+      launchTime: 0,
+      expectedReturnTime: 10_000,
+      tier: 3,
+      fuelLoaded: 10,
+      fuelResource: 'aviation_kerosene',
+    });
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.drones).toHaveLength(1);
+    expect(restored.drones[0]!.fuelResource).toBe('aviation_kerosene');
+  });
+
+  it('preserves fuelResource on a vehicle round-trip (non-biofuel fuel)', () => {
+    const world = makeInitialWorld(0);
+    world.vehicles.push({
+      id: 'vehicle-1',
+      kind: 'helicopter',
+      tier: 2,
+      from: 'home',
+      target: 'forest-ne',
+      fuelLoaded: 10,
+      foundationKitCount: 1,
+      speed: 0.75,
+      launchTime: 0,
+      expectedArrivalTime: 10_000,
+      weatherMultiplier: 0.7,
+      fuelResource: 'diesel',
+    });
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.vehicles).toHaveLength(1);
+    expect(restored.vehicles[0]!.fuelResource).toBe('diesel');
+  });
+
+  it('backfills missing fuelResource on legacy drones to biofuel', () => {
+    // Synthesise a legacy v3 snapshot whose drone record predates §11.7 —
+    // serialized without a `fuelResource` field. The deserializer must
+    // backfill to 'biofuel' (the only fuel grade that the legacy hardcoded
+    // dispatch path ever consumed).
+    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
+    // Hand-craft a drone entry without `fuelResource` to simulate the
+    // legacy save shape. Type-asserted because the new `Drone` interface
+    // requires the field; the persistence loader treats it as missing.
+    const legacyDrone = {
+      id: 'drone-legacy',
+      fromIslandId: 'home',
+      originX: 0,
+      originY: 0,
+      dirX: 1,
+      dirY: 0,
+      outboundTiles: 20,
+      scanRadius: 8,
+      launchTime: 0,
+      expectedReturnTime: 10_000,
+      tier: 2,
+      fuelLoaded: 10,
+    };
+    const legacySnap = {
+      ...baseSnap,
+      world: {
+        ...baseSnap.world,
+        drones: [legacyDrone],
+      },
+    } as unknown as SaveSnapshot;
+    const json = JSON.parse(JSON.stringify(legacySnap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.drones).toHaveLength(1);
+    expect(restored.drones[0]!.fuelResource).toBe('biofuel');
+  });
+
+  it('backfills missing fuelResource on legacy vehicles to biofuel', () => {
+    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
+    const legacyVehicle = {
+      id: 'vehicle-legacy',
+      kind: 'ship',
+      tier: 1,
+      from: 'home',
+      target: 'forest-ne',
+      fuelLoaded: 10,
+      foundationKitCount: 1,
+      speed: 0.25,
+      launchTime: 0,
+      expectedArrivalTime: 10_000,
+      weatherMultiplier: 1.0,
+    };
+    const legacySnap = {
+      ...baseSnap,
+      world: {
+        ...baseSnap.world,
+        vehicles: [legacyVehicle],
+      },
+    } as unknown as SaveSnapshot;
+    const json = JSON.parse(JSON.stringify(legacySnap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.vehicles).toHaveLength(1);
+    expect(restored.vehicles[0]!.fuelResource).toBe('biofuel');
+  });
+});
 
 describe('with a full demo world', () => {
   it('round-trips makeInitialWorld + per-island makeInitialIslandState', () => {

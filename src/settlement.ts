@@ -19,12 +19,14 @@
 //     and grants no starter inventory. The colony arrives with a Cargo
 //     Dock / Helipad and the standard fresh-island state.
 //
-// Fuel = Biofuel (T1, §11.7 fuel table). The Helipad nominally launches
-// T2 helicopters burning Diesel per spec, but step 12 has no Diesel chain;
-// using Biofuel here mirrors drones.ts and keeps the demo runnable.
+// Fuel grade matches the launching island's tier per §11.7 — resolved at
+// dispatch via `fuelForTier(tierForLevel(originState.level))` and stored on
+// the SettlementVehicle record. No fallback to lower grades.
 
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
+import { fuelForTier, type ResourceId } from './recipes.js';
+import { tierForLevel } from './skilltree.js';
 import type { IslandSpec, WorldState } from './world.js';
 import { makeInitialIslandState } from './world.js';
 
@@ -62,6 +64,11 @@ export interface SettlementVehicle {
    *  forward-compat with §11.4 destruction logic; not consulted by the
    *  step-12 deterministic-arrival tick. */
   readonly weatherMultiplier: number;
+  /** §11.7 tier-matched fuel grade resolved at dispatch from the launching
+   *  island's tier (`fuelForTier(tierForLevel(origin.level))`). Stored so
+   *  the ticker / UI / persistence layer know which inventory key was
+   *  burned without re-deriving from level (which is mutable post-launch). */
+  readonly fuelResource: ResourceId;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +191,7 @@ export type DispatchVehicleResult =
 
 /**
  * Launch a settlement vehicle from `origin` to `target`. Mutates
- * `world.vehicles` and `originState` inventory (biofuel + foundation_kit).
+ * `world.vehicles` and `originState` inventory (fuel + foundation_kit).
  *
  * Validation (in this order — test cases assert each rejection separately):
  *   1. Target must be a distinct, discovered, unpopulated island.
@@ -193,13 +200,14 @@ export type DispatchVehicleResult =
  *   3. No existing in-flight vehicle from origin to this same target
  *      (1-Shipyard/1-Helipad cap per §11.7 dispatch-capacity table —
  *      step 12 enforces "1 in-flight to any given target per origin").
- *   4. `fuelLoaded` must be positive, available in origin inventory, and
+ *   4. `fuelLoaded` must be positive, available in origin inventory of the
+ *      tier-matched fuel grade (§11.7 — no fallback to lower grades), and
  *      sufficient for the one-way trip given the vehicle's tilesPerFuel.
  *   5. `foundationKitCount` must be ≥ 1 and available in origin inventory.
  *
- * On success: deduct biofuel + foundation_kit from origin inventory,
- * append a fresh SettlementVehicle to `world.vehicles`, return
- * `{ ok: true, vehicle }`.
+ * On success: deduct the tier-matched fuel + foundation_kit from origin
+ * inventory, append a fresh SettlementVehicle (carrying `fuelResource`)
+ * to `world.vehicles`, return `{ ok: true, vehicle }`.
  */
 export function dispatchVehicle(
   world: WorldState,
@@ -228,8 +236,10 @@ export function dispatchVehicle(
     }
   }
 
-  // 4. fuel — must be positive, on-hand, and cover the one-way distance
-  if (fuelLoaded <= 0 || inv(originState, 'biofuel') < fuelLoaded) {
+  // 4. fuel — §11.7 tier-matched grade only (no fallback), positive, on-hand,
+  //    and sufficient to cover the one-way distance.
+  const fuelResource: ResourceId = fuelForTier(tierForLevel(originState.level));
+  if (fuelLoaded <= 0 || inv(originState, fuelResource) < fuelLoaded) {
     return { ok: false, reason: 'insufficient-fuel' };
   }
   const t = tuningFor(kind);
@@ -244,7 +254,7 @@ export function dispatchVehicle(
   }
 
   // All checks passed — mutate the state.
-  originState.inventory.biofuel = inv(originState, 'biofuel') - fuelLoaded;
+  originState.inventory[fuelResource] = inv(originState, fuelResource) - fuelLoaded;
   originState.inventory.foundation_kit =
     inv(originState, 'foundation_kit') - foundationKitCount;
 
@@ -262,6 +272,7 @@ export function dispatchVehicle(
     launchTime: nowMs,
     expectedArrivalTime,
     weatherMultiplier: t.weatherMultiplier,
+    fuelResource,
   };
   world.vehicles.push(vehicle);
   return { ok: true, vehicle };

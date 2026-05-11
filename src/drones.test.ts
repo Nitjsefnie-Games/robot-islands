@@ -313,3 +313,79 @@ describe('drone constants', () => {
     expect(DRONE_SCAN_RADIUS_TILES).toBe(8);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §11.7 tier-matched fuel grades
+// ---------------------------------------------------------------------------
+
+describe('dispatchDrone — §11.7 tier-matched fuel', () => {
+  function freshWorld(): WorldState {
+    return { islands: [], drones: [], routes: [], vehicles: [] };
+  }
+
+  it('T1 island (level 1) consumes biofuel and records fuelResource', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 1 }); // tierForLevel(1) = 1 → biofuel
+    home.inventory.biofuel = 50;
+    home.inventory.diesel = 50; // present but must not be touched
+    const r = dispatchDrone(world, home, 0, 0, 1, 0, 20, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.drone.fuelResource).toBe('biofuel');
+    expect(home.inventory.biofuel).toBe(30);
+    expect(home.inventory.diesel).toBe(50);
+  });
+
+  it('T3 island (level 15) consumes aviation_kerosene, NOT biofuel', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 15 }); // tierForLevel(15) = 3 → aviation_kerosene
+    home.inventory.biofuel = 999;
+    home.inventory.aviation_kerosene = 50;
+    const r = dispatchDrone(world, home, 0, 0, 1, 0, 20, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.drone.fuelResource).toBe('aviation_kerosene');
+    expect(home.inventory.aviation_kerosene).toBe(30);
+    // Biofuel untouched — no fallback to lower grades per §11.7.
+    expect(home.inventory.biofuel).toBe(999);
+  });
+
+  it('T3 island with no aviation_kerosene but plenty of biofuel fails insufficient-fuel', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 15 }); // T3
+    home.inventory.biofuel = 999; // plenty, but wrong grade
+    home.inventory.aviation_kerosene = 5; // not enough for 20-unit dispatch
+    const r = dispatchDrone(world, home, 0, 0, 1, 0, 20, 0);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('insufficient-fuel');
+    // No fallback — biofuel is preserved and no drone launched.
+    expect(home.inventory.biofuel).toBe(999);
+    expect(home.inventory.aviation_kerosene).toBe(5);
+    expect(world.drones).toHaveLength(0);
+  });
+
+  it('T2 island (level 5) consumes diesel', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 5 }); // tierForLevel(5) = 2 → diesel
+    home.inventory.biofuel = 999;
+    home.inventory.diesel = 50;
+    const r = dispatchDrone(world, home, 0, 0, 1, 0, 20, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.drone.fuelResource).toBe('diesel');
+    expect(home.inventory.diesel).toBe(30);
+    expect(home.inventory.biofuel).toBe(999);
+  });
+
+  it('T4 island (level 30) consumes cryogenic_hydrogen', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 30 }); // T4
+    home.inventory.cryogenic_hydrogen = 50;
+    const r = dispatchDrone(world, home, 0, 0, 1, 0, 10, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.drone.fuelResource).toBe('cryogenic_hydrogen');
+    expect(home.inventory.cryogenic_hydrogen).toBe(40);
+  });
+});

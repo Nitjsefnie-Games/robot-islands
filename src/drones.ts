@@ -10,13 +10,15 @@
 //   - No weather destruction (no weather system yet — §11.4 deferred).
 //   - Tier-gating on Drone Pad deferred to step 9; for step 6 the Drone Pad
 //     is hardcoded on the home island like Mine/Workshop are.
-//   - Fuel = Biofuel (T1, §11.7 fuel table). The Drone Pad nominally launches
-//     T2 drones burning Diesel per spec, but step 6 has no Diesel chain;
-//     using Biofuel here matches the home-island tier (T1) and the spec's
-//     "fuel grade matches launching island's tier" rule.
+//   - Fuel grade matches the launching island's tier per §11.7 — resolved at
+//     dispatch via `fuelForTier(tierForLevel(origin.level))` and stored on
+//     the Drone record. A T1 island launches with biofuel, a T3 island with
+//     aviation kerosene, etc. No fallback to lower grades.
 
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
+import { fuelForTier, type ResourceId } from './recipes.js';
+import { tierForLevel } from './skilltree.js';
 import type { WorldState } from './world.js';
 
 /** Drone tier per §11.5. Step 6 only emits tier-2 drones; the field exists so
@@ -45,6 +47,11 @@ export interface Drone {
   readonly expectedReturnTime: number;
   readonly tier: DroneTier;
   readonly fuelLoaded: number;
+  /** §11.7 tier-matched fuel grade resolved at dispatch from the launching
+   *  island's tier (`fuelForTier(tierForLevel(origin.level))`). Stored so
+   *  the ticker / UI / persistence layer know which inventory key was
+   *  burned without re-deriving from level (which is mutable post-launch). */
+  readonly fuelResource: ResourceId;
 }
 
 /** T2-equivalent constants for step 6. Tile units; seconds for time.
@@ -132,10 +139,14 @@ export type DispatchResult =
  *   1. Direction vector magnitude > 0 (post-normalisation length 1).
  *   2. Origin must not already have an in-flight drone (1-drone-per-pad cap
  *      per §11.7 dispatch capacity table).
- *   3. Origin must hold ≥ `fuelLoaded` biofuel.
+ *   3. Origin must hold ≥ `fuelLoaded` of the tier-matched fuel grade. The
+ *      grade is resolved from the launching island's tier per §11.7 — a T1
+ *      island burns biofuel, a T3 island burns aviation_kerosene, etc.
+ *      No fallback to lower grades.
  *
- * On success: subtract `fuelLoaded` from `inventory.biofuel`, append a fresh
- * `Drone` to `world.drones`, return `{ ok: true, drone }`.
+ * On success: subtract `fuelLoaded` from the tier-matched fuel inventory,
+ * append a fresh `Drone` (carrying `fuelResource`) to `world.drones`,
+ * return `{ ok: true, drone }`.
  *
  * The `originX`/`originY` are read from the home spec by the caller (UI
  * passes them in via the world map). We store them on the drone so the
@@ -162,8 +173,9 @@ export function dispatchDrone(
     if (d.fromIslandId === origin.id) return { ok: false, reason: 'already-in-flight' };
   }
 
-  // 3. fuel
-  if (inv(origin, 'biofuel') < fuelLoaded || fuelLoaded <= 0) {
+  // 3. fuel — §11.7 tier-matched grade only, no fallback to lower grades
+  const fuelResource: ResourceId = fuelForTier(tierForLevel(origin.level));
+  if (inv(origin, fuelResource) < fuelLoaded || fuelLoaded <= 0) {
     return { ok: false, reason: 'insufficient-fuel' };
   }
 
@@ -174,7 +186,7 @@ export function dispatchDrone(
   const travelSec = rangeTiles / DRONE_SPEED_TILES_PER_SEC;
   const expectedReturnTime = nowMs + travelSec * 1000;
 
-  origin.inventory.biofuel = inv(origin, 'biofuel') - fuelLoaded;
+  origin.inventory[fuelResource] = inv(origin, fuelResource) - fuelLoaded;
 
   const drone: Drone = {
     id: nextDroneId(),
@@ -189,6 +201,7 @@ export function dispatchDrone(
     expectedReturnTime,
     tier: STEP6_DRONE_TIER,
     fuelLoaded,
+    fuelResource,
   };
   world.drones.push(drone);
   return { ok: true, drone };

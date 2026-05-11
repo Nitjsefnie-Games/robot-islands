@@ -35,6 +35,8 @@ import {
   type Drone,
 } from './drones.js';
 import { TILE_PX } from './island.js';
+import { fuelForTier } from './recipes.js';
+import { tierForLevel } from './skilltree.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -287,7 +289,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   const tierStat = statRow('TIER');
   tierStat.valueEl.textContent = 'T2';
   tierStat.valueEl.style.color = ACCENT;
-  const fuelStat = statRow('BIOFUEL');
+  // Fuel label is dynamic — §11.7 tier-matched grade per the launching
+  // island's tier. The row's left-hand label is overwritten in refresh()
+  // (e.g. BIOFUEL on a T1 island, AVIATION KEROSENE on a T3 island).
+  const fuelStat = statRow('FUEL');
+  const fuelStatLabelEl = fuelStat.row.firstChild as HTMLSpanElement;
   const rangeStat = statRow('OUTBND');
   const etaStat = statRow('FLIGHT');
 
@@ -737,7 +743,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // Stat block always tracks the current slider.
     const origin = deps.getOrigin();
     const originSpec = deps.getOriginSpec();
-    const onhand = inv(origin, 'biofuel');
+    // §11.7 tier-matched fuel — label + on-hand inventory follow the
+    // launching island's tier (T1 → BIOFUEL, T3 → AVIATION KEROSENE …).
+    const fuelResource = fuelForTier(tierForLevel(origin.level));
+    fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
+    const onhand = inv(origin, fuelResource);
     fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
     fuelStat.valueEl.style.color = onhand >= fuelLoaded ? FG : WARN;
     sliderHeadR.textContent = `${fuelLoaded} u`;

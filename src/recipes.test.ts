@@ -24,6 +24,7 @@ import {
   ALL_RESOURCES,
   RECIPES,
   XP_WEIGHT,
+  fuelForTier,
   type RecipeCategory,
   type ResourceId,
 } from './recipes.js';
@@ -147,6 +148,28 @@ describe('step-18 producer coverage (§7 chain closures)', () => {
     }
     for (const r of sentinelProducedResources) {
       expect(producers.has(r), `sentinel resource ${r} has no producer recipe`).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §11.7 fuel-by-tier mapping
+// ---------------------------------------------------------------------------
+
+describe('fuelForTier (§11.7)', () => {
+  it('maps each tier to its canonical fuel grade', () => {
+    expect(fuelForTier(1)).toBe('biofuel');
+    expect(fuelForTier(2)).toBe('diesel');
+    expect(fuelForTier(3)).toBe('aviation_kerosene');
+    expect(fuelForTier(4)).toBe('cryogenic_hydrogen');
+    expect(fuelForTier(5)).toBe('plasma_charge');
+    expect(fuelForTier(6)).toBe('antimatter_propellant');
+  });
+
+  it('every returned fuel is a known ResourceId', () => {
+    const known = new Set<ResourceId>(ALL_RESOURCES);
+    for (const tier of [1, 2, 3, 4, 5, 6] as const) {
+      expect(known.has(fuelForTier(tier))).toBe(true);
     }
   });
 });

@@ -451,3 +451,98 @@ describe('tickVehicles', () => {
     expect(world.vehicles[0]!.target).toBe('target');
   });
 });
+
+// ---------------------------------------------------------------------------
+// §11.7 tier-matched fuel grades — dispatchVehicle
+// ---------------------------------------------------------------------------
+
+describe('dispatchVehicle — §11.7 tier-matched fuel', () => {
+  function tieredSetup(level: number): {
+    world: WorldState;
+    home: IslandSpec;
+    homeState: IslandState;
+    target: IslandSpec;
+  } {
+    const home = makeIslandSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'sy', defId: 'shipyard', x: 0, y: 0 }],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 0,
+      populated: false,
+      discovered: true,
+    });
+    const world = freshWorld([home, target]);
+    const homeState = makeIslandState({ id: 'home', level });
+    homeState.inventory.foundation_kit = 3;
+    return { world, home, homeState, target };
+  }
+
+  it('T1 island (level 1) consumes biofuel and records fuelResource', () => {
+    const { world, home, homeState, target } = tieredSetup(1);
+    homeState.inventory.biofuel = 50;
+    homeState.inventory.diesel = 50; // wrong-grade present, must be untouched
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.vehicle.fuelResource).toBe('biofuel');
+    expect(homeState.inventory.biofuel).toBe(45);
+    expect(homeState.inventory.diesel).toBe(50);
+  });
+
+  it('T2 island (level 5) consumes diesel (T2 helicopter dispatch)', () => {
+    const { world, home, homeState, target } = tieredSetup(5);
+    home.buildings.push({ id: 'hp', defId: 'helipad', x: 1, y: 1 });
+    homeState.inventory.biofuel = 999;
+    homeState.inventory.diesel = 50;
+    // helicopter eff 4 t/fuel: 30 tile trip needs ≥ 8 fuel.
+    const r = dispatchVehicle(world, home, homeState, target, 'helicopter', 10, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.vehicle.fuelResource).toBe('diesel');
+    expect(homeState.inventory.diesel).toBe(40);
+    expect(homeState.inventory.biofuel).toBe(999);
+  });
+
+  it('T3 island (level 15) consumes aviation_kerosene, NOT biofuel', () => {
+    const { world, home, homeState, target } = tieredSetup(15);
+    homeState.inventory.biofuel = 999;
+    homeState.inventory.aviation_kerosene = 50;
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.vehicle.fuelResource).toBe('aviation_kerosene');
+    expect(homeState.inventory.aviation_kerosene).toBe(45);
+    expect(homeState.inventory.biofuel).toBe(999);
+  });
+
+  it('T3 island with biofuel but no aviation_kerosene fails insufficient-fuel (no fallback)', () => {
+    const { world, home, homeState, target } = tieredSetup(15);
+    homeState.inventory.biofuel = 999;
+    homeState.inventory.aviation_kerosene = 2;
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 5, 1, 0);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('insufficient-fuel');
+    expect(homeState.inventory.biofuel).toBe(999);
+    expect(homeState.inventory.aviation_kerosene).toBe(2);
+    expect(homeState.inventory.foundation_kit).toBe(3);
+    expect(world.vehicles).toHaveLength(0);
+  });
+
+  it('T4 island (level 30) consumes cryogenic_hydrogen', () => {
+    const { world, home, homeState, target } = tieredSetup(30);
+    homeState.inventory.cryogenic_hydrogen = 50;
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.vehicle.fuelResource).toBe('cryogenic_hydrogen');
+    expect(homeState.inventory.cryogenic_hydrogen).toBe(45);
+  });
+});

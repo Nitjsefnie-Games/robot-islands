@@ -159,6 +159,7 @@ describe('currentObjective', () => {
       expectedReturnTime: 1000,
       tier: 2,
       fuelLoaded: 10,
+      fuelResource: 'biofuel',
     };
     const snap = makeSnap({ specs: [home], states: [homeState], drones: [drone] });
     expect(currentObjective(snap)?.id).toBe('establish_route');
@@ -280,6 +281,7 @@ describe('currentObjective', () => {
       expectedReturnTime: 1000,
       tier: 2,
       fuelLoaded: 10,
+      fuelResource: 'biofuel',
     };
     const snap = makeSnap({
       specs: [home, island2, island3],
