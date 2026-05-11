@@ -26,7 +26,7 @@ export interface Camera {
   zoom: number;
 }
 
-export const MIN_ZOOM = 0.25;
+export const MIN_ZOOM = 0.0625;  // 4× further out than the prior 0.25 — fits the procedural world (~160-tile half-extent) at a glance.
 export const MAX_ZOOM = 4;
 
 export function makeCamera(tx = 0, ty = 0, zoom = 1): Camera {

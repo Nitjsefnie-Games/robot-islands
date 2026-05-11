@@ -105,7 +105,7 @@ describe('centerOn', () => {
 
 describe('clampZoom', () => {
   it('respects bounds', () => {
-    expect(clampZoom(0.1)).toBe(MIN_ZOOM);
+    expect(clampZoom(MIN_ZOOM / 2)).toBe(MIN_ZOOM);
     expect(clampZoom(100)).toBe(MAX_ZOOM);
     expect(clampZoom(1.5)).toBe(1.5);
   });
