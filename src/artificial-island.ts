@@ -31,6 +31,7 @@ import { BIOME_DEFS, terrainAtForBiome } from './biomes.js';
 import { tierForLevel } from './skilltree.js';
 import type { IslandState } from './economy.js';
 import { makeInitialIslandState } from './world.js';
+import { canPlaceOnIsland, type BuildingDef } from './building-defs.js';
 
 // ---------------------------------------------------------------------------
 // Cost formula (§2.5 placeholder — "scales with size and biome")
@@ -245,4 +246,48 @@ export function maxRadiusForFounderLevel(level: number): number {
   const tier = tierForLevel(level);
   if (tier < 3) return 0;
   return MAX_RADIUS_BY_TIER[tier as 3 | 4 | 5] ?? MAX_RADIUS_BY_TIER[3];
+}
+
+// ---------------------------------------------------------------------------
+// Step-12: biome-locked-unique placement gate (§9.5)
+// ---------------------------------------------------------------------------
+//
+// `canPlaceOnIsland` is the canonical pure check (in `building-defs.ts`).
+// `validateBuildingPlacement` adds a reason-code layer for UI surfacing —
+// step 12 hooks the catalog tooltip, step 2.5 will hook the placement
+// validator. The two reasons mirror the two gates inside `canPlaceOnIsland`:
+//   - `biome-mismatch` — the def has `requiredBiomes` and the island's
+//     biome is not in the set (e.g. Pyroforge on a Forest island).
+//   - `artificial-island-biome-locked` — the def has `requiredBiomes` and
+//     the island is artificial. Per §9.5 "Artificial islands cannot host
+//     biome-locked uniques."
+
+export type PlacementReason = 'biome-mismatch' | 'artificial-island-biome-locked';
+
+export interface PlacementResult {
+  readonly ok: boolean;
+  readonly reason?: PlacementReason;
+}
+
+/**
+ * Validate placement of a single biome-locked building on a target island.
+ * Pure — returns a reasoned result; does not throw, does not mutate.
+ *
+ * Unrestricted defs (no `requiredBiomes`) always return `{ ok: true }`.
+ * Restricted defs check biome match first, then the artificial flag — the
+ * biome reason is preferred when both fail (a Volcanic-locked def on an
+ * artificial Forest island fails on biome match, which is the more
+ * actionable error for the player).
+ */
+export function validateBuildingPlacement(
+  def: BuildingDef,
+  spec: IslandSpec,
+): PlacementResult {
+  if (canPlaceOnIsland(def, spec)) return { ok: true };
+  if (def.requiredBiomes && !def.requiredBiomes.includes(spec.biome)) {
+    return { ok: false, reason: 'biome-mismatch' };
+  }
+  // Reaching here means the biome IS in requiredBiomes but the island is
+  // artificial — the §9.5 gate.
+  return { ok: false, reason: 'artificial-island-biome-locked' };
 }

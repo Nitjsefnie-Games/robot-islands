@@ -13,9 +13,11 @@ import {
   computeConstructionCost,
   constructIsland,
   maxRadiusForFounderLevel,
+  validateBuildingPlacement,
   validateConstruction,
   type ConstructionRequirements,
 } from './artificial-island.js';
+import { BUILDING_DEFS, canPlaceOnIsland } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -362,6 +364,81 @@ describe('constructIsland', () => {
 // ---------------------------------------------------------------------------
 // maxRadiusForFounderLevel
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Step-12: §9.5 biome-locked-unique gate — Pyroforge on artificial Volcanic
+// ---------------------------------------------------------------------------
+
+describe('§9.5 — biome-locked uniques rejected on artificial islands (step 12)', () => {
+  it('constructing an artificial Volcanic island then placing a Pyroforge fails canPlaceOnIsland', () => {
+    // Setup: T3+ founder with Platform Constructor + plenty of materials,
+    // including the volcanic surcharge for a 4×4 volcanic spec.
+    const spec = makeFounderSpec([PC_BUILDING]);
+    const state = makeFounderState(
+      [PC_BUILDING],
+      { steel: 9999, iron_ingot: 9999, wood: 9999 },
+    );
+    const result = constructIsland(
+      state,
+      spec,
+      { biome: 'volcanic', majorRadius: 4, minorRadius: 4 },
+      { cx: 200, cy: 200 },
+      'art-volcanic-1',
+      0,
+    );
+    // The new island is Volcanic AND artificial. Per §9.5, Pyroforge (the
+    // Volcanic-locked unique) cannot be placed here.
+    expect(result.newSpec.biome).toBe('volcanic');
+    expect(result.newSpec.artificial).toBe(true);
+    const pyroforge = BUILDING_DEFS.pyroforge;
+    expect(canPlaceOnIsland(pyroforge, result.newSpec)).toBe(false);
+    // And via the reasoned wrapper, the rejection carries the correct code.
+    const placement = validateBuildingPlacement(pyroforge, result.newSpec);
+    expect(placement.ok).toBe(false);
+    expect(placement.reason).toBe('artificial-island-biome-locked');
+  });
+
+  it('Pyroforge places on a natural Volcanic island (artificial=false)', () => {
+    // Sanity: same biome but `artificial` defaults to false → placement OK.
+    const naturalVolcanic: IslandSpec = {
+      id: 'nat-volc',
+      biome: 'volcanic',
+      cx: 0,
+      cy: 0,
+      majorRadius: 7,
+      minorRadius: 7,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    };
+    expect(canPlaceOnIsland(BUILDING_DEFS.pyroforge, naturalVolcanic)).toBe(true);
+    expect(validateBuildingPlacement(BUILDING_DEFS.pyroforge, naturalVolcanic).ok).toBe(true);
+  });
+
+  it('biome-mismatch reason is preferred when the artificial island has the wrong biome', () => {
+    // An artificial Forest island fails BOTH gates for Pyroforge (biome
+    // mismatch AND artificial). `validateBuildingPlacement` reports the
+    // biome-mismatch reason (the more actionable error — placement is
+    // closed on biome grounds, not just the artificial flag).
+    const artForest: IslandSpec = {
+      id: 'art-forest',
+      biome: 'forest',
+      cx: 0,
+      cy: 0,
+      majorRadius: 4,
+      minorRadius: 4,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+      artificial: true,
+    };
+    const result = validateBuildingPlacement(BUILDING_DEFS.pyroforge, artForest);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('biome-mismatch');
+  });
+});
 
 describe('maxRadiusForFounderLevel', () => {
   it('returns 0 for sub-T3 founders (gating closed)', () => {

@@ -41,6 +41,9 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
       wood: 100, iron_ore: 100, coal: 100, biofuel: 100,
       iron_ingot: 100, coke: 100, pig_iron: 100,
       bolt: 100, steel: 100, gear: 100,
+      // Step-12 T4 resources
+      helium_3: 100, cryogenic_hydrogen: 100, quantum_chip: 100,
+      exotic_alloy: 100, ai_core: 100,
     },
     xp: 0,
     level: 1,

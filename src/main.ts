@@ -354,19 +354,25 @@ async function main(): Promise<void> {
     if (!spec.populated) continue;
     islandStates.set(spec.id, makeInitialIslandState(spec, performance.now()));
   }
-  // Step-11 demo seed: bump forest-ne to level 20 (T3) and pre-load enough
+  // Step-11/12 demo seed: bump forest-ne to level 30 (T4) and pre-load enough
   // construction materials so the player can fire off a 4×4 artificial
   // island construction without first grinding the smelting chain. The
   // values exceed the 4×4 Plains cost (~252 steel / 151 iron_ingot / 503
   // wood) with comfortable headroom for one construct + a second attempt.
+  // Step 12 bumps the level 20 → 30 so the catalog UI shows the T4 band
+  // unlocked, and seeds `helium_3` so a Fusion Core placed on forest-ne can
+  // actually run. Forest-ne stays Forest biome, so Volcanic/Arctic biome-
+  // locked uniques (Pyroforge, Cryogenic Compute Center) remain locked from
+  // the catalog — that's the intended §9.5 demo behaviour.
   // This seed is demo-only — once the natural economy reaches forest-ne
   // (via funneled routes from the home island), the seed is removed.
   const forestNe = islandStates.get('forest-ne');
   if (forestNe) {
-    forestNe.level = 20;
+    forestNe.level = 30;
     forestNe.inventory.steel = 300;
     forestNe.inventory.iron_ingot = 200;
     forestNe.inventory.wood = 600;
+    forestNe.inventory.helium_3 = 50; // demo seed — Fusion Core fuel
   }
   // Spec lookup by id — also needed by routes UI later. Built once; spec
   // identity is stable across the session (drones flip discovered, but
@@ -400,7 +406,10 @@ async function main(): Promise<void> {
 
   // Buildings catalog — sister modal panel to the skill tree. KeyB toggles;
   // Escape routes to whichever modal is visible (`dismiss-modal` below).
-  const buildingsUi = mountBuildingsUi(document.body, homeState);
+  // §9.5: passes homeSpec so the catalog can flag biome-locked uniques
+  // (Pyroforge / Cryogenic Compute Center) as placement-locked when the
+  // current island's biome doesn't match.
+  const buildingsUi = mountBuildingsUi(document.body, homeState, homeSpec);
   defineAction(reg, 'toggle-buildings', () => {
     buildingsUi.toggle();
   });

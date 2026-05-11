@@ -22,12 +22,15 @@ import {
   ALL_BUILDING_DEF_IDS,
   BUILDING_DEFS,
   buildingUnlocked,
+  canPlaceOnIsland,
   type BuildingCategory,
   type BuildingDefId,
 } from './building-defs.js';
+import { BIOME_DEFS } from './biomes.js';
 import type { IslandState } from './economy.js';
 import { RECIPES, type Recipe } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';
+import type { IslandSpec } from './world.js';
 
 export interface BuildingsUi {
   readonly el: HTMLDivElement;
@@ -154,7 +157,11 @@ interface TierBandRef {
   readonly tier: Tier;
 }
 
-export function mountBuildingsUi(parentEl: HTMLElement, state: IslandState): BuildingsUi {
+export function mountBuildingsUi(
+  parentEl: HTMLElement,
+  state: IslandState,
+  spec: IslandSpec,
+): BuildingsUi {
   const rowRefs = new Map<BuildingDefId, RowRef>();
   const tierBandRefs: TierBandRef[] = [];
 
@@ -517,15 +524,36 @@ export function mountBuildingsUi(parentEl: HTMLElement, state: IslandState): Bui
   function paintRow(defId: BuildingDefId, ref: RowRef): void {
     const def = BUILDING_DEFS[defId];
     const unlocked = buildingUnlocked(state.level, defId);
+    // §9.5: biome-locked uniques (those with `requiredBiomes`) are tier-
+    // unlocked but cannot be placed on this island unless biome matches and
+    // the island is not artificial. `canPlaceOnIsland` is the canonical
+    // pure helper — the UI just surfaces its result.
+    const biomeOk = canPlaceOnIsland(def, spec);
+    // "placement-locked" reads as a softer state than tier-locked: the tier
+    // is unlocked but the player needs a different island to actually
+    // place it. Tier-locked overrides — if the tier isn't there, no point
+    // saying "wrong biome".
+    const placementLocked = unlocked && !biomeOk;
 
     // Status dot + colours
-    if (unlocked) {
+    if (unlocked && !placementLocked) {
       ref.statusDot.textContent = '●';
       ref.statusDot.style.color = ACCENT;
       ref.titleEl.style.color = FG;
       ref.subtitleEl.style.color = FG_DIM;
       ref.row.style.borderLeftColor = ACCENT_DIM;
       ref.row.style.opacity = '1';
+    } else if (placementLocked) {
+      // Biome-locked unique: tier-unlocked but wrong biome / artificial.
+      // Half-bright — visually distinct from a tier-locked row but not as
+      // loud as an available one. WARN-coloured rail to flag "you can't
+      // place this here" without making it look broken.
+      ref.statusDot.textContent = '◐';
+      ref.statusDot.style.color = WARN;
+      ref.titleEl.style.color = FG_DIM;
+      ref.subtitleEl.style.color = WARN_DIM;
+      ref.row.style.borderLeftColor = WARN_DIM;
+      ref.row.style.opacity = '0.78';
     } else {
       ref.statusDot.textContent = '○';
       ref.statusDot.style.color = FG_MUTED;
@@ -539,13 +567,29 @@ export function mountBuildingsUi(parentEl: HTMLElement, state: IslandState): Bui
       ref.row.style.opacity = proximityWarn ? '0.78' : '0.55';
     }
 
-    // Meta badges — footprint, power, storage. Rebuilt each paint so a
-    // build with skill-tree-modified power could (future) update live.
-    // For step 9 the values are static; cost of full rebuild here is
-    // trivial (3-4 spans per row).
+    // Meta badges — footprint, power, storage, biome-restriction. Rebuilt
+    // each paint so a build with skill-tree-modified power could (future)
+    // update live. For step 9 the values are static; cost of full rebuild
+    // here is trivial (3-5 spans per row).
     while (ref.metaRail.firstChild) ref.metaRail.removeChild(ref.metaRail.firstChild);
     const metaFg = unlocked ? FG : FG_DIM;
     const metaBorder = unlocked ? PANEL_BORDER : FG_MUTED;
+    // §9.5: biome-restriction badge for biome-locked uniques. Renders
+    // FIRST so the player sees the constraint before the dimensions.
+    // E.g. "VOLCANIC" or "ARCTIC" — the §9.5 single-biome restrictions are
+    // the only shape that ships in step 12, but the badge concatenates if
+    // a future def lists multiple biomes.
+    if (def.requiredBiomes && def.requiredBiomes.length > 0) {
+      const biomeLabel = def.requiredBiomes
+        .map((b) => BIOME_DEFS[b].displayName.toUpperCase())
+        .join(' / ');
+      // WARN colour when player's current island doesn't match (the row
+      // is placement-locked); ACCENT colour when it does (placement is
+      // valid on the current island).
+      const badgeFg = placementLocked ? WARN : ACCENT;
+      const badgeBorder = placementLocked ? WARN_DIM : ACCENT_DIM;
+      ref.metaRail.appendChild(makeMetaBadge(biomeLabel, badgeFg, badgeBorder));
+    }
     ref.metaRail.appendChild(
       makeMetaBadge(`${def.width}×${def.height}`, metaFg, metaBorder),
     );

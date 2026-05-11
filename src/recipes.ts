@@ -2,14 +2,17 @@
 //
 // Per SPEC §6 (Resource Catalog) and §7 (Recipe Chains). Step 9 expands the
 // catalog from the step-3 Mine+Workshop chain to the partial §7.1 Iron/Steel
-// pipeline plus a forestry/biomass loop:
+// pipeline plus a forestry/biomass loop. Step 12 extends into the T4
+// endgame chain (§6.5) — five new resources fed by the new T4 buildings:
 //
 //   T0/T1 raws:   wood, iron_ore, coal, biofuel
 //   T1 refined:   iron_ingot, coke, pig_iron, bolt
 //   T2 alloy:     steel
 //   T2 component: gear
+//   T4 raw/fuel:  helium_3, cryogenic_hydrogen
+//   T4 component: quantum_chip, exotic_alloy, ai_core
 //
-// `xp_weight` per SPEC §9.1: T0 raws = 1, T1 = 3, T2 = 10. Higher-tier
+// `xp_weight` per SPEC §9.1: T0 raws = 1, T1 = 3, T2 = 10, T4 = 100. Higher-tier
 // outputs grant proportionally more XP per unit produced, so the progression
 // curve rewards climbing the recipe chain rather than just stockpiling raws.
 
@@ -28,7 +31,13 @@ export type ResourceId =
   | 'bolt'
   // T2 alloy / component
   | 'steel'
-  | 'gear';
+  | 'gear'
+  // T4 endgame (§6.5)
+  | 'helium_3'
+  | 'cryogenic_hydrogen'
+  | 'quantum_chip'
+  | 'exotic_alloy'
+  | 'ai_core';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -42,6 +51,11 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'bolt',
   'steel',
   'gear',
+  'helium_3',
+  'cryogenic_hydrogen',
+  'quantum_chip',
+  'exotic_alloy',
+  'ai_core',
 ];
 
 /**
@@ -50,6 +64,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
  *   T1 refined   = 3   (biofuel, iron_ingot, coke, pig_iron)
  *   T2 alloy /   = 10  (bolt, steel, gear)
  *      component
+ *   T4 endgame   = 100 (helium_3, cryogenic_hydrogen, quantum_chip,
+ *                       exotic_alloy, ai_core)
  */
 export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // T0 raws
@@ -65,6 +81,12 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   bolt: 10,
   steel: 10,
   gear: 10,
+  // T4 endgame (§6.5)
+  helium_3: 100,
+  cryogenic_hydrogen: 100,
+  quantum_chip: 100,
+  exotic_alloy: 100,
+  ai_core: 100,
 };
 
 /**
@@ -222,5 +244,60 @@ export const RECIPES: Partial<Record<BuildingDefId, Recipe>> = {
     inputs: { pig_iron: 1 },
     outputs: { steel: 1 },
     category: 'smelting',
+  },
+
+  // ---------------------------------------------------------------------------
+  // T4 endgame chain (§6.5 / §7.11 / §8.2 / §9.5)
+  // ---------------------------------------------------------------------------
+  // Dependency arrow: particle_accelerator → quantum_chip
+  //                   → cryogenic_compute_center (ARCTIC) → ai_core
+  //                   pyroforge (VOLCANIC) → exotic_alloy (uses helium_3 fuel)
+  //                   fusion_core → power-burn (uses helium_3 fuel)
+  // helium_3 is a §6.4 T3 raw mined naturally (Vault terrain) — not produced
+  // by any building in step 12. It is seeded on forest-ne for demo only.
+  // The chain is NOT fully exercisable on forest-ne (no Arctic/Volcanic) —
+  // that's intended demo behaviour per §9.5 biome-locked uniques.
+
+  // T4 power — Fusion Core burns helium_3 as fuel; W contribution lives on
+  // def.power.produces (5000W), not in `outputs`. Empty outputs intentional.
+  fusion_core: {
+    cycleSec: 30,
+    inputs: { helium_3: 1 },
+    outputs: {},
+    category: 'power',
+  },
+
+  // T4 biome-locked smelting — Volcanic-only Pyroforge produces Exotic Alloy
+  // from Steel + Helium-3 fuel. Per §9.5, only producer of Exotic Alloy in
+  // the world. §5.2 heat-source adjacency deferred.
+  pyroforge: {
+    cycleSec: 60,
+    inputs: { steel: 5, helium_3: 1 },
+    outputs: { exotic_alloy: 1 },
+    category: 'smelting',
+  },
+
+  // T4 biome-locked electronics — Arctic-only Cryogenic Compute Center
+  // produces AI Cores from Steel + Quantum Chip. Per §9.5, only producer of
+  // AI Cores in the world. Arctic ambient cold halves compute-recipe power
+  // draw (deferred — modelled at static 1200W in step 12).
+  cryogenic_compute_center: {
+    cycleSec: 90,
+    inputs: { steel: 3, quantum_chip: 1 },
+    outputs: { ai_core: 1 },
+    category: 'electronics',
+  },
+
+  // T4 electronics — Particle Accelerator produces Quantum Chips from
+  // Steel + Pig Iron. Not biome-locked (only Carbon Forge / Pyroforge /
+  // Cryogenic Compute Center / Mass Driver / Tidal Array / Sunspire are).
+  // Tagged `electronics` because Quantum Chip is the T4 electronics
+  // intermediate; the building's name is metallurgy-coded but its output
+  // is an electronics component.
+  particle_accelerator: {
+    cycleSec: 45,
+    inputs: { steel: 4, pig_iron: 4 },
+    outputs: { quantum_chip: 1 },
+    category: 'electronics',
   },
 };

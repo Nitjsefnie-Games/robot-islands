@@ -7,15 +7,27 @@
 // repeating fill/stroke/footprint.
 //
 // Step-9 catalog: T1 + T2 + T3 buildings sufficient to demonstrate the
-// Iron/Steel chain (§7.1) end-to-end. T4/T5/T6 defs are deferred to steps
-// 12/13. Heat-source adjacency (§5.2) is not yet implemented — Blast Furnace
-// runs without its required heat source; comment flags the deferred constraint.
+// Iron/Steel chain (§7.1) end-to-end.
+// Step-12 catalog: adds 5 T4 endgame defs (§6.5/§9.5) — Fusion Core,
+// Pyroforge (Volcanic-unique), Cryogenic Compute Center (Arctic-unique),
+// Particle Accelerator, Launch Tower. Pyroforge + Cryogenic Compute Center
+// carry `requiredBiomes` per §15.1; the `canPlaceOnIsland` helper at the
+// bottom of this file is the canonical gate.
+//
+// Heat-source adjacency (§5.2) is not yet implemented — Blast Furnace and
+// Pyroforge run without their required heat source; comment flags the
+// deferred constraint. T4 omnidirectional pulse mechanic (§11.5) for the
+// Launch Tower is also deferred — only the def is added in step 12.
 //
 // No PixiJS imports, no DOM — `building-defs.ts` is pure data + the tier
-// gate. `buildings.ts` consumes BUILDING_DEFS for rendering; `recipes.ts`
-// keys its RECIPES table by `BuildingDefId`.
+// gate + biome gate. `buildings.ts` consumes BUILDING_DEFS for rendering;
+// `recipes.ts` keys its RECIPES table by `BuildingDefId`.
 
 import { tierForLevel } from './skilltree.js';
+// Type-only imports avoid a runtime cycle with world.ts (which imports
+// BUILDING_DEFS from this file). The Biome union and IslandSpec interface
+// are pure types — `import type` strips the edge at compile time.
+import type { Biome, IslandSpec } from './world.js';
 
 /** SPEC §8 building category. Drives the per-category Specialization passive
  *  buff (§9.4) and the Building Catalog UI grouping. */
@@ -56,12 +68,23 @@ export type BuildingDefId =
   | 'tank'
   // New T3
   | 'electric_arc_furnace'
-  | 'platform_constructor';
+  | 'platform_constructor'
+  // New T4 (§6.5 / §9.5 / step 12)
+  | 'fusion_core'
+  | 'pyroforge'
+  | 'cryogenic_compute_center'
+  | 'particle_accelerator'
+  | 'launch_tower';
 
 /**
  * Per-kind static definition. Step 9 fills the fields needed by the
- * economy + render layer; `requiredTile`, `requiredBiomes`, adjacency, and
- * the heat flag stay in SPEC §15.1's BuildingDef shape but are not used yet.
+ * economy + render layer; `requiredTile`, adjacency, and the heat flag stay
+ * in SPEC §15.1's BuildingDef shape but are not used yet.
+ *
+ * Step 12 wires `requiredBiomes` per §15.1 / §9.5: a non-empty list means
+ * the building can only be placed on an island whose biome is in the set
+ * (and never on artificial islands). The canonical gate is
+ * `canPlaceOnIsland` at the bottom of this file.
  */
 export interface BuildingDef {
   readonly id: BuildingDefId;
@@ -83,6 +106,10 @@ export interface BuildingDef {
   readonly storageCap?: number;
   /** §5.1 electrical contribution. Either side may be undefined / 0. */
   readonly power?: { readonly produces?: number; readonly consumes?: number };
+  /** §15.1 / §9.5 biome restriction for biome-locked uniques (T4). Undefined
+   *  means "any biome". A non-empty list restricts placement to natural
+   *  islands of the listed biomes — `canPlaceOnIsland` enforces the gate. */
+  readonly requiredBiomes?: ReadonlyArray<Biome>;
 }
 
 /** Read-only catalog. Keys = BuildingDefId; every defId MUST have an entry. */
@@ -316,6 +343,85 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x2a1a40,
     power: { consumes: 200 },
   },
+  // -------------------------------------------------------------------------
+  // T4 (levels 30-50) — endgame chain per §6.5 / §8.5 / §9.5
+  // -------------------------------------------------------------------------
+  // §8.5: Fusion Core — universal T4 power source, Helium-3 fuel, massive
+  // output (5000W). Not biome-locked. Per §5.2 it also doubles as a free
+  // heat source; the heat system is deferred so only the power contribution
+  // is wired in step 12.
+  fusion_core: {
+    id: 'fusion_core',
+    displayName: 'Fusion Core',
+    category: 'power',
+    tier: 4,
+    width: 4,
+    height: 4,
+    fill: 0x4a90c8, // cool electric blue
+    stroke: 0x1a3050,
+    power: { produces: 5000 },
+  },
+  // §9.5: Pyroforge — Volcanic-unique. Only producer of Exotic Alloy in the
+  // world. §5.2 heat-source adjacency deferred — runs without an adjacent
+  // Geothermal Vent for step 12.
+  pyroforge: {
+    id: 'pyroforge',
+    displayName: 'Pyroforge',
+    category: 'smelting',
+    tier: 4,
+    width: 3,
+    height: 3,
+    fill: 0xc04020, // lava red
+    stroke: 0x2a0800,
+    power: { consumes: 800 },
+    requiredBiomes: ['volcanic'],
+  },
+  // §9.5: Cryogenic Compute Center — Arctic-unique. Only producer of AI
+  // Cores. Arctic ambient cold should halve compute-recipe power draw (§9.5
+  // intrinsic bonus); deferred to a later step, modelled at static 1200W
+  // here.
+  cryogenic_compute_center: {
+    id: 'cryogenic_compute_center',
+    displayName: 'Cryogenic Compute Center',
+    category: 'electronics',
+    tier: 4,
+    width: 4,
+    height: 4,
+    fill: 0xa0e0e8, // icy cyan
+    stroke: 0x205060,
+    power: { consumes: 1200 },
+    requiredBiomes: ['arctic'],
+  },
+  // §8.6: Particle Accelerator — T4 production of Quantum Chips (and, in
+  // a later step, Antimatter Capsule via a separate recipe per §7.11). Not
+  // biome-locked; the §9.5 list reserves "biome-locked" for the bottleneck
+  // outputs (Exotic Alloy, AI Core, Carbon Fiber, etc.).
+  particle_accelerator: {
+    id: 'particle_accelerator',
+    displayName: 'Particle Accelerator',
+    category: 'smelting',
+    tier: 4,
+    width: 4,
+    height: 4,
+    fill: 0x8060c0, // deep violet
+    stroke: 0x301050,
+    power: { consumes: 1500 },
+  },
+  // §8.8 / §11.5: Launch Tower — T4 omnidirectional drone-pulse launch
+  // site. The pulse mechanic itself (3-cell-radius single-disk reveal) is
+  // deferred; the def exists in step 12 so the catalog row + tier badge
+  // are visible.
+  launch_tower: {
+    id: 'launch_tower',
+    displayName: 'Launch Tower',
+    category: 'special',
+    tier: 4,
+    width: 3,
+    height: 3,
+    fill: 0x8a8a40, // dull sand-gold
+    stroke: 0x303010,
+    power: { consumes: 400 },
+  },
 };
 
 /** Whether `defId` is buildable at the given island level. Pure — no DOM,
@@ -338,3 +444,25 @@ export function unlockedDefs(islandLevel: number): BuildingDefId[] {
 export const ALL_BUILDING_DEF_IDS: ReadonlyArray<BuildingDefId> = Object.keys(
   BUILDING_DEFS,
 ) as BuildingDefId[];
+
+/**
+ * Per §15.1 / §9.5: can the given def be placed on the given island?
+ *
+ * Two gates compose:
+ *   - `requiredBiomes` (if set) must include the island's biome.
+ *   - artificial islands (spec.artificial === true) cannot host any def
+ *     that has a `requiredBiomes` restriction — per §9.5 "Artificial
+ *     islands cannot host biome-locked uniques."
+ *
+ * Pure function — no DOM, no PixiJS, no IslandState dependency. Tier-gate
+ * (`buildingUnlocked`) is intentionally separate; placement validators
+ * typically check both `buildingUnlocked(state.level, defId)` AND
+ * `canPlaceOnIsland(def, spec)`.
+ */
+export function canPlaceOnIsland(def: BuildingDef, spec: IslandSpec): boolean {
+  if (def.requiredBiomes) {
+    if (!def.requiredBiomes.includes(spec.biome)) return false;
+    if (spec.artificial) return false;
+  }
+  return true;
+}

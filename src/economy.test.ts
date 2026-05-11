@@ -814,6 +814,77 @@ describe('step-10 — specialization role integration (§9.4)', () => {
 });
 
 // -----------------------------------------------------------------------
+// Step 12 — T4 endgame production integration (§6.5 / §9.5)
+// -----------------------------------------------------------------------
+
+describe('step-12 — T4 endgame production integration (§6.5)', () => {
+  it('Pyroforge on a synthetic volcanic spec produces exotic_alloy at 1/60s base rate', () => {
+    // Pyroforge recipe: 60s cycle, inputs { steel: 5, helium_3: 1 },
+    // outputs { exotic_alloy: 1 }. With sufficient inputs and ample
+    // headroom, rate = 1/60 = 0.01667/s. Over 600s = 10 cycles → 10
+    // exotic_alloy produced, 50 steel + 10 helium_3 consumed.
+    //
+    // Power-free catalog: pyroforge nominally consumes 800W. To isolate
+    // the production rate we strip its power field — power is its own
+    // §5.1 system tested elsewhere.
+    const PYROFORGE: PlacedBuilding = {
+      id: 'b-pyroforge',
+      defId: 'pyroforge',
+      x: 0,
+      y: 0,
+    };
+    const powerFreePyro = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.pyroforge;
+      base.pyroforge = rest as BuildingDef;
+      return base;
+    })();
+    const state = makeState({
+      buildings: [PYROFORGE],
+      // Inputs sized for the test: 100 steel + 20 helium_3 covers many
+      // cycles without running out. Big caps to avoid the cap-stall path.
+      inventory: { ...blankInventory(), steel: 100, helium_3: 20 },
+      storageCaps: blankCaps(10000),
+    });
+    advanceIsland(state, 600_000, { defs: powerFreePyro });
+    // 600s × (1/60) = 10 exotic_alloy.
+    expect(state.inventory.exotic_alloy).toBeCloseTo(10, 6);
+    // 10 cycles × 5 steel = 50 consumed, 50 left.
+    expect(state.inventory.steel).toBeCloseTo(50, 6);
+    // 10 cycles × 1 helium_3 = 10 consumed, 10 left.
+    expect(state.inventory.helium_3).toBeCloseTo(10, 6);
+  });
+
+  it('Cryogenic Compute Center on synthetic arctic spec produces ai_core at 1/90s', () => {
+    // Cryogenic Compute Center: 90s cycle, inputs { steel: 3,
+    // quantum_chip: 1 }, outputs { ai_core: 1 }. Over 900s = 10 cycles.
+    const CRYO: PlacedBuilding = {
+      id: 'b-cryo',
+      defId: 'cryogenic_compute_center',
+      x: 0,
+      y: 0,
+    };
+    const powerFreeCryo = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.cryogenic_compute_center;
+      base.cryogenic_compute_center = rest as BuildingDef;
+      return base;
+    })();
+    const state = makeState({
+      buildings: [CRYO],
+      inventory: { ...blankInventory(), steel: 100, quantum_chip: 20 },
+      storageCaps: blankCaps(10000),
+    });
+    advanceIsland(state, 900_000, { defs: powerFreeCryo });
+    expect(state.inventory.ai_core).toBeCloseTo(10, 6);
+    // 10 cycles × 3 steel = 30 consumed.
+    expect(state.inventory.steel).toBeCloseTo(70, 6);
+    // 10 cycles × 1 quantum_chip = 10 consumed.
+    expect(state.inventory.quantum_chip).toBeCloseTo(10, 6);
+  });
+});
+
+// -----------------------------------------------------------------------
 // Step 11 — artificial-island construction integration
 // -----------------------------------------------------------------------
 

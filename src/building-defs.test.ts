@@ -12,9 +12,11 @@ import {
   ALL_BUILDING_DEF_IDS,
   BUILDING_DEFS,
   buildingUnlocked,
+  canPlaceOnIsland,
   unlockedDefs,
   type BuildingDefId,
 } from './building-defs.js';
+import type { IslandSpec } from './world.js';
 
 // Hand-mirrored list of every id in the union. If a new id is added to
 // BuildingDefId, both this list AND BUILDING_DEFS must grow together —
@@ -38,7 +40,32 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'tank',
   'electric_arc_furnace',
   'platform_constructor',
+  // Step-12 T4 endgame (§6.5 / §9.5)
+  'fusion_core',
+  'pyroforge',
+  'cryogenic_compute_center',
+  'particle_accelerator',
+  'launch_tower',
 ];
+
+// Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
+// pure helper only reads `biome` and `artificial`, so we can elide the
+// other fields safely behind the IslandSpec contract.
+function fakeSpec(biome: IslandSpec['biome'], artificial = false): IslandSpec {
+  return {
+    id: 'test',
+    biome,
+    cx: 0,
+    cy: 0,
+    majorRadius: 4,
+    minorRadius: 4,
+    populated: true,
+    discovered: true,
+    buildings: [],
+    modifiers: [],
+    artificial,
+  };
+}
 
 describe('BUILDING_DEFS catalog', () => {
   it('every BuildingDefId in the union has a def entry', () => {
@@ -122,6 +149,108 @@ describe('buildingUnlocked / tier gating (§9.2)', () => {
   });
 });
 
+describe('step-12 T4 catalog (§6.5 / §9.5)', () => {
+  it('all 5 T4 defs are present with tier 4', () => {
+    for (const id of ['fusion_core', 'pyroforge', 'cryogenic_compute_center', 'particle_accelerator', 'launch_tower'] as const) {
+      expect(BUILDING_DEFS[id]).toBeDefined();
+      expect(BUILDING_DEFS[id].tier).toBe(4);
+    }
+  });
+
+  it('Fusion Core: 4×4, +5000W producer, no biome restriction', () => {
+    const def = BUILDING_DEFS.fusion_core;
+    expect(def.width).toBe(4);
+    expect(def.height).toBe(4);
+    expect(def.power?.produces).toBe(5000);
+    expect(def.requiredBiomes).toBeUndefined();
+  });
+
+  it('Pyroforge: 3×3, -800W consumer, Volcanic-restricted', () => {
+    const def = BUILDING_DEFS.pyroforge;
+    expect(def.width).toBe(3);
+    expect(def.height).toBe(3);
+    expect(def.power?.consumes).toBe(800);
+    expect(def.requiredBiomes).toEqual(['volcanic']);
+  });
+
+  it('Cryogenic Compute Center: 4×4, -1200W consumer, Arctic-restricted', () => {
+    const def = BUILDING_DEFS.cryogenic_compute_center;
+    expect(def.width).toBe(4);
+    expect(def.height).toBe(4);
+    expect(def.power?.consumes).toBe(1200);
+    expect(def.requiredBiomes).toEqual(['arctic']);
+  });
+
+  it('Particle Accelerator: 4×4, -1500W consumer, no biome restriction', () => {
+    const def = BUILDING_DEFS.particle_accelerator;
+    expect(def.width).toBe(4);
+    expect(def.height).toBe(4);
+    expect(def.power?.consumes).toBe(1500);
+    expect(def.requiredBiomes).toBeUndefined();
+  });
+
+  it('Launch Tower: 3×3, -400W consumer, no biome restriction, no recipe', () => {
+    const def = BUILDING_DEFS.launch_tower;
+    expect(def.width).toBe(3);
+    expect(def.height).toBe(3);
+    expect(def.power?.consumes).toBe(400);
+    expect(def.requiredBiomes).toBeUndefined();
+  });
+
+  it('T4 defs gate at level 30 (tierForLevel(30) === 4)', () => {
+    expect(buildingUnlocked(29, 'fusion_core')).toBe(false);
+    expect(buildingUnlocked(29, 'pyroforge')).toBe(false);
+    expect(buildingUnlocked(30, 'fusion_core')).toBe(true);
+    expect(buildingUnlocked(30, 'pyroforge')).toBe(true);
+    expect(buildingUnlocked(30, 'cryogenic_compute_center')).toBe(true);
+    expect(buildingUnlocked(30, 'particle_accelerator')).toBe(true);
+    expect(buildingUnlocked(30, 'launch_tower')).toBe(true);
+  });
+});
+
+describe('canPlaceOnIsland (§9.5 / step 12)', () => {
+  it('unrestricted defs place on any natural biome', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.fusion_core, fakeSpec('plains'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.fusion_core, fakeSpec('forest'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.fusion_core, fakeSpec('volcanic'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.fusion_core, fakeSpec('arctic'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.particle_accelerator, fakeSpec('desert'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.launch_tower, fakeSpec('coast'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.mine, fakeSpec('plains'))).toBe(true);
+  });
+
+  it('unrestricted defs ALSO place on artificial islands', () => {
+    // Per §9.5, only biome-locked uniques are banned from artificial
+    // islands. Unrestricted defs (Fusion Core, Mine, etc.) are fine.
+    expect(canPlaceOnIsland(BUILDING_DEFS.fusion_core, fakeSpec('plains', true))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.particle_accelerator, fakeSpec('plains', true))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.mine, fakeSpec('plains', true))).toBe(true);
+  });
+
+  it('Pyroforge: places on natural Volcanic, rejects other biomes', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.pyroforge, fakeSpec('volcanic'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.pyroforge, fakeSpec('plains'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.pyroforge, fakeSpec('forest'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.pyroforge, fakeSpec('arctic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.pyroforge, fakeSpec('coast'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.pyroforge, fakeSpec('desert'))).toBe(false);
+  });
+
+  it('Pyroforge: rejects artificial Volcanic island (§9.5 biome-locked-unique gate)', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.pyroforge, fakeSpec('volcanic', true))).toBe(false);
+  });
+
+  it('Cryogenic Compute Center: places on natural Arctic, rejects other biomes', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.cryogenic_compute_center, fakeSpec('arctic'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.cryogenic_compute_center, fakeSpec('plains'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.cryogenic_compute_center, fakeSpec('volcanic'))).toBe(false);
+  });
+
+  it('Cryogenic Compute Center: rejects artificial Arctic island', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.cryogenic_compute_center, fakeSpec('arctic', true))).toBe(false);
+  });
+});
+
 describe('unlockedDefs', () => {
   it('returns every T1 id at level 1', () => {
     const list = unlockedDefs(1);
@@ -153,6 +282,23 @@ describe('unlockedDefs', () => {
     const list = unlockedDefs(15);
     expect(list).toContain('electric_arc_furnace');
     expect(list).toContain('blast_furnace');
+    expect(list).toContain('mine');
+    // T4 should NOT yet be unlocked at level 15.
+    expect(list).not.toContain('fusion_core');
+    expect(list).not.toContain('pyroforge');
+  });
+
+  it('returns T1 + T2 + T3 + T4 ids at level 30', () => {
+    const list = unlockedDefs(30);
+    // All T4 defs are listed regardless of biome — `unlockedDefs` is the
+    // tier gate only; `canPlaceOnIsland` is the biome gate (see §9.5).
+    expect(list).toContain('fusion_core');
+    expect(list).toContain('pyroforge');
+    expect(list).toContain('cryogenic_compute_center');
+    expect(list).toContain('particle_accelerator');
+    expect(list).toContain('launch_tower');
+    // T3 / T2 / T1 still present.
+    expect(list).toContain('electric_arc_furnace');
     expect(list).toContain('mine');
   });
 });
