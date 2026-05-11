@@ -70,6 +70,9 @@ export interface DroneUiHandle {
   /** Whether launch mode is currently armed. The canvas mousedown handler
    *  reads this to disambiguate launch-clicks from pan-clicks. */
   isLaunchMode(): boolean;
+  /** Force launch mode on/off externally. Used by main.ts to enforce
+   *  mode mutual-exclusion when placement mode is entered. */
+  setLaunchMode(on: boolean): void;
   /** Update the reticle's screen position (canvas mousemove). No-op when
    *  not in launch mode. */
   setReticleScreenPos(x: number, y: number): void;
@@ -107,6 +110,9 @@ export interface DroneUiDeps {
    *  island layers should be rebuilt. main.ts owns the rebuild logic; we
    *  just nudge it. */
   onDiscoveryChanged(): void;
+  /** Optional: called whenever launch-mode toggles on/off. Used by main.ts
+   *  to disarm placement mode when launch is armed (mutual exclusion). */
+  onLaunchModeChanged?(armed: boolean): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +393,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   body.appendChild(armBtn);
 
   function setLaunchMode(on: boolean): void {
+    if (launchMode === on) return;  // no-op + don't re-fire callback
     launchMode = on;
     if (on) {
       armBtn.textContent = '◆ DISARM';
@@ -401,6 +408,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       armBtn.style.background = '#1a1f2a';
       reticleLayer.visible = false;
     }
+    deps.onLaunchModeChanged?.(on);
   }
 
   // -------------------------------------------------------------------------
@@ -762,6 +770,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     toggle,
     isVisible: () => visible,
     isLaunchMode: () => launchMode,
+    setLaunchMode,
     setReticleScreenPos,
     hideReticle: hideReticleFn,
     attemptLaunch,

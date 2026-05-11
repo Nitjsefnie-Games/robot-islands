@@ -297,9 +297,10 @@ async function main(): Promise<void> {
       return;
     }
     // Step-2.5: small click in placement mode commits a placement.
-    // Mutual-exclusion with launch mode is enforced by the buildings-ui
-    // entry path (entering placement hides the catalog; both modes share
-    // the canvas, but the buildings click won't have armed launch).
+    // Mutual-exclusion with launch mode is symmetric: entering placement
+    // calls dronesUi.setLaunchMode(false); entering launch calls
+    // placementUi.cancel(). Both entry sites wire this — see the
+    // onPlaceRequested callback below and the toggle-drones action above.
     if (accumDrag < CLICK_DRAG_PX_MAX && placementUi.isActive()) {
       const rect = app.canvas.getBoundingClientRect();
       const sx = e.clientX - rect.left;
@@ -467,6 +468,9 @@ async function main(): Promise<void> {
   const buildingsUi = mountBuildingsUi(document.body, homeState, homeSpec, {
     onPlaceRequested: (defId) => {
       buildingsUi.hide();
+      // Mutual-exclusion: disarm drone launch before entering placement so a
+      // mouseup-commit reaches the placement branch instead of firing a drone.
+      dronesUi.setLaunchMode(false);
       placementUi.begin(defId);
     },
   });
@@ -539,6 +543,11 @@ async function main(): Promise<void> {
     homeSpec,
     screenToWorldTile,
     onDiscoveryChanged: rebuildWorldLayers,
+    // Mutual-exclusion: when launch mode arms, cancel any in-progress
+    // placement so a mouseup-commit can't ambiguously route to both.
+    onLaunchModeChanged: (armed) => {
+      if (armed) placementUi.cancel();
+    },
   });
   // Drone dots live in world space (between islands and the cell grid so
   // they sit above land, below debug overlay).
