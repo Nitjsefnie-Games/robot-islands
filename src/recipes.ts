@@ -29,7 +29,9 @@
 // progression curve rewards climbing the recipe chain rather than just
 // stockpiling raws.
 
-import type { BuildingDefId } from './building-defs.js';
+import type { BuildingDef, BuildingDefId } from './building-defs.js';
+import type { PlacedBuilding } from './buildings.js';
+import type { TerrainKind } from './island.js';
 
 export type ResourceId =
   // T0 raws
@@ -173,13 +175,31 @@ export interface Recipe {
 }
 
 /**
- * Recipe binding by building defId. Buildings without a recipe (Solar, Dock,
+ * A recipe id. Most ids match a `BuildingDefId` 1:1 — the recipe table is
+ * keyed by the building that runs it. A few synthetic ids cover tile-variant
+ * recipes for a single building kind, selected at runtime by
+ * `resolveRecipe`:
+ *
+ *   - `mine_on_ore`  — Mine on an ore-vein footprint  → iron_ore
+ *   - `mine_on_coal` — Mine on a coal-vein footprint → coal
+ *
+ * The legacy `mine` entry stays as a fallback recipe (= same as
+ * `mine_on_ore`) so callers that don't pass a terrain closure into
+ * `resolveRecipe` keep the pre-tile-aware behaviour.
+ */
+export type RecipeId = BuildingDefId | 'mine_on_ore' | 'mine_on_coal';
+
+/**
+ * Recipe binding by recipe id. Buildings without a recipe (Solar, Dock,
  * Crate, Silo, Tank, Drone Pad) are absent from the map.
  *
  * Step-9 chain (partial §7.1 Iron/Steel + auxiliaries):
  *
  *   T1 extraction:
- *     mine     -> 1 iron_ore  / 5s   (no inputs)
+ *     mine     -> 1 iron_ore  / 5s   (no inputs; fallback when no terrain
+ *                                     closure is provided to resolveRecipe.
+ *                                     Tile-aware callers receive
+ *                                     mine_on_ore / mine_on_coal instead.)
  *     logger   -> 1 wood      / 4s   (no inputs; tile-req `tree` deferred)
  *
  *   T1 smelting / refining:
@@ -206,12 +226,33 @@ export interface Recipe {
  *     electric_arc_furnace -> 1 steel / 6s from 1 pig_iron
  *                              (higher-throughput alternative to Steel Mill)
  */
-export const RECIPES: Partial<Record<BuildingDefId, Recipe>> = {
+export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T1 extraction
+  // `mine` is the legacy / fallback Mine recipe (= mine_on_ore). Tile-aware
+  // callers go through `resolveRecipe` and receive `mine_on_ore` or
+  // `mine_on_coal` depending on the building's footprint terrain. The
+  // bare-defId lookup is preserved for tests + saved games that never had
+  // a tile-aware path.
   mine: {
     cycleSec: 5,
     inputs: {},
     outputs: { iron_ore: 1 },
+    category: 'extraction',
+  },
+  // §8.1 Mine variants — tile-dependent recipe selection. The two entries
+  // differ only in output: ore-vein footprint → iron_ore; coal-vein
+  // footprint → coal. Inputs/cycleSec/category identical so a build-order
+  // change in placement doesn't shift any other downstream rate.
+  mine_on_ore: {
+    cycleSec: 5,
+    inputs: {},
+    outputs: { iron_ore: 1 },
+    category: 'extraction',
+  },
+  mine_on_coal: {
+    cycleSec: 5,
+    inputs: {},
+    outputs: { coal: 1 },
     category: 'extraction',
   },
   logger: {
@@ -389,3 +430,80 @@ export const RECIPES: Partial<Record<BuildingDefId, Recipe>> = {
     category: 'manufacturing',
   },
 };
+
+/**
+ * Tile-dependent recipe resolution per §8.1.
+ *
+ * Most buildings have a single recipe keyed by `def.id` — the lookup is just
+ * `RECIPES[def.id]`. Mine is the §8.1 exception: it produces ore OR coal
+ * depending on the tile under its footprint. To keep `PlacedBuilding` pure
+ * data (no per-instance recipe state), the variant is resolved at rate-
+ * computation time from the terrain function on the IslandSpec.
+ *
+ * Pure function — no DOM, no PixiJS, no allocation per call beyond the same
+ * Recipe-object reference returned from the static RECIPES table. The hot
+ * path (computeRates) calls this once per building per pass, so we avoid
+ * building intermediate arrays unless we're actually scanning Mine tiles.
+ *
+ * The `terrainAt` closure is optional. When undefined (legacy callers,
+ * tests that don't model terrain), we fall back to `RECIPES[def.id]` — for
+ * Mine this is the pre-tile-aware recipe that produces iron_ore, matching
+ * historical behaviour.
+ *
+ * The footprint enumeration mirrors `footprintTiles` in placement.ts but is
+ * inlined here to keep `recipes.ts → placement.ts` from forming a runtime
+ * import cycle (placement.ts imports `recipes.ts` for ResourceId/
+ * ALL_RESOURCES). If we ever pull `footprintTiles` into a primitive module
+ * the inlining can be removed.
+ */
+export function resolveRecipe(
+  def: BuildingDef,
+  b: PlacedBuilding,
+  terrainAt?: (x: number, y: number) => TerrainKind,
+): Recipe | undefined {
+  if (def.id === 'mine' && terrainAt) {
+    let sawCoal = false;
+    let sawOre = false;
+    const rotation = (b.rotation ?? 0) as Rotation01ish;
+    // Inline footprint enumeration — matches the four-rotation transforms
+    // in placement.ts `footprintTiles`. Short-circuits on first `coal` tile
+    // to keep the typical-case cost minimal.
+    for (let dy = 0; dy < def.height; dy++) {
+      for (let dx = 0; dx < def.width; dx++) {
+        let rx: number;
+        let ry: number;
+        switch (rotation) {
+          case 0: rx = dx; ry = dy; break;
+          case 1: rx = def.height - 1 - dy; ry = dx; break;
+          case 2: rx = def.width - 1 - dx; ry = def.height - 1 - dy; break;
+          case 3: rx = dy; ry = def.width - 1 - dx; break;
+        }
+        const k = terrainAt(b.x + rx, b.y + ry);
+        if (k === 'coal') {
+          sawCoal = true;
+        } else if (k === 'ore') {
+          sawOre = true;
+        }
+        // We can short-circuit only when we've seen coal: coal wins the
+        // tie per the §8.1 "Ore or coal output by tile" rule encoded as
+        // "any coal tile → coal recipe". Without seeing coal, an early ore
+        // tile may still be followed by coal later in the scan.
+        if (sawCoal) {
+          return RECIPES.mine_on_coal;
+        }
+      }
+    }
+    if (sawOre) return RECIPES.mine_on_ore;
+    // No ore and no coal in footprint — shouldn't happen because
+    // `validatePlacement` enforces `def.requiredTile` on every footprint
+    // tile. Return undefined defensively so the rate loop sees a no-op
+    // building rather than picking up a stale (legacy) iron_ore recipe.
+    return undefined;
+  }
+  return RECIPES[def.id as RecipeId];
+}
+
+/** Local copy of the rotation union from placement.ts. Kept here to avoid
+ *  importing placement.ts (which already imports recipes.ts); the value is
+ *  PlacedBuilding.rotation, which placement.ts also constrains to 0|1|2|3. */
+type Rotation01ish = 0 | 1 | 2 | 3;

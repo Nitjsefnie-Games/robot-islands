@@ -942,6 +942,74 @@ describe('step-11 — artificial-island construction integration (§2.5)', () =>
 // Step 2.5 — placement integration
 // -----------------------------------------------------------------------
 
+// -----------------------------------------------------------------------
+// §8.1 tile-dependent Mine recipes
+// -----------------------------------------------------------------------
+
+describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
+  it('Mine on a coal-tile spec produces coal at 1/5s (not iron_ore)', () => {
+    // Synthetic Mine at (0,0) with a terrainAt closure returning 'coal' for
+    // every footprint tile. resolveRecipe should select mine_on_coal →
+    // output coal at 1/5s = 0.2/s. Over 10s = 2 units of coal, 0 iron_ore.
+    // POWER_FREE strips the Mine's power.consumes so the rate isn't
+    // throttled by powerFactor.
+    const state = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+    });
+    advanceIsland(state, 10_000, {
+      defs: POWER_FREE,
+      terrainAt: () => 'coal',
+    });
+    expect(state.inventory.coal).toBeCloseTo(2, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
+  });
+
+  it('Mine on an ore-tile spec produces iron_ore at 1/5s (mine_on_ore branch)', () => {
+    // Same shape as above but terrainAt is all 'ore' — should match the
+    // pre-tile-aware behaviour exactly: 2 iron_ore over 10s.
+    const state = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+    });
+    advanceIsland(state, 10_000, {
+      defs: POWER_FREE,
+      terrainAt: () => 'ore',
+    });
+    expect(state.inventory.iron_ore).toBeCloseTo(2, 9);
+    expect(state.inventory.coal).toBeCloseTo(0, 9);
+  });
+
+  it('Mine with no terrainAt falls back to RECIPES.mine (iron_ore)', () => {
+    // Regression: legacy callers that don't pass `terrainAt` keep the
+    // pre-tile-aware behaviour (Mine → iron_ore). This is the codepath
+    // every existing economy test uses.
+    const state = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+    });
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
+    expect(state.inventory.iron_ore).toBeCloseTo(2, 9);
+    expect(state.inventory.coal).toBeCloseTo(0, 9);
+  });
+
+  it('Mine on a mixed ore+coal footprint picks the coal variant (any coal tile wins)', () => {
+    // 4 footprint tiles, 1 of them coal — resolveRecipe should select the
+    // mine_on_coal variant per the "any coal tile → coal recipe" tiebreak.
+    const state = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+    });
+    advanceIsland(state, 10_000, {
+      defs: POWER_FREE,
+      // (1,1) is the bottom-right of the 2×2 anchored at (0,0).
+      terrainAt: (x, y) => (x === 1 && y === 1 ? 'coal' : 'ore'),
+    });
+    expect(state.inventory.coal).toBeCloseTo(2, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
+  });
+});
+
 describe('step-2.5 — placement is recognised by the live economy', () => {
   it('placing a Smelter on a Plains spec makes computeRates see its iron_ingot recipe', () => {
     // Build a fresh Plains spec with no buildings, run computeRates → no

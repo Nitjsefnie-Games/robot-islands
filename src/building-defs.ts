@@ -40,6 +40,7 @@
 // gate + biome gate. `buildings.ts` consumes BUILDING_DEFS for rendering;
 // `recipes.ts` keys its RECIPES table by `BuildingDefId`.
 
+import type { TerrainKind } from './island.js';
 import { tierForLevel } from './skilltree.js';
 // Type-only imports avoid a runtime cycle with world.ts (which imports
 // BUILDING_DEFS from this file). The Biome union and IslandSpec interface
@@ -141,6 +142,15 @@ export interface BuildingDef {
    *  means "any biome". A non-empty list restricts placement to natural
    *  islands of the listed biomes — `canPlaceOnIsland` enforces the gate. */
   readonly requiredBiomes?: ReadonlyArray<Biome>;
+  /** §4.3 / §8.1 terrain-tile requirement. If present and non-empty, EVERY
+   *  tile in the building's footprint must have a TerrainKind in this set,
+   *  per §4.3 ("Mine requires every cell of its footprint to be on an
+   *  ore/coal vein"). Undefined / empty = no tile requirement (any in-island
+   *  tile accepted). `validatePlacement` in placement.ts is the canonical
+   *  gate. Currently honored by: `mine` (ore or coal). Other §8.1 entries
+   *  (Logger → tree, Quarry → stone, Well → water) are documented in their
+   *  def comments with `requiredTile` unset until those buildings ship. */
+  readonly requiredTile?: ReadonlyArray<TerrainKind>;
 }
 
 /** Read-only catalog. Keys = BuildingDefId; every defId MUST have an entry. */
@@ -148,6 +158,14 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // -------------------------------------------------------------------------
   // T1 (levels 1-5)
   // -------------------------------------------------------------------------
+  // §8.1: Mine output branches on the underlying tile — every footprint cell
+  // must be on an ore vein OR a coal vein, and the recipe variant produced is
+  // selected by tile type via `resolveRecipe` in recipes.ts:
+  //   - footprint contains a `coal` tile → produces coal
+  //   - else footprint all `ore`         → produces iron_ore
+  // Per §8.1 catalog: "Mine | 2x2 | T1 | ore vein or coal vein | … Ore or coal
+  // output by tile". `requiredTile` is the placement gate; recipe selection is
+  // a runtime resolve so a single defId backs both extraction variants.
   mine: {
     id: 'mine',
     displayName: 'Mine',
@@ -158,6 +176,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x9a9a9a,
     stroke: 0x222222,
     power: { consumes: 40 },
+    requiredTile: ['ore', 'coal'],
   },
   workshop: {
     id: 'workshop',

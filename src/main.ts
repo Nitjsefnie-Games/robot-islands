@@ -744,7 +744,17 @@ async function main(): Promise<void> {
     // Each island's modifier set composes its own recipe-rate multipliers,
     // so we look up the precomputed bundle by id and pass it through.
     for (const s of islandStates.values()) {
-      advanceIsland(s, now, { modifierMul: modifierMulFor(s.id), specMul: specMulFor(s), ncBuff: ncBuffFor(s) });
+      // Thread the spec's `terrainAt` closure so `resolveRecipe` (recipes.ts)
+      // can branch Mine output on the tile under each footprint (§8.1).
+      // Spec lookup is cheap (Map.get); the closure itself is reused across
+      // every recomputeRates call within the tick.
+      const spec = islandSpecsById.get(s.id);
+      advanceIsland(s, now, {
+        modifierMul: modifierMulFor(s.id),
+        specMul: specMulFor(s),
+        ncBuff: ncBuffFor(s),
+        terrainAt: spec?.terrainAt,
+      });
     }
     // Drones tick AFTER economy so any biofuel changes from this frame
     // are visible to the dispatch UI on the same frame; drone returns
@@ -781,6 +791,7 @@ async function main(): Promise<void> {
       modifierMul: modifierMulFor(homeState.id),
       specMul: specMulFor(homeState),
       ncBuff: ncBuffFor(homeState),
+      terrainAt: homeSpec.terrainAt,
     });
     const saveAgeSec =
       lastSaveAt === null ? null : Math.max(0, Math.floor((now - lastSaveAt) / 1000));

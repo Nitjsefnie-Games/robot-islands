@@ -42,7 +42,17 @@ export const HOME_ISLAND_BUILDINGS: PlacedBuilding[] = [
   // T1 staples preserved from step 1-8 (same positions, defId redirects).
   { id: 'home-solar-1',    defId: 'solar',    x: 2,  y: -1 },
   { id: 'home-workshop-1', defId: 'workshop', x: -1, y: 1 },
+  // §8.1 Mine output branches on tile — this one sits on the ore cluster at
+  // (-7,2)..(-6,3) (all 4 footprint tiles are 'ore' per defaultTerrainAt) so
+  // it produces iron_ore via the resolveRecipe → mine_on_ore branch.
   { id: 'home-mine-1',     defId: 'mine',     x: -7, y: 2 },
+  // §8.1 second Mine on the coal cluster at (8,5)..(9,6). All 4 footprint
+  // tiles are 'coal' per defaultTerrainAt — resolveRecipe → mine_on_coal
+  // → produces 1 coal / 5s. Without this, the home economy has no coal
+  // source beyond the seeded 50 starter units (which the iron-chain
+  // exhausts in ~120s), and the iron→steel pipeline stalls. The coal Mine
+  // restores the iron-chain loop end-to-end.
+  { id: 'home-mine-coal-1', defId: 'mine',    x: 8,  y: 5 },
   { id: 'home-dock-1',     defId: 'dock',     x: 7,  y: 1 },
   { id: 'home-coalgen-1',  defId: 'coal_gen', x: 3,  y: 4 },
   { id: 'home-dronepad-1', defId: 'dronepad', x: 5,  y: -3 },

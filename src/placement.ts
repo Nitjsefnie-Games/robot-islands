@@ -118,12 +118,16 @@ export function rotatedDims(
 
 /** Reasons placement can fail. Mirrors the §4.3 rule set plus the §9.5
  *  biome-locked-unique gate. `out-of-bounds` covers any tile of the
- *  rotated footprint that isn't inscribed in the island ellipse (§3.4). */
+ *  rotated footprint that isn't inscribed in the island ellipse (§3.4).
+ *  `tile-requirement-not-met` fires when `def.requiredTile` is set and at
+ *  least one footprint tile's TerrainKind isn't in the allowed set — §4.3
+ *  ("All terrain-tile requirements are satisfied"). */
 export type PlacementReason =
   | 'out-of-bounds'
   | 'overlap'
   | 'def-not-unlocked'
-  | 'biome-locked';
+  | 'biome-locked'
+  | 'tile-requirement-not-met';
 
 export interface PlacementValidation {
   readonly ok: boolean;
@@ -138,12 +142,15 @@ export interface PlacementValidation {
  * Order matters for the reason code returned on failure — we surface the
  * "fundamental" problems first so the UI shows the most actionable message:
  *
- *   1. def-not-unlocked  (player's island level is too low; nothing they can
- *      do in the placement modal will fix this — they need to keep playing).
- *   2. biome-locked      (§9.5 unique that can't be placed here; the player
- *      needs to pick a different island).
- *   3. out-of-bounds     (geometry; the player can move the cursor).
- *   4. overlap           (geometry; the player can move the cursor).
+ *   1. def-not-unlocked      (player's island level is too low; nothing they
+ *      can do in the placement modal will fix this — they need to keep playing).
+ *   2. biome-locked          (§9.5 unique that can't be placed here; the
+ *      player needs to pick a different island).
+ *   3. out-of-bounds         (geometry; the player can move the cursor).
+ *   4. overlap               (geometry; the player can move the cursor).
+ *   5. tile-requirement-not-met (§4.3 — placement reaches a real tile in the
+ *      island but its TerrainKind isn't acceptable for this def. Geometry-
+ *      adjacent: the player can move the cursor to a tile that matches.)
  *
  * The 1-2 split also has a defense-in-depth angle: `buildings-ui.ts` already
  * soft-disables biome-locked rows, but a future entry point (drag-drop?
@@ -190,6 +197,26 @@ export function validatePlacement(
   }
   for (const t of tiles) {
     if (covered.has(`${t.x},${t.y}`)) return { ok: false, reason: 'overlap' };
+  }
+  // §4.3 terrain-tile requirement. `def.requiredTile`, when set and
+  // non-empty, demands EVERY footprint tile's TerrainKind to lie in the
+  // allowed set — per the spec "Mine requires every cell of its footprint to
+  // be on an ore/coal vein". For Mine the allowed set is ['ore','coal']; a
+  // mixed footprint (some ore + some coal) is fine because both belong to
+  // the set, but a single grass tile in the footprint fails the gate.
+  //
+  // If the def has no `requiredTile` (Workshop / Solar / Smelter / etc.) or
+  // the spec carries no `terrainAt` closure (synthetic test specs), this
+  // check is a no-op and placement passes through. The latter preserves
+  // legacy test behaviour for fixtures that don't model terrain.
+  if (def.requiredTile && def.requiredTile.length > 0 && spec.terrainAt) {
+    const allowed = def.requiredTile;
+    for (const t of tiles) {
+      const k = spec.terrainAt(t.x, t.y);
+      if (!allowed.includes(k)) {
+        return { ok: false, reason: 'tile-requirement-not-met' };
+      }
+    }
   }
   return { ok: true };
 }

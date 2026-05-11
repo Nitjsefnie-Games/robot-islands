@@ -27,7 +27,8 @@
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
-import { RECIPES, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
+import type { TerrainKind } from './island.js';
+import { resolveRecipe, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type NodeId, type SubPathId } from './skilltree.js';
 import {
   effectiveSpecializationMultipliers,
@@ -46,6 +47,15 @@ export interface RatesContext {
   readonly defs?: DefCatalog;
   readonly specMul?: SpecializationMultipliers;
   readonly ncBuff?: number;
+  /** Optional island terrain closure. Threaded to `resolveRecipe` for
+   *  tile-dependent recipe selection per §8.1 (Mine produces ore on an
+   *  ore-vein footprint, coal on a coal-vein footprint). Undefined =
+   *  fall back to the bare-defId recipe (Mine → iron_ore), preserving
+   *  pre-tile-aware test/legacy behaviour. The closure is the same
+   *  `IslandSpec.terrainAt` field that `renderIsland` consumes — passing
+   *  a closure rather than the full IslandSpec keeps economy.ts off the
+   *  world.ts import edge. */
+  readonly terrainAt?: (x: number, y: number) => TerrainKind;
 }
 
 /**
@@ -270,6 +280,7 @@ export function computeRates(
     defs = BUILDING_DEFS,
     specMul = IDENTITY_SPECIALIZATION,
     ncBuff = 1,
+    terrainAt,
   } = ctx ?? {};
   // The §5.1 active flag depends on inputAvail, and inputAvail must be
   // computed at NOMINAL rate (independent of powerFactor) to avoid a circular
@@ -299,7 +310,10 @@ export function computeRates(
   /** Gross production by resource from all tentatively-running buildings. */
   const tentSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
   for (const b of state.buildings) {
-    const recipe = RECIPES[b.defId];
+    // Tile-aware recipe pickup — see resolveRecipe in recipes.ts. For most
+    // buildings this is the same as `RECIPES[def.id]`; Mine branches on
+    // its footprint terrain when `terrainAt` is provided.
+    const recipe = resolveRecipe(defs[b.defId], b, terrainAt);
     if (!recipe) continue;
     const oa = outputAvail(state, recipe);
     if (oa === 0) {
@@ -365,8 +379,12 @@ export function computeRates(
   let powerProduced = 0;
   let powerConsumed = 0;
   for (const b of state.buildings) {
-    const recipe = RECIPES[b.defId];
     const def = defs[b.defId];
+    // Same tile-aware resolution as the pass-1 loop. `active` only checks
+    // recipe presence here, so the variant chosen doesn't matter — but we
+    // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
+    // confusion about which lookup is "the" lookup).
+    const recipe = resolveRecipe(def, b, terrainAt);
     let active: boolean;
     if (!recipe) {
       active = true;

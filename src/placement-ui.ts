@@ -94,6 +94,7 @@ const REASON_LABEL: Readonly<Record<PlacementReason, string>> = {
   overlap: 'OVERLAP',
   'def-not-unlocked': 'LOCKED',
   'biome-locked': 'BIOME MISMATCH',
+  'tile-requirement-not-met': 'TILE MISMATCH',
 };
 
 // ---------------------------------------------------------------------------

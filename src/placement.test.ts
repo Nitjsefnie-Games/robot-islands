@@ -185,6 +185,69 @@ describe('validatePlacement', () => {
     expect(v.reason).toBe('biome-locked');
   });
 
+  // -------------------------------------------------------------------------
+  // tile-requirement-not-met (§4.3 / §8.1) — Mine on ore vs coal vs grass
+  // -------------------------------------------------------------------------
+  // Mine carries `requiredTile: ['ore', 'coal']`. Every footprint tile must
+  // belong to that set. validatePlacement enforces it only when the spec
+  // carries a `terrainAt` closure — synthetic specs without one skip the
+  // check (existing tests above rely on that pass-through).
+
+  it('returns ok=true for a Mine on a homogeneous ore footprint', () => {
+    const spec = makeSpec({ terrainAt: () => 'ore' });
+    const state = makeState(spec);
+    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    expect(v.ok).toBe(true);
+  });
+
+  it('returns ok=true for a Mine on a homogeneous coal footprint', () => {
+    const spec = makeSpec({ terrainAt: () => 'coal' });
+    const state = makeState(spec);
+    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    expect(v.ok).toBe(true);
+  });
+
+  it('returns ok=true for a Mine on a mixed ore+coal footprint (both in requiredTile)', () => {
+    // Half ore, half coal under the 2×2 footprint at (0,0). Every tile is in
+    // the allowed set, so the gate passes even though the cells are mixed.
+    const spec = makeSpec({
+      terrainAt: (x, _y) => (x === 0 ? 'ore' : 'coal'),
+    });
+    const state = makeState(spec);
+    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    expect(v.ok).toBe(true);
+  });
+
+  it('returns tile-requirement-not-met for a Mine on all-grass terrain', () => {
+    const spec = makeSpec({ terrainAt: () => 'grass' });
+    const state = makeState(spec);
+    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('tile-requirement-not-met');
+  });
+
+  it('returns tile-requirement-not-met when even one footprint tile is grass', () => {
+    // 3 of 4 footprint tiles are ore; the (1,1) corner is grass. The
+    // §4.3 rule is EVERY cell — one mismatched tile rejects.
+    const spec = makeSpec({
+      terrainAt: (x, y) => (x === 1 && y === 1 ? 'grass' : 'ore'),
+    });
+    const state = makeState(spec);
+    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('tile-requirement-not-met');
+  });
+
+  it('skips the tile check when the def has no requiredTile (Workshop on grass is fine)', () => {
+    // Workshop has no requiredTile; placing on all-grass terrain should pass
+    // the §4.3 gate. Tier passes because makeState gives the state level 1
+    // and Workshop is T1.
+    const spec = makeSpec({ terrainAt: () => 'grass' });
+    const state = makeState(spec);
+    const v = validatePlacement(spec, state, 'workshop', 0, 0, 0);
+    expect(v.ok).toBe(true);
+  });
+
   it('rotation respects ellipse bounds', () => {
     // A 1×3 (vertical strip) at (0, -1) sits at (0,-1),(0,0),(0,1). All
     // inside r=5. Rotated by 1, it becomes 3×1 at (0,-1) covering

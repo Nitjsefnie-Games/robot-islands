@@ -119,9 +119,15 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   const oreTiles: ReadonlyArray<readonly [number, number]> = [
     [-7, 2], [-6, 2], [-7, 3], [-6, 3], [-5, 2], [-5, 3],
   ];
-  // Coal vein.
+  // Coal vein. 2×2 cluster so a 2×2 Mine footprint anchored at (8, 5)
+  // satisfies the §4.3 requirement that EVERY footprint tile be ore/coal.
+  // The cluster was moved/squared up from the original 3-tile L-shape at
+  // (5,6)/(6,6)/(5,7) when the §4.3 terrain-tile requirement landed — the
+  // old footprint would have included a grass corner and failed the gate.
+  // Old location also overlapped the home Shipyard at (4,6)..(6,8); the
+  // new (8,5)..(9,6) site sits clear of every existing home building.
   const coalTiles: ReadonlyArray<readonly [number, number]> = [
-    [5, 6], [6, 6], [5, 7],
+    [8, 5], [9, 5], [8, 6], [9, 6],
   ];
   // Small fresh-water cluster.
   const waterTiles: ReadonlyArray<readonly [number, number]> = [
