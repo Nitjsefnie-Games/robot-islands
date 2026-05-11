@@ -36,6 +36,7 @@
 import { BIOME_DEFS, MODIFIER_DEFS, type ModifierId } from './biomes.js';
 import { BUILDING_DEFS, type BuildingCategory, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
+import { dayPhase, dayPhaseName, solarMultiplier, type DayPhase } from './daynight.js';
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
 import type { Objective } from './objectives.js';
@@ -79,6 +80,22 @@ function powerColor(factor: number): string {
   if (factor >= 0.5) return POWER_COLOR_MARGINAL;
   return POWER_COLOR_CRITICAL;
 }
+
+// Day-phase display palette — Day full daylight, Dusk/Dawn warm amber,
+// Night cool dim. Tied to `DayPhase` from daynight.ts.
+const PHASE_COLOR: Readonly<Record<DayPhase, string>> = {
+  dawn: '#f5a742', // warm amber
+  day: '#f2c84b', // sunlight gold
+  dusk: '#e07b3a', // dusk orange
+  night: '#6c7791', // muted cool
+};
+
+const PHASE_LABEL: Readonly<Record<DayPhase, string>> = {
+  dawn: 'Dawn',
+  day: 'Day',
+  dusk: 'Dusk',
+  night: 'Night',
+};
 
 // Tier-breakpoint thresholds, mirroring `tierForLevel` in skilltree.ts.
 const NEXT_TIER_LEVEL: Readonly<Record<Tier, number>> = {
@@ -430,6 +447,39 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
   powerLine.appendChild(factorSpan);
   panel.appendChild(powerLine);
 
+  // ---- Day-night phase line ----------------------------------------------
+  // §2.7 day-night cycle. The world has a global 24h cycle that modulates
+  // solar producers. One read-only line: "Phase  Day · solar 1.0×".
+  const phaseLine = document.createElement('div');
+  phaseLine.style.cssText = [
+    'display: flex',
+    'justify-content: space-between',
+    'align-items: baseline',
+    'gap: 8px',
+    'padding-top: 1px',
+  ].join(';');
+  const phaseLabel = document.createElement('span');
+  phaseLabel.textContent = 'Phase';
+  phaseLabel.style.cssText = [
+    'color: #7a8294',
+    'letter-spacing: 0.06em',
+    'text-transform: uppercase',
+    'font-size: 10px',
+  ].join(';');
+  const phaseValue = document.createElement('span');
+  phaseValue.style.cssText = [
+    'font-size: 11px',
+    'font-weight: 600',
+    'font-variant-numeric: tabular-nums',
+  ].join(';');
+  phaseLine.appendChild(phaseLabel);
+  phaseLine.appendChild(phaseValue);
+  panel.appendChild(phaseLine);
+
+  // Cached phase signature so the DOM only rewrites when the quadrant flips
+  // (avoids per-frame text churn — the value changes 4× per real-world day).
+  let lastPhaseKey = '';
+
   // ---- Saved indicator ---------------------------------------------------
   const savedLine = document.createElement('div');
   savedLine.style.cssText = [
@@ -739,6 +789,22 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
     powerNode.textContent = `Power      ${prodStr}W / ${conStr}W  factor `;
     factorSpan.textContent = factorStr;
     factorSpan.style.color = powerColor(power.factor);
+
+    // Day-night phase line (§2.7). The value updates every frame for the
+    // progress sub-readout; the colour-coded quadrant name is cached on the
+    // last-rendered key so we don't repaint identical text.
+    const nowMs = Date.now();
+    const phaseName = dayPhaseName(nowMs);
+    // Sub-quadrant progress: phase ∈ [0,1) → quadrant-local progress ∈ [0,1).
+    const phaseFrac = (dayPhase(nowMs) * 4) % 1;
+    const mul = solarMultiplier(nowMs);
+    const phaseKey = `${phaseName}|${Math.floor(phaseFrac * 100)}|${mul}`;
+    if (phaseKey !== lastPhaseKey) {
+      phaseValue.textContent =
+        `${PHASE_LABEL[phaseName]} ${Math.floor(phaseFrac * 100)}% · solar ${mul.toFixed(1)}×`;
+      phaseValue.style.color = PHASE_COLOR[phaseName];
+      lastPhaseKey = phaseKey;
+    }
 
     // Save-age indicator.
     if (saveAgeSec === null) {

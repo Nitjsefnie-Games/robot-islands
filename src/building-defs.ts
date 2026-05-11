@@ -210,8 +210,16 @@ export interface BuildingDef {
     readonly category: StorageCategory | 'generic';
     readonly capacity: number;
   };
-  /** §5.1 electrical contribution. Either side may be undefined / 0. */
-  readonly power?: { readonly produces?: number; readonly consumes?: number };
+  /** §5.1 electrical contribution. Either side may be undefined / 0.
+   *  `solar: true` marks the producer as sun-driven — its `produces`
+   *  output is multiplied by the §2.7 day-night `solarMultiplier` at
+   *  the current world tick (Day 1.0, Dawn/Dusk 0.5, Night 0.0). Only
+   *  applies to the production side; consumers ignore the flag. */
+  readonly power?: {
+    readonly produces?: number;
+    readonly consumes?: number;
+    readonly solar?: boolean;
+  };
   /** §15.1 / §9.5 biome restriction for biome-locked uniques (T4). Undefined
    *  means "any biome". A non-empty list restricts placement to natural
    *  islands of the listed biomes — `canPlaceOnIsland` enforces the gate. */
@@ -301,7 +309,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     height: 1,
     fill: 0xf2c84b,
     stroke: 0x6a4a00,
-    power: { produces: 50 },
+    // §2.7: solar-driven producer — output modulates by day-night cycle.
+    // Day 1.0×, Dawn/Dusk 0.5×, Night 0.0×.
+    power: { produces: 50, solar: true },
     glyph: '☀',
   },
   coal_gen: {

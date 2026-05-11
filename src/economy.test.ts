@@ -1369,3 +1369,143 @@ describe('step-20 T6 gate composition (§14.1)', () => {
     expect(list).not.toContain('orbital_insertion_assembly');
   });
 });
+
+describe('day-night solar modulation (§2.7)', () => {
+  // Quadrant anchors relative to `nowMs = 0` (phase 0.375, mid-Day):
+  //   t = 0   → Day   (mul 1.0)
+  //   t = 3h  → Dusk  start (mul 0.5)
+  //   t = 9h  → Night start (mul 0.0)
+  //   t = 15h → Dawn  start (mul 0.5)
+  //   t = 21h → Day   start (mul 1.0)
+  const HOUR = 60 * 60 * 1000;
+
+  it('Solar at noon produces full nameplate (50W × 1.0)', () => {
+    const state = makeState({
+      buildings: [SOLAR],
+      lastTick: 0, // mid-Day
+    });
+    const { power } = computeRates(state);
+    expect(power.produced).toBe(50);
+  });
+
+  it('Solar at dawn produces half nameplate (50W × 0.5 = 25W)', () => {
+    const state = makeState({
+      buildings: [SOLAR],
+      lastTick: 16 * HOUR, // Dawn quadrant
+    });
+    const { power } = computeRates(state, undefined, 16 * HOUR);
+    expect(power.produced).toBe(25);
+  });
+
+  it('Solar at dusk produces half nameplate (50W × 0.5 = 25W)', () => {
+    const state = makeState({
+      buildings: [SOLAR],
+      lastTick: 4 * HOUR, // Dusk quadrant
+    });
+    const { power } = computeRates(state, undefined, 4 * HOUR);
+    expect(power.produced).toBe(25);
+  });
+
+  it('Solar at midnight produces zero (50W × 0.0)', () => {
+    const state = makeState({
+      buildings: [SOLAR],
+      lastTick: 12 * HOUR, // Night quadrant
+    });
+    const { power } = computeRates(state, undefined, 12 * HOUR);
+    expect(power.produced).toBe(0);
+  });
+
+  it('non-solar producers ignore the multiplier (Coal Gen at night still produces 100W)', () => {
+    // Coal Gen burns coal; needs coal in inventory to be active.
+    const state = makeState({
+      buildings: [COAL_GEN],
+      inventory: { ...blankInventory(), coal: 50 },
+      lastTick: 12 * HOUR, // Night
+    });
+    const { power } = computeRates(state, undefined, 12 * HOUR);
+    expect(power.produced).toBe(100);
+  });
+
+  it('mixed island: at night only coal generator contributes; at noon both do', () => {
+    // SOLAR (50W) + COAL_GEN (100W) into MINE (40W) + WORKSHOP (60W) = 100W demand.
+    const buildings = [SOLAR, COAL_GEN, MINE_PWR, WORKSHOP_PWR];
+    const inv = { ...blankInventory(), coal: 50, iron_ore: 50 };
+    // Noon: produced = 50 + 100 = 150.
+    const noon = makeState({ buildings, inventory: { ...inv }, lastTick: 0 });
+    const noonPower = computeRates(noon).power;
+    expect(noonPower.produced).toBe(150);
+    // Night: solar 0, coal still 100.
+    const night = makeState({ buildings, inventory: { ...inv }, lastTick: 12 * HOUR });
+    const nightPower = computeRates(night, undefined, 12 * HOUR).power;
+    expect(nightPower.produced).toBe(100);
+  });
+
+  it('offline catchup over 24h integrates phase boundaries (matches per-quadrant ticking)', () => {
+    // Solar (50W, modulated) feeds a Mine (40W consumer, no input recipe — pure
+    // power-throttle producer). Across one full day starting at the Day→Dusk
+    // boundary (t = 3h):
+    //   [3h, 9h)  Dusk  mul 0.5 → 25W/40W → factor 0.625 → mine 0.02 × 0.625
+    //   [9h, 15h) Night mul 0   → 0W/40W  → factor 0     → mine 0
+    //   [15h, 21h) Dawn mul 0.5 → 25W/40W → factor 0.625 → mine 0.02 × 0.625
+    //   [21h, 27h) Day  mul 1.0 → 50W/40W → factor 1.0   → mine 0.02
+    //
+    // Use `eternalServitor: true` to disable §4.7 maintenance — otherwise the
+    // T1 Mine's 12h threshold + 4h ramp would entangle the day-night signal
+    // with maintenance segments. Big caps avoid output-stall events.
+    const SOLAR_ETERNAL: PlacedBuilding = { ...SOLAR, eternalServitor: true };
+    const MINE_ETERNAL: PlacedBuilding = { ...MINE_PWR, eternalServitor: true };
+    function makeSolarMineState(startMs: number): IslandState {
+      return makeState({
+        buildings: [SOLAR_ETERNAL, MINE_ETERNAL],
+        inventory: { ...blankInventory() },
+        storageCaps: blankCaps(1e9),
+        lastTick: startMs,
+      });
+    }
+
+    const start = 3 * HOUR; // Day→Dusk boundary
+    const end = start + 24 * HOUR;
+
+    // (a) One big offline catchup.
+    const offline = makeSolarMineState(start);
+    advanceIsland(offline, end);
+
+    // (b) Step through each phase boundary manually.
+    const stepwise = makeSolarMineState(start);
+    advanceIsland(stepwise, start + 6 * HOUR); // end of Dusk
+    advanceIsland(stepwise, start + 12 * HOUR); // end of Night
+    advanceIsland(stepwise, start + 18 * HOUR); // end of Dawn
+    advanceIsland(stepwise, end); // end of next Day
+
+    expect(offline.inventory.iron_ore).toBeCloseTo(stepwise.inventory.iron_ore, 6);
+    expect(offline.lastTick).toBe(end);
+
+    // Sanity-check the magnitude: Dusk + Dawn each produce 0.0125/s × 21600s = 270,
+    // Night = 0, Day = 0.02 × 21600 = 432 → total 972.
+    expect(offline.inventory.iron_ore).toBeCloseTo(972, 3);
+  });
+
+  it('offline catchup with solar-only producer drops to zero at night', () => {
+    // Mine + solar; at night the mine is brownout-stalled (no coal_gen backup).
+    // After 24h starting at noon (t=0), inventory should equal sum of Day +
+    // Dusk + Dawn contributions, with Night contributing nothing.
+    // Eternal servitor to remove maintenance from the picture.
+    const SOLAR_ETERNAL: PlacedBuilding = { ...SOLAR, eternalServitor: true };
+    const MINE_ETERNAL: PlacedBuilding = { ...MINE_PWR, eternalServitor: true };
+    const state = makeState({
+      buildings: [SOLAR_ETERNAL, MINE_ETERNAL],
+      inventory: { ...blankInventory() },
+      storageCaps: blankCaps(1e9),
+      lastTick: 0, // mid-Day
+    });
+    advanceIsland(state, 24 * HOUR);
+    // Quadrants in this window:
+    //   [0, 3h)   Day  rate 0.02 → 0.02 × 10800 = 216
+    //   [3h, 9h)  Dusk rate 0.0125 → 270
+    //   [9h, 15h) Night rate 0 → 0
+    //   [15h, 21h) Dawn rate 0.0125 → 270
+    //   [21h, 24h) Day rate 0.02 → 0.02 × 10800 = 216
+    // Total 972.
+    expect(state.inventory.iron_ore).toBeCloseTo(972, 3);
+  });
+});

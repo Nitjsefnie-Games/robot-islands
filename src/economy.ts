@@ -27,6 +27,7 @@
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
+import { nextPhaseBoundaryMs, solarMultiplier } from './daynight.js';
 import { resolveHeatAssignments, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
 import {
@@ -282,6 +283,12 @@ export interface PowerBalance {
 export function computeRates(
   state: IslandState,
   ctx?: RatesContext,
+  /** Wall-clock time used for time-of-day modulation (§2.7 solar). Defaults
+   *  to `state.lastTick` so test callers with `lastTick = 0` see full solar
+   *  output (the §2.7 epoch offset places `nowMs = 0` mid-Day). The
+   *  piecewise integrator passes the segment-start `t` here so each segment
+   *  uses a constant solar multiplier matching the segment's quadrant. */
+  nowMs?: number,
 ): {
   byBuilding: ReadonlyArray<BuildingRate>;
   production: Record<ResourceId, number>;
@@ -303,6 +310,13 @@ export function computeRates(
     ncBuff = 1,
     terrainAt,
   } = ctx ?? {};
+  // §2.7 day-night cycle. `nowMs` defaults to `state.lastTick` so existing
+  // callers (and tests) that don't pass an explicit time see the multiplier
+  // for the state's own clock. The integrator in `advanceIsland` passes the
+  // segment-start time `t` so each segment is integrated at the quadrant's
+  // constant multiplier.
+  const t = nowMs ?? state.lastTick;
+  const solarMul = solarMultiplier(t);
   // The §5.1 active flag depends on inputAvail, and inputAvail must be
   // computed at NOMINAL rate (independent of powerFactor) to avoid a circular
   // dependency. PowerFactor is then applied to consumers' final effective
@@ -437,7 +451,12 @@ export function computeRates(
       active = ia > 0;
     }
     if (!active) continue;
-    powerProduced += (def.power?.produces ?? 0) * skillMul.powerProduction;
+    const producesBase = def.power?.produces ?? 0;
+    // §2.7: solar-tagged producers scale by the current quadrant's average.
+    // Non-solar producers (Coal Gen, Biomass, Fusion Core, Casimir Tap) are
+    // unaffected — their `solar` flag is undefined / false.
+    const solarFactor = def.power?.solar === true ? solarMul : 1;
+    powerProduced += producesBase * solarFactor * skillMul.powerProduction;
     // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
     // so we divide. Default 1.0 leaves draw untouched.
     powerConsumed += (def.power?.consumes ?? 0) / skillMul.powerConsumption;
@@ -751,11 +770,19 @@ export function advanceIsland(
   }
   for (let safety = 0; safety < 10000; safety++) {
     if (t >= nowMs) break;
-    const { production, consumption, net } = computeRates(state, ctx);
+    // §2.7: pass `t` so the solar multiplier reflects this segment's
+    // quadrant, not start-of-tick. Without this, a 24h offline gap would
+    // integrate one constant solar multiplier across all four phases.
+    const { production, consumption, net } = computeRates(state, ctx, t);
     const nextEventMs = findNextCapEvent(state, net, t, nowMs, ctx);
+    // §2.7: bound the segment to the next phase boundary so the constant-
+    // rate invariant of §15.3 still holds across day-night transitions. A
+    // quadrant lasts 6h; offline catchup of N days produces ≤ 4N + extras
+    // segments instead of an under-integrated single segment.
+    const nextPhaseMs = nextPhaseBoundaryMs(t);
     // Clamp to nowMs; findNextCapEvent already returns nowMs when nothing
     // changes, but if all rates are zero we still need to exit the loop.
-    const segEndMs = Math.min(nextEventMs, nowMs);
+    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nowMs);
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec);
