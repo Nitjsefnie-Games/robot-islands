@@ -12,6 +12,7 @@ import { terrainAtForBiome } from './biomes.js';
 import type { IslandState } from './economy.js';
 import {
   _resetDroneIdCounter,
+  nextDroneId,
 } from './drones.js';
 import {
   _resetRouteIdCounter,
@@ -350,6 +351,102 @@ describe('id counter seeding', () => {
     deserializeWorld(json, 0, 0);
     // No routes → counter stays at 0 → next is route-1.
     expect(nextRouteId()).toBe('route-1');
+  });
+
+  it('seeds drone id counter past the maximum saved drone suffix', () => {
+    _resetDroneIdCounter();
+    const world = makeInitialWorld(0);
+    world.drones.push({
+      id: 'drone-12',
+      fromIslandId: 'home',
+      originX: 0,
+      originY: 0,
+      dirX: 1,
+      dirY: 0,
+      outboundTiles: 20,
+      scanRadius: 8,
+      launchTime: 1000,
+      expectedReturnTime: 11_000,
+      tier: 2,
+      fuelLoaded: 10,
+    });
+    const snap = serializeWorld(world, new Map(), 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    _resetDroneIdCounter();
+    deserializeWorld(json, 0, 0);
+    expect(nextDroneId()).toBe('drone-13');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drone + route timestamp remapping — these live in the same
+// `performance.now()` domain as lastTick and need the same -deltaMs shift,
+// or saved in-flight craft become permanently stuck on reload.
+// ---------------------------------------------------------------------------
+
+describe('drone and route timestamp remapping', () => {
+  it('shifts drone launchTime and expectedReturnTime across the perf-domain reset', () => {
+    // Saved session's perf-time at save = 1_500_000. Drone in flight,
+    // 10s from arrival. 15s offline. New session's perf-time is 5_000.
+    // perfShift = 5_000 - 1_500_000 - 15_000 = -1_510_000
+    // new launchTime = 1_500_000 + perfShift = -10_000
+    // new expectedReturnTime = 1_510_000 + perfShift = 0
+    // → already in the past at nowPerfMs=5_000, tickDrones resolves it.
+    const world = makeInitialWorld(0);
+    world.drones.push({
+      id: 'drone-1',
+      fromIslandId: 'home',
+      originX: 0,
+      originY: 0,
+      dirX: 1,
+      dirY: 0,
+      outboundTiles: 20,
+      scanRadius: 8,
+      launchTime: 1_500_000,
+      expectedReturnTime: 1_510_000,
+      tier: 2,
+      fuelLoaded: 10,
+    });
+    const states = new Map<string, IslandState>();
+    const savedAtWallMs = 100_000;
+    const savedAtPerfMs = 1_500_000;
+    const snap = serializeWorld(world, states, savedAtWallMs, savedAtPerfMs);
+    const { world: restored } = deserializeWorld(snap, savedAtWallMs + 15_000, 5_000);
+    const d = restored.drones[0]!;
+    // The delta between launch and expected-return is preserved.
+    expect(d.expectedReturnTime - d.launchTime).toBe(10_000);
+    // expectedReturnTime is now in the past relative to nowPerfMs=5_000.
+    expect(d.expectedReturnTime).toBeLessThan(5_000);
+  });
+
+  it('shifts route inFlight batch timestamps across the perf-domain reset', () => {
+    const world = makeInitialWorld(0);
+    world.routes.push({
+      id: 'route-1',
+      from: 'home',
+      to: 'forest-ne',
+      type: 'cargo',
+      capacityPerSec: 0.5,
+      filter: 'iron_ore',
+      priorityList: [],
+      transitTimeSec: 10,
+      inFlight: [
+        {
+          resourceId: 'iron_ore',
+          amount: 5,
+          dispatchTime: 1_500_000,
+          arrivalTime: 1_510_000,
+        },
+      ],
+    });
+    const savedAtWallMs = 100_000;
+    const savedAtPerfMs = 1_500_000;
+    const snap = serializeWorld(world, new Map(), savedAtWallMs, savedAtPerfMs);
+    const { world: restored } = deserializeWorld(snap, savedAtWallMs + 15_000, 5_000);
+    const b = restored.routes[0]!.inFlight[0]!;
+    // Delta preserved; arrivalTime now in the past (will deliver on next tick).
+    expect(b.arrivalTime - b.dispatchTime).toBe(10_000);
+    expect(b.arrivalTime).toBeLessThan(5_000);
   });
 });
 

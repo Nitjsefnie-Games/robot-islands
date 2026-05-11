@@ -106,6 +106,11 @@ export interface SaveSnapshot {
   /** `Date.now()` wall-clock ms at save time. Used to compute the offline
    *  delta on restore — see the module head for the lastTick remapping. */
   readonly savedAt: number;
+  /** `performance.now()` at save time. The prior session's perf-domain
+   *  anchor — drone/route timestamps were minted relative to this value,
+   *  so the loader needs it to translate them into the new session's
+   *  perf-domain. Without this, saved in-flight craft are stuck forever. */
+  readonly savedAtPerf: number;
   readonly world: SerializedWorld;
   readonly islandStates: ReadonlyArray<SerializedIslandStateEntry>;
 }
@@ -126,6 +131,7 @@ export function serializeWorld(
   world: WorldState,
   islandStates: ReadonlyMap<string, IslandState>,
   nowWallMs: number = Date.now(),
+  nowPerfMs: number = performance.now(),
 ): SaveSnapshot {
   const islands: SerializedIslandSpec[] = world.islands.map((s) => {
     // Strip terrainAt; preserve every other field including the mutable
@@ -150,6 +156,7 @@ export function serializeWorld(
   return {
     v: SCHEMA_VERSION,
     savedAt: nowWallMs,
+    savedAtPerf: nowPerfMs,
     world: {
       islands,
       // Spread to drop any read-only-array exotic-ness from the live arrays.
@@ -210,12 +217,36 @@ export function deserializeWorld(
     buildings: [...s.buildings],
   }));
 
+  // Drone and route timestamps were minted in the SAVED session's
+  // `performance.now()` domain (which is per-page-load and resets to ~0 on
+  // every refresh). We need to translate them into the NEW session's
+  // perf-domain while also accounting for the offline gap.
+  //
+  // The translation: `T_new = T_saved + perfShift`, where
+  //   perfShift = nowPerfMs - snapshot.savedAtPerf - deltaMs.
+  //
+  // Conceptually that's "shift saved-perf timestamps so a value that was
+  // `savedAtPerf` lands at `nowPerfMs - deltaMs` in the new perf-domain"
+  // — i.e. as far in the new session's past as the offline gap was long.
+  // Anything that was a future event whose time has elapsed lands at-or-
+  // below nowPerfMs and the next tick processes it as already-arrived, the
+  // same "1 frame or 24h, one code path" property the lastTick remap gives
+  // advanceIsland.
+  const perfShift = nowPerfMs - snapshot.savedAtPerf - deltaMs;
   const world: WorldState = {
     islands,
-    drones: [...snapshot.world.drones],
+    drones: snapshot.world.drones.map((d) => ({
+      ...d,
+      launchTime: d.launchTime + perfShift,
+      expectedReturnTime: d.expectedReturnTime + perfShift,
+    })),
     routes: snapshot.world.routes.map((r) => ({
       ...r,
-      inFlight: [...r.inFlight],
+      inFlight: r.inFlight.map((b) => ({
+        ...b,
+        arrivalTime: b.arrivalTime + perfShift,
+        dispatchTime: b.dispatchTime + perfShift,
+      })),
     })),
   };
 

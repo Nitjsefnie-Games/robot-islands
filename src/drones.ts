@@ -98,7 +98,7 @@ export function pointToSegmentDistSq(
 }
 
 let droneIdCounter = 0;
-function nextDroneId(): string {
+export function nextDroneId(): string {
   droneIdCounter += 1;
   return `drone-${droneIdCounter}`;
 }
