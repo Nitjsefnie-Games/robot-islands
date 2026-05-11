@@ -1190,3 +1190,125 @@ describe('step-2.5 — placement is recognised by the live economy', () => {
     expect(after.byBuilding[0]!.building.defId).toBe('smelter');
   });
 });
+
+// ---------------------------------------------------------------------------
+// §4.7 maintenance integration — operating-time accrual + auto-maintain
+// ---------------------------------------------------------------------------
+describe('§4.7 maintenance — integration with advanceIsland', () => {
+  const HOUR_MS = 60 * 60 * 1000;
+  const T1_THRESHOLD = 12 * HOUR_MS;
+
+  it('operatingMs accrues across advanceIsland segments regardless of production', () => {
+    // A Mine that can't produce (iron_ore at cap) should still accrue
+    // operating time — §4.7 literal: "Idle buildings ... accrue maintenance
+    // time the same as actively-producing ones".
+    const state = makeState({
+      buildings: [{ ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      // Cap iron_ore at 0 so the Mine output-stalls immediately.
+      storageCaps: { ...blankCaps(0) },
+      inventory: { ...blankInventory(), iron_ore: 0 },
+    });
+    advanceIsland(state, 5_000, { defs: POWER_FREE });
+    expect(state.buildings[0]!.operatingMs).toBe(5_000);
+  });
+
+  it('operatingMs accrues over a 24h offline catchup gap', () => {
+    // The same loop handles 1 frame and 24h offline (§15.3). Verify
+    // operatingMs reaches the full gap length.
+    const state = makeState({
+      buildings: [{ ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      storageCaps: blankCaps(1_000_000),
+    });
+    const TWO_FOUR_H = 24 * HOUR_MS;
+    advanceIsland(state, TWO_FOUR_H, { defs: POWER_FREE });
+    expect(state.buildings[0]!.operatingMs).toBe(TWO_FOUR_H);
+  });
+
+  it('Mine production degrades to 50% after threshold + 4h with no materials', () => {
+    // Place a Mine, jump forward past plateau, verify rate halved.
+    // The Mine recipe gives 1/50s = 0.02/s nominal at 100%; at 50% → 0.01/s.
+    const state = makeState({
+      buildings: [
+        {
+          ...MINE,
+          operatingMs: T1_THRESHOLD + 4 * HOUR_MS, // plateau
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+      ],
+      storageCaps: blankCaps(1_000_000),
+    });
+    const rates = computeRates(state, { defs: POWER_FREE });
+    expect(rates.byBuilding[0]!.effectiveRate).toBeCloseTo(0.5 / 50, 9);
+    expect(rates.production.iron_ore).toBeCloseTo(0.5 / 50, 9);
+  });
+
+  it('auto-maintains when materials are present, resetting operatingMs to 0', () => {
+    // Threshold-crossed Mine + stocked maintenance materials → tick fires
+    // the auto-maintain cycle, consuming materials and zeroing the timer.
+    const state = makeState({
+      buildings: [
+        {
+          ...MINE,
+          operatingMs: T1_THRESHOLD + 10, // just over threshold
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+      ],
+      storageCaps: blankCaps(1_000_000),
+      inventory: {
+        ...blankInventory(),
+        // T1 maintenance recipe = 2 lubricant + 5 bolt.
+        lubricant: 10,
+        bolt: 10,
+      },
+    });
+    advanceIsland(state, 1_000, { defs: POWER_FREE });
+    // Materials consumed, timer reset to dt of the post-maintain segment.
+    expect(state.inventory.lubricant).toBe(8);
+    expect(state.inventory.bolt).toBe(5);
+    // After auto-maintain (at segment t=0), accrual restarts; after 1s the
+    // counter is just the dt of the segment.
+    expect(state.buildings[0]!.operatingMs).toBe(1_000);
+  });
+
+  it('stays degraded when maintenance materials absent', () => {
+    const state = makeState({
+      buildings: [
+        {
+          ...MINE,
+          operatingMs: T1_THRESHOLD + 2 * HOUR_MS, // 75% factor
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+      ],
+      storageCaps: blankCaps(1_000_000),
+      // No lubricant / bolt in inventory.
+    });
+    advanceIsland(state, 60_000, { defs: POWER_FREE });
+    // operatingMs grew by 60s. No reset because materials absent.
+    expect(state.buildings[0]!.operatingMs).toBe(T1_THRESHOLD + 2 * HOUR_MS + 60_000);
+    // Still degraded.
+    const rates = computeRates(state, { defs: POWER_FREE });
+    expect(rates.byBuilding[0]!.effectiveRate).toBeLessThan(0.02);
+    expect(rates.byBuilding[0]!.effectiveRate).toBeGreaterThan(0.01);
+  });
+
+  it('Eternal Servitor flag exempts a building from operatingMs accrual', () => {
+    const state = makeState({
+      buildings: [
+        {
+          ...MINE,
+          operatingMs: 0,
+          placedAt: 0,
+          maintainedAt: 0,
+          eternalServitor: true,
+        },
+      ],
+      storageCaps: blankCaps(1_000_000),
+    });
+    advanceIsland(state, 24 * HOUR_MS, { defs: POWER_FREE });
+    // 24h elapsed but timer stayed at 0 (the flag short-circuits accrual).
+    expect(state.buildings[0]!.operatingMs).toBe(0);
+  });
+});

@@ -38,6 +38,29 @@ export interface PlacedBuilding {
    *  back-fill a default — the inspector relabel path is the only way to
    *  attach a resource to a previously-unlabeled Crate. */
   readonly cargoLabel?: ResourceId;
+  /** §4.7 maintenance: wall-clock perf-domain timestamp this building was
+   *  placed at. Optional for forward-compat with saved buildings minted
+   *  before the maintenance system shipped — those load with the field
+   *  undefined and behave as if freshly placed (operatingMs = 0, factor 1.0)
+   *  until the first auto-maintenance check stamps a real value. */
+  readonly placedAt?: number;
+  /** §4.7 accumulated operating time since last maintenance, in ms. Ticks
+   *  every advanceIsland segment regardless of whether the building actually
+   *  ran (§4.7: "Idle buildings ... accrue maintenance time the same as
+   *  actively-producing ones"). Resets to 0 on a successful maintenance
+   *  cycle. Missing on legacy saves = treated as 0 by `maintenanceFactor`. */
+  readonly operatingMs?: number;
+  /** §4.7 perf-domain timestamp of the most recent successful auto-maintain
+   *  cycle. Defaults to `placedAt` on a fresh placement. Missing on legacy
+   *  saves = also undefined (the inspector reports "since placement" then). */
+  readonly maintainedAt?: number;
+  /** §13.3 Eternal Servitor flag. When `true`, the building skips all
+   *  maintenance accrual and degradation (and, when wired, fuel-consumption
+   *  checks). The Servitor Conversion Kit recipe and the Reality-Forge
+   *  conversion mechanic that flips this flag are DEFERRED — the flag is
+   *  honoured wherever `maintenanceFactor` / `tryAutoMaintain` read it, but
+   *  nothing in the catalog turns it on yet. */
+  readonly eternalServitor?: true;
 }
 
 // Step-9 home-island layout. Tile coords are island-local; the home island's

@@ -63,16 +63,29 @@ import type { IslandSpec, WorldState } from './world.js';
  *  Bumping the key (rather than defaulting `vehicles ?? []`) means a stale
  *  v1 save is cleanly ignored, so a returning player gets a fresh demo
  *  seed that includes the new buildings + Foundation Kit starter inventory.
+ *
+ *  Step-§4.7: bumped v2 → v3 because PlacedBuilding gained `placedAt`,
+ *  `operatingMs`, `maintainedAt`. The optional-field shape would let v2
+ *  saves load (the maintenance code defensively treats missing fields as
+ *  "not yet stamped"), but bumping invalidates them anyway to surface the
+ *  schema change cleanly — saved v2 buildings have no `placedAt`, so a
+ *  reload would have all buildings looking 0-second-old on the new tab,
+ *  even after a 30-hour offline gap. A clean reseed is simpler than a
+ *  half-correct migration.
+ *
  *  See the comment on `SCHEMA_VERSION` for the reasoning. */
-export const STORAGE_KEY = 'robot-islands:save:v2';
+export const STORAGE_KEY = 'robot-islands:save:v3';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this.
  *
  *  Step-12: bumped 1 → 2 to silently invalidate stale v1 saves that lack
  *  `world.vehicles` and the Step-12 home-island Shipyard/Kit Assembler
- *  placements. See `STORAGE_KEY` for the matching key change. */
-export const SCHEMA_VERSION = 2 as const;
+ *  placements. See `STORAGE_KEY` for the matching key change.
+ *
+ *  Step-§4.7: bumped 2 → 3 alongside the PlacedBuilding maintenance fields
+ *  to discard saves that pre-date the maintenance timer. */
+export const SCHEMA_VERSION = 3 as const;
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -220,6 +233,11 @@ export function deserializeWorld(
   // tick (advanceIsland's `nowMs <= lastTick` guard handles equality fine).
   const deltaMs = Math.max(0, nowWallMs - snapshot.savedAt);
 
+  // Drone/route/vehicle perfShift defined just below; the buildings array
+  // needs the same shift applied to its §4.7 maintenance timestamps so
+  // `placedAt` / `maintainedAt` land in the NEW session's perf-domain.
+  // `operatingMs` is a DURATION — never perfShift it; it preserves literally.
+  const perfShift = nowPerfMs - snapshot.savedAtPerf - deltaMs;
   const islands: IslandSpec[] = snapshot.world.islands.map((s) => ({
     ...s,
     // Rehydrate the per-island terrainAt closure via the same factory
@@ -230,14 +248,24 @@ export function deserializeWorld(
     // The buildings array is mutable on the live spec, so we clone it.
     // The serializer already deep-copied via JSON-equivalence in the IDB
     // layer, but explicit cloning makes the in-memory round-trip path
-    // (tests) safe too.
-    buildings: [...s.buildings],
+    // (tests) safe too. Each building gets its maintenance timestamps
+    // shifted into the new perf-clock domain (drone/route timestamp
+    // remap mirror).
+    buildings: s.buildings.map((b) => ({
+      ...b,
+      ...(b.placedAt !== undefined
+        ? { placedAt: b.placedAt + perfShift }
+        : {}),
+      ...(b.maintainedAt !== undefined
+        ? { maintainedAt: b.maintainedAt + perfShift }
+        : {}),
+    })),
   }));
 
   // Drone and route timestamps were minted in the SAVED session's
   // `performance.now()` domain (which is per-page-load and resets to ~0 on
-  // every refresh). We need to translate them into the NEW session's
-  // perf-domain while also accounting for the offline gap.
+  // every refresh). They share the `perfShift` constant declared above
+  // (also used for the buildings' maintenance timestamps).
   //
   // The translation: `T_new = T_saved + perfShift`, where
   //   perfShift = nowPerfMs - snapshot.savedAtPerf - deltaMs.
@@ -249,7 +277,6 @@ export function deserializeWorld(
   // below nowPerfMs and the next tick processes it as already-arrived, the
   // same "1 frame or 24h, one code path" property the lastTick remap gives
   // advanceIsland.
-  const perfShift = nowPerfMs - snapshot.savedAtPerf - deltaMs;
   const world: WorldState = {
     islands,
     drones: snapshot.world.drones.map((d) => ({

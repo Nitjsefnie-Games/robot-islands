@@ -33,6 +33,11 @@ import {
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { computeRates } from './economy.js';
+import {
+  MAINTENANCE_RECIPES,
+  MAINTENANCE_THRESHOLD_MS_BY_TIER,
+  maintenanceFactor,
+} from './maintenance.js';
 import { ALL_RESOURCES, resolveRecipe, type Recipe, type ResourceId } from './recipes.js';
 import { RESOURCE_STORAGE_CATEGORY, type StorageCategory } from './storage-categories.js';
 import type { IslandSpec } from './world.js';
@@ -178,6 +183,17 @@ function formatRate(direction: 'in' | 'out', rate: number): string {
   if (rate < 0.1) return `${sign}${rate.toFixed(3)}/s`;
   if (rate < 10) return `${sign}${rate.toFixed(2)}/s`;
   return `${sign}${rate.toFixed(1)}/s`;
+}
+
+/** Format a duration in milliseconds as `Hh MMm` (24h+) or `Hh MMm` (24h-)
+ *  to a compact readable form used by the §4.7 maintenance readout. Negative
+ *  inputs clamp to zero. */
+function formatHM(ms: number): string {
+  const clamped = Math.max(0, Math.floor(ms));
+  const totalMin = Math.floor(clamped / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
 // ---------------------------------------------------------------------------
@@ -648,6 +664,23 @@ export function mountInspectorUi(
   );
   heatSection.body.appendChild(heatLine);
 
+  // §4.7 maintenance section — operating-time / threshold readout, plus the
+  // tier's maintenance bill of materials. For an Eternal Servitor the
+  // section displays the exemption stamp and the recipe is hidden.
+  const maintenanceSection = makeSection('Maintenance');
+  const maintenanceStatus = document.createElement('span');
+  styled(
+    maintenanceStatus,
+    [`color: ${FG}`, 'font-size: 11px', 'letter-spacing: 0.02em'].join(';'),
+  );
+  const maintenanceRecipeLine = document.createElement('span');
+  styled(
+    maintenanceRecipeLine,
+    [`color: ${FG_DIM}`, 'font-size: 10.5px', 'letter-spacing: 0.02em'].join(';'),
+  );
+  maintenanceSection.body.appendChild(maintenanceStatus);
+  maintenanceSection.body.appendChild(maintenanceRecipeLine);
+
   // Constraints (requiredTile / requiredBiomes) — shown only when relevant.
   const constraintsSection = makeSection('Constraints');
   const constraintsLine = document.createElement('span');
@@ -726,6 +759,7 @@ export function mountInspectorUi(
   body.appendChild(powerSection.wrap);
   body.appendChild(storageSection.wrap);
   body.appendChild(heatSection.wrap);
+  body.appendChild(maintenanceSection.wrap);
   body.appendChild(constraintsSection.wrap);
 
   panel.appendChild(header);
@@ -896,6 +930,39 @@ export function mountInspectorUi(
     } else {
       heatSection.wrap.style.display = 'none';
     }
+
+    // §4.7 maintenance section. Three display modes:
+    //   - Eternal Servitor exempt → single bold line, recipe hidden.
+    //   - Under threshold → "12h 30m / 24h" + recipe (preview).
+    //   - Over threshold → "OVERDUE — degraded to 67%" + recipe + warning color.
+    if (building.eternalServitor === true) {
+      maintenanceStatus.textContent = 'ETERNAL SERVITOR — exempt';
+      maintenanceStatus.style.color = ACCENT;
+      maintenanceRecipeLine.textContent = '';
+      maintenanceRecipeLine.style.display = 'none';
+    } else {
+      const operating = building.operatingMs ?? 0;
+      const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier];
+      const factor = maintenanceFactor(building, def);
+      if (operating < threshold) {
+        maintenanceStatus.textContent = `${formatHM(operating)} / ${formatHM(threshold)}`;
+        maintenanceStatus.style.color = FG;
+      } else {
+        const pct = Math.round(factor * 100);
+        maintenanceStatus.textContent = `OVERDUE — degraded to ${pct}%`;
+        maintenanceStatus.style.color = WARN;
+      }
+      const recipe = MAINTENANCE_RECIPES[def.tier];
+      const recipeParts: string[] = [];
+      for (const [r, need] of Object.entries(recipe)) {
+        if ((need ?? 0) === 0) continue;
+        recipeParts.push(`${need} ${r}`);
+      }
+      maintenanceRecipeLine.textContent =
+        recipeParts.length > 0 ? `needs: ${recipeParts.join(' + ')}` : '';
+      maintenanceRecipeLine.style.display = '';
+    }
+    maintenanceSection.wrap.style.display = '';
 
     // Constraints section — shown when requiredTile or requiredBiomes apply.
     const parts: string[] = [];

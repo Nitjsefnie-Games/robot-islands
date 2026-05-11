@@ -29,6 +29,12 @@ import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-
 import type { PlacedBuilding } from './buildings.js';
 import { resolveHeatAssignments, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
+import {
+  accrueOperatingTime,
+  maintenanceFactor,
+  nextMaintenanceBoundaryMs,
+  tryAutoMaintain,
+} from './maintenance.js';
 import { resolveRecipe, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type NodeId, type SubPathId } from './skilltree.js';
 import {
@@ -445,7 +451,14 @@ export function computeRates(
     const ia = inputAvailByIdx[i] ?? 0;
     const consumesPower = (defs[t.building.defId].power?.consumes ?? 0) > 0;
     const pf = consumesPower ? powerFactor : 1;
-    const effectiveRate = t.baseRate * ia * pf;
+    // §4.7 maintenance factor on the production-side recipe rate. Power
+    // producers' W output stays full — `power.produces` is summed before
+    // this loop in Pass 3 — which is a deliberate gap: the spec phrases
+    // degradation as "output efficiency", ambiguous for power buildings,
+    // and applying maintenance to power would cascade into the brownout
+    // factor and double-dip on consumers. Resource recipes only.
+    const mf = maintenanceFactor(t.building, defs[t.building.defId]);
+    const effectiveRate = t.baseRate * ia * pf * mf;
     byBuilding.push({ building: t.building, recipe: t.recipe, effectiveRate });
 
     if (effectiveRate === 0) continue;
@@ -498,21 +511,35 @@ export function computeRates(
 
 /**
  * Find the next moment in `[tMs, nowMs]` at which the rate-determining state
- * changes — that is, some inventory will reach 0 (input depleted) or some
- * cap (output filled). If nothing changes in the interval, returns `nowMs`.
+ * changes — that is, some inventory will reach 0 (input depleted), some cap
+ * (output filled), or any building's §4.7 maintenance factor crosses a
+ * boundary (entering degraded state, advancing one sub-segment of the linear
+ * ramp, or reaching the 0.5 plateau). If nothing changes in the interval,
+ * returns `nowMs`.
  *
  * This is the §15.3 `findNextCapEvent`. We extend it to also report
  * input-depletion events because those are equally important for stopping
- * the integration before consuming a resource past zero.
+ * the integration before consuming a resource past zero. And — since step-§4.7
+ * — maintenance boundaries: without these, a 24h offline catchup would
+ * integrate one giant segment at start-of-segment maintenance factor
+ * (typically 1.0), missing the degradation entirely. Each sub-segment then
+ * integrates at the start-of-segment factor; since the linear ramp is
+ * monotonically DECREASING, that over-estimates production within the ramp.
+ * The `MAINTENANCE_RAMP_SEGMENTS` constant in `maintenance.ts` bounds the
+ * over-count to roughly `0.5 / (2 × ramp_segments)`.
  *
  * `tMs` and `nowMs` are wall-clock millisecond timestamps; `net` is in
  * units-per-second. We convert via /1000.
+ *
+ * `ctx.defs` is consulted for per-building tier lookups; defaults to
+ * `BUILDING_DEFS` to keep the bare-arity signature for legacy callers.
  */
 export function findNextCapEvent(
   state: IslandState,
   net: Record<ResourceId, number>,
   tMs: number,
   nowMs: number,
+  ctx?: RatesContext,
 ): number {
   let best = nowMs;
   for (const r of Object.keys(net) as ResourceId[]) {
@@ -535,6 +562,20 @@ export function findNextCapEvent(
     }
     const eventMs = tMs + timeToEventSec * 1000;
     if (eventMs < best) best = eventMs;
+  }
+  // §4.7 maintenance-boundary events. For each building with a pending
+  // boundary in operatingMs, emit `tMs + (boundary - operating)` as a
+  // candidate event. This keeps long catchup segments honest: a 24h offline
+  // gap on a T1 building (12h threshold → 4h ramp → plateau) becomes at
+  // most three segments instead of one.
+  const defs = ctx?.defs ?? BUILDING_DEFS;
+  for (const b of state.buildings) {
+    const def = defs[b.defId];
+    const boundary = nextMaintenanceBoundaryMs(b, def);
+    if (boundary === null) continue;
+    const operating = b.operatingMs ?? 0;
+    const eventMs = tMs + (boundary - operating);
+    if (eventMs > tMs && eventMs < best) best = eventMs;
   }
   // Guard against floating-point fuzz: if best is microscopically below tMs
   // (e.g. -1e-12), clamp to tMs so the integration progresses one event at
@@ -685,16 +726,23 @@ export function advanceIsland(
   nowMs: number,
   ctx?: RatesContext,
 ): void {
-  const { specMul = IDENTITY_SPECIALIZATION } = ctx ?? {};
+  const { specMul = IDENTITY_SPECIALIZATION, defs = BUILDING_DEFS } = ctx ?? {};
   if (nowMs <= state.lastTick) {
     state.lastTick = nowMs;
     return;
   }
   let t = state.lastTick;
+  // §4.7: attempt auto-maintain BEFORE the first segment too — a save loaded
+  // with materials in inventory and an over-threshold building should
+  // self-heal on the next tick without waiting for the next inventory
+  // boundary.
+  for (const b of state.buildings) {
+    tryAutoMaintain(b, defs[b.defId], state.inventory, t);
+  }
   for (let safety = 0; safety < 10000; safety++) {
     if (t >= nowMs) break;
     const { production, consumption, net } = computeRates(state, ctx);
-    const nextEventMs = findNextCapEvent(state, net, t, nowMs);
+    const nextEventMs = findNextCapEvent(state, net, t, nowMs, ctx);
     // Clamp to nowMs; findNextCapEvent already returns nowMs when nothing
     // changes, but if all rates are zero we still need to exit the loop.
     const segEndMs = Math.min(nextEventMs, nowMs);
@@ -703,6 +751,17 @@ export function advanceIsland(
       applyRates(state, net, dtSec);
       accrueXp(state, production, consumption, dtSec, specMul.xpMul);
       levelUpIfReady(state);
+      // §4.7 operating-time accrual: every building accrues regardless of
+      // whether it produced this segment (§4.7 literal: "Idle buildings,
+      // stalled buildings, and inactive buildings ... accrue maintenance
+      // time the same as actively-producing ones"). Done AFTER applyRates
+      // so the maintenance factor used inside computeRates was computed
+      // at the start-of-segment operatingMs, matching §15.3's piecewise-
+      // constant-rate invariant.
+      const dtMs = segEndMs - t;
+      for (const b of state.buildings) {
+        accrueOperatingTime(b, dtMs);
+      }
     }
     // Advance t. If no progress was made (dt = 0 and segEnd === t) but we
     // haven't reached nowMs, force advance to avoid an infinite loop. This
@@ -711,6 +770,14 @@ export function advanceIsland(
       t = nowMs;
     } else {
       t = segEndMs;
+    }
+    // §4.7 auto-maintenance check. Fires at every segment boundary —
+    // including inventory-cap/floor boundaries where a maintenance material
+    // may have just arrived from a route delivery or a recipe completion.
+    // The pass scans every building; only over-threshold buildings with
+    // materials in stock actually transact.
+    for (const b of state.buildings) {
+      tryAutoMaintain(b, defs[b.defId], state.inventory, t);
     }
   }
   state.lastTick = nowMs;

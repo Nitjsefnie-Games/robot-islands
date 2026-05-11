@@ -284,7 +284,13 @@ describe('placeBuilding', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     const placed = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-1');
-    expect(placed).toEqual({ id: 'p-1', defId: 'mine', x: 0, y: 0, rotation: 0 });
+    expect(placed).toMatchObject({ id: 'p-1', defId: 'mine', x: 0, y: 0, rotation: 0 });
+    // §4.7 maintenance seeds: placedAt/maintainedAt default to state.lastTick;
+    // operatingMs starts at 0. Test only asserts presence (the exact stamp
+    // depends on state.lastTick, which the makeState helper picks).
+    expect(placed.operatingMs).toBe(0);
+    expect(placed.placedAt).toBe(state.lastTick);
+    expect(placed.maintainedAt).toBe(state.lastTick);
     expect(spec.buildings).toHaveLength(1);
     expect(spec.buildings[0]).toBe(placed);
     // state.buildings is a live reference (NOT a copy) to spec.buildings,

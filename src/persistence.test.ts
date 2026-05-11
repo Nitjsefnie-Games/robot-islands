@@ -91,12 +91,12 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('serializeWorld', () => {
-  it('produces a snapshot with v: 2 and a savedAt timestamp', () => {
+  it('produces a snapshot with v: 3 and a savedAt timestamp', () => {
     const world = makeInitialWorld(0);
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(2);
+    expect(snap.v).toBe(3);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -315,8 +315,8 @@ describe('schema version', () => {
     expect(() => deserializeWorld(future, 0, 0)).toThrow(/unknown schema version/);
   });
 
-  it('exports STORAGE_KEY containing v2 so it does not collide with stale v1 saves', () => {
-    expect(STORAGE_KEY).toMatch(/v2$/);
+  it('exports STORAGE_KEY containing v3 so it does not collide with stale v1/v2 saves', () => {
+    expect(STORAGE_KEY).toMatch(/v3$/);
   });
 });
 

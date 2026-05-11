@@ -261,6 +261,13 @@ export function placeBuilding(
   anchorY: number,
   rotation: Rotation,
   idGenerator: () => string,
+  /** §4.7 maintenance: perf-domain timestamp to seed the building's
+   *  placedAt / maintainedAt at. Defaults to the state's lastTick — the
+   *  same perf-clock anchor `advanceIsland` integrates from, so a freshly-
+   *  placed building has `operatingMs = 0` and accrues from the next tick
+   *  forward. Tests can inject a specific value when they want to assert
+   *  maintenance-cycle math. */
+  nowMs: number = state.lastTick,
 ): PlacedBuilding {
   const def = BUILDING_DEFS[defId];
   // §4.6: generic-storage instances (Crate, Warehouse) carry a per-instance
@@ -276,6 +283,11 @@ export function placeBuilding(
     y: anchorY,
     rotation,
     ...(cargoLabel !== undefined ? { cargoLabel } : {}),
+    // §4.7 maintenance seeds. operatingMs starts at zero; placedAt and
+    // maintainedAt mark the perf-clock moment the timer began.
+    placedAt: nowMs,
+    operatingMs: 0,
+    maintainedAt: nowMs,
   };
   spec.buildings.push(placed);
   // Bump storage caps per §4.6 categorized routing. Specialized buildings
