@@ -88,8 +88,11 @@ export interface ExtraEllipseDef {
 }
 
 /** Like `tileInscribedInEllipse` but for an off-centre ellipse at
- *  `(offsetX, offsetY)`. Internal helper for the §3.6 union test. */
-function tileInscribedInOffsetEllipse(
+ *  `(offsetX, offsetY)`. Internal helper for the §3.6 union test.
+ *  Exported for `discovery.ts → islandCells` which needs to enumerate
+ *  only the cells that contain at least one inscribed tile (avoiding
+ *  the cell-bbox over-inclusion that put fog squares over open ocean). */
+export function tileInscribedInOffsetEllipse(
   x: number,
   y: number,
   major: number,

@@ -11,6 +11,7 @@
 // for the tile→cell mapping so negative coordinates land on the correct cell
 // — `(-1, -1)` floors to `(-1, -1)`, not `(0, 0)`.
 
+import { tileInscribedInOffsetEllipse } from './island.js';
 import { CELL_SIZE_TILES } from './world.js';
 import type { IslandSpec } from './world.js';
 import { islandConstituents } from './world.js';
@@ -144,29 +145,42 @@ function pointToSegmentDistSq2(
  * Enumerate the set of cell keys covered by an island's footprint. Used at
  * world-init time so populated islands' immediate cells start revealed (the
  * home island shouldn't read as pitch-dark — its own footprint cells are
- * trivially revealed at game start).
+ * trivially revealed at game start) and by `renderOceanFogOverlay` to mask
+ * the unrevealed portion of each partially-revealed island.
  *
- * Walks every constituent's tile bounding box and adds each tile's cell.
- * Coarse vs precise: we add a cell as soon as any one of its tiles falls
- * inside the constituent's bbox — that's a slight over-inclusion at the
- * ellipse edges (cell can be "covered" by a single corner tile that isn't
- * actually inscribed), but cells are the unit and a partial-coverage cell
- * still reads as "the player has been here".
+ * A cell is included iff at least one tile inscribed in any of the island's
+ * constituent ellipses falls inside that cell. Walking the tile-bbox and
+ * snapping to the cell grid (the previous implementation) double-rounded
+ * outward — the tile bbox already overshoots the ellipse, then floor/ceil
+ * to cell coords added another up-to-16-tile margin per axis. Corner cells
+ * with zero inscribed tiles slipped in, which the fog overlay then painted
+ * UNKNOWN_BLUE squares over — masking the vision halo where it crossed
+ * those cells in open ocean.
+ *
+ * The inscribed-tile walk is bounded by the same per-constituent tile bbox
+ * `computeIslandTiles` uses (`xMin = -ceil(major)`..`xMax = ceil(major)-1`,
+ * same for y) shifted to world coords; `tileInscribedInOffsetEllipse`
+ * (island.ts) runs the strict-inside corner test that defines buildable
+ * terrain (§3.4). Rotation on extras is ignored — `computeIslandTiles`
+ * ignores it too, so cell coverage stays consistent with what gets rendered.
  */
 export function islandCells(spec: IslandSpec): string[] {
   const seen = new Set<string>();
   for (const c of islandConstituents(spec)) {
-    const xMin = Math.floor(spec.cx + c.offsetX - c.major);
-    const xMax = Math.ceil(spec.cx + c.offsetX + c.major);
-    const yMin = Math.floor(spec.cy + c.offsetY - c.minor);
-    const yMax = Math.ceil(spec.cy + c.offsetY + c.minor);
-    const cMinX = Math.floor(xMin / CELL_SIZE_TILES);
-    const cMaxX = Math.floor(xMax / CELL_SIZE_TILES);
-    const cMinY = Math.floor(yMin / CELL_SIZE_TILES);
-    const cMaxY = Math.floor(yMax / CELL_SIZE_TILES);
-    for (let cy = cMinY; cy <= cMaxY; cy++) {
-      for (let cx = cMinX; cx <= cMaxX; cx++) {
-        seen.add(cellKey(cx, cy));
+    const cxAbs = spec.cx + c.offsetX;
+    const cyAbs = spec.cy + c.offsetY;
+    const xMin = Math.floor(cxAbs - c.major);
+    const xMax = Math.ceil(cxAbs + c.major) - 1;
+    const yMin = Math.floor(cyAbs - c.minor);
+    const yMax = Math.ceil(cyAbs + c.minor) - 1;
+    for (let y = yMin; y <= yMax; y++) {
+      for (let x = xMin; x <= xMax; x++) {
+        if (!tileInscribedInOffsetEllipse(x, y, c.major, c.minor, cxAbs, cyAbs)) {
+          continue;
+        }
+        const cellX = Math.floor(x / CELL_SIZE_TILES);
+        const cellY = Math.floor(y / CELL_SIZE_TILES);
+        seen.add(cellKey(cellX, cellY));
       }
     }
   }

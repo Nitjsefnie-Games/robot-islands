@@ -216,6 +216,63 @@ describe('islandCells', () => {
     const uniq = new Set(cells);
     expect(uniq.size).toBe(cells.length);
   });
+
+  // Regression: fog overlay must NOT mask cells outside the actual island
+  // footprint (open ocean cells the cell-grid snap of the tile-bbox used to
+  // sneak in). For a small island at (40, -10) with r=10 the tile bbox is
+  // [30, 50] × [-20, 0] which snaps to a 3×3 cell block on x∈{1,2,3}
+  // y∈{-2,-1,0}. Corner cell (1, -2) covers tiles [16, 32) × [-32, -16) —
+  // its nearest inscribed-test corner to the ellipse center is at distance
+  // > major radius, so it contains zero inscribed tiles and is pure open
+  // ocean. Including it in the fog overlay was masking the cyan vision
+  // halo where it crossed those cells.
+  it('excludes cells outside the inscribed ellipse footprint (regression)', () => {
+    const spec = makeIslandSpec({
+      cx: 40,
+      cy: -10,
+      majorRadius: 10,
+      minorRadius: 10,
+    });
+    const cells = new Set(islandCells(spec));
+    // Must still cover the inscribed interior.
+    expect(cells.has('2,-1')).toBe(true);
+    // Corner cells with no inscribed tiles must NOT slip in.
+    expect(cells.has('1,-2')).toBe(false);
+    expect(cells.has('3,-2')).toBe(false);
+    expect(cells.has('1,0')).toBe(false);
+    expect(cells.has('3,0')).toBe(false);
+  });
+
+  // Regression: every emitted cell must overlap at least one inscribed tile.
+  // Exhaustive check on a moderate-size island.
+  it('every emitted cell contains at least one inscribed tile (regression)', () => {
+    const spec = makeIslandSpec({
+      cx: 0,
+      cy: 0,
+      majorRadius: 14,
+      minorRadius: 14,
+    });
+    const cells = islandCells(spec);
+    const a2 = 14 * 14;
+    function tileInscribed(x: number, y: number): boolean {
+      for (const [px, py] of [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]]) {
+        if ((px! * px!) / a2 + (py! * py!) / a2 >= 1) return false;
+      }
+      return true;
+    }
+    for (const key of cells) {
+      const { cellX, cellY } = parseCellKey(key);
+      let found = false;
+      const xStart = cellX * CELL_SIZE_TILES;
+      const yStart = cellY * CELL_SIZE_TILES;
+      for (let y = yStart; y < yStart + CELL_SIZE_TILES && !found; y++) {
+        for (let x = xStart; x < xStart + CELL_SIZE_TILES && !found; x++) {
+          if (tileInscribed(x, y)) found = true;
+        }
+      }
+      expect(found, `cell ${key} has no inscribed tile`).toBe(true);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
