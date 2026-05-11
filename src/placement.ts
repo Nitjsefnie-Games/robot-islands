@@ -297,10 +297,14 @@ export function buildingAtTile(
   wy: number,
 ): PlacedBuilding | null {
   // Snap to integer tile — callers pass either integer or fractional tile
-  // coords (mouse hit-test is fractional). Tiles are the unit, so we round
-  // down to land in the correct cell.
-  const tx = Math.floor(wx);
-  const ty = Math.floor(wy);
+  // coords (mouse hit-test is fractional). Because tile (n) is rendered
+  // centred on world pixel (n * TILE_PX), its visual extent spans
+  // [n - 0.5, n + 0.5) in fractional-tile space. Math.round maps a
+  // fractional coord to the tile whose visual centre is nearest — matching
+  // the half-tile rendering convention in renderIslandTiles / renderBuildings
+  // where tile (n) draws at (n * TILE_PX - TILE_PX/2).
+  const tx = Math.round(wx);
+  const ty = Math.round(wy);
   for (const b of spec.buildings) {
     const def = BUILDING_DEFS[b.defId];
     const tiles = footprintTiles(def.width, def.height, b.x, b.y, (b.rotation ?? 0) as Rotation);

@@ -353,13 +353,31 @@ describe('buildingAtTile', () => {
     expect(buildingAtTile(spec, -1, -1)).toBeNull();
   });
 
-  it('snaps fractional tile coords to the integer cell (floor)', () => {
+  it('snaps fractional tile coords to the nearest tile (round, centred-tile convention)', () => {
     const b: PlacedBuilding = { id: 'm1', defId: 'mine', x: 0, y: 0, rotation: 0 };
     const spec = makeSpec({ buildings: [b] });
-    // 0.7, 0.3 lies in tile (0, 0).
+    // 0.3 and 0.7 both round to the nearest integer within the 2×2 footprint.
     expect(buildingAtTile(spec, 0.7, 0.3)).toBe(b);
-    // 2.1, 0 lies in tile (2, 0) — outside the 2×2 at (0,0).
+    // 2.1 rounds to 2 — outside the 2×2 at (0,0) which covers tiles 0 and 1.
     expect(buildingAtTile(spec, 2.1, 0)).toBeNull();
+  });
+
+  it('hit-tests the visual edges of a building (centred-tile rendering)', () => {
+    // The home island uses TILE_PX = 24. Each tile (n) is rendered centred on
+    // world pixel (n * 24), covering world pixels [n*24 - 12, n*24 + 12).
+    // In fractional-tile coords, tile (n) spans [n - 0.5, n + 0.5).
+    // A 2×2 Mine at (0,0) covers tiles {0,1} × {0,1}, so its visual footprint
+    // spans fractional coords [-0.5, 1.5) in both axes.
+    const b: PlacedBuilding = { id: 'm1', defId: 'mine', x: 0, y: 0, rotation: 0 };
+    const spec = makeSpec({ buildings: [b] });
+    // Visual top-left corner: fractional (-0.49, -0.49) — inside the building.
+    expect(buildingAtTile(spec, -0.49, -0.49)).toBe(b);
+    // Visual bottom-right corner: fractional (1.49, 1.49) — inside the building.
+    expect(buildingAtTile(spec, 1.49, 1.49)).toBe(b);
+    // Just past the left visual edge: fractional (-0.51, 0) — outside.
+    expect(buildingAtTile(spec, -0.51, 0)).toBeNull();
+    // Just past the right visual edge: fractional (1.51, 0) — outside.
+    expect(buildingAtTile(spec, 1.51, 0)).toBeNull();
   });
 
   it('respects rotation in the footprint tile set', () => {

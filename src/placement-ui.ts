@@ -165,11 +165,13 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     const targetSpec = deps.getTargetSpec();
     const targetState = deps.getTargetState();
 
-    // Cursor → world-tile → island-local. The anchor is the integer tile
-    // the cursor lies in.
+    // Cursor → world-tile → island-local. The anchor snaps to the integer
+    // tile whose visual centre is nearest the cursor (Math.round), matching
+    // the half-tile rendering convention: tile (n) is drawn centred on
+    // world pixel (n * TILE_PX), so its visual extent spans [n-0.5, n+0.5).
     const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
-    const localX = Math.floor(wt.x - targetSpec.cx);
-    const localY = Math.floor(wt.y - targetSpec.cy);
+    const localX = Math.round(wt.x - targetSpec.cx);
+    const localY = Math.round(wt.y - targetSpec.cy);
 
     const v = validatePlacement(
       targetSpec,
@@ -269,8 +271,8 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     const targetSpec = deps.getTargetSpec();
     const targetState = deps.getTargetState();
     const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
-    const localX = Math.floor(wt.x - targetSpec.cx);
-    const localY = Math.floor(wt.y - targetSpec.cy);
+    const localX = Math.round(wt.x - targetSpec.cx);
+    const localY = Math.round(wt.y - targetSpec.cy);
     const v = validatePlacement(
       targetSpec,
       targetState,
