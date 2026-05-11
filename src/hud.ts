@@ -24,9 +24,10 @@
 //   4. Network Consciousness line (above Power per the refactor brief)
 //   5. Power line (produced / consumed / factor)
 //   6. Saved indicator
-//   7. Buildings — compact per-category enumeration of placed defs
-//   8. Alarms — surfaces resources at cap or trending to empty
-//   9. Inventory hint (KeyI)
+//   7. Objective — current short-term goal from the objectives ladder
+//   8. Buildings — compact per-category enumeration of placed defs
+//   9. Alarms — surfaces resources at cap or trending to empty
+//  10. Inventory hint (KeyI)
 //
 // Why DOM rather than PixiJS Text: the HUD updates every frame with
 // changing strings, and the surrounding game UI is already DOM. DOM text
@@ -37,6 +38,7 @@ import { BUILDING_DEFS, type BuildingCategory, type BuildingDefId } from './buil
 import type { PlacedBuilding } from './buildings.js';
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
+import type { Objective } from './objectives.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';
 import type { IslandSpec } from './world.js';
@@ -61,6 +63,7 @@ export interface HudHandle {
     ncState: NetworkConsciousnessState,
     saveAgeSec: number | null,
     vehiclesEnRoute: number,
+    objective: Objective | null,
   ): void;
 }
 
@@ -448,6 +451,41 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
   savedLine.appendChild(savedValue);
   panel.appendChild(savedLine);
 
+  // ---- Objective line ----------------------------------------------------
+  // Current short-term goal from the objectives ladder. Same FG_DIM label /
+  // ACCENT cyan value vocabulary as the Site/Network/Saved rows. Cached on
+  // `lastObjectiveLabel` so the DOM only rewrites when the label changes.
+  const objectiveLine = document.createElement('div');
+  objectiveLine.style.cssText = [
+    'display: flex',
+    'justify-content: space-between',
+    'align-items: baseline',
+    'gap: 8px',
+    'padding-top: 1px',
+    'margin-top: 3px',
+    'border-top: 1px solid rgba(58, 68, 82, 0.4)',
+  ].join(';');
+  const objectiveLabel = document.createElement('span');
+  objectiveLabel.textContent = 'Objective';
+  objectiveLabel.style.cssText = [
+    'color: #7a8294', // FG_DIM
+    'letter-spacing: 0.06em',
+    'text-transform: uppercase',
+    'font-size: 10px',
+  ].join(';');
+  const objectiveValue = document.createElement('span');
+  objectiveValue.style.cssText = [
+    'color: #7dd3e8', // ACCENT cyan
+    'font-size: 11px',
+    'font-weight: 600',
+    // Long labels wrap rather than overflow the panel's max-width.
+    'word-break: break-word',
+    'text-align: right',
+  ].join(';');
+  objectiveLine.appendChild(objectiveLabel);
+  objectiveLine.appendChild(objectiveValue);
+  panel.appendChild(objectiveLine);
+
   // ---- Buildings enumeration section -------------------------------------
   // A thin divider rule + a flex column. The row layout per category is a
   // grid: [label][entries]. The whole section's DOM is rebuilt only when
@@ -504,6 +542,10 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
   /** Last-rendered alarms signature so the alarm DOM stays stable when the
    *  fires don't change frame-to-frame. */
   let lastAlarmsKey = '';
+  /** Last-rendered objective label (or '' for the "all complete / none"
+   *  state). Gates the DOM write so the cyan value isn't repainted on every
+   *  frame. */
+  let lastObjectiveLabel = '\0'; // sentinel that no real label can equal
 
   function buildChip(id: ModifierId): HTMLSpanElement {
     const def = MODIFIER_DEFS[id];
@@ -646,6 +688,7 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
     ncState: NetworkConsciousnessState,
     saveAgeSec: number | null,
     vehiclesEnRoute: number,
+    objective: Objective | null,
   ): void {
     const need = xpForLevel(state.level + 1);
     titleNode.textContent = state.id === 'home' ? 'Starting Island' : state.id;
@@ -704,6 +747,17 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
       savedValue.textContent = 'just now';
     } else {
       savedValue.textContent = `${saveAgeSec}s ago`;
+    }
+
+    // Objective — gated on label so the DOM doesn't repaint each frame.
+    // Null (all ladder entries complete) is unreachable today (the §13.4
+    // stubs have `check: () => false`) but the empty path is shown as an
+    // em dash for forward-compat.
+    const objLabel = objective?.label ?? '—';
+    if (objLabel !== lastObjectiveLabel) {
+      objectiveValue.textContent = objLabel;
+      objectiveValue.style.color = objective === null ? '#4d5566' : '#7dd3e8';
+      lastObjectiveLabel = objLabel;
     }
 
     // Buildings enumeration — gated on signature.

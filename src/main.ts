@@ -55,6 +55,7 @@ import { mountBuildingsUi } from './buildings-ui.js';
 import { mountConstructionUi } from './construction-ui.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
 import { mountInventoryUi } from './inventory-ui.js';
+import { currentObjective, makeGameSnapshot } from './objectives.js';
 import { buildingAtTile, demolishBuilding, footprintTiles, type Rotation } from './placement.js';
 import { mountPlacementUi } from './placement-ui.js';
 import { mountSkillTreeUi } from './skilltree-ui.js';
@@ -1091,6 +1092,11 @@ async function main(): Promise<void> {
     });
     const saveAgeSec =
       lastSaveAt === null ? null : Math.max(0, Math.floor((now - lastSaveAt) / 1000));
+    // Objectives banner: compute the current short-term goal from a
+    // snapshot view of world + per-island states. Cheap — `makeGameSnapshot`
+    // copies no large arrays, just packages live references.
+    const objSnap = makeGameSnapshot(worldState, islandStates, activeIslandId);
+    const objective = currentObjective(objSnap);
     hud.update(
       activeS,
       net,
@@ -1099,6 +1105,7 @@ async function main(): Promise<void> {
       ncState,
       saveAgeSec,
       worldState.vehicles.length,
+      objective,
     );
     // Skill tree only repaints while visible — DOM writes are wasted
     // otherwise. show() also forces a paint on transition so we don't
