@@ -30,6 +30,7 @@ import {
   type BuildingCategory,
   type BuildingDefId,
 } from './building-defs.js';
+import { placementCostFor } from './placement.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { computeRates } from './economy.js';
@@ -105,15 +106,13 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 // ---------------------------------------------------------------------------
 // Demolition-credit formula (mirrors `demolishBuilding` in placement.ts)
 // ---------------------------------------------------------------------------
-/** Placeholder per §6.7: scrap = footprint-tile-count × 3. The demolish
- *  modal needs the credit number before the player confirms; the canonical
- *  formula lives in `demolishBuilding`, but recomputing here keeps the UI
- *  free of an extra "preview" entry point on the pure module. */
-function previewScrapForBuilding(b: PlacedBuilding): number {
-  const def = BUILDING_DEFS[b.defId];
-  // Rectangle area is `width × height` regardless of rotation (rotation only
-  // re-orients the same tile set), so we can skip a footprintTiles call.
-  return Math.floor(def.width * def.height * 3);
+/** Preview the §6.7 scrap credit for a building def. Mirrors the
+ *  `floor(sum(placementCost) * 0.3)` computation `demolishBuilding` applies. */
+function previewScrapForBuilding(defId: BuildingDefId): number {
+  const def = BUILDING_DEFS[defId];
+  const cost = placementCostFor(def);
+  const costSum = Object.values(cost).reduce((sum, n) => sum + n, 0);
+  return Math.floor(costSum * 0.3);
 }
 
 /** §14: preview the 50% placement-cost refund for the confirm dialog.
@@ -917,7 +916,7 @@ export function mountInspectorUi(
   });
   demolishBtn.addEventListener('click', () => {
     if (!target) return;
-    const credit = previewScrapForBuilding(target.building);
+    const credit = previewScrapForBuilding(target.building.defId);
     const refund = previewRefundForBuilding(target.building);
     const refundStr = formatRefund(refund);
     const def = BUILDING_DEFS[target.building.defId];
@@ -1243,7 +1242,7 @@ export function mountInspectorUi(
 
     // Demolish button — credit preview baked into the label so the player
     // doesn't have to click before learning the cost.
-    const credit = previewScrapForBuilding(building);
+    const credit = previewScrapForBuilding(building.defId);
     demolishBtn.textContent = `▼ DEMOLISH · +${credit} SCRAP`;
   }
 

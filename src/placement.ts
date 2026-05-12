@@ -479,15 +479,9 @@ export interface DemolishResult {
 /**
  * Remove a placed building and credit the player with two compensations:
  *
- *   1. §6.7 Scrap, scaled with footprint area (placeholder while the
- *      §6.7 ingredient-mirror "Scrap proportional to build cost" formula
- *      is DEFERRED — task #22 picks that up using the recipe ingredients
- *      and is separate from this §14 placement-cost refund).
- *
- *         scrap = footprint-tile-count × 3
- *
- *      Keeps a 1×1 Solar (3 scrap), 2×2 Mine (12), 3×3 Blast Furnace (27),
- *      and 4×4 Fusion Core (48) on a sane progression curve.
+ *   1. §6.7 Scrap, proportional to build cost: `floor(sum(placementCost) * 0.3)`.
+ *      Every def post-§14 carries a placementCost; if one somehow doesn't,
+ *      `placementCostFor` returns `{}` and scrap is 0.
  *
  *   2. §14 placement-cost refund: 50% of `def.placementCost`, floored
  *      per-resource. A 30-stone Mine demolition refunds 15 stone; a
@@ -533,18 +527,9 @@ export function demolishBuilding(
   }
   const b = spec.buildings[idx]!;
   const def = BUILDING_DEFS[b.defId];
-  // Footprint-area × 3 placeholder per §6.7 (proper recipe-cost mirror
-  // deferred to task #22 — task #22 uses recipe ingredients not
-  // placementCost, so this credit is independent of the §14 refund below).
-  // `footprintTiles` returns the axis-aligned tile coverage — count its length.
-  const tiles = footprintTiles(
-    def.width,
-    def.height,
-    b.x,
-    b.y,
-    (b.rotation ?? 0) as Rotation,
-  );
-  const scrapReturned = Math.floor(tiles.length * 3);
+  const cost = placementCostFor(def);
+  const costSum = Object.values(cost).reduce((sum, n) => sum + n, 0);
+  const scrapReturned = Math.floor(costSum * 0.3);
   // Splice out the building. `spec.buildings` and `state.buildings` are the
   // same array reference (see `makeInitialIslandState`), so this mutation
   // is visible to the next economy tick without an explicit sync.
@@ -589,7 +574,6 @@ export function demolishBuilding(
   // Buildings without a placementCost (defensive forward-compat for legacy
   // saves) refund nothing here; the Scrap credit above still fires.
   const refunded: Partial<Record<ResourceId, number>> = {};
-  const cost = placementCostFor(def);
   for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
     if (n <= 0) continue;
     const half = Math.floor(n / 2);

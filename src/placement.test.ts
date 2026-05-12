@@ -14,6 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
@@ -22,6 +23,7 @@ import {
   demolishBuilding,
   footprintTiles,
   placeBuilding,
+  placementCostFor,
   rotatedDims,
   validatePlacement,
   type Rotation,
@@ -567,13 +569,12 @@ describe('demolishBuilding', () => {
     expect(state.buildings).toHaveLength(0);
   });
 
-  it('credits scrap = footprint-tile-count × 3 on success', () => {
-    // 1×1 Solar → 3 scrap; 2×2 Mine → 12; 3×3 Blast Furnace → 27. Verify all
-    // three so the formula is locked in.
+  it('credits scrap = floor(sum(placementCost) * 0.3) on success', () => {
+    // solar 30 → 9; mine 45 → 13; blast_furnace 220 → 66.
     const cases: Array<{ defId: 'solar' | 'mine' | 'blast_furnace'; level: number; expected: number }> = [
-      { defId: 'solar', level: 1, expected: 3 },
-      { defId: 'mine', level: 1, expected: 12 },
-      { defId: 'blast_furnace', level: 5, expected: 27 },
+      { defId: 'solar', level: 1, expected: 9 },
+      { defId: 'mine', level: 1, expected: 13 },
+      { defId: 'blast_furnace', level: 5, expected: 66 },
     ];
     for (const c of cases) {
       const spec = makeSpec();
@@ -660,14 +661,14 @@ describe('demolishBuilding', () => {
     // Force the scrap cap low so the demolition credit hits it.
     state.storageCaps.scrap = 5;
     state.inventory.scrap = 0;
-    // 2×2 Mine would credit 12 scrap; the cap of 5 should clip it.
+    // Mine costs 45 total → 13 scrap; the cap of 5 should clip it.
     placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine');
     const r = demolishBuilding(spec, state, 'p-mine');
     expect(r.ok).toBe(true);
     // Reported credit reflects the raw scrap returned per §6.7 formula —
     // the inventory clip is what gets lost, but the player feedback is the
     // full earned amount.
-    expect(r.scrapReturned).toBe(12);
+    expect(r.scrapReturned).toBe(13);
     expect(state.inventory.scrap).toBe(5);
   });
 
@@ -712,5 +713,28 @@ describe('demolishBuilding', () => {
     // refunded number reflects what ACTUALLY landed (5), not the raw 15.
     expect(r.refunded.stone).toBe(5);
     expect(state.inventory.stone).toBe(75); // clamped
+  });
+});
+
+describe('§6.7 scrap recovery', () => {
+  it('returns scrap proportional to build cost, not footprint area', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine');
+    const mineDef = BUILDING_DEFS.mine;
+    const costSum = Object.values(placementCostFor(mineDef)).reduce((a, b) => a + b, 0);
+    const expectedScrap = Math.floor(costSum * 0.3);
+    const result = demolishBuilding(spec, state, state.buildings[state.buildings.length - 1]!.id);
+    expect(result.ok).toBe(true);
+    expect(result.scrapReturned).toBe(expectedScrap);
+  });
+
+  it('floors scrap from cost × 0.3', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // workshop costs { stone: 40, wood: 20 } → sum 60 → 60*0.3 = 18.0
+    placeBuilding(spec, state, 'workshop', 0, 0, 0, () => 'p-workshop');
+    const result = demolishBuilding(spec, state, state.buildings[state.buildings.length - 1]!.id);
+    expect(result.scrapReturned).toBe(18);
   });
 });
