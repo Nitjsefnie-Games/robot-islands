@@ -540,6 +540,7 @@ describe('id counter seeding', () => {
       expectedArrivalTime: 11_000,
       weatherMultiplier: 1.0,
       fuelResource: 'biofuel',
+      failureRate: 0.02,
     });
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
@@ -608,6 +609,7 @@ describe('drone and route timestamp remapping', () => {
       expectedArrivalTime: 1_510_000,
       weatherMultiplier: 1.0,
       fuelResource: 'biofuel',
+      failureRate: 0.02,
     });
     const states = new Map<string, IslandState>();
     const savedAtWallMs = 100_000;
@@ -701,6 +703,7 @@ describe('§11.7 tier-matched fuelResource persistence', () => {
       expectedArrivalTime: 10_000,
       weatherMultiplier: 0.7,
       fuelResource: 'diesel',
+      failureRate: 0.01,
     });
     const snap = serializeWorld(world, new Map(), 0, 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;

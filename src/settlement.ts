@@ -26,6 +26,7 @@
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
+import { makeSeededRng } from './rng.js';
 import { tierForLevel } from './skilltree.js';
 import type { IslandSpec, WorldState } from './world.js';
 import { makeInitialIslandState } from './world.js';
@@ -69,6 +70,9 @@ export interface SettlementVehicle {
    *  the ticker / UI / persistence layer know which inventory key was
    *  burned without re-deriving from level (which is mutable post-launch). */
   readonly fuelResource: ResourceId;
+  /** §12.5 mechanical failure probability [0,1]. Carried on the record so
+   *  the tick loop can roll deterministically at arrival time. */
+  readonly failureRate: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +124,7 @@ export interface VehicleTuning {
   readonly speed: number;
   readonly tilesPerFuel: number;
   readonly weatherMultiplier: number;
+  readonly failureRate: number; // §12.5 mechanical failure probability [0,1]
 }
 
 export function tuningFor(kind: VehicleKind): VehicleTuning {
@@ -129,6 +134,7 @@ export function tuningFor(kind: VehicleKind): VehicleTuning {
       speed: SHIP_SPEED_TILES_PER_SEC,
       tilesPerFuel: SHIP_TILES_PER_FUEL,
       weatherMultiplier: SHIP_T1_WEATHER_MUL,
+      failureRate: 0.02, // 2% T1 ship
     };
   }
   return {
@@ -136,6 +142,7 @@ export function tuningFor(kind: VehicleKind): VehicleTuning {
     speed: HELI_SPEED_TILES_PER_SEC,
     tilesPerFuel: HELI_TILES_PER_FUEL,
     weatherMultiplier: HELI_T2_WEATHER_MUL,
+    failureRate: 0.01, // 1% T2 helicopter
   };
 }
 
@@ -273,6 +280,7 @@ export function dispatchVehicle(
     expectedArrivalTime,
     weatherMultiplier: t.weatherMultiplier,
     fuelResource,
+    failureRate: t.failureRate,
   };
   world.vehicles.push(vehicle);
   return { ok: true, vehicle };
@@ -293,6 +301,7 @@ export interface VehicleArrival {
 
 export interface TickVehiclesResult {
   readonly arrivals: VehicleArrival[];
+  readonly failures: VehicleArrival[];
 }
 
 /**
@@ -328,6 +337,7 @@ export function tickVehicles(
   nowMs: number,
 ): TickVehiclesResult {
   const arrivals: VehicleArrival[] = [];
+  const failures: VehicleArrival[] = [];
   const remaining: SettlementVehicle[] = [];
 
   for (const v of world.vehicles) {
@@ -341,6 +351,12 @@ export function tickVehicles(
       // Target despawned mid-flight — vehicle + cargo lost. (Should never
       // happen in step 12; islands aren't removed.)
       continue;
+    }
+    // §12.5 mechanical failure roll.
+    const rng = makeSeededRng(`${v.id}:${v.launchTime}`);
+    if (rng() < v.failureRate) {
+      failures.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
+      continue; // vehicle lost; target stays unsettled
     }
     if (target.populated) {
       // Target became populated via a parallel path (e.g. two vehicles
@@ -370,7 +386,7 @@ export function tickVehicles(
   world.vehicles.length = 0;
   for (const v of remaining) world.vehicles.push(v);
 
-  return { arrivals };
+  return { arrivals, failures };
 }
 
 // ---------------------------------------------------------------------------

@@ -1187,6 +1187,12 @@ async function main(): Promise<void> {
       }
       rebuildWorldLayers();
     }
+    if (vehicleResult.failures.length > 0) {
+      // Minimal first-step: log to console. Future step can add UI toast.
+      for (const f of vehicleResult.failures) {
+        console.log(`Settlement vehicle lost: ${f.kind} → ${f.targetIslandId}`);
+      }
+    }
 
     // Recompute rates AFTER the tick so the HUD shows the current
     // post-advance state (e.g., a freshly-stalled building reads as

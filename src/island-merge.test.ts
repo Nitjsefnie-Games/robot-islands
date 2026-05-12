@@ -394,6 +394,7 @@ describe('performMerge', () => {
       expectedArrivalTime: 100_000,
       weatherMultiplier: 1,
       fuelResource: 'biofuel',
+      failureRate: 0.02,
     };
     world.vehicles.push(v);
     const states = new Map<string, IslandState>([

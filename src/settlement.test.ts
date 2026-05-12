@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import { makeSeededRng } from './rng.js';
+import type { SettlementVehicle } from './settlement.js';
 import {
   HELI_TILES_PER_FUEL,
   SHIP_SPEED_TILES_PER_SEC,
@@ -546,5 +548,87 @@ describe('dispatchVehicle — §11.7 tier-matched fuel', () => {
     if (!r.ok) return;
     expect(r.vehicle.fuelResource).toBe('cryogenic_hydrogen');
     expect(homeState.inventory.cryogenic_hydrogen).toBe(45);
+  });
+});
+
+describe('mechanical failure §12.5', () => {
+  it('deterministically fails a T1 ship with a known seed', () => {
+    const origin = makeIslandSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'sy', defId: 'shipyard', x: 0, y: 0 }],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 0,
+      populated: false,
+      discovered: true,
+    });
+    const world = freshWorld([origin, target]);
+    const originState = makeIslandState({ id: 'home' });
+    originState.inventory.biofuel = 100;
+    originState.inventory.foundation_kit = 1;
+
+    // Brute-force a launchTime that causes failure for id 'vehicle-1'.
+    let launchTime = 0;
+    while (true) {
+      const rng = makeSeededRng(`vehicle-1:${launchTime}`);
+      if (rng() < 0.02) break;
+      launchTime += 1;
+    }
+
+    const result = dispatchVehicle(world, origin, originState, target, 'ship', 10, 1, launchTime);
+    expect(result.ok).toBe(true);
+    const v = (result as any).vehicle as SettlementVehicle;
+
+    const tickResult = tickVehicles(world, new Map(), v.expectedArrivalTime + 1);
+    expect(tickResult.failures.length).toBe(1);
+    expect(tickResult.arrivals.length).toBe(0);
+    expect(target.populated).toBe(false);
+  });
+
+  it('deterministically succeeds a T2 helicopter with a known seed', () => {
+    const origin = makeIslandSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      discovered: true,
+      buildings: [
+        { id: 'sy', defId: 'shipyard', x: 0, y: 0 },
+        { id: 'hp', defId: 'helipad', x: 1, y: 1 },
+      ],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 0,
+      populated: false,
+      discovered: true,
+    });
+    const world = freshWorld([origin, target]);
+    const originState = makeIslandState({ id: 'home', level: 5 });
+    originState.inventory.diesel = 100;
+    originState.inventory.foundation_kit = 1;
+
+    let launchTime = 0;
+    while (true) {
+      const rng = makeSeededRng(`vehicle-1:${launchTime}`);
+      if (rng() >= 0.01) break;
+      launchTime += 1;
+    }
+
+    const result = dispatchVehicle(world, origin, originState, target, 'helicopter', 10, 1, launchTime);
+    expect(result.ok).toBe(true);
+    const v = (result as any).vehicle as SettlementVehicle;
+
+    const tickResult = tickVehicles(world, new Map(), v.expectedArrivalTime + 1);
+    expect(tickResult.failures.length).toBe(0);
+    expect(tickResult.arrivals.length).toBe(1);
+    expect(target.populated).toBe(true);
   });
 });

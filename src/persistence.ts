@@ -51,7 +51,7 @@ import { _seedDroneIdCounter } from './drones.js';
 import type { Route } from './routes.js';
 import { _seedRouteIdCounter } from './routes.js';
 import type { SettlementVehicle } from './settlement.js';
-import { _seedVehicleIdCounter } from './settlement.js';
+import { _seedVehicleIdCounter, tuningFor } from './settlement.js';
 import { ALL_RESOURCES } from './recipes.js';
 import type { NodeId, SubPathId } from './skilltree.js';
 import type { IslandSpec, WorldState } from './world.js';
@@ -345,6 +345,12 @@ export function deserializeWorld(
         'fuelResource' in v && typeof (v as { fuelResource?: unknown }).fuelResource === 'string'
           ? (v as { fuelResource: SettlementVehicle['fuelResource'] }).fuelResource
           : 'biofuel',
+      // §12.5 mechanical-failure rate backfill. Legacy saves predate the
+      // `failureRate` field — derive from vehicle kind via tuning table.
+      failureRate:
+        'failureRate' in v && typeof (v as { failureRate?: unknown }).failureRate === 'number'
+          ? (v as { failureRate: SettlementVehicle['failureRate'] }).failureRate
+          : tuningFor(v.kind).failureRate,
     })),
     // §11 telemetry forward-compat backfill: legacy v3 saves predate the
     // `revealedCells` field. Restore from the snapshot's array (Set form
