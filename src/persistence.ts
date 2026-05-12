@@ -414,6 +414,27 @@ export function deserializeWorld(
         (s as { lastResetAt?: unknown }).lastResetAt === null)
         ? (s as { lastResetAt: number | null }).lastResetAt
         : null;
+    // Forward-compat backfill: Time Lock fields added after v3. Legacy saves
+    // lack them; default to safe baseline values so banking / spending math
+    // doesn't see `undefined` and produce NaN.
+    const timeLockBankedMin =
+      typeof (s as { timeLockBankedMin?: unknown }).timeLockBankedMin === 'number'
+        ? (s as { timeLockBankedMin: number }).timeLockBankedMin
+        : 0;
+    const accelerationQueue = Array.isArray(
+      (s as { accelerationQueue?: unknown }).accelerationQueue,
+    )
+      ? (s as { accelerationQueue: IslandState['accelerationQueue'] }).accelerationQueue
+      : [];
+    const accelerationRemainingMin =
+      typeof (s as { accelerationRemainingMin?: unknown }).accelerationRemainingMin ===
+      'number'
+        ? (s as { accelerationRemainingMin: number }).accelerationRemainingMin
+        : 0;
+    const bankingEnabled =
+      typeof (s as { bankingEnabled?: unknown }).bankingEnabled === 'boolean'
+        ? (s as { bankingEnabled: boolean }).bankingEnabled
+        : false;
     const live: IslandState = {
       ...s,
       // Defensive inventory + storageCaps + funnelPending clones so the
@@ -425,6 +446,10 @@ export function deserializeWorld(
       subPathProgress: new Map(s.subPathProgress),
       ascendantCoreCrafted,
       lastResetAt,
+      timeLockBankedMin,
+      accelerationQueue,
+      accelerationRemainingMin,
+      bankingEnabled,
       // Remap lastTick from the saved performance.now() domain into the
       // current session's performance.now() domain. The save preserved
       // lastTick literally; we shift by the offline delta so the
