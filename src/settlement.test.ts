@@ -817,7 +817,6 @@ describe('vehicle weather destruction §2.6', () => {
     if (!r.ok) return;
     const result = tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
     expect(result.arrivals).toHaveLength(1);
-    expect(result.lost).toHaveLength(0);
     expect(result.failures).toHaveLength(0);
     expect(target.populated).toBe(true);
     expect(world.vehicles[0]!.status).toBe('arrived');

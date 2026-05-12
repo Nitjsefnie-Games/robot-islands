@@ -305,4 +305,14 @@ describe('rollVehicleDestruction', () => {
     const safe = rollVehicleDestruction('seed', path, 0, 'v1');
     expect(safe.destroyed).toBe(false);
   });
+
+  it('destroys a vehicle crossing catastrophic weather with a deterministic roll', () => {
+    const seed = 'test-5';
+    // Cell (0,0) is catastrophic for this seed at t=0.
+    expect(weather(seed, 0, 0, 0).state).toBe('catastrophic');
+    const path = [{ cx: 0, cy: 0, entryMs: 0 }];
+    const result = rollVehicleDestruction(seed, path, 1.0, 'vehicle-1');
+    expect(result.destroyed).toBe(true);
+    expect(result.atCellIndex).toBe(0);
+  });
 });
