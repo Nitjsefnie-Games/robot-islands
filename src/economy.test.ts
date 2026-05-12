@@ -974,6 +974,74 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
 });
 
 // -----------------------------------------------------------------------
+// §13 core-craft auto-flip
+// -----------------------------------------------------------------------
+
+describe('§13 core-craft auto-flip', () => {
+  it('flips aiCoreCrafted on first ai_core production', () => {
+    const CRYO: PlacedBuilding = {
+      id: 'b-cryo',
+      defId: 'cryogenic_compute_center',
+      x: 0,
+      y: 0,
+    };
+    const powerFreeCryo = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.cryogenic_compute_center;
+      base.cryogenic_compute_center = rest as BuildingDef;
+      return base;
+    })();
+    const state = makeState({
+      buildings: [CRYO],
+      inventory: { ...blankInventory(), steel: 100, quantum_chip: 20 },
+      storageCaps: blankCaps(10000),
+      level: 50,
+      aiCoreCrafted: false,
+    });
+    expect(state.aiCoreCrafted).toBe(false);
+    advanceIsland(state, 6_000_000, { defs: powerFreeCryo });
+    expect(state.aiCoreCrafted).toBe(true);
+    expect(state.inventory.ai_core ?? 0).toBeGreaterThan(0);
+  });
+
+  it('does not flip aiCoreCrafted from inventory presence alone', () => {
+    const state = makeState({
+      inventory: { ...blankInventory(), ai_core: 5 },
+      aiCoreCrafted: false,
+    });
+    advanceIsland(state, 10_000);
+    expect(state.aiCoreCrafted).toBe(false);
+  });
+
+  it('flips ascendantCoreCrafted on first ascendant_core production', () => {
+    const ASC: PlacedBuilding = {
+      id: 'b-asc',
+      defId: 'ascendant_assembly',
+      x: 0,
+      y: 0,
+    };
+    const powerFreeAsc = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.ascendant_assembly;
+      base.ascendant_assembly = rest as BuildingDef;
+      return base;
+    })();
+    const state = makeState({
+      buildings: [ASC],
+      inventory: { ...blankInventory(), reality_anchor: 100, eldritch_processor: 100, ai_core: 100 },
+      storageCaps: blankCaps(10000),
+      level: 50,
+      aiCoreCrafted: true,
+      ascendantCoreCrafted: false,
+    });
+    expect(state.ascendantCoreCrafted).toBe(false);
+    advanceIsland(state, 8_000_000, { defs: powerFreeAsc });
+    expect(state.ascendantCoreCrafted).toBe(true);
+    expect(state.inventory.ascendant_core ?? 0).toBeGreaterThan(0);
+  });
+});
+
+// -----------------------------------------------------------------------
 // §5.2 Heat adjacency — economy integration
 // -----------------------------------------------------------------------
 

@@ -860,6 +860,13 @@ export function advanceIsland(
     // quadrant, not start-of-tick. Without this, a 24h offline gap would
     // integrate one constant solar multiplier across all four phases.
     const { production, consumption, net } = computeRates(state, ctx, t);
+    // §13 auto-flip: first local production of ai_core / ascendant_core
+    if (!state.aiCoreCrafted && (production.ai_core ?? 0) > 0) {
+      state.aiCoreCrafted = true;
+    }
+    if (!state.ascendantCoreCrafted && (production.ascendant_core ?? 0) > 0) {
+      state.ascendantCoreCrafted = true;
+    }
     const nextEventMs = findNextCapEvent(state, net, t, nowMs, ctx);
     // §2.7: bound the segment to the next phase boundary so the constant-
     // rate invariant of §15.3 still holds across day-night transitions. A
