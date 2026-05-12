@@ -51,10 +51,9 @@ export type ResourceId =
   // 2.5 the resource exists only as the credit returned on demolition.
   | 'scrap'
   // Step-18 T0 raws (§6.1 / §6.2). Added so every §7 recipe input has at
-  // least one producer in the catalog. Per-tile gating on extraction
-  // (Quarry → stone tile, Well → water tile, etc.) is DEFERRED — the
-  // step-18 producers run anywhere. See building-defs.ts for the matching
-  // §8.1 tile-requirement comment per def.
+  // least one producer in the catalog. §8.1 tile-gating is live for all
+  // extractors via `requiredTile` in building-defs.ts and enforced at
+  // placement time (validatePlacement) and runtime (computeRates).
   | 'stone'
   | 'sand'
   | 'fresh_water'
@@ -394,7 +393,7 @@ export type RecipeId = BuildingDefId | 'mine_on_ore' | 'mine_on_coal';
  *                                     closure is provided to resolveRecipe.
  *                                     Tile-aware callers receive
  *                                     mine_on_ore / mine_on_coal instead.)
- *     logger   -> 1 wood      / 4s   (no inputs; tile-req `tree` deferred)
+ *     logger   -> 1 wood      / 4s   (no inputs; tile-req `tree` live)
  *
  *   T1 smelting / refining:
  *     smelter  -> 1 iron_ingot / 8s  from 1 iron_ore + 1 coal
@@ -629,9 +628,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // The next block of recipes closes the resource graph: every resource
   // referenced as a recipe INPUT must have at least one producer. Cycle
   // times are placeholders chosen for "demonstrably tickable, not
-  // balanced" — a later pass will rebalance. Per-tile placement gates
-  // (Quarry → stone, Well → water, Pump Jack → oil_well) are DEFERRED
-  // per the step-18 brief: producers run anywhere inside an island.
+  // balanced" — a later pass will rebalance. §8.1 tile-gating is live
+  // for all extractors (placement + runtime).
 
   // T1 extraction (§7.1 / §8.1 raws) — rebalanced for idle-game scale, step #19 (×10).
   // All have empty `inputs` and a single-resource output — same shape as the existing Mine/Logger.
@@ -715,8 +713,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: {},
     outputs: { crude_oil: 1 },
     category: 'extraction',
-    // §8.1 catalog: requires `oil_well` terrain tile. Tile gating
-    // DEFERRED — runs on any in-island tile.
+    // §8.1 catalog: requires `oil_well` terrain tile. Tile gating is
+    // implemented via `requiredTile` in building-defs.ts.
   },
   gas_extractor: {
     cycleSec: 480, // rebalanced for idle-game scale, step #19 (×40: was 12s)

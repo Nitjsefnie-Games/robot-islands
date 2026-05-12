@@ -31,7 +31,7 @@ import {
 import { makeInitialIslandState } from './world.js';
 import type { IslandSpec } from './world.js';
 import type { IslandState } from './economy.js';
-import type { TerrainKind } from './biomes.js';
+import type { TerrainKind } from './island.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
