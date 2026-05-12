@@ -209,7 +209,10 @@ export type BuildingDefId =
   | 'pcb_etcher'
   | 'circuit_assembler'
   | 'processor_fab'
-  | 'compute_module_fab';
+  | 'compute_module_fab'
+  // §2.6 weather stations
+  | 'weather_station_t2'
+  | 'advanced_weather_station_t3';
 
 /**
  * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's
@@ -1852,6 +1855,33 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 100 },
     placementCost: { steel: 30, quantum_chip: 2, exotic_alloy: 5 },
     glyph: '◈',
+  },
+  // -------------------------------------------------------------------------
+  // §2.6 weather stations
+  // -------------------------------------------------------------------------
+  weather_station_t2: {
+    id: 'weather_station_t2',
+    displayName: 'Weather Station',
+    category: 'special',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x6090c0,
+    stroke: 0x203050,
+    power: { consumes: 10 },
+    placementCost: { steel: 5, gear: 2, glass: 5 },
+    glyph: '☁',
+  },
+  advanced_weather_station_t3: {
+    id: 'advanced_weather_station_t3',
+    displayName: 'Advanced Weather Station',
+    category: 'special',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x4070a0,
+    stroke: 0x102040,
+    power: { consumes: 25 },
+    placementCost: { steel: 10, microchip: 2, glass: 10 },
+    glyph: '☁',
   },
 };
 

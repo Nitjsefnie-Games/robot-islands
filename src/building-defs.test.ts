@@ -119,6 +119,9 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'antenna_t4',
   'antenna_t5',
   'antenna_t6',
+  // §2.6 weather stations
+  'weather_station_t2',
+  'advanced_weather_station_t3',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
