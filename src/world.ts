@@ -119,7 +119,7 @@ export interface IslandSpec {
    *  UI surface that shows the island to the player; `id` remains the
    *  internal lookup key (routes, save files, log lines, etc.). */
   name: string;
-  biome: Biome;
+  readonly biome: Biome;
   /** Centre of the island in world-tile coordinates. */
   readonly cx: number;
   readonly cy: number;
@@ -150,7 +150,7 @@ export interface IslandSpec {
   /** Active modifiers on this island per §3.5. Step 8 hard-codes the demo
    *  set on `DEMO_ISLANDS`; future steps roll from `rollModifiers` at
    *  generation. Empty array means no modifiers active. */
-  modifiers: ReadonlyArray<ModifierId>;
+  readonly modifiers: ReadonlyArray<ModifierId>;
   /** §2.5: islands built via Platform Constructor are flagged so future
    *  systems can deny natural-only content (rare-biome modifiers per §3.5,
    *  biome-locked uniques per §9.5). For step 11 the flag is metadata only —
@@ -279,18 +279,17 @@ export function useRealityForge(
   world: WorldState,
   islandId: string,
   targetBiome: Biome,
-  _nowMs: number,
 ): void {
   const spec = world.islands.find((i) => i.id === islandId);
   if (!spec) return;
 
   // Regenerate terrain.
-  regenerateTerrain(spec, targetBiome, (x, y) =>
+  regenerateTerrain(spec as IslandSpec, targetBiome, (x, y) =>
     terrainAtForBiome(targetBiome, spec.id, x, y),
   );
 
   // Reroll modifiers — natural-only ones are excluded.
-  spec.modifiers = rerollModifiers(WORLD_SEED, targetBiome);
+  (spec as any).modifiers = rerollModifiers(WORLD_SEED, targetBiome);
 
   // Invalidate buildings that no longer match terrain.
   for (const b of spec.buildings) {

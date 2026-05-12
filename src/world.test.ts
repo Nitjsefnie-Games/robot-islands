@@ -568,7 +568,7 @@ describe('useRealityForge', () => {
       modifiers: ['stable'],
     });
     const world = makeWorld(spec);
-    useRealityForge(world, 'test-island', 'volcanic', 0);
+    useRealityForge(world, 'test-island', 'volcanic');
     expect(spec.biome).toBe('volcanic');
     // Volcanic default is stone; plains default is grass.
     // Pick a coordinate we know is stone on this volcanic island.
@@ -596,7 +596,7 @@ describe('useRealityForge', () => {
       modifiers: ['stable'],
     });
     const world = makeWorld(spec);
-    useRealityForge(world, 'test-island', 'forest', 0);
+    useRealityForge(world, 'test-island', 'forest');
     expect(spec.biome).toBe('forest');
     const mine = spec.buildings[0]!;
     expect(mine.invalid).toBe(true);
@@ -611,7 +611,7 @@ describe('useRealityForge', () => {
       modifiers: ['stable'],
     });
     const world = makeWorld(spec);
-    useRealityForge(world, 'test-island', 'forest', 0);
+    useRealityForge(world, 'test-island', 'forest');
     const solar = spec.buildings[0]!;
     expect(solar.invalid).toBeUndefined();
   });
@@ -624,7 +624,7 @@ describe('useRealityForge', () => {
       modifiers: ['aetheric_anomaly', 'mineral_rich'],
     });
     const world = makeWorld(spec);
-    useRealityForge(world, 'test-island', 'desert', 0);
+    useRealityForge(world, 'test-island', 'desert');
     // Old modifiers should be replaced; new set must not contain natural-only.
     expect(spec.modifiers.includes('aetheric_anomaly')).toBe(false);
     expect(spec.modifiers.includes('frozen_core')).toBe(false);

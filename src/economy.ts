@@ -381,6 +381,9 @@ export function computeRates(
     ncBuff = 1,
     terrainAt,
   } = ctx ?? {};
+  // Filter out invalid buildings once so they don't participate in heat,
+  // buffs, spaceport checks, or power balance.
+  const validBuildings = state.buildings.filter((b) => !b.invalid);
   // §2.7 day-night cycle. `nowMs` defaults to `state.lastTick` so existing
   // callers (and tests) that don't pass an explicit time see the multiplier
   // for the state's own clock. The integrator in `advanceIsland` passes the
@@ -415,7 +418,7 @@ export function computeRates(
   // from the pass-3 power balance (per §5.1 "active iff … all gates pass").
   // Coal-source served counts drive a post-pass fuel-burn deduction folded
   // directly into `consumption.coal` / `net.coal`.
-  const heat = resolveHeatAssignments(state.buildings);
+  const heat = resolveHeatAssignments(validBuildings);
   // §9.7 Tier Reset runtime gate. A building whose tier exceeds the island's
   // current tier band (e.g. a T2 building on a post-reset L1 island) is
   // forced to baseRate = 0 in pass-1 and excluded from the pass-3 power
@@ -425,7 +428,7 @@ export function computeRates(
   // beyond plain tier. `hasSpaceport` is precomputed once because the
   // pass-1 / pass-3 loops would otherwise scan `state.buildings` per
   // building.
-  const hasSpaceport = state.buildings.some((b) => b.defId === 'spaceport');
+  const hasSpaceport = validBuildings.some((b) => b.defId === 'spaceport');
   function isBuildingActive(b: PlacedBuilding): boolean {
     return buildingUnlocked(
       state.level,
@@ -448,8 +451,7 @@ export function computeRates(
   const tentative: Tentative[] = [];
   /** Gross production by resource from all tentatively-running buildings. */
   const tentSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
-  for (const b of state.buildings) {
-    if (b.invalid) continue;
+  for (const b of validBuildings) {
     // §13.3 Genesis Chamber — free creation of a player-chosen T1-T4 resource.
     // Handled before the normal recipe path because genesis_chamber has no
     // static RECIPES entry.
@@ -510,7 +512,7 @@ export function computeRates(
     // 4-neighbor footprint border. Captured here so pass 2's nominal-rate
     // sees the same factor and producer/consumer supply ratios stay correct.
     // Returns 1.0 when the def has no `adjacencyBuffs` or no matches.
-    const buffStack = computeBuffStack(b, state.buildings, defs);
+    const buffStack = computeBuffStack(b, validBuildings, defs);
     // §9.7 Tier Reset runtime gate: a building above the island's current
     // tier band is fully inactive — same shape as the heat / output stall,
     // baseRate=0 + skipped in the pass-3 power balance.
@@ -622,8 +624,7 @@ export function computeRates(
   // production, no consumption — per §5.1 "active iff all gates pass".
   let powerProduced = 0;
   let powerConsumed = 0;
-  for (const b of state.buildings) {
-    if (b.invalid) continue;
+  for (const b of validBuildings) {
     const def = defs[b.defId];
     // §13.3 Genesis Chamber power is handled below with tier-based draw.
     if (b.defId === 'genesis_chamber') continue;
@@ -662,8 +663,7 @@ export function computeRates(
     powerConsumed += (def.power?.consumes ?? 0) / skillMul.powerConsumption;
   }
   // §13.3 Genesis Chamber tier-based power draw (converted kW → W).
-  for (const b of state.buildings) {
-    if (b.invalid) continue;
+  for (const b of validBuildings) {
     if (b.defId !== 'genesis_chamber') continue;
     if (!isBuildingActive(b)) continue;
     if (!state.genesisTarget) continue;
@@ -732,7 +732,7 @@ export function computeRates(
   const COAL_CYCLE_SEC = 30;
   for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
     if (servedCount <= 0) continue;
-    const furnace = state.buildings.find((b) => b.id === furnaceId);
+    const furnace = validBuildings.find((b) => b.id === furnaceId);
     if (!furnace) continue;
     const def = defs[furnace.defId];
     const coalPerCycle = def.heatSource?.coalPerCycle ?? 0;

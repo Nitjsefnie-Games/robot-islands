@@ -193,8 +193,8 @@ export function regenerateTerrain(
   newBiome: Biome,
   newTerrainAt: (x: number, y: number) => TerrainKind,
 ): void {
-  (spec as { biome: Biome }).biome = newBiome;
-  (spec as { terrainAt?: ((x: number, y: number) => TerrainKind) | null }).terrainAt = newTerrainAt;
+  spec.biome = newBiome;
+  spec.terrainAt = newTerrainAt;
 }
 
 export function defaultTerrainAt(x: number, y: number): TerrainKind {
