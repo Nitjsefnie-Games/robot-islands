@@ -7,7 +7,7 @@
 // Step-6 scope notes (deferred bits flagged inline elsewhere):
 //   - One drone class only — T2-equivalent constants. T3+ tiers, T4
 //     omnidirectional pulse, T5 path-drawn, all deferred to step 9+.
-//   - No weather destruction (no weather system yet — §11.4 deferred).
+//   - §2.6 weather destruction implemented.
 //   - Tier-gating on Drone Pad deferred to step 9; for step 6 the Drone Pad
 //     is hardcoded on the home island like Mine/Workshop are.
 //   - Fuel grade matches the launching island's tier per §11.7 — resolved at
@@ -21,6 +21,7 @@ import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
 import { tierForLevel } from './skilltree.js';
+import { rasterizePath, rollVehicleDestruction } from './weather.js';
 import type { WorldState } from './world.js';
 
 /** Drone tier per §11.5. Step 6 only emits tier-2 drones; the field exists so
@@ -54,6 +55,9 @@ export interface Drone {
    *  the ticker / UI / persistence layer know which inventory key was
    *  burned without re-deriving from level (which is mutable post-launch). */
   readonly fuelResource: ResourceId;
+  /** §2.6 weather-destruction fate. `active` while in flight; `lost` if the
+   *  weather roll destroyed it; `returned` after a successful landing. */
+  status?: 'active' | 'lost' | 'returned';
 }
 
 /** T2-equivalent constants for step 6. Tile units; seconds for time.
@@ -64,6 +68,16 @@ export interface Drone {
 export const DRONE_TIER_EFFICIENCY = 4;
 export const DRONE_SPEED_TILES_PER_SEC = 0.5; // rebalanced for idle-game scale, step #19 (was 2)
 export const DRONE_SCAN_RADIUS_TILES = 8;
+
+/** §2.6 weather vulnerability multiplier per drone tier. */
+export const DRONE_TIER_MULTIPLIERS: Record<DroneTier, number> = {
+  1: 1.5,
+  2: 1.0,
+  3: 0.7,
+  4: 0.5,
+  5: 0.3,
+  6: 0.2,
+};
 
 /** Step-6 drone tier (single class). Drone Pad nominally T2, but the engine
  *  carries the tier as data — easy to widen when more pads come online. */
@@ -170,9 +184,11 @@ export function dispatchDrone(
   const ux = dirX / mag;
   const uy = dirY / mag;
 
-  // 2. one-pad cap — reject if any existing drone shares this origin
+  // 2. one-pad cap — reject if any active drone shares this origin
   for (const d of world.drones) {
-    if (d.fromIslandId === origin.id) return { ok: false, reason: 'already-in-flight' };
+    if (d.fromIslandId === origin.id && (d.status === 'active' || d.status === undefined)) {
+      return { ok: false, reason: 'already-in-flight' };
+    }
   }
 
   // 3. fuel — §11.7 tier-matched grade only, no fallback to lower grades
@@ -204,6 +220,7 @@ export function dispatchDrone(
     tier: STEP6_DRONE_TIER,
     fuelLoaded,
     fuelResource,
+    status: 'active',
   };
   world.drones.push(drone);
   return { ok: true, drone };
@@ -215,6 +232,7 @@ export function dispatchDrone(
  *  the per-tick deltas to know when to rebuild the ocean / island layers. */
 export interface TickDronesResult {
   returned: Drone[];
+  lost: Drone[];
   newlyDiscoveredIslandIds: string[];
   /** Number of cells added to `world.revealedCells` this tick. */
   revealedCellsAdded: number;
@@ -231,8 +249,10 @@ export interface TickDronesResult {
  *   3. For each such cell, if the cell center sits inside ANY current
  *      Antenna signal range, add the cell key to `world.revealedCells`.
  *      Out-of-range cells are dropped — there is no onboard buffer.
- *   4. Drones whose `expectedReturnTime` has elapsed are removed from
- *      `world.drones`.
+ *   4. Drones whose `expectedReturnTime` has elapsed undergo a §2.6 weather
+ *      destruction roll. Destroyed drones are marked `status: 'lost'` and
+ *      kept in `world.drones` for UI/history. Successful drones are marked
+ *      `status: 'returned'` and also kept.
  *   5. After cell reveals, walk every island whose `discovered` is false;
  *      if any of its footprint cells is now in `revealedCells`, flip
  *      `discovered = true`. This is the new "any-cell" rule that replaces
@@ -254,6 +274,7 @@ export function tickDrones(
   prevTickMs: number = nowMs,
 ): TickDronesResult {
   const returned: Drone[] = [];
+  const lost: Drone[] = [];
   const newlyDiscoveredIslandIds: string[] = [];
   const remaining: Drone[] = [];
 
@@ -265,6 +286,13 @@ export function tickDrones(
 
   let cellsAddedThisTick = 0;
   for (const d of world.drones) {
+    // Terminal-status drones are kept in the array for UI/history but
+    // no longer participate in reveals or weather rolls.
+    if (d.status === 'lost' || d.status === 'returned') {
+      remaining.push(d);
+      continue;
+    }
+
     // 1) per-tick corridor reveal. The drone's path is piecewise-linear:
     //    out from origin to the outbound endpoint, then back. Compute the
     //    waypoints actually visited in [prevTickMs, nowMs] and union the
@@ -308,15 +336,39 @@ export function tickDrones(
       }
     }
 
-    // 2) Removal on return. The return decision is decoupled from reveals —
-    //    a returned drone has already had its full flight scanned above
-    //    (the segStartMs..segEndMs clamp covers the entire trajectory if
-    //    the tick spans the flight).
+    // 2) Weather destruction on return. The return decision is decoupled
+    //    from reveals — a returned drone has already had its full flight
+    //    scanned above (the segStartMs..segEndMs clamp covers the entire
+    //    trajectory if the tick spans the flight).
     if (nowMs < d.expectedReturnTime) {
       remaining.push(d);
       continue;
     }
+
+    // §2.6 weather destruction roll.
+    const path = rasterizePath(
+      d.originX,
+      d.originY,
+      d.dirX,
+      d.dirY,
+      d.outboundTiles,
+      DRONE_SPEED_TILES_PER_SEC,
+      d.launchTime,
+      16,
+    );
+    const multiplier = DRONE_TIER_MULTIPLIERS[d.tier];
+    const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id);
+
+    if (roll.destroyed) {
+      d.status = 'lost';
+      lost.push(d);
+      remaining.push(d);
+      continue;
+    }
+
+    d.status = 'returned';
     returned.push(d);
+    remaining.push(d);
   }
 
   // 3) Walk undiscovered islands; any-cell rule flips `discovered`.
@@ -337,6 +389,7 @@ export function tickDrones(
 
   return {
     returned,
+    lost,
     newlyDiscoveredIslandIds,
     revealedCellsAdded: cellsAddedThisTick,
   };

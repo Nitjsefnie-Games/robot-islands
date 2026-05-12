@@ -8,10 +8,9 @@
 //   - One generic ship + one generic helicopter class (T1 + T2). T3+ tiered
 //     vehicles (Heavy Freighter, Industrial Carrier, VTOL Tilt-Rotor) and
 //     their per-tier loadouts/speeds DEFERRED to a later step.
-//   - No weather destruction (no weather system yet — §11.4 / §12.5
-//     DEFERRED). Mechanical-failure rolls are implemented (§12.5).
-//     Every dispatched vehicle still arrives deterministically unless the
-//     roll fails at the expected-arrival tick.
+//   - §2.6 weather destruction implemented. Mechanical-failure rolls are
+//     implemented (§12.5). Every dispatched vehicle still arrives
+//     deterministically unless a roll fails at the expected-arrival tick.
 //   - Auto-routing at the 10-island NC milestone (§9.6 Auto-Patronage,
 //     §12.7) DEFERRED.
 //   - Coastal-tile placement check on Shipyard implemented via
@@ -30,6 +29,7 @@ import type { BuildingDefId } from './building-defs.js';
 import { fuelForTier, RECIPES, type ResourceId } from './recipes.js';
 import { makeSeededRng } from './rng.js';
 import { tierForLevel } from './skilltree.js';
+import { rasterizePath, rollVehicleDestruction } from './weather.js';
 import type { IslandSpec, WorldState } from './world.js';
 import { makeInitialIslandState } from './world.js';
 
@@ -65,6 +65,9 @@ export interface SettlementVehicle {
   readonly fuelResource: ResourceId;
   /** §12.5 mechanical failure probability [0,1]. */
   readonly failureRate: number;
+  /** §2.6 weather-destruction fate. `active` while in flight; `lost` if the
+   *  weather roll destroyed it; `arrived` after a successful landing. */
+  status?: 'active' | 'lost' | 'arrived';
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +257,7 @@ export function dispatchVehicle(
 
   // 3. one-in-flight-to-target-per-origin cap
   for (const v of world.vehicles) {
-    if (v.from === originSpec.id && v.target === targetSpec.id) {
+    if (v.from === originSpec.id && v.target === targetSpec.id && (v.status === 'active' || v.status === undefined)) {
       return { ok: false, reason: 'already-in-flight' };
     }
   }
@@ -297,6 +300,7 @@ export function dispatchVehicle(
     weatherMultiplier: t.weatherMultiplier,
     fuelResource,
     failureRate: t.failureRate,
+    status: 'active',
   };
   world.vehicles.push(vehicle);
   return { ok: true, vehicle };
@@ -318,24 +322,31 @@ export interface VehicleArrival {
 export interface TickVehiclesResult {
   readonly arrivals: VehicleArrival[];
   readonly failures: VehicleArrival[];
+  readonly lost: VehicleArrival[];
 }
 
 /**
  * Advance the settlement-vehicle fleet to `nowMs`. Any vehicle whose
- * `expectedArrivalTime` has elapsed is removed from `world.vehicles` and
- * processed:
+ * `expectedArrivalTime` has elapsed is processed:
  *
- *   1. Target spec's `populated` flag flips to true.
- *   2. A Cargo Dock (for ships) or Helipad (for helicopters) is pushed onto
+ *   1. §2.6 weather destruction roll — if destroyed, mark `status: 'lost'`
+ *      and do not populate target.
+ *   2. §12.5 mechanical failure roll — if failed, mark `status: 'lost'`
+ *      and do not populate target.
+ *   3. Target spec's `populated` flag flips to true.
+ *   4. A Cargo Dock (for ships) or Helipad (for helicopters) is pushed onto
  *      the target spec's `buildings` array. Coordinate is (0, 0) — the
  *      auto-placed dock convention from §12.4. Coast-tile selection is
  *      DEFERRED — the dock lands at the island centre.
- *   3. Starter buildings for T3+ vehicles are pushed onto the spec before
+ *   5. Starter buildings for T3+ vehicles are pushed onto the spec before
  *      `makeInitialIslandState` so they count for storage + economy.
- *   4. A fresh IslandState is constructed via `makeInitialIslandState` and
+ *   6. A fresh IslandState is constructed via `makeInitialIslandState` and
  *      added to `islandStates`. The spec's `buildings` array IS the same
  *      reference the state will hold, so the auto-placed dock + starters
  *      are visible to the economy on the very next tick.
+ *
+ * All vehicles (including lost and arrived) are kept in `world.vehicles`
+ * with their `status` field updated so the UI/history can display them.
  *
  * Per the load-bearing invariant in `persistence.test.ts` ("keeps
  * IslandState.buildings === IslandSpec.buildings"), we push all buildings
@@ -356,9 +367,17 @@ export function tickVehicles(
 ): TickVehiclesResult {
   const arrivals: VehicleArrival[] = [];
   const failures: VehicleArrival[] = [];
+  const lost: VehicleArrival[] = [];
   const remaining: SettlementVehicle[] = [];
 
   for (const v of world.vehicles) {
+    // Terminal-status vehicles are kept for UI/history but no longer
+    // participate in arrival processing.
+    if (v.status === 'lost' || v.status === 'arrived') {
+      remaining.push(v);
+      continue;
+    }
+
     if (nowMs < v.expectedArrivalTime) {
       remaining.push(v);
       continue;
@@ -368,19 +387,55 @@ export function tickVehicles(
     if (!target) {
       // Target despawned mid-flight — vehicle + cargo lost. (Should never
       // happen in step 12; islands aren't removed.)
+      v.status = 'lost';
+      remaining.push(v);
       continue;
     }
+
+    // §2.6 weather destruction roll.
+    const from = world.islands.find((s) => s.id === v.from);
+    if (from) {
+      const dx = target.cx - from.cx;
+      const dy = target.cy - from.cy;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance > 0) {
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+        const path = rasterizePath(
+          from.cx,
+          from.cy,
+          dirX,
+          dirY,
+          distance,
+          v.speed,
+          v.launchTime,
+          16,
+        );
+        const roll = rollVehicleDestruction(world.seed, path, v.weatherMultiplier, v.id);
+        if (roll.destroyed) {
+          v.status = 'lost';
+          lost.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
+          remaining.push(v);
+          continue;
+        }
+      }
+    }
+
     // §12.5 mechanical failure roll.
     const rng = makeSeededRng(`${v.id}:${v.launchTime}`);
     if (rng() < v.failureRate) {
+      v.status = 'lost';
       failures.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
+      remaining.push(v);
       continue; // vehicle lost; target stays unsettled
     }
     if (target.populated) {
       // Target became populated via a parallel path (e.g. two vehicles
       // racing to the same island). Vehicle + cargo are consumed; no
       // new state created.
+      v.status = 'arrived';
       arrivals.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
+      remaining.push(v);
       continue;
     }
     // Mutate spec: populated + auto-placed building.
@@ -423,14 +478,16 @@ export function tickVehicles(
       newState.unspentSkillPoints += freePoints;
     }
 
+    v.status = 'arrived';
     arrivals.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
+    remaining.push(v);
   }
 
   // Replace world.vehicles contents in-place so external references stay valid.
   world.vehicles.length = 0;
   for (const v of remaining) world.vehicles.push(v);
 
-  return { arrivals, failures };
+  return { arrivals, failures, lost };
 }
 
 // ---------------------------------------------------------------------------

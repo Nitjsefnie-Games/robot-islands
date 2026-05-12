@@ -670,6 +670,9 @@ export interface WorldState {
   /** Mutable: `discovered` flag flips when drones return. The `IslandSpec`
    *  objects themselves are reused — drone-discovery touches one field. */
   islands: IslandSpec[];
+  /** Procedural seed used for weather and other deterministic world systems.
+   *  Frozen at world creation; reloads carry the same seed. */
+  readonly seed: string;
   /** Mutable: drones list grows on dispatch, shrinks on return. The
    *  inline-import keeps this a type-only edge so `world.ts` doesn't take a
    *  runtime dependency on `drones.ts` (the dependency goes the other way:
@@ -692,6 +695,7 @@ export interface WorldState {
    *  scan-corridor cells to this set each tick. Persisted as a sorted array
    *  of strings. Replaces the per-island-center-flip discovery model. */
   revealedCells: Set<string>;
+
 }
 
 /** Default seed for the procedural world. Could later be made
@@ -750,7 +754,7 @@ export function makeInitialWorld(_nowMs: number): WorldState {
     if (!spec.populated && !spec.discovered) continue;
     for (const k of islandCells(spec)) revealedCells.add(k);
   }
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED };
 }
 
 // ---------------------------------------------------------------------------

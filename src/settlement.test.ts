@@ -16,6 +16,7 @@ import {
   tickVehicles,
   tuningFor,
 } from './settlement.js';
+import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { type IslandSpec, type WorldState } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -86,7 +87,7 @@ function makeIslandSpec(over: Partial<IslandSpec>): IslandSpec {
 }
 
 function freshWorld(islands: IslandSpec[] = []): WorldState {
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells: new Set() };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells: new Set(), seed: 'test-seed' };
 }
 
 function makeTestWorld(): {
@@ -468,7 +469,8 @@ describe('tickVehicles', () => {
     expect(r.arrivals[0]!.targetIslandId).toBe('target');
     expect(r.arrivals[0]!.fromIslandId).toBe('home');
     expect(r.arrivals[0]!.kind).toBe('ship');
-    expect(world.vehicles).toHaveLength(0);
+    expect(world.vehicles).toHaveLength(1);
+    expect(world.vehicles[0]!.status).toBe('arrived');
     expect(target.populated).toBe(true);
     expect(islandStates.has('target')).toBe(true);
     // Auto-placed Cargo Dock on the target spec at (0, 0).
@@ -504,7 +506,8 @@ describe('tickVehicles', () => {
     expect(r.arrivals).toHaveLength(1);
     // Target stays populated; vehicle consumed (lost cargo) but no new
     // IslandState was created since one might already exist.
-    expect(world.vehicles).toHaveLength(0);
+    expect(world.vehicles).toHaveLength(1);
+    expect(world.vehicles[0]!.status).toBe('arrived');
     expect(target.populated).toBe(true);
   });
 
@@ -520,7 +523,7 @@ describe('tickVehicles', () => {
     expect(homeState.inventory.foundation_kit).toBe(2);
   });
 
-  it('vehicle removed from world.vehicles regardless of dispatch ordering', () => {
+  it('keeps arrived vehicle in world.vehicles with status arrived', () => {
     const { world, home, homeState, target, islandStates } = setup();
     const target2 = makeIslandSpec({
       id: 'target2',
@@ -537,8 +540,10 @@ describe('tickVehicles', () => {
     const r = tickVehicles(world, islandStates, 85_000);
     expect(r.arrivals).toHaveLength(1);
     expect(r.arrivals[0]!.targetIslandId).toBe('target2');
-    expect(world.vehicles).toHaveLength(1);
-    expect(world.vehicles[0]!.target).toBe('target');
+    expect(world.vehicles).toHaveLength(2);
+    const active = world.vehicles.filter((v) => v.status === 'active' || v.status === undefined);
+    expect(active).toHaveLength(1);
+    expect(active[0]!.target).toBe('target');
   });
 });
 
@@ -749,5 +754,106 @@ describe('§12.4 foundation kit decomposition', () => {
     expect(newState!.inventory.iron_ingot).toBe(10);
     expect(newState!.inventory.wood).toBe(60); // 40 starter + 20 from 2 kits
     expect(newState!.inventory.bolt).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2.6 vehicle weather destruction
+// ---------------------------------------------------------------------------
+
+describe('vehicle weather destruction §2.6', () => {
+  function findClearSeed(): string {
+    for (let i = 0; i < 1000; i++) {
+      const seed = `v-clear-${i}`;
+      // Path from (0,0) to (30,0) with cell size 16
+      const path = rasterizePath(0, 0, 1, 0, 30, 0.25, 0, 16);
+      let allClear = true;
+      for (const p of path) {
+        if (weather(seed, p.cx, p.cy, p.entryMs).state !== 'clear') {
+          allClear = false;
+          break;
+        }
+      }
+      if (allClear) return seed;
+    }
+    throw new Error('no clear seed found');
+  }
+
+  function findDestroyingSeed(): string {
+    for (let i = 0; i < 10000; i++) {
+      const seed = `v-destroy-${i}`;
+      if (weather(seed, 0, 0, 0).state !== 'catastrophic') continue;
+      const result = rollVehicleDestruction(seed, [{ cx: 0, cy: 0, entryMs: 0 }], 1.0, 'vehicle-1');
+      if (result.destroyed) return seed;
+    }
+    throw new Error('no destroying seed found');
+  }
+
+  it('ship in clear weather arrives and populates target', () => {
+    const seed = findClearSeed();
+    const home = makeIslandSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'sy', defId: 'shipyard', x: 0, y: 0 }],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 0,
+      populated: false,
+      discovered: true,
+    });
+    const world: WorldState = { ...freshWorld([home, target]), seed };
+    const homeState = makeIslandState({ id: 'home' });
+    homeState.inventory.biofuel = 50;
+    homeState.inventory.foundation_kit = 1;
+    const islandStates = new Map<string, IslandState>([['home', homeState]]);
+
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 1, 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const result = tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+    expect(result.arrivals).toHaveLength(1);
+    expect(result.lost).toHaveLength(0);
+    expect(result.failures).toHaveLength(0);
+    expect(target.populated).toBe(true);
+    expect(world.vehicles[0]!.status).toBe('arrived');
+  });
+
+  it('ship in catastrophic weather gets destroyed (deterministic)', () => {
+    const seed = findDestroyingSeed();
+    const home = makeIslandSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'sy', defId: 'shipyard', x: 0, y: 0 }],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 0,
+      populated: false,
+      discovered: true,
+    });
+    const world: WorldState = { ...freshWorld([home, target]), seed };
+    const homeState = makeIslandState({ id: 'home' });
+    homeState.inventory.biofuel = 50;
+    homeState.inventory.foundation_kit = 1;
+    const islandStates = new Map<string, IslandState>([['home', homeState]]);
+
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 1, 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const result = tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+    expect(result.arrivals).toHaveLength(0);
+    expect(result.lost).toHaveLength(1);
+    expect(result.failures).toHaveLength(0);
+    expect(target.populated).toBe(false);
+    expect(world.vehicles[0]!.status).toBe('lost');
   });
 });

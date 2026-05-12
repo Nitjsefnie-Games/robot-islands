@@ -642,6 +642,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   function repaintDroneLayer(nowMs: number): void {
     droneLayer.removeChildren();
     for (const d of deps.world.drones) {
+      if (d.status === 'lost' || d.status === 'returned') continue;
       droneLayer.addChild(renderDroneDot(d, nowMs));
     }
     // Drop trail buffers for drones that no longer exist.
@@ -655,13 +656,16 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // -------------------------------------------------------------------------
   function repaintLedger(nowMs: number): void {
     ledgerList.replaceChildren();
-    if (deps.world.drones.length === 0) {
+    const active = deps.world.drones.filter(
+      (d) => d.status !== 'lost' && d.status !== 'returned',
+    );
+    if (active.length === 0) {
       ledgerList.appendChild(ledgerEmpty);
       ledgerR.textContent = '0 / 1';
       return;
     }
-    ledgerR.textContent = `${deps.world.drones.length} / 1`;
-    for (const d of deps.world.drones) {
+    ledgerR.textContent = `${active.length} / 1`;
+    for (const d of active) {
       ledgerList.appendChild(renderLedgerRow(d, nowMs));
     }
   }
@@ -759,7 +763,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // button is gated. Same `defId` discipline the settlement panel uses
     // for shipyard/helipad.
     const hasDronePad = originSpec.buildings.some((b) => b.defId === 'dronepad');
-    const inFlight = deps.world.drones.some((d) => d.fromIslandId === origin.id);
+    const inFlight = deps.world.drones.some(
+      (d) => d.fromIslandId === origin.id && (d.status === 'active' || d.status === undefined),
+    );
     const canLaunch = hasDronePad && onhand >= fuelLoaded && !inFlight;
     armBtn.disabled = !canLaunch;
     armBtn.style.opacity = canLaunch ? '1' : '0.5';

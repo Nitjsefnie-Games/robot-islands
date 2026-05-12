@@ -108,7 +108,7 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
 }
 
 function makeWorld(islands: IslandSpec[]): WorldState {
-  return { islands: [...islands], drones: [], routes: [], vehicles: [], revealedCells: new Set() };
+  return { islands: [...islands], drones: [], routes: [], vehicles: [], revealedCells: new Set(), seed: 'test-seed' };
 }
 
 beforeEach(() => {

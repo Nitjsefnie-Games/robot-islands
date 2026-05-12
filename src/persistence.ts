@@ -54,7 +54,7 @@ import type { SettlementVehicle } from './settlement.js';
 import { _seedVehicleIdCounter, tuningFor } from './settlement.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { NodeId, SubPathId } from './skilltree.js';
-import type { IslandSpec, WorldState } from './world.js';
+import { WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
  *  intended migration entry point — `loadWorld` keys on this string, so a
@@ -307,6 +307,10 @@ export function deserializeWorld(
   // advanceIsland.
   const world: WorldState = {
     islands,
+    seed:
+      'seed' in snapshot.world && typeof (snapshot.world as { seed?: unknown }).seed === 'string'
+        ? (snapshot.world as { seed: string }).seed
+        : WORLD_SEED,
     drones: snapshot.world.drones.map((d) => ({
       ...d,
       launchTime: d.launchTime + perfShift,

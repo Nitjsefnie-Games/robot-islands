@@ -150,3 +150,122 @@ export function isWeatherVisible(world: WorldState, cx: number, cy: number): boo
   }
   return false;
 }
+
+export function rasterizePath(
+  originX: number,
+  originY: number,
+  dirX: number,
+  dirY: number,
+  totalTiles: number,
+  speedTilesPerSec: number,
+  launchTimeMs: number,
+  cellSizeTiles: number,
+): Array<{ cx: number; cy: number; entryMs: number }> {
+  const result: Array<{ cx: number; cy: number; entryMs: number }> = [];
+
+  if (totalTiles <= 0 || speedTilesPerSec <= 0) {
+    result.push({
+      cx: Math.floor(originX / cellSizeTiles),
+      cy: Math.floor(originY / cellSizeTiles),
+      entryMs: launchTimeMs,
+    });
+    return result;
+  }
+
+  let cx = Math.floor(originX / cellSizeTiles);
+  let cy = Math.floor(originY / cellSizeTiles);
+
+  const stepX = Math.sign(dirX);
+  const stepY = Math.sign(dirY);
+
+  const tDeltaX = stepX !== 0 ? cellSizeTiles / Math.abs(dirX) : Infinity;
+  const tDeltaY = stepY !== 0 ? cellSizeTiles / Math.abs(dirY) : Infinity;
+
+  const nextBorderX = stepX > 0 ? (cx + 1) * cellSizeTiles : cx * cellSizeTiles;
+  const nextBorderY = stepY > 0 ? (cy + 1) * cellSizeTiles : cy * cellSizeTiles;
+
+  let tMaxX = stepX !== 0 ? (nextBorderX - originX) / dirX : Infinity;
+  let tMaxY = stepY !== 0 ? (nextBorderY - originY) / dirY : Infinity;
+
+  let dist = 0;
+  result.push({ cx, cy, entryMs: launchTimeMs });
+
+  while (dist < totalTiles) {
+    let nextDist: number;
+    let nextCx = cx;
+    let nextCy = cy;
+
+    if (tMaxX < tMaxY) {
+      nextDist = tMaxX;
+      nextCx = cx + stepX;
+      nextCy = cy;
+      tMaxX += tDeltaX;
+    } else if (tMaxY < tMaxX) {
+      nextDist = tMaxY;
+      nextCx = cx;
+      nextCy = cy + stepY;
+      tMaxY += tDeltaY;
+    } else {
+      nextDist = tMaxX;
+      nextCx = cx + stepX;
+      nextCy = cy + stepY;
+      tMaxX += tDeltaX;
+      tMaxY += tDeltaY;
+    }
+
+    if (nextDist > totalTiles) break;
+
+    if (nextDist === totalTiles) {
+      dist = nextDist;
+      break;
+    }
+
+    dist = nextDist;
+    cx = nextCx;
+    cy = nextCy;
+
+    const last = result[result.length - 1];
+    if (!last || last.cx !== cx || last.cy !== cy) {
+      result.push({
+        cx,
+        cy,
+        entryMs: launchTimeMs + (dist / speedTilesPerSec) * 1000,
+      });
+    }
+  }
+
+  const endX = originX + dirX * totalTiles;
+  const endY = originY + dirY * totalTiles;
+  const endCx = Math.floor(endX / cellSizeTiles);
+  const endCy = Math.floor(endY / cellSizeTiles);
+  const last = result[result.length - 1];
+  if (last && (last.cx !== endCx || last.cy !== endCy)) {
+    result.push({
+      cx: endCx,
+      cy: endCy,
+      entryMs: launchTimeMs + (totalTiles / speedTilesPerSec) * 1000,
+    });
+  }
+
+  return result;
+}
+
+export function rollVehicleDestruction(
+  seed: string,
+  path: Array<{ cx: number; cy: number; entryMs: number }>,
+  weatherMultiplier: number,
+  vehicleId: string,
+): { destroyed: boolean; atCellIndex: number | null } {
+  const rng = makeSeededRng(`${seed}_vehicle_${vehicleId}`);
+  for (let i = 0; i < path.length; i++) {
+    const { cx, cy, entryMs } = path[i]!;
+    const cell = weather(seed, cx, cy, entryMs);
+    const baseChance = WEATHER_DESTRUCTION_CHANCE[cell.state];
+    if (baseChance === undefined || baseChance === 0) continue;
+    const finalChance = baseChance * weatherMultiplier;
+    if (rng() < finalChance) {
+      return { destroyed: true, atCellIndex: i };
+    }
+  }
+  return { destroyed: false, atCellIndex: null };
+}

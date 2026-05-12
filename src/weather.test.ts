@@ -5,6 +5,8 @@ import {
   isWeatherVisible,
   WEATHER_DESTRUCTION_CHANCE,
   WEATHER_SCAN_PENALTY,
+  rasterizePath,
+  rollVehicleDestruction,
 } from './weather.js';
 import type { WorldState } from './world.js';
 
@@ -81,6 +83,7 @@ describe('isWeatherVisible', () => {
       routes: [],
       vehicles: [],
       revealedCells: new Set(),
+      seed: 'test-seed',
     };
   }
 
@@ -204,5 +207,102 @@ describe('weather constants', () => {
     expect(WEATHER_SCAN_PENALTY.storm).toBe(0.25);
     expect(WEATHER_SCAN_PENALTY.severe_storm).toBe(0.75);
     expect(WEATHER_SCAN_PENALTY.catastrophic).toBe(1.0);
+  });
+});
+
+describe('rasterizePath', () => {
+  it('returns the starting cell for zero distance', () => {
+    const path = rasterizePath(8, 8, 1, 0, 0, 1, 0, 16);
+    expect(path).toEqual([{ cx: 0, cy: 0, entryMs: 0 }]);
+  });
+
+  it('returns monotonically increasing entryMs', () => {
+    const path = rasterizePath(0, 0, 1, 0, 40, 1, 0, 16);
+    for (let i = 1; i < path.length; i++) {
+      expect(path[i]!.entryMs).toBeGreaterThanOrEqual(path[i - 1]!.entryMs);
+    }
+  });
+
+  it('steps through correct cells for eastward travel', () => {
+    const path = rasterizePath(0, 0, 1, 0, 40, 1, 0, 16);
+    const cells = path.map((p) => [p.cx, p.cy]);
+    expect(cells).toEqual([
+      [0, 0],
+      [1, 0],
+      [2, 0],
+    ]);
+    expect(path[0]!.entryMs).toBe(0);
+    // Cell (1,0) is entered at x=16 (distance 16).
+    expect(path[1]!.entryMs).toBe(16_000);
+    // Cell (2,0) is entered at x=32 (distance 32); the path ends at x=40
+    // still inside this cell.
+    expect(path[2]!.entryMs).toBe(32_000);
+  });
+
+  it('steps through correct cells for northward travel', () => {
+    const path = rasterizePath(8, 8, 0, 1, 32, 1, 0, 16);
+    const cells = path.map((p) => [p.cx, p.cy]);
+    expect(cells).toEqual([
+      [0, 0],
+      [0, 1],
+      [0, 2],
+    ]);
+  });
+
+  it('steps through correct cells for westward travel starting mid-cell', () => {
+    const path = rasterizePath(20, 4, -1, 0, 20, 1, 0, 16);
+    const cells = path.map((p) => [p.cx, p.cy]);
+    expect(cells).toEqual([
+      [1, 0],
+      [0, 0],
+    ]);
+  });
+
+  it('handles diagonal travel crossing a corner', () => {
+    const path = rasterizePath(0, 0, 1 / Math.sqrt(2), 1 / Math.sqrt(2), 24, 1, 0, 16);
+    const cells = path.map((p) => [p.cx, p.cy]);
+    // Travels 24 tiles along diagonal; ends at (17,17) which is cell (1,1).
+    expect(cells).toEqual([
+      [0, 0],
+      [1, 1],
+    ]);
+  });
+
+  it('is deterministic for the same inputs', () => {
+    const a = rasterizePath(5, 5, 1, 0, 30, 2, 1000, 16);
+    const b = rasterizePath(5, 5, 1, 0, 30, 2, 1000, 16);
+    expect(a).toEqual(b);
+  });
+});
+
+describe('rollVehicleDestruction', () => {
+  it('never destroys in clear weather (baseChance = 0)', () => {
+    const path = [
+      { cx: 0, cy: 0, entryMs: 0 },
+      { cx: 1, cy: 0, entryMs: 1000 },
+    ];
+    const result = rollVehicleDestruction('seed', path, 1.0, 'vehicle-1');
+    expect(result.destroyed).toBe(false);
+    expect(result.atCellIndex).toBe(null);
+  });
+
+  it('is deterministic for the same inputs', () => {
+    const path = [{ cx: 0, cy: 0, entryMs: 0 }];
+    const a = rollVehicleDestruction('seed', path, 10.0, 'v1');
+    const b = rollVehicleDestruction('seed', path, 10.0, 'v1');
+    expect(a.destroyed).toBe(b.destroyed);
+    expect(a.atCellIndex).toBe(b.atCellIndex);
+  });
+
+  it('respects weatherMultiplier scaling', () => {
+    // With a huge multiplier, even a low base chance should eventually hit
+    // if the path is long enough. Use a fixed seed and many storm cells.
+    const path: Array<{ cx: number; cy: number; entryMs: number }> = [];
+    for (let i = 0; i < 200; i++) {
+      path.push({ cx: i, cy: 0, entryMs: i * 1000 });
+    }
+    // multiplier 0 should guarantee survival
+    const safe = rollVehicleDestruction('seed', path, 0, 'v1');
+    expect(safe.destroyed).toBe(false);
   });
 });

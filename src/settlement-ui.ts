@@ -654,6 +654,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   function repaintVehicleLayer(nowMs: number): void {
     vehicleLayer.removeChildren();
     for (const v of deps.world.vehicles) {
+      if (v.status === 'lost' || v.status === 'arrived') continue;
       vehicleLayer.addChild(renderVehicleDot(v, nowMs));
     }
   }
@@ -854,7 +855,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     if (dist > range) return `out of range: ${dist.toFixed(0)} > ${range.toFixed(0)} t`;
     // Already-in-flight cap.
     for (const v of deps.world.vehicles) {
-      if (v.from === originSpec.id && v.target === targetSpec.id) {
+      if (v.from === originSpec.id && v.target === targetSpec.id && (v.status === 'active' || v.status === undefined)) {
         return 'already en route to target';
       }
     }
@@ -863,13 +864,16 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
 
   function repaintLedger(): void {
     ledgerList.replaceChildren();
-    if (deps.world.vehicles.length === 0) {
+    const active = deps.world.vehicles.filter(
+      (v) => v.status !== 'lost' && v.status !== 'arrived',
+    );
+    if (active.length === 0) {
       ledgerList.appendChild(ledgerEmpty);
       ledgerR.textContent = '0';
       return;
     }
-    ledgerR.textContent = `${deps.world.vehicles.length}`;
-    for (const v of deps.world.vehicles) {
+    ledgerR.textContent = `${active.length}`;
+    for (const v of active) {
       ledgerList.appendChild(renderLedgerRow(v));
     }
   }

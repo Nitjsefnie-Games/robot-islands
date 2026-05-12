@@ -1167,6 +1167,11 @@ async function main(): Promise<void> {
     ) {
       rebuildWorldLayers();
     }
+    if (droneResult.lost.length > 0) {
+      for (const d of droneResult.lost) {
+        console.log(`Drone lost: ${d.id}`);
+      }
+    }
     tickRoutes(worldState, islandStates, now, elapsedSec);
     // Step-12 / §12: settlement vehicles tick after drones so a frame can
     // see new discoveries AND a brand-new arrival in the same pass. On
@@ -1187,10 +1192,15 @@ async function main(): Promise<void> {
       }
       rebuildWorldLayers();
     }
+    if (vehicleResult.lost.length > 0) {
+      for (const f of vehicleResult.lost) {
+        console.log(`Settlement vehicle lost to weather: ${f.kind} → ${f.targetIslandId}`);
+      }
+    }
     if (vehicleResult.failures.length > 0) {
       // Minimal first-step: log to console. Future step can add UI toast.
       for (const f of vehicleResult.failures) {
-        console.log(`Settlement vehicle lost: ${f.kind} → ${f.targetIslandId}`);
+        console.log(`Settlement vehicle mechanical failure: ${f.kind} → ${f.targetIslandId}`);
       }
     }
 

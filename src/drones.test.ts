@@ -13,6 +13,7 @@ import {
   pointToSegmentDistSq,
   tickDrones,
 } from './drones.js';
+import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { type IslandSpec, type WorldState } from './world.js';
 
@@ -136,6 +137,7 @@ describe('dispatchDrone', () => {
       routes: [],
       vehicles: [],
       revealedCells: new Set(),
+      seed: 'test-seed',
     };
   }
 
@@ -248,6 +250,7 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
       routes: [],
       vehicles: [],
       revealedCells: new Set(),
+      seed: 'test-seed',
     };
   }
 
@@ -274,6 +277,7 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
       routes: [],
       vehicles: [],
       revealedCells: new Set(),
+      seed: 'test-seed',
     };
   }
 
@@ -465,6 +469,7 @@ describe('dispatchDrone — §11.7 tier-matched fuel', () => {
       routes: [],
       vehicles: [],
       revealedCells: new Set(),
+      seed: 'test-seed',
     };
   }
 
@@ -532,5 +537,76 @@ describe('dispatchDrone — §11.7 tier-matched fuel', () => {
     if (!r.ok) return;
     expect(r.drone.fuelResource).toBe('cryogenic_hydrogen');
     expect(home.inventory.cryogenic_hydrogen).toBe(40);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2.6 drone weather destruction
+// ---------------------------------------------------------------------------
+
+describe('drone weather destruction §2.6', () => {
+  function findClearSeed(): string {
+    for (let i = 0; i < 1000; i++) {
+      const seed = `clear-${i}`;
+      const path = rasterizePath(0, 0, 1, 0, 20, 0.5, 0, 16);
+      let allClear = true;
+      for (const p of path) {
+        if (weather(seed, p.cx, p.cy, p.entryMs).state !== 'clear') {
+          allClear = false;
+          break;
+        }
+      }
+      if (allClear) return seed;
+    }
+    throw new Error('no clear seed found');
+  }
+
+  function findDestroyingSeed(): string {
+    for (let i = 0; i < 10000; i++) {
+      const seed = `destroy-${i}`;
+      if (weather(seed, 0, 0, 0).state !== 'catastrophic') continue;
+      const result = rollVehicleDestruction(seed, [{ cx: 0, cy: 0, entryMs: 0 }], 1.5, 'drone-1');
+      if (result.destroyed) return seed;
+    }
+    throw new Error('no destroying seed found');
+  }
+
+  it('drone in clear weather arrives normally', () => {
+    const seed = findClearSeed();
+    const w: WorldState = {
+      islands: [],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      seed,
+    };
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
+    // 10 fuel × 4 = 40 tiles round-trip, 80s flight.
+    const r = tickDrones(w, 81_000, 0);
+    expect(r.returned).toHaveLength(1);
+    expect(r.lost).toHaveLength(0);
+    expect(w.drones[0]!.status).toBe('returned');
+  });
+
+  it('drone in catastrophic weather gets destroyed (deterministic)', () => {
+    const seed = findDestroyingSeed();
+    const w: WorldState = {
+      islands: [],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      seed,
+    };
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
+    const r = tickDrones(w, 81_000, 0);
+    expect(r.returned).toHaveLength(0);
+    expect(r.lost).toHaveLength(1);
+    expect(w.drones[0]!.status).toBe('lost');
   });
 });
