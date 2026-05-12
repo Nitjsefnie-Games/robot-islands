@@ -30,8 +30,8 @@ import { fuelForTier, RECIPES, type ResourceId } from './recipes.js';
 import { makeSeededRng } from './rng.js';
 import { tierForLevel } from './skilltree.js';
 import { rasterizePath, rollVehicleDestruction } from './weather.js';
+import { CELL_SIZE_TILES, makeInitialIslandState } from './world.js';
 import type { IslandSpec, WorldState } from './world.js';
-import { makeInitialIslandState } from './world.js';
 
 /** Settlement vehicle kind per §12.6. */
 export type VehicleKind = 'ship' | 'helicopter';
@@ -409,7 +409,7 @@ export function tickVehicles(
           distance,
           v.speed,
           v.launchTime,
-          16,
+          CELL_SIZE_TILES,
         );
         const roll = rollVehicleDestruction(world.seed, path, v.weatherMultiplier, v.id);
         if (roll.destroyed) {

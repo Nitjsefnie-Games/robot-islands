@@ -137,6 +137,7 @@ export interface SerializedIslandStateEntry {
  *  with cells under each populated island's footprint. */
 export interface SerializedWorld {
   readonly islands: ReadonlyArray<SerializedIslandSpec>;
+  readonly seed?: string;
   readonly drones: ReadonlyArray<Drone>;
   readonly routes: ReadonlyArray<Route>;
   readonly vehicles: ReadonlyArray<SettlementVehicle>;
@@ -204,6 +205,7 @@ export function serializeWorld(
     savedAtPerf: nowPerfMs,
     world: {
       islands,
+      seed: world.seed,
       // Spread to drop any read-only-array exotic-ness from the live arrays.
       drones: [...world.drones],
       routes: world.routes.map((r) => ({

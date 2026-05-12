@@ -22,6 +22,7 @@ import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
 import { tierForLevel } from './skilltree.js';
 import { rasterizePath, rollVehicleDestruction } from './weather.js';
+import { CELL_SIZE_TILES } from './world.js';
 import type { WorldState } from './world.js';
 
 /** Drone tier per §11.5. Step 6 only emits tier-2 drones; the field exists so
@@ -345,8 +346,8 @@ export function tickDrones(
       continue;
     }
 
-    // §2.6 weather destruction roll.
-    const path = rasterizePath(
+    // §2.6 weather destruction roll — outbound + return legs.
+    const outboundPath = rasterizePath(
       d.originX,
       d.originY,
       d.dirX,
@@ -354,8 +355,31 @@ export function tickDrones(
       d.outboundTiles,
       DRONE_SPEED_TILES_PER_SEC,
       d.launchTime,
-      16,
+      CELL_SIZE_TILES,
     );
+    const apexTime =
+      d.launchTime + (d.outboundTiles / DRONE_SPEED_TILES_PER_SEC) * 1000;
+    const apexX = d.originX + d.dirX * d.outboundTiles;
+    const apexY = d.originY + d.dirY * d.outboundTiles;
+    const returnPath = rasterizePath(
+      apexX,
+      apexY,
+      -d.dirX,
+      -d.dirY,
+      d.outboundTiles,
+      DRONE_SPEED_TILES_PER_SEC,
+      apexTime,
+      CELL_SIZE_TILES,
+    );
+    // Deduplicate cells that appear in both legs (e.g., origin cell).
+    const seen = new Set<string>();
+    const path: Array<{ cx: number; cy: number; entryMs: number }> = [];
+    for (const p of [...outboundPath, ...returnPath]) {
+      const key = `${p.cx},${p.cy}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      path.push(p);
+    }
     const multiplier = DRONE_TIER_MULTIPLIERS[d.tier];
     const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id);
 
