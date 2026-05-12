@@ -195,4 +195,8 @@ describe('microchip chain', () => {
   it('XP_WEIGHT.computing_module is 30', () => {
     expect(XP_WEIGHT.computing_module).toBe(30);
   });
+
+  it('XP_WEIGHT.processor is 30', () => {
+    expect(XP_WEIGHT.processor).toBe(30);
+  });
 });

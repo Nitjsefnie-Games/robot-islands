@@ -924,7 +924,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // `ascendantCoreCrafted` on first production DEFERRED.
   ascendant_assembly: {
     cycleSec: 7200,
-    inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5 },
+    inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5, computing_module: 2 },
     outputs: { ascendant_core: 1 },
     category: 'manufacturing',
   },
