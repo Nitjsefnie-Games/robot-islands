@@ -24,7 +24,7 @@
 
 import { Container, Graphics, Text } from 'pixi.js';
 
-import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { BUILDING_DEFS, shapeHeight, shapeWidth, type BuildingDefId } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import { TILE_PX } from './island.js';
 import {
@@ -209,7 +209,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // which is added at the world container's root (so the camera transform
     // takes it from world-px to screen-px).
     outlineGfx.clear();
-    const tiles = footprintTiles(def.width, def.height, localX, localY, rotation);
+    const tiles = footprintTiles(def.footprint, localX, localY, rotation);
     const islandWorldPx = tileToWorldPx(targetSpec.cx, targetSpec.cy);
     const half = TILE_PX / 2;
     for (const t of tiles) {
@@ -241,7 +241,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     //      red when short and the OK colour when affordable, summarising
     //      the §14 affordability snapshot at a glance even when the
     //      cursor is over a valid tile.
-    const labelMain = `${def.displayName.toUpperCase()} ${def.width}×${def.height}`;
+    const labelMain = `${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}`;
     const labelTail = v.ok
       ? ''
       : v.reason === 'insufficient-resources' && v.missing

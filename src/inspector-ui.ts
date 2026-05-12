@@ -27,6 +27,8 @@
 
 import {
   BUILDING_DEFS,
+  shapeHeight,
+  shapeWidth,
   type BuildingCategory,
   type BuildingDefId,
 } from './building-defs.js';
@@ -1063,7 +1065,7 @@ export function mountInspectorUi(
     nameEl.textContent = def.displayName;
     tierBadge.textContent = `T${def.tier}`;
     categoryEl.textContent = CATEGORY_LABEL[def.category].toUpperCase();
-    footprintEl.textContent = `${def.width}×${def.height}  ·  rot ${(building.rotation ?? 0) * 90}°`;
+    footprintEl.textContent = `${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}  ·  rot ${(building.rotation ?? 0) * 90}°`;
 
     // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1).
     const recipe = resolveRecipe(BUILDING_DEFS[building.defId], building, spec.terrainAt);

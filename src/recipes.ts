@@ -39,6 +39,7 @@
 import type { BuildingDef, BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { TerrainKind } from './island.js';
+import { footprintTiles, type Rotation } from './placement.js';
 
 export type ResourceId =
   // T0 raws
@@ -1046,33 +1047,20 @@ export function resolveRecipe(
   if (def.id === 'mine' && terrainAt) {
     let sawCoal = false;
     let sawOre = false;
-    const rotation = (b.rotation ?? 0) as Rotation01ish;
-    // Inline footprint enumeration — matches the four-rotation transforms
-    // in placement.ts `footprintTiles`. Short-circuits on first `coal` tile
-    // to keep the typical-case cost minimal.
-    for (let dy = 0; dy < def.height; dy++) {
-      for (let dx = 0; dx < def.width; dx++) {
-        let rx: number;
-        let ry: number;
-        switch (rotation) {
-          case 0: rx = dx; ry = dy; break;
-          case 1: rx = def.height - 1 - dy; ry = dx; break;
-          case 2: rx = def.width - 1 - dx; ry = def.height - 1 - dy; break;
-          case 3: rx = dy; ry = def.width - 1 - dx; break;
-        }
-        const k = terrainAt(b.x + rx, b.y + ry);
-        if (k === 'coal') {
-          sawCoal = true;
-        } else if (k === 'ore') {
-          sawOre = true;
-        }
-        // We can short-circuit only when we've seen coal: coal wins the
-        // tie per the §8.1 "Ore or coal output by tile" rule encoded as
-        // "any coal tile → coal recipe". Without seeing coal, an early ore
-        // tile may still be followed by coal later in the scan.
-        if (sawCoal) {
-          return RECIPES.mine_on_coal;
-        }
+    const rotation = (b.rotation ?? 0) as Rotation;
+    for (const t of footprintTiles(def.footprint, b.x, b.y, rotation)) {
+      const k = terrainAt(t.x, t.y);
+      if (k === 'coal') {
+        sawCoal = true;
+      } else if (k === 'ore') {
+        sawOre = true;
+      }
+      // We can short-circuit only when we've seen coal: coal wins the
+      // tie per the §8.1 "Ore or coal output by tile" rule encoded as
+      // "any coal tile → coal recipe". Without seeing coal, an early ore
+      // tile may still be followed by coal later in the scan.
+      if (sawCoal) {
+        return RECIPES.mine_on_coal;
       }
     }
     if (sawOre) return RECIPES.mine_on_ore;
@@ -1088,4 +1076,4 @@ export function resolveRecipe(
 /** Local copy of the rotation union from placement.ts. Kept here to avoid
  *  importing placement.ts (which already imports recipes.ts); the value is
  *  PlacedBuilding.rotation, which placement.ts also constrains to 0|1|2|3. */
-type Rotation01ish = 0 | 1 | 2 | 3;
+

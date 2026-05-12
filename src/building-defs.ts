@@ -210,6 +210,65 @@ export type BuildingDefId =
   | 'processor_fab'
   | 'compute_module_fab';
 
+export interface ShapeMask {
+  readonly tiles: ReadonlyArray<{ readonly dx: number; readonly dy: number }>;
+}
+
+export function shapeWidth(mask: ShapeMask): number {
+  if (mask.tiles.length === 0) return 0;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const { dx } of mask.tiles) {
+    if (dx < min) min = dx;
+    if (dx > max) max = dx;
+  }
+  return max - min + 1;
+}
+
+export function shapeHeight(mask: ShapeMask): number {
+  if (mask.tiles.length === 0) return 0;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const { dy } of mask.tiles) {
+    if (dy < min) min = dy;
+    if (dy > max) max = dy;
+  }
+  return max - min + 1;
+}
+
+export const SHAPES = {
+  single: { tiles: [{ dx: 0, dy: 0 }] },
+  line2h: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }] },
+  line2v: { tiles: [{ dx: 0, dy: 0 }, { dx: 0, dy: 1 }] },
+  square2: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }] },
+  line3h: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }] },
+  line3v: { tiles: [{ dx: 0, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: 2 }] },
+  lTromino: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }] },
+  lTetromino: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 0, dy: 1 }] },
+  tTetromino: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 1, dy: 1 }] },
+  rect2x3: { tiles: [
+    { dx: 0, dy: 0 }, { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
+    { dx: 0, dy: 2 }, { dx: 1, dy: 2 },
+  ]},
+  rect3x2: { tiles: [
+    { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 },
+    { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 },
+  ]},
+  line4h: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 3, dy: 0 }] },
+  square3: { tiles: [
+    { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 },
+    { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 },
+    { dx: 0, dy: 2 }, { dx: 1, dy: 2 }, { dx: 2, dy: 2 },
+  ]},
+  square4: { tiles: [
+    { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 3, dy: 0 },
+    { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 }, { dx: 3, dy: 1 },
+    { dx: 0, dy: 2 }, { dx: 1, dy: 2 }, { dx: 2, dy: 2 }, { dx: 3, dy: 2 },
+    { dx: 0, dy: 3 }, { dx: 1, dy: 3 }, { dx: 2, dy: 3 }, { dx: 3, dy: 3 },
+  ]},
+} as const satisfies Record<string, ShapeMask>;
+
 /**
  * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's
  * recipe rate by `1 + percentPerMatch / 100`, summed additively up to
@@ -253,10 +312,8 @@ export interface BuildingDef {
   readonly displayName: string;
   readonly category: BuildingCategory;
   readonly tier: 1 | 2 | 3 | 4 | 5 | 6;
-  /** Footprint width in tiles (whole tiles only). */
-  readonly width: number;
-  /** Footprint height in tiles. */
-  readonly height: number;
+  /** Footprint shape mask — the set of tile offsets covered by this building. */
+  readonly footprint: ShapeMask;
   /** Primary fill colour (PIXI hex). */
   readonly fill: number;
   /** Stroke / outline colour. */
@@ -364,8 +421,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Mine',
     category: 'extraction',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x9a9a9a,
     stroke: 0x222222,
     power: { consumes: 40 },
@@ -384,8 +440,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Workshop',
     category: 'manufacturing',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xe07b3a,
     stroke: 0x6b2f00,
     power: { consumes: 60 },
@@ -403,8 +458,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Solar Panel',
     category: 'power',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xf2c84b,
     stroke: 0x6a4a00,
     // §2.7: solar-driven producer — output modulates by day-night cycle.
@@ -419,8 +473,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Coal Generator',
     category: 'power',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xd97a18,
     stroke: 0x4a2400,
     power: { produces: 100 },
@@ -433,8 +486,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Cargo Dock',
     category: 'logistics',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x3a7bd5,
     stroke: 0x0a2a55,
     // §14 placeholder — tune in Appendix A.
@@ -446,8 +498,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Drone Pad',
     category: 'logistics',
     tier: 2,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x4a6b78,
     stroke: 0x14222a,
     // §14 placeholder — tune in Appendix A.
@@ -459,8 +510,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Logger',
     category: 'extraction',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x2f5e2c,
     stroke: 0x0f2a0c,
     requiredTile: ['tree'],
@@ -472,8 +522,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Smelter',
     category: 'smelting',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x7a5050,
     stroke: 0x3a1a1a,
     power: { consumes: 50 },
@@ -491,8 +540,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Crate',
     category: 'storage',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x8a6a3a,
     stroke: 0x402a10,
     // §4.6 / §8.4: +100 cap on ONE player-chosen resource per instance.
@@ -508,8 +556,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Silo',
     category: 'storage',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xa08a5a,
     stroke: 0x504028,
     // §4.6 / §8.4: +2000 cap, dry-goods category only. Bumps every resource
@@ -524,8 +571,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Biomass Plant',
     category: 'power',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x3e7a36,
     stroke: 0x1a3a16,
     power: { produces: 80 },
@@ -545,8 +591,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Coal Furnace',
     category: 'special',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x4a2820, // dark ember
     stroke: 0x1a0a08,
     heatSource: { freeOrCoal: 'coal', coalPerCycle: 1 },
@@ -563,8 +608,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Geothermal Vent',
     category: 'power',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xc04020, // magma orange
     stroke: 0x401005,
     power: { produces: 200 },
@@ -586,8 +630,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Kit Assembler',
     category: 'manufacturing',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xb88a5a,
     stroke: 0x4a3520,
     power: { consumes: 70 },
@@ -603,8 +646,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Shipyard',
     category: 'logistics',
     tier: 1,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x3a7bd5,
     stroke: 0x0a2a55,
     power: { consumes: 80 },
@@ -621,8 +663,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Helipad',
     category: 'logistics',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x6a8a9a,
     stroke: 0x1f3340,
     power: { consumes: 60 },
@@ -638,8 +679,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Coke Oven',
     category: 'smelting',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x6a5a48,
     stroke: 0x2a2014,
     power: { consumes: 60 },
@@ -657,8 +697,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Blast Furnace',
     category: 'smelting',
     tier: 2,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x8a2a1a,
     stroke: 0x401005,
     power: { consumes: 100 },
@@ -676,8 +715,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Steel Mill',
     category: 'smelting',
     tier: 2,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x6e7480,
     stroke: 0x2a2e36,
     power: { consumes: 120 },
@@ -695,8 +733,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Oxygen Converter',
     category: 'smelting',
     tier: 3,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x5a7a9a,
     stroke: 0x3a5a7a,
     power: { consumes: 40 },
@@ -709,8 +746,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Assembler',
     category: 'manufacturing',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xff8c2a,
     stroke: 0x6e3500,
     power: { consumes: 80 },
@@ -723,8 +759,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Tank',
     category: 'storage',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x2a4078,
     stroke: 0x0a1a3a,
     // §4.6 / §8.4: +2000 cap, liquids/gases category only.
@@ -742,8 +777,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Cold Storage',
     category: 'storage',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x8090a0,
     stroke: 0x2a3848,
     storage: { category: 'temp_sensitive', capacity: 1500 },
@@ -759,8 +793,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Component Warehouse',
     category: 'storage',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x806840,
     stroke: 0x3a2810,
     storage: { category: 'components', capacity: 2000 },
@@ -782,8 +815,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Land Reclamation Hub',
     category: 'special',
     tier: 2,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x5a8a6a, // verdant reclamation green
     stroke: 0x1a3020,
     // §14 placeholder — tune in Appendix A. 3×3 footprint bumps T2 base.
@@ -802,8 +834,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Plasma Heater',
     category: 'special',
     tier: 3,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xa040a0, // plasma magenta
     stroke: 0x401040,
     power: { consumes: 200 },
@@ -817,8 +848,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Electric Arc Furnace',
     category: 'smelting',
     tier: 3,
-    width: 2,
-    height: 3,
+    footprint: SHAPES.rect2x3,
     fill: 0x4a8ae0,
     stroke: 0x1a3a78,
     power: { consumes: 200 },
@@ -838,8 +868,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Vault',
     category: 'storage',
     tier: 3,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x504860,
     stroke: 0x1a1830,
     storage: { category: 'rare', capacity: 5000 },
@@ -857,8 +886,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Platform Constructor',
     category: 'special',
     tier: 3,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0x6a4a8c, // dusky violet — "foundry"-coded
     stroke: 0x2a1a40,
     power: { consumes: 200 },
@@ -879,8 +907,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Fusion Core',
     category: 'power',
     tier: 4,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0x4a90c8, // cool electric blue
     stroke: 0x1a3050,
     power: { produces: 5000 },
@@ -898,8 +925,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Pyroforge',
     category: 'smelting',
     tier: 4,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xc04020, // lava red
     stroke: 0x2a0800,
     power: { consumes: 800 },
@@ -918,8 +944,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Cryogenic Compute Center',
     category: 'electronics',
     tier: 4,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0xa0e0e8, // icy cyan
     stroke: 0x205060,
     power: { consumes: 1200 },
@@ -937,8 +962,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Particle Accelerator',
     category: 'smelting',
     tier: 4,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0x8060c0, // deep violet
     stroke: 0x301050,
     power: { consumes: 1500 },
@@ -955,8 +979,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Launch Tower',
     category: 'special',
     tier: 4,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x8a8a40, // dull sand-gold
     stroke: 0x303010,
     power: { consumes: 400 },
@@ -979,8 +1002,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Casimir Tap',
     category: 'power',
     tier: 5,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x3a0a4a, // deep void violet
     stroke: 0x100020,
     power: { produces: 8000 },
@@ -997,8 +1019,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Reality Forge',
     category: 'manufacturing',
     tier: 5,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0x6020a0, // amethyst violet
     stroke: 0x100040,
     power: { consumes: 3000 },
@@ -1019,8 +1040,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Singularity Battery',
     category: 'power',
     tier: 5,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x202060, // deep ultramarine
     stroke: 0x0a0a30,
     power: { consumes: 100 },
@@ -1038,8 +1058,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Time Lock',
     category: 'special',
     tier: 5,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xc080e0, // pale aurora violet
     stroke: 0x400060,
     power: { consumes: 1500 },
@@ -1057,8 +1076,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Genesis Chamber',
     category: 'special',
     tier: 5,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0xa0e0a0, // ethereal green
     stroke: 0x205020,
     power: { consumes: 2500 },
@@ -1076,8 +1094,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Universe Editor',
     category: 'special',
     tier: 5,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xff80a0, // rose-pink
     stroke: 0x500020,
     power: { consumes: 4000 },
@@ -1095,8 +1112,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lattice Node',
     category: 'special',
     tier: 5,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x80f0c0, // mint-cyan
     stroke: 0x205040,
     power: { consumes: 800 },
@@ -1118,8 +1134,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Ascendant Assembly',
     category: 'manufacturing',
     tier: 5,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0xe0c060, // ascendant gold
     stroke: 0x504010,
     power: { consumes: 4000 },
@@ -1156,8 +1171,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Spaceport',
     category: 'special',
     tier: 6,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0x202060, // deep cosmic blue
     stroke: 0x080018,
     power: { consumes: 3000 },
@@ -1175,8 +1189,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Antimatter Refinery',
     category: 'manufacturing',
     tier: 6,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xc060e0, // electric violet
     stroke: 0x300040,
     power: { consumes: 5000 },
@@ -1195,8 +1208,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Scanner Sat Assembly',
     category: 'manufacturing',
     tier: 6,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x80a0c0, // pale instrument blue
     stroke: 0x20303a,
     power: { consumes: 2000 },
@@ -1214,8 +1226,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Comm Sat Assembly',
     category: 'manufacturing',
     tier: 6,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xa0c080, // pale antenna green
     stroke: 0x303a20,
     power: { consumes: 2000 },
@@ -1235,8 +1246,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Orbital Insertion Assembly',
     category: 'manufacturing',
     tier: 6,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xc0a060, // bronze
     stroke: 0x403014,
     power: { consumes: 1500 },
@@ -1258,8 +1268,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Quarry',
     category: 'extraction',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xa8a094, // pale stone-grey
     stroke: 0x403828,
     power: { consumes: 30 },
@@ -1272,8 +1281,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Sand Pit',
     category: 'extraction',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xe0c878, // dune-tan
     stroke: 0x6a5028,
     power: { consumes: 20 },
@@ -1286,8 +1294,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Well',
     category: 'extraction',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x4a8ac0, // freshwater blue
     stroke: 0x1a3a60,
     power: { consumes: 10 },
@@ -1300,8 +1307,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Coastal Pump',
     category: 'extraction',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x2a7090, // brine-teal
     stroke: 0x0a2030,
     power: { consumes: 15 },
@@ -1314,8 +1320,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Quartz Mine',
     category: 'extraction',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xb0b8d0, // pale silica-grey
     stroke: 0x484858,
     power: { consumes: 30 },
@@ -1330,8 +1335,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lumber Mill',
     category: 'manufacturing',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x8a5a30, // sawn-wood ochre
     stroke: 0x3a2010,
     power: { consumes: 40 },
@@ -1344,8 +1348,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Glassworks',
     category: 'manufacturing',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xa8d0e0, // pane-cyan
     stroke: 0x305060,
     power: { consumes: 80 },
@@ -1361,8 +1364,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Evaporator',
     category: 'manufacturing',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xf0e0a0, // salt-pan tan
     stroke: 0x605030,
     power: { consumes: 25 },
@@ -1375,8 +1377,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Electrolyzer',
     category: 'chemistry',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xa0c0e8, // electrolyte blue
     stroke: 0x303a60,
     power: { consumes: 100 },
@@ -1389,8 +1390,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Biofuel Plant',
     category: 'chemistry',
     tier: 1,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x408a30, // bioreactor green
     stroke: 0x1a3a10,
     power: { consumes: 60 },
@@ -1405,8 +1405,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Pump Jack',
     category: 'extraction',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x2a1a14, // crude-oil black-brown
     stroke: 0x080404,
     power: { consumes: 80 },
@@ -1419,8 +1418,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Gas Extractor',
     category: 'extraction',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x707a40, // sulfur-yellow-grey
     stroke: 0x2a2810,
     power: { consumes: 70 },
@@ -1435,8 +1433,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Naphtha Cracker',
     category: 'chemistry',
     tier: 2,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x6a4a20, // refinery brown
     stroke: 0x2a1a08,
     power: { consumes: 200 },
@@ -1449,8 +1446,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Chlor-Alkali Plant',
     category: 'chemistry',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x80d050, // chlorine-green
     stroke: 0x305018,
     power: { consumes: 150 },
@@ -1463,8 +1459,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lubricant Refinery',
     category: 'chemistry',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x4a3018, // viscous-oil brown
     stroke: 0x1a1008,
     power: { consumes: 120 },
@@ -1477,8 +1472,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Diesel Refinery',
     category: 'chemistry',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x504030, // diesel-tan brown
     stroke: 0x201810,
     power: { consumes: 180 },
@@ -1491,8 +1485,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Metal Rolling Mill',
     category: 'manufacturing',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x8090a0, // steel-roll grey
     stroke: 0x2a3848,
     power: { consumes: 200 },
@@ -1507,8 +1500,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Silicon Crusher',
     category: 'smelting',
     tier: 3,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x686878, // metallic-silicon grey
     stroke: 0x202028,
     power: { consumes: 250 },
@@ -1521,8 +1513,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Air Separator',
     category: 'chemistry',
     tier: 3,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xc8e8f0, // pale-cyan condenser
     stroke: 0x405058,
     power: { consumes: 300 },
@@ -1535,8 +1526,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Cryo Lab',
     category: 'chemistry',
     tier: 3,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x80c0e8, // cryo-pale-blue
     stroke: 0x204060,
     power: { consumes: 400 },
@@ -1549,8 +1539,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Cryo Compressor',
     category: 'chemistry',
     tier: 3,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x6080b0, // compressed-fluid blue
     stroke: 0x182840,
     power: { consumes: 500 },
@@ -1563,8 +1552,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Kerosene Refinery',
     category: 'chemistry',
     tier: 3,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x9080a0, // aviation-fuel purple-grey
     stroke: 0x302840,
     power: { consumes: 350 },
@@ -1577,8 +1565,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lithography Lab',
     category: 'electronics',
     tier: 3,
-    width: 4,
-    height: 4,
+    footprint: SHAPES.square4,
     fill: 0x40a0c0, // wafer-fab cyan
     stroke: 0x103040,
     power: { consumes: 600 },
@@ -1591,8 +1578,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Drilling Rig',
     category: 'extraction',
     tier: 3,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xa07050, // rig-rust brown
     stroke: 0x401810,
     power: { consumes: 400 },
@@ -1610,8 +1596,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Aetheric Conduit',
     category: 'special',
     tier: 5,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x80a0e0, // aetheric pale-blue
     stroke: 0x203060,
     power: { consumes: 60000 },
@@ -1624,8 +1609,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Spacetime Resonator',
     category: 'special',
     tier: 5,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xa080e0, // tachyon violet
     stroke: 0x301040,
     power: { consumes: 100000 },
@@ -1638,8 +1622,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Eldritch Sieve',
     category: 'special',
     tier: 5,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x402040, // dark-matter near-black
     stroke: 0x100008,
     power: { consumes: 80000 },
@@ -1655,8 +1638,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Plasma Forge',
     category: 'manufacturing',
     tier: 5,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0xe06030, // plasma-orange
     stroke: 0x401008,
     power: { consumes: 4000 },
@@ -1669,8 +1651,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Eldritch Refiner',
     category: 'manufacturing',
     tier: 5,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x603060, // eldritch-violet
     stroke: 0x201020,
     power: { consumes: 5000 },
@@ -1683,8 +1664,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Phase Refiner',
     category: 'manufacturing',
     tier: 5,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x4060a0, // phase-blue
     stroke: 0x10204a,
     power: { consumes: 5000 },
@@ -1714,8 +1694,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lighthouse T1',
     category: 'special',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xd4c898, // pale sand
     stroke: 0x484028,
     // Zero-power signal beacon. No `power` declaration so the economy
@@ -1729,8 +1708,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lighthouse T2',
     category: 'special',
     tier: 2,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xd0d0d0, // weathered concrete
     stroke: 0x404040,
     power: { consumes: 10 },
@@ -1743,8 +1721,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lighthouse T3',
     category: 'special',
     tier: 3,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xb0c8e0, // pale steel
     stroke: 0x304058,
     power: { consumes: 25 },
@@ -1757,8 +1734,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lighthouse T4',
     category: 'special',
     tier: 4,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x90b8d0, // sky-instrument
     stroke: 0x203040,
     power: { consumes: 60 },
@@ -1771,8 +1747,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lighthouse T5',
     category: 'special',
     tier: 5,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xc080e0, // transcendent violet
     stroke: 0x400060,
     power: { consumes: 150 },
@@ -1785,8 +1760,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Lighthouse T6',
     category: 'special',
     tier: 6,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xe0c060, // ascendant gold
     stroke: 0x504010,
     power: { consumes: 400 },
@@ -1813,8 +1787,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Antenna T1',
     category: 'special',
     tier: 1,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0xa0b0c0, // pale telemetry blue
     stroke: 0x303848,
     // Zero-power basic beacon. Antenna placeholder — tune in Appendix A.
@@ -1826,8 +1799,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Antenna T2',
     category: 'special',
     tier: 2,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x80a0c0,
     stroke: 0x203048,
     // Antenna placeholder — tune in Appendix A.
@@ -1840,8 +1812,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Antenna T3',
     category: 'special',
     tier: 3,
-    width: 1,
-    height: 1,
+    footprint: SHAPES.single,
     fill: 0x6088c0,
     stroke: 0x102038,
     // Antenna placeholder — tune in Appendix A.
@@ -1854,8 +1825,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Comm Tower (Antenna T4)',
     category: 'special',
     tier: 4,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x4878c0,
     stroke: 0x081830,
     // Antenna placeholder — tune in Appendix A.
@@ -1868,8 +1838,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Exotic Antenna (Antenna T5)',
     category: 'special',
     tier: 5,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x9070c0, // exotic violet
     stroke: 0x301050,
     // Antenna placeholder — tune in Appendix A.
@@ -1882,8 +1851,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Ascendant Antenna (Antenna T6)',
     category: 'special',
     tier: 6,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0xd8b840, // ascendant gold + antenna-blue blend
     stroke: 0x483820,
     // Antenna placeholder — tune in Appendix A. T6 antenna ALSO acts as the
@@ -1900,8 +1868,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'PCB Etcher',
     category: 'electronics',
     tier: 2,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x4a7a5a,
     stroke: 0x1a3a2a,
     power: { consumes: 80 },
@@ -1913,8 +1880,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Circuit Assembler',
     category: 'electronics',
     tier: 3,
-    width: 2,
-    height: 2,
+    footprint: SHAPES.square2,
     fill: 0x4a90d9,
     stroke: 0x2a6099,
     power: { consumes: 30 },
@@ -1926,8 +1892,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Processor Fabricator',
     category: 'electronics',
     tier: 4,
-    width: 3,
-    height: 2,
+    footprint: SHAPES.rect3x2,
     fill: 0x6a50b9,
     stroke: 0x4a3099,
     power: { consumes: 60 },
@@ -1939,8 +1904,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     displayName: 'Computing Module Fabricator',
     category: 'electronics',
     tier: 4,
-    width: 3,
-    height: 3,
+    footprint: SHAPES.square3,
     fill: 0x8a40a9,
     stroke: 0x6a2089,
     power: { consumes: 100 },

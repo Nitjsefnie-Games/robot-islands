@@ -27,6 +27,7 @@ import {
   type BuildingDefId,
 } from './building-defs.js';
 import { BIOME_DEFS } from './biomes.js';
+import { shapeHeight, shapeWidth } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import { RECIPES, type Recipe } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';
@@ -647,7 +648,7 @@ export function mountBuildingsUi(
       ref.metaRail.appendChild(makeMetaBadge(biomeLabel, badgeFg, badgeBorder));
     }
     ref.metaRail.appendChild(
-      makeMetaBadge(`${def.width}×${def.height}`, metaFg, metaBorder),
+      makeMetaBadge(`${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}`, metaFg, metaBorder),
     );
     if (def.power?.produces) {
       ref.metaRail.appendChild(

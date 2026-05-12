@@ -11,6 +11,7 @@
 
 import { BUILDING_DEFS } from './building-defs.js';
 import type { BuildingDefId } from './building-defs.js';
+import { shapeHeight, shapeWidth } from './building-defs.js';
 import type { IslandSpec } from './world.js';
 
 /** Antenna defId → signal radius in tiles. Single source of truth.
@@ -51,8 +52,8 @@ export function computeSignalRanges(
       if (radius === undefined) continue;
       const def = BUILDING_DEFS[b.defId as BuildingDefId];
       out.push({
-        cx: spec.cx + b.x + def.width / 2,
-        cy: spec.cy + b.y + def.height / 2,
+        cx: spec.cx + b.x + shapeWidth(def.footprint) / 2,
+        cy: spec.cy + b.y + shapeHeight(def.footprint) / 2,
         radius,
       });
     }

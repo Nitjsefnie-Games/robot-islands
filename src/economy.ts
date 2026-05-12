@@ -432,7 +432,7 @@ export function computeRates(
     // draw is preserved by pass 3's existing active-building check.
     if (def.requiredTile && def.requiredTile.length > 0 && terrainAt) {
       let tileOk = true;
-      for (const t of footprintTiles(def.width, def.height, b.x, b.y, (b.rotation ?? 0) as 0 | 1 | 2 | 3)) {
+      for (const t of footprintTiles(def.footprint, b.x, b.y, (b.rotation ?? 0) as 0 | 1 | 2 | 3)) {
         const k = terrainAt(t.x, t.y);
         if (!def.requiredTile.includes(k)) {
           tileOk = false;
@@ -447,7 +447,7 @@ export function computeRates(
     // §8.8 coastal placement: at least one footprint tile must be water.
     if (def.coastal && terrainAt) {
       let hasWater = false;
-      for (const t of footprintTiles(def.width, def.height, b.x, b.y, (b.rotation ?? 0) as 0 | 1 | 2 | 3)) {
+      for (const t of footprintTiles(def.footprint, b.x, b.y, (b.rotation ?? 0) as 0 | 1 | 2 | 3)) {
         if (terrainAt(t.x, t.y) === 'water') {
           hasWater = true;
           break;

@@ -20,6 +20,7 @@
 
 import { BUILDING_DEFS } from './building-defs.js';
 import { pointInVision, type VisionSource } from './vision-source.js';
+import { shapeHeight, shapeWidth } from './building-defs.js';
 import {
   VISION_PADDING_TILES,
   islandConstituents,
@@ -90,8 +91,8 @@ export function computeVisionSources(
       const def = BUILDING_DEFS[b.defId];
       out.push({
         kind: 'circle',
-        cx: spec.cx + b.x + def.width / 2,
-        cy: spec.cy + b.y + def.height / 2,
+        cx: spec.cx + b.x + shapeWidth(def.footprint) / 2,
+        cy: spec.cy + b.y + shapeHeight(def.footprint) / 2,
         radius,
       });
     }

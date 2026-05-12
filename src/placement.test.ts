@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { BUILDING_DEFS } from './building-defs.js';
+import { BUILDING_DEFS, SHAPES } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
@@ -24,6 +24,7 @@ import {
   footprintTiles,
   placeBuilding,
   placementCostFor,
+  rotateShape,
   rotatedDims,
   validatePlacement,
   type Rotation,
@@ -83,7 +84,7 @@ function makeState(spec: IslandSpec, level: number = 1): IslandState {
 describe('footprintTiles', () => {
   it('1×1 footprint covers exactly one tile under any rotation', () => {
     for (const r of [0, 1, 2, 3] as Rotation[]) {
-      const tiles = footprintTiles(1, 1, 5, 7, r);
+      const tiles = footprintTiles(SHAPES.single, 5, 7, r);
       expect(tiles).toHaveLength(1);
       expect(tiles[0]).toEqual({ x: 5, y: 7 });
     }
@@ -98,7 +99,7 @@ describe('footprintTiles', () => {
       { x: 11, y: 21 },
     ]);
     for (const r of [0, 1, 2, 3] as Rotation[]) {
-      const tiles = footprintTiles(2, 2, 10, 20, r);
+      const tiles = footprintTiles(SHAPES.square2, 10, 20, r);
       expect(tiles).toHaveLength(4);
       expect(tileSet(tiles)).toEqual(expected);
     }
@@ -106,7 +107,7 @@ describe('footprintTiles', () => {
 
   it('2×3 footprint at (0, 0) produces the right tile sets under each rotation', () => {
     // Rotation 0: 2 wide × 3 tall block at (0,0).
-    expect(tileSet(footprintTiles(2, 3, 0, 0, 0))).toEqual(
+    expect(tileSet(footprintTiles(SHAPES.rect2x3, 0, 0, 0))).toEqual(
       tileSet([
         { x: 0, y: 0 }, { x: 1, y: 0 },
         { x: 0, y: 1 }, { x: 1, y: 1 },
@@ -114,7 +115,7 @@ describe('footprintTiles', () => {
       ]),
     );
     // Rotation 1 (90° CW): bounding box is 3 wide × 2 tall at (0,0).
-    expect(tileSet(footprintTiles(2, 3, 0, 0, 1))).toEqual(
+    expect(tileSet(footprintTiles(SHAPES.rect2x3, 0, 0, 1))).toEqual(
       tileSet([
         { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 },
         { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 },
@@ -122,7 +123,7 @@ describe('footprintTiles', () => {
     );
     // Rotation 2 (180°): bounding box is 2 wide × 3 tall at (0,0), same set
     // as rotation 0 for a solid rectangle.
-    expect(tileSet(footprintTiles(2, 3, 0, 0, 2))).toEqual(
+    expect(tileSet(footprintTiles(SHAPES.rect2x3, 0, 0, 2))).toEqual(
       tileSet([
         { x: 0, y: 0 }, { x: 1, y: 0 },
         { x: 0, y: 1 }, { x: 1, y: 1 },
@@ -131,7 +132,7 @@ describe('footprintTiles', () => {
     );
     // Rotation 3 (270° CW): bounding box is 3 wide × 2 tall at (0,0), same
     // set as rotation 1 for a solid rectangle.
-    expect(tileSet(footprintTiles(2, 3, 0, 0, 3))).toEqual(
+    expect(tileSet(footprintTiles(SHAPES.rect2x3, 0, 0, 3))).toEqual(
       tileSet([
         { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 },
         { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 },
@@ -142,15 +143,28 @@ describe('footprintTiles', () => {
 
 describe('rotatedDims', () => {
   it('keeps {w, h} on rotations 0 and 2', () => {
-    expect(rotatedDims(2, 3, 0)).toEqual({ width: 2, height: 3 });
-    expect(rotatedDims(2, 3, 2)).toEqual({ width: 2, height: 3 });
-    expect(rotatedDims(4, 1, 0)).toEqual({ width: 4, height: 1 });
+    expect(rotatedDims(SHAPES.rect2x3, 0)).toEqual({ width: 2, height: 3 });
+    expect(rotatedDims(SHAPES.rect2x3, 2)).toEqual({ width: 2, height: 3 });
+    expect(rotatedDims(SHAPES.line4h, 0)).toEqual({ width: 4, height: 1 });
   });
 
   it('swaps to {h, w} on rotations 1 and 3', () => {
-    expect(rotatedDims(2, 3, 1)).toEqual({ width: 3, height: 2 });
-    expect(rotatedDims(2, 3, 3)).toEqual({ width: 3, height: 2 });
-    expect(rotatedDims(4, 1, 1)).toEqual({ width: 1, height: 4 });
+    expect(rotatedDims(SHAPES.rect2x3, 1)).toEqual({ width: 3, height: 2 });
+    expect(rotatedDims(SHAPES.rect2x3, 3)).toEqual({ width: 3, height: 2 });
+    expect(rotatedDims(SHAPES.line4h, 1)).toEqual({ width: 1, height: 4 });
+  });
+});
+
+describe('rotateShape', () => {
+  it('rotates L-tromino 90°', () => {
+    const r = rotateShape(SHAPES.lTromino, 1);
+    expect(r.tiles).toContainEqual({ dx: 0, dy: 0 });
+    expect(r.tiles).toContainEqual({ dx: 0, dy: 1 });
+    expect(r.tiles).toContainEqual({ dx: -1, dy: 0 });
+  });
+  it('4 rotations returns original', () => {
+    const r = rotateShape(SHAPES.lTetromino, 4);
+    expect(r.tiles).toEqual(SHAPES.lTetromino.tiles);
   });
 });
 

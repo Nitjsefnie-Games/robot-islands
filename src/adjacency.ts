@@ -43,7 +43,7 @@ function footprintKeySet(
 ): Set<string> {
   const def = defs[b.defId];
   const rot = (b.rotation ?? 0) as Rotation;
-  const tiles = footprintTiles(def.width, def.height, b.x, b.y, rot);
+  const tiles = footprintTiles(def.footprint, b.x, b.y, rot);
   const out = new Set<string>();
   for (const t of tiles) out.add(`${t.x},${t.y}`);
   return out;
@@ -81,7 +81,7 @@ function touchesBorder(
 ): boolean {
   const def = defs[other.defId];
   const rot = (other.rotation ?? 0) as Rotation;
-  const tiles = footprintTiles(def.width, def.height, other.x, other.y, rot);
+  const tiles = footprintTiles(def.footprint, other.x, other.y, rot);
   for (const t of tiles) {
     if (border.has(`${t.x},${t.y}`)) return true;
   }

@@ -68,7 +68,7 @@ export const EMPTY_HEAT_ASSIGNMENTS: HeatAssignments = {
 function footprintKeySet(b: PlacedBuilding): Set<string> {
   const def = BUILDING_DEFS[b.defId];
   const rot = (b.rotation ?? 0) as Rotation;
-  const tiles = footprintTiles(def.width, def.height, b.x, b.y, rot);
+  const tiles = footprintTiles(def.footprint, b.x, b.y, rot);
   const out = new Set<string>();
   for (const t of tiles) out.add(`${t.x},${t.y}`);
   return out;
@@ -104,7 +104,7 @@ function borderTiles(footprint: Set<string>): Set<string> {
 function sourceTouchesBorder(source: PlacedBuilding, border: Set<string>): boolean {
   const def = BUILDING_DEFS[source.defId];
   const rot = (source.rotation ?? 0) as Rotation;
-  const tiles = footprintTiles(def.width, def.height, source.x, source.y, rot);
+  const tiles = footprintTiles(def.footprint, source.x, source.y, rot);
   for (const t of tiles) {
     if (border.has(`${t.x},${t.y}`)) return true;
   }

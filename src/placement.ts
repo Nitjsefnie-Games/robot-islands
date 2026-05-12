@@ -27,7 +27,7 @@
 // is pure: takes a spec + state + def id + anchor + rotation, returns a
 // validation verdict, optionally appends a new PlacedBuilding.
 
-import { BUILDING_DEFS, buildingUnlocked, canPlaceOnIsland, type BuildingDef, type BuildingDefId } from './building-defs.js';
+import { BUILDING_DEFS, buildingUnlocked, canPlaceOnIsland, shapeHeight, shapeWidth, type BuildingDef, type BuildingDefId, type ShapeMask } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { tileInscribedInEllipse } from './island.js';
@@ -66,48 +66,32 @@ export type Rotation = 0 | 1 | 2 | 3;
  * enough that swapping to an explicit shape mask (when L-trominoes land)
  * only requires changing the enumeration source.
  */
+
+export function rotateShape(mask: ShapeMask, rotations: number): ShapeMask {
+  let tiles = mask.tiles;
+  for (let i = 0; i < rotations; i++) {
+    tiles = tiles.map(({ dx, dy }) => ({ dx: dy === 0 ? 0 : -dy, dy: dx }));
+  }
+  return { tiles };
+}
+
 export function footprintTiles(
-  width: number,
-  height: number,
+  mask: ShapeMask,
   anchorX: number,
   anchorY: number,
   rotation: Rotation,
 ): ReadonlyArray<{ readonly x: number; readonly y: number }> {
-  const out: Array<{ x: number; y: number }> = [];
-  // Original mask offsets are dx in [0..w-1], dy in [0..h-1]. Under rotation
-  // r, the rotated offset (rx, ry) is computed so the bounding box stays
-  // anchored at (0,0). The transforms (worked out from a 90° CW rotation of
-  // a w×h block):
-  //   0:  (dx, dy)
-  //   1:  (h-1-dy, dx)            — 90° CW: x' = h-1-y, y' = x
-  //   2:  (w-1-dx, h-1-dy)        — 180°
-  //   3:  (dy, w-1-dx)            — 270° CW: x' = y, y' = w-1-x
-  for (let dy = 0; dy < height; dy++) {
-    for (let dx = 0; dx < width; dx++) {
-      let rx: number;
-      let ry: number;
-      switch (rotation) {
-        case 0:
-          rx = dx;
-          ry = dy;
-          break;
-        case 1:
-          rx = height - 1 - dy;
-          ry = dx;
-          break;
-        case 2:
-          rx = width - 1 - dx;
-          ry = height - 1 - dy;
-          break;
-        case 3:
-          rx = dy;
-          ry = width - 1 - dx;
-          break;
-      }
-      out.push({ x: anchorX + rx, y: anchorY + ry });
-    }
+  const rotated = rotateShape(mask, rotation);
+  let minDx = Infinity;
+  let minDy = Infinity;
+  for (const { dx, dy } of rotated.tiles) {
+    if (dx < minDx) minDx = dx;
+    if (dy < minDy) minDy = dy;
   }
-  return out;
+  return rotated.tiles.map(({ dx, dy }) => ({
+    x: anchorX + dx - minDx,
+    y: anchorY + dy - minDy,
+  }));
 }
 
 /**
@@ -116,12 +100,11 @@ export function footprintTiles(
  * `{w, h}`; rotations 1/3 swap to `{h, w}`.
  */
 export function rotatedDims(
-  width: number,
-  height: number,
+  mask: ShapeMask,
   rotation: Rotation,
 ): { readonly width: number; readonly height: number } {
-  if (rotation === 1 || rotation === 3) return { width: height, height: width };
-  return { width, height };
+  const r = rotateShape(mask, rotation);
+  return { width: shapeWidth(r), height: shapeHeight(r) };
 }
 
 /** Reasons placement can fail. Mirrors the §4.3 rule set plus the §9.5
@@ -233,7 +216,7 @@ export function validatePlacement(
   if (!canPlaceOnIsland(def, spec)) {
     return { ok: false, reason: 'biome-locked' };
   }
-  const tiles = footprintTiles(def.width, def.height, anchorX, anchorY, rotation);
+  const tiles = footprintTiles(def.footprint, anchorX, anchorY, rotation);
   for (const t of tiles) {
     if (!tileInscribedInEllipse(t.x, t.y, spec.majorRadius, spec.minorRadius)) {
       return { ok: false, reason: 'out-of-bounds' };
@@ -249,8 +232,7 @@ export function validatePlacement(
     const existingDef = BUILDING_DEFS[existing.defId];
     const existingRot = (existing.rotation ?? 0) as Rotation;
     const eTiles = footprintTiles(
-      existingDef.width,
-      existingDef.height,
+      existingDef.footprint,
       existing.x,
       existing.y,
       existingRot,
@@ -464,7 +446,7 @@ export function buildingAtTile(
   const ty = Math.round(wy);
   for (const b of spec.buildings) {
     const def = BUILDING_DEFS[b.defId];
-    const tiles = footprintTiles(def.width, def.height, b.x, b.y, (b.rotation ?? 0) as Rotation);
+    const tiles = footprintTiles(def.footprint, b.x, b.y, (b.rotation ?? 0) as Rotation);
     for (const t of tiles) {
       if (t.x === tx && t.y === ty) return b;
     }

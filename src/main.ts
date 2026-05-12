@@ -756,8 +756,7 @@ async function main(): Promise<void> {
   ): void {
     const def = BUILDING_DEFS[building.defId];
     const tiles = footprintTiles(
-      def.width,
-      def.height,
+      def.footprint,
       building.x,
       building.y,
       (building.rotation ?? 0) as Rotation,

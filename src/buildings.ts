@@ -14,6 +14,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { footprintTiles, type Rotation } from './placement.js';
 import { TILE_PX, desaturate, lighten } from './island.js';
 import type { ResourceId } from './recipes.js';
 
@@ -94,7 +95,7 @@ export interface PlacedBuilding {
 const DESAT_AMOUNT = 0.30;
 const SHADOW_OFFSET = 2;
 const SHADOW_ALPHA = 0.40;
-const BEVEL_ALPHA = 0.28;
+
 const GLYPH_SCALE = 0.5;
 const GLYPH_LIGHTEN = 0.70;
 const GLYPH_ALPHA = 0.85;
@@ -132,47 +133,47 @@ export function renderBuildings(buildings: ReadonlyArray<PlacedBuilding>): Conta
 
   for (const b of buildings) {
     const def = BUILDING_DEFS[b.defId];
-    const px = b.x * TILE_PX - half + inset;
-    const py = b.y * TILE_PX - half + inset;
-    const w = def.width * TILE_PX - inset * 2;
-    const h = def.height * TILE_PX - inset * 2;
+    const rot = (b.rotation ?? 0) as Rotation;
+    const tiles = footprintTiles(def.footprint, b.x, b.y, rot);
 
-    // 1) Drop shadow — same shape, offset down-right, dark fill at low
-    // alpha. Drawn first so everything else stacks on top.
-    g.rect(px + SHADOW_OFFSET, py + SHADOW_OFFSET, w, h).fill({
+    // Bounding box of the rotated footprint for shadow + glyph centre.
+    let minTx = Infinity;
+    let minTy = Infinity;
+    let maxTx = -Infinity;
+    let maxTy = -Infinity;
+    for (const t of tiles) {
+      if (t.x < minTx) minTx = t.x;
+      if (t.y < minTy) minTy = t.y;
+      if (t.x > maxTx) maxTx = t.x;
+      if (t.y > maxTy) maxTy = t.y;
+    }
+    const bboxPx = minTx * TILE_PX - half + inset;
+    const bboxPy = minTy * TILE_PX - half + inset;
+    const bboxW = (maxTx - minTx + 1) * TILE_PX - inset * 2;
+    const bboxH = (maxTy - minTy + 1) * TILE_PX - inset * 2;
+
+    // 1) Drop shadow — bounding box, offset down-right, dark fill at low alpha.
+    g.rect(bboxPx + SHADOW_OFFSET, bboxPy + SHADOW_OFFSET, bboxW, bboxH).fill({
       color: 0x000000,
       alpha: SHADOW_ALPHA,
     });
 
-    // 2) Main fill — desaturated to read as weathered/aged. Stroke uses
-    // the def's full-saturation stroke colour for definition.
+    // 2) Main fill — one rect per tile. Desaturated to read as weathered/aged.
+    // Stroke on each tile so non-rectangular shapes render correctly.
     const fillCol = desaturate(def.fill, DESAT_AMOUNT);
-    g.rect(px, py, w, h)
-      .fill(fillCol)
-      .stroke({ width: 2, color: def.stroke, alignment: 1 });
+    for (const t of tiles) {
+      const tx = t.x * TILE_PX - half + inset;
+      const ty = t.y * TILE_PX - half + inset;
+      const tw = TILE_PX - inset * 2;
+      const th = TILE_PX - inset * 2;
+      g.rect(tx, ty, tw, th)
+        .fill(fillCol)
+        .stroke({ width: 2, color: def.stroke, alignment: 1 });
+    }
 
-    // 3) Bevel — 1px inner-top lighter line + 1px inner-bottom darker
-    // line. Drawn 1px inside the stroke so the building reads as a
-    // stamped metal plate.
-    const beveled = lighten(fillCol, 0.30);
-    // Inner top edge (highlight).
-    g.moveTo(px + 1, py + 1).lineTo(px + w - 1, py + 1)
-      .stroke({ width: 1, color: beveled, alpha: BEVEL_ALPHA });
-    // Inner left edge (highlight).
-    g.moveTo(px + 1, py + 1).lineTo(px + 1, py + h - 1)
-      .stroke({ width: 1, color: beveled, alpha: BEVEL_ALPHA });
-    // Inner bottom edge (shadow).
-    g.moveTo(px + 1, py + h - 1).lineTo(px + w - 1, py + h - 1)
-      .stroke({ width: 1, color: 0x000000, alpha: BEVEL_ALPHA });
-    // Inner right edge (shadow).
-    g.moveTo(px + w - 1, py + 1).lineTo(px + w - 1, py + h - 1)
-      .stroke({ width: 1, color: 0x000000, alpha: BEVEL_ALPHA });
-
-    // 4) Glyph — centred Text. Size scales with footprint dimension so a
-    // 4×4 building gets a beefier mark than a 1×1. Lightened against the
-    // fill for contrast; alpha holds it back from competing with the
-    // hover/select overlays.
-    const minSide = Math.min(def.width, def.height);
+    // 3) Glyph — centred on the bounding box. Size scales with the smaller
+    // bbox dimension so a 4×4 building gets a beefier mark than a 1×1.
+    const minSide = Math.min(maxTx - minTx + 1, maxTy - minTy + 1);
     const fontSize = Math.round(minSide * TILE_PX * GLYPH_SCALE);
     const glyphColor = lighten(fillCol, GLYPH_LIGHTEN);
     const t = new Text({
@@ -186,10 +187,7 @@ export function renderBuildings(buildings: ReadonlyArray<PlacedBuilding>): Conta
     });
     t.alpha = GLYPH_ALPHA;
     t.anchor.set(0.5);
-    // Centre on the footprint. Note px/py already include the inset; the
-    // footprint centre is at (px + w/2, py + h/2). Subtle 1px down nudge
-    // optically balances the bevel highlight.
-    t.position.set(px + w / 2, py + h / 2);
+    t.position.set(bboxPx + bboxW / 2, bboxPy + bboxH / 2);
     glyphLayer.addChild(t);
   }
 
