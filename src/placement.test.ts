@@ -14,7 +14,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { BUILDING_DEFS, SHAPES } from './building-defs.js';
+import { BUILDING_DEFS } from './building-defs.js';
+import { SHAPES } from './shape-mask.js';
 import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';

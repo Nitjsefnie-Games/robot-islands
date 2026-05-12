@@ -16,6 +16,7 @@ import {
   unlockedDefs,
   type BuildingDefId,
 } from './building-defs.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import type { IslandSpec } from './world.js';
 
 // Hand-mirrored list of every id in the union. If a new id is added to
@@ -158,10 +159,10 @@ describe('BUILDING_DEFS catalog', () => {
   it('every def declares positive integer footprint dimensions', () => {
     for (const id of KNOWN_DEF_IDS) {
       const def = BUILDING_DEFS[id];
-      expect(def.width).toBeGreaterThan(0);
-      expect(def.height).toBeGreaterThan(0);
-      expect(Number.isInteger(def.width)).toBe(true);
-      expect(Number.isInteger(def.height)).toBe(true);
+      expect(shapeWidth(def.footprint)).toBeGreaterThan(0);
+      expect(shapeHeight(def.footprint)).toBeGreaterThan(0);
+      expect(Number.isInteger(shapeWidth(def.footprint))).toBe(true);
+      expect(Number.isInteger(shapeHeight(def.footprint))).toBe(true);
     }
   });
 
@@ -248,40 +249,40 @@ describe('step-12 T4 catalog (§6.5 / §9.5)', () => {
 
   it('Fusion Core: 4×4, +5000W producer, no biome restriction', () => {
     const def = BUILDING_DEFS.fusion_core;
-    expect(def.width).toBe(4);
-    expect(def.height).toBe(4);
+    expect(shapeWidth(def.footprint)).toBe(4);
+    expect(shapeHeight(def.footprint)).toBe(4);
     expect(def.power?.produces).toBe(5000);
     expect(def.requiredBiomes).toBeUndefined();
   });
 
   it('Pyroforge: 3×3, -800W consumer, Volcanic-restricted', () => {
     const def = BUILDING_DEFS.pyroforge;
-    expect(def.width).toBe(3);
-    expect(def.height).toBe(3);
+    expect(shapeWidth(def.footprint)).toBe(3);
+    expect(shapeHeight(def.footprint)).toBe(3);
     expect(def.power?.consumes).toBe(800);
     expect(def.requiredBiomes).toEqual(['volcanic']);
   });
 
   it('Cryogenic Compute Center: 4×4, -1200W consumer, Arctic-restricted', () => {
     const def = BUILDING_DEFS.cryogenic_compute_center;
-    expect(def.width).toBe(4);
-    expect(def.height).toBe(4);
+    expect(shapeWidth(def.footprint)).toBe(4);
+    expect(shapeHeight(def.footprint)).toBe(4);
     expect(def.power?.consumes).toBe(1200);
     expect(def.requiredBiomes).toEqual(['arctic']);
   });
 
   it('Particle Accelerator: 4×4, -1500W consumer, no biome restriction', () => {
     const def = BUILDING_DEFS.particle_accelerator;
-    expect(def.width).toBe(4);
-    expect(def.height).toBe(4);
+    expect(shapeWidth(def.footprint)).toBe(4);
+    expect(shapeHeight(def.footprint)).toBe(4);
     expect(def.power?.consumes).toBe(1500);
     expect(def.requiredBiomes).toBeUndefined();
   });
 
   it('Launch Tower: 3×3, -400W consumer, no biome restriction, no recipe', () => {
     const def = BUILDING_DEFS.launch_tower;
-    expect(def.width).toBe(3);
-    expect(def.height).toBe(3);
+    expect(shapeWidth(def.footprint)).toBe(3);
+    expect(shapeHeight(def.footprint)).toBe(3);
     expect(def.power?.consumes).toBe(400);
     expect(def.requiredBiomes).toBeUndefined();
   });
@@ -445,8 +446,8 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
 
   it('Casimir Tap: 2×2, +8000W producer, power category', () => {
     const def = BUILDING_DEFS.casimir_tap;
-    expect(def.width).toBe(2);
-    expect(def.height).toBe(2);
+    expect(shapeWidth(def.footprint)).toBe(2);
+    expect(shapeHeight(def.footprint)).toBe(2);
     expect(def.power?.produces).toBe(8000);
     expect(def.category).toBe('power');
     expect(def.requiredBiomes).toBeUndefined();
@@ -454,8 +455,8 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
 
   it('Reality Forge: 4×4, -3000W consumer, manufacturing', () => {
     const def = BUILDING_DEFS.reality_forge;
-    expect(def.width).toBe(4);
-    expect(def.height).toBe(4);
+    expect(shapeWidth(def.footprint)).toBe(4);
+    expect(shapeHeight(def.footprint)).toBe(4);
     expect(def.power?.consumes).toBe(3000);
     expect(def.category).toBe('manufacturing');
   });
@@ -466,8 +467,8 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
     // earlier 10000-cap placeholder. Power-buffer mechanic per §13.3 still
     // deferred to step 14+.
     const def = BUILDING_DEFS.singularity_battery;
-    expect(def.width).toBe(2);
-    expect(def.height).toBe(2);
+    expect(shapeWidth(def.footprint)).toBe(2);
+    expect(shapeHeight(def.footprint)).toBe(2);
     expect(def.storage).toBeUndefined();
     expect(def.power?.consumes).toBe(100);
     expect(def.category).toBe('power');
@@ -557,8 +558,8 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
 
   it('Spaceport: 4×4, -3000W consumer, special category, no recipe (gate building)', () => {
     const def = BUILDING_DEFS.spaceport;
-    expect(def.width).toBe(4);
-    expect(def.height).toBe(4);
+    expect(shapeWidth(def.footprint)).toBe(4);
+    expect(shapeHeight(def.footprint)).toBe(4);
     expect(def.power?.consumes).toBe(3000);
     expect(def.category).toBe('special');
     expect(def.requiredBiomes).toBeUndefined();
@@ -566,8 +567,8 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
 
   it('Antimatter Refinery: 3×3, -5000W consumer, manufacturing', () => {
     const def = BUILDING_DEFS.antimatter_refinery;
-    expect(def.width).toBe(3);
-    expect(def.height).toBe(3);
+    expect(shapeWidth(def.footprint)).toBe(3);
+    expect(shapeHeight(def.footprint)).toBe(3);
     expect(def.power?.consumes).toBe(5000);
     expect(def.category).toBe('manufacturing');
   });
@@ -579,8 +580,8 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
       'orbital_insertion_assembly',
     ] as const) {
       const def = BUILDING_DEFS[id];
-      expect(def.width).toBe(3);
-      expect(def.height).toBe(3);
+      expect(shapeWidth(def.footprint)).toBe(3);
+      expect(shapeHeight(def.footprint)).toBe(3);
       expect(def.category).toBe('manufacturing');
       expect(def.power?.consumes).toBeGreaterThan(0);
     }

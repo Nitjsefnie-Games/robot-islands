@@ -24,7 +24,8 @@
 
 import { Container, Graphics, Text } from 'pixi.js';
 
-import { BUILDING_DEFS, shapeHeight, shapeWidth, type BuildingDefId } from './building-defs.js';
+import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import type { IslandState } from './economy.js';
 import { TILE_PX } from './island.js';
 import {

@@ -27,7 +27,7 @@ import {
   type BuildingDefId,
 } from './building-defs.js';
 import { BIOME_DEFS } from './biomes.js';
-import { shapeHeight, shapeWidth } from './building-defs.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import type { IslandState } from './economy.js';
 import { RECIPES, type Recipe } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';

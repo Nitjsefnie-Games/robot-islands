@@ -20,7 +20,7 @@
 
 import { BUILDING_DEFS } from './building-defs.js';
 import { pointInVision, type VisionSource } from './vision-source.js';
-import { shapeHeight, shapeWidth } from './building-defs.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import {
   VISION_PADDING_TILES,
   islandConstituents,

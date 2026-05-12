@@ -63,7 +63,7 @@ export const EMPTY_HEAT_ASSIGNMENTS: HeatAssignments = {
 };
 
 /** All footprint tiles a building occupies, computed via `footprintTiles` with
- *  the building's nominal width/height and rotation. Returned as a Set of
+ *  the building's shape mask and rotation. Returned as a Set of
  *  "x,y" keys for O(1) membership tests during border-overlap checks. */
 function footprintKeySet(b: PlacedBuilding): Set<string> {
   const def = BUILDING_DEFS[b.defId];

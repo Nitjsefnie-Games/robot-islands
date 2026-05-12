@@ -19,8 +19,8 @@ import { TILE_PX, desaturate, lighten } from './island.js';
 import type { ResourceId } from './recipes.js';
 
 /** Per-instance placement. `id` is unique across the world; `defId` points
- *  into BUILDING_DEFS. (x, y) is the top-left tile of the footprint —
- *  footprint extends to (x + def.width - 1, y + def.height - 1). */
+ *  into BUILDING_DEFS. (x, y) is the anchor tile of the footprint —
+ *  the covered tiles are given by `footprintTiles(def.footprint, x, y, rot)`. */
 export interface PlacedBuilding {
   readonly id: string;
   readonly defId: BuildingDefId;

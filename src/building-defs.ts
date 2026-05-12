@@ -46,6 +46,7 @@
 
 import type { TerrainKind } from './island.js';
 import type { ResourceId } from './recipes.js';
+import { SHAPES, type ShapeMask } from './shape-mask.js';
 import { tierForLevel } from './skilltree.js';
 import type { StorageCategory } from './storage-categories.js';
 // Type-only imports avoid a runtime cycle with world.ts (which imports
@@ -209,65 +210,6 @@ export type BuildingDefId =
   | 'circuit_assembler'
   | 'processor_fab'
   | 'compute_module_fab';
-
-export interface ShapeMask {
-  readonly tiles: ReadonlyArray<{ readonly dx: number; readonly dy: number }>;
-}
-
-export function shapeWidth(mask: ShapeMask): number {
-  if (mask.tiles.length === 0) return 0;
-  let min = Infinity;
-  let max = -Infinity;
-  for (const { dx } of mask.tiles) {
-    if (dx < min) min = dx;
-    if (dx > max) max = dx;
-  }
-  return max - min + 1;
-}
-
-export function shapeHeight(mask: ShapeMask): number {
-  if (mask.tiles.length === 0) return 0;
-  let min = Infinity;
-  let max = -Infinity;
-  for (const { dy } of mask.tiles) {
-    if (dy < min) min = dy;
-    if (dy > max) max = dy;
-  }
-  return max - min + 1;
-}
-
-export const SHAPES = {
-  single: { tiles: [{ dx: 0, dy: 0 }] },
-  line2h: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }] },
-  line2v: { tiles: [{ dx: 0, dy: 0 }, { dx: 0, dy: 1 }] },
-  square2: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }] },
-  line3h: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }] },
-  line3v: { tiles: [{ dx: 0, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: 2 }] },
-  lTromino: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }] },
-  lTetromino: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 0, dy: 1 }] },
-  tTetromino: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 1, dy: 1 }] },
-  rect2x3: { tiles: [
-    { dx: 0, dy: 0 }, { dx: 1, dy: 0 },
-    { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
-    { dx: 0, dy: 2 }, { dx: 1, dy: 2 },
-  ]},
-  rect3x2: { tiles: [
-    { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 },
-    { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 },
-  ]},
-  line4h: { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 3, dy: 0 }] },
-  square3: { tiles: [
-    { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 },
-    { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 },
-    { dx: 0, dy: 2 }, { dx: 1, dy: 2 }, { dx: 2, dy: 2 },
-  ]},
-  square4: { tiles: [
-    { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 3, dy: 0 },
-    { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 }, { dx: 3, dy: 1 },
-    { dx: 0, dy: 2 }, { dx: 1, dy: 2 }, { dx: 2, dy: 2 }, { dx: 3, dy: 2 },
-    { dx: 0, dy: 3 }, { dx: 1, dy: 3 }, { dx: 2, dy: 3 }, { dx: 3, dy: 3 },
-  ]},
-} as const satisfies Record<string, ShapeMask>;
 
 /**
  * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's

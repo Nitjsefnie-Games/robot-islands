@@ -1,10 +1,10 @@
 // Building placement — pure tile math + validation + state mutation.
 //
 // SPEC §4 in summary:
-//   §4.1 footprint shapes — buildings cover one or more tiles. Step 2.5
-//        simplifies to rectangular footprints (BuildingDef.width × .height);
-//        custom L-tromino / tetromino shapes per §4.1 are DEFERRED (no current
-//        def uses them). The footprint mask is implicit `[(0,0)..(w-1,h-1)]`.
+//   §4.1 footprint shapes — buildings cover one or more tiles via an explicit
+//        `ShapeMask` (a set of tile offsets). Rectangular masks are provided
+//        by the `SHAPES` library in `shape-mask.ts`; L-tromino / tetromino
+//        variants are available for future defs.
 //   §4.2 rotation — 4-way (0/90/180/270 CW). For a rectangle this just swaps
 //        width/height on rotation 1/3 (no-op on 0/2). The transform here is
 //        written to also work when a non-rectangular shape mask lands later.
@@ -27,7 +27,9 @@
 // is pure: takes a spec + state + def id + anchor + rotation, returns a
 // validation verdict, optionally appends a new PlacedBuilding.
 
-import { BUILDING_DEFS, buildingUnlocked, canPlaceOnIsland, shapeHeight, shapeWidth, type BuildingDef, type BuildingDefId, type ShapeMask } from './building-defs.js';
+import { BUILDING_DEFS, buildingUnlocked, canPlaceOnIsland, type BuildingDef, type BuildingDefId } from './building-defs.js';
+import { rotateShape, shapeHeight, shapeWidth, type ShapeMask } from './shape-mask.js';
+export { rotateShape, type ShapeMask };
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { tileInscribedInEllipse } from './island.js';
@@ -47,8 +49,7 @@ const DEFAULT_CARGO_LABEL: ResourceId = 'iron_ore';
 export type Rotation = 0 | 1 | 2 | 3;
 
 /**
- * All tile coordinates a rectangular footprint of nominal `width × height`
- * covers when its anchor (top-left of the unrotated rectangle) sits at
+ * All tile coordinates a footprint covers when its anchor sits at
  * `(anchorX, anchorY)` under the given rotation.
  *
  * Convention: rotation pivots around the anchor and stays anchored at the
@@ -60,20 +61,9 @@ export type Rotation = 0 | 1 | 2 | 3;
  * the §4.2 spec where rotation does not move the placement origin, only
  * reshapes the footprint extent.
  *
- * Implementation: enumerate the original footprint mask (implicit
- * [0..w-1] × [0..h-1] for step 2.5), rotate each (dx, dy) into the bounding
- * box coordinate system, emit (anchor + rotated). The math is general
- * enough that swapping to an explicit shape mask (when L-trominoes land)
- * only requires changing the enumeration source.
+ * Implementation: enumerate the original footprint mask, rotate each
+ * (dx, dy) into the bounding box coordinate system, emit (anchor + rotated).
  */
-
-export function rotateShape(mask: ShapeMask, rotations: number): ShapeMask {
-  let tiles = mask.tiles;
-  for (let i = 0; i < rotations; i++) {
-    tiles = tiles.map(({ dx, dy }) => ({ dx: dy === 0 ? 0 : -dy, dy: dx }));
-  }
-  return { tiles };
-}
 
 export function footprintTiles(
   mask: ShapeMask,
@@ -95,9 +85,9 @@ export function footprintTiles(
 }
 
 /**
- * The effective axis-aligned bounding-box dimensions of a footprint of
- * nominal `width × height` under rotation. Rectangles: rotations 0/2 keep
- * `{w, h}`; rotations 1/3 swap to `{h, w}`.
+ * The effective axis-aligned bounding-box dimensions of a footprint under
+ * rotation. For rectangular masks: rotations 0/2 keep `{w, h}`;
+ * rotations 1/3 swap to `{h, w}`.
  */
 export function rotatedDims(
   mask: ShapeMask,

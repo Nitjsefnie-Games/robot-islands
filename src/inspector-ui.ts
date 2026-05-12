@@ -27,11 +27,10 @@
 
 import {
   BUILDING_DEFS,
-  shapeHeight,
-  shapeWidth,
   type BuildingCategory,
   type BuildingDefId,
 } from './building-defs.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { placementCostFor } from './placement.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';

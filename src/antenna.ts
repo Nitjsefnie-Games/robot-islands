@@ -11,7 +11,7 @@
 
 import { BUILDING_DEFS } from './building-defs.js';
 import type { BuildingDefId } from './building-defs.js';
-import { shapeHeight, shapeWidth } from './building-defs.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import type { IslandSpec } from './world.js';
 
 /** Antenna defId → signal radius in tiles. Single source of truth.
