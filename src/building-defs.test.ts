@@ -36,6 +36,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'coke_oven',
   'blast_furnace',
   'steel_mill',
+  'oxygen_converter',
   'assembler',
   'tank',
   'cold_storage',
