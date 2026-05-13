@@ -1,14 +1,13 @@
 // Per-island skill tree per SPEC §9.3. Pure logic — no PixiJS, no DOM.
 //
-// Three branches × sub-paths × depth-graded nodes. Players spend skill points
+// Four branches × sub-paths × depth-graded nodes. Players spend skill points
 // (granted on level-up, §9.1) to unlock nodes, which compose multiplicatively
 // into rate, cap, and power multipliers consumed by `computeRates` in
 // `economy.ts`.
 //
-// Step 5 implements only depth 1 and depth 2 nodes (11 sub-paths × 2 = 22
-// total). Deeper nodes are deferred per §9.3's per-node enumeration
-// deferment to Appendix A. The data model supports arbitrary depth — adding
-// depth-3+ entries to NODE_CATALOG is a future-step exercise.
+// The catalog now implements depth 1-15 for all sub-paths (11 legacy + 4
+// Orbital = 15 sub-paths × 15 depths = 225 nodes total). Depth 6+ nodes use
+// `structural` placeholder effects pending future mechanic implementation.
 //
 // Several depth-1 effects are `placeholder` because step 5 has no economic
 // surface to express them yet: Robotics (construction speed; placement
@@ -17,11 +16,13 @@
 // successors normally; their `kind: 'placeholder'` effect is a no-op in
 // `effectiveSkillMultipliers`. Later steps activate them.
 
+import type { BuildingDefId } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import type { RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
+import type { Biome } from './world.js';
 
-export type BranchId = 'extraction' | 'refinement' | 'logistics';
+export type BranchId = 'extraction' | 'refinement' | 'logistics' | 'orbital';
 
 export type SubPathId =
   // Extraction branch
@@ -37,7 +38,12 @@ export type SubPathId =
   // Logistics branch
   | 'storage'
   | 'transport'
-  | 'network';
+  | 'network'
+  // Orbital branch
+  | 'launch'
+  | 'communication'
+  | 'discovery'
+  | 'resilience';
 
 /** Node id is `<subPath>.<depth>`, e.g. `mining.1`. */
 export type NodeId = string;
@@ -60,7 +66,11 @@ export type SkillEffect =
   | { readonly kind: 'storageCapMul' }
   | { readonly kind: 'powerProductionMul' }
   | { readonly kind: 'powerConsumptionMul'; readonly reduce: true }
-  | { readonly kind: 'placeholder' };
+  | { readonly kind: 'placeholder' }
+  | { readonly kind: 'unlockRecipe'; readonly recipeDefId: BuildingDefId }
+  | { readonly kind: 'exoticAdjacency'; readonly description: string }
+  | { readonly kind: 'biomeBypass'; readonly biomes: Biome[] }
+  | { readonly kind: 'structural'; readonly description: string };
 
 export interface SkillNode {
   readonly id: NodeId;
@@ -91,6 +101,10 @@ export const SUBPATH_BRANCH: Readonly<Record<SubPathId, BranchId>> = {
   storage: 'logistics',
   transport: 'logistics',
   network: 'logistics',
+  launch: 'orbital',
+  communication: 'orbital',
+  discovery: 'orbital',
+  resilience: 'orbital',
 };
 
 /** Sub-paths grouped by branch. Order is the order the UI displays them in. */
@@ -98,6 +112,7 @@ export const BRANCH_SUBPATHS: Readonly<Record<BranchId, ReadonlyArray<SubPathId>
   extraction: ['mining', 'forestry', 'drilling', 'robotics'],
   refinement: ['smelting', 'chemistry', 'electronics', 'power_systems'],
   logistics: ['storage', 'transport', 'network'],
+  orbital: ['launch', 'communication', 'discovery', 'resilience'],
 };
 
 /** Display labels for sub-paths. Pure data; UI imports these to render. */
@@ -113,12 +128,17 @@ export const SUBPATH_LABEL: Readonly<Record<SubPathId, string>> = {
   storage: 'Storage',
   transport: 'Transport',
   network: 'Network',
+  launch: 'Launch',
+  communication: 'Communication',
+  discovery: 'Discovery',
+  resilience: 'Resilience',
 };
 
 export const BRANCH_LABEL: Readonly<Record<BranchId, string>> = {
   extraction: 'Extraction',
   refinement: 'Refinement',
   logistics: 'Logistics',
+  orbital: 'Orbital',
 };
 
 /**
@@ -185,38 +205,54 @@ export function t6Unlocked(
   return spec.buildings.some((b) => b.defId === 'spaceport');
 }
 
+/** Tier required to purchase a node at the given depth per §9.3. */
+export function tierRequiredForDepth(depth: number): Tier {
+  if (depth >= 8) return 6;
+  if (depth >= 5) return 5;
+  if (depth >= 4) return 4;
+  if (depth >= 3) return 3;
+  return 2;
+}
+
+export function costForDepth(depth: number): number {
+  return 2 ** (depth - 1);
+}
+
+export function magnitudeForDepth(depth: number): number {
+  if (depth <= 5) {
+    return 0.05 * (2 ** (depth - 1));
+  }
+  return 0;
+}
+
 /**
  * Required tier for a node at a given depth per §9.3:
  *   depth 1-2 → T2, depth 3 → T3, depth 4 → T4, depth 5-7 → T5, depth 8+ → T6.
  * §9.3's Drilling "T2+" annotation is subsumed by depth-1 → T2 uniformly.
  */
 export function nodeRequiredTier(node: SkillNode): Tier {
-  const d = node.depth;
-  if (d >= 8) return 6;
-  if (d >= 5) return 5;
-  if (d >= 4) return 4;
-  if (d >= 3) return 3;
-  return 2;
+  return tierRequiredForDepth(node.depth);
 }
 
 // ---------------------------------------------------------------------------
 // Node catalog
 // ---------------------------------------------------------------------------
 //
-// Depth 1 and depth 2 only for step 5 (22 nodes). Magnitudes per §9.3:
-// depth 1 = +5%, depth 2 = +10%. Costs: depth 1 = 1, depth 2 = 2.
+// Depth 1-15 for all 15 sub-paths (11 legacy + 4 Orbital = 225 nodes).
+// Magnitudes per §9.3: depth 1 = +5%, depth 2 = +10%, depth 3 = +20%,
+// depth 4 = +40%, depth 5 = +80%. Costs: depth 1 = 1, depth 2 = 2, …,
+// depth 15 = 16384.
 //
 // Effects:
 //   Mining/Forestry/Drilling: recipe-rate multiplier on `extraction` recipes.
-//     (Forestry/Drilling have no distinct recipes yet — the tag is shared
-//      across the sub-paths until the Logger/Drilling Rig recipes land.)
 //   Robotics: placeholder (construction speed — no placement system yet).
 //   Smelting/Chemistry/Electronics: recipe-rate multiplier on the matching
-//     category. No step-5 recipes use these tags, so the multiplier is a
-//     latent buff with no current effect.
-//   Power Systems: multiplies producers' `power.produces` (Solar, Coal Gen).
+//     category.
+//   Power Systems: multiplies producers' `power.produces`.
 //   Storage: multiplies every storage cap.
 //   Transport/Network: placeholder until routes/teleporters exist.
+//   Orbital sub-paths (Launch/Communication/Discovery/Resilience): structural
+//     placeholders until satellite/launch mechanics land (§14.9).
 
 function rate(category: RecipeCategory): SkillEffect {
   return { kind: 'recipeRateMul', category };
@@ -257,6 +293,52 @@ function depth2(
   };
 }
 
+function makeDeepNodes(subPath: SubPathId, baseEffect: SkillEffect): SkillNode[] {
+  const nodes: SkillNode[] = [];
+  for (let d = 3; d <= 15; d++) {
+    const cost = costForDepth(d);
+    const mag = magnitudeForDepth(d);
+    if (mag > 0) {
+      nodes.push({
+        id: `${subPath}.${d}`,
+        subPath,
+        depth: d,
+        cost,
+        magnitude: mag,
+        effect: baseEffect,
+        description: `${SUBPATH_LABEL[subPath]} +${(mag * 100).toFixed(0)}%`,
+      });
+    } else {
+      nodes.push({
+        id: `${subPath}.${d}`,
+        subPath,
+        depth: d,
+        cost,
+        magnitude: 0,
+        effect: { kind: 'structural', description: `${subPath} unique unlock (depth ${d})` },
+        description: `${SUBPATH_LABEL[subPath]} unique unlock (depth ${d})`,
+      });
+    }
+  }
+  return nodes;
+}
+
+function makeOrbitalNodes(subPath: SubPathId): SkillNode[] {
+  const nodes: SkillNode[] = [];
+  for (let d = 1; d <= 15; d++) {
+    nodes.push({
+      id: `${subPath}.${d}`,
+      subPath,
+      depth: d,
+      cost: costForDepth(d),
+      magnitude: 0,
+      effect: { kind: 'structural', description: `${subPath} depth-${d} unlock` },
+      description: `${SUBPATH_LABEL[subPath]} depth-${d} unlock`,
+    });
+  }
+  return nodes;
+}
+
 export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   // Extraction branch
   depth1('mining', rate('extraction'), 'Ore output +5%'),
@@ -285,6 +367,25 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   depth2('transport', { kind: 'placeholder' }, 'Route capacity +10% (routes pending)'),
   depth1('network', { kind: 'placeholder' }, 'Network reach +5% (teleporters pending)'),
   depth2('network', { kind: 'placeholder' }, 'Network reach +10% (teleporters pending)'),
+
+  // Deep nodes (depth 3-15) for existing sub-paths
+  ...makeDeepNodes('mining', rate('extraction')),
+  ...makeDeepNodes('forestry', rate('extraction')),
+  ...makeDeepNodes('drilling', rate('extraction')),
+  ...makeDeepNodes('robotics', { kind: 'placeholder' }),
+  ...makeDeepNodes('smelting', rate('smelting')),
+  ...makeDeepNodes('chemistry', rate('chemistry')),
+  ...makeDeepNodes('electronics', rate('electronics')),
+  ...makeDeepNodes('power_systems', { kind: 'powerProductionMul' }),
+  ...makeDeepNodes('storage', { kind: 'storageCapMul' }),
+  ...makeDeepNodes('transport', { kind: 'placeholder' }),
+  ...makeDeepNodes('network', { kind: 'placeholder' }),
+
+  // Orbital branch (depth 1-15)
+  ...makeOrbitalNodes('launch'),
+  ...makeOrbitalNodes('communication'),
+  ...makeOrbitalNodes('discovery'),
+  ...makeOrbitalNodes('resilience'),
 ];
 
 // ---------------------------------------------------------------------------
@@ -366,11 +467,11 @@ export function canSpend(
   // in the same branch is committed-but-incomplete, this purchase is blocked
   // — unless the target is exactly that in-progress sub-path.
   //
-  // With only depth-1 + depth-2 in the step-5 catalog, completing depth-2 of
-  // a sub-path simultaneously commits AND completes it (3 points spent). The
-  // branch lock thus never engages through normal step-5 play; it exists for
-  // forward-compat once depth-3+ nodes land and for the synthetic-catalog
-  // test that verifies the rule's correctness.
+  // With the full depth-1-15 catalog, buying depth-1 + depth-2 costs 3 points
+  // and commits the sub-path while leaving it incomplete. The branch lock
+  // therefore engages in normal play as soon as a player buys the first two
+  // nodes of any sub-path, preventing parallel work on sibling sub-paths
+  // until the committed one is fully completed.
   const targetBranch = SUBPATH_BRANCH[node.subPath];
   for (const [sp, progress] of state.subPathProgress) {
     if (sp === node.subPath) continue;
@@ -389,12 +490,10 @@ export function canSpend(
  * `state.subPathProgress`.
  *
  * Sub-path completion semantics: a sub-path is `complete` when every node in
- * the catalog belonging to that sub-path has been unlocked. With the step-5
- * catalog defining only depth-1 + depth-2, "complete" means "depth-1 AND
- * depth-2 owned". When depth-3+ nodes land in later steps, the same rule
- * still holds: complete = all defined nodes purchased. A sub-path that was
- * "complete" at one node-catalog version may revert to "in-progress" if new
- * nodes are added — that's by design.
+ * the catalog belonging to that sub-path has been unlocked. With the full
+ * depth-1-15 catalog, "complete" means all 15 nodes owned. A sub-path that
+ * was "complete" at one node-catalog version may revert to "in-progress" if
+ * new nodes are added — that's by design.
  */
 export function spendPoint(
   state: IslandState,
@@ -477,6 +576,14 @@ export function effectiveSkillMultipliers(
         powerConsumption *= m;
         break;
       case 'placeholder':
+        break;
+      case 'unlockRecipe':
+        break;
+      case 'exoticAdjacency':
+        break;
+      case 'biomeBypass':
+        break;
+      case 'structural':
         break;
     }
   }

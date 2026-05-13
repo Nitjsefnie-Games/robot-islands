@@ -1,4 +1,4 @@
-// Skill-tree panel — DOM overlay rendering §9.3 as three branch columns.
+// Skill-tree panel — DOM overlay rendering §9.3 as four branch columns.
 //
 // Aesthetic: a refinement of the existing HUD/ui-overlay industrial-readout
 // vocabulary (dark monospace, `#0a0e14` page void, `#cdd6f4` foreground,
@@ -177,7 +177,7 @@ export function mountSkillTreeUi(
       'top: 50%',
       'left: 50%',
       'transform: translate(-50%, -50%)',
-      'width: min(960px, calc(100vw - 32px))',
+      'width: min(1200px, calc(100vw - 32px))',
       'max-height: calc(100vh - 32px)',
       `background: ${PANEL_BG}`,
       `border: 1px solid ${PANEL_BORDER}`,
@@ -300,14 +300,14 @@ export function mountSkillTreeUi(
   header.appendChild(closeBtn);
 
   // -------------------------------------------------------------------------
-  // Body — three branch columns
+  // Body — four branch columns
   // -------------------------------------------------------------------------
   const body = document.createElement('div');
   styled(
     body,
     [
       'display: grid',
-      'grid-template-columns: 1fr 1fr 1fr',
+      'grid-template-columns: 1fr 1fr 1fr 1fr',
       'gap: 1px',
       'background: #2a3140',
       'overflow-y: auto',
@@ -428,7 +428,7 @@ export function mountSkillTreeUi(
     return row;
   }
 
-  for (const branch of ['extraction', 'refinement', 'logistics'] as const) {
+  for (const branch of (Object.keys(BRANCH_SUBPATHS) as BranchId[])) {
     const col = document.createElement('div');
     styled(
       col,
@@ -545,7 +545,7 @@ export function mountSkillTreeUi(
   const footerL = document.createElement('span');
   footerL.textContent = 'click a node to spend a skill point';
   const footerR = document.createElement('span');
-  footerR.textContent = 'depth 1-2 require T2 · costs grow 2^(depth-1)';
+  footerR.textContent = 'depth 1-2 require T2 · depth 3→T3 · depth 4→T4 · depth 5-7→T5 · depth 8+→T6 · costs grow 2^(depth-1)';
   footer.appendChild(footerL);
   footer.appendChild(footerR);
 
@@ -1297,7 +1297,7 @@ export function mountSkillTreeUi(
     }
 
     // Sub-path summary status: "committed", "complete", "locked", "open".
-    for (const branch of ['extraction', 'refinement', 'logistics'] as const) {
+    for (const branch of (Object.keys(BRANCH_SUBPATHS) as BranchId[])) {
       for (const sp of BRANCH_SUBPATHS[branch]) {
         const subEl = subStatusRefs.get(sp);
         if (!subEl) continue;

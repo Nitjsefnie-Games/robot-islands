@@ -8,12 +8,15 @@ import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   canSpend,
+  costForDepth,
   effectiveSkillMultipliers,
+  magnitudeForDepth,
   nodeRequiredTier,
   spendPoint,
   t5Unlocked,
   t6Unlocked,
   tierForLevel,
+  tierRequiredForDepth,
   type SkillNode,
 } from './skilltree.js';
 
@@ -154,6 +157,7 @@ describe('nodeRequiredTier', () => {
   });
   it('maps depth 5-7 to T5', () => {
     expect(nodeRequiredTier(mockNode(5))).toBe(5);
+    expect(nodeRequiredTier(mockNode(6))).toBe(5);
     expect(nodeRequiredTier(mockNode(7))).toBe(5);
   });
   it('maps depth 8+ to T6', () => {
@@ -324,12 +328,96 @@ describe('spendPoint', () => {
     expect(prog).toEqual({ spent: 1, complete: false });
   });
 
-  it('marks a sub-path complete when both step-5 nodes are owned', () => {
+  it('marks a sub-path complete when all catalog nodes are owned', () => {
+    const TWO_NODE_CATALOG: ReadonlyArray<SkillNode> = [
+      { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'placeholder' }, description: '' },
+      { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'placeholder' }, description: '' },
+    ];
     const s = makeState({ level: 5, unspentSkillPoints: 5 });
-    spendPoint(s, 'mining.1');
-    spendPoint(s, 'mining.2');
+    spendPoint(s, 'mining.1', TWO_NODE_CATALOG);
+    spendPoint(s, 'mining.2', TWO_NODE_CATALOG);
     expect(s.subPathProgress.get('mining')).toEqual({ spent: 3, complete: true });
     expect(s.unspentSkillPoints).toBe(2);
+  });
+});
+
+describe('skill tree depth', () => {
+  it('tierRequiredForDepth / nodeRequiredTier for depths 3, 5, 8, 15', () => {
+    expect(tierRequiredForDepth(3)).toBe(3);
+    expect(tierRequiredForDepth(5)).toBe(5);
+    expect(tierRequiredForDepth(8)).toBe(6);
+    expect(tierRequiredForDepth(15)).toBe(6);
+    expect(nodeRequiredTier({ id: 'x.3', subPath: 'mining', depth: 3, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(3);
+    expect(nodeRequiredTier({ id: 'x.8', subPath: 'mining', depth: 8, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(6);
+  });
+
+  it('costForDepth doubles each depth', () => {
+    expect(costForDepth(1)).toBe(1);
+    expect(costForDepth(5)).toBe(16);
+    expect(costForDepth(10)).toBe(512);
+    expect(costForDepth(15)).toBe(16384);
+  });
+
+  it('magnitudeForDepth doubles through depth 5, returns 0 for depth 6+', () => {
+    expect(magnitudeForDepth(1)).toBe(0.05);
+    expect(magnitudeForDepth(2)).toBe(0.10);
+    expect(magnitudeForDepth(3)).toBe(0.20);
+    expect(magnitudeForDepth(4)).toBe(0.40);
+    expect(magnitudeForDepth(5)).toBe(0.80);
+    expect(magnitudeForDepth(6)).toBe(0);
+    expect(magnitudeForDepth(15)).toBe(0);
+  });
+
+  it('effectiveSkillMultipliers with deep catalog composes correctly and ignores structural placeholders', () => {
+    const deepCatalog: ReadonlyArray<SkillNode> = [
+      { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
+      { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
+      { id: 'mining.3', subPath: 'mining', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
+      { id: 'mining.6', subPath: 'mining', depth: 6, cost: 32, magnitude: 0, effect: { kind: 'structural', description: 'mining unique unlock (depth 6)' }, description: '' },
+      { id: 'launch.1', subPath: 'launch', depth: 1, cost: 1, magnitude: 0, effect: { kind: 'structural', description: 'launch depth-1 unlock' }, description: '' },
+    ];
+    const s = makeState({
+      unlockedNodes: new Set(['mining.1', 'mining.2', 'mining.3', 'mining.6', 'launch.1']),
+    });
+    const m = effectiveSkillMultipliers(s, deepCatalog);
+    // 1.05 * 1.10 * 1.20 = 1.386
+    expect(m.recipeRate.extraction).toBeCloseTo(1.386, 9);
+    expect(m.recipeRate.smelting).toBe(1);
+    expect(m.storageCap).toBe(1);
+    expect(m.powerProduction).toBe(1);
+  });
+
+  it('canSpend rejects depth-3 node at T2 island', () => {
+    const s = makeState({ level: 5, unspentSkillPoints: 10 });
+    expect(canSpend(s, 'mining.3')).toEqual({ ok: false, reason: 'tier-locked' });
+  });
+
+  it('spendPoint with deep nodes updates subPathProgress.complete correctly when all nodes in a sub-path are owned', () => {
+    const deepCatalog: ReadonlyArray<SkillNode> = [
+      { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'placeholder' }, description: '' },
+      { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'placeholder' }, description: '' },
+      { id: 'mining.3', subPath: 'mining', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'placeholder' }, description: '' },
+    ];
+    const s = makeState({ level: 15, unspentSkillPoints: 10 });
+    spendPoint(s, 'mining.1', deepCatalog);
+    spendPoint(s, 'mining.2', deepCatalog);
+    expect(s.subPathProgress.get('mining')).toEqual({ spent: 3, complete: false });
+    spendPoint(s, 'mining.3', deepCatalog);
+    expect(s.subPathProgress.get('mining')).toEqual({ spent: 7, complete: true });
+  });
+
+  it('branch lock engages on default catalog after mining.1 + mining.2 (committed but incomplete)', () => {
+    const s = makeState({ level: 50, unspentSkillPoints: 10 });
+    spendPoint(s, 'mining.1');
+    spendPoint(s, 'mining.2');
+    // 3 points spent on mining → committed but incomplete (15 nodes in catalog).
+    // forestry.1 (same branch) must be blocked.
+    expect(canSpend(s, 'forestry.1')).toEqual({
+      ok: false,
+      reason: 'branch-locked',
+    });
+    // smelting.1 (refinement branch) must be unaffected.
+    expect(canSpend(s, 'smelting.1')).toEqual({ ok: true });
   });
 });
 
