@@ -311,6 +311,46 @@ describe('computeRates', () => {
     expect(net.iron_ore ?? 0).toBe(0);
     expect(byBuilding.length).toBe(0);
   });
+
+  it('hard gate failure zeros production and consumption', () => {
+    // Use a catalog where mine has a hard def_id gate requiring coal_furnace.
+    const defs: DefCatalog = {
+      ...BUILDING_DEFS,
+      mine: {
+        ...BUILDING_DEFS.mine,
+        gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: true }],
+      },
+    };
+    const mine: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [mine],
+      inventory: blankInventory(),
+    });
+    const { byBuilding, net } = computeRates(state, { defs });
+    const mineRate = byBuilding.find((b) => b.building.id === 'b-mine');
+    expect(mineRate?.effectiveRate).toBe(0);
+    expect(net.iron_ore ?? 0).toBe(0);
+  });
+
+  it('soft gate failure degrades production', () => {
+    const defs: DefCatalog = {
+      ...POWER_FREE,
+      mine: {
+        ...POWER_FREE.mine,
+        gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: 0.5 }],
+      },
+    };
+    const mine: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [mine],
+      inventory: blankInventory(),
+    });
+    const { byBuilding, net } = computeRates(state, { defs });
+    const mineRate = byBuilding.find((b) => b.building.id === 'b-mine');
+    // Base rate 1/50 = 0.02, degraded by 0.5 → 0.01
+    expect(mineRate?.effectiveRate).toBeCloseTo(0.01, 9);
+    expect(net.iron_ore ?? 0).toBeCloseTo(0.01, 9);
+  });
 });
 
 // -----------------------------------------------------------------------

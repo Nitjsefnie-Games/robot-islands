@@ -13,12 +13,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { computeBuffStack } from './adjacency.js';
+import { checkGates, computeBuffStack } from './adjacency.js';
 import {
   BUILDING_DEFS,
   type AdjacencyBuff,
   type BuildingDef,
   type BuildingDefId,
+  type GateRequirement,
 } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 
@@ -32,6 +33,16 @@ function withBuffs(
 ): Readonly<Record<BuildingDefId, BuildingDef>> {
   const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
   base[defId] = { ...base[defId], adjacencyBuffs: buffs };
+  return base;
+}
+
+/** Build a one-off catalog override that sets `gates` on the given defId. */
+function withGates(
+  defId: BuildingDefId,
+  gates: ReadonlyArray<GateRequirement>,
+): Readonly<Record<BuildingDefId, BuildingDef>> {
+  const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+  base[defId] = { ...base[defId], gates };
   return base;
 }
 
@@ -189,5 +200,89 @@ describe('computeBuffStack — §4.4 / §4.5', () => {
     // 'dock' which is not in the placeholder list.
     const focal: PlacedBuilding = { id: 'd', defId: 'dock', x: 0, y: 0 };
     expect(computeBuffStack(focal, [focal])).toBe(1);
+  });
+});
+
+describe('checkGates — §4.5 gating adjacency', () => {
+  it('building with no gates → satisfied, mul=1', () => {
+    const focal: PlacedBuilding = { id: 'd', defId: 'dock', x: 0, y: 0 };
+    expect(checkGates(focal, [focal])).toEqual({ satisfied: true, effectiveMul: 1 });
+  });
+
+  it('hard gate met → satisfied, mul=1', () => {
+    const defs = withGates('coke_oven', [{ matchType: 'heat_source', hard: true }]);
+    const focal: PlacedBuilding = { id: 'c', defId: 'coke_oven', x: 0, y: 0 };
+    const heater: PlacedBuilding = { id: 'h', defId: 'coal_furnace', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, heater], defs)).toEqual({ satisfied: true, effectiveMul: 1 });
+  });
+
+  it('hard gate unmet → unsatisfied, mul=0', () => {
+    const defs = withGates('coke_oven', [{ matchType: 'heat_source', hard: true }]);
+    const focal: PlacedBuilding = { id: 'c', defId: 'coke_oven', x: 0, y: 0 };
+    expect(checkGates(focal, [focal], defs)).toEqual({ satisfied: false, effectiveMul: 0 });
+  });
+
+  it('soft gate unmet → unsatisfied, mul=degradeMul', () => {
+    const defs = withGates('coke_oven', [{ matchType: 'heat_source', hard: false, degradeMul: 0.3 }]);
+    const focal: PlacedBuilding = { id: 'c', defId: 'coke_oven', x: 0, y: 0 };
+    expect(checkGates(focal, [focal], defs)).toEqual({ satisfied: false, effectiveMul: 0.3 });
+  });
+
+  it('multiple soft gates take the minimum degradeMul', () => {
+    const defs = withGates('coke_oven', [
+      { matchType: 'heat_source', hard: false, degradeMul: 0.5 },
+      { matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: 0.4 },
+    ]);
+    const focal: PlacedBuilding = { id: 'c', defId: 'coke_oven', x: 0, y: 0 };
+    // No neighbors → both unmet → min(0.5, 0.4) = 0.4
+    expect(checkGates(focal, [focal], defs)).toEqual({ satisfied: false, effectiveMul: 0.4 });
+  });
+
+  it('same_def match type', () => {
+    const defs = withGates('mine', [
+      { matchType: 'same_def', defId: 'mine', hard: true },
+    ]);
+    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
+    const other: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, other], defs)).toEqual({ satisfied: true, effectiveMul: 1 });
+
+    const workshop: PlacedBuilding = { id: 'w', defId: 'workshop', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, workshop], defs)).toEqual({ satisfied: false, effectiveMul: 0 });
+  });
+
+  it('def_id match type', () => {
+    const defs = withGates('mine', [
+      { matchType: 'def_id', defId: 'logger', hard: true },
+    ]);
+    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
+    const logger: PlacedBuilding = { id: 'l', defId: 'logger', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, logger], defs)).toEqual({ satisfied: true, effectiveMul: 1 });
+
+    const workshop: PlacedBuilding = { id: 'w', defId: 'workshop', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, workshop], defs)).toEqual({ satisfied: false, effectiveMul: 0 });
+  });
+
+  it('heat_source match type', () => {
+    const defs = withGates('coke_oven', [
+      { matchType: 'heat_source', hard: true },
+    ]);
+    const focal: PlacedBuilding = { id: 'c', defId: 'coke_oven', x: 0, y: 0 };
+    const heater: PlacedBuilding = { id: 'h', defId: 'coal_furnace', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, heater], defs)).toEqual({ satisfied: true, effectiveMul: 1 });
+
+    const nonHeater: PlacedBuilding = { id: 'w', defId: 'workshop', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, nonHeater], defs)).toEqual({ satisfied: false, effectiveMul: 0 });
+  });
+
+  it('same_category match type', () => {
+    const defs = withGates('mine', [
+      { matchType: 'same_category', category: 'extraction', hard: true },
+    ]);
+    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
+    const logger: PlacedBuilding = { id: 'l', defId: 'logger', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, logger], defs)).toEqual({ satisfied: true, effectiveMul: 1 });
+
+    const workshop: PlacedBuilding = { id: 'w', defId: 'workshop', x: 2, y: 0 };
+    expect(checkGates(focal, [focal, workshop], defs)).toEqual({ satisfied: false, effectiveMul: 0 });
   });
 });

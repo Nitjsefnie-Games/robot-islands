@@ -24,7 +24,7 @@
 // linear and exact. The integration converges in O(events × resources)
 // regardless of `now - lastTick`, so multi-day offline catchup is cheap.
 
-import { computeBuffStack } from './adjacency.js';
+import { checkGates, computeBuffStack } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import {
   BUILDING_DEFS,
@@ -515,7 +515,12 @@ export function computeRates(
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1 });
         continue;
       }
-      const baseRate = 1 / GENESIS_CYCLE_SEC;
+      const gateResult = checkGates(b, validBuildings, defs);
+      if (gateResult.effectiveMul === 0) {
+        tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1 });
+        continue;
+      }
+      const baseRate = (1 / GENESIS_CYCLE_SEC) * gateResult.effectiveMul;
       tentative.push({ building: b, recipe: syntheticRecipe, baseRate, buffStack: 1 });
       tentSupply[target] = (tentSupply[target] ?? 0) + baseRate;
       continue;
@@ -578,6 +583,12 @@ export function computeRates(
         continue;
       }
     }
+    // §4.5 gating adjacency: hard gates zero output; soft gates degrade.
+    const gateResult = checkGates(b, validBuildings, defs);
+    if (gateResult.effectiveMul === 0) {
+      tentative.push({ building: b, recipe, baseRate: 0, buffStack });
+      continue;
+    }
     const oa = outputAvail(state, recipe);
     if (oa === 0) {
       tentative.push({ building: b, recipe, baseRate: 0, buffStack });
@@ -594,7 +605,7 @@ export function computeRates(
       (specMul.recipeRateByCategory[recipe.category] ?? 1) *
       specMul.globalRecipeRate *
       ncBuff;
-    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul;
+    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul;
     tentative.push({ building: b, recipe, baseRate, buffStack });
     for (const [r, yld] of Object.entries(recipe.outputs)) {
       const id = r as ResourceId;

@@ -29,6 +29,7 @@ import {
   type AdjacencyBuff,
   type BuildingDef,
   type BuildingDefId,
+  type GateRequirement,
 } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
@@ -37,7 +38,7 @@ import { footprintTiles, type Rotation } from './shape-mask.js';
  *  for O(1) membership tests during border-overlap checks. Mirrors the
  *  helper in heat.ts (kept local so the two adjacency resolvers stay
  *  independent — see module header). */
-function footprintKeySet(
+export function footprintKeySet(
   b: PlacedBuilding,
   defs: Readonly<Record<BuildingDefId, BuildingDef>>,
 ): Set<string> {
@@ -53,7 +54,7 @@ function footprintKeySet(
  *  the footprint itself (per §4.4: "minus the footprint itself"). Required
  *  for multi-tile buildings — without the exclusion a 2×2 footprint's
  *  internal cardinal neighbors would loop back into its own cells. */
-function borderTiles(footprint: Set<string>): Set<string> {
+export function borderTiles(footprint: Set<string>): Set<string> {
   const border = new Set<string>();
   for (const key of footprint) {
     const [xs, ys] = key.split(',');
@@ -74,7 +75,7 @@ function borderTiles(footprint: Set<string>): Set<string> {
 }
 
 /** True iff any tile of `other`'s footprint lies in `border`. */
-function touchesBorder(
+export function touchesBorder(
   other: PlacedBuilding,
   border: Set<string>,
   defs: Readonly<Record<BuildingDefId, BuildingDef>>,
@@ -127,6 +128,76 @@ function neighborMatches(
  * threads its `RatesContext.defs` catalog through so a power-free /
  * heavy-mine test catalog continues to work.
  */
+/** §4.5 gating adjacency result. */
+export interface GateResult {
+  readonly satisfied: boolean;
+  readonly effectiveMul: number; // 0 if hard gate fails, degradeMul if soft
+}
+
+/**
+ * §4.5 gating adjacency resolution.
+ *
+ * Walks the focal building's 4-neighbor footprint border to identify
+ * distinct neighboring buildings, then evaluates each `GateRequirement`
+ * on the focal def. A hard gate with insufficient matches returns
+ * `{ satisfied: false, effectiveMul: 0 }` immediately. Soft gates
+ * accumulate the minimum `degradeMul` across all unmet requirements.
+ */
+export function checkGates(
+  building: PlacedBuilding,
+  all: ReadonlyArray<PlacedBuilding>,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
+): GateResult {
+  const def = defs[building.defId];
+  if (!def.gates || def.gates.length === 0) {
+    return { satisfied: true, effectiveMul: 1 };
+  }
+
+  const fp = footprintKeySet(building, defs);
+  const border = borderTiles(fp);
+  const neighbors: PlacedBuilding[] = [];
+  const seen = new Set<string>();
+  for (const other of all) {
+    if (other.id === building.id) continue;
+    if (seen.has(other.id)) continue;
+    if (!touchesBorder(other, border, defs)) continue;
+    seen.add(other.id);
+    neighbors.push(other);
+  }
+
+  let minMul = 1;
+  for (const gate of def.gates) {
+    let matches = 0;
+    for (const n of neighbors) {
+      const nd = defs[n.defId];
+      if (!nd) continue;
+      if (matchesGate(nd, gate)) matches++;
+    }
+    const needed = gate.minCount ?? 1;
+    if (matches < needed) {
+      if (gate.hard) return { satisfied: false, effectiveMul: 0 };
+      minMul = Math.min(minMul, gate.degradeMul ?? 0.5);
+    }
+  }
+  return { satisfied: minMul >= 1, effectiveMul: minMul };
+}
+
+function matchesGate(nd: BuildingDef, gate: GateRequirement): boolean {
+  switch (gate.matchType) {
+    case 'same_def':
+      return nd.id === gate.defId;
+    case 'same_category':
+      return nd.category === gate.category;
+    case 'def_id':
+      return nd.id === gate.defId;
+    case 'heat_source':
+      return !!nd.heatSource;
+    case 'cooling_tower':
+      return (nd.id as string) === 'cooling_tower';
+  }
+  return false;
+}
+
 export function computeBuffStack(
   b: PlacedBuilding,
   buildings: ReadonlyArray<PlacedBuilding>,

@@ -242,6 +242,26 @@ export interface AdjacencyBuff {
   readonly maxMatches: number;
 }
 
+/** §4.5 gating adjacency match type. Hard gates zero output entirely;
+ *  soft gates degrade by `degradeMul`. */
+export type GateMatchType = 'same_def' | 'same_category' | 'def_id' | 'heat_source' | 'cooling_tower';
+
+/** §4.5 gating adjacency requirement. A building declares zero or more
+ *  gates; each must be satisfied for full-rate operation. */
+export interface GateRequirement {
+  readonly matchType: GateMatchType;
+  /** Specific defId when matchType === 'def_id' or 'same_def'. */
+  readonly defId?: BuildingDefId;
+  /** Specific category when matchType === 'same_category'. */
+  readonly category?: BuildingCategory;
+  /** Minimum number of adjacent matches required (default 1). */
+  readonly minCount?: number;
+  /** If true, missing gate zeros output entirely. If false, degrades. */
+  readonly hard?: boolean;
+  /** Degraded output multiplier when soft-gate is unmet (default 0.5). */
+  readonly degradeMul?: number;
+}
+
 /**
  * Per-kind static definition. Step 9 fills the fields needed by the
  * economy + render layer; `requiredTile`, adjacency, and the heat flag stay
@@ -331,6 +351,9 @@ export interface BuildingDef {
    *  empty = no adjacency buff (default). Resolution: `computeBuffStack`
    *  in `adjacency.ts`, called from `computeRates`. */
   readonly adjacencyBuffs?: ReadonlyArray<AdjacencyBuff>;
+  /** §4.5 gating adjacency requirements. Hard gates zero output; soft gates
+   *  degrade by `degradeMul`. Resolution: `checkGates` in `adjacency.ts`. */
+  readonly gates?: ReadonlyArray<GateRequirement>;
   /** §14 placement-time material cost. Multi-resource basket charged at
    *  `placeBuilding` time; demolition refunds 50% (floor) of each entry
    *  in addition to the §6.7 scrap credit. Tier-shaped baskets:
@@ -633,6 +656,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // Fusion Core to operate. Per §7.1 the coke-making chain is heat-driven
     // ("Coal → Coke (Coke Oven)") in addition to the §8.2 catalog tagging.
     requiresHeat: true,
+    // §4.5 gating adjacency demonstration: hard heat_source gate.
+    gates: [{ matchType: 'heat_source', hard: true }],
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
     glyph: '▲',
@@ -651,6 +676,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // effective rate on `resolveHeatAssignments`; without heat it stalls and
     // contributes 0 to P_consumed.
     requiresHeat: true,
+    // §4.5 gating adjacency demonstration: hard heat_source gate.
+    gates: [{ matchType: 'heat_source', hard: true }],
     // §14 placeholder — tune in Appendix A. 3×3 footprint bumps base T2.
     placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
     glyph: '△',
@@ -800,6 +827,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §5.2: T3 arc furnaces still rely on adjacent heat per the spec's
     // smelting-category convention. Gated like Blast Furnace / Pyroforge.
     requiresHeat: true,
+    // §4.5 gating adjacency demonstration: hard heat_source gate.
+    gates: [{ matchType: 'heat_source', hard: true }],
     // §14 placeholder — tune in Appendix A.
     placementCost: { steel: 100, microchip: 50, stone: 20 },
     glyph: '△',
