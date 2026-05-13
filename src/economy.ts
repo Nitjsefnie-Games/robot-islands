@@ -668,6 +668,9 @@ export function computeRates(
     // (zero power draw). Checked before recipe lookup so the gate applies
     // even if the building's recipe is somehow undefined for the variant.
     if (def.requiresHeat && heat.hasHeat.get(b.id) !== true) continue;
+    // §4.5 gating adjacency: a building with a failed hard gate draws no power.
+    const gateResult = checkGates(b, validBuildings, defs);
+    if (gateResult.effectiveMul === 0) continue;
     // Same tile-aware resolution as the pass-1 loop. `active` only checks
     // recipe presence here, so the variant chosen doesn't matter — but we
     // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
@@ -696,6 +699,8 @@ export function computeRates(
   for (const b of validBuildings) {
     if (b.defId !== 'genesis_chamber') continue;
     if (!isBuildingActive(b)) continue;
+    const gcGateResult = checkGates(b, validBuildings, defs);
+    if (gcGateResult.effectiveMul === 0) continue;
     if (!state.genesisTarget) continue;
     const targetTier = tierForResource(state.genesisTarget);
     if (targetTier < 1 || targetTier > 4) continue;

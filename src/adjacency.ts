@@ -171,7 +171,7 @@ export function checkGates(
     for (const n of neighbors) {
       const nd = defs[n.defId];
       if (!nd) continue;
-      if (matchesGate(nd, gate)) matches++;
+      if (matchesGate(nd, gate, building.defId)) matches++;
     }
     const needed = gate.minCount ?? 1;
     if (matches < needed) {
@@ -182,10 +182,10 @@ export function checkGates(
   return { satisfied: minMul >= 1, effectiveMul: minMul };
 }
 
-function matchesGate(nd: BuildingDef, gate: GateRequirement): boolean {
+function matchesGate(nd: BuildingDef, gate: GateRequirement, focalDefId: BuildingDefId): boolean {
   switch (gate.matchType) {
     case 'same_def':
-      return nd.id === gate.defId;
+      return nd.id === focalDefId;
     case 'same_category':
       return nd.category === gate.category;
     case 'def_id':
