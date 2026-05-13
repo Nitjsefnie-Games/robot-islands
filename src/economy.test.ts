@@ -326,10 +326,11 @@ describe('computeRates', () => {
       buildings: [mine],
       inventory: blankInventory(),
     });
-    const { byBuilding, net } = computeRates(state, { defs });
+    const { byBuilding, net, power } = computeRates(state, { defs });
     const mineRate = byBuilding.find((b) => b.building.id === 'b-mine');
     expect(mineRate?.effectiveRate).toBe(0);
     expect(net.iron_ore ?? 0).toBe(0);
+    expect(power.consumed).toBe(0);
   });
 
   it('soft gate failure degrades production', () => {

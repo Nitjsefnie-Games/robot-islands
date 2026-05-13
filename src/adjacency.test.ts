@@ -22,7 +22,7 @@ import {
   type GateRequirement,
 } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
-import { SHAPES } from './shape-mask.js';
+
 
 /** Build a one-off catalog override that sets `adjacencyBuffs` on the given
  *  defId, leaving everything else identical to BUILDING_DEFS. Tests use this
@@ -305,31 +305,5 @@ describe('checkGates — §4.5 gating adjacency', () => {
     expect(checkGates(focal, [focal, neighbor], softDefs)).toEqual({ satisfied: false, effectiveMul: 0.25 });
   });
 
-  it('cooling_tower match type', () => {
-    const coolingTowerDef: BuildingDef = {
-      id: 'cooling_tower' as BuildingDefId,
-      displayName: 'Cooling Tower',
-      category: 'cooling',
-      tier: 2,
-      footprint: SHAPES.single,
-      fill: 0x7dd3e8,
-      stroke: 0xffffff,
-      glyph: '❄',
-    };
-    const defs = {
-      ...BUILDING_DEFS,
-      cooling_tower: coolingTowerDef,
-    } as unknown as Record<BuildingDefId, BuildingDef>;
-    const gatedDefs = {
-      ...defs,
-      coke_oven: { ...defs.coke_oven, gates: [{ matchType: 'cooling_tower', hard: true }] },
-    } as unknown as Record<BuildingDefId, BuildingDef>;
 
-    const focal: PlacedBuilding = { id: 'c', defId: 'coke_oven', x: 0, y: 0 };
-    const tower: PlacedBuilding = { id: 't', defId: 'cooling_tower' as BuildingDefId, x: 2, y: 0 };
-    expect(checkGates(focal, [focal, tower], gatedDefs)).toEqual({ satisfied: true, effectiveMul: 1 });
-
-    const workshop: PlacedBuilding = { id: 'w', defId: 'workshop', x: 2, y: 0 };
-    expect(checkGates(focal, [focal, workshop], gatedDefs)).toEqual({ satisfied: false, effectiveMul: 0 });
-  });
 });

@@ -510,13 +510,13 @@ export function computeRates(
         cycleSec: GENESIS_CYCLE_SEC,
         category: 'manufacturing',
       };
-      const oa = outputAvail(state, syntheticRecipe);
-      if (oa === 0) {
+      const gateResult = checkGates(b, validBuildings, defs);
+      if (gateResult.effectiveMul === 0) {
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1 });
         continue;
       }
-      const gateResult = checkGates(b, validBuildings, defs);
-      if (gateResult.effectiveMul === 0) {
+      const oa = outputAvail(state, syntheticRecipe);
+      if (oa === 0) {
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1 });
         continue;
       }
@@ -630,6 +630,7 @@ export function computeRates(
       (specMul.recipeRateByCategory[t.recipe.category] ?? 1) *
       specMul.globalRecipeRate *
       ncBuff;
+    // TODO(soft-gates): include gateResult.effectiveMul in nominalRate for inputAvail computation.
     const nominalRate = (1 / t.recipe.cycleSec) * t.buffStack * rateMul;
     const externalSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
     for (const r of Object.keys(tentSupply) as ResourceId[]) {

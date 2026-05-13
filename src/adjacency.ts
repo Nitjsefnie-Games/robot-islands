@@ -258,8 +258,6 @@ export function matchesGate(nd: BuildingDef, gate: GateRequirement, focalDefId: 
       return nd.id === gate.defId;
     case 'heat_source':
       return !!nd.heatSource;
-    case 'cooling_tower':
-      return (nd.id as string) === 'cooling_tower';
   }
   return false;
 }

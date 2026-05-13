@@ -95,12 +95,12 @@ const STORAGE_CATEGORY_LABEL: Readonly<Record<StorageCategory, string>> = {
 };
 
 function gateLabel(gate: GateRequirement): string {
+  const suffix = (gate.minCount ?? 1) > 1 ? ` ×${gate.minCount}` : '';
   switch (gate.matchType) {
-    case 'heat_source': return 'Heat Source';
-    case 'cooling_tower': return 'Cooling Tower';
-    case 'same_def': return 'Same Type';
-    case 'same_category': return gate.category ?? 'Same Category';
-    case 'def_id': return BUILDING_DEFS[gate.defId!]?.displayName ?? gate.defId!;
+    case 'heat_source': return `Heat Source${suffix}`;
+    case 'same_def': return `Same Type${suffix}`;
+    case 'same_category': return `${gate.category ?? 'unknown category'}${suffix}`;
+    case 'def_id': return `${BUILDING_DEFS[gate.defId!]?.displayName ?? gate.defId!}${suffix}`;
   }
 }
 
@@ -1148,7 +1148,7 @@ export function mountInspectorUi(
         gateSection.body.removeChild(gateSection.body.firstChild);
       }
       for (const gate of def.gates) {
-        const satisfied = gateSatisfied(building, gate, state.buildings, BUILDING_DEFS);
+        const satisfied = gateSatisfied(building, gate, state.buildings.filter((b) => !b.invalid), BUILDING_DEFS);
         const pill = document.createElement('span');
         pill.textContent = gateLabel(gate);
         styled(pill, [

@@ -244,7 +244,7 @@ export interface AdjacencyBuff {
 
 /** §4.5 gating adjacency match type. Hard gates zero output entirely;
  *  soft gates degrade by `degradeMul`. */
-export type GateMatchType = 'same_def' | 'same_category' | 'def_id' | 'heat_source' | 'cooling_tower';
+export type GateMatchType = 'same_def' | 'same_category' | 'def_id' | 'heat_source';
 
 /** §4.5 gating adjacency requirement. A building declares zero or more
  *  gates; each must be satisfied for full-rate operation. */
