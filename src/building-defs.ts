@@ -91,6 +91,8 @@ export type BuildingDefId =
   | 'shipyard'
   // T2 logistics — Helipad for §12 helicopter dispatch
   | 'helipad'
+  // T3 logistics — Patron Hub for §9.6 Auto-Patronage
+  | 'patron_hub'
   // New T2
   | 'coke_oven'
   | 'blast_furnace'
@@ -638,6 +640,22 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 15 },
     glyph: 'H',
+  },
+  // §9.6 / §12.7: Patron Hub — T3 logistics building that enables Auto-
+  // Patronage cargo routes at the 10-island NC milestone. The economy scans
+  // for `patron_hub` presence in `_nearestPatronHub`; without it, settlement
+  // arrivals get no automatic supply lines.
+  patron_hub: {
+    id: 'patron_hub',
+    displayName: 'Patron Hub',
+    category: 'logistics',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0xc8a040, // patron gold
+    stroke: 0x4a3510,
+    power: { consumes: 100 },
+    placementCost: { steel: 50, gear: 20, microchip: 10, glass: 20 },
+    glyph: '⚜',
   },
   // -------------------------------------------------------------------------
   // T2 (levels 5-15)

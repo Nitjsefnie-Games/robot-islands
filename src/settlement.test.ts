@@ -874,7 +874,7 @@ function makeT3Island(id: string, cx: number, cy: number, opts: { hasPatronHub?:
     cy,
     populated: true,
     discovered: true,
-    buildings: opts.hasPatronHub ? [{ id: `${id}-ph`, defId: 'patron_hub' as import('./building-defs.js').BuildingDefId, x: 0, y: 0 }] : [],
+    buildings: opts.hasPatronHub ? [{ id: `${id}-ph`, defId: 'patron_hub', x: 0, y: 0 }] : [],
   });
 }
 

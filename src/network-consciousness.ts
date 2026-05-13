@@ -75,8 +75,10 @@ export function networkedIslandIds(world: WorldState): Set<string> {
   const queue = [home.id];
   visited.add(home.id);
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
+  let head = 0;
+  while (head < queue.length) {
+    const current = queue[head]!;
+    head++;
     const neighbors = adj.get(current) ?? [];
     for (const next of neighbors) {
       if (!visited.has(next)) {

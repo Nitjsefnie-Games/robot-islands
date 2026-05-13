@@ -697,7 +697,7 @@ export interface WorldState {
   revealedCells: Set<string>;
   /** Runtime island states keyed by island id. Not persisted as part of the
    *  world snapshot (serialization keeps it separate for schema stability);
-   *  set by `main.ts` after init and by `deserializeWorld` on load. */
+   *  set by `main.ts` after init/load. */
   islandStates?: Map<string, IslandState>;
 
 }

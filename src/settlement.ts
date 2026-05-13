@@ -12,7 +12,7 @@
 //     implemented (§12.5). Every dispatched vehicle still arrives
 //     deterministically unless a roll fails at the expected-arrival tick.
 //   - Auto-routing at the 10-island NC milestone (§9.6 Auto-Patronage,
-//     §12.7) DEFERRED.
+//     §12.7) is IMPLEMENTED and gated by Patron Hub presence.
 //   - Coastal-tile placement check on Shipyard implemented via
 //     `coastal: true` on the shipyard def (§4.3 / §8.8).
 //   - Foundation Kit "starter inventory grace cap" (§12.4) remains
@@ -207,7 +207,7 @@ export function _nearestPatronHub(world: WorldState, targetId: string): IslandSp
 
   const hubs = world.islands.filter(spec => {
     const state = islandStates.get(spec.id);
-    return state && state.buildings.some(b => (b.defId as string) === 'patron_hub');
+    return state && state.buildings.some(b => b.defId === 'patron_hub');
   });
   if (hubs.length === 0) return null;
 

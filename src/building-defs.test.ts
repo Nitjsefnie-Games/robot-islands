@@ -29,6 +29,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'coal_gen',
   'dock',
   'dronepad',
+  'patron_hub',
   'logger',
   'smelter',
   'crate',
