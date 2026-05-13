@@ -37,12 +37,12 @@ import { BIOME_DEFS, MODIFIER_DEFS, type ModifierId } from './biomes.js';
 import { BUILDING_DEFS, type BuildingCategory, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { dayPhase, dayPhaseName, solarMultiplier, type DayPhase } from './daynight.js';
-import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
+import { cap, inv, type IslandState, type PowerBalance, xpForLevel, computeRates } from './economy.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
 import type { Objective } from './objectives.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';
-import type { IslandSpec } from './world.js';
+import type { IslandSpec, WorldState } from './world.js';
 
 /**
  * Mounts a fixed-position panel and returns an `update` function. Calling
@@ -65,6 +65,7 @@ export interface HudHandle {
     saveAgeSec: number | null,
     vehiclesEnRoute: number,
     objective: Objective | null,
+    activeIslandId: string,
   ): void;
 }
 
@@ -290,7 +291,82 @@ export function computeAlarms(
 // Mount
 // ---------------------------------------------------------------------------
 
-export function mountHud(parentEl: HTMLElement): HudHandle {
+export function renderMultiIslandBar(
+  world: WorldState,
+  activeIslandId: string,
+  onSelect: (id: string) => void,
+): HTMLElement {
+  const bar = document.createElement('div');
+  bar.id = 'multi-island-bar';
+  bar.style.cssText = `
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 32px;
+    background: #0a0e14;
+    border-bottom: 1px solid #2d5878;
+    display: flex;
+    gap: 8px;
+    padding: 0 8px;
+    align-items: center;
+    overflow-x: auto;
+    z-index: 100;
+  `;
+
+  for (const spec of world.islands) {
+    if (!spec.populated) continue;
+    const state = world.islandStates?.get(spec.id);
+    if (!state) continue;
+
+    const item = document.createElement('div');
+    const isActive = spec.id === activeIslandId;
+    item.style.cssText = `
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: 12px;
+      color: #eee;
+      background: ${isActive ? '#2d5878' : 'transparent'};
+    `;
+    item.onclick = () => onSelect(spec.id);
+
+    const name = document.createElement('span');
+    name.textContent = spec.name ?? spec.id;
+    item.appendChild(name);
+
+    const level = document.createElement('span');
+    level.style.cssText = 'color:#7dd3e8;font-size:10px;';
+    level.textContent = `L${state.level}`;
+    item.appendChild(level);
+
+    // Brownout indicator
+    const { power } = computeRates(state, {}, performance.now());
+    const isBrownout = power.rawConsumed > power.rawProduced;
+    if (isBrownout) {
+      item.style.color = '#ff4444';
+    }
+
+    // Storage cap hit indicator
+    const capHit = Object.entries(state.inventory).some(([r, amount]) => {
+      return amount >= (state.storageCaps[r as ResourceId] ?? 0) && amount > 0;
+    });
+    if (capHit) {
+      const alert = document.createElement('span');
+      alert.style.cssText = 'color:#ffaa00;font-weight:bold;margin-left:2px;';
+      alert.textContent = '!';
+      item.appendChild(alert);
+    }
+
+    bar.appendChild(item);
+  }
+
+  return bar;
+}
+
+export function mountHud(parentEl: HTMLElement, world: WorldState, onSelect: (id: string) => void): HudHandle {
   const panel = document.createElement('div');
   panel.id = 'hud-economy';
   panel.style.cssText = [
@@ -730,6 +806,9 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
     return n.toFixed(1);
   };
 
+  let bar = renderMultiIslandBar(world, '', onSelect);
+  parentEl.appendChild(bar);
+
   function update(
     state: IslandState,
     net: Record<ResourceId, number>,
@@ -739,6 +818,7 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
     saveAgeSec: number | null,
     vehiclesEnRoute: number,
     objective: Objective | null,
+    activeIslandId: string,
   ): void {
     const need = xpForLevel(state.level + 1);
     titleNode.textContent = spec.name;
@@ -842,6 +922,11 @@ export function mountHud(parentEl: HTMLElement): HudHandle {
       renderAlarms(alarms);
       lastAlarmsKey = akey;
     }
+
+    // Multi-island bar — lightweight rebuild each frame.
+    const newBar = renderMultiIslandBar(world, activeIslandId, onSelect);
+    bar.replaceWith(newBar);
+    bar = newBar;
   }
 
   return { el: panel, update };

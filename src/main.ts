@@ -651,7 +651,14 @@ async function main(): Promise<void> {
 
   // HUD: bottom-right panel showing inventory, rates, and level. Updated
   // once per frame inside the ticker after the economy advance.
-  const hud = mountHud(document.body);
+  const hud = mountHud(document.body, worldState, (id) => {
+    activeIslandId = id;
+    const spec = islandSpecsById.get(id);
+    if (spec) {
+      const wpx = tileToWorldPx(spec.cx, spec.cy);
+      centerOn(cam, { x: wpx.x, y: wpx.y }, viewportCentre());
+    }
+  });
 
   // Skill tree panel — modal-ish DOM overlay, dismissed via KeyK, Escape,
   // or its close button. Reads the active island's state through the
@@ -1234,6 +1241,7 @@ async function main(): Promise<void> {
       saveAgeSec,
       worldState.vehicles.length,
       objective,
+      activeIslandId,
     );
     // Skill tree only repaints while visible — DOM writes are wasted
     // otherwise. show() also forces a paint on transition so we don't
