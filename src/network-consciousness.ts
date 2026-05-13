@@ -59,8 +59,17 @@ const MILESTONE_TABLE: ReadonlyArray<MilestoneRow> = [
  * connects both ends.
  */
 export function networkedIslandIds(world: WorldState): Set<string> {
-  const home = world.islands.find(i => i.populated);
+  const home = world.islands.find(i => i.id === 'home' && i.populated);
   if (!home) return new Set();
+
+  // Pre-build undirected adjacency list for O(1) neighbour lookup.
+  const adj = new Map<string, string[]>();
+  for (const r of world.routes) {
+    if (!adj.has(r.from)) adj.set(r.from, []);
+    if (!adj.has(r.to))   adj.set(r.to, []);
+    adj.get(r.from)!.push(r.to);
+    adj.get(r.to)!.push(r.from);
+  }
 
   const visited = new Set<string>();
   const queue = [home.id];
@@ -68,20 +77,11 @@ export function networkedIslandIds(world: WorldState): Set<string> {
 
   while (queue.length > 0) {
     const current = queue.shift()!;
-    // Find all routes from current
-    const outbound = world.routes.filter(r => r.from === current);
-    for (const route of outbound) {
-      if (!visited.has(route.to)) {
-        visited.add(route.to);
-        queue.push(route.to);
-      }
-    }
-    // Also find inbound (graph is undirected for connectivity)
-    const inbound = world.routes.filter(r => r.to === current);
-    for (const route of inbound) {
-      if (!visited.has(route.from)) {
-        visited.add(route.from);
-        queue.push(route.from);
+    const neighbors = adj.get(current) ?? [];
+    for (const next of neighbors) {
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push(next);
       }
     }
   }

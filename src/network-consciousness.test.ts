@@ -58,6 +58,7 @@ function makeState(id: string, level: number): IslandState {
 function makeWorld(opts: {
   islands: Array<{ id: string; populated: boolean; level: number }>;
   routes?: Array<{ from: string; to: string }>;
+  omitStates?: string[];
 }): WorldState {
   const islandSpecs = opts.islands.map((i) => ({
     id: i.id,
@@ -75,6 +76,7 @@ function makeWorld(opts: {
 
   const islandStates = new Map<string, IslandState>();
   for (const i of opts.islands) {
+    if (opts.omitStates?.includes(i.id)) continue;
     islandStates.set(i.id, makeState(i.id, i.level));
   }
 
@@ -146,9 +148,23 @@ describe('networkedIslandIds', () => {
       ],
     });
     expect(networkedIslandIds(world)).toEqual(new Set(['home']));
-    const nc = computeNcState(world);
-    expect(nc.tier3PlusCount).toBe(1);
-    expect(nc.milestone).toBe(0);
+  });
+
+  it('bidirectional routes and cycles do not infinite-loop or double-count', () => {
+    const world = makeWorld({
+      islands: [
+        { id: 'home', populated: true, level: 1 },
+        { id: 'b', populated: true, level: 1 },
+        { id: 'c', populated: true, level: 1 },
+      ],
+      routes: [
+        { from: 'home', to: 'b' },
+        { from: 'b', to: 'home' },
+        { from: 'b', to: 'c' },
+        { from: 'c', to: 'b' },
+      ],
+    });
+    expect(networkedIslandIds(world)).toEqual(new Set(['home', 'b', 'c']));
   });
 
   it('undirected connectivity: inbound route counts', () => {
@@ -220,11 +236,11 @@ describe('computeNcState — Network Consciousness thresholds per §9.6', () => 
 
   it('5 islands at T3+ → milestone 2 / buff 1.10', () => {
     const islands = Array.from({ length: 5 }, (_, i) => ({
-      id: `a${i}`,
+      id: i === 0 ? 'home' : `a${i}`,
       populated: true as const,
       level: 15,
     }));
-    const routes = islands.slice(1).map((i) => ({ from: 'a0', to: i.id }));
+    const routes = islands.slice(1).map((i) => ({ from: 'home', to: i.id }));
     const world = makeWorld({ islands, routes });
     const nc = computeNcState(world);
     expect(nc.tier3PlusCount).toBe(5);
@@ -234,11 +250,11 @@ describe('computeNcState — Network Consciousness thresholds per §9.6', () => 
 
   it('10 islands at T3+ → milestone 3 / buff 1.25', () => {
     const islands = Array.from({ length: 10 }, (_, i) => ({
-      id: `a${i}`,
+      id: i === 0 ? 'home' : `a${i}`,
       populated: true as const,
       level: 15,
     }));
-    const routes = islands.slice(1).map((i) => ({ from: 'a0', to: i.id }));
+    const routes = islands.slice(1).map((i) => ({ from: 'home', to: i.id }));
     const world = makeWorld({ islands, routes });
     const nc = computeNcState(world);
     expect(nc.tier3PlusCount).toBe(10);
@@ -248,11 +264,11 @@ describe('computeNcState — Network Consciousness thresholds per §9.6', () => 
 
   it('20 islands at T3+ → milestone 4 / buff 1.25', () => {
     const islands = Array.from({ length: 20 }, (_, i) => ({
-      id: `a${i}`,
+      id: i === 0 ? 'home' : `a${i}`,
       populated: true as const,
       level: 15,
     }));
-    const routes = islands.slice(1).map((i) => ({ from: 'a0', to: i.id }));
+    const routes = islands.slice(1).map((i) => ({ from: 'home', to: i.id }));
     const world = makeWorld({ islands, routes });
     const nc = computeNcState(world);
     expect(nc.tier3PlusCount).toBe(20);
@@ -311,6 +327,30 @@ describe('computeNcState — Network Consciousness thresholds per §9.6', () => 
     const nc = computeNcState(world);
     expect(nc.tier3PlusCount).toBe(3);
     expect(nc.milestone).toBe(1);
+  });
+
+  it('throws when world.islandStates is missing', () => {
+    const world = makeWorld({
+      islands: [{ id: 'home', populated: true, level: 15 }],
+    });
+    world.islandStates = undefined;
+    expect(() => computeNcState(world)).toThrow(
+      'computeNcState: world.islandStates is missing',
+    );
+  });
+
+  it('ignores islands that have no entry in islandStates', () => {
+    const world = makeWorld({
+      islands: [
+        { id: 'home', populated: true, level: 15 },
+        { id: 'missing', populated: true, level: 20 },
+      ],
+      routes: [{ from: 'home', to: 'missing' }],
+      omitStates: ['missing'],
+    });
+    const nc = computeNcState(world);
+    expect(nc.tier3PlusCount).toBe(1); // only home counts
+    expect(nc.milestone).toBe(0);
   });
 
   it('unpopulated islands never count, even if T3+ and routed', () => {
