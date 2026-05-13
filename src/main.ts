@@ -1223,6 +1223,19 @@ async function main(): Promise<void> {
       }
     }
 
+    // Recompute active island rates post-routes/vehicles so both the main HUD
+    // and the multi-island bar show current data.
+    const postTickActiveS = activeState();
+    const postTickActiveP = activeSpec();
+    const { net: postNet, power: postPower } = computeRates(postTickActiveS, {
+      modifierMul: modifierMulFor(postTickActiveS.id),
+      specMul: specMulFor(postTickActiveS),
+      ncBuff: ncBuffFor(postTickActiveS),
+      terrainAt: postTickActiveP?.terrainAt,
+    });
+    islandNets.set(activeIslandId, postNet);
+    islandPower.set(activeIslandId, postPower);
+
     // Recompute rates AFTER the tick so the HUD shows the current
     // post-advance state (e.g., a freshly-stalled building reads as
     // 0 rate, not the rate it was running at one event ago).

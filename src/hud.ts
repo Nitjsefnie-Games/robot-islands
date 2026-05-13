@@ -333,10 +333,12 @@ export function renderMultiIslandBar(
     item.onclick = () => onSelect(spec.id);
 
     const name = document.createElement('span');
+    name.className = 'island-name';
     name.textContent = spec.name ?? spec.id;
     item.appendChild(name);
 
     const level = document.createElement('span');
+    level.className = 'island-level';
     level.style.cssText = 'color:#7dd3e8;font-size:10px;';
     level.textContent = `L${state.level}`;
     item.appendChild(level);
@@ -914,7 +916,7 @@ export function mountHud(parentEl: HTMLElement, world: WorldState, onSelect: (id
       bar.replaceWith(newBar);
       bar = newBar;
     }
-    // Always update active highlight, brownout color, and cap-hit alert
+    // Always update active highlight, brownout color, cap-hit alert, name, and level
     for (const child of bar.children) {
       const el = child as HTMLElement;
       const id = el.dataset.islandId;
@@ -925,8 +927,23 @@ export function mountHud(parentEl: HTMLElement, world: WorldState, onSelect: (id
       const p = islandPower.get(id);
       el.style.color = (p && p.rawConsumed > p.rawProduced) ? '#ff4444' : '#eee';
 
-      // Update cap-hit alert
+      // Update name
+      const nameSpan = el.querySelector('.island-name') as HTMLElement | null;
+      if (nameSpan) {
+        const sp = world.islands.find(i => i.id === id);
+        if (sp) {
+          nameSpan.textContent = sp.name ?? sp.id;
+        }
+      }
+
+      // Update level
+      const levelSpan = el.querySelector('.island-level') as HTMLElement | null;
       const st = world.islandStates?.get(id);
+      if (levelSpan && st) {
+        levelSpan.textContent = `L${st.level}`;
+      }
+
+      // Update cap-hit alert
       const capHit = st ? Object.entries(st.inventory).some(([r, amount]) => amount >= cap(st, r as ResourceId) && amount > 0) : false;
       const existingAlert = el.querySelector('.alert');
       if (capHit && !existingAlert) {
