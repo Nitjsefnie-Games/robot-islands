@@ -666,7 +666,64 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     row.appendChild(mid);
     row.appendChild(ruleWrap);
     row.appendChild(meta);
+    if (route.filter === null) {
+      renderPriorityEditor(route, row, () => refresh(performance.now()));
+    }
     return row;
+  }
+
+  function renderPriorityEditor(route: Route, container: HTMLElement, rerender: () => void): void {
+    const ul = document.createElement('ul');
+    ul.style.cssText = 'list-style:none;margin:4px 0 0 16px;padding:0;';
+    route.priorityList.forEach((resId, index) => {
+      const li = document.createElement('li');
+      li.draggable = true;
+      li.dataset.index = String(index);
+      li.textContent = resId;
+      li.style.cssText = [
+        'cursor: grab',
+        'padding: 2px 6px',
+        'border: 1px solid #2d5878',
+        'margin-bottom: 2px',
+        'background: #0f1720',
+        'color: #7dd3e8',
+        'font-size: 11px',
+        'border-radius: 2px',
+      ].join(';');
+      li.addEventListener('dragstart', (e) => handleDragStart(e));
+      li.addEventListener('dragover', (e) => handleDragOver(e));
+      li.addEventListener('drop', (e) => handleDrop(e, route, rerender));
+      li.addEventListener('dragenter', (e) => { e.preventDefault(); li.style.borderColor = '#7dd3e8'; });
+      li.addEventListener('dragleave', () => { li.style.borderColor = '#2d5878'; });
+      ul.appendChild(li);
+    });
+    container.appendChild(ul);
+  }
+
+  function handleDragStart(e: DragEvent) {
+    const li = e.currentTarget as HTMLElement;
+    li.style.opacity = '0.5';
+    e.dataTransfer?.setData('text/plain', li.dataset.index!);
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+  }
+
+  function handleDrop(e: DragEvent, route: Route, rerender: () => void) {
+    e.preventDefault();
+    const src = Number(e.dataTransfer?.getData('text/plain'));
+    const dstLi = e.currentTarget as HTMLElement;
+    const dst = Number(dstLi.dataset.index);
+    if (src === dst || Number.isNaN(src) || Number.isNaN(dst)) return;
+
+    const list = [...route.priorityList];
+    const [moved] = list.splice(src, 1);
+    if (moved === undefined) return;
+    list.splice(dst, 0, moved);
+    (route as any).priorityList = list;
+
+    rerender();
   }
 
   // ---- Stat refresh ----------------------------------------------------------
