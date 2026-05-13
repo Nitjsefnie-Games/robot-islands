@@ -223,16 +223,6 @@ export function flushSatBuffer(sat: Satellite): SatBufferEntry[] {
   return entries;
 }
 
-/**
- * Upgrade the Spaceport on an island to the next tier.
- *
- * Cost table:
- *   - Tier 1 → 2: 5 phase_converter, 2 eldritch_processor, 50 cryogenic_hydrogen
- *   - Tier 2 → 3: 10 reality_anchor, 5 eldritch_processor, 100 antimatter_propellant
- *
- * Returns `{ ok: true }` on success, or `{ ok: false, reason }` when the island
- * or spaceport is missing, the tier is already maxed, or resources are insufficient.
- */
 export function dispatchRepairDrone(
   world: WorldState,
   spaceportIslandId: string,
@@ -248,7 +238,11 @@ export function dispatchRepairDrone(
   if (!state.buildings.some((b) => b.defId === 'spaceport')) {
     return { ok: false, reason: 'no-spaceport' };
   }
+  if (!state.ascendantCoreCrafted) {
+    return { ok: false, reason: 'no-ascendant-core' };
+  }
 
+  // TODO(§14.12): proportional fuel load by distance
   // Consume 1 repair_pack + 1 antimatter_propellant
   if (inv(state, 'repair_pack') < 1) return { ok: false, reason: 'insufficient-repair-pack' };
   if (inv(state, 'antimatter_propellant') < 1) return { ok: false, reason: 'insufficient-fuel' };
@@ -299,6 +293,16 @@ export function tickRepairDrones(world: WorldState, nowMs: number): void {
   world.repairDrones = remaining;
 }
 
+/**
+ * Upgrade the Spaceport on an island to the next tier.
+ *
+ * Cost table:
+ *   - Tier 1 → 2: 5 phase_converter, 2 eldritch_processor, 50 cryogenic_hydrogen
+ *   - Tier 2 → 3: 10 reality_anchor, 5 eldritch_processor, 100 antimatter_propellant
+ *
+ * Returns `{ ok: true }` on success, or `{ ok: false, reason }` when the island
+ * or spaceport is missing, the tier is already maxed, or resources are insufficient.
+ */
 export function upgradeSpaceport(
   world: WorldState,
   islandId: string

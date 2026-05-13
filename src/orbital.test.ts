@@ -642,10 +642,23 @@ describe('repair drone dispatch', () => {
     expect(result.reason).toBe('no-spaceport');
   });
 
+  it('rejects when ascendant_core has not been crafted', () => {
+    const world = makeWorld();
+    world.satellites.push(makeMinimalSat({ id: 'sat1', x: 0, y: 0 }));
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: false });
+    addSpaceport(state);
+    stockRepairResources(state);
+    world.islandStates = new Map([['home', state]]);
+    const result = dispatchRepairDrone(world, 'home', 'sat1', 0);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('no-ascendant-core');
+  });
+
   it('rejects when repair_pack is missing', () => {
     const world = makeWorld();
     world.satellites.push(makeMinimalSat({ id: 'sat1', x: 0, y: 0 }));
-    const state = makeIslandState({ id: 'home' });
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     state.inventory.antimatter_propellant = 1;
     world.islandStates = new Map([['home', state]]);
@@ -658,7 +671,7 @@ describe('repair drone dispatch', () => {
   it('rejects when antimatter_propellant is missing', () => {
     const world = makeWorld();
     world.satellites.push(makeMinimalSat({ id: 'sat1', x: 0, y: 0 }));
-    const state = makeIslandState({ id: 'home' });
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     state.inventory.repair_pack = 1;
     world.islandStates = new Map([['home', state]]);
@@ -671,7 +684,7 @@ describe('repair drone dispatch', () => {
   it('dispatches a drone and sets pendingRepairDroneId', () => {
     const world = makeWorld();
     world.satellites.push(makeMinimalSat({ id: 'sat1', x: 0, y: 0 }));
-    const state = makeIslandState({ id: 'home' });
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     stockRepairResources(state);
     world.islandStates = new Map([['home', state]]);
@@ -686,7 +699,7 @@ describe('repair drone dispatch', () => {
   it('blocks second dispatch while repair pending', () => {
     const world = makeWorld();
     world.satellites.push(makeMinimalSat({ id: 'sat1', x: 0, y: 0 }));
-    const state = makeIslandState({ id: 'home' });
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     stockRepairResources(state);
     world.islandStates = new Map([['home', state]]);
@@ -701,7 +714,7 @@ describe('repair drone dispatch', () => {
   it('deducts repair_pack and antimatter_propellant on dispatch', () => {
     const world = makeWorld();
     world.satellites.push(makeMinimalSat({ id: 'sat1', x: 0, y: 0 }));
-    const state = makeIslandState({ id: 'home' });
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     stockRepairResources(state);
     world.islandStates = new Map([['home', state]]);
@@ -721,7 +734,7 @@ describe('repair drone arrival', () => {
     const world = makeWorld({ seed: 'test-seed' });
     const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0, lodges: { scan: 0.5, weather: 0.3, comm: 0.2 }, fuel: 20 });
     world.satellites.push(sat);
-    const state = makeIslandState({ id: 'home' });
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     stockRepairResources(state);
     world.islandStates = new Map([['home', state]]);
@@ -743,7 +756,7 @@ describe('repair drone arrival', () => {
     const world = makeWorld({ seed: 'test-seed' });
     const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0, lodges: { scan: 0.5, weather: 0.3, comm: 0.2 } });
     world.satellites.push(sat);
-    const state = makeIslandState({ id: 'home' });
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     stockRepairResources(state);
     world.islandStates = new Map([['home', state]]);
@@ -764,7 +777,7 @@ describe('repair drone arrival', () => {
     const world = makeWorld({ seed: 'test-seed' });
     const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0, lodges: { scan: 0.5, weather: 0.3, comm: 0.2 } });
     world.satellites.push(sat);
-    const state = makeIslandState({ id: 'home' });
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     stockRepairResources(state);
     world.islandStates = new Map([['home', state]]);
