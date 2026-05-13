@@ -294,9 +294,7 @@ export function computeAlarms(
 
 export function renderMultiIslandBar(
   world: WorldState,
-  activeIslandId: string,
   onSelect: (id: string) => void,
-  islandPower: Map<string, PowerBalance>,
 ): HTMLElement {
   const bar = document.createElement('div');
   bar.id = 'multi-island-bar';
@@ -320,7 +318,6 @@ export function renderMultiIslandBar(
     if (!state) continue;
 
     const item = document.createElement('div');
-    const isActive = spec.id === activeIslandId;
     item.dataset.islandId = spec.id;
     item.style.cssText = `
       display: flex;
@@ -332,7 +329,6 @@ export function renderMultiIslandBar(
       white-space: nowrap;
       font-size: 12px;
       color: #eee;
-      background: ${isActive ? '#2d5878' : 'transparent'};
     `;
     item.onclick = () => onSelect(spec.id);
 
@@ -344,24 +340,6 @@ export function renderMultiIslandBar(
     level.style.cssText = 'color:#7dd3e8;font-size:10px;';
     level.textContent = `L${state.level}`;
     item.appendChild(level);
-
-    // Brownout indicator
-    const power = islandPower.get(spec.id);
-    const isBrownout = power ? power.rawConsumed > power.rawProduced : false;
-    if (isBrownout) {
-      item.style.color = '#ff4444';
-    }
-
-    // Storage cap hit indicator
-    const capHit = Object.entries(state.inventory).some(([r, amount]) => {
-      return amount >= cap(state, r as ResourceId) && amount > 0;
-    });
-    if (capHit) {
-      const alert = document.createElement('span');
-      alert.style.cssText = 'color:#ffaa00;font-weight:bold;margin-left:2px;';
-      alert.textContent = '!';
-      item.appendChild(alert);
-    }
 
     bar.appendChild(item);
   }
@@ -809,7 +787,7 @@ export function mountHud(parentEl: HTMLElement, world: WorldState, onSelect: (id
     return n.toFixed(1);
   };
 
-  let bar = renderMultiIslandBar(world, '', onSelect, new Map());
+  let bar = renderMultiIslandBar(world, onSelect);
   parentEl.appendChild(bar);
   let lastBarSignature = '';
 
@@ -932,16 +910,34 @@ export function mountHud(parentEl: HTMLElement, world: WorldState, onSelect: (id
     const sig = world.islands.filter(i => i.populated).map(i => i.id).join(',');
     if (sig !== lastBarSignature) {
       lastBarSignature = sig;
-      const newBar = renderMultiIslandBar(world, activeIslandId, onSelect, islandPower);
+      const newBar = renderMultiIslandBar(world, onSelect);
       bar.replaceWith(newBar);
       bar = newBar;
     }
-    // Always update active highlight (cheaper than rebuild)
+    // Always update active highlight, brownout color, and cap-hit alert
     for (const child of bar.children) {
       const el = child as HTMLElement;
       const id = el.dataset.islandId;
       if (!id) continue;
       el.style.background = id === activeIslandId ? '#2d5878' : 'transparent';
+
+      // Update brownout color
+      const p = islandPower.get(id);
+      el.style.color = (p && p.rawConsumed > p.rawProduced) ? '#ff4444' : '#eee';
+
+      // Update cap-hit alert
+      const st = world.islandStates?.get(id);
+      const capHit = st ? Object.entries(st.inventory).some(([r, amount]) => amount >= cap(st, r as ResourceId) && amount > 0) : false;
+      const existingAlert = el.querySelector('.alert');
+      if (capHit && !existingAlert) {
+        const alert = document.createElement('span');
+        alert.className = 'alert';
+        alert.style.cssText = 'color:#ffaa00;font-weight:bold;margin-left:2px;';
+        alert.textContent = '!';
+        el.appendChild(alert);
+      } else if (!capHit && existingAlert) {
+        existingAlert.remove();
+      }
     }
   }
 

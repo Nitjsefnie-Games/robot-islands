@@ -30,6 +30,7 @@ import {
 } from './camera.js';
 import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes.js';
 import { advanceIsland, computeRates, type IslandState, type PowerBalance } from './economy.js';
+import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
 import {
   effectiveSpecializationMultipliers,
@@ -1124,6 +1125,7 @@ async function main(): Promise<void> {
     // Each island's modifier set composes its own recipe-rate multipliers,
     // so we look up the precomputed bundle by id and pass it through.
     const islandPower = new Map<string, PowerBalance>();
+    const islandNets = new Map<string, Record<ResourceId, number>>();
     for (const s of islandStates.values()) {
       // Thread the spec's `terrainAt` closure so `resolveRecipe` (recipes.ts)
       // can branch Mine output on the tile under each footprint (§8.1).
@@ -1136,12 +1138,13 @@ async function main(): Promise<void> {
         ncBuff: ncBuffFor(s),
         terrainAt: spec?.terrainAt,
       });
-      const { power } = computeRates(s, {
+      const { net, power } = computeRates(s, {
         modifierMul: modifierMulFor(s.id),
         specMul: specMulFor(s),
         ncBuff: ncBuffFor(s),
         terrainAt: spec?.terrainAt,
       });
+      islandNets.set(s.id, net);
       islandPower.set(s.id, power);
     }
     // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
@@ -1227,12 +1230,8 @@ async function main(): Promise<void> {
     // HUD on the next frame.
     const activeS = activeState();
     const activeP = activeSpec();
-    const { net, power } = computeRates(activeS, {
-      modifierMul: modifierMulFor(activeS.id),
-      specMul: specMulFor(activeS),
-      ncBuff: ncBuffFor(activeS),
-      terrainAt: activeP.terrainAt,
-    });
+    const net = islandNets.get(activeS.id)!;
+    const power = islandPower.get(activeS.id)!;
     const saveAgeSec =
       lastSaveAt === null ? null : Math.max(0, Math.floor((now - lastSaveAt) / 1000));
     // Objectives banner: compute the current short-term goal from a
