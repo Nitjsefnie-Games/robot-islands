@@ -884,6 +884,41 @@ describe('IslandSpec.name persistence', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// §14.2 satellite buffer backfill
+// ---------------------------------------------------------------------------
+
+describe('satellite buffer persistence', () => {
+  it('backfills missing buffer on a legacy satellite to []', () => {
+    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
+    const legacySat = {
+      id: 'sat-legacy',
+      variant: 'scanner',
+      spaceportIslandId: 'home',
+      x: 0,
+      y: 0,
+      commRange: 10,
+      coverageRadius: 20,
+      fuel: 5,
+      lodges: { scan: 0, weather: 0, comm: 0 },
+      locked: true,
+      pendingRepairDroneId: null,
+      // buffer is intentionally omitted
+    };
+    const legacySnap = {
+      ...baseSnap,
+      world: {
+        ...baseSnap.world,
+        satellites: [legacySat],
+      },
+    } as unknown as SaveSnapshot;
+    const json = JSON.parse(JSON.stringify(legacySnap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.satellites).toHaveLength(1);
+    expect(restored.satellites[0]!.buffer).toEqual([]);
+  });
+});
+
 describe('with a full demo world', () => {
   it('round-trips makeInitialWorld + per-island makeInitialIslandState', () => {
     const world = makeInitialWorld(0);

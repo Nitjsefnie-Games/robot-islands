@@ -51,6 +51,7 @@ import { _seedDroneIdCounter } from './drones.js';
 import type { Route } from './routes.js';
 import { _seedRouteIdCounter } from './routes.js';
 import type { SettlementVehicle } from './settlement.js';
+import type { Satellite } from './orbital.js';
 import { _seedVehicleIdCounter, tuningFor } from './settlement.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { NodeId, SubPathId } from './skilltree.js';
@@ -395,7 +396,12 @@ export function deserializeWorld(
     revealedCells: deserializeRevealedCells(islands, snapshot.world.revealedCells),
     // §14.2 satellite fleet backfill: legacy v3 saves predate `satellites`.
     // Default to an empty array so the world loads cleanly.
-    satellites: snapshot.world.satellites ? [...snapshot.world.satellites] : [],
+    satellites: (snapshot.world.satellites ?? []).map((s) => ({
+      ...s,
+      buffer: Array.isArray((s as { buffer?: unknown }).buffer)
+        ? (s as { buffer: Satellite['buffer'] }).buffer
+        : [],
+    })),
   };
 
   const islandStates = new Map<string, IslandState>();
