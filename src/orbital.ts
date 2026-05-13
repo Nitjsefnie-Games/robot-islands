@@ -12,6 +12,11 @@ import type { WorldState } from './world.js';
 
 export type SatelliteVariant = 'scanner' | 'sweeper' | 'comm';
 
+export interface SatBufferEntry {
+  readonly type: 'discovery' | 'weather' | 'debris';
+  readonly payload: unknown;
+}
+
 export interface Satellite {
   readonly id: string;
   readonly variant: SatelliteVariant;
@@ -31,6 +36,8 @@ export interface Satellite {
   locked: boolean;
   /** If pending repair, the incoming repair drone id. */
   pendingRepairDroneId: string | null;
+  /** Store-and-forward buffer for disconnected satellites. */
+  buffer: SatBufferEntry[];
 }
 
 /** Per-variant payload resource id consumed at launch time. */
@@ -126,10 +133,76 @@ export function launchSatellite(
     lodges: { scan: 0, weather: 0, comm: 0 },
     locked: true,
     pendingRepairDroneId: null,
+    buffer: [],
   };
 
   world.satellites.push(sat);
   return { ok: true, sat };
+}
+
+// ---------------------------------------------------------------------------
+// Comm graph BFS
+// ---------------------------------------------------------------------------
+
+function getEntityById(
+  world: WorldState,
+  id: string,
+): { x: number; y: number; commRange: number } | null {
+  const island = world.islands.find((i) => i.id === id);
+  if (island) return { x: island.cx, y: island.cy, commRange: 200 }; // ground station range
+  const sat = world.satellites.find((s) => s.id === id);
+  if (sat) return { x: sat.x, y: sat.y, commRange: sat.commRange };
+  return null;
+}
+
+export function connectedSatellites(world: WorldState): Satellite[] {
+  const connected = new Set<string>();
+  const queue: string[] = [];
+
+  // Seed with all Spaceports on populated islands
+  for (const spec of world.islands) {
+    if (!spec.populated) continue;
+    const state = world.islandStates?.get(spec.id);
+    if (state?.buildings.some((b) => b.defId === 'spaceport')) {
+      connected.add(spec.id);
+      queue.push(spec.id);
+    }
+  }
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const currentEntity = getEntityById(world, currentId);
+    if (!currentEntity) continue;
+
+    for (const sat of world.satellites) {
+      if (connected.has(sat.id)) continue;
+      if (!sat.locked) continue; // in-transit satellites are unreachable
+      const dist = Math.hypot(sat.x - currentEntity.x, sat.y - currentEntity.y);
+      if (dist <= Math.max(currentEntity.commRange, sat.commRange)) {
+        connected.add(sat.id);
+        queue.push(sat.id);
+      }
+    }
+  }
+
+  return world.satellites.filter((s) => connected.has(s.id));
+}
+
+// ---------------------------------------------------------------------------
+// Store-and-forward buffering
+// ---------------------------------------------------------------------------
+
+export function appendSatBuffer(sat: Satellite, entry: SatBufferEntry): void {
+  if (sat.buffer.length >= 100) {
+    sat.buffer.shift();
+  }
+  sat.buffer.push(entry);
+}
+
+export function flushSatBuffer(sat: Satellite): SatBufferEntry[] {
+  const entries = [...sat.buffer];
+  sat.buffer = [];
+  return entries;
 }
 
 /**

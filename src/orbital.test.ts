@@ -2,13 +2,23 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { launchSatellite, upgradeSpaceport, type SatelliteVariant } from './orbital.js';
+import {
+  launchSatellite,
+  upgradeSpaceport,
+  connectedSatellites,
+  appendSatBuffer,
+  flushSatBuffer,
+  type SatelliteVariant,
+  type Satellite,
+  type SatBufferEntry,
+} from './orbital.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   makeInitialWorld,
   type WorldState,
 } from './world.js';
 import type { IslandState } from './economy.js';
+import type { IslandSpec } from './world.js';
 
 function emptyInv(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -372,5 +382,172 @@ describe('spaceport upgrade', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('insufficient-resources');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Comm graph BFS
+// ---------------------------------------------------------------------------
+
+function makeMinimalIsland(over: Partial<IslandSpec> & { id: string; cx: number; cy: number }): IslandSpec {
+  return {
+    name: over.id,
+    biome: 'plains',
+    majorRadius: 10,
+    minorRadius: 10,
+    populated: false,
+    discovered: false,
+    buildings: [],
+    modifiers: [],
+    ...over,
+  } as IslandSpec;
+}
+
+function makeMinimalSat(over: Partial<Satellite> & { id: string; x: number; y: number }): Satellite {
+  return {
+    variant: 'scanner',
+    spaceportIslandId: 'home',
+    commRange: 200,
+    coverageRadius: 0,
+    fuel: 100,
+    lodges: { scan: 0, weather: 0, comm: 0 },
+    locked: true,
+    pendingRepairDroneId: null,
+    buffer: [],
+    ...over,
+  } as Satellite;
+}
+
+function makeBfsWorld(opts: {
+  islands: IslandSpec[];
+  islandStates: Map<string, IslandState>;
+  satellites: Satellite[];
+}): WorldState {
+  return {
+    islands: opts.islands,
+    drones: [],
+    routes: [],
+    vehicles: [],
+    revealedCells: new Set(),
+    seed: '0',
+    satellites: opts.satellites,
+    islandStates: opts.islandStates,
+  } as WorldState;
+}
+
+describe('connectedSatellites BFS', () => {
+  it('reaches satellites within comm range of a populated spaceport island', () => {
+    const island = makeMinimalIsland({ id: 'home', cx: 0, cy: 0, populated: true, buildings: [{ id: 'sp1', defId: 'spaceport', x: 0, y: 0 }] });
+    const state = makeIslandState({ id: 'home' });
+    addSpaceport(state);
+    const sat = makeMinimalSat({ id: 'sat1', x: 100, y: 0, commRange: 200 });
+    const world = makeBfsWorld({
+      islands: [island],
+      islandStates: new Map([['home', state]]),
+      satellites: [sat],
+    });
+    const result = connectedSatellites(world);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('sat1');
+  });
+
+  it('does NOT reach satellites out of range', () => {
+    const island = makeMinimalIsland({ id: 'home', cx: 0, cy: 0, populated: true, buildings: [{ id: 'sp1', defId: 'spaceport', x: 0, y: 0 }] });
+    const state = makeIslandState({ id: 'home' });
+    addSpaceport(state);
+    const sat = makeMinimalSat({ id: 'sat1', x: 500, y: 0, commRange: 200 });
+    const world = makeBfsWorld({
+      islands: [island],
+      islandStates: new Map([['home', state]]),
+      satellites: [sat],
+    });
+    const result = connectedSatellites(world);
+    expect(result).toHaveLength(0);
+  });
+
+  it('does NOT reach unlocked (in-transit) satellites', () => {
+    const island = makeMinimalIsland({ id: 'home', cx: 0, cy: 0, populated: true, buildings: [{ id: 'sp1', defId: 'spaceport', x: 0, y: 0 }] });
+    const state = makeIslandState({ id: 'home' });
+    addSpaceport(state);
+    const sat = makeMinimalSat({ id: 'sat1', x: 100, y: 0, commRange: 200, locked: false });
+    const world = makeBfsWorld({
+      islands: [island],
+      islandStates: new Map([['home', state]]),
+      satellites: [sat],
+    });
+    const result = connectedSatellites(world);
+    expect(result).toHaveLength(0);
+  });
+
+  it('chains through intermediate satellites', () => {
+    const island = makeMinimalIsland({ id: 'home', cx: 0, cy: 0, populated: true, buildings: [{ id: 'sp1', defId: 'spaceport', x: 0, y: 0 }] });
+    const state = makeIslandState({ id: 'home' });
+    addSpaceport(state);
+    const satA = makeMinimalSat({ id: 'satA', x: 150, y: 0, commRange: 200 });
+    const satB = makeMinimalSat({ id: 'satB', x: 350, y: 0, commRange: 200 });
+    const world = makeBfsWorld({
+      islands: [island],
+      islandStates: new Map([['home', state]]),
+      satellites: [satA, satB],
+    });
+    // home (range 200) reaches satA at dist 150
+    // satA (range 200) reaches satB at dist 200
+    const result = connectedSatellites(world);
+    expect(result.map((s) => s.id)).toEqual(['satA', 'satB']);
+  });
+
+  it('only seeds from populated islands with a spaceport', () => {
+    const islandA = makeMinimalIsland({ id: 'home', cx: 0, cy: 0, populated: true, buildings: [{ id: 'sp1', defId: 'spaceport', x: 0, y: 0 }] });
+    const islandB = makeMinimalIsland({ id: 'away', cx: 1000, cy: 0, populated: true, buildings: [] });
+    const stateA = makeIslandState({ id: 'home' });
+    addSpaceport(stateA);
+    const stateB = makeIslandState({ id: 'away' });
+    const sat = makeMinimalSat({ id: 'sat1', x: 100, y: 0, commRange: 200 });
+    const world = makeBfsWorld({
+      islands: [islandA, islandB],
+      islandStates: new Map([['home', stateA], ['away', stateB]]),
+      satellites: [sat],
+    });
+    const result = connectedSatellites(world);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('sat1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Store-and-forward buffering
+// ---------------------------------------------------------------------------
+
+describe('satellite buffer', () => {
+  it('appends entries to the buffer', () => {
+    const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0 });
+    const entry: SatBufferEntry = { type: 'discovery', payload: { foo: 1 } };
+    appendSatBuffer(sat, entry);
+    expect(sat.buffer).toHaveLength(1);
+    expect(sat.buffer[0]!.type).toBe('discovery');
+  });
+
+  it('evicts oldest entry FIFO when buffer exceeds 100 entries', () => {
+    const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0 });
+    for (let i = 0; i < 100; i++) {
+      appendSatBuffer(sat, { type: 'weather', payload: i });
+    }
+    expect(sat.buffer).toHaveLength(100);
+    expect(sat.buffer[0]!.payload).toBe(0);
+    appendSatBuffer(sat, { type: 'weather', payload: 100 });
+    expect(sat.buffer).toHaveLength(100);
+    expect(sat.buffer[0]!.payload).toBe(1);
+    expect(sat.buffer[99]!.payload).toBe(100);
+  });
+
+  it('flush returns all entries and empties the buffer', () => {
+    const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0 });
+    appendSatBuffer(sat, { type: 'debris', payload: 'a' });
+    appendSatBuffer(sat, { type: 'discovery', payload: 'b' });
+    const flushed = flushSatBuffer(sat);
+    expect(flushed).toHaveLength(2);
+    expect(flushed[0]!.type).toBe('debris');
+    expect(flushed[1]!.type).toBe('discovery');
+    expect(sat.buffer).toHaveLength(0);
   });
 });
