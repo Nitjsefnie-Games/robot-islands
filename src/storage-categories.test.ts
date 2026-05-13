@@ -79,11 +79,21 @@ describe('RESOURCE_STORAGE_CATEGORY (§4.6)', () => {
     expect(RESOURCE_STORAGE_CATEGORY.strange_matter).toBe('rare');
   });
 
-  it('every category has at least one assigned resource (except temp_sensitive may be sparse)', () => {
+  it('temp_sensitive category contains the expected cryogenic resources', () => {
+    // §4.6 Cold Storage consumers: cryo_coolant is the only catalogued
+    // cryogenic resource today. cryogenic_compound and liquid_nitrogen
+    // are deferred; no plastics exist in the current catalog.
+    const tempSensitiveResources = ALL_RESOURCES.filter(
+      (r) => RESOURCE_STORAGE_CATEGORY[r] === 'temp_sensitive',
+    );
+    expect(tempSensitiveResources).toContain('cryo_coolant');
+    expect(tempSensitiveResources.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('every category has at least one assigned resource', () => {
     // Sanity: each non-empty category in the spec must have at least one
     // member in the current catalog so the corresponding specialized
     // storage building actually does something on placement.
-    // temp_sensitive currently has one live member (cryo_coolant).
     const counts: Record<StorageCategory, number> = {
       dry_goods: 0,
       liquid_gas: 0,
@@ -98,8 +108,8 @@ describe('RESOURCE_STORAGE_CATEGORY (§4.6)', () => {
     expect(counts.liquid_gas).toBeGreaterThan(0);
     expect(counts.components).toBeGreaterThan(0);
     expect(counts.rare).toBeGreaterThan(0);
-    // temp_sensitive is documented as potentially zero — assert
-    // non-negative only.
-    expect(counts.temp_sensitive).toBeGreaterThanOrEqual(0);
+    // temp_sensitive now has a live member (cryo_coolant) so it must
+    // be non-zero like every other category.
+    expect(counts.temp_sensitive).toBeGreaterThan(0);
   });
 });
