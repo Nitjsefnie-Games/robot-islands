@@ -37,7 +37,7 @@ import { BIOME_DEFS, MODIFIER_DEFS, type ModifierId } from './biomes.js';
 import { BUILDING_DEFS, type BuildingCategory, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { dayPhase, dayPhaseName, solarMultiplier, type DayPhase } from './daynight.js';
-import { cap, inv, type IslandState, type PowerBalance, xpForLevel, computeRates } from './economy.js';
+import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
 import type { Objective } from './objectives.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -66,6 +66,7 @@ export interface HudHandle {
     vehiclesEnRoute: number,
     objective: Objective | null,
     activeIslandId: string,
+    islandPower: Map<string, PowerBalance>,
   ): void;
 }
 
@@ -295,6 +296,7 @@ export function renderMultiIslandBar(
   world: WorldState,
   activeIslandId: string,
   onSelect: (id: string) => void,
+  islandPower: Map<string, PowerBalance>,
 ): HTMLElement {
   const bar = document.createElement('div');
   bar.id = 'multi-island-bar';
@@ -319,6 +321,7 @@ export function renderMultiIslandBar(
 
     const item = document.createElement('div');
     const isActive = spec.id === activeIslandId;
+    item.dataset.islandId = spec.id;
     item.style.cssText = `
       display: flex;
       gap: 4px;
@@ -343,15 +346,15 @@ export function renderMultiIslandBar(
     item.appendChild(level);
 
     // Brownout indicator
-    const { power } = computeRates(state, {}, performance.now());
-    const isBrownout = power.rawConsumed > power.rawProduced;
+    const power = islandPower.get(spec.id);
+    const isBrownout = power ? power.rawConsumed > power.rawProduced : false;
     if (isBrownout) {
       item.style.color = '#ff4444';
     }
 
     // Storage cap hit indicator
     const capHit = Object.entries(state.inventory).some(([r, amount]) => {
-      return amount >= (state.storageCaps[r as ResourceId] ?? 0) && amount > 0;
+      return amount >= cap(state, r as ResourceId) && amount > 0;
     });
     if (capHit) {
       const alert = document.createElement('span');
@@ -806,8 +809,9 @@ export function mountHud(parentEl: HTMLElement, world: WorldState, onSelect: (id
     return n.toFixed(1);
   };
 
-  let bar = renderMultiIslandBar(world, '', onSelect);
+  let bar = renderMultiIslandBar(world, '', onSelect, new Map());
   parentEl.appendChild(bar);
+  let lastBarSignature = '';
 
   function update(
     state: IslandState,
@@ -819,6 +823,7 @@ export function mountHud(parentEl: HTMLElement, world: WorldState, onSelect: (id
     vehiclesEnRoute: number,
     objective: Objective | null,
     activeIslandId: string,
+    islandPower: Map<string, PowerBalance>,
   ): void {
     const need = xpForLevel(state.level + 1);
     titleNode.textContent = spec.name;
@@ -923,10 +928,21 @@ export function mountHud(parentEl: HTMLElement, world: WorldState, onSelect: (id
       lastAlarmsKey = akey;
     }
 
-    // Multi-island bar — lightweight rebuild each frame.
-    const newBar = renderMultiIslandBar(world, activeIslandId, onSelect);
-    bar.replaceWith(newBar);
-    bar = newBar;
+    // Multi-island bar — cache rebuild, update highlight every frame.
+    const sig = world.islands.filter(i => i.populated).map(i => i.id).join(',');
+    if (sig !== lastBarSignature) {
+      lastBarSignature = sig;
+      const newBar = renderMultiIslandBar(world, activeIslandId, onSelect, islandPower);
+      bar.replaceWith(newBar);
+      bar = newBar;
+    }
+    // Always update active highlight (cheaper than rebuild)
+    for (const child of bar.children) {
+      const el = child as HTMLElement;
+      const id = el.dataset.islandId;
+      if (!id) continue;
+      el.style.background = id === activeIslandId ? '#2d5878' : 'transparent';
+    }
   }
 
   return { el: panel, update };

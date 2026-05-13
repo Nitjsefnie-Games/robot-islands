@@ -29,7 +29,7 @@ import {
   type Camera,
 } from './camera.js';
 import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes.js';
-import { advanceIsland, computeRates, type IslandState } from './economy.js';
+import { advanceIsland, computeRates, type IslandState, type PowerBalance } from './economy.js';
 import { computeNcState } from './network-consciousness.js';
 import {
   effectiveSpecializationMultipliers,
@@ -1123,6 +1123,7 @@ async function main(): Promise<void> {
     // get consumed (and the funnel-pending credit drained) on that frame.
     // Each island's modifier set composes its own recipe-rate multipliers,
     // so we look up the precomputed bundle by id and pass it through.
+    const islandPower = new Map<string, PowerBalance>();
     for (const s of islandStates.values()) {
       // Thread the spec's `terrainAt` closure so `resolveRecipe` (recipes.ts)
       // can branch Mine output on the tile under each footprint (§8.1).
@@ -1135,6 +1136,13 @@ async function main(): Promise<void> {
         ncBuff: ncBuffFor(s),
         terrainAt: spec?.terrainAt,
       });
+      const { power } = computeRates(s, {
+        modifierMul: modifierMulFor(s.id),
+        specMul: specMulFor(s),
+        ncBuff: ncBuffFor(s),
+        terrainAt: spec?.terrainAt,
+      });
+      islandPower.set(s.id, power);
     }
     // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
     // islands for ellipse overlaps. At most ONE merge runs per tick — the
@@ -1242,6 +1250,7 @@ async function main(): Promise<void> {
       worldState.vehicles.length,
       objective,
       activeIslandId,
+      islandPower,
     );
     // Skill tree only repaints while visible — DOM writes are wasted
     // otherwise. show() also forces a paint on transition so we don't
