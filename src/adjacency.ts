@@ -182,14 +182,11 @@ export interface GateResult {
  * `{ satisfied: false, effectiveMul: 0 }` immediately. Soft gates
  * accumulate the minimum `degradeMul` across all unmet requirements.
  */
-export function gateSatisfied(
+export function collectNeighbors(
   building: PlacedBuilding,
-  gate: GateRequirement,
   all: ReadonlyArray<PlacedBuilding>,
   defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
-): boolean {
-  const def = defs[building.defId];
-  if (!def) return true;
+): PlacedBuilding[] {
   const fp = footprintKeySet(building, defs);
   const border = borderTiles(fp);
   const neighbors: PlacedBuilding[] = [];
@@ -201,6 +198,18 @@ export function gateSatisfied(
     seen.add(other.id);
     neighbors.push(other);
   }
+  return neighbors;
+}
+
+export function gateSatisfied(
+  building: PlacedBuilding,
+  gate: GateRequirement,
+  all: ReadonlyArray<PlacedBuilding>,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
+): boolean {
+  const def = defs[building.defId];
+  if (!def) return true;
+  const neighbors = collectNeighbors(building, all, defs);
   let matches = 0;
   for (const n of neighbors) {
     const nd = defs[n.defId];
@@ -220,17 +229,7 @@ export function checkGates(
     return { satisfied: true, effectiveMul: 1 };
   }
 
-  const fp = footprintKeySet(building, defs);
-  const border = borderTiles(fp);
-  const neighbors: PlacedBuilding[] = [];
-  const seen = new Set<string>();
-  for (const other of all) {
-    if (other.id === building.id) continue;
-    if (seen.has(other.id)) continue;
-    if (!touchesBorder(other, border, defs)) continue;
-    seen.add(other.id);
-    neighbors.push(other);
-  }
+  const neighbors = collectNeighbors(building, all, defs);
 
   let minMul = 1;
   for (const gate of def.gates) {

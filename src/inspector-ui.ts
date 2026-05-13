@@ -1150,7 +1150,6 @@ export function mountInspectorUi(
       for (const gate of def.gates) {
         const satisfied = gateSatisfied(building, gate, state.buildings, BUILDING_DEFS);
         const pill = document.createElement('span');
-        pill.className = 'gate-pill';
         pill.textContent = gateLabel(gate);
         styled(pill, [
           'display: inline-block',
