@@ -168,6 +168,10 @@ describe('currentObjective', () => {
       tier: 2,
       fuelLoaded: 10,
       fuelResource: 'biofuel',
+      waypoints: [],
+      darkMode: false,
+      darkModeDiscoveries: [],
+      probabilityBias: 0,
     };
     const snap = makeSnap({ specs: [home], states: [homeState], drones: [drone] });
     expect(currentObjective(snap)?.id).toBe('establish_route');
@@ -290,6 +294,10 @@ describe('currentObjective', () => {
       tier: 2,
       fuelLoaded: 10,
       fuelResource: 'biofuel',
+      waypoints: [],
+      darkMode: false,
+      darkModeDiscoveries: [],
+      probabilityBias: 0,
     };
     const snap = makeSnap({
       specs: [home, island2, island3],

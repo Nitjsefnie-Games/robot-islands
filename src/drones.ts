@@ -59,6 +59,14 @@ export interface Drone {
   /** §2.6 weather-destruction fate. `active` while in flight; `lost` if the
    *  weather roll destroyed it; `returned` after a successful landing. */
   status?: 'active' | 'lost' | 'returned';
+  /** For T5 path-drawn drones: sequence of waypoints. Empty for straight-line drones. */
+  readonly waypoints: ReadonlyArray<{ readonly x: number; readonly y: number }>;
+  /** True if this drone is currently in dark mode (out of antenna range). */
+  darkMode: boolean;
+  /** Accumulated discoveries while in dark mode. */
+  darkModeDiscoveries: Array<{ readonly islandId: string }>;
+  /** §13.3 Probability Engine bias stored at dispatch time. */
+  readonly probabilityBias: number;
 }
 
 /** T2-equivalent constants for step 6. Tile units; seconds for time.
@@ -70,13 +78,19 @@ export const DRONE_TIER_EFFICIENCY = 4;
 export const DRONE_SPEED_TILES_PER_SEC = 0.5; // rebalanced for idle-game scale, step #19 (was 2)
 export const DRONE_SCAN_RADIUS_TILES = 8;
 
+/** T5 path-drawn drone constants per §11.6. */
+export const DRONE_T5_EFFICIENCY = 8;
+export const DRONE_T5_SPEED_TILES_PER_SEC = 0.8;
+export const DRONE_T5_SCAN_RADIUS_TILES = 12;
+export const DRONE_T5_WEATHER_MULTIPLIER = 0.5;
+
 /** §2.6 weather vulnerability multiplier per drone tier. */
 export const DRONE_TIER_MULTIPLIERS: Record<DroneTier, number> = {
   1: 1.5,
   2: 1.0,
   3: 0.7,
   4: 0.5,
-  5: 0.3,
+  5: DRONE_T5_WEATHER_MULTIPLIER,
   6: 0.2,
 };
 
@@ -147,7 +161,65 @@ export function _seedDroneIdCounter(value: number): void {
 
 export type DispatchResult =
   | { ok: true; drone: Drone }
-  | { ok: false; reason: 'insufficient-fuel' | 'invalid-direction' | 'already-in-flight' };
+  | { ok: false; reason: 'insufficient-fuel' | 'invalid-direction' | 'already-in-flight' | 'path-too-long' };
+
+/** §13.3 Probability Engine — compute the rare-island scan bias for an island. */
+export function probabilityBiasForIsland(state: { buildings: ReadonlyArray<{ defId: string }> }): number {
+  const engineCount = state.buildings.filter((b) => b.defId === 'probability_engine').length;
+  if (engineCount === 0) return 0;
+  if (engineCount === 1) return 0.25;
+  if (engineCount === 2) return 0.40;
+  if (engineCount === 3) return 0.50;
+  return 0.60;
+}
+
+/** Rasterize a polyline path for weather destruction rolls.
+ *  Returns the same {cx, cy, entryMs} shape as `rasterizePath` but follows
+ *  the waypoint polyline outbound and its reverse inbound. */
+function rasterizeWaypointPathForWeather(
+  waypoints: ReadonlyArray<{ x: number; y: number }>,
+  speedTilesPerSec: number,
+  launchTimeMs: number,
+  cellSizeTiles: number,
+): Array<{ cx: number; cy: number; entryMs: number }> {
+  const result: Array<{ cx: number; cy: number; entryMs: number }> = [];
+  let elapsedMs = 0;
+  // Outbound: follow waypoints in order.
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const a = waypoints[i]!;
+    const b = waypoints[i + 1]!;
+    const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    if (segLen === 0) continue;
+    const dirX = (b.x - a.x) / segLen;
+    const dirY = (b.y - a.y) / segLen;
+    const segPath = rasterizePath(a.x, a.y, dirX, dirY, segLen, speedTilesPerSec, launchTimeMs + elapsedMs, cellSizeTiles);
+    for (const p of segPath) {
+      const last = result[result.length - 1];
+      if (!last || last.cx !== p.cx || last.cy !== p.cy || Math.abs(last.entryMs - p.entryMs) > 0.001) {
+        result.push(p);
+      }
+    }
+    elapsedMs += (segLen / speedTilesPerSec) * 1000;
+  }
+  // Inbound: follow waypoints in reverse order.
+  for (let i = waypoints.length - 1; i > 0; i--) {
+    const a = waypoints[i]!;
+    const b = waypoints[i - 1]!;
+    const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    if (segLen === 0) continue;
+    const dirX = (b.x - a.x) / segLen;
+    const dirY = (b.y - a.y) / segLen;
+    const segPath = rasterizePath(a.x, a.y, dirX, dirY, segLen, speedTilesPerSec, launchTimeMs + elapsedMs, cellSizeTiles);
+    for (const p of segPath) {
+      const last = result[result.length - 1];
+      if (!last || last.cx !== p.cx || last.cy !== p.cy || Math.abs(last.entryMs - p.entryMs) > 0.001) {
+        result.push(p);
+      }
+    }
+    elapsedMs += (segLen / speedTilesPerSec) * 1000;
+  }
+  return result;
+}
 
 /**
  * Launch a drone from `origin`. Mutates `world.drones` and `origin.inventory`.
@@ -178,6 +250,7 @@ export function dispatchDrone(
   dirY: number,
   fuelLoaded: number,
   nowMs: number,
+  waypoints?: ReadonlyArray<{ x: number; y: number }>,
 ): DispatchResult {
   // 1. direction
   const mag = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -198,11 +271,37 @@ export function dispatchDrone(
     return { ok: false, reason: 'insufficient-fuel' };
   }
 
-  // Range: total round-trip in tiles. Outbound is half (straight out, straight
-  // back along the same line). Travel time uses the full round-trip distance.
-  const rangeTiles = fuelLoaded * DRONE_TIER_EFFICIENCY;
-  const outboundTiles = rangeTiles / 2;
-  const travelSec = rangeTiles / DRONE_SPEED_TILES_PER_SEC;
+  const isPathDrawn = waypoints !== undefined && waypoints.length >= 2;
+  const efficiency = isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY;
+  const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
+  const scanRadius = isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES;
+  const tier: DroneTier = isPathDrawn ? 5 : STEP6_DRONE_TIER;
+
+  let outboundTiles: number;
+  let travelSec: number;
+
+  if (isPathDrawn) {
+    // Path-drawn: total path length is sum of segment lengths. Drone travels
+    // out along the path, then back along the reverse path.
+    let totalPathLength = 0;
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const a = waypoints[i]!;
+      const b = waypoints[i + 1]!;
+      totalPathLength += Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    }
+    // Range check: total round-trip = 2 × totalPathLength
+    if (totalPathLength * 2 > fuelLoaded * efficiency) {
+      return { ok: false, reason: 'path-too-long' };
+    }
+    outboundTiles = totalPathLength;
+    travelSec = (totalPathLength * 2) / speed;
+  } else {
+    // Straight-line: range = fuel × efficiency, outbound = half.
+    const rangeTiles = fuelLoaded * efficiency;
+    outboundTiles = rangeTiles / 2;
+    travelSec = rangeTiles / speed;
+  }
+
   const expectedReturnTime = nowMs + travelSec * 1000;
 
   origin.inventory[fuelResource] = inv(origin, fuelResource) - fuelLoaded;
@@ -215,13 +314,17 @@ export function dispatchDrone(
     dirX: ux,
     dirY: uy,
     outboundTiles,
-    scanRadius: DRONE_SCAN_RADIUS_TILES,
+    scanRadius,
     launchTime: nowMs,
     expectedReturnTime,
-    tier: STEP6_DRONE_TIER,
+    tier,
     fuelLoaded,
     fuelResource,
     status: 'active',
+    waypoints: waypoints ?? [],
+    darkMode: false,
+    darkModeDiscoveries: [],
+    probabilityBias: probabilityBiasForIsland(origin),
   };
   world.drones.push(drone);
   return { ok: true, drone };
@@ -269,6 +372,54 @@ export interface TickDronesResult {
  * the elapsed time to ≥ 0 and returns the launch origin — i.e. the
  * corridor of a freshly-launched drone starts at its launching island.
  */
+function droneSpeed(d: Drone): number {
+  return d.tier === 5 ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
+}
+
+/** Helper: find undiscovered islands whose footprint intersects a set of cell keys. */
+function islandsInCells(
+  islands: ReadonlyArray<import('./world.js').IslandSpec>,
+  cells: ReadonlySet<string>,
+): Array<{ readonly islandId: string }> {
+  const out: Array<{ readonly islandId: string }> = [];
+  const seen = new Set<string>();
+  for (const isl of islands) {
+    if (isl.populated) continue;
+    if (isl.discovered) continue;
+    if (islandHasRevealedCell(isl, cells)) {
+      if (!seen.has(isl.id)) {
+        seen.add(isl.id);
+        out.push({ islandId: isl.id });
+      }
+    }
+  }
+  return out;
+}
+
+/** §13.3 Probability Engine heuristic: an island is "rare" if it has
+ *  multiple modifiers or an aetheric anomaly. */
+function isRareIsland(isl: import('./world.js').IslandSpec): boolean {
+  return isl.modifiers.length >= 2 || isl.modifiers.includes('aetheric_anomaly');
+}
+
+/** Discover rare islands that fall inside an expanded cell set (probability-bias
+ *  corridor). Mutates `isl.discovered` and appends to `outIds`. */
+function discoverRareIslands(
+  islands: ReadonlyArray<import('./world.js').IslandSpec>,
+  expandedCells: ReadonlySet<string>,
+  outIds: string[],
+): void {
+  for (const isl of islands) {
+    if (isl.populated) continue;
+    if (isl.discovered) continue;
+    if (!isRareIsland(isl)) continue;
+    if (islandHasRevealedCell(isl, expandedCells)) {
+      isl.discovered = true;
+      outIds.push(isl.id);
+    }
+  }
+}
+
 export function tickDrones(
   world: WorldState,
   nowMs: number,
@@ -305,26 +456,74 @@ export function tickDrones(
     //    point — which would silently lose reveals for the legitimate
     //    "single tick spans the whole flight" case (the cell-test goes
     //    over a one-tick flight from launch to return).
-    if (ranges.length > 0) {
+    if (d.tier === 5 || ranges.length > 0) {
       const segStartMs = Math.max(prevTickMs, d.launchTime);
       const segEndMs = Math.min(nowMs, d.expectedReturnTime);
       if (segEndMs >= segStartMs) {
-        const apexMs =
-          d.launchTime + (d.outboundTiles / DRONE_SPEED_TILES_PER_SEC) * 1000;
-        const waypoints: Array<{ x: number; y: number }> = [];
-        waypoints.push(droneCurrentPosition(d, segStartMs));
+        const speed = droneSpeed(d);
+        const apexMs = d.launchTime + (d.outboundTiles / speed) * 1000;
+        const segWaypoints: Array<{ x: number; y: number }> = [];
+        segWaypoints.push(droneCurrentPosition(d, segStartMs));
         // Include the outbound-endpoint waypoint if the apex falls strictly
         // inside (segStartMs, segEndMs). On the boundary the linear segment
         // to the next endpoint subsumes it.
         if (apexMs > segStartMs && apexMs < segEndMs) {
-          waypoints.push(droneCurrentPosition(d, apexMs));
+          segWaypoints.push(droneCurrentPosition(d, apexMs));
         }
-        waypoints.push(droneCurrentPosition(d, segEndMs));
-        for (let i = 0; i + 1 < waypoints.length; i++) {
-          const a = waypoints[i]!;
-          const b = waypoints[i + 1]!;
+        segWaypoints.push(droneCurrentPosition(d, segEndMs));
+
+        // Collect all corridor cells for this tick.
+        const corridor = new Set<string>();
+        for (let i = 0; i + 1 < segWaypoints.length; i++) {
+          const a = segWaypoints[i]!;
+          const b = segWaypoints[i + 1]!;
           const cells = corridorCells(a.x, a.y, b.x, b.y, d.scanRadius);
-          for (const k of cells) {
+          cells.forEach((c) => corridor.add(c));
+        }
+
+        // §13.3 Probability Engine: expanded corridor for rare-island discovery.
+        const expandedCorridor = new Set<string>(corridor);
+        if (d.probabilityBias > 0) {
+          const effectiveRadius = d.scanRadius * (1 + d.probabilityBias);
+          for (let i = 0; i + 1 < segWaypoints.length; i++) {
+            const a = segWaypoints[i]!;
+            const b = segWaypoints[i + 1]!;
+            const cells = corridorCells(a.x, a.y, b.x, b.y, effectiveRadius);
+            cells.forEach((c) => expandedCorridor.add(c));
+          }
+        }
+
+        if (d.tier === 5) {
+          // §11.6 dark-mode telemetry: check drone position at segEndMs.
+          const dronePos = droneCurrentPosition(d, segEndMs);
+          const inSignalRange = pointInSignalRange(ranges, dronePos.x, dronePos.y);
+
+          if (inSignalRange) {
+            d.darkMode = false;
+            // Flush buffered discoveries.
+            for (const disc of d.darkModeDiscoveries) {
+              const isl = world.islands.find((i) => i.id === disc.islandId);
+              if (isl && !isl.discovered && !isl.populated) {
+                isl.discovered = true;
+                newlyDiscoveredIslandIds.push(isl.id);
+              }
+            }
+            d.darkModeDiscoveries = [];
+          } else {
+            d.darkMode = true;
+            // Buffer island discoveries instead of revealing cells.
+            // Use expanded corridor so Probability Engine biases toward rare islands.
+            const discoveries = islandsInCells(world.islands, expandedCorridor);
+            const seen = new Set<string>(d.darkModeDiscoveries.map((x) => x.islandId));
+            for (const disc of discoveries) {
+              if (!seen.has(disc.islandId)) {
+                seen.add(disc.islandId);
+                d.darkModeDiscoveries.push(disc);
+              }
+            }
+          }
+          // Per-cell antenna range check for reveals (T1–T5 all use the same rule).
+          for (const k of corridor) {
             if (world.revealedCells.has(k)) continue;
             const { cellX, cellY } = parseCellKey(k);
             const center = cellCenterTile(cellX, cellY);
@@ -333,6 +532,21 @@ export function tickDrones(
               cellsAddedThisTick++;
             }
           }
+          // Probability-bias discovery of rare islands in expanded corridor.
+          discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
+        } else {
+          // Legacy straight-line (T1-T4/T6) per-cell antenna range check.
+          for (const k of corridor) {
+            if (world.revealedCells.has(k)) continue;
+            const { cellX, cellY } = parseCellKey(k);
+            const center = cellCenterTile(cellX, cellY);
+            if (pointInSignalRange(ranges, center.x, center.y)) {
+              world.revealedCells.add(k);
+              cellsAddedThisTick++;
+            }
+          }
+          // Probability-bias discovery of rare islands in expanded corridor.
+          discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
         }
       }
     }
@@ -347,39 +561,45 @@ export function tickDrones(
     }
 
     // §2.6 weather destruction roll — outbound + return legs.
-    const outboundPath = rasterizePath(
-      d.originX,
-      d.originY,
-      d.dirX,
-      d.dirY,
-      d.outboundTiles,
-      DRONE_SPEED_TILES_PER_SEC,
-      d.launchTime,
-      CELL_SIZE_TILES,
-    );
-    const apexTime =
-      d.launchTime + (d.outboundTiles / DRONE_SPEED_TILES_PER_SEC) * 1000;
-    const apexX = d.originX + d.dirX * d.outboundTiles;
-    const apexY = d.originY + d.dirY * d.outboundTiles;
-    const returnPath = rasterizePath(
-      apexX,
-      apexY,
-      -d.dirX,
-      -d.dirY,
-      d.outboundTiles,
-      DRONE_SPEED_TILES_PER_SEC,
-      apexTime,
-      CELL_SIZE_TILES,
-    );
-    // Concatenate outbound + return legs. Dedup only exact (cell, time)
-    // duplicates so both legs are evaluated by rollVehicleDestruction.
-    const seen = new Set<string>();
-    const path: Array<{ cx: number; cy: number; entryMs: number }> = [];
-    for (const p of [...outboundPath, ...returnPath]) {
-      const key = `${p.cx},${p.cy},${p.entryMs}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      path.push(p);
+    const speed = droneSpeed(d);
+    let path: Array<{ cx: number; cy: number; entryMs: number }>;
+    if (d.waypoints.length >= 2) {
+      // T5 path-drawn: rasterize the waypoint polyline.
+      path = rasterizeWaypointPathForWeather(d.waypoints, speed, d.launchTime, CELL_SIZE_TILES);
+    } else {
+      const outboundPath = rasterizePath(
+        d.originX,
+        d.originY,
+        d.dirX,
+        d.dirY,
+        d.outboundTiles,
+        speed,
+        d.launchTime,
+        CELL_SIZE_TILES,
+      );
+      const apexTime = d.launchTime + (d.outboundTiles / speed) * 1000;
+      const apexX = d.originX + d.dirX * d.outboundTiles;
+      const apexY = d.originY + d.dirY * d.outboundTiles;
+      const returnPath = rasterizePath(
+        apexX,
+        apexY,
+        -d.dirX,
+        -d.dirY,
+        d.outboundTiles,
+        speed,
+        apexTime,
+        CELL_SIZE_TILES,
+      );
+      // Concatenate outbound + return legs. Dedup only exact (cell, time)
+      // duplicates so both legs are evaluated by rollVehicleDestruction.
+      const seen = new Set<string>();
+      path = [];
+      for (const p of [...outboundPath, ...returnPath]) {
+        const key = `${p.cx},${p.cy},${p.entryMs}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        path.push(p);
+      }
     }
     const multiplier = DRONE_TIER_MULTIPLIERS[d.tier];
     const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id);
@@ -387,12 +607,23 @@ export function tickDrones(
     if (roll.destroyed) {
       d.status = 'lost';
       lost.push(d);
+      // Discard dark-mode discoveries on destruction.
+      d.darkModeDiscoveries = [];
       remaining.push(d);
       continue;
     }
 
     d.status = 'returned';
     returned.push(d);
+    // Flush dark-mode discoveries on successful return.
+    for (const disc of d.darkModeDiscoveries) {
+      const isl = world.islands.find((i) => i.id === disc.islandId);
+      if (isl && !isl.discovered && !isl.populated) {
+        isl.discovered = true;
+        newlyDiscoveredIslandIds.push(isl.id);
+      }
+    }
+    d.darkModeDiscoveries = [];
     remaining.push(d);
   }
 
@@ -450,13 +681,44 @@ function islandHasRevealedCell(
  */
 export function droneCurrentPosition(d: Drone, nowMs: number): { x: number; y: number } {
   const elapsedSec = Math.max(0, (nowMs - d.launchTime) / 1000);
-  const travelled = elapsedSec * DRONE_SPEED_TILES_PER_SEC;
+  const speed = droneSpeed(d);
+  const travelled = elapsedSec * speed;
   const total = 2 * d.outboundTiles;
   const clamped = Math.min(travelled, total);
-  // Fold: 0..outbound is forward, outbound..2*outbound is backward.
+
+  if (d.waypoints.length >= 2) {
+    // T5 path-drawn: travel along waypoints outbound, then reverse inbound.
+    if (clamped <= d.outboundTiles) {
+      return positionAlongPolyline(d.waypoints, clamped);
+    } else {
+      const returnDist = clamped - d.outboundTiles;
+      return positionAlongPolyline([...d.waypoints].reverse(), returnDist);
+    }
+  }
+
+  // Straight-line behavior (T1-T4).
   const along = clamped <= d.outboundTiles ? clamped : total - clamped;
   return {
     x: d.originX + d.dirX * along,
     y: d.originY + d.dirY * along,
   };
+}
+
+function positionAlongPolyline(
+  waypoints: ReadonlyArray<{ x: number; y: number }>,
+  distance: number,
+): { x: number; y: number } {
+  let remaining = distance;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const a = waypoints[i]!;
+    const b = waypoints[i + 1]!;
+    const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    if (remaining <= segLen + 1e-9) {
+      const t = segLen === 0 ? 0 : remaining / segLen;
+      return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+    }
+    remaining -= segLen;
+  }
+  const last = waypoints[waypoints.length - 1]!;
+  return { x: last.x, y: last.y };
 }

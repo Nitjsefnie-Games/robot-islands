@@ -100,6 +100,9 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   tachyon_stream: 'rare',
   dark_matter: 'rare',
   strange_matter: 'rare',
+  quantum_foam: 'rare',
+  spacetime_fragment: 'rare',
+  higgs_flux: 'rare',
   // T5→T6 transition artifact + T6 Orbital (step 20, §13.4 / §14)
   ascendant_core: 'rare',
   antimatter_propellant: 'fuel',     // §11.7 T6 launch fuel

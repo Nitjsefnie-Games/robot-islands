@@ -131,6 +131,9 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   tachyon_stream: 'rare',
   dark_matter: 'rare',
   strange_matter: 'rare',
+  quantum_foam: 'rare',
+  spacetime_fragment: 'rare',
+  higgs_flux: 'rare',
   // Step-20 (T6 Orbital). All five route to `rare` — the Vault is the
   // canonical T5/T6 catch-all. `antimatter_propellant` is a fuel/gas in
   // nature (§11.7) and an arguable `liquid_gas` candidate, but routing it

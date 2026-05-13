@@ -88,17 +88,17 @@ describe('MODIFIER_DEFS catalog', () => {
       expect(def.displayName.length).toBeGreaterThan(0);
     }
   });
-  it('marks the three step-8 placeholders as placeholder=true', () => {
+  it('marks the two step-8 placeholders as placeholder=true', () => {
     expect(MODIFIER_DEFS.geothermal_active.placeholder).toBe(true);
-    expect(MODIFIER_DEFS.aetheric_anomaly.placeholder).toBe(true);
     expect(MODIFIER_DEFS.frozen_core.placeholder).toBe(true);
   });
-  it('marks the five wired modifiers as placeholder=false', () => {
+  it('marks the six wired modifiers as placeholder=false', () => {
     expect(MODIFIER_DEFS.high_wind.placeholder).toBe(false);
     expect(MODIFIER_DEFS.mineral_rich.placeholder).toBe(false);
     expect(MODIFIER_DEFS.fertile.placeholder).toBe(false);
     expect(MODIFIER_DEFS.cursed_storms.placeholder).toBe(false);
     expect(MODIFIER_DEFS.stable.placeholder).toBe(false);
+    expect(MODIFIER_DEFS.aetheric_anomaly.placeholder).toBe(false);
   });
   it('frozen_core is biome-restricted to arctic', () => {
     expect(MODIFIER_DEFS.frozen_core.biomeRestriction).toEqual(['arctic']);

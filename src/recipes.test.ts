@@ -25,6 +25,7 @@ import {
   RECIPES,
   XP_WEIGHT,
   fuelForTier,
+  nextRotateOutputBoundaryMs,
   type RecipeCategory,
   type ResourceId,
 } from './recipes.js';
@@ -39,6 +40,11 @@ describe('recipe graph completeness (step 18)', () => {
       if (!recipe) continue;
       for (const r of Object.keys(recipe.outputs) as ResourceId[]) {
         producers.add(r);
+      }
+      for (const rot of recipe.rotateOutputs ?? []) {
+        for (const r of Object.keys(rot) as ResourceId[]) {
+          producers.add(r);
+        }
       }
     }
     return producers;
@@ -148,6 +154,13 @@ describe('step-18 producer coverage (§7 chain closures)', () => {
       for (const r of Object.keys(recipe.outputs) as ResourceId[]) {
         producers.add(r);
       }
+      if (recipe.rotateOutputs) {
+        for (const opt of recipe.rotateOutputs) {
+          for (const r of Object.keys(opt) as ResourceId[]) {
+            producers.add(r);
+          }
+        }
+      }
     }
     for (const r of sentinelProducedResources) {
       expect(producers.has(r), `sentinel resource ${r} has no producer recipe`).toBe(true);
@@ -235,5 +248,44 @@ describe('microchip chain', () => {
 
   it('XP_WEIGHT.processor is 30', () => {
     expect(XP_WEIGHT.processor).toBe(30);
+  });
+});
+
+describe('nextRotateOutputBoundaryMs', () => {
+  const rotatingRecipe = {
+    cycleSec: 10,
+    inputs: {},
+    outputs: { aetheric_current: 1 },
+    rotateOutputs: [{ aetheric_current: 1 }, { quantum_foam: 1 }],
+    category: 'extraction',
+  } as import('./recipes.js').Recipe;
+
+  it('returns null for non-rotating recipes', () => {
+    const recipe = {
+      cycleSec: 10,
+      inputs: {},
+      outputs: { iron_ore: 1 },
+      category: 'extraction',
+    } as import('./recipes.js').Recipe;
+    expect(nextRotateOutputBoundaryMs(recipe, 0)).toBeNull();
+    expect(nextRotateOutputBoundaryMs(recipe, 5_000)).toBeNull();
+  });
+
+  it('returns null for single-option rotateOutputs', () => {
+    const recipe = {
+      cycleSec: 10,
+      inputs: {},
+      outputs: { iron_ore: 1 },
+      rotateOutputs: [{ iron_ore: 1 }],
+      category: 'extraction',
+    } as import('./recipes.js').Recipe;
+    expect(nextRotateOutputBoundaryMs(recipe, 0)).toBeNull();
+  });
+
+  it('returns the next cycle boundary', () => {
+    expect(nextRotateOutputBoundaryMs(rotatingRecipe, 0)).toBe(10_000);
+    expect(nextRotateOutputBoundaryMs(rotatingRecipe, 5_000)).toBe(10_000);
+    expect(nextRotateOutputBoundaryMs(rotatingRecipe, 10_000)).toBe(20_000);
+    expect(nextRotateOutputBoundaryMs(rotatingRecipe, 15_000)).toBe(20_000);
   });
 });

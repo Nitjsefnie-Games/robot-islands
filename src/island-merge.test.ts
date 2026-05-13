@@ -373,6 +373,10 @@ describe('performMerge', () => {
       tier: 2,
       fuelLoaded: 25,
       fuelResource: 'biofuel',
+      waypoints: [],
+      darkMode: false,
+      darkModeDiscoveries: [],
+      probabilityBias: 0,
     };
     world.drones.push(drone);
     const states = new Map<string, IslandState>([

@@ -109,16 +109,15 @@ export type ResourceId =
   | 'plasma_charge'
   | 'eldritch_processor'
   | 'phase_converter'
-  // Step-18 T5 raws (§6.6 / §8.10). Only the four raws CONSUMED by the
-  // step-18 T5 refining recipes are added: aetheric_current and
-  // tachyon_stream feed phase_converter; dark_matter and strange_matter
-  // feed eldritch_processor. The remaining §6.6 raws (spacetime_fragment,
-  // higgs_flux, quantum_foam, neutronium, zero-point_flux) are DEFERRED
-  // until they have an explicit consumer.
+  // Step-18 T5 raws (§6.6 / §8.10). The seven raws consumed by step-18
+  // T5 refining recipes and the new rotateOutputs extractor cycle.
   | 'aetheric_current'
   | 'tachyon_stream'
   | 'dark_matter'
   | 'strange_matter'
+  | 'quantum_foam'
+  | 'spacetime_fragment'
+  | 'higgs_flux'
   // Step-20 (T6 Orbital, §14). Partial catalog: the resources the §14.2
   // Spaceport + §14.10 satellite-assembly defs touch. §14.10 placeholder
   // recipes additionally reference Aluminum, Magnet, Optical Fiber,
@@ -205,11 +204,14 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'plasma_charge',
   'eldritch_processor',
   'phase_converter',
-  // Step-18 T5 raws (only those consumed by step-18 recipes).
+  // Step-18 T5 raws (consumed by step-18 recipes + rotateOutputs cycle).
   'aetheric_current',
   'tachyon_stream',
   'dark_matter',
   'strange_matter',
+  'quantum_foam',
+  'spacetime_fragment',
+  'higgs_flux',
   // Step-20 T5→T6 artifact + T6 Orbital partial catalog (§14).
   'ascendant_core',
   'antimatter_propellant',
@@ -300,6 +302,9 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   tachyon_stream: 300,
   dark_matter: 300,
   strange_matter: 300,
+  quantum_foam: 300,
+  spacetime_fragment: 300,
+  higgs_flux: 300,
   // T5→T6 transition artifact. §9.1 puts T5 weight at 300 and T6 at 1000;
   // Ascendant Core is the bridge artifact unlocking T6 access (§13.4 /
   // §14.1), so it carries the higher T6 weight (1000) — producing one
@@ -390,6 +395,8 @@ export interface Recipe {
   readonly inputs: Partial<Record<ResourceId, number>>;
   readonly outputs: Partial<Record<ResourceId, number>>;
   readonly category: RecipeCategory;
+  /** If set, outputs cycle through these options deterministically per §8.10. */
+  readonly rotateOutputs?: ReadonlyArray<Partial<Record<ResourceId, number>>>;
 }
 
 /**
@@ -879,27 +886,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 4800, // rebalanced for idle-game scale, step #19 (×8: was 600s)
     inputs: {},
     outputs: { aetheric_current: 1 },
+    rotateOutputs: [{ aetheric_current: 1 }, { quantum_foam: 1 }],
     category: 'extraction',
-    // §8.10 rotation (aetheric_current OR quantum_foam) DEFERRED —
-    // quantum_foam has no consumer in step 18 anyway.
   },
   spacetime_resonator: {
     cycleSec: 5760, // rebalanced for idle-game scale, step #19 (×8: was 720s)
     inputs: {},
-    outputs: { tachyon_stream: 1 },
+    outputs: { spacetime_fragment: 1 },
+    rotateOutputs: [{ spacetime_fragment: 1 }, { tachyon_stream: 1 }],
     category: 'extraction',
-    // §8.10 rotation (tachyon_stream OR spacetime_fragment) DEFERRED —
-    // spacetime_fragment has no consumer in step 18.
   },
   eldritch_sieve: {
     cycleSec: 5760, // rebalanced for idle-game scale, step #19 (×8: was 720s)
-    // Multi-output recipe: dark_matter + strange_matter per cycle.
-    // §8.10 rotation across {dark, strange, higgs_flux} DEFERRED;
-    // producing both in one cycle keeps the downstream Eldritch
-    // Refiner (1 dark + 1 strange → 1 eldritch_processor) tickable
-    // without needing the rotation engine.
     inputs: {},
-    outputs: { dark_matter: 1, strange_matter: 1 },
+    outputs: { dark_matter: 1 },
+    rotateOutputs: [{ dark_matter: 1 }, { strange_matter: 1 }, { higgs_flux: 1 }],
     category: 'extraction',
   },
 
@@ -1068,6 +1069,35 @@ export function resolveRecipe(
     return undefined;
   }
   return RECIPES[def.id as RecipeId];
+}
+
+/**
+ * §8.10 deterministic output rotation. Given a recipe with `rotateOutputs`,
+ * returns the active output set for the current cycle index. Pure — no DOM,
+ * no PixiJS. The cycle index is derived from `nowMs / cycleMs` so the same
+ * wall-clock time always yields the same output, making the rotation
+ * deterministic and testable.
+ */
+export function resolveRotatingOutput(
+  recipe: Recipe,
+  nowMs: number,
+): Partial<Record<ResourceId, number>> {
+  if (!recipe.rotateOutputs || recipe.rotateOutputs.length === 0) {
+    return recipe.outputs;
+  }
+  const cycleMs = recipe.cycleSec * 1000;
+  const cycleIndex = Math.floor(nowMs / cycleMs);
+  const idx = cycleIndex % recipe.rotateOutputs.length;
+  return recipe.rotateOutputs[idx]!;
+}
+
+/** Next wall-clock time (in ms) at which `recipe`'s rotating output changes.
+ *  Returns `null` if the recipe does not rotate or has only one option. */
+export function nextRotateOutputBoundaryMs(recipe: Recipe, tMs: number): number | null {
+  if (!recipe.rotateOutputs || recipe.rotateOutputs.length <= 1) return null;
+  const cycleMs = recipe.cycleSec * 1000;
+  const nextCycleIndex = Math.floor(tMs / cycleMs) + 1;
+  return nextCycleIndex * cycleMs;
 }
 
 /** Local copy of the rotation union from placement.ts. Kept here to avoid

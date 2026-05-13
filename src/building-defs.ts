@@ -124,6 +124,9 @@ export type BuildingDefId =
   | 'genesis_chamber'
   | 'universe_editor'
   | 'lattice_node'
+  // §11.6 T5 path-drawn drone launcher + §13.3 Probability Engine
+  | 'path_drone_foundry'
+  | 'probability_engine'
   // T5→T6 transition (step 20): produces `ascendant_core`, the §14.1 gate
   // artifact. Built at T5 (level 50 + AI core) so the player can craft
   // ascendant_core BEFORE the §14.1 Spaceport requirement — Ascendant
@@ -1111,6 +1114,35 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     placementCost: { reality_anchor: 50, steel: 100, microchip: 50 },
     glyph: '✺',
+  },
+  // §11.6: Path Drone Foundry — T5 logistics building that launches path-
+  // drawn drones with waypoints. No recipe; the launch action is driven by
+  // the UI invoking `dispatchDrone` with a `waypoints` array.
+  path_drone_foundry: {
+    id: 'path_drone_foundry',
+    displayName: 'Path Drone Foundry',
+    category: 'logistics',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0x4a6b78,
+    stroke: 0x14222a,
+    power: { consumes: 50 },
+    placementCost: { steel: 50, microchip: 20, quantum_chip: 2 },
+    glyph: '✈',
+  },
+  // §13.3: Probability Engine — boosts effective scan radius for rare islands
+  // (islands with modifiers) via `probabilityBiasForIsland`.
+  probability_engine: {
+    id: 'probability_engine',
+    displayName: 'Probability Engine',
+    category: 'special',
+    tier: 5,
+    footprint: SHAPES.square2,
+    fill: 0x9070c0, // exotic violet
+    stroke: 0x301050,
+    power: { consumes: 80 },
+    placementCost: { steel: 40, quantum_chip: 4, exotic_alloy: 10 },
+    glyph: '⚄',
   },
   // §13.4 / §14.1: Ascendant Assembly — T5 building dedicated to crafting
   // the Ascendant Core. Spec §13.4 describes the Core as "constructed"

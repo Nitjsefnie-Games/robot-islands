@@ -455,6 +455,10 @@ describe('id counter seeding', () => {
       tier: 2,
       fuelLoaded: 10,
       fuelResource: 'biofuel',
+      waypoints: [],
+      darkMode: false,
+      darkModeDiscoveries: [],
+      probabilityBias: 0,
     });
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
@@ -585,6 +589,10 @@ describe('drone and route timestamp remapping', () => {
       tier: 2,
       fuelLoaded: 10,
       fuelResource: 'biofuel',
+      waypoints: [],
+      darkMode: false,
+      darkModeDiscoveries: [],
+      probabilityBias: 0,
     });
     const states = new Map<string, IslandState>();
     const savedAtWallMs = 100_000;
@@ -686,6 +694,10 @@ describe('§11.7 tier-matched fuelResource persistence', () => {
       tier: 3,
       fuelLoaded: 10,
       fuelResource: 'aviation_kerosene',
+      waypoints: [],
+      darkMode: false,
+      darkModeDiscoveries: [],
+      probabilityBias: 0,
     });
     const snap = serializeWorld(world, new Map(), 0, 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;

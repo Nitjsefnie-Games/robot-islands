@@ -223,7 +223,7 @@ export const MODIFIER_DEFS: Readonly<Record<ModifierId, ModifierDef>> = {
     description: 'T5 raw extraction +50% on this island.',
     weight: 1,
     biomeRestriction: [],
-    placeholder: true, // T5 extraction not implemented.
+    placeholder: false,
     category: 'exotic',
     naturalOnly: true,
   },
@@ -272,12 +272,14 @@ export interface ModifierMultipliers {
   readonly recipeRateByCategory: Readonly<Record<RecipeCategory, number>>;
   /** If true, apply ±20% variance to all recipe outputs. */
   readonly outputVariance: boolean;
+  /** §8.10 Aetheric Anomaly: doubles T5 extractor rate (halves cycleSec). */
+  readonly t5ExtractionRateMul: number;
 }
 
 function blankModifierMultipliers(): ModifierMultipliers {
   const recipeRateByCategory = {} as Record<RecipeCategory, number>;
   for (const c of ALL_RECIPE_CATEGORIES) recipeRateByCategory[c] = 1;
-  return { globalRecipeRate: 1, recipeRateByCategory, outputVariance: false };
+  return { globalRecipeRate: 1, recipeRateByCategory, outputVariance: false, t5ExtractionRateMul: 1 };
 }
 
 /** Identity bundle, exported so callers (`computeRates`, tests) have a
@@ -306,6 +308,7 @@ export function effectiveModifierMultipliers(
   const cat = out.recipeRateByCategory as Record<RecipeCategory, number>;
   let global = out.globalRecipeRate;
   let outputVariance = out.outputVariance;
+  let t5ExtractionRateMul = out.t5ExtractionRateMul;
   for (const id of modifiers) {
     switch (id) {
       case 'mineral_rich':
@@ -320,11 +323,12 @@ export function effectiveModifierMultipliers(
       case 'high_wind':
         outputVariance = true;
         break;
-      // Stable + remaining placeholders: no economic multiplier change.
       case 'stable':
       case 'geothermal_active':
-      case 'aetheric_anomaly':
       case 'frozen_core':
+        break;
+      case 'aetheric_anomaly':
+        t5ExtractionRateMul *= 2;
         break;
       default: {
         // Exhaustiveness guard — adding a new ModifierId without wiring its
@@ -335,7 +339,7 @@ export function effectiveModifierMultipliers(
       }
     }
   }
-  return { globalRecipeRate: global, recipeRateByCategory: cat, outputVariance };
+  return { globalRecipeRate: global, recipeRateByCategory: cat, outputVariance, t5ExtractionRateMul };
 }
 
 // ---------------------------------------------------------------------------

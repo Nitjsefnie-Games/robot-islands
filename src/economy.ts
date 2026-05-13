@@ -44,7 +44,7 @@ import {
   tryAutoMaintain,
 } from './maintenance.js';
 import { makeSeededRng } from './rng.js';
-import { resolveRecipe, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
+import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type NodeId, type SubPathId } from './skilltree.js';
 import {
   effectiveSpecializationMultipliers,
@@ -77,6 +77,8 @@ export interface RatesContext {
   readonly terrainAt?: (x: number, y: number) => TerrainKind;
   /** §13.3 acceleration multiplier from Time Lock spend. Default 1 (no acceleration). */
   readonly accelerationMul?: number;
+  /** World seed for deterministic §8.10 output rotation. */
+  readonly worldSeed?: string;
 }
 
 /**
@@ -286,8 +288,9 @@ export type DefCatalog = Readonly<Record<BuildingDefId, BuildingDef>>;
  * If any of the recipe's outputs is at or above cap, the building stalls
  * entirely (no inputs consumed, no outputs produced, no XP).
  */
-function outputAvail(state: IslandState, recipe: Recipe): number {
-  for (const [r, _yield] of Object.entries(recipe.outputs)) {
+function outputAvail(state: IslandState, recipe: Recipe, nowMs: number): number {
+  const outputs = resolveRotatingOutput(recipe, nowMs);
+  for (const [r, _yield] of Object.entries(outputs)) {
     const id = r as ResourceId;
     if (inv(state, id) >= cap(state, id)) return 0;
   }
@@ -515,7 +518,7 @@ export function computeRates(
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1 });
         continue;
       }
-      const oa = outputAvail(state, syntheticRecipe);
+      const oa = outputAvail(state, syntheticRecipe, t);
       if (oa === 0) {
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1 });
         continue;
@@ -589,7 +592,7 @@ export function computeRates(
       tentative.push({ building: b, recipe, baseRate: 0, buffStack });
       continue;
     }
-    const oa = outputAvail(state, recipe);
+    const oa = outputAvail(state, recipe, t);
     if (oa === 0) {
       tentative.push({ building: b, recipe, baseRate: 0, buffStack });
       continue;
@@ -605,9 +608,16 @@ export function computeRates(
       (specMul.recipeRateByCategory[recipe.category] ?? 1) *
       specMul.globalRecipeRate *
       ncBuff;
-    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul;
+    const isT5Extractor =
+      b.defId === 'aetheric_conduit' ||
+      b.defId === 'spacetime_resonator' ||
+      b.defId === 'eldritch_sieve' ||
+      b.defId === 'casimir_tap';
+    const t5Mul = isT5Extractor ? modifierMul.t5ExtractionRateMul : 1;
+    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul;
     tentative.push({ building: b, recipe, baseRate, buffStack });
-    for (const [r, yld] of Object.entries(recipe.outputs)) {
+    const pass1Outputs = resolveRotatingOutput(recipe, t);
+    for (const [r, yld] of Object.entries(pass1Outputs)) {
       const id = r as ResourceId;
       tentSupply[id] = (tentSupply[id] ?? 0) + (yld ?? 0) * baseRate;
     }
@@ -620,30 +630,31 @@ export function computeRates(
   // The supply pool excludes this building's own output contribution.
   const inputAvailByIdx = new Array<number>(tentative.length);
   for (let i = 0; i < tentative.length; i++) {
-    const t = tentative[i]!;
+    const te = tentative[i]!;
     // Same compound multiplier as Pass 1 — keeps producer/consumer supply
     // ratios consistent when only one side is buffed.
     const rateMul =
-      (skillMul.recipeRate[t.recipe.category] ?? 1) *
-      (modifierMul.recipeRateByCategory[t.recipe.category] ?? 1) *
+      (skillMul.recipeRate[te.recipe.category] ?? 1) *
+      (modifierMul.recipeRateByCategory[te.recipe.category] ?? 1) *
       modifierMul.globalRecipeRate *
-      (specMul.recipeRateByCategory[t.recipe.category] ?? 1) *
+      (specMul.recipeRateByCategory[te.recipe.category] ?? 1) *
       specMul.globalRecipeRate *
       ncBuff;
     // TODO(soft-gates): include gateResult.effectiveMul in nominalRate for inputAvail computation.
-    const nominalRate = (1 / t.recipe.cycleSec) * t.buffStack * rateMul;
+    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul;
     const externalSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
     for (const r of Object.keys(tentSupply) as ResourceId[]) {
       externalSupply[r] = tentSupply[r] ?? 0;
     }
     // Self-exclude only if pass 1 actually contributed (baseRate > 0).
-    if (t.baseRate > 0) {
-      for (const [r, yld] of Object.entries(t.recipe.outputs)) {
+    if (te.baseRate > 0) {
+      const pass2Outputs = resolveRotatingOutput(te.recipe, t);
+      for (const [r, yld] of Object.entries(pass2Outputs)) {
         const id = r as ResourceId;
-        externalSupply[id] = (externalSupply[id] ?? 0) - (yld ?? 0) * t.baseRate;
+        externalSupply[id] = (externalSupply[id] ?? 0) - (yld ?? 0) * te.baseRate;
       }
     }
-    inputAvailByIdx[i] = inputAvail(state, t.recipe, externalSupply, nominalRate);
+    inputAvailByIdx[i] = inputAvail(state, te.recipe, externalSupply, nominalRate);
   }
 
   // Pass 3: power balance. A building is `active` for §5.1 iff:
@@ -729,13 +740,13 @@ export function computeRates(
   const consumption: Record<ResourceId, number> = {} as Record<ResourceId, number>;
   const net: Record<ResourceId, number> = {} as Record<ResourceId, number>;
   for (let i = 0; i < tentative.length; i++) {
-    const t = tentative[i]!;
-    if (t.baseRate === 0) {
-      byBuilding.push({ building: t.building, recipe: t.recipe, effectiveRate: 0 });
+    const te = tentative[i]!;
+    if (te.baseRate === 0) {
+      byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate: 0 });
       continue;
     }
     const ia = inputAvailByIdx[i] ?? 0;
-    const consumesPower = (defs[t.building.defId].power?.consumes ?? 0) > 0;
+    const consumesPower = (defs[te.building.defId].power?.consumes ?? 0) > 0;
     const pf = consumesPower ? powerFactor : 1;
     // §4.7 maintenance factor on the production-side recipe rate. Power
     // producers' W output stays full — `power.produces` is summed before
@@ -743,19 +754,20 @@ export function computeRates(
     // degradation as "output efficiency", ambiguous for power buildings,
     // and applying maintenance to power would cascade into the brownout
     // factor and double-dip on consumers. Resource recipes only.
-    const mf = maintenanceFactor(t.building, defs[t.building.defId]);
+    const mf = maintenanceFactor(te.building, defs[te.building.defId]);
     const accelMul = ctx?.accelerationMul ?? 1;
-    const effectiveRate = t.baseRate * ia * pf * mf * accelMul * varianceFactor;
-    byBuilding.push({ building: t.building, recipe: t.recipe, effectiveRate });
+    const effectiveRate = te.baseRate * ia * pf * mf * accelMul * varianceFactor;
+    byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate });
 
     if (effectiveRate === 0) continue;
-    for (const [r, yld] of Object.entries(t.recipe.outputs)) {
+    const pass4Outputs = resolveRotatingOutput(te.recipe, t);
+    for (const [r, yld] of Object.entries(pass4Outputs)) {
       const id = r as ResourceId;
       const delta = (yld ?? 0) * effectiveRate;
       production[id] = (production[id] ?? 0) + delta;
       net[id] = (net[id] ?? 0) + delta;
     }
-    for (const [r, need] of Object.entries(t.recipe.inputs)) {
+    for (const [r, need] of Object.entries(te.recipe.inputs)) {
       const id = r as ResourceId;
       const delta = (need ?? 0) * effectiveRate;
       consumption[id] = (consumption[id] ?? 0) + delta;
@@ -1108,9 +1120,21 @@ export function advanceIsland(
     if (state.accelerationRemainingMin > 0) {
       nextAccelMs = t + state.accelerationRemainingMin * 60 * 1000;
     }
+    // §8.10 rotating-output boundary: if any building has `rotateOutputs`,
+    // clamp the segment so the output set stays constant within it.
+    let nextRotationMs = Infinity;
+    for (const b of validBuildings) {
+      const def = defs[b.defId];
+      const recipe = resolveRecipe(def, b, ctx?.terrainAt);
+      if (!recipe) continue;
+      const boundary = nextRotateOutputBoundaryMs(recipe, t);
+      if (boundary !== null && boundary < nextRotationMs) {
+        nextRotationMs = boundary;
+      }
+    }
     // Clamp to nowMs; findNextCapEvent already returns nowMs when nothing
     // changes, but if all rates are zero we still need to exit the loop.
-    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextAccelMs, nextBatteryMs, nowMs);
+    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextAccelMs, nextBatteryMs, nextRotationMs, nowMs);
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec);

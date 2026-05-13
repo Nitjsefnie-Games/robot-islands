@@ -327,6 +327,24 @@ export function deserializeWorld(
         'fuelResource' in d && typeof (d as { fuelResource?: unknown }).fuelResource === 'string'
           ? (d as { fuelResource: Drone['fuelResource'] }).fuelResource
           : 'biofuel',
+      // T5 path-drawn drone backfill. Legacy saves predate waypoint,
+      // dark-mode telemetry, and probability-bias fields.
+      waypoints:
+        'waypoints' in d && Array.isArray((d as { waypoints?: unknown }).waypoints)
+          ? (d as { waypoints: Drone['waypoints'] }).waypoints
+          : [],
+      darkMode:
+        'darkMode' in d && typeof (d as { darkMode?: unknown }).darkMode === 'boolean'
+          ? (d as { darkMode: boolean }).darkMode
+          : false,
+      darkModeDiscoveries:
+        'darkModeDiscoveries' in d && Array.isArray((d as { darkModeDiscoveries?: unknown }).darkModeDiscoveries)
+          ? (d as { darkModeDiscoveries: Drone['darkModeDiscoveries'] }).darkModeDiscoveries
+          : [],
+      probabilityBias:
+        'probabilityBias' in d && typeof (d as { probabilityBias?: unknown }).probabilityBias === 'number'
+          ? (d as { probabilityBias: number }).probabilityBias
+          : 0,
     })),
     routes: snapshot.world.routes.map((r) => ({
       ...r,

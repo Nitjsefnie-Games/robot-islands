@@ -37,7 +37,7 @@ import {
   type IslandState,
 } from './economy.js';
 import { placeBuilding, validatePlacement } from './placement.js';
-import { ALL_RESOURCES, XP_WEIGHT, type ResourceId } from './recipes.js';
+import { ALL_RESOURCES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
 import { effectiveSpecializationMultipliers } from './specialization.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
@@ -2226,5 +2226,103 @@ describe('Singularity Battery', () => {
     state.buildings.push({ id: 'cg1', defId: 'coal_gen', x: 2, y: 0 });
     advanceIsland(state, 1000);
     expect(state.singularityStoredWs).toBe(1000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §8.10 T5 extractor multi-output rotation
+// ---------------------------------------------------------------------------
+
+describe('resolveRotatingOutput', () => {
+  it('alternates between 2 options deterministically', () => {
+    const recipe = {
+      cycleSec: 10,
+      inputs: {},
+      outputs: { aetheric_current: 1 },
+      rotateOutputs: [{ aetheric_current: 1 }, { quantum_foam: 1 }],
+      category: 'extraction',
+    } as import('./recipes.js').Recipe;
+    // cycleMs = 10_000
+    expect(resolveRotatingOutput(recipe, 0)).toEqual({ aetheric_current: 1 });
+    expect(resolveRotatingOutput(recipe, 5_000)).toEqual({ aetheric_current: 1 });
+    expect(resolveRotatingOutput(recipe, 10_000)).toEqual({ quantum_foam: 1 });
+    expect(resolveRotatingOutput(recipe, 15_000)).toEqual({ quantum_foam: 1 });
+    expect(resolveRotatingOutput(recipe, 20_000)).toEqual({ aetheric_current: 1 });
+  });
+
+  it('cycles through 3 options deterministically', () => {
+    const recipe = {
+      cycleSec: 10,
+      inputs: {},
+      outputs: { dark_matter: 1 },
+      rotateOutputs: [{ dark_matter: 1 }, { strange_matter: 1 }, { higgs_flux: 1 }],
+      category: 'extraction',
+    } as import('./recipes.js').Recipe;
+    expect(resolveRotatingOutput(recipe, 0)).toEqual({ dark_matter: 1 });
+    expect(resolveRotatingOutput(recipe, 10_000)).toEqual({ strange_matter: 1 });
+    expect(resolveRotatingOutput(recipe, 20_000)).toEqual({ higgs_flux: 1 });
+    expect(resolveRotatingOutput(recipe, 30_000)).toEqual({ dark_matter: 1 });
+  });
+
+  it('returns recipe.outputs when rotateOutputs is absent', () => {
+    const recipe = {
+      cycleSec: 10,
+      inputs: {},
+      outputs: { iron_ore: 2 },
+      category: 'extraction',
+    } as import('./recipes.js').Recipe;
+    expect(resolveRotatingOutput(recipe, 25_000)).toEqual({ iron_ore: 2 });
+  });
+});
+
+describe('computeRates with T5 extractor rotation', () => {
+  it('produces aetheric_current at cycle 0 and quantum_foam at cycle 1', () => {
+    const conduit: PlacedBuilding = { id: 'b-ac', defId: 'aetheric_conduit', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [conduit],
+      inventory: blankInventory(),
+      level: 50,
+      aiCoreCrafted: true,
+    });
+    // Use a power-free catalog so the massive 60kW draw doesn't brownout.
+    const noPower = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.aetheric_conduit;
+      base.aetheric_conduit = rest as BuildingDef;
+      return base;
+    })();
+    // cycleSec = 4800s → cycleMs = 4_800_000
+    const r0 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 0);
+    expect(r0.production.aetheric_current ?? 0).toBeGreaterThan(0);
+    expect(r0.production.quantum_foam ?? 0).toBe(0);
+
+    const r1 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 4_800_000);
+    expect(r1.production.aetheric_current ?? 0).toBe(0);
+    expect(r1.production.quantum_foam ?? 0).toBeGreaterThan(0);
+  });
+
+  it('cycles eldritch_sieve through dark_matter, strange_matter, higgs_flux', () => {
+    const sieve: PlacedBuilding = { id: 'b-es', defId: 'eldritch_sieve', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [sieve],
+      inventory: blankInventory(),
+      level: 50,
+      aiCoreCrafted: true,
+    });
+    const noPower = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.eldritch_sieve;
+      base.eldritch_sieve = rest as BuildingDef;
+      return base;
+    })();
+    // cycleSec = 5760s → cycleMs = 5_760_000
+    const r0 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 0);
+    expect(r0.production.dark_matter ?? 0).toBeGreaterThan(0);
+
+    const r1 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 5_760_000);
+    expect(r1.production.strange_matter ?? 0).toBeGreaterThan(0);
+
+    const r2 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 11_520_000);
+    expect(r2.production.higgs_flux ?? 0).toBeGreaterThan(0);
   });
 });

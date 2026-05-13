@@ -60,6 +60,9 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'genesis_chamber',
   'universe_editor',
   'lattice_node',
+  // §11.6 / §13.3
+  'path_drone_foundry',
+  'probability_engine',
   // Step-20 T5→T6 transition + T6 Orbital (§13.4 / §14.2 / §14.10)
   'ascendant_assembly',
   'spaceport',
