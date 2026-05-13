@@ -250,7 +250,7 @@ export type GateMatchType = 'same_def' | 'same_category' | 'def_id' | 'heat_sour
  *  gates; each must be satisfied for full-rate operation. */
 export interface GateRequirement {
   readonly matchType: GateMatchType;
-  /** Specific defId when matchType === 'def_id' or 'same_def'. */
+  /** Specific defId when matchType === 'def_id'. */
   readonly defId?: BuildingDefId;
   /** Specific category when matchType === 'same_category'. */
   readonly category?: BuildingCategory;

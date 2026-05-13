@@ -20,9 +20,8 @@
 // local rather than exporting them from heat.ts so the two resolvers can
 // evolve independently. Both compute the same set per §4.4.
 //
-// Gating adjacency (Smelter→Heat Source, Refinery→Wastewater, etc.) is NOT
-// implemented here — heat gating lives in `heat.ts`. This module covers the
-// buff-stack half of §4.5 only.
+// Both buff adjacency (`computeBuffStack`) and gating adjacency (`checkGates`)
+// are implemented in this module per SPEC §4.5.
 
 import {
   BUILDING_DEFS,
@@ -128,6 +127,46 @@ function neighborMatches(
  * threads its `RatesContext.defs` catalog through so a power-free /
  * heavy-mine test catalog continues to work.
  */
+export function computeBuffStack(
+  b: PlacedBuilding,
+  buildings: ReadonlyArray<PlacedBuilding>,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
+): number {
+  const def = defs[b.defId];
+  const buffs = def.adjacencyBuffs;
+  if (!buffs || buffs.length === 0) return 1;
+
+  const fp = footprintKeySet(b, defs);
+  const border = borderTiles(fp);
+
+  // Distinct neighboring buildings (by id) whose footprint touches our
+  // border. De-duplication is the §4.4 "union" semantics: a 3×3 neighbor
+  // crossing three of the focal's border tiles counts as one neighbor,
+  // not three. Self is excluded both by border-tile filtering (own
+  // footprint excluded from border) and a defensive id check.
+  const neighbors: PlacedBuilding[] = [];
+  const seen = new Set<string>();
+  for (const other of buildings) {
+    if (other.id === b.id) continue;
+    if (seen.has(other.id)) continue;
+    if (!touchesBorder(other, border, defs)) continue;
+    seen.add(other.id);
+    neighbors.push(other);
+  }
+
+  let stack = 1;
+  for (const entry of buffs) {
+    let count = 0;
+    for (const n of neighbors) {
+      if (neighborMatches(b, n, entry, defs)) count++;
+    }
+    if (count <= 0) continue;
+    const effective = Math.min(count, entry.maxMatches);
+    stack *= 1 + (effective * entry.percentPerMatch) / 100;
+  }
+  return stack;
+}
+
 /** §4.5 gating adjacency result. */
 export interface GateResult {
   readonly satisfied: boolean;
@@ -196,44 +235,4 @@ function matchesGate(nd: BuildingDef, gate: GateRequirement, focalDefId: Buildin
       return (nd.id as string) === 'cooling_tower';
   }
   return false;
-}
-
-export function computeBuffStack(
-  b: PlacedBuilding,
-  buildings: ReadonlyArray<PlacedBuilding>,
-  defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
-): number {
-  const def = defs[b.defId];
-  const buffs = def.adjacencyBuffs;
-  if (!buffs || buffs.length === 0) return 1;
-
-  const fp = footprintKeySet(b, defs);
-  const border = borderTiles(fp);
-
-  // Distinct neighboring buildings (by id) whose footprint touches our
-  // border. De-duplication is the §4.4 "union" semantics: a 3×3 neighbor
-  // crossing three of the focal's border tiles counts as one neighbor,
-  // not three. Self is excluded both by border-tile filtering (own
-  // footprint excluded from border) and a defensive id check.
-  const neighbors: PlacedBuilding[] = [];
-  const seen = new Set<string>();
-  for (const other of buildings) {
-    if (other.id === b.id) continue;
-    if (seen.has(other.id)) continue;
-    if (!touchesBorder(other, border, defs)) continue;
-    seen.add(other.id);
-    neighbors.push(other);
-  }
-
-  let stack = 1;
-  for (const entry of buffs) {
-    let count = 0;
-    for (const n of neighbors) {
-      if (neighborMatches(b, n, entry, defs)) count++;
-    }
-    if (count <= 0) continue;
-    const effective = Math.min(count, entry.maxMatches);
-    stack *= 1 + (effective * entry.percentPerMatch) / 100;
-  }
-  return stack;
 }

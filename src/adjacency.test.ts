@@ -289,6 +289,22 @@ describe('checkGates — §4.5 gating adjacency', () => {
     expect(checkGates(focal, [focal, workshop], defs)).toEqual({ satisfied: false, effectiveMul: 0 });
   });
 
+  it('minCount=2 with only 1 matching neighbor: hard gate zeros, soft gate degrades', () => {
+    const defs = withGates('mine', [
+      { matchType: 'same_def', minCount: 2, hard: true },
+    ]);
+    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
+    const neighbor: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 0 };
+    // Only 1 matching neighbor but minCount=2 → hard gate fails
+    expect(checkGates(focal, [focal, neighbor], defs)).toEqual({ satisfied: false, effectiveMul: 0 });
+
+    const softDefs = withGates('mine', [
+      { matchType: 'same_def', minCount: 2, hard: false, degradeMul: 0.25 },
+    ]);
+    // Soft gate with 1 match → degraded
+    expect(checkGates(focal, [focal, neighbor], softDefs)).toEqual({ satisfied: false, effectiveMul: 0.25 });
+  });
+
   it('cooling_tower match type', () => {
     const coolingTowerDef: BuildingDef = {
       id: 'cooling_tower' as BuildingDefId,
