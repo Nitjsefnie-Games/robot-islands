@@ -1224,11 +1224,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '✦',
   },
   // §14.3 / §14.10: Scanner Sat Assembly — produces Scanner Sat payloads
-  // for §14.3 discovery + weather observation. §14.10 placeholder recipe
-  // (`4 exotic_alloy + 2 ai_core + spacetime_fragment + 50 aluminum + 1
-  // orbital_insertion_package`) is simplified here to inputs already in
-  // the catalog: `2 ai_core + 4 microchip + 1 exotic_alloy` on a 90-min
-  // cycle. Spacetime fragment / Aluminum DEFERRED.
+  // for §14.3 discovery + weather observation. Recipe:
+  // `4 exotic_alloy + 2 ai_core + 1 spacetime_fragment + 50 steel + 1
+  // orbital_insertion_package` on a 60-min (3600s) cycle.
   scanner_sat_assembly: {
     id: 'scanner_sat_assembly',
     displayName: 'Scanner Sat Assembly',
@@ -1243,10 +1241,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '◇',
   },
   // §14.3 / §14.10: Comm Sat Assembly — produces Comm Sat payloads for
-  // §14.4 comm-graph extension. §14.10 placeholder recipe (`6 exotic_alloy
-  // + 1 ai_core + 200 optical_fiber + 1 orbital_insertion_package`) is
-  // simplified to inputs in the catalog: `1 ai_core + 6 microchip + 1
-  // exotic_alloy` on a 90-min cycle. Optical Fiber DEFERRED.
+  // §14.4 comm-graph extension. Recipe:
+  // `6 exotic_alloy + 1 ai_core + 200 wire + 1 orbital_insertion_package`
+  // on a 60-min (3600s) cycle.
   comm_sat_assembly: {
     id: 'comm_sat_assembly',
     displayName: 'Comm Sat Assembly',
@@ -1262,11 +1259,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §14.7 / §14.10: Orbital Insertion Assembly — produces Orbital
   // Insertion Packages (T6 Foundation-Kit equivalent). Every §14.7
-  // satellite launch requires one alongside fuel + variant recipe. §14.10
-  // placeholder recipe (`100 iron_ingot + 30 brick + 20 glass + 10
-  // carbon_fiber + 5 ai_core`) is simplified to T6-scale inputs in the
-  // catalog: `2 antimatter_propellant + 1 exotic_alloy` on a 60-min
-  // cycle. Brick / Carbon Fiber DEFERRED.
+  // satellite launch requires one alongside fuel + variant recipe. Recipe:
+  // `100 iron_ingot + 30 stone + 20 glass + 10 pcb + 5 ai_core` on a
+  // 30-min (1800s) cycle.
   orbital_insertion_assembly: {
     id: 'orbital_insertion_assembly',
     displayName: 'Orbital Insertion Assembly',
@@ -1281,7 +1276,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '⚙',
   },
   // §14.3 / §14.10: Sweeper Sat Assembly — produces Sweeper Sat payloads
-  // for §14.8 debris-field / Kessler-cascade clearing.
+  // for §14.8 debris-field / Kessler-cascade clearing. Recipe:
+  // `4 exotic_alloy + 1 ai_core + 100 steel + 20 gear + 1
+  // orbital_insertion_package` on a 60-min (3600s) cycle.
   sweeper_sat_assembly: {
     id: 'sweeper_sat_assembly',
     displayName: 'Sweeper Sat Assembly',
@@ -1296,7 +1293,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '◇',
   },
   // §14.12 / §14.10: Repair Pack Assembly — produces Repair Pack consumables
-  // for orbital drone repair operations.
+  // for orbital drone repair operations. Recipe:
+  // `50 steel + 10 gear + 2 exotic_alloy + 5 microchip` on a 30-min (1800s)
+  // cycle.
   repair_pack_assembly: {
     id: 'repair_pack_assembly',
     displayName: 'Repair Pack Assembly',
