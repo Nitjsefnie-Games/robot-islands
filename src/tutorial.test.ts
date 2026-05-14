@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IslandState } from './economy.js';
+import { type ResourceId } from './recipes.js';
 import { checkObjectives, type ObjectiveId, type TutorialState } from './tutorial.js';
 import type { WorldState } from './world.js';
 
@@ -44,6 +45,7 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     bankingEnabled: false,
     genesisTarget: null,
     singularityStoredWs: 0,
+    starterInventoryGrace: {} as Record<ResourceId, number>,
     lastTick: 0,
     ...over,
   };

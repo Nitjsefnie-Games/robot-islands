@@ -186,6 +186,10 @@ export interface IslandState {
   genesisTarget: ResourceId | null;
   /** Singularity Battery stored energy in W-seconds (Joules). */
   singularityStoredWs: number;
+  /** §12.4 Starter inventory grace cap — per-resource one-time allowance
+   *  that lets a new colony hold kit-delivered raws even with zero storage.
+   *  Shrinks resource-by-resource as normal cap meets or exceeds inventory. */
+  starterInventoryGrace: Record<ResourceId, number>;
 }
 
 /**
@@ -249,7 +253,12 @@ export function inv(state: IslandState, r: ResourceId): number {
  * still displays nominal caps; the economy uses these effective caps. That
  * UX inconsistency is left to a later step alongside the broader storage UI.
  */
-export function cap(state: IslandState, r: ResourceId, override?: Record<ResourceId, number>): number {
+export function cap(
+  state: IslandState,
+  r: ResourceId,
+  override?: Record<ResourceId, number>,
+  opts?: { ignoreGrace?: boolean },
+): number {
   const nominal = override?.[r] ?? state.storageCaps[r] ?? 0;
   if (nominal === 0) return 0;
   const skillMul = effectiveSkillMultipliers(state).storageCap;
@@ -258,7 +267,21 @@ export function cap(state: IslandState, r: ResourceId, override?: Record<Resourc
   // HUD) sees the same effective cap without threading specMul as a param.
   // Identity role → 1.0, composes cleanly.
   const specMul = effectiveSpecializationMultipliers(state.specializationRole).storageCapMul;
-  return nominal * skillMul * specMul;
+  const computedCap = nominal * skillMul * specMul;
+  if (opts?.ignoreGrace) return computedCap;
+  const grace = state.starterInventoryGrace[r] ?? 0;
+  return Math.max(computedCap, grace);
+}
+
+/** §12.4: clear starter inventory grace for a single resource when its
+ *  normal cap meets or exceeds current inventory. */
+export function clearGraceIfRedundant(state: IslandState, r: ResourceId): void {
+  const grace = state.starterInventoryGrace[r] ?? 0;
+  if (grace <= 0) return;
+  const normalCap = cap(state, r, undefined, { ignoreGrace: true });
+  if (normalCap >= (state.inventory[r] ?? 0)) {
+    state.starterInventoryGrace[r] = 0;
+  }
 }
 
 /**
@@ -1091,6 +1114,10 @@ export function advanceIsland(
     state.timeLockBankedMin = Math.min(maxBank, state.timeLockBankedMin + offlineMin);
     state.lastTick = nowMs;
     return; // skip normal advancement — island is paused while banking
+  }
+  // §12.4: shrink starter inventory grace as normal caps catch up.
+  for (const r of Object.keys(state.starterInventoryGrace) as ResourceId[]) {
+    clearGraceIfRedundant(state, r);
   }
   let t = state.lastTick;
   // §4.7: attempt auto-maintain BEFORE the first segment too — a save loaded

@@ -3,12 +3,13 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { IslandState } from './economy.js';
+import { advanceIsland, type IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { makeSeededRng } from './rng.js';
 import type { SettlementVehicle } from './settlement.js';
 import {
   _resetRouteIdCounter,
+  deliverArrivals,
 } from './routes.js';
 import {
   HELICOPTER_STATS,
@@ -20,6 +21,7 @@ import {
   tickVehicles,
   tuningFor,
 } from './settlement.js';
+import { deserializeWorld, serializeWorld, type SaveSnapshot } from './persistence.js';
 import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { type IslandSpec, type WorldState } from './world.js';
 
@@ -68,6 +70,7 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     bankingEnabled: false,
     genesisTarget: null,
     singularityStoredWs: 0,
+    starterInventoryGrace: {} as Record<ResourceId, number>,
     lastTick: 0,
     ...over,
   };
@@ -759,6 +762,114 @@ describe('§12.4 foundation kit decomposition', () => {
     expect(newState!.inventory.iron_ingot).toBe(10);
     expect(newState!.inventory.wood).toBe(60); // 40 starter + 20 from 2 kits
     expect(newState!.inventory.bolt).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §12.4 Foundation Kit starter-inventory grace cap
+// ---------------------------------------------------------------------------
+
+describe('§12.4 Foundation Kit starter-inventory grace cap', () => {
+  it('arriving colony holds kit raw contents above zero normal cap', () => {
+    const { world, homeSpec, homeState, targetSpec, islandStates } = makeTestWorld();
+    homeState.inventory.foundation_kit = 1;
+    homeState.inventory.biofuel = 10;
+    const r = dispatchVehicle(world, homeSpec, homeState, targetSpec, 'ship', 1, 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+    const newState = islandStates.get(targetSpec.id)!;
+    // kit_assembler inputs: { iron_ingot: 5, wood: 10, bolt: 5 }
+    // startingInventory seeds wood=40, so wood = 50 after kit.
+    expect(newState.inventory.iron_ingot).toBe(5);
+    expect(newState.inventory.wood).toBe(50);
+    expect(newState.inventory.bolt).toBe(5);
+    expect(newState.starterInventoryGrace.iron_ingot).toBe(5);
+    expect(newState.starterInventoryGrace.wood).toBe(10);
+    expect(newState.starterInventoryGrace.bolt).toBe(5);
+  });
+
+  it('grace shrinks when normal cap catches up', () => {
+    const { world, homeSpec, homeState, targetSpec, islandStates } = makeTestWorld();
+    homeState.inventory.foundation_kit = 1;
+    homeState.inventory.biofuel = 10;
+    const r = dispatchVehicle(world, homeSpec, homeState, targetSpec, 'ship', 1, 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+    const newState = islandStates.get(targetSpec.id)!;
+    // Simulate zero normal cap for kit resources so grace is active.
+    newState.storageCaps.iron_ingot = 0;
+    newState.storageCaps.bolt = 0;
+    // Place a generic Crate labeled for iron_ingot (capacity 100).
+    newState.buildings.push({ id: 'crate-1', defId: 'crate', x: 1, y: 1, cargoLabel: 'iron_ingot' });
+    newState.storageCaps.iron_ingot += 100;
+    // Tick — clearGraceIfRedundant should clear iron_ingot but not bolt.
+    advanceIsland(newState, newState.lastTick + 1000);
+    expect(newState.starterInventoryGrace.iron_ingot).toBe(0);
+    expect(newState.starterInventoryGrace.bolt).toBe(5);
+  });
+
+  it('route arrivals respect normal cap, not grace', () => {
+    // Colony with 5 iron_ingot under grace but zero normal cap.
+    const destState = makeIslandState({ id: 'dest' });
+    destState.inventory.iron_ingot = 5;
+    destState.starterInventoryGrace.iron_ingot = 5;
+    destState.storageCaps.iron_ingot = 0;
+    // Source with 10 iron_ingot to ship.
+    const srcState = makeIslandState({ id: 'src' });
+    srcState.inventory.iron_ingot = 10;
+    const route = {
+      id: 'r-1',
+      from: 'src',
+      to: 'dest',
+      type: 'cargo' as const,
+      capacityPerSec: 1,
+      filter: 'iron_ingot' as const,
+      priorityList: [],
+      transitTimeSec: 0,
+      inFlight: [
+        {
+          resourceId: 'iron_ingot' as const,
+          amount: 10,
+          arrivalTime: 1000,
+          dispatchTime: 0,
+        },
+      ],
+    };
+    const world = freshWorld([]);
+    world.routes.push(route);
+    const states = new Map([
+      ['src', srcState],
+      ['dest', destState],
+    ]);
+    const delivered = deliverArrivals(world, states, 2000);
+    // Normal cap is 0, so no headroom — route arrival rejected.
+    expect(destState.inventory.iron_ingot).toBe(5);
+    expect(delivered.length).toBe(0);
+  });
+
+  it('grace persists across save/load', () => {
+    const world = freshWorld([]);
+    const state = makeIslandState({ id: 'home' });
+    state.starterInventoryGrace.iron_ingot = 5;
+    state.starterInventoryGrace.bolt = 3;
+    const states = new Map([['home', state]]);
+    const snap = serializeWorld(world, states, 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    const r = restored.get('home')!;
+    expect(r.starterInventoryGrace.iron_ingot).toBe(5);
+    expect(r.starterInventoryGrace.bolt).toBe(3);
+
+    // Legacy saves missing the field default to all-zero grace.
+    for (const entry of json.islandStates) {
+      delete (entry.state as { starterInventoryGrace?: unknown }).starterInventoryGrace;
+    }
+    const { islandStates: legacyRestored } = deserializeWorld(json, 0, 0);
+    const lr = legacyRestored.get('home')!;
+    expect(lr.starterInventoryGrace.iron_ingot).toBe(0);
+    expect(lr.starterInventoryGrace.bolt).toBe(0);
   });
 });
 

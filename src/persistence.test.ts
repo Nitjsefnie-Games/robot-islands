@@ -87,6 +87,7 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     bankingEnabled: false,
     genesisTarget: null,
     singularityStoredWs: 0,
+    starterInventoryGrace: {} as Record<ResourceId, number>,
     lastTick: 1000,
     ...over,
   };

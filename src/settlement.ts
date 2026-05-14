@@ -565,6 +565,8 @@ export function tickVehicles(
         const total = (amount ?? 0) * v.foundationKitCount;
         if (total > 0) {
           newState.inventory[id] = (newState.inventory[id] ?? 0) + total;
+          newState.starterInventoryGrace[id] =
+            (newState.starterInventoryGrace[id] ?? 0) + total;
         }
       }
     }

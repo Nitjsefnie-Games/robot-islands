@@ -166,7 +166,7 @@ function destinationHeadroom(
 ): number {
   const destState = states.get(destIslandId);
   if (!destState) return 0;
-  const room = cap(destState, r) - inv(destState, r) - totalInboundInFlight(world, destIslandId, r);
+  const room = cap(destState, r, undefined, { ignoreGrace: true }) - inv(destState, r) - totalInboundInFlight(world, destIslandId, r);
   return Math.max(0, room);
 }
 
@@ -252,7 +252,8 @@ export function deliverArrivals(
         }
       }
 
-      const headroom = cap(destState, b.resourceId) - inv(destState, b.resourceId);
+      const headroom = cap(destState, b.resourceId, undefined, { ignoreGrace: true }) - inv(destState, b.resourceId);
+      // §12.4: route arrivals respect normal caps, not the kit grace.
       // Clamp against current cap headroom only — totalInboundInFlight at
       // dispatch already accounted for siblings, so we don't subtract those
       // again here.

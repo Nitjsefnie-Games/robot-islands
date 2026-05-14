@@ -52,6 +52,7 @@ function makeState(id: string, level: number): IslandState {
     accelerationRemainingMin: 0,
     bankingEnabled: false,
     singularityStoredWs: 0,
+    starterInventoryGrace: {} as Record<ResourceId, number>,
   };
 }
 

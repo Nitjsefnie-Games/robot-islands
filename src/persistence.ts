@@ -473,6 +473,7 @@ export function deserializeWorld(
     const inventoryClone = { ...s.inventory };
     const storageCapsClone = { ...s.storageCaps };
     const funnelClone = { ...s.funnelPending };
+    const graceClone = { ...(s as { starterInventoryGrace?: Record<ResourceId, number> }).starterInventoryGrace } as Record<ResourceId, number>;
     // Forward-compat backfill: a save written by an older build is missing
     // any ResourceId added since. The strict `Record<ResourceId, number>`
     // type would catch reads of missing keys via `noUncheckedIndexedAccess`
@@ -487,6 +488,7 @@ export function deserializeWorld(
       if (!(r in inventoryClone)) inventoryClone[r] = 0;
       if (!(r in storageCapsClone)) storageCapsClone[r] = BASELINE_STORAGE_CAP;
       if (!(r in funnelClone)) funnelClone[r] = 0;
+      if (!(r in graceClone)) graceClone[r] = 0;
     }
     // Forward-compat backfill: step-20 added `ascendantCoreCrafted` to
     // IslandState (§14.1 T6 access gate). A v3 save written before the
@@ -549,6 +551,7 @@ export function deserializeWorld(
       inventory: inventoryClone,
       storageCaps: storageCapsClone,
       funnelPending: funnelClone,
+      starterInventoryGrace: graceClone,
       unlockedNodes: new Set(s.unlockedNodes),
       subPathProgress: new Map(s.subPathProgress),
       ascendantCoreCrafted,

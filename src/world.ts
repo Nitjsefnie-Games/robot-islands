@@ -930,6 +930,8 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     genesisTarget: null,
     // §13.3 Singularity Battery defaults to empty.
     singularityStoredWs: 0,
+    // §12.4 Starter inventory grace cap — no kit yet delivered.
+    starterInventoryGrace: {} as Record<ResourceId, number>,
     lastTick: nowMs,
   };
 }

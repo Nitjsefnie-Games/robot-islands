@@ -54,6 +54,7 @@ function makeState(
     bankingEnabled: false,
     genesisTarget: null,
     singularityStoredWs: 0,
+    starterInventoryGrace: {} as Record<ResourceId, number>,
     lastTick: 0,
   };
 }

@@ -84,6 +84,7 @@ function makeState(inventory: Partial<Record<ResourceId, number>> = {}): IslandS
     bankingEnabled: false,
     genesisTarget: null,
     singularityStoredWs: 0,
+    starterInventoryGrace: {} as Record<ResourceId, number>,
     lastTick: 0,
   };
 }

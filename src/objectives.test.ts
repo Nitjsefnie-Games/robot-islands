@@ -61,6 +61,7 @@ function makeIslandState(overrides: Partial<IslandState> & { id: string }): Isla
     bankingEnabled: overrides.bankingEnabled ?? false,
     genesisTarget: overrides.genesisTarget ?? null,
     singularityStoredWs: overrides.singularityStoredWs ?? 0,
+    starterInventoryGrace: (overrides.starterInventoryGrace ?? {}) as Record<ResourceId, number>,
     lastTick: overrides.lastTick ?? 0,
   };
 }
