@@ -327,6 +327,23 @@ describe('T6 orbital recipes (§14.10)', () => {
   });
 });
 
+describe('§8.1 T2 extraction recipes', () => {
+  it('heavy_logger produces wood with higher rate than logger', () => {
+    const t1 = RECIPES.logger!;
+    const t2 = RECIPES.heavy_logger!;
+    const t1Rate = (t1.outputs.wood ?? 0) / t1.cycleSec;
+    const t2Rate = (t2.outputs.wood ?? 0) / t2.cycleSec;
+    expect(t2Rate).toBeGreaterThan(t1Rate);
+  });
+  it('deep_mine produces iron_ore with higher rate than mine', () => {
+    const t1 = RECIPES.mine!;
+    const t2 = RECIPES.deep_mine!;
+    const t1Rate = (t1.outputs.iron_ore ?? 0) / t1.cycleSec;
+    const t2Rate = (t2.outputs.iron_ore ?? 0) / t2.cycleSec;
+    expect(t2Rate).toBeGreaterThan(t1Rate);
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,

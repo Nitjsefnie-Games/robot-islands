@@ -126,6 +126,9 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   // §2.6 weather stations
   'weather_station_t2',
   'advanced_weather_station_t3',
+  // §8.1 T2 extraction
+  'heavy_logger',
+  'deep_mine',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -668,5 +671,20 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
     for (const id of ALL_T6_IDS) {
       expect(list).not.toContain(id);
     }
+  });
+
+  describe('§8.1 T2 extraction buildings', () => {
+    it('heavy_logger is T2, 2x2, requires tree (dense_forest deferred)', () => {
+      const def = BUILDING_DEFS.heavy_logger;
+      expect(def.tier).toBe(2);
+      expect(def.footprint.tiles.length).toBe(4); // 2x2
+      expect(def.requiredTile?.length).toBeGreaterThan(0);
+    });
+    it('deep_mine is T2, 2x3, requires ore vein', () => {
+      const def = BUILDING_DEFS.deep_mine;
+      expect(def.tier).toBe(2);
+      expect(def.footprint.tiles.length).toBe(6); // 2x3
+      expect(def.requiredTile).toContain('ore');
+    });
   });
 });

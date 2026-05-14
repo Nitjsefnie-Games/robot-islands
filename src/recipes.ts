@@ -504,6 +504,23 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { wood: 1 },
     category: 'extraction',
   },
+  // §8.1 T2 Heavy Logger: 3× wood throughput vs T1 Logger.
+  heavy_logger: {
+    cycleSec: 30,
+    inputs: {},
+    outputs: { wood: 3 },
+    category: 'extraction',
+  },
+  // §8.1 T2 Deep Mine: 3× ore throughput vs T1 Mine. Output is iron_ore
+  // (the only ore vein the live game currently surfaces; deeper-vein
+  // variants like copper / nickel land alongside their resource catalog
+  // additions).
+  deep_mine: {
+    cycleSec: 60,
+    inputs: {},
+    outputs: { iron_ore: 3 },
+    category: 'extraction',
+  },
 
   // T1 smelting — rebalanced for idle-game scale, step #19 (×10)
   smelter: {

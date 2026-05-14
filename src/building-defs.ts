@@ -154,6 +154,9 @@ export type BuildingDefId =
   | 'quarry'
   | 'sand_pit'
   | 'well'
+  // §8.1 T2 extraction
+  | 'heavy_logger'
+  | 'deep_mine'
   | 'coastal_pump'
   | 'quartz_mine'
   | 'lumber_mill'
@@ -410,6 +413,22 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
       { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
     ],
   },
+  // §8.1 T2 extraction: Deep Mine (2x3, ore vein tile). Higher ore yield
+  // than T1 Mine. Skill-tree Mining sub-path gate per §8.1 is enforced
+  // separately by `buildingUnlocked` once the catalog ships.
+  deep_mine: {
+    id: 'deep_mine',
+    displayName: 'Deep Mine',
+    category: 'extraction',
+    tier: 2,
+    footprint: SHAPES.rect2x3,
+    fill: 0x4a3a30, // darker stone-brown vs T1 mine
+    stroke: 0x1a1308,
+    power: { consumes: 120 },
+    requiredTile: ['ore'],
+    placementCost: { stone: 80, wood: 40, iron_ingot: 30 },
+    glyph: '▦',
+  },
   workshop: {
     id: 'workshop',
     displayName: 'Workshop',
@@ -490,6 +509,24 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x0f2a0c,
     requiredTile: ['tree'],
     placementCost: { stone: 15, wood: 5 },
+    glyph: '⌬',
+  },
+  // §8.1 T2 extraction: Heavy Logger (2x2, dense forest tile). Higher wood
+  // throughput than the T1 Logger — see recipe below.
+  // NOTE: dense_forest terrain is not yet emitted by the procedural generator,
+  // so requiredTile uses 'tree' as a less-restrictive placeholder until
+  // biomes.ts terrainAtForBiome surfaces dense_forest clusters.
+  heavy_logger: {
+    id: 'heavy_logger',
+    displayName: 'Heavy Logger',
+    category: 'extraction',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x1f4e1c, // darker forest green vs T1 logger
+    stroke: 0x0a1e08,
+    power: { consumes: 80 },
+    requiredTile: ['tree'],
+    placementCost: { stone: 60, wood: 30, iron_ingot: 20 },
     glyph: '⌬',
   },
   smelter: {
