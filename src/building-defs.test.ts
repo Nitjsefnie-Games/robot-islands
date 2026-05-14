@@ -141,6 +141,12 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'cooling_tower',
   'wastewater_treatment',
   'exhaust_scrubber',
+  // §8.8 / §8.9 logistics + special buildings
+  'airship_dock',
+  'teleporter_pad',
+  'spacetime_anchor',
+  'power_substation',
+  'terrain_modifier',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -759,6 +765,34 @@ describe('§8.1 T2 extraction buildings', () => {
       const def = BUILDING_DEFS.exhaust_scrubber;
       expect(def.tier).toBe(2);
       expect(def.footprint.tiles.length).toBe(1);
+    });
+  });
+
+  describe('§8.8 / §8.9 logistics + special buildings', () => {
+    it('airship_dock is T3, 3x3', () => {
+      const def = BUILDING_DEFS.airship_dock;
+      expect(def.tier).toBe(3);
+      expect(def.footprint.tiles.length).toBe(9);
+    });
+    it('teleporter_pad is T4, 2x2', () => {
+      const def = BUILDING_DEFS.teleporter_pad;
+      expect(def.tier).toBe(4);
+      expect(def.footprint.tiles.length).toBe(4);
+    });
+    it('spacetime_anchor is T5, 2x2', () => {
+      const def = BUILDING_DEFS.spacetime_anchor;
+      expect(def.tier).toBe(5);
+      expect(def.footprint.tiles.length).toBe(4);
+    });
+    it('power_substation is T4, 2x2', () => {
+      const def = BUILDING_DEFS.power_substation;
+      expect(def.tier).toBe(4);
+      expect(def.footprint.tiles.length).toBe(4);
+    });
+    it('terrain_modifier is T2, 2x2', () => {
+      const def = BUILDING_DEFS.terrain_modifier;
+      expect(def.tier).toBe(2);
+      expect(def.footprint.tiles.length).toBe(4);
     });
   });
 });

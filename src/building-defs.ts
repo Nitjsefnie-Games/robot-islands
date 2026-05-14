@@ -233,7 +233,12 @@ export type BuildingDefId =
   // §8.7 cooling / treatment
   | 'cooling_tower'
   | 'wastewater_treatment'
-  | 'exhaust_scrubber';
+  | 'exhaust_scrubber'
+  | 'airship_dock'
+  | 'teleporter_pad'
+  | 'spacetime_anchor'
+  | 'power_substation'
+  | 'terrain_modifier';
 
 /**
  * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's
@@ -726,6 +731,70 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel: 50, gear: 20, microchip: 10, glass: 20 },
     glyph: '⚜',
   },
+  // §8.8 T3 logistics: Airship Dock (3x3). T3 long-range airship-route
+  // endpoint. Route capacity / range mechanics live alongside the existing
+  // cargo / drone route infrastructure (§2.4); this def ships as a catalog
+  // row so airship routes can be created from this building once the
+  // T3 airship route-type is fully wired in routes-ui.ts.
+  airship_dock: {
+    id: 'airship_dock',
+    displayName: 'Airship Dock',
+    category: 'logistics',
+    tier: 3,
+    footprint: SHAPES.square3,
+    fill: 0xa09060, // ochre-zeppelin
+    stroke: 0x303018,
+    power: { consumes: 150 },
+    placementCost: { steel: 200, gear: 30, glass: 20 },
+    glyph: '⊿',
+  },
+  // §8.8 T4 logistics: Teleporter Pad (2x2). Paired-endpoint instant
+  // transport per §2.4. Pairing UX + route-type wire-up are separate;
+  // this def ships as a catalog row.
+  teleporter_pad: {
+    id: 'teleporter_pad',
+    displayName: 'Teleporter Pad',
+    category: 'logistics',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0x9060e0, // teleporter violet
+    stroke: 0x301060,
+    power: { consumes: 800 },
+    placementCost: { steel: 200, exotic_alloy: 10, microchip: 30 },
+    glyph: '⊕',
+  },
+  // §8.8 T5 logistics: Spacetime Anchor (2x2). Logical island unification
+  // per §13.3 — links two islands as one logical unit (zero-distance
+  // transport). Activation + linkage mechanics are separate.
+  spacetime_anchor: {
+    id: 'spacetime_anchor',
+    displayName: 'Spacetime Anchor',
+    category: 'logistics',
+    tier: 5,
+    footprint: SHAPES.square2,
+    fill: 0x405080, // spacetime indigo
+    stroke: 0x101020,
+    power: { consumes: 1500 },
+    placementCost: { spacetime_fragment: 5, exotic_alloy: 20, reality_anchor: 2 },
+    glyph: '⧗',
+  },
+  // §8.8 T4 logistics: Power Substation (2x2). Inter-island power-cable
+  // endpoint per §5.3 — required at both ends of a cable route to transmit
+  // W-capacity between islands. The cable W-capacity transmission mechanic
+  // ships in a follow-up task (§5.3 wire-up); the def is needed now so
+  // routes-ui can offer "cable" as a route-type option.
+  power_substation: {
+    id: 'power_substation',
+    displayName: 'Power Substation',
+    category: 'logistics',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0xc08040, // substation amber
+    stroke: 0x402010,
+    power: { consumes: 60 },  // operating overhead; the cable transmission itself doesn't count here
+    placementCost: { steel: 150, wire: 20, microchip: 5 },  // heavy_cable not yet in ResourceId catalog; substituted with wire
+    glyph: '⚡',
+  },
   // -------------------------------------------------------------------------
   // T2 (levels 5-15)
   // -------------------------------------------------------------------------
@@ -925,6 +994,21 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A. 3×3 footprint bumps T2 base.
     placementCost: { stone: 150, iron_ingot: 50, wood: 30 },
     glyph: '⊕',
+  },
+  // §8.9 T2 special: Terrain Modifier (2x2). Clears or converts tiles per
+  // §8.9. The tile-conversion mechanic is a separate UI action; this def
+  // ships as a catalog row.
+  terrain_modifier: {
+    id: 'terrain_modifier',
+    displayName: 'Terrain Modifier',
+    category: 'special',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x804040, // earth-tone modifier
+    stroke: 0x200810,
+    power: { consumes: 100 },
+    placementCost: { steel: 50, gear: 20 },
+    glyph: '◈',
   },
   // §8.5 T2 power: Cryogenic Generator (2x2, ice tile / arctic). Consumes
   // cryo_coolant as fuel. High output among T2 power options when an Arctic
