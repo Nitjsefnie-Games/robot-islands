@@ -26,7 +26,9 @@ import {
   _resetVehicleIdCounter,
   nextVehicleId,
 } from './settlement.js';
+import type { VictoryCondition } from './endgame.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import type { ObjectiveId } from './tutorial.js';
 import {
   SCHEMA_VERSION,
   STORAGE_KEY,
@@ -1026,6 +1028,199 @@ describe('IslandState.declaredAt / lastResetAt perfShift (§9.7)', () => {
     const r = restored.get(homeState.id)!;
     expect(r.declaredAt).toBeNull();
     expect(r.lastResetAt).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WorldState-level fields round-trip
+// ---------------------------------------------------------------------------
+
+describe('WorldState-level fields round-trip', () => {
+  it('preserves endgameState (achieved Set, firstAchievedMs, victoryBannerShown)', () => {
+    const world = makeInitialWorld(0);
+    world.endgameState = {
+      achieved: new Set<VictoryCondition>(['genesis_cell_crafted', 'ascendant_core_crafted']),
+      firstAchievedMs: 12_345,
+      victoryBannerShown: true,
+    };
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.endgameState.achieved).toBeInstanceOf(Set);
+    expect(restored.endgameState.achieved.has('genesis_cell_crafted')).toBe(true);
+    expect(restored.endgameState.achieved.has('ascendant_core_crafted')).toBe(true);
+    expect(restored.endgameState.achieved.has('omniscient_lattice_active')).toBe(false);
+    expect(restored.endgameState.achieved.size).toBe(2);
+    expect(restored.endgameState.firstAchievedMs).toBe(12_345);
+    expect(restored.endgameState.victoryBannerShown).toBe(true);
+  });
+
+  it('preserves latticeActive and latticeNodeIslands', () => {
+    const world = makeInitialWorld(0);
+    world.latticeActive = true;
+    world.latticeNodeIslands = ['home', 'forest-ne'];
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.latticeActive).toBe(true);
+    expect(restored.latticeNodeIslands).toEqual(['home', 'forest-ne']);
+  });
+
+  it('preserves tutorialState (completed Set and current)', () => {
+    const world = makeInitialWorld(0);
+    world.tutorialState = {
+      completed: new Set<ObjectiveId>(['place_solar', 'place_mine', 'reach_level_5']),
+      current: 'build_dronepad',
+    };
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.tutorialState!.completed).toBeInstanceOf(Set);
+    expect(restored.tutorialState!.completed.has('place_solar')).toBe(true);
+    expect(restored.tutorialState!.completed.has('place_mine')).toBe(true);
+    expect(restored.tutorialState!.completed.has('reach_level_5')).toBe(true);
+    expect(restored.tutorialState!.completed.size).toBe(3);
+    expect(restored.tutorialState!.current).toBe('build_dronepad');
+  });
+
+  it('preserves revealedCells as a Set of cell keys', () => {
+    const world = makeInitialWorld(0);
+    world.revealedCells = new Set(['0,0', '1,0', '2,0', '0,1']);
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.revealedCells).toBeInstanceOf(Set);
+    expect(restored.revealedCells.has('0,0')).toBe(true);
+    expect(restored.revealedCells.has('1,0')).toBe(true);
+    expect(restored.revealedCells.has('2,0')).toBe(true);
+    expect(restored.revealedCells.has('0,1')).toBe(true);
+    // deserializeRevealedCells also re-seeds cells from populated/discovered
+    // islands, so the total size may be larger than the 4 explicit cells.
+    expect(restored.revealedCells.size).toBeGreaterThanOrEqual(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// IslandState Time Lock state round-trip
+// ---------------------------------------------------------------------------
+
+describe('IslandState Time Lock state round-trip', () => {
+  it('preserves timeLockBankedMin, accelerationQueue, accelerationRemainingMin, and bankingEnabled', () => {
+    const home = makeIslandState({
+      timeLockBankedMin: 120,
+      accelerationQueue: [{ sourceIslandId: 'home', durationMin: 5 }, { sourceIslandId: 'forest-ne', durationMin: 10 }],
+      accelerationRemainingMin: 7.5,
+      bankingEnabled: true,
+    });
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>([['home', home]]);
+    const snap = serializeWorld(world, states, 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    const r = restored.get('home')!;
+    expect(r.timeLockBankedMin).toBe(120);
+    expect(r.accelerationQueue).toEqual([{ sourceIslandId: 'home', durationMin: 5 }, { sourceIslandId: 'forest-ne', durationMin: 10 }]);
+    expect(r.accelerationRemainingMin).toBe(7.5);
+    expect(r.bankingEnabled).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// IslandState specializationRole round-trip
+// ---------------------------------------------------------------------------
+
+describe('IslandState specializationRole round-trip', () => {
+  it('preserves a non-null specializationRole', () => {
+    const home = makeIslandState({ specializationRole: 'research_beacon' });
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>([['home', home]]);
+    const snap = serializeWorld(world, states, 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.get('home')!.specializationRole).toBe('research_beacon');
+  });
+
+  it('preserves null specializationRole', () => {
+    const home = makeIslandState({ specializationRole: null });
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>([['home', home]]);
+    const snap = serializeWorld(world, states, 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.get('home')!.specializationRole).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PlacedBuilding flags round-trip
+// ---------------------------------------------------------------------------
+
+describe('PlacedBuilding flags round-trip', () => {
+  it('preserves cargoLabel on a generic-storage building', () => {
+    const world = makeInitialWorld(0);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({ id: 'crate-1', defId: 'crate', x: 5, y: 5, cargoLabel: 'iron_ingot' });
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    const restoredHome = restored.islands.find((s) => s.id === 'home')!;
+    const crate = restoredHome.buildings.find((b) => b.id === 'crate-1')!;
+    expect(crate.cargoLabel).toBe('iron_ingot');
+  });
+
+  it('preserves eternalServitor flag', () => {
+    const world = makeInitialWorld(0);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({ id: 'solar-99', defId: 'solar', x: 3, y: 3, eternalServitor: true });
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    const restoredHome = restored.islands.find((s) => s.id === 'home')!;
+    const solar = restoredHome.buildings.find((b) => b.id === 'solar-99')!;
+    expect(solar.eternalServitor).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PlacedBuilding maintenance timestamp perfShift
+// ---------------------------------------------------------------------------
+
+describe('PlacedBuilding placedAt / maintainedAt perfShift', () => {
+  it('shifts placedAt and maintainedAt across the perf-domain reset', () => {
+    const world = makeInitialWorld(0);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'mine-1',
+      defId: 'mine',
+      x: 2,
+      y: 2,
+      placedAt: 1_500_000,
+      maintainedAt: 1_505_000,
+    });
+    const states = new Map<string, IslandState>();
+    const savedAtWallMs = 100_000;
+    const savedAtPerfMs = 1_500_000;
+    const snap = serializeWorld(world, states, savedAtWallMs, savedAtPerfMs);
+    const { world: restored } = deserializeWorld(snap, savedAtWallMs + 15_000, 5_000);
+    const restoredHome = restored.islands.find((s) => s.id === 'home')!;
+    const b = restoredHome.buildings.find((bld) => bld.id === 'mine-1')!;
+    // perfShift = 5_000 - 1_500_000 - 15_000 = -1_510_000
+    expect(b.placedAt).toBe(-10_000);
+    expect(b.maintainedAt).toBe(-5_000);
+    expect(b.maintainedAt! - b.placedAt!).toBe(5_000);
+  });
+
+  it('leaves undefined placedAt / maintainedAt as undefined', () => {
+    const world = makeInitialWorld(0);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({ id: 'solar-1', defId: 'solar', x: 1, y: 1 });
+    const states = new Map<string, IslandState>();
+    const snap = serializeWorld(world, states, 100_000, 1_500_000);
+    const { world: restored } = deserializeWorld(snap, 115_000, 5_000);
+    const restoredHome = restored.islands.find((s) => s.id === 'home')!;
+    const b = restoredHome.buildings.find((bld) => bld.id === 'solar-1')!;
+    expect(b.placedAt).toBeUndefined();
+    expect(b.maintainedAt).toBeUndefined();
   });
 });
 
