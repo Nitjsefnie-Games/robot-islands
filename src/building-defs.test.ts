@@ -16,7 +16,7 @@ import {
   unlockedDefs,
   type BuildingDefId,
 } from './building-defs.js';
-import { shapeHeight, shapeWidth } from './shape-mask.js';
+import { SHAPES, shapeHeight, shapeWidth } from './shape-mask.js';
 import { RECIPES } from './recipes.js';
 import type { IslandSpec } from './world.js';
 
@@ -94,6 +94,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'gas_extractor',
   'naphtha_cracker',
   'chlor_alkali_plant',
+  'chemical_reactor',
   'lubricant_refinery',
   'diesel_refinery',
   'metal_rolling_mill',
@@ -650,6 +651,27 @@ describe('step-20 T5→T6 Ascendant Assembly (§13.4)', () => {
     expect(buildingUnlocked(50, 'ascendant_assembly', false)).toBe(false);
     // Post-T5: unlocked.
     expect(buildingUnlocked(50, 'ascendant_assembly', true)).toBe(true);
+  });
+});
+
+describe('chemical_reactor (§8.2 / §7.5)', () => {
+  it('ships as a T2 chemistry def with 2x2 footprint', () => {
+    const def = BUILDING_DEFS.chemical_reactor;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(2);
+    expect(def.category).toBe('chemistry');
+    expect(def.footprint).toEqual(SHAPES.square2);
+  });
+  it('produces chlorine from salt + fresh_water (§7.5 electrolysis)', () => {
+    const recipe = RECIPES.chemical_reactor!;
+    expect(recipe).toBeDefined();
+    expect(recipe.inputs).toEqual({ salt: 1, fresh_water: 2 });
+    expect(recipe.outputs).toEqual({ chlorine: 1 });
+    expect(recipe.category).toBe('chemistry');
+  });
+  it('unlocks at level 1 of T2 (uses standard tier-2 unlock per §9.2)', () => {
+    expect(buildingUnlocked(10, 'chemical_reactor')).toBe(true);
+    expect(buildingUnlocked(1, 'chemical_reactor')).toBe(false);
   });
 });
 

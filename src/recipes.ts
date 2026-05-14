@@ -874,6 +874,15 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // recipes (soap, paper, etc.) DEFERRED → omitted from outputs to
     // keep the resource list lean.
   },
+  chemical_reactor: {
+    cycleSec: 800,           // matches chlor_alkali_plant — electrolysis pace
+    inputs: { salt: 1, fresh_water: 2 },
+    outputs: { chlorine: 1 },
+    category: 'chemistry',
+    // §7.5 spec: Salt + power → Chlorine (+ Sodium hydroxide co-product
+    // deferred). Acid / plastic precursor / alumina outputs from §8.2
+    // are deferred — those resource ids aren't in the catalog yet.
+  },
   lubricant_refinery: {
     cycleSec: 1000, // rebalanced for idle-game scale, step #19 (×40: was 25s)
     inputs: { crude_oil: 1, chlorine: 1 },

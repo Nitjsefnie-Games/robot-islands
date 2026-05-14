@@ -176,6 +176,7 @@ export type BuildingDefId =
   | 'gas_extractor'
   | 'naphtha_cracker'
   | 'chlor_alkali_plant'
+  | 'chemical_reactor'
   | 'lubricant_refinery'
   | 'diesel_refinery'
   | 'metal_rolling_mill'
@@ -1852,6 +1853,25 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 150 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    glyph: '◇',
+  },
+  // §8.2 T2 chemistry: Chemical Reactor (2×2, any tile). Spec lists three
+  // example outputs ("Acid, plastic precursor, alumina") — those resource
+  // ids aren't in the catalog yet. Placeholder recipe ships the §7.5
+  // electrolysis chain (Salt + power → Chlorine), which keeps the
+  // building tickable. Primary purpose: serve as the adjacency anchor for
+  // the §4.5 toxicity event (mechanic implemented in a later task).
+  chemical_reactor: {
+    id: 'chemical_reactor',
+    displayName: 'Chemical Reactor',
+    category: 'chemistry',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0xc06030,         // rust-orange (corrosive-coded)
+    stroke: 0x401810,
+    power: { consumes: 160 },
+    // §14 placeholder — tune in Appendix A.
+    placementCost: { stone: 100, iron_ingot: 40, wood: 15 },
     glyph: '◇',
   },
   lubricant_refinery: {
