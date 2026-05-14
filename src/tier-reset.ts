@@ -55,8 +55,12 @@ export interface TierResetCost {
   readonly gear: number;
 }
 
-/** TODO(§9.7-tune): placeholder cost formula. Balance pass once §6.5
- *  T4-T5 production loops have throughput data. */
+/** TODO(§9.7-tune): placeholder cost formula. §9.7 itself declares
+ *  "Cost (placeholder): a pile of T2-T3 components scaling with the island's
+ *  current level (placeholder formula: cost proportional to level²)". The
+ *  code matches that literal. Balance pass once §6.5 T4-T5 production
+ *  loops have throughput data — track alongside the other deferred
+ *  numeric placeholders in SPEC Appendix A. */
 export function tierResetCost(level: number): TierResetCost {
   const l2 = level * level;
   return { steel: l2, gear: Math.floor(l2 / 2) };
