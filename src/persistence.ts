@@ -433,9 +433,15 @@ export function deserializeWorld(
         ? (s as { buffer: Satellite['buffer'] }).buffer.slice(-SAT_BUFFER_CAP)
         : [],
     })),
-    // §14.12 repair drone fleet backfill: legacy v3 saves predate `repairDrones`.
-    // Default to an empty array so the world loads cleanly.
-    repairDrones: [...(snapshot.world.repairDrones ?? [])],
+    // §14.12 repair drone fleet backfill. perfShift the in-flight timestamps
+    // so the prior session's `performance.now()` domain doesn't strand the
+    // drone forever. Mirrors the drone (lines 354-355) / vehicle (401-402)
+    // backfill pattern.
+    repairDrones: (snapshot.world.repairDrones ?? []).map((d) => ({
+      ...d,
+      launchTime: d.launchTime + perfShift,
+      expectedArrivalTime: d.expectedArrivalTime + perfShift,
+    })),
     // Tutorial onboarding state backfill: legacy saves predate the field.
     // Default to the fresh-game starting objective.
     tutorialState: snapshot.world.tutorialState

@@ -946,6 +946,33 @@ describe('repair drone persistence', () => {
     const { world: restored } = deserializeWorld(legacy, 0, 0);
     expect(restored.repairDrones).toEqual([]);
   });
+
+  it('repairDrones launchTime + expectedArrivalTime are perfShift-ed (§14.12)', () => {
+    // Mirrors the drone/vehicle perfShift tests above. Saved session's
+    // perf-time at save = 1_500_000. Repair drone in flight, 10s from
+    // arrival. 15s offline gap. New session's perf-time is 5_000.
+    // perfShift = 5_000 - 1_500_000 - 15_000 = -1_510_000.
+    // new launchTime = 1_500_000 + perfShift = -10_000
+    // new expectedArrivalTime = 1_510_000 + perfShift = 0
+    // → already in the past at nowPerfMs=5_000, the repair tick resolves it.
+    const world = makeInitialWorld(0);
+    world.repairDrones.push({
+      id: 'repair-1',
+      targetSatId: 'sat1',
+      launchTime: 1_500_000,
+      expectedArrivalTime: 1_510_000,
+    });
+    const states = new Map<string, IslandState>();
+    const savedAtWallMs = 100_000;
+    const savedAtPerfMs = 1_500_000;
+    const snap = serializeWorld(world, states, savedAtWallMs, savedAtPerfMs);
+    const { world: restored } = deserializeWorld(snap, savedAtWallMs + 15_000, 5_000);
+    const d = restored.repairDrones[0]!;
+    // The delta between launch and expected-arrival is preserved.
+    expect(d.expectedArrivalTime - d.launchTime).toBe(10_000);
+    // expectedArrivalTime is now in the past relative to nowPerfMs=5_000.
+    expect(d.expectedArrivalTime).toBeLessThan(5_000);
+  });
 });
 
 describe('with a full demo world', () => {
