@@ -552,7 +552,14 @@ export function deserializeWorld(
       unlockedNodes: new Set(s.unlockedNodes),
       subPathProgress: new Map(s.subPathProgress),
       ascendantCoreCrafted,
-      lastResetAt,
+      // §9.7 cooldown anchors. Both fields were minted in the saved
+      // session's `performance.now()` domain (matching `lastTick`); apply
+      // the same perfShift the drone/vehicle/repair-drone timestamps get,
+      // so the 24-hour cooldown gate reads a real elapsed value after a
+      // reload. Null-preserving: a fresh island has both null and must
+      // survive deserialize as null (null + number would be NaN).
+      declaredAt: s.declaredAt === null ? null : s.declaredAt + perfShift,
+      lastResetAt: lastResetAt === null ? null : lastResetAt + perfShift,
       timeLockBankedMin,
       accelerationQueue,
       accelerationRemainingMin,

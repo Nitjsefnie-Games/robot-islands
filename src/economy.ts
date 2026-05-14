@@ -167,15 +167,9 @@ export interface IslandState {
    *  and `declaredAt`) of the last §9.7 Tier Reset on this island, or null
    *  if the island has never been reset. Drives the 24-hour cooldown gate
    *  in `canTierReset`. Null on a fresh island; stamped by
-   *  `executeTierReset(state, nowMs)`.
-   *
-   *  TODO(persistence): `declaredAt` and now `lastResetAt` survive a save
-   *  / load verbatim — they're NOT perfShifted by `deserializeWorld`, so a
-   *  reload right after a reset puts `lastResetAt` in the previous session's
-   *  perf-domain. The cooldown math `nowMs - lastResetAt` is incorrect by
-   *  exactly the perfShift offset until the next reset. Same pre-existing
-   *  issue applies to `declaredAt`; leave both consistent until a future
-   *  pass perf-shifts both. */
+   *  `executeTierReset(state, nowMs)`. perfShift-ed on deserialize alongside
+   *  `declaredAt`, so the cooldown gate reads a real elapsed value across
+   *  save/load. */
   lastResetAt: number | null;
   /** Wall-clock timestamp of the last advance, in milliseconds. */
   lastTick: number;

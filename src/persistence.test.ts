@@ -975,6 +975,59 @@ describe('repair drone persistence', () => {
   });
 });
 
+describe('IslandState.declaredAt / lastResetAt perfShift (§9.7)', () => {
+  it('IslandState.declaredAt and lastResetAt are perfShift-ed (§9.7 cooldown)', () => {
+    // Mirrors the repair-drone / vehicle perfShift tests above. The two
+    // fields are minted in the saved session's `performance.now()` domain
+    // (matching `lastTick`). On deserialize they must shift into the new
+    // session's perf-domain so the 24-hour cooldown gate `nowMs -
+    // lastResetAt < TIER_RESET_COOLDOWN_MS` reads a real elapsed value.
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>();
+    const home = world.islands[0]!;
+    const homeState = makeInitialIslandState(home, 1_500_000);
+    homeState.declaredAt = 1_502_000; // 2s after lastTick
+    homeState.lastResetAt = 1_504_000; // 4s after lastTick
+    states.set(homeState.id, homeState);
+
+    const savedAtWallMs = 100_000;
+    const savedAtPerfMs = 1_500_000;
+    const snap = serializeWorld(world, states, savedAtWallMs, savedAtPerfMs);
+    // 15s offline; nowPerfMs in the new session = 5_000.
+    // perfShift = 5_000 - 1_500_000 - 15_000 = -1_510_000.
+    const { islandStates: restored } = deserializeWorld(
+      snap,
+      savedAtWallMs + 15_000,
+      5_000,
+    );
+    const r = restored.get(homeState.id)!;
+    // declaredAt: 1_502_000 + (-1_510_000) = -8_000
+    // lastResetAt: 1_504_000 + (-1_510_000) = -6_000
+    expect(r.declaredAt).toBe(-8_000);
+    expect(r.lastResetAt).toBe(-6_000);
+    // The 2s gap between them is preserved (perfShift is a constant offset).
+    expect(r.lastResetAt! - r.declaredAt!).toBe(2_000);
+  });
+
+  it('null declaredAt and lastResetAt survive deserialize without perfShift NaN', () => {
+    // The null-preservation branch — a fresh island has both fields null.
+    // The perfShift remap must NOT poison them into NaN (null + number).
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>();
+    const home = world.islands[0]!;
+    const homeState = makeInitialIslandState(home, 1_500_000);
+    expect(homeState.declaredAt).toBeNull();
+    expect(homeState.lastResetAt).toBeNull();
+    states.set(homeState.id, homeState);
+
+    const snap = serializeWorld(world, states, 100_000, 1_500_000);
+    const { islandStates: restored } = deserializeWorld(snap, 115_000, 5_000);
+    const r = restored.get(homeState.id)!;
+    expect(r.declaredAt).toBeNull();
+    expect(r.lastResetAt).toBeNull();
+  });
+});
+
 describe('with a full demo world', () => {
   it('round-trips makeInitialWorld + per-island makeInitialIslandState', () => {
     const world = makeInitialWorld(0);
