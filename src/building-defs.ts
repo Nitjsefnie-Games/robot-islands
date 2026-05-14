@@ -119,6 +119,11 @@ export type BuildingDefId =
   | 'cryogenic_compute_center'
   | 'particle_accelerator'
   | 'launch_tower'
+  // §9.5 biome-locked uniques (Mass Driver + Carbon Forge + Tidal Array + Sunspire)
+  | 'mass_driver'
+  | 'carbon_forge'
+  | 'tidal_array'
+  | 'sunspire'
   // New T5 (§13.2 / §8.4 / §8.5 / §8.9 / step 13)
   | 'casimir_tap'
   | 'reality_forge'
@@ -1223,6 +1228,72 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     placementCost: { steel: 400, microchip: 150, glass: 50 },
     glyph: '◈',
+  },
+  // §9.5: Mass Driver — Plains-unique T4. Long-range cargo route launcher
+  // (~5× airship capacity per spec). Consumes Diesel per dispatch volume.
+  // One per Plains island. The route-type wire-up (mass_driver as RouteType)
+  // ships separately; this def is the catalog row + biome lock.
+  mass_driver: {
+    id: 'mass_driver',
+    displayName: 'Mass Driver',
+    category: 'logistics',
+    tier: 4,
+    footprint: SHAPES.square4,
+    fill: 0x707080, // industrial steel-grey
+    stroke: 0x202028,
+    power: { consumes: 600 },
+    requiredBiomes: ['plains'],
+    placementCost: { steel: 500, gear: 80, microchip: 30 },
+    glyph: '➶',
+  },
+  // §9.5: Carbon Forge — Forest-unique T4. Only producer of Carbon Fiber /
+  // Glass Fiber / Optical Fiber. Forest's wood/charcoal abundance feeds the
+  // chain. Heavy power draw; requires adjacent Heat Source per §9.5.
+  carbon_forge: {
+    id: 'carbon_forge',
+    displayName: 'Carbon Forge',
+    category: 'smelting',
+    tier: 4,
+    footprint: SHAPES.square3,
+    fill: 0x303030, // deep carbon-black
+    stroke: 0x080808,
+    power: { consumes: 700 },
+    requiredBiomes: ['forest'],
+    requiresHeat: true,
+    placementCost: { steel: 250, microchip: 80, glass: 40 },
+    glyph: '⬢',
+  },
+  // §9.5: Tidal Array — Coast-unique T4 renewable power. Massive constant
+  // output (50 MW placeholder). No fuel cost. Coastal water-tile siting.
+  tidal_array: {
+    id: 'tidal_array',
+    displayName: 'Tidal Array',
+    category: 'power',
+    tier: 4,
+    footprint: SHAPES.square3,
+    fill: 0x3878a8, // tidal blue
+    stroke: 0x0a2848,
+    power: { produces: 50000 },  // 50 MW placeholder
+    requiredBiomes: ['coast'],
+    requiredTile: ['water'],     // coastal water tile (the project uses 'water' for shoreline; see Wind Turbine precedent)
+    placementCost: { steel: 350, gear: 60, microchip: 20 },
+    glyph: '≋',
+  },
+  // §9.5: Sunspire — Desert-unique T4 renewable power. Peak solar output
+  // (60 MW placeholder). No fuel cost. Composes with Solar Panel's per-tile
+  // solar bonus for Desert-dominant power islands.
+  sunspire: {
+    id: 'sunspire',
+    displayName: 'Sunspire',
+    category: 'power',
+    tier: 4,
+    footprint: SHAPES.square3,
+    fill: 0xf0c050, // solar gold
+    stroke: 0x402810,
+    power: { produces: 60000 },  // 60 MW placeholder
+    requiredBiomes: ['desert'],
+    placementCost: { steel: 250, glass: 100, microchip: 25 },
+    glyph: '☀',
   },
   // §8.6: Particle Accelerator — T4 production of Quantum Chips (and, in
   // a later step, Antimatter Capsule via a separate recipe per §7.11). Not

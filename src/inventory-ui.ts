@@ -75,6 +75,7 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   quantum_chip: 'components',
   ai_core: 'components',
   exotic_alloy: 'components',
+  carbon_fiber: 'components',
   foundation_kit: 'components',
   // Fuels
   biofuel: 'fuel',

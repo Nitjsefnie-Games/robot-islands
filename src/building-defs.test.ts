@@ -56,6 +56,11 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'cryogenic_compute_center',
   'particle_accelerator',
   'launch_tower',
+  // §9.5 biome-locked uniques (Mass Driver + Carbon Forge + Tidal Array + Sunspire)
+  'mass_driver',
+  'carbon_forge',
+  'tidal_array',
+  'sunspire',
   // Step-13 T5 transcendent (§13.2 / §8.4 / §8.5 / §8.9)
   'casimir_tap',
   'reality_forge',
@@ -268,8 +273,8 @@ describe('buildingUnlocked / tier gating (§9.2)', () => {
 });
 
 describe('step-12 T4 catalog (§6.5 / §9.5)', () => {
-  it('all 5 T4 defs are present with tier 4', () => {
-    for (const id of ['fusion_core', 'pyroforge', 'cryogenic_compute_center', 'particle_accelerator', 'launch_tower'] as const) {
+  it('all 9 T4 defs are present with tier 4', () => {
+    for (const id of ['fusion_core', 'pyroforge', 'cryogenic_compute_center', 'particle_accelerator', 'launch_tower', 'mass_driver', 'carbon_forge', 'tidal_array', 'sunspire'] as const) {
       expect(BUILDING_DEFS[id]).toBeDefined();
       expect(BUILDING_DEFS[id].tier).toBe(4);
     }
@@ -323,6 +328,10 @@ describe('step-12 T4 catalog (§6.5 / §9.5)', () => {
     expect(buildingUnlocked(30, 'cryogenic_compute_center')).toBe(true);
     expect(buildingUnlocked(30, 'particle_accelerator')).toBe(true);
     expect(buildingUnlocked(30, 'launch_tower')).toBe(true);
+    expect(buildingUnlocked(30, 'mass_driver')).toBe(true);
+    expect(buildingUnlocked(30, 'carbon_forge')).toBe(true);
+    expect(buildingUnlocked(30, 'tidal_array')).toBe(true);
+    expect(buildingUnlocked(30, 'sunspire')).toBe(true);
   });
 });
 
@@ -366,6 +375,88 @@ describe('canPlaceOnIsland (§9.5 / step 12)', () => {
 
   it('Cryogenic Compute Center: rejects artificial Arctic island', () => {
     expect(canPlaceOnIsland(BUILDING_DEFS.cryogenic_compute_center, fakeSpec('arctic', true))).toBe(false);
+  });
+
+  it('Mass Driver: places on natural Plains, rejects other biomes', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.mass_driver, fakeSpec('plains'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.mass_driver, fakeSpec('forest'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.mass_driver, fakeSpec('volcanic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.mass_driver, fakeSpec('arctic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.mass_driver, fakeSpec('coast'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.mass_driver, fakeSpec('desert'))).toBe(false);
+  });
+
+  it('Mass Driver: rejects artificial Plains island', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.mass_driver, fakeSpec('plains', true))).toBe(false);
+  });
+
+  it('Carbon Forge: places on natural Forest, rejects other biomes', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.carbon_forge, fakeSpec('forest'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.carbon_forge, fakeSpec('plains'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.carbon_forge, fakeSpec('volcanic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.carbon_forge, fakeSpec('arctic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.carbon_forge, fakeSpec('coast'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.carbon_forge, fakeSpec('desert'))).toBe(false);
+  });
+
+  it('Carbon Forge: rejects artificial Forest island', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.carbon_forge, fakeSpec('forest', true))).toBe(false);
+  });
+
+  it('Tidal Array: places on natural Coast, rejects other biomes', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.tidal_array, fakeSpec('coast'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.tidal_array, fakeSpec('plains'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.tidal_array, fakeSpec('forest'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.tidal_array, fakeSpec('volcanic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.tidal_array, fakeSpec('arctic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.tidal_array, fakeSpec('desert'))).toBe(false);
+  });
+
+  it('Tidal Array: rejects artificial Coast island', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.tidal_array, fakeSpec('coast', true))).toBe(false);
+  });
+
+  it('Sunspire: places on natural Desert, rejects other biomes', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.sunspire, fakeSpec('desert'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.sunspire, fakeSpec('plains'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.sunspire, fakeSpec('forest'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.sunspire, fakeSpec('volcanic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.sunspire, fakeSpec('arctic'))).toBe(false);
+    expect(canPlaceOnIsland(BUILDING_DEFS.sunspire, fakeSpec('coast'))).toBe(false);
+  });
+
+  it('Sunspire: rejects artificial Desert island', () => {
+    expect(canPlaceOnIsland(BUILDING_DEFS.sunspire, fakeSpec('desert', true))).toBe(false);
+  });
+});
+
+describe('§9.5 biome-locked uniques', () => {
+  it('mass_driver is T4, 4x4, Plains-locked', () => {
+    const def = BUILDING_DEFS.mass_driver;
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(16);
+    expect(def.requiredBiomes).toEqual(['plains']);
+  });
+  it('carbon_forge is T4, 3x3, Forest-locked, requires heat', () => {
+    const def = BUILDING_DEFS.carbon_forge;
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.requiredBiomes).toEqual(['forest']);
+    expect(def.requiresHeat).toBe(true);
+  });
+  it('tidal_array is T4, 3x3, Coast-locked, produces ≥ 10 MW', () => {
+    const def = BUILDING_DEFS.tidal_array;
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.requiredBiomes).toEqual(['coast']);
+    expect(def.power?.produces).toBeGreaterThanOrEqual(10000);
+  });
+  it('sunspire is T4, 3x3, Desert-locked, produces ≥ 10 MW', () => {
+    const def = BUILDING_DEFS.sunspire;
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.requiredBiomes).toEqual(['desert']);
+    expect(def.power?.produces).toBeGreaterThanOrEqual(10000);
   });
 });
 

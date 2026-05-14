@@ -102,6 +102,8 @@ export type ResourceId =
   | 'quantum_chip'
   | 'exotic_alloy'
   | 'ai_core'
+  // §9.5 Carbon Forge output — T4 component (Forest-unique)
+  | 'carbon_fiber'
   // T5 transcendent (§6.6) — partial step-13 catalog (raws/components needed
   // for the Reality Forge demo chain + T5 fuel). Full §6.6 raws deferred.
   | 'casimir_energy'
@@ -203,6 +205,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'quantum_chip',
   'exotic_alloy',
   'ai_core',
+  // §9.5 Carbon Forge output
+  'carbon_fiber',
   // T5 transcendent (§6.6) — step-13 partial catalog
   'casimir_energy',
   'reality_anchor',
@@ -301,6 +305,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   quantum_chip: 100,
   exotic_alloy: 100,
   ai_core: 100,
+  // §9.5 T4 component (Carbon Forge — Forest-unique)
+  carbon_fiber: 100,
   // T5 transcendent (§6.6) — partial step-13 catalog
   casimir_energy: 300,
   reality_anchor: 300,
@@ -683,6 +689,18 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { steel: 4, pig_iron: 4 },
     outputs: { quantum_chip: 1 },
     category: 'electronics',
+  },
+
+  // §9.5 Carbon Forge: produces Carbon Fiber. Optical/Glass fiber variants
+  // are separate-recipe deferrals (the 1:1 recipe-per-defId design ships a
+  // single output; carbon_fiber is the primary Forest bottleneck per §9.5).
+  // Optical fiber + glass fiber recipes can land later as separate def-ids
+  // if needed, or via a recipe-rotation extension.
+  carbon_forge: {
+    cycleSec: 600,
+    inputs: { wood: 5, coke: 2 },
+    outputs: { carbon_fiber: 1 },
+    category: 'smelting',
   },
 
   // ---------------------------------------------------------------------------

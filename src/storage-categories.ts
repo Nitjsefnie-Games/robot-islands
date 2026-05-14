@@ -120,6 +120,7 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   quantum_chip: 'components',   // T4 chip; brief locates it in components.
   exotic_alloy: 'rare',         // T4 alloy; brief locates it in rare.
   ai_core: 'rare',              // T4 component; brief locates it in rare.
+  carbon_fiber: 'rare',         // §9.5 T4 component; Forest-unique bottleneck output.
 
   // T5 transcendent — all rare except plasma_charge (T5 propellant/fuel).
   casimir_energy: 'rare',
