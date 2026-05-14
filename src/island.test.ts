@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  defaultTerrainAt,
   desaturate,
   lighten,
   tileBrightnessJitter,
@@ -177,5 +178,34 @@ describe('lighten', () => {
     expect(r).toBeLessThan(255);
     expect(g).toBeLessThan(255);
     expect(b).toBeLessThan(255);
+  });
+});
+
+describe('defaultTerrainAt — bootstrap seeds', () => {
+  it('home has at least 2 tree tiles (Logger requirement, §8.1)', () => {
+    const tiles: Array<[number, number]> = [];
+    for (let x = -14; x <= 14; x++) {
+      for (let y = -14; y <= 14; y++) {
+        if (defaultTerrainAt(x, y) === 'tree') tiles.push([x, y]);
+      }
+    }
+    expect(tiles.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('home has a 2x2 stone cluster (Quarry footprint, §8.1)', () => {
+    let found = false;
+    for (let x = -14; x <= 13 && !found; x++) {
+      for (let y = -14; y <= 13 && !found; y++) {
+        if (
+          defaultTerrainAt(x, y) === 'stone' &&
+          defaultTerrainAt(x + 1, y) === 'stone' &&
+          defaultTerrainAt(x, y + 1) === 'stone' &&
+          defaultTerrainAt(x + 1, y + 1) === 'stone'
+        ) {
+          found = true;
+        }
+      }
+    }
+    expect(found).toBe(true);
   });
 });

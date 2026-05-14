@@ -66,7 +66,11 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     initialMinorRadius: 14,
     powerSource: 'solar',
     defaultTerrain: 'grass',
-    rareTerrain: ['stone', 'ore', 'coal'],
+    // §8.1 bootstrap: Plains needs Logger access (tree) and stone access.
+    // Procedurally-settled Plains colonies inherit these rares via
+    // terrainAtForBiome scatter (not clustered, but present so 1x1 Loggers
+    // and singletons of stone are placeable).
+    rareTerrain: ['tree', 'stone', 'ore', 'coal'],
     displayName: 'Plains',
   },
   forest: {

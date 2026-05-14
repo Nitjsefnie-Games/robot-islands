@@ -202,6 +202,11 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   const stoneTiles: ReadonlyArray<readonly [number, number]> = [
     [-9, -2], [-8, 5], [3, 9], [7, -6], [10, 1], [-2, -10],
   ];
+  // §3.7 / §8.1 bootstrap seed: 2x2 stone cluster so a 2x2 Quarry can place.
+  // South-west safe zone, clear of every existing home building.
+  const stoneClusterTiles: ReadonlyArray<readonly [number, number]> = [
+    [-11, 4], [-10, 4], [-11, 5], [-10, 5],
+  ];
   // Ore vein cluster — needs to sit under the Mine (placed at top-left of a 2×2).
   const oreTiles: ReadonlyArray<readonly [number, number]> = [
     [-7, 2], [-6, 2], [-7, 3], [-6, 3], [-5, 2], [-5, 3],
@@ -216,6 +221,11 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   const coalTiles: ReadonlyArray<readonly [number, number]> = [
     [8, 5], [9, 5], [8, 6], [9, 6],
   ];
+  // §3.7 / §8.1 bootstrap seed: tree tiles so a 1x1 Logger can place.
+  // North-east safe zone, clear of every existing home building.
+  const treeTiles: ReadonlyArray<readonly [number, number]> = [
+    [6, -3], [7, -3], [6, -4],
+  ];
   // Small fresh-water cluster.
   const waterTiles: ReadonlyArray<readonly [number, number]> = [
     [-1, -5], [0, -5], [-1, -4], [0, -4],
@@ -223,6 +233,8 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
 
   for (const t of waterTiles) if (t[0] === x && t[1] === y) return 'water';
   for (const t of coalTiles) if (t[0] === x && t[1] === y) return 'coal';
+  for (const t of treeTiles) if (t[0] === x && t[1] === y) return 'tree';
+  for (const t of stoneClusterTiles) if (t[0] === x && t[1] === y) return 'stone';
   for (const t of oreTiles) if (t[0] === x && t[1] === y) return 'ore';
   for (const t of stoneTiles) if (t[0] === x && t[1] === y) return 'stone';
   return 'grass';

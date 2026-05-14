@@ -75,6 +75,9 @@ describe('BIOME_DEFS catalog', () => {
     expect(BIOME_DEFS.arctic.initialMajorRadius).toBe(10);
     expect(BIOME_DEFS.arctic.initialMinorRadius).toBe(10);
   });
+  it('Plains rareTerrain includes tree (§8.1 bootstrap)', () => {
+    expect(BIOME_DEFS.plains.rareTerrain).toContain('tree');
+  });
 });
 
 describe('MODIFIER_DEFS catalog', () => {
