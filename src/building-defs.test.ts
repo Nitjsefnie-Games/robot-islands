@@ -40,6 +40,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'blast_furnace',
   'steel_mill',
   'oxygen_converter',
+  'slag_reprocessor',
   'assembler',
   'fabricator',
   'precision_lab',
@@ -672,6 +673,26 @@ describe('chemical_reactor (§8.2 / §7.5)', () => {
   it('unlocks at level 1 of T2 (uses standard tier-2 unlock per §9.2)', () => {
     expect(buildingUnlocked(10, 'chemical_reactor')).toBe(true);
     expect(buildingUnlocked(1, 'chemical_reactor')).toBe(false);
+  });
+});
+
+describe('slag_reprocessor (§6.7 byproduct reprocessing)', () => {
+  it('ships as a T2 smelting def with 2x2 footprint', () => {
+    const def = BUILDING_DEFS.slag_reprocessor;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(2);
+    expect(def.category).toBe('smelting');
+    expect(def.footprint).toEqual(SHAPES.square2);
+  });
+  it('consumes slag and outputs all three trace minerals', () => {
+    const recipe = RECIPES.slag_reprocessor;
+    expect(recipe).toBeDefined();
+    expect(recipe!.inputs).toEqual({ slag: 10 });
+    expect(recipe!.outputs).toEqual({
+      gold_ore: 1,
+      silver_ore: 1,
+      rare_earth: 1,
+    });
   });
 });
 

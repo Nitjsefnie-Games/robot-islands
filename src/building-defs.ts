@@ -98,6 +98,7 @@ export type BuildingDefId =
   | 'blast_furnace'
   | 'steel_mill'
   | 'oxygen_converter'
+  | 'slag_reprocessor'
   | 'assembler'
   | 'fabricator'
   | 'precision_lab'
@@ -873,6 +874,24 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 40 },
     requiresHeat: true,
     placementCost: { steel: 10, gear: 5 },
+    glyph: '△',
+  },
+  // §6.7 Slag reprocessing: T2 smelting (2×2). Consumes accumulated slag
+  // (a steel_mill / blast_furnace byproduct) and recovers trace amounts
+  // of gold/silver/rare-earth ores per the §6.7 "low yield" spec literal.
+  // Power-driven (no heat-source adjacency required — this is electric
+  // arc / chemical separation, not direct smelting).
+  slag_reprocessor: {
+    id: 'slag_reprocessor',
+    displayName: 'Slag Reprocessor',
+    category: 'smelting',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x707080,        // slate-grey (industrial waste)
+    stroke: 0x303038,
+    power: { consumes: 100 },
+    // §14 placeholder — tune in Appendix A.
+    placementCost: { stone: 100, iron_ingot: 40, wood: 15 },
     glyph: '△',
   },
   assembler: {

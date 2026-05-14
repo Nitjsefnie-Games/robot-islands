@@ -627,6 +627,16 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { steel: 2 },
     category: 'smelting',
   },
+  // §6.7 Slag reprocessing — T2 smelting-byproduct refiner.
+  slag_reprocessor: {
+    cycleSec: 1200,        // slow — reflects "low yield" §6.7
+    inputs: { slag: 10 },  // batch input keeps the yield low
+    outputs: { gold_ore: 1, silver_ore: 1, rare_earth: 1 },
+    category: 'smelting',
+    // §6.7 "trace minerals at low yield": 10 slag in, one of each trace
+    // mineral out. Tune yields in Appendix A balance pass; this matches
+    // the spec's "low yield" qualifier (1/30 = 3.3% per slag unit).
+  },
 
   // T2 manufacturing — rebalanced for idle-game scale, step #19 (×40)
   assembler: {
