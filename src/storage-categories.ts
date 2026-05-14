@@ -121,6 +121,13 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   exotic_alloy: 'rare',         // T4 alloy; brief locates it in rare.
   ai_core: 'rare',              // T4 component; brief locates it in rare.
   carbon_fiber: 'rare',         // §9.5 T4 component; Forest-unique bottleneck output.
+  // §6.4 T3 mineral raws (for slag reprocessing + nuclear fuel)
+  gold_ore: 'dry_goods',
+  silver_ore: 'dry_goods',
+  rare_earth: 'dry_goods',
+  uranium_ore: 'dry_goods',
+  // §6.6 T5 component (memetic core)
+  memetic_core: 'rare',
 
   // T5 transcendent — all rare except plasma_charge (T5 propellant/fuel).
   casimir_energy: 'rare',

@@ -48,6 +48,11 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   sand: 'raw',
   salt: 'raw',
   quartz: 'raw',
+  // §6.4 T3 mineral raws (for slag reprocessing + nuclear fuel)
+  gold_ore: 'raw',
+  silver_ore: 'raw',
+  rare_earth: 'raw',
+  uranium_ore: 'raw',
   // Liquids (Fuel/Liquid takes precedence over Raw)
   fresh_water: 'liquid',
   saltwater: 'liquid',
@@ -97,6 +102,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   reality_anchor: 'rare',
   eldritch_processor: 'rare',
   phase_converter: 'rare',
+  // §6.6 T5 component (memetic core)
+  memetic_core: 'rare',
   aetheric_current: 'rare',
   tachyon_stream: 'rare',
   dark_matter: 'rare',

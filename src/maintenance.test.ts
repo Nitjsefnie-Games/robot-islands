@@ -14,6 +14,7 @@ import {
   MAINTENANCE_DEGRADE_DURATION_MS,
   MAINTENANCE_RAMP_SEGMENTS,
   MAINTENANCE_THRESHOLD_MS_BY_TIER,
+  MAINTENANCE_RECIPES,
   accrueOperatingTime,
   maintenanceFactor,
   nextMaintenanceBoundaryMs,
@@ -47,6 +48,14 @@ function blankInventory(): Record<ResourceId, number> {
 
 const T1_THRESHOLD = MAINTENANCE_THRESHOLD_MS_BY_TIER[1];
 const HOUR = 60 * 60 * 1000;
+
+it('T6 maintenance recipe matches §4.7 spec literal (memetic_core, not stand-in)', () => {
+  expect(MAINTENANCE_RECIPES[6]).toEqual({
+    lubricant: 25,
+    reality_anchor: 1,
+    memetic_core: 1,
+  });
+});
 
 describe('maintenanceFactor', () => {
   it('returns 1.0 at operatingMs = 0', () => {

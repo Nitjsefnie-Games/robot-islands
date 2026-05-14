@@ -57,8 +57,7 @@ export const MAINTENANCE_DEGRADE_DURATION_MS = 4 * 60 * 60 * 1000;
  *    - T3: spec says "1 Electric motor + 1 Capacitor" — neither in our
  *      catalog yet; sub 1 microchip + 1 quantum_chip to keep T3 maintenance
  *      meaningfully more demanding than T2 without inventing resources.
- *    - T6: spec says "1 Memetic Core" — not in our catalog; sub
- *      1 eldritch_processor (T5 component already paired with reality_anchor).
+ *    - T6 maintenance matches §4.7 spec literal.
  *
  *  Lubricant counts match §4.7 literally for every tier. */
 export const MAINTENANCE_RECIPES: Readonly<Record<Tier, Partial<Record<ResourceId, number>>>> = {
@@ -73,9 +72,8 @@ export const MAINTENANCE_RECIPES: Readonly<Record<Tier, Partial<Record<ResourceI
   3: { lubricant: 5, microchip: 1, quantum_chip: 1 },
   4: { lubricant: 10, exotic_alloy: 1, microchip: 1 },
   5: { lubricant: 15, phase_converter: 1, eldritch_processor: 1 },
-  // T6: spec literal is `25 Lubricant + 1 Reality Anchor fragment + 1 Memetic Core`;
-  // memetic_core TBD, reuse eldritch_processor as a stand-in T5+ component.
-  6: { lubricant: 25, reality_anchor: 1, eldritch_processor: 1 },
+  // T6 maintenance matches §4.7 spec literal.
+  6: { lubricant: 25, reality_anchor: 1, memetic_core: 1 },
 };
 
 /**

@@ -96,6 +96,13 @@ export type ResourceId =
   | 'cryo_coolant'
   | 'aviation_kerosene'
   | 'microchip'
+  // §6.4 T3 mineral raws (for slag reprocessing + nuclear fuel)
+  | 'gold_ore'
+  | 'silver_ore'
+  | 'rare_earth'
+  | 'uranium_ore'
+  // §6.6 T5 component (memetic core)
+  | 'memetic_core'
   // T4 endgame (§6.5)
   | 'helium_3'
   | 'cryogenic_hydrogen'
@@ -200,6 +207,13 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'cryo_coolant',
   'aviation_kerosene',
   'microchip',
+  // §6.4 T3 mineral raws (for slag reprocessing + nuclear fuel)
+  'gold_ore',
+  'silver_ore',
+  'rare_earth',
+  'uranium_ore',
+  // §6.6 T5 component (memetic core)
+  'memetic_core',
   'helium_3',
   'cryogenic_hydrogen',
   'quantum_chip',
@@ -299,6 +313,13 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   cryo_coolant: 30,
   aviation_kerosene: 30,
   microchip: 30,
+  // §6.4 T3 mineral raws (for slag reprocessing + nuclear fuel)
+  gold_ore: 30,
+  silver_ore: 30,
+  rare_earth: 30,
+  uranium_ore: 30,
+  // §6.6 T5 component (memetic core)
+  memetic_core: 300,
   // T4 endgame (§6.5)
   helium_3: 100,
   cryogenic_hydrogen: 100,

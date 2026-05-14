@@ -30,6 +30,29 @@ import {
   type ResourceId,
 } from './recipes.js';
 
+describe('Catalog additions (§6.4 T3 raws + §6.6 T5 memetic_core)', () => {
+  it('includes gold_ore as a T3 dry_goods raw with xp_weight 30', () => {
+    expect(ALL_RESOURCES).toContain('gold_ore' as ResourceId);
+    expect(XP_WEIGHT.gold_ore).toBe(30);
+  });
+  it('includes silver_ore as T3 dry_goods raw', () => {
+    expect(ALL_RESOURCES).toContain('silver_ore' as ResourceId);
+    expect(XP_WEIGHT.silver_ore).toBe(30);
+  });
+  it('includes rare_earth as T3 dry_goods raw', () => {
+    expect(ALL_RESOURCES).toContain('rare_earth' as ResourceId);
+    expect(XP_WEIGHT.rare_earth).toBe(30);
+  });
+  it('includes uranium_ore as T3 dry_goods raw', () => {
+    expect(ALL_RESOURCES).toContain('uranium_ore' as ResourceId);
+    expect(XP_WEIGHT.uranium_ore).toBe(30);
+  });
+  it('includes memetic_core as T5 rare with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('memetic_core' as ResourceId);
+    expect(XP_WEIGHT.memetic_core).toBe(300);
+  });
+});
+
 describe('recipe graph completeness (step 18)', () => {
   // Build the set of all resources that appear as a recipe output. T0
   // raws (Mine, Logger, Well, Pump Jack, etc.) emit themselves as
