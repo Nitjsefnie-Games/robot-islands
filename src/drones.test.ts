@@ -563,6 +563,26 @@ describe('dispatchDrone — §11.7 tier-matched fuel', () => {
     expect(r.drone.fuelResource).toBe('cryogenic_hydrogen');
     expect(home.inventory.cryogenic_hydrogen).toBe(40);
   });
+
+  it("§11.5 drone tier matches launching island's tier (L5 → T2)", () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 5 }); // tierForLevel(5) = 2
+    home.inventory.diesel = 50;
+    const r = dispatchDrone(world, home, 0, 0, 1, 0, 20, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.drone.tier).toBe(2);
+  });
+
+  it("§11.5 drone tier matches launching island's tier (L30 → T4)", () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 30 }); // tierForLevel(30) = 4
+    home.inventory.cryogenic_hydrogen = 50;
+    const r = dispatchDrone(world, home, 0, 0, 1, 0, 10, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.drone.tier).toBe(4);
+  });
 });
 
 // ---------------------------------------------------------------------------

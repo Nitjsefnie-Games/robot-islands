@@ -94,9 +94,7 @@ export const DRONE_TIER_MULTIPLIERS: Record<DroneTier, number> = {
   6: 0.2,
 };
 
-/** Step-6 drone tier (single class). Drone Pad nominally T2, but the engine
- *  carries the tier as data — easy to widen when more pads come online. */
-const STEP6_DRONE_TIER: DroneTier = 2;
+
 
 /** Minimum / maximum biofuel the launch UI lets the player commit per drone.
  *  Chosen so the demo islands `hidden-w` (50 tiles) and `hidden-s` (~78 tiles)
@@ -275,7 +273,11 @@ export function dispatchDrone(
   const efficiency = isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY;
   const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
   const scanRadius = isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES;
-  const tier: DroneTier = isPathDrawn ? 5 : STEP6_DRONE_TIER;
+  // §11.5: tier matches the launching island's tier. T5 is the path-drawn
+  // branch; non-path drones inherit the island's current tier (T2 at L5,
+  // T3 at L15, T4 at L30). T1 islands don't have Drone Pads yet so the
+  // value won't reach this site in practice; clamping isn't necessary.
+  const tier: DroneTier = isPathDrawn ? 5 : tierForLevel(origin.level);
 
   let outboundTiles: number;
   let travelSec: number;
