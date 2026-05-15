@@ -1187,6 +1187,7 @@ async function main(): Promise<void> {
       const isLatticeIsland = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(s.id);
       const crossIsland = crossIslandById.get(s.id);
       const cableInflowW = cableInflowForIsland(worldState, islandStates, s.id);
+      const geothermalActive = spec?.modifiers.includes('geothermal_active') === true;
       advanceIsland(s, now, {
         modifierMul: modifierMulFor(s.id),
         specMul: specMulFor(s),
@@ -1196,6 +1197,8 @@ async function main(): Promise<void> {
         crossIsland,
         caps: isLatticeIsland ? unifiedCaps : undefined,
         cableInflowW,
+        worldSeed: worldState.seed,
+        geothermalActive,
       });
       const { net, power } = computeRates(s, {
         modifierMul: modifierMulFor(s.id),
@@ -1206,6 +1209,7 @@ async function main(): Promise<void> {
         crossIsland,
         caps: isLatticeIsland ? unifiedCaps : undefined,
         cableInflowW,
+        geothermalActive,
       });
       islandNets.set(s.id, net);
       islandPower.set(s.id, power);
@@ -1330,6 +1334,7 @@ async function main(): Promise<void> {
     const postTickActiveP = activeSpec();
     const postTickLattice = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(postTickActiveS.id);
     const postTickCableInflowW = cableInflowForIsland(worldState, islandStates, postTickActiveS.id);
+    const postTickGeothermal = postTickActiveP?.modifiers.includes('geothermal_active') === true;
     const { net: postNet, power: postPower } = computeRates(postTickActiveS, {
       modifierMul: modifierMulFor(postTickActiveS.id),
       specMul: specMulFor(postTickActiveS),
@@ -1339,6 +1344,8 @@ async function main(): Promise<void> {
       crossIsland: crossIslandById.get(postTickActiveS.id),
       caps: postTickLattice ? unifiedCaps : undefined,
       cableInflowW: postTickCableInflowW,
+      geothermalActive: postTickGeothermal,
+      accelerationMul: postTickActiveS.accelerationRemainingMin > 0 ? 3 : 1,
     });
     islandNets.set(activeIslandId, postNet);
     islandPower.set(activeIslandId, postPower);
@@ -1351,6 +1358,7 @@ async function main(): Promise<void> {
     const activeS = activeState();
     const activeP = activeSpec();
     const activeLattice = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(activeS.id);
+    const activeGeothermal = activeP?.modifiers.includes('geothermal_active') === true;
     if (activeLattice) {
       // Refresh the active island's net/power with unified inventory so the HUD
       // reads the same cross-island state that advanceIsland used.
@@ -1364,6 +1372,8 @@ async function main(): Promise<void> {
         crossIsland: crossIslandById.get(activeS.id),
         caps: unifiedCaps,
         cableInflowW: activeCableInflowW,
+        geothermalActive: activeGeothermal,
+        accelerationMul: activeS.accelerationRemainingMin > 0 ? 3 : 1,
       });
       islandNets.set(activeS.id, activeNet);
       islandPower.set(activeS.id, activePower);

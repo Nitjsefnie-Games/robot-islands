@@ -1462,4 +1462,19 @@ describe('§14.4 commPackets persistence', () => {
     const { world: restored } = deserializeWorld(legacy, 0, 0);
     expect(restored.commPackets).toEqual([]);
   });
+
+  it('backfills missing declaredAt to null instead of NaN', () => {
+    const world = makeInitialWorld(0);
+    const home = makeIslandState();
+    const states = new Map<string, IslandState>([['home', home]]);
+    const snap = serializeWorld(world, states, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    // Simulate a legacy snapshot that omits declaredAt entirely.
+    const entry = json.islandStates[0]!;
+    delete (entry.state as { declaredAt?: unknown }).declaredAt;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    const r = restored.get('home')!;
+    expect(r.declaredAt).toBeNull();
+    expect(Number.isNaN(r.declaredAt as unknown as number)).toBe(false);
+  });
 });

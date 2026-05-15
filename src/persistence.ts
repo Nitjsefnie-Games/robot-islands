@@ -558,6 +558,15 @@ export function deserializeWorld(
       typeof (s as { singularityStoredWs?: unknown }).singularityStoredWs === 'number'
         ? (s as { singularityStoredWs: number }).singularityStoredWs
         : 0;
+    // Forward-compat backfill: `declaredAt` added after v3. A snapshot
+    // missing the field must backfill to `null`, not `undefined`, so the
+    // `null + perfShift` guard below doesn't produce NaN.
+    const declaredAt =
+      'declaredAt' in s &&
+      (typeof (s as { declaredAt?: unknown }).declaredAt === 'number' ||
+        (s as { declaredAt?: unknown }).declaredAt === null)
+        ? (s as { declaredAt: number | null }).declaredAt
+        : null;
     const live: IslandState = {
       ...s,
       // Defensive inventory + storageCaps + funnelPending clones so the
@@ -575,7 +584,7 @@ export function deserializeWorld(
       // so the 24-hour cooldown gate reads a real elapsed value after a
       // reload. Null-preserving: a fresh island has both null and must
       // survive deserialize as null (null + number would be NaN).
-      declaredAt: s.declaredAt === null ? null : s.declaredAt + perfShift,
+      declaredAt: declaredAt === null ? null : declaredAt + perfShift,
       lastResetAt: lastResetAt === null ? null : lastResetAt + perfShift,
       timeLockBankedMin,
       accelerationQueue,

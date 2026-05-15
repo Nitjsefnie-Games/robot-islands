@@ -999,6 +999,43 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     expect(hotRate?.effectiveRate).toBeCloseTo(1 / 480, 9); // blast_furnace cycleSec = 480
   });
 
+  it('advanceIsland respects geothermalActive for requiresHeat buildings', () => {
+    const BF: PlacedBuilding = { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 };
+    const noPowerBf = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.blast_furnace;
+      base.blast_furnace = rest as BuildingDef;
+      return base;
+    })();
+    const state = makeState({
+      buildings: [BF],
+      inventory: {
+        ...blankInventory(),
+        iron_ingot: 1000,
+        coke: 1000,
+      },
+      storageCaps: blankCaps(10_000),
+      level: 5,
+    });
+    // Without geothermalActive, the BF stalls — no production over 60s.
+    advanceIsland(state, 60_000, { defs: noPowerBf });
+    expect(state.inventory.steel ?? 0).toBe(0);
+
+    // With geothermalActive=true, the BF produces steel despite no heat-source neighbor.
+    const state2 = makeState({
+      buildings: [BF],
+      inventory: {
+        ...blankInventory(),
+        iron_ingot: 1000,
+        coke: 1000,
+      },
+      storageCaps: blankCaps(10_000),
+      level: 5,
+    });
+    advanceIsland(state2, 60_000, { defs: noPowerBf, geothermalActive: true });
+    expect(state2.inventory.pig_iron ?? 0).toBeGreaterThan(0);
+  });
+
   it('Aetheric Anomaly gives T5 extractor 1.5× rate', () => {
     const conduit: PlacedBuilding = { id: 'b-ac', defId: 'aetheric_conduit', x: 0, y: 0 };
     const state = makeState({
@@ -2570,5 +2607,37 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
     // Base rate = 1/800 = 0.00125. No other multipliers apply in this fixture.
     expect(rateB).toBeCloseTo(0.00125, 9);
     expect(rateA).toBeCloseTo(rateB * 0.5, 9);
+  });
+
+  it('advanceIsland actually triggers toxicity rolls when worldSeed is threaded', () => {
+    // Seed 'test13' deterministically triggers reactor-a at hour 1.
+    const reactorA: PlacedBuilding = { id: 'reactor-a', defId: 'chemical_reactor', x: 0, y: 0 };
+    const reactorB: PlacedBuilding = { id: 'reactor-b', defId: 'chemical_reactor', x: 2, y: 0 };
+    const startMs = 0;
+    const futureMs = 2 * 60 * 60 * 1000; // 2 hours — crosses hour 1 boundary
+
+    const state = makeState({
+      buildings: [reactorA, reactorB],
+      inventory: { ...blankInventory(), salt: 1000, fresh_water: 1000 },
+      level: 5,
+      lastTick: startMs,
+    });
+
+    const noPower = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.chemical_reactor;
+      base.chemical_reactor = rest as BuildingDef;
+      return base;
+    })();
+
+    advanceIsland(state, futureMs, { defs: noPower, worldSeed: 'test13' });
+
+    const a = state.buildings.find((b) => b.id === 'reactor-a')!;
+    const b = state.buildings.find((b) => b.id === 'reactor-b')!;
+    // At least one reactor should have been triggered.
+    const anyTriggered =
+      (a.toxicityExpiryMs !== undefined && a.toxicityExpiryMs > startMs) ||
+      (b.toxicityExpiryMs !== undefined && b.toxicityExpiryMs > startMs);
+    expect(anyTriggered).toBe(true);
   });
 });
