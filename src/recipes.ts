@@ -239,7 +239,7 @@ export type ResourceId =
   //   orbital_insertion_package — §14.7 "T6 Foundation-Kit equivalent" —
   //                              every launch requires one alongside fuel +
   //                              variant recipe. Crafted at
-  //                              `orbital_insertion_assembly` (T6).
+  //                              `oip_assembly` (T6).
   | 'ascendant_core'
   | 'antimatter_propellant'
   | 'scanner_sat'
@@ -1907,44 +1907,52 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // §14.3 / §14.10: Scanner Sat Assembly. 1-hour cycle.
+  // §14.3 / §14.10: Scanner Sat Assembly. 30-min cycle.
   scanner_sat_assembly: {
-    cycleSec: 3600,
-    inputs: { exotic_alloy: 4, ai_core: 2, spacetime_fragment: 1, steel: 50, orbital_insertion_package: 1 },
+    cycleSec: 1800,
+    inputs: { exotic_alloy: 4, ai_core: 2, spacetime_fragment: 1, aluminum: 50, orbital_insertion_package: 1 },
     outputs: { scanner_sat: 1 },
     category: 'manufacturing',
   },
 
-  // §14.3 / §14.10: Comm Sat Assembly. 1-hour cycle.
+  // §14.3 / §14.10: Comm Sat Assembly. 30-min cycle.
   comm_sat_assembly: {
-    cycleSec: 3600,
-    inputs: { exotic_alloy: 6, ai_core: 1, wire: 200, orbital_insertion_package: 1 },
+    cycleSec: 1800,
+    inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 200, orbital_insertion_package: 1 },
     outputs: { comm_sat: 1 },
     category: 'manufacturing',
   },
 
-  // §14.3 / §14.10: Sweeper Sat Assembly. 1-hour cycle.
+  // §14.3 / §14.10: Sweeper Sat Assembly. 30-min cycle.
   sweeper_sat_assembly: {
-    cycleSec: 3600,
-    inputs: { exotic_alloy: 4, ai_core: 1, steel: 100, gear: 20, orbital_insertion_package: 1 },
+    cycleSec: 1800,
+    inputs: { exotic_alloy: 4, ai_core: 1, carbon_steel: 100, magnet: 20, orbital_insertion_package: 1 },
     outputs: { sweeper_sat: 1 },
     category: 'manufacturing',
   },
 
-  // §14.7 / §14.10: Orbital Insertion Assembly produces the T6 Foundation-
-  // Kit-equivalent payload required by every §14.7 launch. 30-min cycle.
-  orbital_insertion_assembly: {
+  // §14.7 / §14.10: OIP Assembly produces the T6 Foundation-Kit-equivalent
+  // payload required by every §14.7 launch. 30-min cycle.
+  oip_assembly: {
     cycleSec: 1800,
-    inputs: { iron_ingot: 100, stone: 30, glass: 20, pcb: 10, ai_core: 5 },
+    inputs: { iron_ingot: 100, brick: 30, glass: 20, carbon_fiber: 10, ai_core: 5 },
     outputs: { orbital_insertion_package: 1 },
     category: 'manufacturing',
   },
 
-  // §14.12 / §14.10: Repair Pack Assembly. 30-min cycle.
+  // §14.12 / §14.10: Repair Pack Assembly. 10-min cycle.
   repair_pack_assembly: {
-    cycleSec: 1800,
-    inputs: { steel: 50, gear: 10, exotic_alloy: 2, microchip: 5 },
+    cycleSec: 600,
+    inputs: { exotic_alloy: 1, lubricant: 5, microchip: 5 },
     outputs: { repair_pack: 1 },
+    category: 'manufacturing',
+  },
+
+  // §14.12 / §14.10: Repair Drone Assembly. 20-min cycle.
+  repair_drone_assembly: {
+    cycleSec: 1200,
+    inputs: { exotic_alloy: 2, carbon_steel: 50, foundation_kit: 1 },
+    outputs: { repair_drone: 1 },
     category: 'manufacturing',
   },
 

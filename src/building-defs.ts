@@ -176,9 +176,10 @@ export type BuildingDefId =
   | 'antimatter_refinery'
   | 'scanner_sat_assembly'
   | 'comm_sat_assembly'
-  | 'orbital_insertion_assembly'
   | 'sweeper_sat_assembly'
+  | 'oip_assembly'
   | 'repair_pack_assembly'
+  | 'repair_drone_assembly'
   // Step-18 recipe-graph closure (§7.1-§7.12). One defId per recipe
   // since the engine's 1:1 recipe-per-defId model doesn't support
   // multi-recipe-per-building selection without infra changes.
@@ -2004,90 +2005,88 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '✦',
   },
   // §14.3 / §14.10: Scanner Sat Assembly — produces Scanner Sat payloads
-  // for §14.3 discovery + weather observation. Recipe:
-  // `4 exotic_alloy + 2 ai_core + 1 spacetime_fragment + 50 steel + 1
-  // orbital_insertion_package` on a 60-min (3600s) cycle.
+  // for §14.3 discovery + weather observation.
   scanner_sat_assembly: {
     id: 'scanner_sat_assembly',
     displayName: 'Scanner Sat Assembly',
     category: 'manufacturing',
     tier: 6,
     footprint: SHAPES.square3,
-    fill: 0x80a0c0, // pale instrument blue
+    fill: 0x4080a0,
     stroke: 0x20303a,
-    power: { consumes: 2000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { antimatter_propellant: 75, steel: 150, reality_anchor: 75 },
+    power: { consumes: 600 },
+    placementCost: { steel: 250, microchip: 60, glass: 30 },
     glyph: '◇',
   },
   // §14.3 / §14.10: Comm Sat Assembly — produces Comm Sat payloads for
-  // §14.4 comm-graph extension. Recipe:
-  // `6 exotic_alloy + 1 ai_core + 200 wire + 1 orbital_insertion_package`
-  // on a 60-min (3600s) cycle.
+  // §14.4 comm-graph extension.
   comm_sat_assembly: {
     id: 'comm_sat_assembly',
     displayName: 'Comm Sat Assembly',
     category: 'manufacturing',
     tier: 6,
     footprint: SHAPES.square3,
-    fill: 0xa0c080, // pale antenna green
+    fill: 0xa040c0,
     stroke: 0x303a20,
-    power: { consumes: 2000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { antimatter_propellant: 75, steel: 150, reality_anchor: 75 },
+    power: { consumes: 600 },
+    placementCost: { steel: 250, microchip: 60, glass: 30 },
     glyph: '◇',
   },
-  // §14.7 / §14.10: Orbital Insertion Assembly — produces Orbital
-  // Insertion Packages (T6 Foundation-Kit equivalent). Every §14.7
-  // satellite launch requires one alongside fuel + variant recipe. Recipe:
-  // `100 iron_ingot + 30 stone + 20 glass + 10 pcb + 5 ai_core` on a
-  // 30-min (1800s) cycle.
-  orbital_insertion_assembly: {
-    id: 'orbital_insertion_assembly',
-    displayName: 'Orbital Insertion Assembly',
-    category: 'manufacturing',
-    tier: 6,
-    footprint: SHAPES.square3,
-    fill: 0xc0a060, // bronze
-    stroke: 0x403014,
-    power: { consumes: 1500 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { antimatter_propellant: 75, steel: 150, reality_anchor: 75 },
-    glyph: '⚙',
-  },
   // §14.3 / §14.10: Sweeper Sat Assembly — produces Sweeper Sat payloads
-  // for §14.8 debris-field / Kessler-cascade clearing. Recipe:
-  // `4 exotic_alloy + 1 ai_core + 100 steel + 20 gear + 1
-  // orbital_insertion_package` on a 60-min (3600s) cycle.
+  // for §14.8 debris-field / Kessler-cascade clearing.
   sweeper_sat_assembly: {
     id: 'sweeper_sat_assembly',
     displayName: 'Sweeper Sat Assembly',
     category: 'manufacturing',
     tier: 6,
     footprint: SHAPES.square3,
-    fill: 0x80a0a0, // pale teal
+    fill: 0x709020,
     stroke: 0x203030,
-    power: { consumes: 2000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { antimatter_propellant: 75, steel: 150, reality_anchor: 75 },
+    power: { consumes: 600 },
+    placementCost: { steel: 250, microchip: 60, glass: 30 },
     glyph: '◇',
   },
+  // §14.7 / §14.10: OIP Assembly — produces Orbital Insertion Packages
+  // (T6 Foundation-Kit equivalent). Every §14.7 satellite launch requires
+  // one alongside fuel + variant recipe.
+  oip_assembly: {
+    id: 'oip_assembly',
+    displayName: 'OIP Assembly',
+    category: 'manufacturing',
+    tier: 6,
+    footprint: SHAPES.square3,
+    fill: 0x408060,
+    stroke: 0x403014,
+    power: { consumes: 600 },
+    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    glyph: '⚙',
+  },
   // §14.12 / §14.10: Repair Pack Assembly — produces Repair Pack consumables
-  // for orbital drone repair operations. Recipe:
-  // `50 steel + 10 gear + 2 exotic_alloy + 5 microchip` on a 30-min (1800s)
-  // cycle.
+  // for orbital drone repair operations.
   repair_pack_assembly: {
     id: 'repair_pack_assembly',
     displayName: 'Repair Pack Assembly',
     category: 'manufacturing',
     tier: 6,
-    footprint: SHAPES.square2,
-    fill: 0xc08060, // warm copper
+    footprint: SHAPES.square3,
+    fill: 0x806040,
     stroke: 0x402818,
-    power: { consumes: 1200 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { antimatter_propellant: 50, steel: 100, reality_anchor: 50 },
+    power: { consumes: 600 },
+    placementCost: { steel: 250, microchip: 60, glass: 30 },
     glyph: '⚙',
+  },
+  // §14.12 / §14.10: Repair Drone Assembly — produces Repair Drone units.
+  repair_drone_assembly: {
+    id: 'repair_drone_assembly',
+    displayName: 'Repair Drone Assembly',
+    category: 'manufacturing',
+    tier: 6,
+    footprint: SHAPES.square3,
+    fill: 0xa06060,
+    stroke: 0x402020,
+    power: { consumes: 600 },
+    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    glyph: '◇',
   },
   // -------------------------------------------------------------------------
   // Step-18 recipe-graph closure (§7.1-§7.12)

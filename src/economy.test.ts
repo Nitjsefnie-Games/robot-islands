@@ -1950,7 +1950,10 @@ describe('step-20 T6 gate composition (§14.1)', () => {
     expect(list).toContain('antimatter_refinery');
     expect(list).toContain('scanner_sat_assembly');
     expect(list).toContain('comm_sat_assembly');
-    expect(list).toContain('orbital_insertion_assembly');
+    expect(list).toContain('sweeper_sat_assembly');
+    expect(list).toContain('oip_assembly');
+    expect(list).toContain('repair_pack_assembly');
+    expect(list).toContain('repair_drone_assembly');
     // T5 ascendant_assembly also in the list (needed to craft ascendant_core).
     expect(list).toContain('ascendant_assembly');
   });
@@ -1973,7 +1976,10 @@ describe('step-20 T6 gate composition (§14.1)', () => {
     expect(list).not.toContain('antimatter_refinery');
     expect(list).not.toContain('scanner_sat_assembly');
     expect(list).not.toContain('comm_sat_assembly');
-    expect(list).not.toContain('orbital_insertion_assembly');
+    expect(list).not.toContain('sweeper_sat_assembly');
+    expect(list).not.toContain('oip_assembly');
+    expect(list).not.toContain('repair_pack_assembly');
+    expect(list).not.toContain('repair_drone_assembly');
   });
 });
 
