@@ -1847,7 +1847,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   memory_lab: {
     cycleSec: 500,
     inputs: { pcb: 1, transistor: 4, capacitor: 4, resistor: 4, solder: 1 },
-    outputs: { memory_module: 1 },
+    // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
+    outputs: { memory_module: 2 },
     category: 'electronics',
   },
   drilling_rig: {
@@ -2035,14 +2036,16 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // rebalanced step-19 idle-game scale (missed in original sweep)
     cycleSec: 1200,
     inputs: { circuit_board: 2, microchip: 4, exotic_alloy: 1 },
-    outputs: { processor: 1 },
+    // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
+    outputs: { processor: 2 },
     category: 'electronics',
   },
   compute_module_fab: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
     cycleSec: 1200,
     inputs: { processor: 2, circuit_board: 4, quantum_chip: 1 },
-    outputs: { computing_module: 1 },
+    // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
+    outputs: { computing_module: 2 },
     category: 'electronics',
   },
   // Phase 6 — T2 mechanical components (§6.3 / §7.1)
