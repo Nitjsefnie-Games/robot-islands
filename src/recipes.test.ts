@@ -1449,6 +1449,42 @@ describe('§6.5 T4 endgame components (Task 11.4)', () => {
   });
 });
 
+describe('§6.6 T5 components — probability_calculator + dimensional_fold + causal_regulator (Task 12.2)', () => {
+  it('probability_calculator is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('probability_calculator' as ResourceId);
+    expect(XP_WEIGHT.probability_calculator).toBe(300);
+  });
+  it('dimensional_fold is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('dimensional_fold' as ResourceId);
+    expect(XP_WEIGHT.dimensional_fold).toBe(300);
+  });
+  it('causal_regulator is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('causal_regulator' as ResourceId);
+    expect(XP_WEIGHT.causal_regulator).toBe(300);
+  });
+  it('probability_calculator_lab recipe: quantum_chip + casimir_energy + ai_core → probability_calculator', () => {
+    expect(RECIPES.probability_calculator_lab).toBeDefined();
+    expect(RECIPES.probability_calculator_lab!.inputs).toEqual({ quantum_chip: 4, casimir_energy: 1, ai_core: 1 });
+    expect(RECIPES.probability_calculator_lab!.outputs).toEqual({ probability_calculator: 1 });
+    expect(RECIPES.probability_calculator_lab!.cycleSec).toBe(1800);
+    expect(RECIPES.probability_calculator_lab!.category).toBe('manufacturing');
+  });
+  it('dimensional_fold_lab recipe: spacetime_fragment + exotic_alloy + eldritch_processor → dimensional_fold', () => {
+    expect(RECIPES.dimensional_fold_lab).toBeDefined();
+    expect(RECIPES.dimensional_fold_lab!.inputs).toEqual({ spacetime_fragment: 1, exotic_alloy: 2, eldritch_processor: 1 });
+    expect(RECIPES.dimensional_fold_lab!.outputs).toEqual({ dimensional_fold: 1 });
+    expect(RECIPES.dimensional_fold_lab!.cycleSec).toBe(1800);
+    expect(RECIPES.dimensional_fold_lab!.category).toBe('manufacturing');
+  });
+  it('causal_regulator_lab recipe: time_crystal + phase_converter + reality_anchor → causal_regulator', () => {
+    expect(RECIPES.causal_regulator_lab).toBeDefined();
+    expect(RECIPES.causal_regulator_lab!.inputs).toEqual({ time_crystal: 1, phase_converter: 2, reality_anchor: 1 });
+    expect(RECIPES.causal_regulator_lab!.outputs).toEqual({ causal_regulator: 1 });
+    expect(RECIPES.causal_regulator_lab!.cycleSec).toBe(1800);
+    expect(RECIPES.causal_regulator_lab!.category).toBe('manufacturing');
+  });
+});
+
 describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
   it('zero_point_flux is in ALL_RESOURCES with xp_weight 300', () => {
     expect(ALL_RESOURCES).toContain('zero_point_flux' as ResourceId);

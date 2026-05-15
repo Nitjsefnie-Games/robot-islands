@@ -990,6 +990,30 @@ describe('step-20 T5→T6 Ascendant Assembly (§13.4)', () => {
   });
 });
 
+describe('§7.12 probability_calculator_lab + dimensional_fold_lab + causal_regulator_lab (Task 12.2)', () => {
+  it('probability_calculator_lab is T5, 3x3, manufacturing category', () => {
+    const def = BUILDING_DEFS.probability_calculator_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('dimensional_fold_lab is T5, 3x3, manufacturing category', () => {
+    const def = BUILDING_DEFS.dimensional_fold_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('causal_regulator_lab is T5, 3x3, manufacturing category', () => {
+    const def = BUILDING_DEFS.causal_regulator_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+});
+
 describe('§8.10 zero_point_extractor + neutronium_extractor (T5 field extractors)', () => {
   it('zero_point_extractor is T5, 2x2, extraction category, no requiredTile', () => {
     const def = BUILDING_DEFS.zero_point_extractor;
