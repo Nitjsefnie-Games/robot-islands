@@ -246,6 +246,8 @@ export type ResourceId =
   | 'time_crystal'
   // Phase 11 — T4 endgame (Task 11.2)
   | 'antimatter_capsule'
+  // Phase 11 — T4 endgame (Task 11.3)
+  | 'nuclear_fuel_rod'
   // Phase 10 — T3 minerals + alloy (Task 10.1)
   | 'mercury'
   // Phase 10 — T3 minerals + alloy (Task 10.2)
@@ -447,6 +449,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'time_crystal',
   // Phase 11 — T4 endgame (Task 11.2)
   'antimatter_capsule',
+  // Phase 11 — T4 endgame (Task 11.3)
+  'nuclear_fuel_rod',
   // Phase 10 — T3 minerals + alloy (Task 10.1)
   'mercury',
   // Phase 10 — T3 minerals + alloy (Task 10.2)
@@ -672,6 +676,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   time_crystal: 100,
   // Phase 11 — T4 endgame (Task 11.2)
   antimatter_capsule: 100,
+  // Phase 11 — T4 endgame (Task 11.3)
+  nuclear_fuel_rod: 100,
   // Phase 10 — T3 minerals + alloy (Task 10.1)
   mercury: 30,
   // Phase 10 — T3 minerals + alloy (Task 10.2)
@@ -925,14 +931,11 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: {},
     category: 'power',
   },
-  // §8.5 T3 power: Nuclear Reactor fuel TBD per SPEC §6.5 — placeholder
-  // uses `coal: 5` as a heavy proxy until `uranium_ore` (§6.4) or
-  // `nuclear_fuel_rod` (§6.5) ship as ResourceIds in the catalog. Swap to
-  // the real T3/T4 fuel once that lands; for now coal makes the building
-  // TICKABLE without inventing a phantom ResourceId.
+  // §8.5 T3 power: Nuclear Reactor burns nuclear_fuel_rod (T4 endgame
+  // fuel, §6.5). Cycle bumped to 600s to reflect slow fuel-rod burn.
   nuclear_reactor: {
-    cycleSec: 120,
-    inputs: { coal: 5 },
+    cycleSec: 600,
+    inputs: { nuclear_fuel_rod: 1 },
     outputs: {},
     category: 'power',
   },
@@ -1072,6 +1075,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 1800,
     inputs: { helium_3: 1, exotic_alloy: 1 },
     outputs: { time_crystal: 1 },
+    category: 'manufacturing',
+  },
+
+  // Phase 11 — T4 endgame (Task 11.3): Fuel Rod Assembler → nuclear_fuel_rod.
+  fuel_rod_assembler: {
+    cycleSec: 1200,
+    inputs: { uranium_ore: 5, stainless_steel: 2, coolant: 2 },
+    outputs: { nuclear_fuel_rod: 1 },
     category: 'manufacturing',
   },
 

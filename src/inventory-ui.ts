@@ -237,6 +237,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   time_crystal: 'rare',
   // Phase 11 — T4 endgame (Task 11.2)
   antimatter_capsule: 'rare',
+  // Phase 11 — T4 endgame (Task 11.3)
+  nuclear_fuel_rod: 'rare',
 };
 
 /** Filter chips shown above the resource list. `'all'` is the default. */
