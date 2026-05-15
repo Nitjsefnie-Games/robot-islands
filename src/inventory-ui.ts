@@ -204,6 +204,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   slag: 'misc',
   // §13.4 T5 endgame artifact
   genesis_cell: 'rare',
+  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  mercury: 'liquid',
 };
 
 /** Filter chips shown above the resource list. `'all'` is the default. */

@@ -208,6 +208,8 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'transistor_doping',
   'capacitor_doping',
   'resistor_doping',
+  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  'mercury_well',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -288,6 +290,20 @@ describe('BUILDING_DEFS catalog', () => {
     expect(BUILDING_DEFS.mine.storage).toBeUndefined();
     expect(BUILDING_DEFS.workshop.storage).toBeUndefined();
     expect(BUILDING_DEFS.solar.storage).toBeUndefined();
+  });
+
+  describe('§6.4 mercury_well (T3 mercury extractor)', () => {
+    it('is T3 extraction gated to mercury_pit tile', () => {
+      const def = BUILDING_DEFS.mercury_well;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(3);
+      expect(def.category).toBe('extraction');
+      expect(def.requiredTile).toEqual(['mercury_pit']);
+    });
+    it('produces 1 mercury per cycle', () => {
+      expect(RECIPES.mercury_well).toBeDefined();
+      expect(RECIPES.mercury_well!.outputs).toEqual({ mercury: 1 });
+    });
   });
 });
 

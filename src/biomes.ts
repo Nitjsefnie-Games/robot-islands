@@ -101,7 +101,7 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     initialMinorRadius: 7,
     powerSource: 'geothermal',
     defaultTerrain: 'stone',
-    rareTerrain: ['magma_vent', 'coal', 'ore', 'gas_seep', 'helium_vent', 'sulfur_vein', 'copper_vein', 'lead_vein', 'manganese_vein', 'zinc_vein', 'chromium_vein', 'nickel_vein', 'tungsten_vein'],
+    rareTerrain: ['magma_vent', 'coal', 'ore', 'gas_seep', 'helium_vent', 'sulfur_vein', 'copper_vein', 'lead_vein', 'manganese_vein', 'zinc_vein', 'chromium_vein', 'nickel_vein', 'tungsten_vein', 'mercury_pit'],
     displayName: 'Volcanic',
   },
   desert: {
@@ -110,7 +110,7 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     initialMinorRadius: 12,
     powerSource: 'solar',
     defaultTerrain: 'sand',
-    rareTerrain: ['stone', 'ore', 'oil_well', 'sulfur_vein', 'phosphate_deposit', 'graphite_vein', 'copper_vein', 'bauxite_vein', 'manganese_vein'],
+    rareTerrain: ['stone', 'ore', 'oil_well', 'sulfur_vein', 'phosphate_deposit', 'graphite_vein', 'copper_vein', 'bauxite_vein', 'manganese_vein', 'mercury_pit'],
     displayName: 'Desert',
   },
   arctic: {

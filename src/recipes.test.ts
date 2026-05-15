@@ -1138,3 +1138,16 @@ describe('nextRotateOutputBoundaryMs', () => {
     expect(nextRotateOutputBoundaryMs(rotatingRecipe, 15_000)).toBe(20_000);
   });
 });
+
+describe('§6.4 mercury + mercury_well (Task 10.1)', () => {
+  it('mercury is in ALL_RESOURCES with xp_weight 30 (T3 liquid)', () => {
+    expect(ALL_RESOURCES).toContain('mercury' as ResourceId);
+    expect(XP_WEIGHT.mercury).toBe(30);
+  });
+  it('mercury_well recipe: empty inputs → mercury', () => {
+    expect(RECIPES.mercury_well).toBeDefined();
+    expect(RECIPES.mercury_well!.inputs).toEqual({});
+    expect(RECIPES.mercury_well!.outputs).toEqual({ mercury: 1 });
+    expect(RECIPES.mercury_well!.cycleSec).toBe(200);
+  });
+});

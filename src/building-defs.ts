@@ -262,6 +262,8 @@ export type BuildingDefId =
   | 'plasma_forge'
   | 'eldritch_refiner'
   | 'phase_refiner'
+  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  | 'mercury_well'
   // §5.2 / §8.6 Heat Sources. The economy reads `def.heatSource` to identify
   // sources during heat-adjacency resolution. Each free source costs no fuel
   // when serving consumers; coal_furnace burns `coalPerCycle × consumers` per
@@ -2925,6 +2927,21 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiredTile: ['helium_vent'],
     placementCost: { steel: 150, microchip: 50, stone: 30 },
     glyph: '⛏',
+  },
+
+  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  mercury_well: {
+    id: 'mercury_well',
+    displayName: 'Mercury Well',
+    category: 'extraction',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0xc0c0c8, // mercury-silver
+    stroke: 0x505058,
+    power: { consumes: 80 },
+    requiredTile: ['mercury_pit'],
+    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    glyph: '◌',
   },
 
   // T5 raw extractors (§8.10). Power draws are placeholder "60-100 kW"

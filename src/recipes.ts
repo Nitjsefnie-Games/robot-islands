@@ -241,7 +241,9 @@ export type ResourceId =
   | 'processor'
   | 'computing_module'
   // §13.4 endgame artifact — victory condition resource. No producer yet.
-  | 'genesis_cell';
+  | 'genesis_cell'
+  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  | 'mercury';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -410,6 +412,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'computing_module',
   // §13.4 endgame artifact
   'genesis_cell',
+  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  'mercury',
 ];
 
 /**
@@ -602,6 +606,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   computing_module: 30,
   // §13.4 T5 endgame artifact
   genesis_cell: 300,
+  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  mercury: 30,
 };
 
 /**
@@ -1775,6 +1781,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { clay: 2, sand: 1 },
     outputs: { ceramic_insulator: 1 },
     category: 'manufacturing',
+  },
+
+  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  mercury_well: {
+    cycleSec: 200,
+    inputs: {},
+    outputs: { mercury: 1 },
+    category: 'extraction',
   },
 };
 
