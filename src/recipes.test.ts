@@ -81,6 +81,9 @@ describe('recipe graph completeness (step 18)', () => {
     // uranium_ore is a terrain-seeded T3 raw (§6.4) with no extractor
     // building yet; it is exempt until an extractor is added.
     producers.add('uranium_ore');
+    // memetic_core is a T5 component with no producer recipe yet;
+    // exempt until a lab is added.
+    producers.add('memetic_core');
     const violations: { recipeId: string; missing: ResourceId }[] = [];
     for (const [recipeId, recipe] of Object.entries(RECIPES)) {
       if (!recipe) continue;
@@ -1529,6 +1532,23 @@ describe('§6.6 T5 components — probability_calculator + dimensional_fold + ca
     expect(RECIPES.causal_regulator_lab!.outputs).toEqual({ causal_regulator: 1 });
     expect(RECIPES.causal_regulator_lab!.cycleSec).toBe(1800);
     expect(RECIPES.causal_regulator_lab!.category).toBe('manufacturing');
+  });
+});
+
+describe('§13.3 T5 special — lattice_node + universe_editor recipes (Task 12.4)', () => {
+  it('lattice_node recipe: reality_anchor + causal_regulator + memetic_core → activation sink', () => {
+    expect(RECIPES.lattice_node).toBeDefined();
+    expect(RECIPES.lattice_node!.inputs).toEqual({ reality_anchor: 2, causal_regulator: 4, memetic_core: 1 });
+    expect(RECIPES.lattice_node!.outputs).toEqual({});
+    expect(RECIPES.lattice_node!.cycleSec).toBe(43200);
+    expect(RECIPES.lattice_node!.category).toBe('manufacturing');
+  });
+  it('universe_editor recipe: reality_anchor + dimensional_fold + causal_regulator → activation sink', () => {
+    expect(RECIPES.universe_editor).toBeDefined();
+    expect(RECIPES.universe_editor!.inputs).toEqual({ reality_anchor: 4, dimensional_fold: 1, causal_regulator: 2 });
+    expect(RECIPES.universe_editor!.outputs).toEqual({});
+    expect(RECIPES.universe_editor!.cycleSec).toBe(21600);
+    expect(RECIPES.universe_editor!.category).toBe('manufacturing');
   });
 });
 
