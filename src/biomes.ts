@@ -171,7 +171,7 @@ export const MODIFIER_DEFS: Readonly<Record<ModifierId, ModifierDef>> = {
     description: 'Wind power +50%, but all output has ±20% random variance.',
     weight: 10,
     biomeRestriction: [],
-    placeholder: false, // Variance machinery wired; wind-power +50% deferred.
+    placeholder: false, // Variance machinery wired; wind-power +50% STILL-DEFERRED.
     category: 'warning',
   },
   geothermal_active: {
@@ -207,7 +207,7 @@ export const MODIFIER_DEFS: Readonly<Record<ModifierId, ModifierDef>> = {
     description: '-10% production overall, but rare resource finds doubled.',
     weight: 3,
     biomeRestriction: [],
-    placeholder: false, // -10% is wired; doubled-rare is deferred (no rare-find rolls yet).
+    placeholder: false, // -10% is wired; doubled-rare is STILL-DEFERRED (no rare-find rolls yet).
     category: 'warning',
   },
   stable: {
@@ -352,7 +352,7 @@ export function effectiveModifierMultipliers(
 }
 
 // ---------------------------------------------------------------------------
-// Modifier random generation (deferred from step 8 — exported for step 11+)
+// Modifier random generation (shipped in step 11 — exported for step 11+)
 // ---------------------------------------------------------------------------
 
 /** §3.5: 50% → 0 modifiers, 30% → 1, 15% → 2, 5% → 3. */

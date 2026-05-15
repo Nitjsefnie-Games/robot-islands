@@ -143,7 +143,7 @@ export interface IslandState {
   /** §9.4 declared specialization role, or `null` for the Generalist
    *  baseline. Step-10 mutates this exactly once per island (declaration is
    *  one-way; the §9.7 Tier Reset path that clears it back to null is
-   *  deferred). The economy reads this each frame via
+   *  STILL-DEFERRED). The economy reads this each frame via
    *  `effectiveSpecializationMultipliers` to fold the role's buff/penalty
    *  into the rate, storage, and XP multipliers. */
   specializationRole: RoleId | null;
@@ -997,7 +997,7 @@ export function accrueXp(
   // credit and returns the same amount as XP.
   // §10.1 funnel provenance: we approximate per-batch tracking by draining
   // only net consumption (local production shields local use). True batch
-  // provenance is deferred because the current model has no inventory lots.
+  // provenance is STILL-DEFERRED because the current model has no inventory lots.
   for (const r of Object.keys(consumption) as ResourceId[]) {
     const consRate = consumption[r] ?? 0;
     if (consRate <= 0) continue;

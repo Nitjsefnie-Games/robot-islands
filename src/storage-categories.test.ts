@@ -82,7 +82,7 @@ describe('RESOURCE_STORAGE_CATEGORY (§4.6)', () => {
   it('temp_sensitive category contains the expected cryogenic resources', () => {
     // §4.6 Cold Storage consumers: cryo_coolant is the only catalogued
     // cryogenic resource today. cryogenic_compound and liquid_nitrogen
-    // are deferred; no plastics exist in the current catalog.
+    // are STILL-DEFERRED; no plastics exist in the current catalog.
     const tempSensitiveResources = ALL_RESOURCES.filter(
       (r) => RESOURCE_STORAGE_CATEGORY[r] === 'temp_sensitive',
     );

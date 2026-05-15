@@ -8,8 +8,8 @@
 // The split lands per SPEC §15.1: many instances share one def, the def
 // table drives the Building Catalog UI, and the placement runtime stays
 // minimal. Rotation lives here too — wired into the type as
-// `rotation: 0|1|2|3` but unused for step 9 (placement is deferred to
-// step 2.5, so every demo instance ships rotation: 0).
+// `rotation: 0|1|2|3` wired since step 2.5; every demo instance still
+// ships rotation: 0 until the placement UI rotation widget lands.
 
 import { Container, Graphics, Text } from 'pixi.js';
 
@@ -60,7 +60,7 @@ export interface PlacedBuilding {
   /** §13.3 Eternal Servitor flag. When `true`, the building skips all
    *  maintenance accrual and degradation (and, when wired, fuel-consumption
    *  checks). The Servitor Conversion Kit recipe and the Reality-Forge
-   *  conversion mechanic that flips this flag are DEFERRED — the flag is
+   *  conversion mechanic that flips this flag are STILL-DEFERRED — the flag is
    *  honoured wherever `maintenanceFactor` / `tryAutoMaintain` read it, but
    *  nothing in the catalog turns it on yet. */
   readonly eternalServitor?: true;

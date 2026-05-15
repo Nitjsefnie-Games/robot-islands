@@ -153,7 +153,7 @@ const PAYLOAD_RESOURCE: Record<SatelliteVariant, ResourceId> = {
  * Failure modes:
  *   - Pad explosion (30% of failures): the Spaceport building is destroyed
  *   - Orbit explosion (70% of failures): satellite is lost; full debris
- *     mechanics are deferred to a later step
+ *     mechanics are STILL-DEFERRED to a later step
  */
 export function launchSatellite(
   world: WorldState,

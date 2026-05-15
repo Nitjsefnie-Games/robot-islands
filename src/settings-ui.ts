@@ -27,7 +27,7 @@
 // step. `installDefaultBindings` re-runs on every boot, so a custom layout
 // resets. Persisting the rebind map is straightforward (snapshot the
 // `reg.bindings` Map alongside the world snapshot) but is intentionally
-// deferred to keep this step's surface small.
+// STILL-DEFERRED to keep this step's surface small.
 //
 // `e.code` exception: per AGENTS.md "No hardcoded `e.code === 'KeyW'`
 // checks anywhere outside `input.ts`" — the capture handler READS `e.code`

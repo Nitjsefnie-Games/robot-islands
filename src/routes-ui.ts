@@ -452,7 +452,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
 
     cargoSel.replaceChildren();
     // "any" — default priority list = ALL_RESOURCES in catalog order.
-    // A full drag-to-reorder priority editor is deferred to a later UI
+    // A full drag-to-reorder priority editor is STILL-DEFERRED to a later UI
     // pass; this is the spec-required filter option (§2.4 'any' rule)
     // exposed at minimum interactivity.
     const oAny = document.createElement('option');
@@ -506,7 +506,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const dy = spec1.cy - spec2.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
     // '__any__' → filter null + priority list. Full drag-to-reorder
-    // priority editor is deferred to a later UI pass; the default
+    // priority editor is STILL-DEFERRED to a later UI pass; the default
     // order is the catalog order in ALL_RESOURCES.
     const isAny = cargoChoice === '__any__';
     const route: Route = {

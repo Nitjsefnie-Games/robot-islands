@@ -110,7 +110,8 @@ describe('Balance — every consumed resource has at least one producer', () => 
     // outside the per-building RECIPES map (placement-time consumable).
     'foundation_kit',
     // T2 components built outside the basic recipes map — fabricator chain
-    // ships defs but recipes deferred until catalog expansion.
+    // shipped in step 9 (pcb_etcher → circuit_assembler → processor_fab →
+    // compute_module_fab).
     'pcb', 'circuit_board', 'processor', 'computing_module',
     // T4 endgame — separate fabrication chain (§7.11)
     'cryogenic_hydrogen', 'quantum_chip', 'exotic_alloy', 'ai_core',

@@ -4,10 +4,10 @@
 // state and draws; the main ticker calls `tickVehicles` once per frame to
 // advance arrivals. Tests target this module directly.
 //
-// Step-12 scope notes (deferred bits flagged inline elsewhere):
+// Step-12 scope notes (STILL-DEFERRED bits flagged inline elsewhere):
 //   - One generic ship + one generic helicopter class (T1 + T2). T3+ tiered
 //     vehicles (Heavy Freighter, Industrial Carrier, VTOL Tilt-Rotor) and
-//     their per-tier loadouts/speeds DEFERRED to a later step.
+//     their per-tier loadouts/speeds STILL-DEFERRED to a later step.
 //   - §2.6 weather destruction implemented. Mechanical-failure rolls are
 //     implemented (§12.5). Every dispatched vehicle still arrives
 //     deterministically unless a roll fails at the expected-arrival tick.
@@ -16,7 +16,7 @@
 //   - Coastal-tile placement check on Shipyard implemented via
 //     `coastal: true` on the shipyard def (§4.3 / §8.8).
 //   - Foundation Kit "starter inventory grace cap" (§12.4) remains
-//     DEFERRED — step 12 consumes the kit on dispatch. Decomposition
+//     STILL-DEFERRED — step 12 consumes the kit on dispatch. Decomposition
 //     into raw recipe inputs on arrival is implemented in tickVehicles.
 //
 // Fuel grade matches the launching island's tier per §11.7 — resolved at
@@ -426,7 +426,7 @@ export interface TickVehiclesResult {
  *   4. A Cargo Dock (for ships) or Helipad (for helicopters) is pushed onto
  *      the target spec's `buildings` array. Coordinate is (0, 0) — the
  *      auto-placed dock convention from §12.4. Coast-tile selection is
- *      DEFERRED — the dock lands at the island centre.
+ *      STILL-DEFERRED — the dock lands at the island centre.
  *   5. Starter buildings for T3+ vehicles are pushed onto the spec before
  *      `makeInitialIslandState` so they count for storage + economy.
  *   6. A fresh IslandState is constructed via `makeInitialIslandState` and

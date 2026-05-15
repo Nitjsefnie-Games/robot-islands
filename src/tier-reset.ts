@@ -32,7 +32,7 @@
 // (placeholder per §9.7).
 //
 // Merged islands (§3.6) operate as a single identity per spec — that
-// integration is deferred until §3.6 ships and is not handled here.
+// integration is STILL-DEFERRED until §3.6 ships and is not handled here.
 
 import { inv, type IslandState } from './economy.js';
 import { nodeById } from './skilltree.js';
@@ -59,7 +59,7 @@ export interface TierResetCost {
  *  "Cost (placeholder): a pile of T2-T3 components scaling with the island's
  *  current level (placeholder formula: cost proportional to level²)". The
  *  code matches that literal. Balance pass once §6.5 T4-T5 production
- *  loops have throughput data — track alongside the other deferred
+ *  loops have throughput data — track alongside the other STILL-DEFERRED
  *  numeric placeholders in SPEC Appendix A. */
 export function tierResetCost(level: number): TierResetCost {
   const l2 = level * level;

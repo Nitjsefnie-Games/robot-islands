@@ -5,16 +5,16 @@
 // and draws; the main ticker calls `tickRoutes` once per frame to deliver
 // arrivals and dispatch the next batch.
 //
-// Step-7 scope notes (deferred bits flagged inline):
+// Step-7 scope notes (STILL-DEFERRED bits flagged inline):
 //   - T1 cargo only. T2 drone cargo, T3 airship, T4 teleporter, T5 spacetime
 //     anchor all share this `Route` shape but their tier-specific capacities
-//     and transit times are deferred.
+//     and transit times are STILL-DEFERRED.
 //   - Weather modulation of capacity and in-flight loss implemented per §2.6.
 //   - Multi-route contention on the same source resource IS implemented per
 //     §15.4 (proportional distribution by capacity).
 //   - Funneling tier-cap check uses `state.level < FUNNELING_TIER_CAP` as a
 //     placeholder. The proper §9.2 tier-breakpoint mapping (T3 ≈ level 50)
-//     is deferred to step 9 alongside tier-gating in general; `level < 3`
+//     is STILL-DEFERRED to step 9 alongside tier-gating in general; `level < 3`
 //     here keeps the step-7 demo's funnel-stops-at-T3 behaviour qualitatively
 //     correct.
 
@@ -94,7 +94,7 @@ export const T1_CARGO_CAPACITY_UNITS_PER_SEC = 0.5;
 export const FUNNELING_BONUS_PERCENT = 0.5;
 
 /** Tier at which funneling bonus zeroes out per §10 ("crosses Tier 3").
- *  Placeholder: level-based. Proper §9.2 tier-breakpoint mapping deferred
+ *  Placeholder: level-based. Proper §9.2 tier-breakpoint mapping STILL-DEFERRED
  *  to step 9. */
 export const FUNNELING_TIER_CAP = 3;
 
