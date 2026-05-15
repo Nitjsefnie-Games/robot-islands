@@ -26,7 +26,9 @@ export type TerrainKind =
   // Step 4A — new terrain kinds for extractors
   | 'oil_well'
   | 'gas_seep'
-  | 'helium_vent';
+  | 'helium_vent'
+  // §6.1 T0 mineral raw: limestone (used by Limekiln in §7.5 chemistry chain).
+  | 'limestone';
 
 export interface Tile {
   /** Tile grid x. The tile occupies the unit square [x, x+1) × [y, y+1). */
@@ -53,6 +55,7 @@ const TERRAIN_COLOR: Readonly<Record<TerrainKind, number>> = {
   oil_well: 0x1a0f05,     // near-black crude
   gas_seep: 0x8a9a4a,     // sulfur-green
   helium_vent: 0xc0c8e0,  // pale helium-grey
+  limestone: 0xc8c0a8,    // pale calcareous beige
 };
 
 /**
@@ -230,10 +233,30 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   const waterTiles: ReadonlyArray<readonly [number, number]> = [
     [-1, -5], [0, -5], [-1, -4], [0, -4],
   ];
+  // §7.4 / §11.5 fuel chain bootstrap: one oil_well tile so the §7.4
+  // petrochemical chain (Pump Jack → Lubricant Refinery) is reachable on
+  // home without inter-island migration. A Pump Jack is 2×2 but only one
+  // footprint tile must satisfy the §4.3 requiredTile gate, so a single
+  // seeded tile is enough. South-west sector, clear of every home building
+  // (Mine cluster ends at (-5, 3); Crate at (3, 4); Shipyard at (4..6, 6..8);
+  // coal cluster (8..9, 5..6); water cluster (-1..0, -5..-4); tree cluster
+  // (6..7, -3..-4); stone cluster (-11..-10, 4..5)). (-4, 8) sits south of
+  // every cluster and inside the radius-14 inscribed disk.
+  const oilWellTiles: ReadonlyArray<readonly [number, number]> = [
+    [-4, 8],
+  ];
+  // §7.5 chemistry chain bootstrap: one limestone tile so a Limekiln can
+  // place its §7.5 limestone + heat → quicklime recipe. (-9, 7) sits
+  // south-west, clear of every cluster above.
+  const limestoneTiles: ReadonlyArray<readonly [number, number]> = [
+    [-9, 7],
+  ];
 
   for (const t of waterTiles) if (t[0] === x && t[1] === y) return 'water';
   for (const t of coalTiles) if (t[0] === x && t[1] === y) return 'coal';
   for (const t of treeTiles) if (t[0] === x && t[1] === y) return 'tree';
+  for (const t of oilWellTiles) if (t[0] === x && t[1] === y) return 'oil_well';
+  for (const t of limestoneTiles) if (t[0] === x && t[1] === y) return 'limestone';
   for (const t of stoneClusterTiles) if (t[0] === x && t[1] === y) return 'stone';
   for (const t of oreTiles) if (t[0] === x && t[1] === y) return 'ore';
   for (const t of stoneTiles) if (t[0] === x && t[1] === y) return 'stone';

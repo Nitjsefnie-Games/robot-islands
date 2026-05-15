@@ -208,4 +208,24 @@ describe('defaultTerrainAt — bootstrap seeds', () => {
     }
     expect(found).toBe(true);
   });
+
+  it('home has an oil_well tile (Pump Jack requirement, §7.4 fuel chain)', () => {
+    let found = false;
+    for (let x = -14; x <= 14 && !found; x++) {
+      for (let y = -14; y <= 14 && !found; y++) {
+        if (defaultTerrainAt(x, y) === 'oil_well') found = true;
+      }
+    }
+    expect(found).toBe(true);
+  });
+
+  it('home has a limestone tile (Limekiln requirement, §7.5 chemistry chain)', () => {
+    let found = false;
+    for (let x = -14; x <= 14 && !found; x++) {
+      for (let y = -14; y <= 14 && !found; y++) {
+        if (defaultTerrainAt(x, y) === 'limestone') found = true;
+      }
+    }
+    expect(found).toBe(true);
+  });
 });
