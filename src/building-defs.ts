@@ -87,6 +87,9 @@ export type BuildingDefId =
   | 'biomass_plant'
   // T1 manufacturing — Foundation Kit Assembler (§12.3 / §12 settlement)
   | 'kit_assembler'
+  // Task 13.2 — Foundation Kit Enriched (T3) + Refined (T4) variants.
+  | 'kit_assembler_enriched'
+  | 'kit_assembler_refined'
   // T1 logistics — Shipyard for §12 ship dispatch
   | 'shipyard'
   // T2 logistics — Helipad for §12 helicopter dispatch
@@ -806,6 +809,32 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 70 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 40, wood: 20 },
+    glyph: '⚙',
+  },
+  // §12.3: Kit Assembler Enriched — T3 variant producing Foundation Kit Enriched.
+  kit_assembler_enriched: {
+    id: 'kit_assembler_enriched',
+    displayName: 'Kit Assembler Enriched',
+    category: 'manufacturing',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0xa0a060,
+    stroke: 0x4a3520,
+    power: { consumes: 150 },
+    placementCost: { steel: 80, microchip: 5 },
+    glyph: '⚙',
+  },
+  // §12.3: Kit Assembler Refined — T4 variant producing Foundation Kit Refined.
+  kit_assembler_refined: {
+    id: 'kit_assembler_refined',
+    displayName: 'Kit Assembler Refined',
+    category: 'manufacturing',
+    tier: 4,
+    footprint: SHAPES.square3,
+    fill: 0xc0a080,
+    stroke: 0x4a3520,
+    power: { consumes: 300 },
+    placementCost: { steel: 150, microchip: 20, glass: 10 },
     glyph: '⚙',
   },
   // §8.8 / §12.2: Shipyard — T1 logistics building that launches §12 cargo

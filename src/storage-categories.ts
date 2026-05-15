@@ -129,6 +129,8 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   lumber: 'dry_goods',
   glass: 'dry_goods',
   foundation_kit: 'dry_goods', // composite-but-dry assembly per §12.3.
+  foundation_kit_enriched: 'dry_goods',
+  foundation_kit_refined: 'dry_goods',
 
   // T1 refined fluid.
   biofuel: 'liquid_gas',

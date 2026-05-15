@@ -128,6 +128,9 @@ export type ResourceId =
   // Refined per-tier variants deferred. The kit is a single inventory item;
   // its decomposition into raw constituents on arrival (§12.4) is deferred.
   | 'foundation_kit'
+  // Task 13.2 — Foundation Kit Enriched (T3) + Refined (T4) variants.
+  | 'foundation_kit_enriched'
+  | 'foundation_kit_refined'
   // Step-18 T2 refined / petrochemical (§7.3).
   | 'naphtha'
   | 'chlorine'
@@ -372,6 +375,9 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'steel',
   'gear',
   'foundation_kit',
+  // Task 13.2 — Foundation Kit Enriched (T3) + Refined (T4) variants.
+  'foundation_kit_enriched',
+  'foundation_kit_refined',
   // Step-18 T2 petrochemical / refined.
   'naphtha',
   'chlorine',
@@ -611,6 +617,9 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // T1 composite (§12.3). xp_weight 10 — task brief assigns the kit the same
   // weight as T2 components since one kit represents a non-trivial assembly.
   foundation_kit: 10,
+  // Task 13.2 — Foundation Kit Enriched (T3) + Refined (T4) variants.
+  foundation_kit_enriched: 30,
+  foundation_kit_refined: 100,
   // Step-18 T2 petrochemical / refined.
   naphtha: 10,
   chlorine: 10,
@@ -1953,6 +1962,22 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 1200,
     inputs: { exotic_alloy: 2, carbon_steel: 50, foundation_kit: 1 },
     outputs: { repair_drone: 1 },
+    category: 'manufacturing',
+  },
+
+  // §12.3: Kit Assembler Enriched (T3). 10-min cycle.
+  kit_assembler_enriched: {
+    cycleSec: 600,
+    inputs: { steel: 5, microchip: 1, wire: 5, gear: 5 },
+    outputs: { foundation_kit_enriched: 1 },
+    category: 'manufacturing',
+  },
+
+  // §12.3: Kit Assembler Refined (T4). 20-min cycle.
+  kit_assembler_refined: {
+    cycleSec: 1200,
+    inputs: { stainless_steel: 5, quantum_chip: 1, fuel_cell: 1, computing_module: 1 },
+    outputs: { foundation_kit_refined: 1 },
     category: 'manufacturing',
   },
 

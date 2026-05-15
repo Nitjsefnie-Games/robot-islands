@@ -125,6 +125,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   exotic_alloy: 'components',
   carbon_fiber: 'components',
   foundation_kit: 'components',
+  foundation_kit_enriched: 'refined',
+  foundation_kit_refined: 'refined',
   // Fuels
   biofuel: 'fuel',
   diesel: 'fuel',
