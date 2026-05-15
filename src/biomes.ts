@@ -101,7 +101,7 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     initialMinorRadius: 7,
     powerSource: 'geothermal',
     defaultTerrain: 'stone',
-    rareTerrain: ['magma_vent', 'coal', 'ore', 'gas_seep', 'helium_vent', 'sulfur_vein', 'copper_vein', 'lead_vein', 'manganese_vein', 'zinc_vein', 'chromium_vein', 'nickel_vein', 'tungsten_vein', 'mercury_pit', 'diamond_vein'],
+    rareTerrain: ['magma_vent', 'coal', 'ore', 'gas_seep', 'helium_vent', 'sulfur_vein', 'copper_vein', 'lead_vein', 'manganese_vein', 'zinc_vein', 'chromium_vein', 'nickel_vein', 'tungsten_vein', 'mercury_pit', 'diamond_vein', 'uranium_vein'],
     displayName: 'Volcanic',
   },
   desert: {
@@ -120,7 +120,7 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     powerSource: 'cryogenic',
     defaultTerrain: 'stone',
     // Arctic uses `ice` as scattered cryo deposit (cryo recipes not implemented).
-    rareTerrain: ['ice', 'ice', 'stone', 'helium_vent', 'chromium_vein', 'nickel_vein', 'tungsten_vein', 'diamond_vein', 'lithium_vein'],
+    rareTerrain: ['ice', 'ice', 'stone', 'helium_vent', 'chromium_vein', 'nickel_vein', 'tungsten_vein', 'diamond_vein', 'lithium_vein', 'uranium_vein'],
     displayName: 'Arctic',
   },
 };

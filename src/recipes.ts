@@ -1151,6 +1151,15 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
+  // Phase 16.1 — §6.4 uranium extractor (Task 16.1). Closes the uranium_ore
+  // producer gap: previously uranium_ore had no extractor, only a consumer.
+  uranium_mine: {
+    cycleSec: 200,
+    inputs: {},
+    outputs: { uranium_ore: 1 },
+    category: 'extraction',
+  },
+
   // Phase 11 — T4 endgame (Task 11.3): Fuel Rod Assembler → nuclear_fuel_rod.
   fuel_rod_assembler: {
     cycleSec: 1200,

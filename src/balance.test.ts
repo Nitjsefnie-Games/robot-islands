@@ -83,8 +83,9 @@ describe('Balance — every consumed resource has at least one producer', () => 
     'wood', 'iron_ore', 'coal', 'stone', 'sand', 'salt', 'quartz', 'limestone', 'clay', 'sulfur', 'phosphate', 'graphite', 'copper_ore', 'tin_ore', 'lead_ore', 'bauxite',
     'manganese_ore', 'zinc_ore', 'chromium_ore', 'nickel_ore', 'tungsten_ore',
     'crude_oil', 'natural_gas', 'fresh_water', 'saltwater', 'hydrogen',
-    // §6.4 T3 raw minerals (slag-reprocessed via §6.7, terrain-deferred)
-    'gold_ore', 'silver_ore', 'rare_earth', 'uranium_ore',
+    // §6.4 T3 raw minerals (slag-reprocessed via §6.7, terrain-deferred).
+    // uranium_ore removed: now has a real terrain extractor (uranium_mine, Task 16.1).
+    'gold_ore', 'silver_ore', 'rare_earth',
     // Phase 10 — T3 raw minerals (Task 10.1)
     'mercury',
     // Phase 10 — T3 raw minerals (Task 10.2)
