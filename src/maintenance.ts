@@ -66,13 +66,12 @@ export const MAINTENANCE_RECIPES: Readonly<Record<Tier, Partial<Record<ResourceI
   // T2: spec literal is `3 Lubricant + 5 Bearing`; bearing shipped in
   // Task 6.2 but maintenance recipes haven't been retuned yet, still using bolt.
   2: { lubricant: 3, bolt: 5 },
-  // T3: spec literal is `5 Lubricant + 1 Electric motor + 1 Capacitor`;
-  // motor + capacitor shipped in Tasks 6.2/9.2 but maintenance recipes
-  // haven't been retuned yet, still using microchip + quantum_chip to keep the tier's
-  // material gate meaningful. Chicken-and-egg note: quantum_chip is a T4
-  // component, so T3 maintenance currently requires T4-tier inputs — a
-  // known awkwardness pending a real T3 components pass.
-  3: { lubricant: 5, microchip: 1, quantum_chip: 1 },
+  // T3: spec literal is `5 Lubricant + 1 Electric motor + 1 Capacitor`.
+  // Both motor + capacitor are now in the catalog (Tasks 10.6 / 9.2). The
+  // earlier microchip + quantum_chip stand-in caused a chicken-and-egg —
+  // T3 buildings hit threshold at 20h but quantum_chip required T4 access
+  // (level 30+). Resolved by switching to the spec literal here.
+  3: { lubricant: 5, electric_motor: 1, capacitor: 1 },
   4: { lubricant: 10, exotic_alloy: 1, microchip: 1 },
   5: { lubricant: 15, phase_converter: 1, eldritch_processor: 1 },
   // T6 maintenance matches §4.7 spec literal.
