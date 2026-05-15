@@ -2154,6 +2154,22 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { optical_fiber: 2 },
     category: 'manufacturing',
   },
+
+  // §13.3 T5 special buildings — activation recipes (Task 12.4).
+  // These buildings consume rare inputs to "activate"; the building itself
+  // is the reward. Empty outputs so the economy loop treats them as sinks.
+  lattice_node: {
+    cycleSec: 43200, // 12h — one node per day per island at most.
+    inputs: { reality_anchor: 2, causal_regulator: 4, memetic_core: 1 },
+    outputs: {},
+    category: 'manufacturing',
+  },
+  universe_editor: {
+    cycleSec: 21600, // 6h
+    inputs: { reality_anchor: 4, dimensional_fold: 1, causal_regulator: 2 },
+    outputs: {},
+    category: 'manufacturing',
+  },
 };
 
 /**
