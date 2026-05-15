@@ -1957,7 +1957,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Comm Sat Assembly. 30-min cycle.
   comm_sat_assembly: {
     cycleSec: 1800,
-    inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 200, orbital_insertion_package: 1 },
+    // optical_fiber reduced 200→50 (Agent C: extreme ratio, suspected copy-paste from spec).
+    inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 50, orbital_insertion_package: 1 },
     outputs: { comm_sat: 1 },
     category: 'manufacturing',
   },
