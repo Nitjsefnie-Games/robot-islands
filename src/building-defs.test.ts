@@ -60,6 +60,12 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'quantum_manipulator',
   'quantum_chip_fab',
   'fuel_rod_assembler',
+  // Phase 11 — T4 endgame (Task 11.4)
+  'plasma_containment_assembler',
+  'singularity_sensor_lab',
+  'cryo_containment_assembler',
+  'accelerator_core_lab',
+  'self_replication_lab',
   // §9.5 biome-locked uniques (Mass Driver + Carbon Forge + Tidal Array + Sunspire)
   'mass_driver',
   'carbon_forge',
@@ -2141,5 +2147,100 @@ describe('§6.5 fuel_rod_assembler (T4 nuclear_fuel_rod producer, Task 11.3)', (
     expect(RECIPES.fuel_rod_assembler!.inputs).toEqual({ uranium_ore: 5, stainless_steel: 2, coolant: 2 });
     expect(RECIPES.fuel_rod_assembler!.outputs).toEqual({ nuclear_fuel_rod: 1 });
     expect(RECIPES.fuel_rod_assembler!.cycleSec).toBe(1200);
+  });
+});
+
+describe('plasma_containment_assembler (Task 11.4)', () => {
+  it('is T4 manufacturing with 2x2 footprint', () => {
+    const def = BUILDING_DEFS.plasma_containment_assembler;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(4);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('has power consumption 600W', () => {
+    expect(BUILDING_DEFS.plasma_containment_assembler.power?.consumes).toBe(600);
+  });
+  it('produces plasma_containment_vessel from exotic_alloy + magnet + steel', () => {
+    expect(RECIPES.plasma_containment_assembler).toBeDefined();
+    expect(RECIPES.plasma_containment_assembler!.inputs).toEqual({ exotic_alloy: 1, magnet: 4, steel: 5 });
+    expect(RECIPES.plasma_containment_assembler!.outputs).toEqual({ plasma_containment_vessel: 1 });
+    expect(RECIPES.plasma_containment_assembler!.cycleSec).toBe(1500);
+  });
+});
+
+describe('singularity_sensor_lab (Task 11.4)', () => {
+  it('is T4 electronics with 2x2 footprint', () => {
+    const def = BUILDING_DEFS.singularity_sensor_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(4);
+    expect(def.category).toBe('electronics');
+  });
+  it('has power consumption 500W', () => {
+    expect(BUILDING_DEFS.singularity_sensor_lab.power?.consumes).toBe(500);
+  });
+  it('produces singularity_sensor from quantum_chip + optical_fiber + magnet', () => {
+    expect(RECIPES.singularity_sensor_lab).toBeDefined();
+    expect(RECIPES.singularity_sensor_lab!.inputs).toEqual({ quantum_chip: 1, optical_fiber: 4, magnet: 2 });
+    expect(RECIPES.singularity_sensor_lab!.outputs).toEqual({ singularity_sensor: 1 });
+    expect(RECIPES.singularity_sensor_lab!.cycleSec).toBe(1500);
+  });
+});
+
+describe('cryo_containment_assembler (Task 11.4)', () => {
+  it('is T4 manufacturing with 2x2 footprint', () => {
+    const def = BUILDING_DEFS.cryo_containment_assembler;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(4);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('has power consumption 500W', () => {
+    expect(BUILDING_DEFS.cryo_containment_assembler.power?.consumes).toBe(500);
+  });
+  it('produces cryo_containment_unit from cryogenic_compound + stainless_steel + glass_fiber', () => {
+    expect(RECIPES.cryo_containment_assembler).toBeDefined();
+    expect(RECIPES.cryo_containment_assembler!.inputs).toEqual({ cryogenic_compound: 1, stainless_steel: 2, glass_fiber: 4 });
+    expect(RECIPES.cryo_containment_assembler!.outputs).toEqual({ cryo_containment_unit: 1 });
+    expect(RECIPES.cryo_containment_assembler!.cycleSec).toBe(1500);
+  });
+});
+
+describe('accelerator_core_lab (Task 11.4)', () => {
+  it('is T4 electronics with 2x2 footprint', () => {
+    const def = BUILDING_DEFS.accelerator_core_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(4);
+    expect(def.category).toBe('electronics');
+  });
+  it('has power consumption 800W', () => {
+    expect(BUILDING_DEFS.accelerator_core_lab.power?.consumes).toBe(800);
+  });
+  it('produces particle_accelerator_core from magnet + exotic_alloy + optical_fiber', () => {
+    expect(RECIPES.accelerator_core_lab).toBeDefined();
+    expect(RECIPES.accelerator_core_lab!.inputs).toEqual({ magnet: 8, exotic_alloy: 1, optical_fiber: 4 });
+    expect(RECIPES.accelerator_core_lab!.outputs).toEqual({ particle_accelerator_core: 1 });
+    expect(RECIPES.accelerator_core_lab!.cycleSec).toBe(1500);
+  });
+});
+
+describe('self_replication_lab (Task 11.4)', () => {
+  it('is T4 manufacturing with 3x3 footprint', () => {
+    const def = BUILDING_DEFS.self_replication_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('has power consumption 700W', () => {
+    expect(BUILDING_DEFS.self_replication_lab.power?.consumes).toBe(700);
+  });
+  it('produces self_replication_module from ai_core + microchip + electric_motor + computing_module', () => {
+    expect(RECIPES.self_replication_lab).toBeDefined();
+    expect(RECIPES.self_replication_lab!.inputs).toEqual({ ai_core: 1, microchip: 8, electric_motor: 4, computing_module: 2 });
+    expect(RECIPES.self_replication_lab!.outputs).toEqual({ self_replication_module: 1 });
+    expect(RECIPES.self_replication_lab!.cycleSec).toBe(1800);
   });
 });

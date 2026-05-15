@@ -123,6 +123,12 @@ export type BuildingDefId =
   | 'quantum_manipulator'
   | 'quantum_chip_fab'
   | 'fuel_rod_assembler'
+  // Phase 11 — T4 endgame (Task 11.4)
+  | 'plasma_containment_assembler'
+  | 'singularity_sensor_lab'
+  | 'cryo_containment_assembler'
+  | 'accelerator_core_lab'
+  | 'self_replication_lab'
   // §9.5 biome-locked uniques (Mass Driver + Carbon Forge + Tidal Array + Sunspire)
   | 'mass_driver'
   | 'carbon_forge'
@@ -1666,6 +1672,67 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 400 },
     placementCost: { steel: 200, microchip: 30, glass: 20 },
     glyph: '⚡',
+  },
+  // Phase 11 — T4 endgame (Task 11.4): Five T4 component assemblers.
+  plasma_containment_assembler: {
+    id: 'plasma_containment_assembler',
+    displayName: 'Plasma Containment Assembler',
+    category: 'manufacturing',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0xff6030,
+    stroke: 0x802010,
+    power: { consumes: 600 },
+    placementCost: { steel: 250, exotic_alloy: 20, microchip: 30 },
+    glyph: '◎',
+  },
+  singularity_sensor_lab: {
+    id: 'singularity_sensor_lab',
+    displayName: 'Singularity Sensor Lab',
+    category: 'electronics',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0x40a0f0,
+    stroke: 0x104060,
+    power: { consumes: 500 },
+    placementCost: { steel: 250, quantum_chip: 10, glass: 40 },
+    glyph: '◉',
+  },
+  cryo_containment_assembler: {
+    id: 'cryo_containment_assembler',
+    displayName: 'Cryo Containment Assembler',
+    category: 'manufacturing',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0x60d0e0,
+    stroke: 0x105060,
+    power: { consumes: 500 },
+    placementCost: { steel: 250, cryogenic_compound: 15, glass: 30 },
+    glyph: '❄',
+  },
+  accelerator_core_lab: {
+    id: 'accelerator_core_lab',
+    displayName: 'Accelerator Core Lab',
+    category: 'electronics',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0xe0a020,
+    stroke: 0x604010,
+    power: { consumes: 800 },
+    placementCost: { steel: 300, exotic_alloy: 25, optical_fiber: 20 },
+    glyph: '✦',
+  },
+  self_replication_lab: {
+    id: 'self_replication_lab',
+    displayName: 'Self-Replication Lab',
+    category: 'manufacturing',
+    tier: 4,
+    footprint: SHAPES.square3,
+    fill: 0x50e080,
+    stroke: 0x106030,
+    power: { consumes: 700 },
+    placementCost: { steel: 350, ai_core: 2, microchip: 50, electric_motor: 20 },
+    glyph: '↻',
   },
   // -------------------------------------------------------------------------
   // T5 (levels 50+, AI Core required) — Transcendent per §13 / step 13
