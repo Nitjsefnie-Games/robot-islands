@@ -258,13 +258,13 @@ describe('microchip chain', () => {
     expect(RECIPES.circuit_assembler!.outputs.circuit_board).toBe(1);
   });
 
-  it('processor_fab outputs processor: 1 and inputs circuit_board: 2', () => {
-    expect(RECIPES.processor_fab!.outputs.processor).toBe(1);
+  it('processor_fab outputs processor: 2 and inputs circuit_board: 2', () => {
+    expect(RECIPES.processor_fab!.outputs.processor).toBe(2); // doubled Task 16.8 (was 1)
     expect(RECIPES.processor_fab!.inputs.circuit_board).toBe(2);
   });
 
-  it('compute_module_fab outputs computing_module: 1', () => {
-    expect(RECIPES.compute_module_fab!.outputs.computing_module).toBe(1);
+  it('compute_module_fab outputs computing_module: 2', () => {
+    expect(RECIPES.compute_module_fab!.outputs.computing_module).toBe(2); // doubled Task 16.8 (was 1)
   });
 
   it('XP_WEIGHT.circuit_board is 30', () => {
@@ -1256,7 +1256,7 @@ describe('§7.7 memory_module via memory_lab (Task 9.3)', () => {
       resistor: 4,
       solder: 1,
     });
-    expect(RECIPES.memory_lab!.outputs).toEqual({ memory_module: 1 });
+    expect(RECIPES.memory_lab!.outputs).toEqual({ memory_module: 2 }); // doubled Task 16.8 (was 1)
     expect(RECIPES.memory_lab!.cycleSec).toBe(500);
     expect(RECIPES.memory_lab!.category).toBe('electronics');
   });
@@ -1586,6 +1586,18 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
   });
 });
 
+
+describe('§7.7 double output of memory_lab + processor_fab + compute_module_fab (Task 16.8)', () => {
+  it('memory_lab outputs memory_module: 2 (was 1, XP-net-negative fix)', () => {
+    expect(RECIPES.memory_lab!.outputs).toEqual({ memory_module: 2 });
+  });
+  it('processor_fab outputs processor: 2 (was 1, XP-net-negative fix)', () => {
+    expect(RECIPES.processor_fab!.outputs).toEqual({ processor: 2 });
+  });
+  it('compute_module_fab outputs computing_module: 2 (was 1, XP-net-negative fix)', () => {
+    expect(RECIPES.compute_module_fab!.outputs).toEqual({ computing_module: 2 });
+  });
+});
 
 describe('§14.10 comm_sat optical_fiber input reduction (Task 16.7)', () => {
   it('comm_sat_assembly inputs optical_fiber: 50 (was 200)', () => {
