@@ -268,6 +268,8 @@ export type BuildingDefId =
   | 'diamond_quarry'
   // Phase 10 — T3 minerals + alloy (Task 10.3)
   | 'cryo_compound_lab'
+  // Phase 10 — T3 minerals + alloy (Task 10.4)
+  | 'mag_alloyer'
   // §5.2 / §8.6 Heat Sources. The economy reads `def.heatSource` to identify
   // sources during heat-adjacency resolution. Each free source costs no fuel
   // when serving consumers; coal_furnace burns `coalPerCycle × consumers` per
@@ -2973,6 +2975,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 300 },
     placementCost: { steel: 100, microchip: 5, glass: 10 },
     glyph: '❄',
+  },
+  // Phase 10 — T3 minerals + alloy (Task 10.4)
+  mag_alloyer: {
+    id: 'mag_alloyer',
+    displayName: 'Magnetic Alloyer',
+    category: 'manufacturing',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x7060a0, // violet-grey magnetic
+    stroke: 0x302050,
+    power: { consumes: 150 },
+    placementCost: { steel: 50, microchip: 3 },
+    glyph: '◈',
   },
 
   // T5 raw extractors (§8.10). Power draws are placeholder "60-100 kW"

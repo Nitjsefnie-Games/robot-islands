@@ -245,4 +245,6 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   diamond_ore: 'rare',
   // Phase 10 — T3 minerals + alloy (Task 10.3)
   cryogenic_compound: 'temp_sensitive',
+  // Phase 10 — T3 minerals + alloy (Task 10.4)
+  magnetic_alloy: 'components',
 };

@@ -214,6 +214,8 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'diamond_quarry',
   // Phase 10 — T3 minerals + alloy (Task 10.3)
   'cryo_compound_lab',
+  // Phase 10 — T3 minerals + alloy (Task 10.4)
+  'mag_alloyer',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -336,6 +338,21 @@ describe('BUILDING_DEFS catalog', () => {
       expect(RECIPES.cryo_compound_lab).toBeDefined();
       expect(RECIPES.cryo_compound_lab!.inputs).toEqual({ liquid_nitrogen: 1, cryo_coolant: 1 });
       expect(RECIPES.cryo_compound_lab!.outputs).toEqual({ cryogenic_compound: 1 });
+    });
+  });
+
+  describe('§6.4 mag_alloyer (T3 magnetic_alloy producer)', () => {
+    it('is T3, 2x2, manufacturing category', () => {
+      const def = BUILDING_DEFS.mag_alloyer;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(3);
+      expect(def.footprint).toEqual(SHAPES.square2);
+      expect(def.category).toBe('manufacturing');
+    });
+    it('produces magnetic_alloy from iron_ingot + rare_earth', () => {
+      expect(RECIPES.mag_alloyer).toBeDefined();
+      expect(RECIPES.mag_alloyer!.inputs).toEqual({ iron_ingot: 2, rare_earth: 1 });
+      expect(RECIPES.mag_alloyer!.outputs).toEqual({ magnetic_alloy: 1 });
     });
   });
 });

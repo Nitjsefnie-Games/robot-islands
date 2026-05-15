@@ -1177,3 +1177,16 @@ describe('§6.4 cryogenic_compound + cryo_compound_lab (Task 10.3)', () => {
     expect(RECIPES.cryo_compound_lab!.cycleSec).toBe(400);
   });
 });
+
+describe('§6.4 magnetic_alloy + mag_alloyer (Task 10.4)', () => {
+  it('magnetic_alloy is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
+    expect(ALL_RESOURCES).toContain('magnetic_alloy' as ResourceId);
+    expect(XP_WEIGHT.magnetic_alloy).toBe(30);
+  });
+  it('mag_alloyer recipe: iron_ingot + rare_earth → magnetic_alloy', () => {
+    expect(RECIPES.mag_alloyer).toBeDefined();
+    expect(RECIPES.mag_alloyer!.inputs).toEqual({ iron_ingot: 2, rare_earth: 1 });
+    expect(RECIPES.mag_alloyer!.outputs).toEqual({ magnetic_alloy: 1 });
+    expect(RECIPES.mag_alloyer!.cycleSec).toBe(300);
+  });
+});
