@@ -990,6 +990,37 @@ describe('step-20 T5→T6 Ascendant Assembly (§13.4)', () => {
   });
 });
 
+describe('§7.12 tachyonic_transmitter_lab + aether_beacon_lab + reality_engine_lab + singularity_battery_factory (Task 12.3)', () => {
+  it('tachyonic_transmitter_lab is T5, 3x3, manufacturing category', () => {
+    const def = BUILDING_DEFS.tachyonic_transmitter_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('aether_beacon_lab is T5, 3x3, manufacturing category', () => {
+    const def = BUILDING_DEFS.aether_beacon_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('reality_engine_lab is T5, 3x3, manufacturing category', () => {
+    const def = BUILDING_DEFS.reality_engine_lab;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('singularity_battery_factory is T5, 3x3, manufacturing category', () => {
+    const def = BUILDING_DEFS.singularity_battery_factory;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+});
+
 describe('§7.12 probability_calculator_lab + dimensional_fold_lab + causal_regulator_lab (Task 12.2)', () => {
   it('probability_calculator_lab is T5, 3x3, manufacturing category', () => {
     const def = BUILDING_DEFS.probability_calculator_lab;

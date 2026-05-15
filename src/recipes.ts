@@ -214,6 +214,11 @@ export type ResourceId =
   | 'probability_calculator'
   | 'dimensional_fold'
   | 'causal_regulator'
+  // Phase 12 — T5 components (Task 12.3)
+  | 'tachyonic_transmitter'
+  | 'aether_beacon'
+  | 'reality_engine'
+  | 'singularity_battery_unit'
   // Step-20 (T6 Orbital, §14). Partial catalog: the resources the §14.2
   // Spaceport + §14.10 satellite-assembly defs touch. §14.10 placeholder
   // recipes additionally reference Aluminum, Magnet, Optical Fiber,
@@ -450,6 +455,11 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'probability_calculator',
   'dimensional_fold',
   'causal_regulator',
+  // Phase 12 — T5 components (Task 12.3)
+  'tachyonic_transmitter',
+  'aether_beacon',
+  'reality_engine',
+  'singularity_battery_unit',
   // Step-20 T5→T6 artifact + T6 Orbital partial catalog (§14).
   'ascendant_core',
   'antimatter_propellant',
@@ -685,6 +695,11 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   probability_calculator: 300,
   dimensional_fold: 300,
   causal_regulator: 300,
+  // Phase 12 — T5 components (Task 12.3)
+  tachyonic_transmitter: 300,
+  aether_beacon: 300,
+  reality_engine: 300,
+  singularity_battery_unit: 300,
   // T5→T6 transition artifact. §9.1 puts T5 weight at 300 and T6 at 1000;
   // Ascendant Core is the bridge artifact unlocking T6 access (§13.4 /
   // §14.1), so it carries the higher T6 weight (1000) — producing one
@@ -1222,6 +1237,32 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 1800,
     inputs: { time_crystal: 1, phase_converter: 2, reality_anchor: 1 },
     outputs: { causal_regulator: 1 },
+    category: 'manufacturing',
+  },
+
+  // Phase 12 — T5 component labs (Task 12.3)
+  tachyonic_transmitter_lab: {
+    cycleSec: 1800,
+    inputs: { tachyon_stream: 1, optical_fiber: 8, ai_core: 1 },
+    outputs: { tachyonic_transmitter: 1 },
+    category: 'manufacturing',
+  },
+  aether_beacon_lab: {
+    cycleSec: 1800,
+    inputs: { aetheric_current: 1, casimir_energy: 1, magnet: 4 },
+    outputs: { aether_beacon: 1 },
+    category: 'manufacturing',
+  },
+  reality_engine_lab: {
+    cycleSec: 1800,
+    inputs: { reality_anchor: 1, dimensional_fold: 1, causal_regulator: 1 },
+    outputs: { reality_engine: 1 },
+    category: 'manufacturing',
+  },
+  singularity_battery_factory: {
+    cycleSec: 1800,
+    inputs: { phase_converter: 2, dark_matter: 1, casimir_energy: 1 },
+    outputs: { singularity_battery_unit: 1 },
     category: 'manufacturing',
   },
 

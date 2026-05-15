@@ -197,6 +197,11 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   probability_calculator: 'rare',
   dimensional_fold: 'rare',
   causal_regulator: 'rare',
+  // Phase 12 — T5 components (Task 12.3)
+  tachyonic_transmitter: 'rare',
+  aether_beacon: 'rare',
+  reality_engine: 'rare',
+  singularity_battery_unit: 'rare',
   // T5→T6 transition artifact + T6 Orbital (step 20, §13.4 / §14)
   ascendant_core: 'rare',
   antimatter_propellant: 'fuel',     // §11.7 T6 launch fuel
