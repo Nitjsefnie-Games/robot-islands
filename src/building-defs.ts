@@ -152,6 +152,11 @@ export type BuildingDefId =
   | 'probability_calculator_lab'
   | 'dimensional_fold_lab'
   | 'causal_regulator_lab'
+  // Phase 12 — T5 component labs (Task 12.3)
+  | 'tachyonic_transmitter_lab'
+  | 'aether_beacon_lab'
+  | 'reality_engine_lab'
+  | 'singularity_battery_factory'
   // T5→T6 transition (step 20): produces `ascendant_core`, the §14.1 gate
   // artifact. Built at T5 (level 50 + AI core) so the player can craft
   // ascendant_core BEFORE the §14.1 Spaceport requirement — Ascendant
@@ -3349,6 +3354,55 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square3,
     fill: 0x4080a0,
     stroke: 0x104060,
+    power: { consumes: 1500 },
+    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    glyph: '✺',
+  },
+  // Phase 12 — T5 component labs (Task 12.3)
+  tachyonic_transmitter_lab: {
+    id: 'tachyonic_transmitter_lab',
+    displayName: 'Tachyonic Transmitter Lab',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0xa060c0,
+    stroke: 0x401060,
+    power: { consumes: 1500 },
+    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    glyph: '✺',
+  },
+  aether_beacon_lab: {
+    id: 'aether_beacon_lab',
+    displayName: 'Aether Beacon Lab',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0x60a040,
+    stroke: 0x204010,
+    power: { consumes: 1500 },
+    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    glyph: '✺',
+  },
+  reality_engine_lab: {
+    id: 'reality_engine_lab',
+    displayName: 'Reality Engine Lab',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0x804060,
+    stroke: 0x401030,
+    power: { consumes: 1500 },
+    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    glyph: '✺',
+  },
+  singularity_battery_factory: {
+    id: 'singularity_battery_factory',
+    displayName: 'Singularity Battery Factory',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0x2a2a48,
+    stroke: 0x101020,
     power: { consumes: 1500 },
     placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
     glyph: '✺',

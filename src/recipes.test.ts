@@ -1449,6 +1449,53 @@ describe('§6.5 T4 endgame components (Task 11.4)', () => {
   });
 });
 
+describe('§6.6 T5 components — tachyonic_transmitter + aether_beacon + reality_engine + singularity_battery_unit (Task 12.3)', () => {
+  it('tachyonic_transmitter is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('tachyonic_transmitter' as ResourceId);
+    expect(XP_WEIGHT.tachyonic_transmitter).toBe(300);
+  });
+  it('aether_beacon is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('aether_beacon' as ResourceId);
+    expect(XP_WEIGHT.aether_beacon).toBe(300);
+  });
+  it('reality_engine is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('reality_engine' as ResourceId);
+    expect(XP_WEIGHT.reality_engine).toBe(300);
+  });
+  it('singularity_battery_unit is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('singularity_battery_unit' as ResourceId);
+    expect(XP_WEIGHT.singularity_battery_unit).toBe(300);
+  });
+  it('tachyonic_transmitter_lab recipe: tachyon_stream + optical_fiber + ai_core → tachyonic_transmitter', () => {
+    expect(RECIPES.tachyonic_transmitter_lab).toBeDefined();
+    expect(RECIPES.tachyonic_transmitter_lab!.inputs).toEqual({ tachyon_stream: 1, optical_fiber: 8, ai_core: 1 });
+    expect(RECIPES.tachyonic_transmitter_lab!.outputs).toEqual({ tachyonic_transmitter: 1 });
+    expect(RECIPES.tachyonic_transmitter_lab!.cycleSec).toBe(1800);
+    expect(RECIPES.tachyonic_transmitter_lab!.category).toBe('manufacturing');
+  });
+  it('aether_beacon_lab recipe: aetheric_current + casimir_energy + magnet → aether_beacon', () => {
+    expect(RECIPES.aether_beacon_lab).toBeDefined();
+    expect(RECIPES.aether_beacon_lab!.inputs).toEqual({ aetheric_current: 1, casimir_energy: 1, magnet: 4 });
+    expect(RECIPES.aether_beacon_lab!.outputs).toEqual({ aether_beacon: 1 });
+    expect(RECIPES.aether_beacon_lab!.cycleSec).toBe(1800);
+    expect(RECIPES.aether_beacon_lab!.category).toBe('manufacturing');
+  });
+  it('reality_engine_lab recipe: reality_anchor + dimensional_fold + causal_regulator → reality_engine', () => {
+    expect(RECIPES.reality_engine_lab).toBeDefined();
+    expect(RECIPES.reality_engine_lab!.inputs).toEqual({ reality_anchor: 1, dimensional_fold: 1, causal_regulator: 1 });
+    expect(RECIPES.reality_engine_lab!.outputs).toEqual({ reality_engine: 1 });
+    expect(RECIPES.reality_engine_lab!.cycleSec).toBe(1800);
+    expect(RECIPES.reality_engine_lab!.category).toBe('manufacturing');
+  });
+  it('singularity_battery_factory recipe: phase_converter + dark_matter + casimir_energy → singularity_battery_unit', () => {
+    expect(RECIPES.singularity_battery_factory).toBeDefined();
+    expect(RECIPES.singularity_battery_factory!.inputs).toEqual({ phase_converter: 2, dark_matter: 1, casimir_energy: 1 });
+    expect(RECIPES.singularity_battery_factory!.outputs).toEqual({ singularity_battery_unit: 1 });
+    expect(RECIPES.singularity_battery_factory!.cycleSec).toBe(1800);
+    expect(RECIPES.singularity_battery_factory!.category).toBe('manufacturing');
+  });
+});
+
 describe('§6.6 T5 components — probability_calculator + dimensional_fold + causal_regulator (Task 12.2)', () => {
   it('probability_calculator is in ALL_RESOURCES with xp_weight 300', () => {
     expect(ALL_RESOURCES).toContain('probability_calculator' as ResourceId);

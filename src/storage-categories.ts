@@ -229,6 +229,11 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   probability_calculator: 'rare',
   dimensional_fold: 'rare',
   causal_regulator: 'rare',
+  // Phase 12 — T5 components (Task 12.3)
+  tachyonic_transmitter: 'rare',
+  aether_beacon: 'rare',
+  reality_engine: 'rare',
+  singularity_battery_unit: 'rare',
   // Step-20 (T6 Orbital). All five route to `rare` — the Vault is the
   // canonical T5/T6 catch-all. `antimatter_propellant` is a fuel/gas in
   // nature (§11.7) and an arguable `liquid_gas` candidate, but routing it
