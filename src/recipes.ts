@@ -1037,7 +1037,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // iron's worth of steel input (per §6.7 Steel-recipe substitution).
   // §5.2 heat-source adjacency required.
   oxygen_converter: {
-    cycleSec: 20,
+    // rebalanced step-19 idle-game scale (missed in original sweep)
+    cycleSec: 600,
     inputs: { pig_iron: 1, scrap: 1, oxygen: 2 },
     outputs: { steel: 2 },
     category: 'smelting',
@@ -2013,19 +2014,22 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'electronics',
   },
   circuit_assembler: {
-    cycleSec: 30,
+    // rebalanced step-19 idle-game scale (missed in original sweep)
+    cycleSec: 250,
     inputs: { pcb: 1, microchip: 2, steel: 1 },
     outputs: { circuit_board: 1 },
     category: 'electronics',
   },
   processor_fab: {
-    cycleSec: 60,
+    // rebalanced step-19 idle-game scale (missed in original sweep)
+    cycleSec: 1200,
     inputs: { circuit_board: 2, microchip: 4, exotic_alloy: 1 },
     outputs: { processor: 1 },
     category: 'electronics',
   },
   compute_module_fab: {
-    cycleSec: 120,
+    // rebalanced step-19 idle-game scale (missed in original sweep)
+    cycleSec: 1200,
     inputs: { processor: 2, circuit_board: 4, quantum_chip: 1 },
     outputs: { computing_module: 1 },
     category: 'electronics',
