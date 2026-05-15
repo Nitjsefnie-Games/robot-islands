@@ -556,8 +556,8 @@ async function main(): Promise<void> {
     transform: translateX(-50%);
     z-index: 9999;
     background: rgba(128, 240, 192, 0.15);
-    color: #80f0c0;
-    border: 1px solid #80f0c0;
+    color: var(--ri-success);
+    border: 1px solid var(--ri-success);
     border-radius: 4px;
     padding: 4px 12px;
     font-family: monospace;

@@ -164,7 +164,7 @@ export function mountConstructionUi(
 
   // Mutable element refs updated by refresh().
   const founderSelect = document.createElement('select');
-  founderSelect.style.background = '#1a1f2a';
+  founderSelect.style.background = 'var(--ri-elev)';
   founderSelect.style.color = 'var(--ri-fg-1)';
   founderSelect.style.border = '1px solid var(--ri-border-strong)';
   founderSelect.style.padding = '4px 6px';
@@ -228,7 +228,7 @@ export function mountConstructionUi(
   posXInput.type = 'number';
   posXInput.value = String(posX);
   posXInput.step = '1';
-  posXInput.style.background = '#1a1f2a';
+  posXInput.style.background = 'var(--ri-elev)';
   posXInput.style.color = 'var(--ri-fg-1)';
   posXInput.style.border = '1px solid var(--ri-border-strong)';
   posXInput.style.padding = '3px 5px';
@@ -247,7 +247,7 @@ export function mountConstructionUi(
   posYInput.type = 'number';
   posYInput.value = String(posY);
   posYInput.step = '1';
-  posYInput.style.background = '#1a1f2a';
+  posYInput.style.background = 'var(--ri-elev)';
   posYInput.style.color = 'var(--ri-fg-1)';
   posYInput.style.border = '1px solid var(--ri-border-strong)';
   posYInput.style.padding = '3px 5px';
@@ -265,7 +265,7 @@ export function mountConstructionUi(
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.maxLength = ISLAND_NAME_MAX_LEN;
-  nameInput.style.background = '#1a1f2a';
+  nameInput.style.background = 'var(--ri-elev)';
   nameInput.style.color = 'var(--ri-fg-1)';
   nameInput.style.border = '1px solid var(--ri-border-strong)';
   nameInput.style.padding = '4px 6px';
@@ -565,7 +565,7 @@ export function mountConstructionUi(
       statusEl.textContent = `Ready — ${selectedBiome} ${majorRadius}×${minorRadius} at (${posX}, ${posY})`;
       statusEl.style.color = 'var(--ri-accent)';
       constructBtn.style.background = 'var(--ri-accent)';
-      constructBtn.style.color = '#0a0e14';
+      constructBtn.style.color = 'var(--ri-void)';
       constructBtn.style.borderColor = 'var(--ri-accent-dim)';
       constructBtn.style.cursor = 'pointer';
       constructBtn.title = '';

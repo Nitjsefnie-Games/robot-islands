@@ -1160,7 +1160,7 @@ export function mountInspectorUi(
           'font-size: 11px',
           'margin-right: 4px',
           'margin-bottom: 4px',
-          satisfied ? 'background: #1a5c1a; color: #88ff88' : 'background: #5c1a1a; color: #ff8888',
+          satisfied ? 'background: rgba(125,211,160,0.12); color: var(--ri-success)' : 'background: rgba(232,93,74,0.12); color: var(--ri-danger)',
         ].join(';'));
         gateSection.body.appendChild(pill);
       }

@@ -308,7 +308,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       'height: 18px',
       'background: transparent',
       'cursor: pointer',
-      'accent-color: #7dd3e8',
+      'accent-color: var(--ri-accent)',
     ].join(';'),
   );
   slider.addEventListener('input', () => {
@@ -347,7 +347,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   styled(
     armBtn,
     [
-      'background: #1a1f2a',
+      'background: var(--ri-elev)',
       `color: ${'var(--ri-fg-1)'}`,
       `border: 1px solid ${'var(--ri-border-strong)'}`,
       'padding: 8px 12px',
@@ -374,7 +374,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   styled(
     pulseBtn,
     [
-      'background: #1a1f2a',
+      'background: var(--ri-elev)',
       `color: ${'var(--ri-fg-1)'}`,
       `border: 1px solid ${'var(--ri-border-strong)'}`,
       'padding: 8px 12px',
@@ -412,7 +412,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       armBtn.textContent = '◇ ARM LAUNCH';
       armBtn.style.color = 'var(--ri-fg-1)';
       armBtn.style.borderColor = 'var(--ri-border-strong)';
-      armBtn.style.background = '#1a1f2a';
+      armBtn.style.background = 'var(--ri-elev)';
       reticleLayer.visible = false;
     }
     deps.onLaunchModeChanged?.(on);

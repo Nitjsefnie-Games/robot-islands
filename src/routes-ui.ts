@@ -256,7 +256,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     styled(
       s,
       [
-        `background: #1a1f2a`,
+        `background: var(--ri-elev)`,
         `color: ${'var(--ri-fg-1)'}`,
         `border: 1px solid ${'var(--ri-border-strong)'}`,
         'font-family: ui-monospace, monospace',
@@ -313,7 +313,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   styled(
     commitBtn,
     [
-      'background: #1a1f2a',
+      'background: var(--ri-elev)',
       `color: ${'var(--ri-fg-1)'}`,
       `border: 1px solid ${'var(--ri-border-strong)'}`,
       'padding: 6px 10px',
@@ -649,10 +649,10 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       li.style.cssText = [
         'cursor: grab',
         'padding: 2px 6px',
-        'border: 1px solid #2d5878',
+        'border: 1px solid var(--ri-accent-dim)',
         'margin-bottom: 2px',
-        'background: #0f1720',
-        'color: #7dd3e8',
+        'background: var(--ri-panel-solid)',
+        'color: var(--ri-accent)',
         'font-size: 11px',
         'border-radius: 2px',
       ].join(';');
@@ -660,8 +660,8 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       li.addEventListener('dragend', (e) => handleDragEnd(e));
       li.addEventListener('dragover', (e) => handleDragOver(e));
       li.addEventListener('drop', (e) => handleDrop(e, route, rerender));
-      li.addEventListener('dragenter', (e) => { e.preventDefault(); li.style.borderColor = '#7dd3e8'; });
-      li.addEventListener('dragleave', () => { li.style.borderColor = '#2d5878'; });
+      li.addEventListener('dragenter', (e) => { e.preventDefault(); li.style.borderColor = 'var(--ri-accent)'; });
+      li.addEventListener('dragleave', () => { li.style.borderColor = 'var(--ri-accent-dim)'; });
       ul.appendChild(li);
     });
     container.appendChild(ul);

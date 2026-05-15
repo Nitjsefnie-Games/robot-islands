@@ -208,7 +208,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     styled(
       b,
       [
-        'background: #1a1f2a',
+        'background: var(--ri-elev)',
         `color: ${'var(--ri-fg-1)'}`,
         `border: 1px solid ${'var(--ri-border-strong)'}`,
         'padding: 6px 4px',
@@ -244,7 +244,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       } else {
         btn.style.color = 'var(--ri-fg-3)';
         btn.style.borderColor = 'var(--ri-border-strong)';
-        btn.style.background = '#1a1f2a';
+        btn.style.background = 'var(--ri-elev)';
       }
     }
   }
@@ -273,7 +273,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     styled(
       s,
       [
-        `background: #1a1f2a`,
+        `background: var(--ri-elev)`,
         `color: ${'var(--ri-fg-1)'}`,
         `border: 1px solid ${'var(--ri-border-strong)'}`,
         'font-family: ui-monospace, monospace',
@@ -383,7 +383,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       'height: 18px',
       'background: transparent',
       'cursor: pointer',
-      'accent-color: #7dd3e8',
+      'accent-color: var(--ri-accent)',
     ].join(';'),
   );
   fuelSlider.addEventListener('input', () => {
@@ -422,7 +422,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       'height: 18px',
       'background: transparent',
       'cursor: pointer',
-      'accent-color: #7dd3e8',
+      'accent-color: var(--ri-accent)',
     ].join(';'),
   );
   kitSlider.addEventListener('input', () => {
@@ -452,7 +452,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   styled(
     armBtn,
     [
-      'background: #1a1f2a',
+      'background: var(--ri-elev)',
       `color: ${'var(--ri-fg-1)'}`,
       `border: 1px solid ${'var(--ri-border-strong)'}`,
       'padding: 8px 12px',
@@ -485,7 +485,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       armBtn.textContent = '◇ ARM SETTLE';
       armBtn.style.color = 'var(--ri-fg-1)';
       armBtn.style.borderColor = 'var(--ri-border-strong)';
-      armBtn.style.background = '#1a1f2a';
+      armBtn.style.background = 'var(--ri-elev)';
       reticleLayer.visible = false;
     }
     deps.onLaunchModeChanged?.(on);
