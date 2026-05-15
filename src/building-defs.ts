@@ -148,6 +148,10 @@ export type BuildingDefId =
   // Phase 12 — T5 transcendent raws (Task 12.1)
   | 'zero_point_extractor'
   | 'neutronium_extractor'
+  // Phase 12 — T5 component labs (Task 12.2)
+  | 'probability_calculator_lab'
+  | 'dimensional_fold_lab'
+  | 'causal_regulator_lab'
   // T5→T6 transition (step 20): produces `ascendant_core`, the §14.1 gate
   // artifact. Built at T5 (level 50 + AI core) so the player can craft
   // ascendant_core BEFORE the §14.1 Spaceport requirement — Ascendant
@@ -3311,6 +3315,43 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 4000 },
     placementCost: { steel: 100, reality_anchor: 30, microchip: 30 },
     glyph: '✦',
+  },
+  // Phase 12 — T5 component labs (Task 12.2)
+  probability_calculator_lab: {
+    id: 'probability_calculator_lab',
+    displayName: 'Probability Calculator Lab',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0xa040c0,
+    stroke: 0x401060,
+    power: { consumes: 1500 },
+    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    glyph: '✺',
+  },
+  dimensional_fold_lab: {
+    id: 'dimensional_fold_lab',
+    displayName: 'Dimensional Fold Lab',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0x6020a0,
+    stroke: 0x201040,
+    power: { consumes: 1500 },
+    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    glyph: '✺',
+  },
+  causal_regulator_lab: {
+    id: 'causal_regulator_lab',
+    displayName: 'Causal Regulator Lab',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0x4080a0,
+    stroke: 0x104060,
+    power: { consumes: 1500 },
+    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    glyph: '✺',
   },
   aetheric_conduit: {
     id: 'aetheric_conduit',

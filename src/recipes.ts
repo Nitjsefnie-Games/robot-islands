@@ -210,6 +210,10 @@ export type ResourceId =
   // Phase 12 — T5 transcendent raws (Task 12.1)
   | 'zero_point_flux'
   | 'neutronium'
+  // Phase 12 — T5 components (Task 12.2)
+  | 'probability_calculator'
+  | 'dimensional_fold'
+  | 'causal_regulator'
   // Step-20 (T6 Orbital, §14). Partial catalog: the resources the §14.2
   // Spaceport + §14.10 satellite-assembly defs touch. §14.10 placeholder
   // recipes additionally reference Aluminum, Magnet, Optical Fiber,
@@ -442,6 +446,10 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   // Phase 12 — T5 transcendent raws (Task 12.1)
   'zero_point_flux',
   'neutronium',
+  // Phase 12 — T5 components (Task 12.2)
+  'probability_calculator',
+  'dimensional_fold',
+  'causal_regulator',
   // Step-20 T5→T6 artifact + T6 Orbital partial catalog (§14).
   'ascendant_core',
   'antimatter_propellant',
@@ -673,6 +681,10 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // Phase 12 — T5 transcendent raws (Task 12.1)
   zero_point_flux: 300,
   neutronium: 300,
+  // Phase 12 — T5 components (Task 12.2)
+  probability_calculator: 300,
+  dimensional_fold: 300,
+  causal_regulator: 300,
   // T5→T6 transition artifact. §9.1 puts T5 weight at 300 and T6 at 1000;
   // Ascendant Core is the bridge artifact unlocking T6 access (§13.4 /
   // §14.1), so it carries the higher T6 weight (1000) — producing one
@@ -1191,6 +1203,26 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: {},
     outputs: { neutronium: 1 },
     category: 'extraction',
+  },
+
+  // Phase 12 — T5 component labs (Task 12.2)
+  probability_calculator_lab: {
+    cycleSec: 1800,
+    inputs: { quantum_chip: 4, casimir_energy: 1, ai_core: 1 },
+    outputs: { probability_calculator: 1 },
+    category: 'manufacturing',
+  },
+  dimensional_fold_lab: {
+    cycleSec: 1800,
+    inputs: { spacetime_fragment: 1, exotic_alloy: 2, eldritch_processor: 1 },
+    outputs: { dimensional_fold: 1 },
+    category: 'manufacturing',
+  },
+  causal_regulator_lab: {
+    cycleSec: 1800,
+    inputs: { time_crystal: 1, phase_converter: 2, reality_anchor: 1 },
+    outputs: { causal_regulator: 1 },
+    category: 'manufacturing',
   },
 
   // T5 manufacturing — Reality Forge. Rebalanced for idle-game scale, step #19 (×8: was 600s).
