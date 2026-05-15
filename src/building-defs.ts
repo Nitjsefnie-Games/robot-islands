@@ -270,6 +270,9 @@ export type BuildingDefId =
   | 'cryo_compound_lab'
   // Phase 10 — T3 minerals + alloy (Task 10.4)
   | 'mag_alloyer'
+  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
+  | 'lithium_extractor'
+
   // §5.2 / §8.6 Heat Sources. The economy reads `def.heatSource` to identify
   // sources during heat-adjacency resolution. Each free source costs no fuel
   // when serving consumers; coal_furnace burns `coalPerCycle × consumers` per
@@ -2988,6 +2991,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 150 },
     placementCost: { steel: 50, microchip: 3 },
     glyph: '◈',
+  },
+  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
+  lithium_extractor: {
+    id: 'lithium_extractor',
+    displayName: 'Lithium Extractor',
+    category: 'extraction',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0xe04060,
+    stroke: 0x701020,
+    power: { consumes: 80 },
+    requiredTile: ['lithium_vein'],
+    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    glyph: '⛏',
   },
 
   // T5 raw extractors (§8.10). Power draws are placeholder "60-100 kW"

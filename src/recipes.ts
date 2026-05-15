@@ -249,7 +249,10 @@ export type ResourceId =
   // Phase 10 — T3 minerals + alloy (Task 10.3)
   | 'cryogenic_compound'
   // Phase 10 — T3 minerals + alloy (Task 10.4)
-  | 'magnetic_alloy';
+  | 'magnetic_alloy'
+  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
+  | 'lithium'
+;
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -426,6 +429,9 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'cryogenic_compound',
   // Phase 10 — T3 minerals + alloy (Task 10.4)
   'magnetic_alloy',
+  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
+  'lithium',
+
 ];
 
 /**
@@ -626,6 +632,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   cryogenic_compound: 30,
   // Phase 10 — T3 minerals + alloy (Task 10.4)
   magnetic_alloy: 30,
+  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
+  lithium: 30,
 };
 
 /**
@@ -1772,11 +1780,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
   // Phase 6 — T3 battery (§6.3 / §7.9)
-  // §7.9: spec literal uses lithium; substituted with copper_ingot until
-  // lithium ships (Phase 10).
   battery_factory: {
     cycleSec: 300,
-    inputs: { copper_ingot: 1, rigid_plastic: 1, wire: 2 },
+    inputs: { lithium: 1, rigid_plastic: 1, wire: 2 },
     outputs: { battery: 1 },
     category: 'manufacturing',
   },
@@ -1828,6 +1834,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { iron_ingot: 2, rare_earth: 1 },
     outputs: { magnetic_alloy: 1 },
     category: 'manufacturing',
+  },
+  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
+  lithium_extractor: {
+    cycleSec: 200,
+    inputs: {},
+    outputs: { lithium: 1 },
+    category: 'extraction',
   },
 };
 

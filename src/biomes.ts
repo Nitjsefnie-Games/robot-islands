@@ -110,7 +110,7 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     initialMinorRadius: 12,
     powerSource: 'solar',
     defaultTerrain: 'sand',
-    rareTerrain: ['stone', 'ore', 'oil_well', 'sulfur_vein', 'phosphate_deposit', 'graphite_vein', 'copper_vein', 'bauxite_vein', 'manganese_vein', 'mercury_pit'],
+    rareTerrain: ['stone', 'ore', 'oil_well', 'sulfur_vein', 'phosphate_deposit', 'graphite_vein', 'copper_vein', 'bauxite_vein', 'manganese_vein', 'mercury_pit', 'lithium_vein'],
     displayName: 'Desert',
   },
   arctic: {
@@ -120,7 +120,7 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     powerSource: 'cryogenic',
     defaultTerrain: 'stone',
     // Arctic uses `ice` as scattered cryo deposit (cryo recipes not implemented).
-    rareTerrain: ['ice', 'ice', 'stone', 'helium_vent', 'chromium_vein', 'nickel_vein', 'tungsten_vein', 'diamond_vein'],
+    rareTerrain: ['ice', 'ice', 'stone', 'helium_vent', 'chromium_vein', 'nickel_vein', 'tungsten_vein', 'diamond_vein', 'lithium_vein'],
     displayName: 'Arctic',
   },
 };

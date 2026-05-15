@@ -89,6 +89,8 @@ describe('Balance — every consumed resource has at least one producer', () => 
     'mercury',
     // Phase 10 — T3 raw minerals (Task 10.2)
     'diamond_ore',
+    // Phase 10b — T3 raw minerals (Task 10.4.5)
+    'lithium',
     // §6.6 T5 raws (extractor cycle in §8.10)
     'aetheric_current', 'tachyon_stream', 'dark_matter', 'strange_matter',
     'quantum_foam', 'spacetime_fragment', 'higgs_flux', 'helium_3',

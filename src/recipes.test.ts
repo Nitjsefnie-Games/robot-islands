@@ -928,10 +928,10 @@ describe('§6.3/§7.9 battery via battery_factory (Task 6.4)', () => {
     expect(ALL_RESOURCES).toContain('battery');
     expect(XP_WEIGHT.battery).toBe(30);
   });
-  it('battery_factory recipe: copper_ingot + rigid_plastic + wire → battery', () => {
+  it('battery_factory recipe: lithium + rigid_plastic + wire → battery', () => {
     expect(RECIPES.battery_factory).toBeDefined();
     expect(RECIPES.battery_factory!.inputs).toEqual({
-      copper_ingot: 1,
+      lithium: 1,
       rigid_plastic: 1,
       wire: 2,
     });
@@ -939,6 +939,20 @@ describe('§6.3/§7.9 battery via battery_factory (Task 6.4)', () => {
     expect(RECIPES.battery_factory!.cycleSec).toBe(300);
   });
 });
+
+describe('§6.4 lithium + lithium_extractor (Task 10.4.5)', () => {
+  it('lithium is in ALL_RESOURCES with xp_weight 30 (T3 rare)', () => {
+    expect(ALL_RESOURCES).toContain('lithium' as ResourceId);
+    expect(XP_WEIGHT.lithium).toBe(30);
+  });
+  it('lithium_extractor recipe: empty inputs → lithium', () => {
+    expect(RECIPES.lithium_extractor).toBeDefined();
+    expect(RECIPES.lithium_extractor!.inputs).toEqual({});
+    expect(RECIPES.lithium_extractor!.outputs).toEqual({ lithium: 1 });
+    expect(RECIPES.lithium_extractor!.cycleSec).toBe(200);
+  });
+});
+
 
 describe('§6.3 glass_panel via glass_panel_press (Task 6.5)', () => {
   it('glass_panel is in ALL_RESOURCES with xp_weight 10', () => {

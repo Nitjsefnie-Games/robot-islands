@@ -247,4 +247,7 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   cryogenic_compound: 'temp_sensitive',
   // Phase 10 — T3 minerals + alloy (Task 10.4)
   magnetic_alloy: 'components',
+  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
+  lithium: 'rare',
+
 };

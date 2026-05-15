@@ -216,6 +216,9 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'cryo_compound_lab',
   // Phase 10 — T3 minerals + alloy (Task 10.4)
   'mag_alloyer',
+  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
+  'lithium_extractor',
+
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -353,6 +356,20 @@ describe('BUILDING_DEFS catalog', () => {
       expect(RECIPES.mag_alloyer).toBeDefined();
       expect(RECIPES.mag_alloyer!.inputs).toEqual({ iron_ingot: 2, rare_earth: 1 });
       expect(RECIPES.mag_alloyer!.outputs).toEqual({ magnetic_alloy: 1 });
+    });
+  });
+
+  describe('§6.4 lithium_extractor (T3 lithium extractor)', () => {
+    it('is T3 extraction gated to lithium_vein tile', () => {
+      const def = BUILDING_DEFS.lithium_extractor;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(3);
+      expect(def.category).toBe('extraction');
+      expect(def.requiredTile).toEqual(['lithium_vein']);
+    });
+    it('produces 1 lithium per cycle', () => {
+      expect(RECIPES.lithium_extractor).toBeDefined();
+      expect(RECIPES.lithium_extractor!.outputs).toEqual({ lithium: 1 });
     });
   });
 });
