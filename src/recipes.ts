@@ -136,6 +136,10 @@ export type ResourceId =
   | 'rigid_plastic'
   | 'flexible_plastic'
   | 'synthetic_rubber'
+  // Phase 6 — T2 mechanical components (§6.3 / §7.1)
+  | 'sheet_metal'
+  | 'pipe'
+  | 'steel_beam'
   // Phase 5 — T2 chemistry chain (§7.5)
   | 'sulfuric_acid'
   | 'hydrochloric_acid'
@@ -300,6 +304,10 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'rigid_plastic',
   'flexible_plastic',
   'synthetic_rubber',
+  // Phase 6 — T2 mechanical components (§6.3 / §7.1)
+  'sheet_metal',
+  'pipe',
+  'steel_beam',
   // Phase 5 — T2 chemistry chain (§7.5)
   'sulfuric_acid',
   'hydrochloric_acid',
@@ -459,6 +467,10 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   rigid_plastic: 10,
   flexible_plastic: 10,
   synthetic_rubber: 10,
+  // Phase 6 — T2 mechanical components (§6.3 / §7.1)
+  sheet_metal: 10,
+  pipe: 10,
+  steel_beam: 10,
   // Phase 5 — T2 chemistry chain (§7.5)
   sulfuric_acid: 10,
   hydrochloric_acid: 10,
@@ -1567,6 +1579,25 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { processor: 2, circuit_board: 4, quantum_chip: 1 },
     outputs: { computing_module: 1 },
     category: 'electronics',
+  },
+  // Phase 6 — T2 mechanical components (§6.3 / §7.1)
+  sheet_metal_mill: {
+    cycleSec: 200,
+    inputs: { steel: 1 },
+    outputs: { sheet_metal: 2 },
+    category: 'manufacturing',
+  },
+  pipe_mill: {
+    cycleSec: 200,
+    inputs: { steel: 1 },
+    outputs: { pipe: 2 },
+    category: 'manufacturing',
+  },
+  beam_mill: {
+    cycleSec: 200,
+    inputs: { steel: 1 },
+    outputs: { steel_beam: 2 },
+    category: 'manufacturing',
   },
 };
 

@@ -860,6 +860,35 @@ describe('§7.5 sulfuric_acid + hydrochloric_acid plants (Task 5.1)', () => {
   });
 });
 
+describe('§6.3 T2 rolling outputs — sheet_metal + pipe + steel_beam (Task 6.1)', () => {
+  it('sheet_metal, pipe, steel_beam are in ALL_RESOURCES with xp_weight 10', () => {
+    expect(ALL_RESOURCES).toContain('sheet_metal');
+    expect(ALL_RESOURCES).toContain('pipe');
+    expect(ALL_RESOURCES).toContain('steel_beam');
+    expect(XP_WEIGHT.sheet_metal).toBe(10);
+    expect(XP_WEIGHT.pipe).toBe(10);
+    expect(XP_WEIGHT.steel_beam).toBe(10);
+  });
+  it('sheet_metal_mill recipe: steel → sheet_metal', () => {
+    expect(RECIPES.sheet_metal_mill).toBeDefined();
+    expect(RECIPES.sheet_metal_mill!.inputs).toEqual({ steel: 1 });
+    expect(RECIPES.sheet_metal_mill!.outputs).toEqual({ sheet_metal: 2 });
+    expect(RECIPES.sheet_metal_mill!.cycleSec).toBe(200);
+  });
+  it('pipe_mill recipe: steel → pipe', () => {
+    expect(RECIPES.pipe_mill).toBeDefined();
+    expect(RECIPES.pipe_mill!.inputs).toEqual({ steel: 1 });
+    expect(RECIPES.pipe_mill!.outputs).toEqual({ pipe: 2 });
+    expect(RECIPES.pipe_mill!.cycleSec).toBe(200);
+  });
+  it('beam_mill recipe: steel → steel_beam', () => {
+    expect(RECIPES.beam_mill).toBeDefined();
+    expect(RECIPES.beam_mill!.inputs).toEqual({ steel: 1 });
+    expect(RECIPES.beam_mill!.outputs).toEqual({ steel_beam: 2 });
+    expect(RECIPES.beam_mill!.cycleSec).toBe(200);
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,

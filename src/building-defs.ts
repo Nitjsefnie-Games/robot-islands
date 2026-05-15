@@ -227,6 +227,9 @@ export type BuildingDefId =
   | 'lubricant_refinery'
   | 'diesel_refinery'
   | 'metal_rolling_mill'
+  | 'sheet_metal_mill'
+  | 'pipe_mill'
+  | 'beam_mill'
   | 'silicon_crusher'
   | 'air_separator'
   | 'cryo_air_separator'
@@ -953,6 +956,43 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
     glyph: '⚙',
+  },
+  // Phase 6 — T2 rolling mills (§6.3 / §7.1)
+  sheet_metal_mill: {
+    id: 'sheet_metal_mill',
+    displayName: 'Sheet Metal Mill',
+    category: 'manufacturing',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0xb0b8c0,
+    stroke: 0x505860,
+    power: { consumes: 100 },
+    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    glyph: '▭',
+  },
+  pipe_mill: {
+    id: 'pipe_mill',
+    displayName: 'Pipe Mill',
+    category: 'manufacturing',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x9098a0,
+    stroke: 0x404850,
+    power: { consumes: 100 },
+    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    glyph: '◯',
+  },
+  beam_mill: {
+    id: 'beam_mill',
+    displayName: 'Beam Mill',
+    category: 'manufacturing',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x707880,
+    stroke: 0x303840,
+    power: { consumes: 100 },
+    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    glyph: '▬',
   },
   // §8.3 T3 manufacturing: Fabricator (3x3). Advanced components — motors,
   // actuators, hydraulic / pneumatic systems. Recipe assignment lands in

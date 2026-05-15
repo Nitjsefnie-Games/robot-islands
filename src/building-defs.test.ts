@@ -192,6 +192,10 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'spacetime_anchor',
   'power_substation',
   'terrain_modifier',
+  // Phase 6 — T2 mechanical components (§6.3)
+  'sheet_metal_mill',
+  'pipe_mill',
+  'beam_mill',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -1555,6 +1559,33 @@ describe('§8.1 T2 extraction buildings', () => {
       const def = BUILDING_DEFS.exhaust_scrubber;
       expect(def.tier).toBe(2);
       expect(def.footprint.tiles.length).toBe(1);
+    });
+  });
+
+  describe('§6.3 T2 rolling mills — sheet_metal + pipe + steel_beam (Task 6.1)', () => {
+    it('sheet_metal_mill is T2, 2x2, manufacturing, consumes 100W', () => {
+      const def = BUILDING_DEFS.sheet_metal_mill;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(2);
+      expect(def.footprint.tiles.length).toBe(4);
+      expect(def.category).toBe('manufacturing');
+      expect(def.power?.consumes).toBe(100);
+    });
+    it('pipe_mill is T2, 2x2, manufacturing, consumes 100W', () => {
+      const def = BUILDING_DEFS.pipe_mill;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(2);
+      expect(def.footprint.tiles.length).toBe(4);
+      expect(def.category).toBe('manufacturing');
+      expect(def.power?.consumes).toBe(100);
+    });
+    it('beam_mill is T2, 2x2, manufacturing, consumes 100W', () => {
+      const def = BUILDING_DEFS.beam_mill;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(2);
+      expect(def.footprint.tiles.length).toBe(4);
+      expect(def.category).toBe('manufacturing');
+      expect(def.power?.consumes).toBe(100);
     });
   });
 
