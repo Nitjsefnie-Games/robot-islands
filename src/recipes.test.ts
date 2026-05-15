@@ -749,7 +749,7 @@ describe('§7.4 crude_oil_cracker — heavy_oil + tar + asphalt (Task 4.1)', () 
     expect(RECIPES.crude_oil_cracker).toBeDefined();
     expect(RECIPES.crude_oil_cracker!.inputs).toEqual({ crude_oil: 3 });
     expect(RECIPES.crude_oil_cracker!.outputs).toEqual({ heavy_oil: 1, tar: 1, asphalt: 1 });
-    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(600);
+    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(1200); // rebalanced Task 16.6 (was 600)
     expect(RECIPES.crude_oil_cracker!.category).toBe('chemistry');
   });
 });
@@ -814,7 +814,7 @@ describe('§7.5 sodium_hydroxide as real chlor-alkali co-output (Task 5.2)', () 
     expect(RECIPES.chlor_alkali_plant!.outputs.chlorine).toBe(1);
     expect(RECIPES.chlor_alkali_plant!.outputs.sodium_hydroxide).toBe(1);
     expect(RECIPES.chlor_alkali_plant!.inputs).toEqual({ saltwater: 2 });
-    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(800);
+    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(1200); // rebalanced Task 16.6 (was 800)
   });
 });
 
@@ -1586,6 +1586,18 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
   });
 });
 
+
+describe('§7.4/§7.5 petrochemical chains cycleSec rebalance (Task 16.6)', () => {
+  it('naphtha_cracker cycleSec is 1000 (was 600, XP-arbitrage fix)', () => {
+    expect(RECIPES.naphtha_cracker!.cycleSec).toBe(1000);
+  });
+  it('crude_oil_cracker cycleSec is 1200 (was 600, XP-arbitrage fix)', () => {
+    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(1200);
+  });
+  it('chlor_alkali_plant cycleSec is 1200 (was 800, XP-arbitrage fix)', () => {
+    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(1200);
+  });
+});
 
 describe('§7.1 chromium/nickel/tungsten smelter cycleSec rebalance (Task 16.5)', () => {
   it('chromium_smelter cycleSec is 250 (was 80, T1-speed exploit fix)', () => {
