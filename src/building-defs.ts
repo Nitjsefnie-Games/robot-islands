@@ -198,6 +198,11 @@ export type BuildingDefId =
   | 'zinc_mine'
   | 'zinc_smelter'
   | 'galvanizing_bath'
+  | 'chromium_mine'
+  | 'chromium_smelter'
+  | 'nickel_mine'
+  | 'nickel_smelter'
+  | 'stainless_steel_mill'
   | 'lumber_mill'
   | 'glassworks'
   | 'evaporator'
@@ -2145,6 +2150,72 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x3a4048,
     power: { consumes: 150 },
     placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
+    glyph: '◈',
+  },
+
+  // Task 3.3: Stainless steel — chromium_ore + nickel_ore + ingots + stainless_steel
+  chromium_mine: {
+    id: 'chromium_mine',
+    displayName: 'Chromium Mine',
+    category: 'extraction',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0x5c6068,
+    stroke: 0x202428,
+    power: { consumes: 40 },
+    requiredTile: ['chromium_vein'],
+    placementCost: { stone: 30, wood: 15 },
+    glyph: '⛏',
+  },
+  chromium_smelter: {
+    id: 'chromium_smelter',
+    displayName: 'Chromium Smelter',
+    category: 'smelting',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0x5c6068,
+    stroke: 0x202428,
+    power: { consumes: 50 },
+    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    glyph: '△',
+  },
+  nickel_mine: {
+    id: 'nickel_mine',
+    displayName: 'Nickel Mine',
+    category: 'extraction',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0xa0a098,
+    stroke: 0x484840,
+    power: { consumes: 40 },
+    requiredTile: ['nickel_vein'],
+    placementCost: { stone: 30, wood: 15 },
+    glyph: '⛏',
+  },
+  nickel_smelter: {
+    id: 'nickel_smelter',
+    displayName: 'Nickel Smelter',
+    category: 'smelting',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0xa0a098,
+    stroke: 0x484840,
+    power: { consumes: 50 },
+    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    glyph: '△',
+  },
+  stainless_steel_mill: {
+    id: 'stainless_steel_mill',
+    displayName: 'Stainless Steel Mill',
+    category: 'manufacturing',
+    tier: 3,
+    footprint: SHAPES.square3,
+    fill: 0xa0a098,
+    stroke: 0x484840,
+    power: { consumes: 250 },
+    requiresHeat: true,
+    gates: [{ matchType: 'heat_source', hard: true }],
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30 },
     glyph: '◈',
   },
 

@@ -127,6 +127,11 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'zinc_mine',
   'zinc_smelter',
   'galvanizing_bath',
+  'chromium_mine',
+  'chromium_smelter',
+  'nickel_mine',
+  'nickel_smelter',
+  'stainless_steel_mill',
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   'limekiln',
   'lime_slaker',
@@ -1066,6 +1071,83 @@ describe('§7.1 galvanizing_bath (T2 galvanized steel producer)', () => {
     expect(RECIPES.galvanizing_bath).toBeDefined();
     expect(RECIPES.galvanizing_bath!.inputs).toEqual({ steel: 1, zinc_ingot: 1 });
     expect(RECIPES.galvanizing_bath!.outputs).toEqual({ galvanized_steel: 1 });
+  });
+});
+
+describe('§7.1 chromium_mine (T1 chromium extractor)', () => {
+  it('is T1 extraction gated to chromium_vein tile', () => {
+    const def = BUILDING_DEFS.chromium_mine;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.category).toBe('extraction');
+    expect(def.requiredTile).toEqual(['chromium_vein']);
+  });
+  it('produces 1 chromium_ore per cycle', () => {
+    expect(RECIPES.chromium_mine).toBeDefined();
+    expect(RECIPES.chromium_mine!.outputs).toEqual({ chromium_ore: 1 });
+  });
+});
+
+describe('§7.1 chromium_smelter (T1 chromium ingot smelter)', () => {
+  it('is T1, 2x2, smelting, no heat requirement', () => {
+    const def = BUILDING_DEFS.chromium_smelter;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.category).toBe('smelting');
+    expect(def.requiresHeat).toBeUndefined();
+  });
+  it('produces chromium_ingot from chromium_ore + coal', () => {
+    expect(RECIPES.chromium_smelter).toBeDefined();
+    expect(RECIPES.chromium_smelter!.inputs).toEqual({ chromium_ore: 1, coal: 1 });
+    expect(RECIPES.chromium_smelter!.outputs).toEqual({ chromium_ingot: 1 });
+  });
+});
+
+describe('§7.1 nickel_mine (T1 nickel extractor)', () => {
+  it('is T1 extraction gated to nickel_vein tile', () => {
+    const def = BUILDING_DEFS.nickel_mine;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.category).toBe('extraction');
+    expect(def.requiredTile).toEqual(['nickel_vein']);
+  });
+  it('produces 1 nickel_ore per cycle', () => {
+    expect(RECIPES.nickel_mine).toBeDefined();
+    expect(RECIPES.nickel_mine!.outputs).toEqual({ nickel_ore: 1 });
+  });
+});
+
+describe('§7.1 nickel_smelter (T1 nickel ingot smelter)', () => {
+  it('is T1, 2x2, smelting, no heat requirement', () => {
+    const def = BUILDING_DEFS.nickel_smelter;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.category).toBe('smelting');
+    expect(def.requiresHeat).toBeUndefined();
+  });
+  it('produces nickel_ingot from nickel_ore + coal', () => {
+    expect(RECIPES.nickel_smelter).toBeDefined();
+    expect(RECIPES.nickel_smelter!.inputs).toEqual({ nickel_ore: 1, coal: 1 });
+    expect(RECIPES.nickel_smelter!.outputs).toEqual({ nickel_ingot: 1 });
+  });
+});
+
+describe('§7.1 stainless_steel_mill (T3 stainless steel producer)', () => {
+  it('is T3, 3x3, manufacturing, requires heat', () => {
+    const def = BUILDING_DEFS.stainless_steel_mill;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(3);
+    expect(def.footprint.tiles.length).toBe(9); // 3x3
+    expect(def.category).toBe('manufacturing');
+    expect(def.requiresHeat).toBe(true);
+    expect(def.gates).toEqual([{ matchType: 'heat_source', hard: true }]);
+  });
+  it('produces stainless_steel from steel + chromium_ingot + nickel_ingot', () => {
+    expect(RECIPES.stainless_steel_mill).toBeDefined();
+    expect(RECIPES.stainless_steel_mill!.inputs).toEqual({ steel: 1, chromium_ingot: 1, nickel_ingot: 1 });
+    expect(RECIPES.stainless_steel_mill!.outputs).toEqual({ stainless_steel: 1 });
   });
 });
 

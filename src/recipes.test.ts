@@ -631,6 +631,59 @@ describe('§6.1/§7.1 galvanized_steel chain (Task 3.2)', () => {
   });
 });
 
+describe('§6.4/§7.1 stainless_steel chain (Task 3.3)', () => {
+  it('chromium_ore is in ALL_RESOURCES with xp_weight 1 (T0 raw)', () => {
+    expect(ALL_RESOURCES).toContain('chromium_ore' as ResourceId);
+    expect(XP_WEIGHT.chromium_ore).toBe(1);
+  });
+  it('nickel_ore is in ALL_RESOURCES with xp_weight 1 (T0 raw)', () => {
+    expect(ALL_RESOURCES).toContain('nickel_ore' as ResourceId);
+    expect(XP_WEIGHT.nickel_ore).toBe(1);
+  });
+  it('chromium_ingot is in ALL_RESOURCES with xp_weight 30 (T3 refined)', () => {
+    expect(ALL_RESOURCES).toContain('chromium_ingot' as ResourceId);
+    expect(XP_WEIGHT.chromium_ingot).toBe(30);
+  });
+  it('nickel_ingot is in ALL_RESOURCES with xp_weight 30 (T3 refined)', () => {
+    expect(ALL_RESOURCES).toContain('nickel_ingot' as ResourceId);
+    expect(XP_WEIGHT.nickel_ingot).toBe(30);
+  });
+  it('stainless_steel is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
+    expect(ALL_RESOURCES).toContain('stainless_steel' as ResourceId);
+    expect(XP_WEIGHT.stainless_steel).toBe(30);
+  });
+  it('chromium_mine recipe: empty inputs → chromium_ore', () => {
+    expect(RECIPES.chromium_mine).toBeDefined();
+    expect(RECIPES.chromium_mine!.inputs).toEqual({});
+    expect(RECIPES.chromium_mine!.outputs).toEqual({ chromium_ore: 1 });
+    expect(RECIPES.chromium_mine!.cycleSec).toBe(60);
+  });
+  it('chromium_smelter recipe: chromium_ore + coal → chromium_ingot', () => {
+    expect(RECIPES.chromium_smelter).toBeDefined();
+    expect(RECIPES.chromium_smelter!.inputs).toEqual({ chromium_ore: 1, coal: 1 });
+    expect(RECIPES.chromium_smelter!.outputs).toEqual({ chromium_ingot: 1 });
+    expect(RECIPES.chromium_smelter!.cycleSec).toBe(80);
+  });
+  it('nickel_mine recipe: empty inputs → nickel_ore', () => {
+    expect(RECIPES.nickel_mine).toBeDefined();
+    expect(RECIPES.nickel_mine!.inputs).toEqual({});
+    expect(RECIPES.nickel_mine!.outputs).toEqual({ nickel_ore: 1 });
+    expect(RECIPES.nickel_mine!.cycleSec).toBe(60);
+  });
+  it('nickel_smelter recipe: nickel_ore + coal → nickel_ingot', () => {
+    expect(RECIPES.nickel_smelter).toBeDefined();
+    expect(RECIPES.nickel_smelter!.inputs).toEqual({ nickel_ore: 1, coal: 1 });
+    expect(RECIPES.nickel_smelter!.outputs).toEqual({ nickel_ingot: 1 });
+    expect(RECIPES.nickel_smelter!.cycleSec).toBe(80);
+  });
+  it('stainless_steel_mill recipe: steel + chromium_ingot + nickel_ingot → stainless_steel', () => {
+    expect(RECIPES.stainless_steel_mill).toBeDefined();
+    expect(RECIPES.stainless_steel_mill!.inputs).toEqual({ steel: 1, chromium_ingot: 1, nickel_ingot: 1 });
+    expect(RECIPES.stainless_steel_mill!.outputs).toEqual({ stainless_steel: 1 });
+    expect(RECIPES.stainless_steel_mill!.cycleSec).toBe(400);
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,
