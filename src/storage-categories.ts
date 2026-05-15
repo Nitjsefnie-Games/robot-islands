@@ -154,6 +154,8 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   spring: 'components',
   // Phase 6 — T2 mechanical components (§6.3)
   heavy_cable: 'components',
+  // Phase 6 — T3 battery (§6.3 / §7.9)
+  battery: 'components',
   // Phase 5 — T2 chemistry chain (§7.5)
   sulfuric_acid: 'liquid_gas',
   hydrochloric_acid: 'liquid_gas',

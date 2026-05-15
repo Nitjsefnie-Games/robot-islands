@@ -923,6 +923,23 @@ describe('§6.3 heavy_cable via cable_drawer (Task 6.3)', () => {
   });
 });
 
+describe('§6.3/§7.9 battery via battery_factory (Task 6.4)', () => {
+  it('battery is in ALL_RESOURCES with xp_weight 30', () => {
+    expect(ALL_RESOURCES).toContain('battery');
+    expect(XP_WEIGHT.battery).toBe(30);
+  });
+  it('battery_factory recipe: copper_ingot + rigid_plastic + wire → battery', () => {
+    expect(RECIPES.battery_factory).toBeDefined();
+    expect(RECIPES.battery_factory!.inputs).toEqual({
+      copper_ingot: 1,
+      rigid_plastic: 1,
+      wire: 2,
+    });
+    expect(RECIPES.battery_factory!.outputs).toEqual({ battery: 1 });
+    expect(RECIPES.battery_factory!.cycleSec).toBe(300);
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,

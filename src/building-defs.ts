@@ -233,6 +233,7 @@ export type BuildingDefId =
   | 'bearing_press'
   | 'spring_winder'
   | 'cable_drawer'
+  | 'battery_factory'
   | 'silicon_crusher'
   | 'air_separator'
   | 'cryo_air_separator'
@@ -1034,6 +1035,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 80 },
     placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
     glyph: '⌇',
+  },
+  // Phase 6 — T3 battery factory (§6.3 / §7.9)
+  battery_factory: {
+    id: 'battery_factory',
+    displayName: 'Battery Factory',
+    category: 'manufacturing',
+    tier: 3,
+    footprint: SHAPES.square3,
+    fill: 0x4a7040,
+    stroke: 0x1a3010,
+    power: { consumes: 200 },
+    placementCost: { steel: 80, microchip: 5, glass: 10 },
+    glyph: '🔋',
   },
   // §8.3 T3 manufacturing: Fabricator (3x3). Advanced components — motors,
   // actuators, hydraulic / pneumatic systems. Recipe assignment lands in

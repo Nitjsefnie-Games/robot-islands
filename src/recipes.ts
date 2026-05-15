@@ -145,6 +145,8 @@ export type ResourceId =
   | 'spring'
   // Phase 6 — T2 mechanical components (§6.3)
   | 'heavy_cable'
+  // Phase 6 — T3 battery (§6.3 / §7.9)
+  | 'battery'
   // Phase 5 — T2 chemistry chain (§7.5)
   | 'sulfuric_acid'
   | 'hydrochloric_acid'
@@ -318,6 +320,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'spring',
   // Phase 6 — T2 mechanical components (§6.3)
   'heavy_cable',
+  // Phase 6 — T3 battery (§6.3 / §7.9)
+  'battery',
   // Phase 5 — T2 chemistry chain (§7.5)
   'sulfuric_acid',
   'hydrochloric_acid',
@@ -486,6 +490,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   spring: 10,
   // Phase 6 — T2 mechanical components (§6.3)
   heavy_cable: 10,
+  // Phase 6 — T3 battery (§6.3 / §7.9)
+  battery: 30,
   // Phase 5 — T2 chemistry chain (§7.5)
   sulfuric_acid: 10,
   hydrochloric_acid: 10,
@@ -1632,6 +1638,15 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 200,
     inputs: { wire: 3 },
     outputs: { heavy_cable: 1 },
+    category: 'manufacturing',
+  },
+  // Phase 6 — T3 battery (§6.3 / §7.9)
+  // §7.9: spec literal uses lithium; substituted with copper_ingot until
+  // lithium ships (Phase 10).
+  battery_factory: {
+    cycleSec: 300,
+    inputs: { copper_ingot: 1, rigid_plastic: 1, wire: 2 },
+    outputs: { battery: 1 },
     category: 'manufacturing',
   },
 };
