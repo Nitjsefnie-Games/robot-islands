@@ -263,4 +263,6 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   solar_cell: 'components',
   // Phase 10c — T3 power components (Task 10.10)
   fuel_cell: 'components',
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  optical_glass: 'components',
 };

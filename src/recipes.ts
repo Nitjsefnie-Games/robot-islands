@@ -265,7 +265,9 @@ export type ResourceId =
   // Phase 10c — T3 power components (Task 10.9)
   | 'solar_cell'
   // Phase 10c — T3 power components (Task 10.10)
-  | 'fuel_cell';
+  | 'fuel_cell'
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  | 'optical_glass';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -458,6 +460,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'solar_cell',
   // Phase 10c — T3 power components (Task 10.10)
   'fuel_cell',
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  'optical_glass',
 ];
 
 /**
@@ -674,6 +678,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   solar_cell: 30,
   // Phase 10c — T3 power components (Task 10.10)
   fuel_cell: 30,
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  optical_glass: 30,
 };
 
 /**
@@ -1934,6 +1940,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 400,
     inputs: { hydrogen: 2, rare_earth: 1, flexible_plastic: 1 },
     outputs: { fuel_cell: 1 },
+    category: 'manufacturing',
+  },
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  optical_glass_kiln: {
+    cycleSec: 300,
+    inputs: { quartz: 2 },
+    outputs: { optical_glass: 1 },
     category: 'manufacturing',
   },
 };

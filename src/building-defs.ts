@@ -286,6 +286,8 @@ export type BuildingDefId =
   | 'solar_cell_lab'
   // Phase 10c — T3 power components (Task 10.10)
   | 'fuel_cell_lab'
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  | 'optical_glass_kiln'
   // §5.2 / §8.6 Heat Sources. The economy reads `def.heatSource` to identify
   // sources during heat-adjacency resolution. Each free source costs no fuel
   // when serving consumers; coal_furnace burns `coalPerCycle × consumers` per
@@ -3120,6 +3122,21 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 200 },
     placementCost: { steel: 70, microchip: 4 },
     glyph: '⚡',
+  },
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  optical_glass_kiln: {
+    id: 'optical_glass_kiln',
+    displayName: 'Optical Glass Kiln',
+    category: 'manufacturing',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0xc0e0f0,
+    stroke: 0x405060,
+    power: { consumes: 200 },
+    requiresHeat: true,
+    gates: [{ matchType: 'heat_source', hard: true }],
+    placementCost: { steel: 60, microchip: 4 },
+    glyph: '△',
   },
 
   // T5 raw extractors (§8.10). Power draws are placeholder "60-100 kW"

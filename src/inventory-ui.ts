@@ -228,6 +228,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   solar_cell: 'components',
   // Phase 10c — T3 power components (Task 10.10)
   fuel_cell: 'components',
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  optical_glass: 'components',
 };
 
 /** Filter chips shown above the resource list. `'all'` is the default. */

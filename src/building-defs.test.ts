@@ -232,6 +232,8 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'solar_cell_lab',
   // Phase 10c — T3 power components (Task 10.10)
   'fuel_cell_lab',
+  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  'optical_glass_kiln',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -503,6 +505,23 @@ describe('BUILDING_DEFS catalog', () => {
       expect(RECIPES.fuel_cell_lab).toBeDefined();
       expect(RECIPES.fuel_cell_lab!.inputs).toEqual({ hydrogen: 2, rare_earth: 1, flexible_plastic: 1 });
       expect(RECIPES.fuel_cell_lab!.outputs).toEqual({ fuel_cell: 1 });
+    });
+  });
+
+  describe('§6.4/§7.6 optical_glass_kiln (T3 optical_glass producer)', () => {
+    it('is T3, 2x2, manufacturing, requires heat', () => {
+      const def = BUILDING_DEFS.optical_glass_kiln;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(3);
+      expect(def.footprint).toEqual(SHAPES.square2);
+      expect(def.category).toBe('manufacturing');
+      expect(def.requiresHeat).toBe(true);
+      expect(def.gates).toEqual([{ matchType: 'heat_source', hard: true }]);
+    });
+    it('produces optical_glass from quartz', () => {
+      expect(RECIPES.optical_glass_kiln).toBeDefined();
+      expect(RECIPES.optical_glass_kiln!.inputs).toEqual({ quartz: 2 });
+      expect(RECIPES.optical_glass_kiln!.outputs).toEqual({ optical_glass: 1 });
     });
   });
 });

@@ -1051,6 +1051,19 @@ describe('§7.9 fuel_cell via fuel_cell_lab (Task 10.10)', () => {
   });
 });
 
+describe('§6.4/§7.6 optical_glass via optical_glass_kiln (Task 10.11)', () => {
+  it('optical_glass is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
+    expect(ALL_RESOURCES).toContain('optical_glass' as ResourceId);
+    expect(XP_WEIGHT.optical_glass).toBe(30);
+  });
+  it('optical_glass_kiln recipe: quartz → optical_glass', () => {
+    expect(RECIPES.optical_glass_kiln).toBeDefined();
+    expect(RECIPES.optical_glass_kiln!.inputs).toEqual({ quartz: 2 });
+    expect(RECIPES.optical_glass_kiln!.outputs).toEqual({ optical_glass: 1 });
+    expect(RECIPES.optical_glass_kiln!.cycleSec).toBe(300);
+  });
+});
+
 describe('§6.3 glass_panel via glass_panel_press (Task 6.5)', () => {
   it('glass_panel is in ALL_RESOURCES with xp_weight 10', () => {
     expect(ALL_RESOURCES).toContain('glass_panel');
