@@ -145,6 +145,9 @@ export type BuildingDefId =
   // §11.6 T5 path-drawn drone launcher + §13.3 Probability Engine
   | 'path_drone_foundry'
   | 'probability_engine'
+  // Phase 12 — T5 transcendent raws (Task 12.1)
+  | 'zero_point_extractor'
+  | 'neutronium_extractor'
   // T5→T6 transition (step 20): produces `ascendant_core`, the §14.1 gate
   // artifact. Built at T5 (level 50 + AI core) so the player can craft
   // ascendant_core BEFORE the §14.1 Spaceport requirement — Ascendant
@@ -3285,6 +3288,30 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // figures per §8.10 — these are the biggest power loads in the catalog
   // and will brownout most networks until fed Casimir Taps / Singularity
   // Batteries. Multi-output rotation across §6.6 raws DEFERRED.
+  zero_point_extractor: {
+    id: 'zero_point_extractor',
+    displayName: 'Zero Point Extractor',
+    category: 'extraction',
+    tier: 5,
+    footprint: SHAPES.square2,
+    fill: 0x5a0a4a,
+    stroke: 0x200020,
+    power: { consumes: 4000 },
+    placementCost: { steel: 100, reality_anchor: 30, microchip: 30 },
+    glyph: '✦',
+  },
+  neutronium_extractor: {
+    id: 'neutronium_extractor',
+    displayName: 'Neutronium Extractor',
+    category: 'extraction',
+    tier: 5,
+    footprint: SHAPES.square2,
+    fill: 0x303040,
+    stroke: 0x101018,
+    power: { consumes: 4000 },
+    placementCost: { steel: 100, reality_anchor: 30, microchip: 30 },
+    glyph: '✦',
+  },
   aetheric_conduit: {
     id: 'aetheric_conduit',
     displayName: 'Aetheric Conduit',

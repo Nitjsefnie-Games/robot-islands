@@ -661,7 +661,9 @@ export function computeRates(
       b.defId === 'aetheric_conduit' ||
       b.defId === 'spacetime_resonator' ||
       b.defId === 'eldritch_sieve' ||
-      b.defId === 'casimir_tap';
+      b.defId === 'casimir_tap' ||
+      b.defId === 'zero_point_extractor' ||
+      b.defId === 'neutronium_extractor';
     const t5Mul = isT5Extractor ? modifierMul.t5ExtractionRateMul : 1;
     const cryoMul = Object.keys(recipe.outputs).some((r) => r.includes('cryo'))
       ? modifierMul.cryoRecipeRateMul
