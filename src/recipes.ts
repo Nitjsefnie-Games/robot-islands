@@ -1543,7 +1543,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'extraction',
   },
   chromium_smelter: {
-    cycleSec: 80,
+    // bumped from 80s → 250s: T1-speed smelting T3-weight ingots was an XP-arbitrage
+    // exploit (Agent C finding — T1 80s smelter producing VI-15 outputs).
+    cycleSec: 250,
     inputs: { chromium_ore: 1, coal: 1 },
     outputs: { chromium_ingot: 1 },
     category: 'smelting',
@@ -1555,7 +1557,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'extraction',
   },
   nickel_smelter: {
-    cycleSec: 80,
+    // bumped from 80s → 250s: XP-arbitrage fix — same rationale as chromium_smelter.
+    cycleSec: 250,
     inputs: { nickel_ore: 1, coal: 1 },
     outputs: { nickel_ingot: 1 },
     category: 'smelting',
@@ -1573,7 +1576,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'extraction',
   },
   tungsten_smelter: {
-    cycleSec: 80,
+    // bumped from 80s → 250s: XP-arbitrage fix — same rationale as chromium_smelter.
+    cycleSec: 250,
     inputs: { tungsten_ore: 1, coal: 1 },
     outputs: { tungsten_ingot: 1 },
     category: 'smelting',

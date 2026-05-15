@@ -677,7 +677,7 @@ describe('§6.4/§7.1 stainless_steel chain (Task 3.3)', () => {
     expect(RECIPES.chromium_smelter).toBeDefined();
     expect(RECIPES.chromium_smelter!.inputs).toEqual({ chromium_ore: 1, coal: 1 });
     expect(RECIPES.chromium_smelter!.outputs).toEqual({ chromium_ingot: 1 });
-    expect(RECIPES.chromium_smelter!.cycleSec).toBe(80);
+    expect(RECIPES.chromium_smelter!.cycleSec).toBe(250); // rebalanced Task 16.5 (was 80)
   });
   it('nickel_mine recipe: empty inputs → nickel_ore', () => {
     expect(RECIPES.nickel_mine).toBeDefined();
@@ -689,7 +689,7 @@ describe('§6.4/§7.1 stainless_steel chain (Task 3.3)', () => {
     expect(RECIPES.nickel_smelter).toBeDefined();
     expect(RECIPES.nickel_smelter!.inputs).toEqual({ nickel_ore: 1, coal: 1 });
     expect(RECIPES.nickel_smelter!.outputs).toEqual({ nickel_ingot: 1 });
-    expect(RECIPES.nickel_smelter!.cycleSec).toBe(80);
+    expect(RECIPES.nickel_smelter!.cycleSec).toBe(250); // rebalanced Task 16.5 (was 80)
   });
   it('stainless_steel_mill recipe: steel + chromium_ingot + nickel_ingot → stainless_steel', () => {
     expect(RECIPES.stainless_steel_mill).toBeDefined();
@@ -722,7 +722,7 @@ describe('§6.4/§7.1 tool_steel chain (Task 3.4)', () => {
     expect(RECIPES.tungsten_smelter).toBeDefined();
     expect(RECIPES.tungsten_smelter!.inputs).toEqual({ tungsten_ore: 1, coal: 1 });
     expect(RECIPES.tungsten_smelter!.outputs).toEqual({ tungsten_ingot: 1 });
-    expect(RECIPES.tungsten_smelter!.cycleSec).toBe(80);
+    expect(RECIPES.tungsten_smelter!.cycleSec).toBe(250); // rebalanced Task 16.5 (was 80)
   });
   it('tool_steel_mill recipe: steel + tungsten_ingot → tool_steel', () => {
     expect(RECIPES.tool_steel_mill).toBeDefined();
@@ -1586,6 +1586,18 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
   });
 });
 
+
+describe('§7.1 chromium/nickel/tungsten smelter cycleSec rebalance (Task 16.5)', () => {
+  it('chromium_smelter cycleSec is 250 (was 80, T1-speed exploit fix)', () => {
+    expect(RECIPES.chromium_smelter!.cycleSec).toBe(250);
+  });
+  it('nickel_smelter cycleSec is 250 (was 80, T1-speed exploit fix)', () => {
+    expect(RECIPES.nickel_smelter!.cycleSec).toBe(250);
+  });
+  it('tungsten_smelter cycleSec is 250 (was 80, T1-speed exploit fix)', () => {
+    expect(RECIPES.tungsten_smelter!.cycleSec).toBe(250);
+  });
+});
 
 describe('§7.x step-19 cycleSec rebalance (Task 16.4)', () => {
   it('oxygen_converter cycleSec is 600 (rebalanced, was 20)', () => {
