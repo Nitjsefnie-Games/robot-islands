@@ -1587,6 +1587,21 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
 });
 
 
+describe('§7.x step-19 cycleSec rebalance (Task 16.4)', () => {
+  it('oxygen_converter cycleSec is 600 (rebalanced, was 20)', () => {
+    expect(RECIPES.oxygen_converter!.cycleSec).toBe(600);
+  });
+  it('circuit_assembler cycleSec is 250 (rebalanced, was 30)', () => {
+    expect(RECIPES.circuit_assembler!.cycleSec).toBe(250);
+  });
+  it('processor_fab cycleSec is 1200 (rebalanced, was 60)', () => {
+    expect(RECIPES.processor_fab!.cycleSec).toBe(1200);
+  });
+  it('compute_module_fab cycleSec is 1200 (rebalanced, was 120)', () => {
+    expect(RECIPES.compute_module_fab!.cycleSec).toBe(1200);
+  });
+});
+
 describe('§6.6 memetic_core producer via memetic_forge (Task 16.2)', () => {
   it('memetic_forge recipe: eldritch_processor + spacetime_fragment + ai_core → memetic_core', () => {
     expect(RECIPES.memetic_forge).toBeDefined();
