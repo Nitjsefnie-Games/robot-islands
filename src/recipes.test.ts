@@ -1389,3 +1389,62 @@ describe('§6.5 nuclear_fuel_rod + fuel_rod_assembler (Task 11.3)', () => {
     expect(RECIPES.nuclear_reactor!.category).toBe('power');
   });
 });
+
+describe('§6.5 T4 endgame components (Task 11.4)', () => {
+  it('plasma_containment_vessel is in ALL_RESOURCES with xp_weight 100 (T4 rare)', () => {
+    expect(ALL_RESOURCES).toContain('plasma_containment_vessel' as ResourceId);
+    expect(XP_WEIGHT.plasma_containment_vessel).toBe(100);
+  });
+  it('singularity_sensor is in ALL_RESOURCES with xp_weight 100 (T4 rare)', () => {
+    expect(ALL_RESOURCES).toContain('singularity_sensor' as ResourceId);
+    expect(XP_WEIGHT.singularity_sensor).toBe(100);
+  });
+  it('cryo_containment_unit is in ALL_RESOURCES with xp_weight 100 (T4 rare)', () => {
+    expect(ALL_RESOURCES).toContain('cryo_containment_unit' as ResourceId);
+    expect(XP_WEIGHT.cryo_containment_unit).toBe(100);
+  });
+  it('particle_accelerator_core is in ALL_RESOURCES with xp_weight 100 (T4 rare)', () => {
+    expect(ALL_RESOURCES).toContain('particle_accelerator_core' as ResourceId);
+    expect(XP_WEIGHT.particle_accelerator_core).toBe(100);
+  });
+  it('self_replication_module is in ALL_RESOURCES with xp_weight 100 (T4 rare)', () => {
+    expect(ALL_RESOURCES).toContain('self_replication_module' as ResourceId);
+    expect(XP_WEIGHT.self_replication_module).toBe(100);
+  });
+
+  it('plasma_containment_assembler recipe: exotic_alloy + magnet + steel → plasma_containment_vessel', () => {
+    expect(RECIPES.plasma_containment_assembler).toBeDefined();
+    expect(RECIPES.plasma_containment_assembler!.inputs).toEqual({ exotic_alloy: 1, magnet: 4, steel: 5 });
+    expect(RECIPES.plasma_containment_assembler!.outputs).toEqual({ plasma_containment_vessel: 1 });
+    expect(RECIPES.plasma_containment_assembler!.cycleSec).toBe(1500);
+    expect(RECIPES.plasma_containment_assembler!.category).toBe('manufacturing');
+  });
+  it('singularity_sensor_lab recipe: quantum_chip + optical_fiber + magnet → singularity_sensor', () => {
+    expect(RECIPES.singularity_sensor_lab).toBeDefined();
+    expect(RECIPES.singularity_sensor_lab!.inputs).toEqual({ quantum_chip: 1, optical_fiber: 4, magnet: 2 });
+    expect(RECIPES.singularity_sensor_lab!.outputs).toEqual({ singularity_sensor: 1 });
+    expect(RECIPES.singularity_sensor_lab!.cycleSec).toBe(1500);
+    expect(RECIPES.singularity_sensor_lab!.category).toBe('electronics');
+  });
+  it('cryo_containment_assembler recipe: cryogenic_compound + stainless_steel + glass_fiber → cryo_containment_unit', () => {
+    expect(RECIPES.cryo_containment_assembler).toBeDefined();
+    expect(RECIPES.cryo_containment_assembler!.inputs).toEqual({ cryogenic_compound: 1, stainless_steel: 2, glass_fiber: 4 });
+    expect(RECIPES.cryo_containment_assembler!.outputs).toEqual({ cryo_containment_unit: 1 });
+    expect(RECIPES.cryo_containment_assembler!.cycleSec).toBe(1500);
+    expect(RECIPES.cryo_containment_assembler!.category).toBe('manufacturing');
+  });
+  it('accelerator_core_lab recipe: magnet + exotic_alloy + optical_fiber → particle_accelerator_core', () => {
+    expect(RECIPES.accelerator_core_lab).toBeDefined();
+    expect(RECIPES.accelerator_core_lab!.inputs).toEqual({ magnet: 8, exotic_alloy: 1, optical_fiber: 4 });
+    expect(RECIPES.accelerator_core_lab!.outputs).toEqual({ particle_accelerator_core: 1 });
+    expect(RECIPES.accelerator_core_lab!.cycleSec).toBe(1500);
+    expect(RECIPES.accelerator_core_lab!.category).toBe('electronics');
+  });
+  it('self_replication_lab recipe: ai_core + microchip + electric_motor + computing_module → self_replication_module', () => {
+    expect(RECIPES.self_replication_lab).toBeDefined();
+    expect(RECIPES.self_replication_lab!.inputs).toEqual({ ai_core: 1, microchip: 8, electric_motor: 4, computing_module: 2 });
+    expect(RECIPES.self_replication_lab!.outputs).toEqual({ self_replication_module: 1 });
+    expect(RECIPES.self_replication_lab!.cycleSec).toBe(1800);
+    expect(RECIPES.self_replication_lab!.category).toBe('manufacturing');
+  });
+});

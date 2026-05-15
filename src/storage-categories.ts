@@ -274,4 +274,10 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   antimatter_capsule: 'rare',
   // Phase 11 — T4 endgame (Task 11.3)
   nuclear_fuel_rod: 'rare',
+  // Phase 11 — T4 endgame (Task 11.4)
+  plasma_containment_vessel: 'rare',
+  singularity_sensor: 'rare',
+  cryo_containment_unit: 'rare',
+  particle_accelerator_core: 'rare',
+  self_replication_module: 'rare',
 };

@@ -248,6 +248,12 @@ export type ResourceId =
   | 'antimatter_capsule'
   // Phase 11 — T4 endgame (Task 11.3)
   | 'nuclear_fuel_rod'
+  // Phase 11 — T4 endgame (Task 11.4)
+  | 'plasma_containment_vessel'
+  | 'singularity_sensor'
+  | 'cryo_containment_unit'
+  | 'particle_accelerator_core'
+  | 'self_replication_module'
   // Phase 10 — T3 minerals + alloy (Task 10.1)
   | 'mercury'
   // Phase 10 — T3 minerals + alloy (Task 10.2)
@@ -451,6 +457,12 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'antimatter_capsule',
   // Phase 11 — T4 endgame (Task 11.3)
   'nuclear_fuel_rod',
+  // Phase 11 — T4 endgame (Task 11.4)
+  'plasma_containment_vessel',
+  'singularity_sensor',
+  'cryo_containment_unit',
+  'particle_accelerator_core',
+  'self_replication_module',
   // Phase 10 — T3 minerals + alloy (Task 10.1)
   'mercury',
   // Phase 10 — T3 minerals + alloy (Task 10.2)
@@ -678,6 +690,12 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   antimatter_capsule: 100,
   // Phase 11 — T4 endgame (Task 11.3)
   nuclear_fuel_rod: 100,
+  // Phase 11 — T4 endgame (Task 11.4)
+  plasma_containment_vessel: 100,
+  singularity_sensor: 100,
+  cryo_containment_unit: 100,
+  particle_accelerator_core: 100,
+  self_replication_module: 100,
   // Phase 10 — T3 minerals + alloy (Task 10.1)
   mercury: 30,
   // Phase 10 — T3 minerals + alloy (Task 10.2)
@@ -1083,6 +1101,38 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 1200,
     inputs: { uranium_ore: 5, stainless_steel: 2, coolant: 2 },
     outputs: { nuclear_fuel_rod: 1 },
+    category: 'manufacturing',
+  },
+
+  // Phase 11 — T4 endgame (Task 11.4): Five T4 component assemblers.
+  plasma_containment_assembler: {
+    cycleSec: 1500,
+    inputs: { exotic_alloy: 1, magnet: 4, steel: 5 },
+    outputs: { plasma_containment_vessel: 1 },
+    category: 'manufacturing',
+  },
+  singularity_sensor_lab: {
+    cycleSec: 1500,
+    inputs: { quantum_chip: 1, optical_fiber: 4, magnet: 2 },
+    outputs: { singularity_sensor: 1 },
+    category: 'electronics',
+  },
+  cryo_containment_assembler: {
+    cycleSec: 1500,
+    inputs: { cryogenic_compound: 1, stainless_steel: 2, glass_fiber: 4 },
+    outputs: { cryo_containment_unit: 1 },
+    category: 'manufacturing',
+  },
+  accelerator_core_lab: {
+    cycleSec: 1500,
+    inputs: { magnet: 8, exotic_alloy: 1, optical_fiber: 4 },
+    outputs: { particle_accelerator_core: 1 },
+    category: 'electronics',
+  },
+  self_replication_lab: {
+    cycleSec: 1800,
+    inputs: { ai_core: 1, microchip: 8, electric_motor: 4, computing_module: 2 },
+    outputs: { self_replication_module: 1 },
     category: 'manufacturing',
   },
 
