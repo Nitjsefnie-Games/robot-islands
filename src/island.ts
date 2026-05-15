@@ -54,7 +54,9 @@ export type TerrainKind =
   // Phase 10 — T3 mineral terrain kinds (Task 10.2)
   | 'diamond_vein'
   // Phase 10b — T3 mineral terrain kinds (Task 10.4.5)
-  | 'lithium_vein';
+  | 'lithium_vein'
+  // Phase 16.1 — §6.4 T3 mineral terrain: uranium (Task 16.1)
+  | 'uranium_vein';
 
 export interface Tile {
   /** Tile grid x. The tile occupies the unit square [x, x+1) × [y, y+1). */
@@ -102,6 +104,8 @@ const TERRAIN_COLOR: Readonly<Record<TerrainKind, number>> = {
   diamond_vein: 0xd0e8f5,       // pale ice-blue
   // Phase 10b — T3 mineral terrain colors (Task 10.4.5)
   lithium_vein: 0xe04060,       // lithium magenta
+  // Phase 16.1 — §6.4 T3 mineral terrain: uranium (Task 16.1)
+  uranium_vein: 0x80c060,       // yellow-green glow
 };
 
 /**

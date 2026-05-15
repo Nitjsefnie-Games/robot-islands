@@ -299,6 +299,8 @@ export type BuildingDefId =
   | 'mag_alloyer'
   // Phase 10b — T3 minerals + alloy (Task 10.4.5)
   | 'lithium_extractor'
+  // Phase 16.1 — §6.4 uranium extractor (Task 16.1)
+  | 'uranium_mine'
   // Phase 10b — T3 power components (Task 10.5)
   | 'mag_forge'
   // Phase 10b — T3 power components (Task 10.6)
@@ -3189,6 +3191,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiredTile: ['lithium_vein'],
     placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
     glyph: '⛏',
+  },
+  // Phase 16.1 — §6.4 uranium extractor (Task 16.1)
+  uranium_mine: {
+    id: 'uranium_mine',
+    displayName: 'Uranium Mine',
+    category: 'extraction',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x80c060, // yellow-green glow — matches uranium_vein terrain colour
+    stroke: 0x304020,
+    power: { consumes: 80 },
+    requiredTile: ['uranium_vein'],
+    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    glyph: '☢',
   },
   // Phase 10b — T3 power components (Task 10.5)
   mag_forge: {

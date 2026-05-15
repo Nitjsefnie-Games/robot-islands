@@ -1587,6 +1587,20 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
 });
 
 
+describe('§6.4 uranium_vein + uranium_mine (Task 16.1)', () => {
+  it('uranium_mine recipe: empty inputs → uranium_ore', () => {
+    expect(RECIPES.uranium_mine).toBeDefined();
+    expect(RECIPES.uranium_mine!.inputs).toEqual({});
+    expect(RECIPES.uranium_mine!.outputs).toEqual({ uranium_ore: 1 });
+    expect(RECIPES.uranium_mine!.cycleSec).toBe(200);
+    expect(RECIPES.uranium_mine!.category).toBe('extraction');
+  });
+  it('uranium_ore is still in ALL_RESOURCES with xp_weight 30', () => {
+    expect(ALL_RESOURCES).toContain('uranium_ore' as ResourceId);
+    expect(XP_WEIGHT.uranium_ore).toBe(30);
+  });
+});
+
 describe('§12.3 Foundation Kit Enriched + Refined (Task 13.2)', () => {
   it('foundation_kit_enriched is in ALL_RESOURCES with xp_weight 30', () => {
     expect(ALL_RESOURCES).toContain('foundation_kit_enriched' as ResourceId);
