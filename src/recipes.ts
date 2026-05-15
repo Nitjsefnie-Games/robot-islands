@@ -1653,14 +1653,18 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Each split into its own building since the engine's 1:1 recipe-per-defId
   // model doesn't support multi-recipe selection without infrastructure expansion.
   naphtha_cracker: {
-    cycleSec: 600, // rebalanced for idle-game scale, step #19 (×40: was 15s)
+    // rebalanced for idle-game scale, step #19 (×40: was 15s); bumped 600→1000
+    // to reduce XP-arbitrage: T0/T1 inputs → T2-weight outputs at T1 throughput.
+    cycleSec: 1000,
     inputs: { crude_oil: 1 },
     outputs: { naphtha: 1 },
     category: 'chemistry',
   },
   // Phase 4 — T2 deep-fraction crude oil cracker (§7.4)
   crude_oil_cracker: {
-    cycleSec: 600,
+    // bumped 600→1200: produces 3 outputs (heavy_oil, tar, asphalt) — longer
+    // pace is proportionally fair; also closes XP-arbitrage per Agent C finding.
+    cycleSec: 1200,
     inputs: { crude_oil: 3 },
     outputs: { heavy_oil: 1, tar: 1, asphalt: 1 },
     category: 'chemistry',
@@ -1718,7 +1722,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'chemistry',
   },
   chlor_alkali_plant: {
-    cycleSec: 800, // rebalanced for idle-game scale, step #19 (×40: was 20s)
+    // rebalanced for idle-game scale, step #19 (×40: was 20s); bumped 800→1200
+    // to reduce XP-arbitrage per Agent C finding (T0 saltwater → T2-weight outputs).
+    cycleSec: 1200,
     inputs: { saltwater: 2 },
     outputs: { chlorine: 1, sodium_hydroxide: 1 },
     category: 'chemistry',
