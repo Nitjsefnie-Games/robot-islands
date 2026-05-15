@@ -301,6 +301,8 @@ export type BuildingDefId =
   | 'lithium_extractor'
   // Phase 16.1 — §6.4 uranium extractor (Task 16.1)
   | 'uranium_mine'
+  // Phase 16.2 — §6.6 memetic_core producer (Task 16.2)
+  | 'memetic_forge'
   // Phase 10b — T3 power components (Task 10.5)
   | 'mag_forge'
   // Phase 10b — T3 power components (Task 10.6)
@@ -3549,6 +3551,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
     glyph: '✺',
+  },
+  // Phase 16.2 — §6.6 memetic_core producer (Task 16.2). Closes the
+  // memetic_core producer gap: previously memetic_core had no producer.
+  memetic_forge: {
+    id: 'memetic_forge',
+    displayName: 'Memetic Forge',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0x802040, // deep crimson — eldritch family
+    stroke: 0x300818,
+    power: { consumes: 1500 },
+    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    glyph: '⌬',
   },
   // -------------------------------------------------------------------------
   // Lighthouse vision (§15.x). Six tiers extending the baseline 10-tile

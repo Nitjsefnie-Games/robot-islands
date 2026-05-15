@@ -100,7 +100,8 @@ describe('Balance — every consumed resource has at least one producer', () => 
     'zero_point_flux', 'neutronium',
     // T6 fuel — produced via separate refinery def (§7.12); accept terminal
     // for this structural test.
-    'antimatter_propellant', 'memetic_core',
+    // memetic_core removed: now has a producer via memetic_forge (Task 16.2).
+    'antimatter_propellant',
     // §13.4 endgame artifact — no producer yet by design
     'genesis_cell',
     // T6 satellite payloads — separate assembly recipe (§14.10) not in
