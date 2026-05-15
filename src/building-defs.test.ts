@@ -39,6 +39,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'coke_oven',
   'blast_furnace',
   'steel_mill',
+  'steel_mill_scrap',
   'oxygen_converter',
   'slag_reprocessor',
   'assembler',
@@ -2365,5 +2366,25 @@ describe('§12.3 kit_assembler_refined (Task 13.2)', () => {
     expect(RECIPES.kit_assembler_refined!.inputs).toEqual({ stainless_steel: 5, quantum_chip: 1, fuel_cell: 1, computing_module: 1 });
     expect(RECIPES.kit_assembler_refined!.outputs).toEqual({ foundation_kit_refined: 1 });
     expect(RECIPES.kit_assembler_refined!.cycleSec).toBe(1200);
+  });
+});
+
+
+describe('§6.7 steel_mill_scrap (Task 13.3)', () => {
+  it('is T2 smelting with 3x3 footprint', () => {
+    const def = BUILDING_DEFS.steel_mill_scrap;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(2);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('smelting');
+  });
+  it('has power consumption 120W', () => {
+    expect(BUILDING_DEFS.steel_mill_scrap.power?.consumes).toBe(120);
+  });
+  it('produces steel + slag from scrap', () => {
+    expect(RECIPES.steel_mill_scrap).toBeDefined();
+    expect(RECIPES.steel_mill_scrap!.inputs).toEqual({ scrap: 2 });
+    expect(RECIPES.steel_mill_scrap!.outputs).toEqual({ steel: 1, slag: 1 });
+    expect(RECIPES.steel_mill_scrap!.cycleSec).toBe(200);
   });
 });

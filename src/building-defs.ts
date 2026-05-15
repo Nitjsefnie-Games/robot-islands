@@ -100,6 +100,7 @@ export type BuildingDefId =
   | 'coke_oven'
   | 'blast_furnace'
   | 'steel_mill'
+  | 'steel_mill_scrap'
   | 'oxygen_converter'
   | 'slag_reprocessor'
   | 'assembler'
@@ -1006,6 +1007,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // The §6.7 Scrap substitution is now handled by the Oxygen Converter.
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 150, iron_ingot: 60, wood: 20 },
+    glyph: '△',
+  },
+  // §6.7: Steel Mill Scrap — alternate T2 steel producer using scrap instead
+  // of the pig-iron pathway. 2 Scrap = 1 Pig iron's worth of steel input.
+  steel_mill_scrap: {
+    id: 'steel_mill_scrap',
+    displayName: 'Steel Mill (Scrap)',
+    category: 'smelting',
+    tier: 2,
+    footprint: SHAPES.square3,
+    fill: 0x6e7480,
+    stroke: 0x2a2e36,
+    power: { consumes: 120 },
+    placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
     glyph: '△',
   },
   // §6.7: Oxygen Converter — T3 smelting building that consumes pig iron +

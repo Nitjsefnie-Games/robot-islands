@@ -1022,6 +1022,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { steel: 1, slag: 1 },
     category: 'smelting',
   },
+  // §6.7: Steel Mill Scrap — alternate T2 recipe using 2 scrap → 1 steel + 1 slag.
+  steel_mill_scrap: {
+    cycleSec: 200,
+    inputs: { scrap: 2 },
+    outputs: { steel: 1, slag: 1 },
+    category: 'smelting',
+  },
   // T3 smelting — Oxygen Converter (§6.7). Higher-throughput steel
   // from pig iron + scrap + oxygen. Scrap substitution: 2 Scrap = 1 Pig
   // iron's worth of steel input (per §6.7 Steel-recipe substitution).
