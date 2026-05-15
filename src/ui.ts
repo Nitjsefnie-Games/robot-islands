@@ -1,65 +1,45 @@
-// Minimal DOM UI overlay — plain elements, no framework.
+// DOM action strip — a vertical column of icon buttons that mirrors the
+// keyboard action registry. Mounts in the TR zone via the floating-panel
+// manager so it can never overlap the HUD or the top-center island bar.
 //
-// A small fixed-position panel in the corner of the page holds buttons that
-// dispatch actions through the same `InputRegistry` used for keyboard input.
-// This is the explicit goal of point 7 in the task: one source of truth for
-// every action, two input modalities (keyboard + DOM click) feeding it.
+// Each `UiButtonSpec` carries an icon id (from `ui-icons.ts`), an action
+// name (dispatched through `dispatchAction`, same path as keyboard input),
+// a tooltip label, and a one-letter `kbd` hint that `ui.css` renders as a
+// floating badge in the top-right of the button.
 
 import { dispatchAction, type InputRegistry } from './input.js';
+import { mountPanel, Zone } from './ui-zones.js';
+import { icon, type IconId } from './ui-icons.js';
 
 export interface UiButtonSpec {
-  readonly label: string;
+  readonly icon: IconId;
   readonly action: string;
+  readonly label: string;
+  readonly kbd: string;
 }
 
-/**
- * Mount a fixed-position floating panel of action buttons onto `parentEl`.
- * Buttons are styled inline to match the dark monospace theme from
- * index.html; the styling is kept here rather than in CSS so this module is
- * self-contained.
- */
+/** Mount a vertical icon strip in zone TR. Returns the panel element. */
 export function mountUi(
-  parentEl: HTMLElement,
   reg: InputRegistry,
   buttons: ReadonlyArray<UiButtonSpec>,
 ): HTMLDivElement {
-  const panel = document.createElement('div');
-  panel.id = 'ui-overlay';
-  panel.style.cssText = [
-    'position: fixed',
-    'top: 8px',
-    'right: 8px',
-    'display: flex',
-    'flex-direction: column',
-    'gap: 4px',
-    'z-index: 100',
-    'font-family: ui-monospace, monospace',
-    'font-size: 12px',
-    'opacity: 0.85',
-  ].join(';');
+  const strip = document.createElement('div');
+  strip.classList.add('ri-actionstrip');
 
   for (const spec of buttons) {
     const b = document.createElement('button');
-    b.textContent = spec.label;
+    b.classList.add('ri-iconbtn');
+    b.setAttribute('title', `${spec.label} (${spec.kbd})`);
+    b.setAttribute('aria-label', spec.label);
+    b.dataset['kbd'] = spec.kbd;
     b.dataset['action'] = spec.action;
-    b.style.cssText = [
-      'background: #1a1f2a',
-      'color: #cdd6f4',
-      'border: 1px solid #3a4452',
-      'padding: 4px 10px',
-      'cursor: pointer',
-      'font-family: ui-monospace, monospace',
-      'font-size: 12px',
-    ].join(';');
+    b.appendChild(icon(spec.icon, 18));
     b.addEventListener('click', () => {
       dispatchAction(reg, spec.action);
-      // Drop focus so subsequent Space/Enter keys aren't swallowed by the
-      // re-firing of the button click handler.
       b.blur();
     });
-    panel.appendChild(b);
+    strip.appendChild(b);
   }
-
-  parentEl.appendChild(panel);
-  return panel;
+  mountPanel(strip, { id: 'action-strip', zone: Zone.TR, order: 0 });
+  return strip;
 }

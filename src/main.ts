@@ -531,18 +531,18 @@ async function main(): Promise<void> {
     { passive: false },
   );
 
-  // UI overlay
-  mountUi(document.body, reg, [
-    { label: 'Toggle Grid (G)', action: 'toggle-grid' },
-    { label: 'Center on Active (H)', action: 'center-home' },
-    { label: 'Skill Tree (K)', action: 'toggle-skill-tree' },
-    { label: 'Buildings (B)', action: 'toggle-buildings' },
-    { label: 'Inventory (I)', action: 'toggle-inventory' },
-    { label: 'Drones (J)', action: 'toggle-drones' },
-    { label: 'Routes (R)', action: 'toggle-routes' },
-    { label: 'Settle (V)', action: 'toggle-settlement' },
-    { label: 'Construct (C)', action: 'toggle-construction' },
-    { label: 'Settings (S)', action: 'toggle-settings' },
+  // UI overlay — vertical icon strip in TR zone (managed by ui-zones).
+  mountUi(reg, [
+    { icon: 'building',  action: 'toggle-buildings',    label: 'Buildings',   kbd: 'B' },
+    { icon: 'inventory', action: 'toggle-inventory',    label: 'Inventory',   kbd: 'I' },
+    { icon: 'drone',     action: 'toggle-drones',       label: 'Drones',      kbd: 'J' },
+    { icon: 'route',     action: 'toggle-routes',       label: 'Routes',      kbd: 'R' },
+    { icon: 'settle',    action: 'toggle-settlement',   label: 'Settlement',  kbd: 'V' },
+    { icon: 'construct', action: 'toggle-construction', label: 'Construct',   kbd: 'C' },
+    { icon: 'skills',    action: 'toggle-skill-tree',   label: 'Skill Tree',  kbd: 'K' },
+    { icon: 'grid',      action: 'toggle-grid',         label: 'Toggle Grid', kbd: 'G' },
+    { icon: 'crosshair', action: 'center-home',         label: 'Center View', kbd: 'H' },
+    { icon: 'settings',  action: 'toggle-settings',     label: 'Settings',    kbd: 'S' },
   ]);
 
   // §13.3 Omniscient Lattice banner — shown globally when latticeActive.
