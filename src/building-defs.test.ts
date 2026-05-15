@@ -926,7 +926,7 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
     // §8.4 "effectively infinite electrical power storage (not a resource
     // storage building)" — the §4.6 categorized-storage cleanup removed the
     // earlier 10000-cap placeholder. Power-buffer mechanic per §13.3 still
-    // deferred to step 14+.
+    // STILL-DEFERRED to step 14+.
     const def = BUILDING_DEFS.singularity_battery;
     expect(shapeWidth(def.footprint)).toBe(2);
     expect(shapeHeight(def.footprint)).toBe(2);
@@ -939,7 +939,7 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
     for (const id of ['time_lock', 'genesis_chamber', 'universe_editor', 'lattice_node'] as const) {
       const def = BUILDING_DEFS[id];
       expect(def.category).toBe('special');
-      // Mechanics-deferred defs have no recipe — they're inert catalog rows
+      // Mechanics-STILL-DEFERRED defs have no recipe — they're inert catalog rows
       // in step 13 until the §13.3 mechanics land in step 14+.
       expect(def.requiredBiomes).toBeUndefined();
     }
@@ -1949,7 +1949,7 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
 });
 
 describe('§8.1 T2 extraction buildings', () => {
-    it('heavy_logger is T2, 2x2, requires tree (dense_forest deferred)', () => {
+    it('heavy_logger is T2, 2x2, requires tree (dense_forest STILL-DEFERRED)', () => {
       const def = BUILDING_DEFS.heavy_logger;
       expect(def.tier).toBe(2);
       expect(def.footprint.tiles.length).toBe(4); // 2x2

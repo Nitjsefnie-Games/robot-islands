@@ -574,9 +574,9 @@ async function main(): Promise<void> {
   //
   // Step 7 promoted the single home state to a Map keyed by island id, so
   // routes can dispatch between any two populated islands. The HUD still
-  // tracks the home island only — multi-island HUD is a deferred step-14
+  // tracks the home island only — multi-island HUD is a STILL-DEFERRED step-14
   // polish concern. `forest-ne` is hardcoded populated for the step-7 demo
-  // (see `world.ts`); settlement vehicles per §12 are deferred.
+  // (see `world.ts`); settlement vehicles per §12 shipped in step 12.
   const islandStates: Map<string, IslandState> = restored
     ? restored.islandStates
     : new Map<string, IslandState>();
@@ -625,7 +625,7 @@ async function main(): Promise<void> {
       forestNe.level = 50;
       forestNe.aiCoreCrafted = true; // §13.1 T5 access — manual demo seed
       // §14.1 T6 access (first half) — manual demo seed. Auto-flip on
-      // first ascendant_core production DEFERRED. With this flag plus a
+      // first ascendant_core production STILL-DEFERRED. With this flag plus a
       // placed Spaceport, forest-ne crosses the §14.1 T6 gate and the
       // Catalog UI surfaces the T6 band as available.
       forestNe.ascendantCoreCrafted = true;

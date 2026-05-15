@@ -20,7 +20,7 @@
 // §13.3 Eternal Servitor exemption: a PlacedBuilding flagged with
 // `eternalServitor: true` skips all maintenance accrual and degradation.
 // The Servitor-Conversion-Kit recipe and Reality Forge mechanic that flips
-// the flag are deferred — this module only honours the flag if present.
+// the flag are STILL-DEFERRED — this module only honours the flag if present.
 
 import type { BuildingDef } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -29,7 +29,8 @@ import type { Tier } from './skilltree.js';
 
 /** Per-tier operating-time budget before maintenance is due, in ms. Placeholder
  *  values from §4.7 (T1=12h, T2=16h, T3=20h, T4=24h, T5=24h, T6=24h). T6 is
- *  forward-compat — no T6 building exists yet (Spaceport, §14, deferred). */
+ *  forward-compat — Spaceport (§14) exists as a def but live mechanics are
+ *  STILL-DEFERRED. */
 export const MAINTENANCE_THRESHOLD_MS_BY_TIER: Readonly<Record<Tier, number>> = {
   1: 12 * 60 * 60 * 1000,
   2: 16 * 60 * 60 * 1000,
@@ -62,10 +63,12 @@ export const MAINTENANCE_DEGRADE_DURATION_MS = 4 * 60 * 60 * 1000;
  *  Lubricant counts match §4.7 literally for every tier. */
 export const MAINTENANCE_RECIPES: Readonly<Record<Tier, Partial<Record<ResourceId, number>>>> = {
   1: { lubricant: 2, bolt: 5 },
-  // T2: spec literal is `3 Lubricant + 5 Bearing`; bearing TBD, use bolt.
+  // T2: spec literal is `3 Lubricant + 5 Bearing`; bearing shipped in
+  // Task 6.2 but maintenance recipes haven't been retuned yet, still using bolt.
   2: { lubricant: 3, bolt: 5 },
   // T3: spec literal is `5 Lubricant + 1 Electric motor + 1 Capacitor`;
-  // motor + capacitor TBD, use microchip + quantum_chip to keep the tier's
+  // motor + capacitor shipped in Tasks 6.2/9.2 but maintenance recipes
+  // haven't been retuned yet, still using microchip + quantum_chip to keep the tier's
   // material gate meaningful. Chicken-and-egg note: quantum_chip is a T4
   // component, so T3 maintenance currently requires T4-tier inputs — a
   // known awkwardness pending a real T3 components pass.

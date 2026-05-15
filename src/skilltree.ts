@@ -12,7 +12,7 @@
 // Several depth-1 effects are `placeholder` because step 5 has no economic
 // surface to express them yet: Robotics (construction speed; placement
 // isn't built), Transport (route capacity; routes aren't built), Network
-// (teleporter; deferred). They consume points and unlock their depth-2
+// (teleporter; STILL-DEFERRED). They consume points and unlock their depth-2
 // successors normally; their `kind: 'placeholder'` effect is a no-op in
 // `effectiveSkillMultipliers`. Later steps activate them.
 
@@ -329,7 +329,7 @@ function makeOrbitalNodes(subPath: SubPathId): SkillNode[] {
   for (let d = 1; d <= 15; d++) {
     // Launch sub-path: depth-doubled additive launch-success bonus per
     // §14.7. Other Orbital sub-paths remain structural placeholders for
-    // now (wiring deferred to comm / scanner / resilience polish).
+    // now (wiring STILL-DEFERRED to comm / scanner / resilience polish).
     const isLaunch = subPath === 'launch';
     const effect: SkillEffect = isLaunch
       ? { kind: 'launchSuccessAdditive' }

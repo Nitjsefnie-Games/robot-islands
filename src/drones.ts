@@ -4,11 +4,11 @@
 // and draws; the economy ticker calls `tickDrones` once per frame to advance
 // returns. Tests target this module directly.
 //
-// Step-6 scope notes (deferred bits flagged inline elsewhere):
+// Step-6 scope notes (STILL-DEFERRED bits flagged inline elsewhere):
 //   - One drone class only — T2-equivalent constants. T3+ tiers, T4
-//     omnidirectional pulse, T5 path-drawn, all deferred to step 9+.
+//     omnidirectional pulse, T5 path-drawn, all STILL-DEFERRED to step 9+.
 //   - §2.6 weather destruction implemented.
-//   - Tier-gating on Drone Pad deferred to step 9; for step 6 the Drone Pad
+//   - Tier-gating on Drone Pad STILL-DEFERRED to step 9; for step 6 the Drone Pad
 //     is hardcoded on the home island like Mine/Workshop are.
 //   - Fuel grade matches the launching island's tier per §11.7 — resolved at
 //     dispatch via `fuelForTier(tierForLevel(origin.level))` and stored on

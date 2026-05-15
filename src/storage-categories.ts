@@ -40,10 +40,10 @@ export type StorageCategory =
  *                cryogenic_hydrogen, plasma_charge (T5 fuel/propellant).
  *   temp_sensitive — cryo_coolant (per §4.6 "cryo-coolant" example).
  *                cryogenic_compound + liquid_nitrogen aren't in the catalog
- *                yet (deferred) — Cold Storage capacity will gain consumers
+ *                yet (STILL-DEFERRED) — Cold Storage capacity will gain consumers
  *                when they ship.
  *   components — T2-T3 manufactured parts: bolt, gear, wire, sheet_metal
- *                (deferred), microchip, quantum_chip. Silicon is a T3
+ *                (shipped in Task 6.1), microchip, quantum_chip. Silicon is a T3
  *                semiconductor intermediate but lives in components since
  *                it's a manufactured solid, not a raw.
  *   rare       — helium_3 (T3 raw, per §4.6 "all T4-T6 components" and

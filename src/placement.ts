@@ -11,17 +11,17 @@
 //   §4.3 placement rules — every footprint tile must be inscribed in the
 //        island ellipse (§3.4), no tile may overlap any existing footprint,
 //        and the def must be tier-unlocked (§9.2 / §13.1).
-//   §4.4 adjacency — metadata only; effect computation DEFERRED (no consumer
+//   §4.4 adjacency — metadata only; effect computation STILL-DEFERRED (no consumer
 //        wired yet — Step 11 added the heat-source flag plumbing but the
 //        per-frame buff computation is still a future step).
 //
 // Other deferrals documented at the call sites:
 //   - Terrain-tile requirements per §4.3 / §8.1 are implemented.
 //     `validatePlacement` checks `def.requiredTile` against `spec.terrainAt`.
-//   - Adjacency effects (§4.5) — DEFERRED.
-//   - Placement-time material cost — DEFERRED. Placement is free in step 2.5;
+//   - Adjacency effects (§4.5) — STILL-DEFERRED.
+//   - Placement-time material cost — STILL-DEFERRED. Placement is free in step 2.5;
 //     real costs land in step 14 alongside the cost-curve work.
-//   - Demolition — DEFERRED. Placed buildings cannot be removed in step 2.5.
+//   - Demolition — STILL-DEFERRED. Placed buildings cannot be removed in step 2.5.
 //
 // No PixiJS, no DOM, no IslandState construction-time helpers — this module
 // is pure: takes a spec + state + def id + anchor + rotation, returns a

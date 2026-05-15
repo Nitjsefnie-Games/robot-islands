@@ -21,7 +21,7 @@
 //
 // Full §6.6 T5 raw catalog (Dark matter, Zero-point flux, Tachyon stream,
 // Neutronium, Strange matter, Higgs flux, Quantum foam, Aetheric current,
-// Spacetime fragment) is DEFERRED to step 14 — only the resources the
+// Spacetime fragment) shipped in step 18 — only the resources the
 // Reality Forge / Casimir Tap demo recipes consume ship in step 13.
 //
 // Step-20 (T6 Orbital, §14) adds the T5→T6 transition artifact + the
@@ -48,7 +48,7 @@ export type ResourceId =
   | 'coal'
   // §6.7 demolition byproduct. T1 dry-good per spec ("Scrap is a T1 resource
   // in the dry-goods storage category"). The §6.7 Steel-recipe substitution
-  // ("2 Scrap = 1 Pig iron's worth of steel input") is DEFERRED — for step
+  // ("2 Scrap = 1 Pig iron's worth of steel input") is STILL-DEFERRED — for step
   // 2.5 the resource exists only as the credit returned on demolition.
   | 'scrap'
   // Step-18 T0 raws (§6.1 / §6.2). Added so every §7 recipe input has at
@@ -125,8 +125,9 @@ export type ResourceId =
   | 'steel'
   | 'gear'
   // T1 composite (§12.3 Foundation Kit). Standard variant only — Enriched/
-  // Refined per-tier variants deferred. The kit is a single inventory item;
-  // its decomposition into raw constituents on arrival (§12.4) is deferred.
+  // Refined per-tier variants shipped in Task 13.2. The kit is a single
+  // inventory item; its decomposition into raw constituents on arrival (§12.4)
+  // is implemented in settlement.ts tickVehicles.
   | 'foundation_kit'
   // Task 13.2 — Foundation Kit Enriched (T3) + Refined (T4) variants.
   | 'foundation_kit_enriched'
@@ -195,7 +196,9 @@ export type ResourceId =
   // §9.5 Carbon Forge output — T4 component (Forest-unique)
   | 'carbon_fiber'
   // T5 transcendent (§6.6) — partial step-13 catalog (raws/components needed
-  // for the Reality Forge demo chain + T5 fuel). Full §6.6 raws deferred.
+  // for the Reality Forge demo chain + T5 fuel). Full §6.6 raws partially
+  // shipped in step 18 (Aetheric Conduit, Spacetime Resonator, Eldritch Sieve
+  // plus Phase 12 Zero-Point / Neutronium).
   | 'casimir_energy'
   | 'reality_anchor'
   | 'plasma_charge'
@@ -226,14 +229,14 @@ export type ResourceId =
   // Spaceport + §14.10 satellite-assembly defs touch. §14.10 placeholder
   // recipes additionally reference Aluminum, Magnet, Optical Fiber,
   // Spacetime fragment, Memetic Core, Repair Pack, Phase Converter — those
-  // beyond Phase Converter (already in the T5 catalog) are DEFERRED until
-  // the live launch mechanics (§14.2-14.8 / §14.12) land.
+  // beyond Phase Converter are now in the catalog (step 18/19). The live
+  // launch mechanics (§14.2-14.8 / §14.12) remain STILL-DEFERRED.
   //
   //   ascendant_core           — T5/T6 transition artifact per §13.4 /
   //                              §14.1. Crafted at `ascendant_assembly`
   //                              (T5 building); producing one flips the
   //                              §14.1 ascendantCoreCrafted gate. Auto-flip
-  //                              on first production deferred — current
+  //                              on first production STILL-DEFERRED — current
   //                              step seeds the flag manually on forest-ne.
   //   antimatter_propellant    — T6 launch fuel per §11.7 / §14.10. Crafted
   //                              at `antimatter_refinery` (T6).
@@ -895,7 +898,7 @@ export type RecipeId = BuildingDefId | 'mine_on_ore' | 'mine_on_coal';
  *                         Coal Furnace / Geothermal Vent / Plasma Heater /
  *                         Fusion Core; see heat.ts)
  *     steel_mill      -> 1 steel     / 15s from 1 pig_iron
- *                        (§7.1 scrap co-input deferred)
+ *                        (§7.1 scrap co-input STILL-DEFERRED)
  *
  *   T2 manufacturing:
  *     assembler       -> 1 gear      /  8s from 1 iron_ingot + 2 bolt
@@ -1113,7 +1116,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T4 biome-locked electronics — Arctic-only Cryogenic Compute Center
   // produces AI Cores from Steel + Quantum Chip. Per §9.5, only producer of
   // AI Cores in the world. Arctic ambient cold halves compute-recipe power
-  // draw (deferred — modelled at static 1200W in step 12).
+  // draw (STILL-DEFERRED — modelled at static 1200W in step 12).
   cryogenic_compute_center: {
     cycleSec: 5400, // rebalanced for idle-game scale, step #19 (×60: was 90s)
     inputs: { steel: 3, quantum_chip: 1, argon: 1 },
@@ -1209,8 +1212,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // The §7.12 spec recipe ("4 ai_core + 1 antimatter_capsule + 1 time_crystal + 1 exotic_alloy
   // + 24h cycle → Reality Anchor") is the full T5 chain; the step-13 placeholder skips
   // antimatter_capsule + time_crystal (not yet in catalog) and condenses cycle time to 600s
-  // so the demo chain is exercisable without a 24-hour wait. Full §7.12 recipe deferred
-  // to step 14 alongside the missing T4 raws.
+  // so the demo chain is exercisable without a 24-hour wait. Full §7.12 recipe
+  // STILL-DEFERRED to step 14 alongside the missing T4 raws.
 
   // T5 raw extraction — placeholder for the §8.10 Casimir Tap. Spec cycle
   // 30 min to 4 h; already at 1800s (30 min lower bound) — skip rebalance
@@ -1595,8 +1598,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { salt: 1 },
     category: 'manufacturing',
     // Orphan output: `salt` currently has no consumer in the catalog
-    // (§7.3 chlor-alkali variants deferred). Producer ships for chain
-    // completeness; consumer recipes deferred.
+    // (§7.3 chlor-alkali variants STILL-DEFERRED). Producer ships for chain
+    // completeness; consumer recipes STILL-DEFERRED.
   },
   electrolyzer: {
     cycleSec: 100, // rebalanced for idle-game scale, step #19 (×10: was 10s)
@@ -1628,7 +1631,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { natural_gas: 1 },
     category: 'extraction',
     // Orphan output: no current consumer (§7.3 ammonia/syngas variants
-    // deferred). Producer ships so the resource isn't a permanent
+    // STILL-DEFERRED). Producer ships so the resource isn't a permanent
     // sink-without-source if a consumer recipe lands later.
   },
 
@@ -1713,8 +1716,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { chlorine: 1 },
     category: 'chemistry',
     // §7.5 spec: Salt + power → Chlorine (+ Sodium hydroxide co-product
-    // deferred). Acid / plastic precursor / alumina outputs from §8.2
-    // are deferred — those resource ids aren't in the catalog yet.
+    // STILL-DEFERRED). Acid / plastic precursor / alumina outputs from §8.2
+    // are STILL-DEFERRED — those resource ids aren't in the catalog yet.
   },
   lubricant_refinery: {
     cycleSec: 1000, // rebalanced for idle-game scale, step #19 (×40: was 25s)
@@ -1742,7 +1745,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // §7.1 spec lists multiple Steel Mill outputs (wire, sheet_metal,
     // pipe, beam). Step-18 ships wire only — wire is the input to the
     // step-18 Lithography Lab → microchip recipe. sheet_metal, pipe,
-    // and beam DEFERRED until they have an explicit consumer.
+    // and beam STILL-DEFERRED until they have an explicit consumer.
   },
 
   // T3 chemistry / electronics — rebalanced for idle-game scale, step #19 (×20).
@@ -1753,7 +1756,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'smelting',
     // §7.4: spec uses `silicon_wafer` as the lithography input, refined
     // from `silicon`. Step-18 simplification: silicon feeds Lithography
-    // Lab directly; the wafer intermediate is DEFERRED.
+    // Lab directly; the wafer intermediate is STILL-DEFERRED.
   },
   air_separator: {
     cycleSec: 600, // rebalanced for idle-game scale, step #19 (×20: was 30s)
@@ -1775,7 +1778,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // T4 fuel chain closure: `cryogenic_hydrogen` was previously in the
     // catalog with no producer. Cryo Compressor closes the producer side
     // even though the T4 consumer (Fusion Core II / launch fuel)
-    // remains DEFERRED.
+    // remains STILL-DEFERRED.
   },
   kerosene_refinery: {
     cycleSec: 1200, // rebalanced for idle-game scale, step #19 (×20: was 60s)
@@ -1783,7 +1786,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { aviation_kerosene: 1 },
     category: 'chemistry',
     // §11.7: aviation_kerosene = T3 drone fuel. Drone fuel-tier
-    // selection DEFERRED.
+    // selection STILL-DEFERRED.
   },
   lithography_lab: {
     cycleSec: 2400, // rebalanced for idle-game scale, step #19 (×20: was 120s)
@@ -1844,7 +1847,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §8.10 spec describes deterministic per-cycle output rotation across
   // multiple raws ("deterministic given world seed + cycle index"). The
   // step-18 simplification: each extractor outputs a single raw per
-  // cycle, with §8.10 rotation logic DEFERRED. Cycle times were at the
+  // cycle, with §8.10 rotation logic now shipped (rotateOutputs). Cycle times were at the
   // §8.10 lower bound (600-720s); multiplied ×8 for idle-game scale.
   // Power consumption per §8.10 is in the 60-100 kW range (very large).
   aetheric_conduit: {
@@ -1876,7 +1879,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { plasma_charge: 1 },
     category: 'manufacturing',
     // §11.7: plasma_charge = T5 propellant (drone fuel tier 5). Drone
-    // fuel-tier selection DEFERRED.
+    // fuel-tier selection STILL-DEFERRED.
   },
   eldritch_refiner: {
     cycleSec: 9600, // rebalanced for idle-game scale, step #19 (×8: was 1200s)
@@ -1895,18 +1898,18 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T5→T6 transition + T6 Orbital (§13.4 / §14.10 / step 20)
   // ---------------------------------------------------------------------------
   // Data-only ship. §14.2-14.8 / §14.12 launch + debris + lodge + repair
-  // mechanics are DEFERRED — these recipes give the catalog rows visible
+  // mechanics are STILL-DEFERRED — these recipes give the catalog rows visible
   // outputs in the inspector but the resulting payloads/fuel are inert
   // until the live launch system lands. §14.10 spec recipe inputs that
   // aren't yet in the catalog (Spacetime fragment, Aluminum, Magnet,
   // Optical Fiber, Memetic Core, Brick, Carbon Fiber) are simplified to
-  // catalog-resident inputs of the same tier-weight — DEFERRED for proper
+  // catalog-resident inputs of the same tier-weight — STILL-DEFERRED for proper
   // §14.10 fidelity until the missing intermediates ship.
 
   // §13.4 / §14.1: Ascendant Assembly produces the Ascendant Core (T5→T6
   // bridge artifact). Cycle is 2 hours of real time — the artifact's
   // weight-and-cost framing makes it a meaningful gate. Auto-flip of
-  // `ascendantCoreCrafted` on first production DEFERRED.
+  // `ascendantCoreCrafted` on first production STILL-DEFERRED.
   ascendant_assembly: {
     cycleSec: 7200,
     inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5, computing_module: 2 },

@@ -17,12 +17,13 @@
 // Casimir Tap, Reality Forge, Singularity Battery, Time Lock, Genesis Chamber,
 // Universe Editor, Lattice Node. Data-only: §13.3 mechanics (time banking,
 // free creation, biome reassignment, network unity, etc.) are explicitly
-// DEFERRED to step 14+ with a comment at each def site. The T5 access gate
+// STILL-DEFERRED to step 14+ with a comment at each def site. The T5 access gate
 // (§13.1) — level ≥ 50 AND `aiCoreCrafted` flag — is enforced in
 // `buildingUnlocked` below, not by the tier-only `tierForLevel`. The Casimir
 // Tap power figure is a placeholder; full §8.10 T5 raw extractors (Aetheric
 // Conduit, Spacetime Resonator, Eldritch Sieve) and their multi-hour cycle
-// times are deferred.
+// times shipped in step 18 for Aetheric Conduit / Spacetime Resonator /
+// Eldritch Sieve; Casimir Tap cycle remains placeholder (1800s).
 //
 // §13.2 deliberate substitution: spec §13.2 lists Probability Engine in the
 // T5 building set, but step 13 ships Time Lock instead. Time Lock has richer
@@ -38,7 +39,7 @@
 // (Coal Furnace) burn `coalPerCycle × consumersServed` coal per cycle; free
 // sources (Geothermal Vent / Plasma Heater / Fusion Core) cost no fuel.
 // T4 omnidirectional pulse mechanic (§11.5) for the Launch Tower remains
-// deferred — only the def is added in step 12.
+// STILL-DEFERRED — only the def is added in step 12.
 //
 // No PixiJS imports, no DOM — `building-defs.ts` is pure data + the tier
 // gate + biome gate. `buildings.ts` consumes BUILDING_DEFS for rendering;
@@ -169,12 +170,12 @@ export type BuildingDefId =
   | 'ascendant_assembly'
   // New T6 (§14 / step 20) — data-only. §14.2-14.8 / §14.12 live mechanics
   // (satellite launches, debris fields, comm graph, repair drones,
-  // lodge events) are DEFERRED; these defs ship as visible catalog rows
+  // lodge events) are STILL-DEFERRED; these defs ship as visible catalog rows
   // plus power-balance contributions. §14.2 Spaceport tier I/II/III
   // upgrade lifecycle, §14.3 satellite variants, §14.4 comm graph,
   // §14.5 dwell ramps, §14.6 maneuvering fuel, §14.7 launch success,
   // §14.8 debris and Kessler cascades, §14.9 four new Orbital skill
-  // sub-paths, §14.12 Repair Drone operations — all deferred.
+  // sub-paths, §14.12 Repair Drone operations — all STILL-DEFERRED.
   | 'spaceport'
   | 'orbital_tracking_station'
   | 'antimatter_refinery'
@@ -341,7 +342,7 @@ export type BuildingDefId =
   // T1-T3 are 1×1; T4-T6 are 2×2 "comm towers". T1 is zero-power (basic
   // beacon); T2+ consumes power proportional to tier. T6 doubles as a
   // satellite dish for the §14 orbital launch chain (dish dual-role
-  // DEFERRED). Costs are placeholders — Antenna placeholder — tune in
+  // STILL-DEFERRED). Costs are placeholders — Antenna placeholder — tune in
   // Appendix A.
   | 'antenna_t1'
   | 'antenna_t2'
@@ -1280,7 +1281,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §8.3 T4 manufacturing: Singularity Forge (4x4). T4 endgame artifacts —
   // antimatter capsules, exotic alloy fragments, quantum chips. Recipe
-  // assignment deferred to balance pass; def ships now for catalog row.
+  // assignment STILL-DEFERRED to balance pass; def ships now for catalog row.
   singularity_forge: {
     id: 'singularity_forge',
     displayName: 'Singularity Forge',
@@ -1451,7 +1452,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // §8.9: Platform Constructor (a.k.a. Foundry of Lands). T3 special building
   // — gates artificial-island construction (§2.5). Step 11 only checks for the
   // building's PRESENCE on the founder island; placement/power/heat enforcement
-  // is deferred. Power-consumption is declared per §5.1 so a future-step
+  // is STILL-DEFERRED. Power-consumption is declared per §5.1 so a future-step
   // brownout properly throttles construction availability.
   platform_constructor: {
     id: 'platform_constructor',
@@ -1485,7 +1486,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // §8.7 T2 cooling: Cooling Tower (2x2). Adjacency anchor — required for
   // some chemistry recipes (e.g. Crystal Growth Lab → rare crystals per
   // §4.5). The adjacency-effect wire-up that recipe-unlocks downstream
-  // buildings is deferred; this def ships as a catalog row so the player
+  // buildings is STILL-DEFERRED; this def ships as a catalog row so the player
   // can place it now in anticipation of those gates landing.
   cooling_tower: {
     id: 'cooling_tower',
@@ -1503,7 +1504,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // prevents efficiency penalty for chemistry per §4.5 ("Refinery without
   // adjacent Wastewater Treatment operates only on low-grade recipe,
   // efficiency -50%"). Soft-gate wire-up on downstream chemistry recipes
-  // is deferred; def ships as a catalog row.
+  // is STILL-DEFERRED; def ships as a catalog row.
   wastewater_treatment: {
     id: 'wastewater_treatment',
     displayName: 'Wastewater Treatment',
@@ -1517,7 +1518,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '⌇',
   },
   // §8.7 T2 emissions: Exhaust Scrubber (1x1). Required for clean operation
-  // of high-emission buildings per §8.7. Adjacency wire-up is deferred to
+  // of high-emission buildings per §8.7. Adjacency wire-up is STILL-DEFERRED to
   // the §4.5 gate-system extension; this def ships as a catalog row.
   exhaust_scrubber: {
     id: 'exhaust_scrubber',
@@ -1574,7 +1575,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §9.5: Cryogenic Compute Center — Arctic-unique. Only producer of AI
   // Cores. Arctic ambient cold should halve compute-recipe power draw (§9.5
-  // intrinsic bonus); deferred to a later step, modelled at static 1200W
+  // intrinsic bonus); STILL-DEFERRED to a later step, modelled at static 1200W
   // here.
   cryogenic_compute_center: {
     id: 'cryogenic_compute_center',
@@ -1675,7 +1676,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §8.8 / §11.5: Launch Tower — T4 omnidirectional drone-pulse launch
   // site. The pulse mechanic itself (3-cell-radius single-disk reveal) is
-  // deferred; the def exists in step 12 so the catalog row + tier badge
+  // STILL-DEFERRED; the def exists in step 12 so the catalog row + tier badge
   // are visible.
   launch_tower: {
     id: 'launch_tower',
@@ -1798,8 +1799,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // Casimir energy / Zero-point flux. Step-13 simplification: declared as a
   // power producer (8000W placeholder; §8.5 says "free vacuum energy") with
   // a slow recipe emitting `casimir_energy`. Full §8.10 dual-output cycle
-  // (Casimir energy OR Zero-point flux per cycle) plus the §8.10 30-minute
-  // cycle time stay deferred — step-13 recipe uses 1800s (30 min) for the
+  // (Casimir energy OR Zero-point flux per cycle) is STILL-DEFERRED; the
+  // §8.10 30-minute cycle time is shipped (1800s) — step-13 recipe uses it for the
   // placeholder, consistent with the §8.10 lower-bound dwell.
   casimir_tap: {
     id: 'casimir_tap',
@@ -1832,7 +1833,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '✺',
   },
   // §8.4: Singularity Battery — "effectively infinite electrical power
-  // storage" per spec. Power-storage mechanic per §13.3 DEFERRED to step 14+.
+  // storage" per spec. Power-storage mechanic per §13.3 STILL-DEFERRED to step 14+.
   // Per the §8.4 note ("not a resource storage building") this def carries
   // NO `storage` contribution — it never raised any resource cap. The earlier
   // step-13 `storageCap: 10000` placeholder is removed by the §4.6
@@ -1854,7 +1855,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §8.9 / §13.3: Time Lock — banks offline-time stockpile per island and
   // spends to accelerate any chosen island's tick rate at 3×. Time-banking
-  // mechanics per §13.3 DEFERRED to step 14: in step 13 the def ships as a
+  // mechanics per §13.3 STILL-DEFERRED to step 14: in step 13 the def ships as a
   // visible catalog row + power-consuming placeholder. No recipe (the
   // banking/spending model isn't an inputs→outputs recipe).
   time_lock: {
@@ -1872,7 +1873,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §8.9 / §13.3: Genesis Chamber — free-creation of T1-T4 resources from
   // electrical power alone (placeholder cycle 5 min, tier-scaling power
-  // draw). Free-creation mechanic per §13.3 DEFERRED to step 14; def ships
+  // draw). Free-creation mechanic per §13.3 STILL-DEFERRED to step 14; def ships
   // as a visible catalog row + power-consuming placeholder. No recipe (the
   // player-target-resource selection isn't a fixed inputs→outputs recipe).
   genesis_chamber: {
@@ -1889,7 +1890,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '✺',
   },
   // §8.9 / §13.3: Universe Editor — reassigns an island's biome and
-  // regenerates terrain. Biome reassignment per §13.3 DEFERRED to step 14;
+  // regenerates terrain. Biome reassignment per §13.3 STILL-DEFERRED to step 14;
   // def ships as a visible catalog row + power-consuming placeholder. No
   // recipe (the biome-rewrite invocation isn't a continuous production
   // cycle).
@@ -1909,7 +1910,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // §8.9 / §13.3: Lattice Node — one per networked T5 island; activates
   // Omniscient Lattice (unified inventory + cross-island adjacency) when
   // N nodes are placed across N T5-mastered islands. Network unity per
-  // §13.3 (Omniscient Lattice) DEFERRED to step 14; def ships as an inert
+  // §13.3 (Omniscient Lattice) STILL-DEFERRED to step 14; def ships as an inert
   // placeholder with a small standby power draw. No recipe.
   lattice_node: {
     id: 'lattice_node',
@@ -1983,9 +1984,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // tier I/II/III upgrade lifecycle, satellite launches as a concurrent
   // slot, scheduled launches with success rolls, orbital debris fields,
   // Kessler-cascade chains, comm-graph data delivery, lodge events,
-  // Repair Drone operations, dwell-ramp discovery — are all DEFERRED.
+  // Repair Drone operations, dwell-ramp discovery — are all STILL-DEFERRED.
   // §14.9 four new Orbital skill sub-paths (Launch / Communication /
-  // Discovery / Resilience) — DEFERRED.
+  // Discovery / Resilience) — STILL-DEFERRED.
   //
   // The §14.1 access gate (level 50 + AI core + Ascendant Core crafted +
   // Spaceport placed) is composed in `buildingUnlocked` below. Spaceport
@@ -1995,9 +1996,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
 
   // §14.2 Spaceport — single building serving as launch facility, ground-
   // side comm antenna, and repair-launch facility. Tier I/II/III in-place
-  // upgrade lifecycle per §14.2 DEFERRED — ships as a single tier with no
+  // upgrade lifecycle per §14.2 STILL-DEFERRED — ships as a single tier with no
   // upgrade. §14.7 pad-explosion failure (Spaceport returns to tier I on
-  // destruction) — DEFERRED. No recipe — this is a special placement
+  // destruction) — STILL-DEFERRED. No recipe — this is a special placement
   // (the T6 gate building itself).
   spaceport: {
     id: 'spaceport',
@@ -2034,7 +2035,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // (T6 launch fuel). Recipe placeholder per the task brief:
   // `1 exotic_alloy + 1 reality_anchor + 2 casimir_energy → 1 antimatter_propellant`
   // on a 2-hour cycle. §14.10 actual recipe ("Antimatter Capsule" chain
-  // through Particle Accelerator) — DEFERRED.
+  // through Particle Accelerator) — STILL-DEFERRED.
   antimatter_refinery: {
     id: 'antimatter_refinery',
     displayName: 'Antimatter Refinery',
@@ -3339,7 +3340,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // T5 raw extractors (§8.10). Power draws are placeholder "60-100 kW"
   // figures per §8.10 — these are the biggest power loads in the catalog
   // and will brownout most networks until fed Casimir Taps / Singularity
-  // Batteries. Multi-output rotation across §6.6 raws DEFERRED.
+  // Batteries. Multi-output rotation across §6.6 raws now shipped for
+  // Aetheric Conduit / Spacetime Resonator / Eldritch Sieve; Zero-Point /
+  // Neutronium extractors remain single-output.
   zero_point_extractor: {
     id: 'zero_point_extractor',
     displayName: 'Zero Point Extractor',
@@ -3535,7 +3538,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // Lighthouse vision (§15.x). Six tiers extending the baseline 10-tile
   // padding ellipse. Vision radius (in tiles) lives in lighthouse.ts →
   // LIGHTHOUSE_VISION_RADII; the economy doesn't read it. Recipes / build
-  // costs are deferred — placement is free pre-§14, and once §14 costs land
+  // costs are STILL-DEFERRED — placement is free pre-§14, and once §14 costs land
   // the table below moves into `def.placementCost`:
   //
   //   T1: 20 stone + 5 wood                    // Lighthouse placeholder — tune in Appendix A
@@ -3631,14 +3634,14 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // §11 telemetry — Antenna family. Six tiers extending the drone-scan
   // relay range. Signal radius (in tiles) lives in `antenna.ts →
   // ANTENNA_SIGNAL_RADII`; the economy doesn't read it. Build costs are
-  // deferred to Appendix A.
+  // STILL-DEFERRED to Appendix A.
   //
   //   T1: 1×1, radius 80,  zero-power (basic signal beacon)
   //   T2: 1×1, radius 140, 5 W
   //   T3: 1×1, radius 220, 25 W
   //   T4: 2×2, radius 320, 60 W (comm tower)
   //   T5: 2×2, radius 480, 150 W (exotic signal)
-  //   T6: 2×2, radius 700, 400 W (doubles as satellite dish — §14 dish dual-role DEFERRED)
+  //   T6: 2×2, radius 700, 400 W (doubles as satellite dish — §14 dish dual-role STILL-DEFERRED)
   //
   // Antenna placeholder — tune in Appendix A.
   antenna_t1: {
@@ -3714,7 +3717,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xd8b840, // ascendant gold + antenna-blue blend
     stroke: 0x483820,
     // Antenna placeholder — tune in Appendix A. T6 antenna ALSO acts as the
-    // satellite dish for §14 orbital launches (dish dual-role DEFERRED).
+    // satellite dish for §14 orbital launches (dish dual-role STILL-DEFERRED).
     power: { consumes: 400 },
     placementCost: { antimatter_propellant: 40, steel: 80, reality_anchor: 40 },
     glyph: '⟁',

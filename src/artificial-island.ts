@@ -23,7 +23,7 @@
 //     plus `validateConstruction`'s material/tier checks together keep the
 //     pure layer cleanly testable.
 //   - T3 caps at major=8, minor=8 (§2.5). T4 (12, 12) and T5 (16, 16) are
-//     deferred — when those founder tiers land, extend `MAX_RADIUS_BY_TIER`
+//     STILL-DEFERRED — when those founder tiers land, extend `MAX_RADIUS_BY_TIER`
 //     instead of branching here.
 
 import type { Biome, IslandSpec } from './world.js';
@@ -131,7 +131,7 @@ export function computeConstructionCost(req: ConstructionRequirements): Construc
  *   2. founder has at least one `platform_constructor` placed.
  *   3. requested biome is in BIOME_DEFS.
  *   4. radii are within the T3 cap (major ≤ 8 AND minor ≤ 8). T4/T5 caps
- *      are deferred (future founders will use higher tiers and the cap
+ *      are STILL-DEFERRED (future founders will use higher tiers and the cap
  *      function will lift accordingly).
  *   5. founder's inventory has ≥ each material cost.
  *
@@ -155,7 +155,7 @@ export function validateConstruction(
   // Biome sanity check.
   if (!(req.biome in BIOME_DEFS)) return { ok: false, reason: 'invalid-biome' };
 
-  // Radii cap. T3 founder caps at 8×8 per §2.5; T4/T5 deferred.
+  // Radii cap. T3 founder caps at 8×8 per §2.5; T4/T5 STILL-DEFERRED.
   const cap = MAX_RADIUS_BY_TIER[tier as 3 | 4 | 5] ?? MAX_RADIUS_BY_TIER[3];
   if (req.majorRadius > cap || req.minorRadius > cap) {
     return { ok: false, reason: 'radius-too-large' };
