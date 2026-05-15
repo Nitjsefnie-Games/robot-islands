@@ -81,6 +81,7 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   quicklime: 'dry_goods',
   slaked_lime: 'dry_goods',
+  brick: 'dry_goods',
 
   // T0 liquids/gases.
   fresh_water: 'liquid_gas',

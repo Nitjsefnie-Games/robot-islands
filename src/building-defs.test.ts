@@ -123,6 +123,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   'limekiln',
   'lime_slaker',
+  'brick_kiln',
   'aetheric_conduit',
   'spacetime_resonator',
   'eldritch_sieve',
@@ -848,6 +849,22 @@ describe('§7.5 lime_slaker (T1 slaked_lime producer)', () => {
     expect(RECIPES.lime_slaker).toBeDefined();
     expect(RECIPES.lime_slaker!.inputs).toEqual({ quicklime: 1, fresh_water: 1 });
     expect(RECIPES.lime_slaker!.outputs).toEqual({ slaked_lime: 1 });
+  });
+});
+
+describe('§7.6 brick_kiln (T1 brick producer)', () => {
+  it('is T1, 2x2, requires heat, hard heat_source gate', () => {
+    const def = BUILDING_DEFS.brick_kiln;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.requiresHeat).toBe(true);
+    expect(def.gates).toEqual([{ matchType: 'heat_source', hard: true }]);
+  });
+  it('produces brick from clay', () => {
+    expect(RECIPES.brick_kiln).toBeDefined();
+    expect(RECIPES.brick_kiln!.inputs).toEqual({ clay: 2 });
+    expect(RECIPES.brick_kiln!.outputs).toEqual({ brick: 1 });
   });
 });
 

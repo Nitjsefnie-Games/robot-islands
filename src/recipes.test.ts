@@ -447,6 +447,19 @@ describe('§6.2 T1 refined — quicklime + slaked_lime (Task 2.1)', () => {
   });
 });
 
+describe('§6.2 T1 refined — brick (Task 2.2)', () => {
+  it('brick is in ALL_RESOURCES with xp_weight 3', () => {
+    expect(ALL_RESOURCES).toContain('brick' as ResourceId);
+    expect(XP_WEIGHT.brick).toBe(3);
+  });
+  it('brick_kiln recipe exists with clay input and brick output', () => {
+    expect(RECIPES.brick_kiln).toBeDefined();
+    expect(RECIPES.brick_kiln!.inputs).toEqual({ clay: 2 });
+    expect(RECIPES.brick_kiln!.outputs).toEqual({ brick: 1 });
+    expect(RECIPES.brick_kiln!.cycleSec).toBe(120);
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,

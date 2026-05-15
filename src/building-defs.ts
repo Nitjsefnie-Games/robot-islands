@@ -181,6 +181,7 @@ export type BuildingDefId =
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   | 'limekiln'
   | 'lime_slaker'
+  | 'brick_kiln'
   | 'lumber_mill'
   | 'glassworks'
   | 'evaporator'
@@ -1922,6 +1923,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 30 },
     placementCost: { stone: 30, wood: 10 },
     glyph: '◇',
+  },
+  brick_kiln: {
+    id: 'brick_kiln',
+    displayName: 'Brick Kiln',
+    category: 'chemistry',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0xa05030, // terracotta
+    stroke: 0x402010,
+    power: { consumes: 50 },
+    requiresHeat: true,
+    gates: [{ matchType: 'heat_source', hard: true }],
+    placementCost: { stone: 40, wood: 10 },
+    glyph: '△',
   },
 
   // T1 manufacturing / chemistry.

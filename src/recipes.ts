@@ -77,6 +77,7 @@ export type ResourceId =
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   | 'quicklime'
   | 'slaked_lime'
+  | 'brick'
   // Byproducts (§6.7)
   | 'oxygen'
   | 'argon'
@@ -206,6 +207,7 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   'quicklime',
   'slaked_lime',
+  'brick',
   // Byproducts (§6.7)
   'oxygen',
   'argon',
@@ -321,6 +323,7 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   quicklime: 3,
   slaked_lime: 3,
+  brick: 3,
   // Byproducts (§6.7) — T1 refined weight per spec §9.1.
   oxygen: 3,
   argon: 3,
@@ -910,6 +913,12 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 120,
     inputs: { quicklime: 1, fresh_water: 1 },
     outputs: { slaked_lime: 1 },
+    category: 'chemistry',
+  },
+  brick_kiln: {
+    cycleSec: 120,
+    inputs: { clay: 2 },
+    outputs: { brick: 1 },
     category: 'chemistry',
   },
 
