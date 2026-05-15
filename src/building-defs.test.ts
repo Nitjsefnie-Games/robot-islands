@@ -945,6 +945,33 @@ describe('§6.2 plank_mill (T1 plank producer)', () => {
   });
 });
 
+describe('§7.2 copper/tin/lead smelters (Task 2.6)', () => {
+  it('copper_smelter is T1, 2x2, smelting, no heat requirement', () => {
+    const def = BUILDING_DEFS.copper_smelter;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.category).toBe('smelting');
+    expect(def.requiresHeat).toBeUndefined();
+  });
+  it('tin_smelter is T1, 2x2, smelting, no heat requirement', () => {
+    const def = BUILDING_DEFS.tin_smelter;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.category).toBe('smelting');
+    expect(def.requiresHeat).toBeUndefined();
+  });
+  it('lead_smelter is T1, 2x2, smelting, no heat requirement', () => {
+    const def = BUILDING_DEFS.lead_smelter;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.category).toBe('smelting');
+    expect(def.requiresHeat).toBeUndefined();
+  });
+});
+
 describe('§8.8 shipyard coastal gating', () => {
   it('shipyard has coastal flag', () => {
     expect(BUILDING_DEFS.shipyard.coastal).toBe(true);

@@ -87,6 +87,9 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   concrete: 'dry_goods',
   charcoal: 'dry_goods',
   plank: 'dry_goods',
+  copper_ingot: 'dry_goods',
+  tin_ingot: 'dry_goods',
+  lead_ingot: 'dry_goods',
 
   // T0 liquids/gases.
   fresh_water: 'liquid_gas',

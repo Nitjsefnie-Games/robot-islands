@@ -519,6 +519,39 @@ describe('§6.2 T1 refined — plank (Task 2.5)', () => {
   });
 });
 
+describe('§6.2 T1 refined — copper/tin/lead ingots (Task 2.6)', () => {
+  it('copper_ingot is in ALL_RESOURCES with xp_weight 3', () => {
+    expect(ALL_RESOURCES).toContain('copper_ingot' as ResourceId);
+    expect(XP_WEIGHT.copper_ingot).toBe(3);
+  });
+  it('tin_ingot is in ALL_RESOURCES with xp_weight 3', () => {
+    expect(ALL_RESOURCES).toContain('tin_ingot' as ResourceId);
+    expect(XP_WEIGHT.tin_ingot).toBe(3);
+  });
+  it('lead_ingot is in ALL_RESOURCES with xp_weight 3', () => {
+    expect(ALL_RESOURCES).toContain('lead_ingot' as ResourceId);
+    expect(XP_WEIGHT.lead_ingot).toBe(3);
+  });
+  it('copper_smelter recipe: copper_ore + coal → copper_ingot', () => {
+    expect(RECIPES.copper_smelter).toBeDefined();
+    expect(RECIPES.copper_smelter!.inputs).toEqual({ copper_ore: 1, coal: 1 });
+    expect(RECIPES.copper_smelter!.outputs).toEqual({ copper_ingot: 1 });
+    expect(RECIPES.copper_smelter!.cycleSec).toBe(80);
+  });
+  it('tin_smelter recipe: tin_ore + coal → tin_ingot', () => {
+    expect(RECIPES.tin_smelter).toBeDefined();
+    expect(RECIPES.tin_smelter!.inputs).toEqual({ tin_ore: 1, coal: 1 });
+    expect(RECIPES.tin_smelter!.outputs).toEqual({ tin_ingot: 1 });
+    expect(RECIPES.tin_smelter!.cycleSec).toBe(80);
+  });
+  it('lead_smelter recipe: lead_ore + coal → lead_ingot', () => {
+    expect(RECIPES.lead_smelter).toBeDefined();
+    expect(RECIPES.lead_smelter!.inputs).toEqual({ lead_ore: 1, coal: 1 });
+    expect(RECIPES.lead_smelter!.outputs).toEqual({ lead_ingot: 1 });
+    expect(RECIPES.lead_smelter!.cycleSec).toBe(80);
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,

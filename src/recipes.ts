@@ -83,6 +83,9 @@ export type ResourceId =
   | 'concrete'
   | 'charcoal'
   | 'plank'
+  | 'copper_ingot'
+  | 'tin_ingot'
+  | 'lead_ingot'
   // Byproducts (§6.7)
   | 'oxygen'
   | 'argon'
@@ -218,6 +221,9 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'concrete',
   'charcoal',
   'plank',
+  'copper_ingot',
+  'tin_ingot',
+  'lead_ingot',
   // Byproducts (§6.7)
   'oxygen',
   'argon',
@@ -339,6 +345,9 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   concrete: 3,
   charcoal: 3,
   plank: 3,
+  copper_ingot: 3,
+  tin_ingot: 3,
+  lead_ingot: 3,
   // Byproducts (§6.7) — T1 refined weight per spec §9.1.
   oxygen: 3,
   argon: 3,
@@ -965,6 +974,24 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { lumber: 1 },
     outputs: { plank: 2 },
     category: 'manufacturing',
+  },
+  copper_smelter: {
+    cycleSec: 80,
+    inputs: { copper_ore: 1, coal: 1 },
+    outputs: { copper_ingot: 1 },
+    category: 'smelting',
+  },
+  tin_smelter: {
+    cycleSec: 80,
+    inputs: { tin_ore: 1, coal: 1 },
+    outputs: { tin_ingot: 1 },
+    category: 'smelting',
+  },
+  lead_smelter: {
+    cycleSec: 80,
+    inputs: { lead_ore: 1, coal: 1 },
+    outputs: { lead_ingot: 1 },
+    category: 'smelting',
   },
 
   // T1 manufacturing / chemistry — T0 raws → T1 refined. Rebalanced for idle-game scale, step #19 (×10).

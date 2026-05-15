@@ -187,6 +187,9 @@ export type BuildingDefId =
   | 'concrete_plant'
   | 'charcoal_kiln'
   | 'plank_mill'
+  | 'copper_smelter'
+  | 'tin_smelter'
+  | 'lead_smelter'
   | 'lumber_mill'
   | 'glassworks'
   | 'evaporator'
@@ -2006,6 +2009,42 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 30 },
     placementCost: { stone: 20, wood: 10 },
     glyph: '⌬',
+  },
+  copper_smelter: {
+    id: 'copper_smelter',
+    displayName: 'Copper Smelter',
+    category: 'smelting',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0xb87333, // copper oxide orange
+    stroke: 0x5a3018,
+    power: { consumes: 50 },
+    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    glyph: '△',
+  },
+  tin_smelter: {
+    id: 'tin_smelter',
+    displayName: 'Tin Smelter',
+    category: 'smelting',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0xc0c4cb, // pale tin-grey
+    stroke: 0x505458,
+    power: { consumes: 50 },
+    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    glyph: '△',
+  },
+  lead_smelter: {
+    id: 'lead_smelter',
+    displayName: 'Lead Smelter',
+    category: 'smelting',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0x4a4a52, // dark lead-grey
+    stroke: 0x202024,
+    power: { consumes: 50 },
+    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    glyph: '△',
   },
 
   // T1 manufacturing / chemistry.
