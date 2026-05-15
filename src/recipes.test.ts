@@ -1025,6 +1025,19 @@ describe('§7.10 pump + hydraulic_actuator + pneumatic_actuator (Task 10.8)', ()
   });
 });
 
+describe('§7.9 solar_cell via solar_cell_lab (Task 10.9)', () => {
+  it('solar_cell is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
+    expect(ALL_RESOURCES).toContain('solar_cell' as ResourceId);
+    expect(XP_WEIGHT.solar_cell).toBe(30);
+  });
+  it('solar_cell_lab recipe: silicon_wafer + glass + aluminum → solar_cell', () => {
+    expect(RECIPES.solar_cell_lab).toBeDefined();
+    expect(RECIPES.solar_cell_lab!.inputs).toEqual({ silicon_wafer: 1, glass: 2, aluminum: 1 });
+    expect(RECIPES.solar_cell_lab!.outputs).toEqual({ solar_cell: 1 });
+    expect(RECIPES.solar_cell_lab!.cycleSec).toBe(400);
+  });
+});
+
 describe('§6.3 glass_panel via glass_panel_press (Task 6.5)', () => {
   it('glass_panel is in ALL_RESOURCES with xp_weight 10', () => {
     expect(ALL_RESOURCES).toContain('glass_panel');

@@ -224,6 +224,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   pump: 'components',
   hydraulic_actuator: 'components',
   pneumatic_actuator: 'components',
+  // Phase 10c — T3 power components (Task 10.9)
+  solar_cell: 'components',
 };
 
 /** Filter chips shown above the resource list. `'all'` is the default. */

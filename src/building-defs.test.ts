@@ -228,6 +228,8 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'pump_assembly',
   'hydraulic_assembly',
   'pneumatic_assembly',
+  // Phase 10c — T3 power components (Task 10.9)
+  'solar_cell_lab',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -469,6 +471,21 @@ describe('BUILDING_DEFS catalog', () => {
       expect(RECIPES.pneumatic_assembly).toBeDefined();
       expect(RECIPES.pneumatic_assembly!.inputs).toEqual({ pipe: 2, bearing: 1, spring: 1 });
       expect(RECIPES.pneumatic_assembly!.outputs).toEqual({ pneumatic_actuator: 1 });
+    });
+  });
+
+  describe('§7.9 solar_cell_lab (T3 solar_cell producer)', () => {
+    it('is T3, 2x2, electronics category', () => {
+      const def = BUILDING_DEFS.solar_cell_lab;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(3);
+      expect(def.footprint).toEqual(SHAPES.square2);
+      expect(def.category).toBe('electronics');
+    });
+    it('produces solar_cell from silicon_wafer + glass + aluminum', () => {
+      expect(RECIPES.solar_cell_lab).toBeDefined();
+      expect(RECIPES.solar_cell_lab!.inputs).toEqual({ silicon_wafer: 1, glass: 2, aluminum: 1 });
+      expect(RECIPES.solar_cell_lab!.outputs).toEqual({ solar_cell: 1 });
     });
   });
 });

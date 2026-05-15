@@ -259,4 +259,6 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   pump: 'components',
   hydraulic_actuator: 'components',
   pneumatic_actuator: 'components',
+  // Phase 10c — T3 power components (Task 10.9)
+  solar_cell: 'components',
 };
