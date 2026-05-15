@@ -367,6 +367,13 @@ describe('§8.1 T2 extraction recipes', () => {
   });
 });
 
+describe('§6.1 T0 raws — limestone', () => {
+  it('limestone is in ALL_RESOURCES with xp_weight 1', () => {
+    expect(ALL_RESOURCES).toContain('limestone' as ResourceId);
+    expect(XP_WEIGHT.limestone).toBe(1);
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,

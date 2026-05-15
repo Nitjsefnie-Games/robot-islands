@@ -47,6 +47,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   sand: 'raw',
   salt: 'raw',
   quartz: 'raw',
+  // §6.1 T0 mineral raw: limestone (Task 1.2)
+  limestone: 'raw',
   // §6.4 T3 mineral raws (for slag reprocessing + nuclear fuel)
   gold_ore: 'raw',
   silver_ore: 'raw',

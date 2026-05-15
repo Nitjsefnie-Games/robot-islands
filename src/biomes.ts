@@ -70,7 +70,7 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     // Procedurally-settled Plains colonies inherit these rares via
     // terrainAtForBiome scatter (not clustered, but present so 1x1 Loggers
     // and singletons of stone are placeable).
-    rareTerrain: ['tree', 'stone', 'ore', 'coal'],
+    rareTerrain: ['tree', 'stone', 'ore', 'coal', 'limestone'],
     displayName: 'Plains',
   },
   forest: {

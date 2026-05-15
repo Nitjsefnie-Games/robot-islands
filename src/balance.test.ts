@@ -80,7 +80,7 @@ describe('Balance — every consumed resource has at least one producer', () => 
     'slag', 'scrap', 'oxygen', 'argon',
   ]);
   const STARTER_TERRAIN = new Set<ResourceId>([
-    'wood', 'iron_ore', 'coal', 'stone', 'sand', 'salt', 'quartz',
+    'wood', 'iron_ore', 'coal', 'stone', 'sand', 'salt', 'quartz', 'limestone',
     'crude_oil', 'natural_gas', 'fresh_water', 'saltwater', 'hydrogen',
     // §6.4 T3 raw minerals (slag-reprocessed via §6.7, terrain-deferred)
     'gold_ore', 'silver_ore', 'rare_earth', 'uranium_ore',

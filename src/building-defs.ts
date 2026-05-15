@@ -169,6 +169,7 @@ export type BuildingDefId =
   | 'deep_mine'
   | 'coastal_pump'
   | 'quartz_mine'
+  | 'limestone_quarry'
   | 'lumber_mill'
   | 'glassworks'
   | 'evaporator'
@@ -1764,6 +1765,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x484858,
     power: { consumes: 30 },
     requiredTile: ['stone'],
+    placementCost: { stone: 30, wood: 15 },
+    glyph: '⛏',
+  },
+  limestone_quarry: {
+    id: 'limestone_quarry',
+    displayName: 'Limestone Quarry',
+    category: 'extraction',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0xc8c0a8, // pale calcareous beige
+    stroke: 0x60584a,
+    power: { consumes: 30 },
+    requiredTile: ['limestone'],
     placementCost: { stone: 30, wood: 15 },
     glyph: '⛏',
   },

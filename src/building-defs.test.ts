@@ -111,6 +111,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'processor_fab',
   'compute_module_fab',
   'drilling_rig',
+  'limestone_quarry',
   'aetheric_conduit',
   'spacetime_resonator',
   'eldritch_sieve',
@@ -694,6 +695,20 @@ describe('slag_reprocessor (§6.7 byproduct reprocessing)', () => {
       silver_ore: 1,
       rare_earth: 1,
     });
+  });
+});
+
+describe('§8.1 limestone_quarry (T1 limestone extractor)', () => {
+  it('ships as a T1 extraction def gated to limestone tile', () => {
+    const def = BUILDING_DEFS.limestone_quarry;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(1);
+    expect(def.category).toBe('extraction');
+    expect(def.requiredTile).toEqual(['limestone']);
+  });
+  it('produces 1 limestone per cycle', () => {
+    expect(RECIPES.limestone_quarry).toBeDefined();
+    expect(RECIPES.limestone_quarry!.outputs).toEqual({ limestone: 1 });
   });
 });
 

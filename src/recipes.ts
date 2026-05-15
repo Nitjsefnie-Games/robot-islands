@@ -64,6 +64,8 @@ export type ResourceId =
   | 'natural_gas'
   | 'quartz'
   | 'hydrogen'
+  // §6.1 T0 mineral raw: limestone (Task 1.2)
+  | 'limestone'
   // Byproducts (§6.7)
   | 'oxygen'
   | 'argon'
@@ -180,6 +182,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'natural_gas',
   'quartz',
   'hydrogen',
+  // §6.1 T0 mineral raw: limestone (Task 1.2)
+  'limestone',
   // Byproducts (§6.7)
   'oxygen',
   'argon',
@@ -282,6 +286,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   natural_gas: 1,
   quartz: 1,
   hydrogen: 1,
+  // §6.1 T0 mineral raw: limestone (Task 1.2)
+  limestone: 1,
   // Byproducts (§6.7) — T1 refined weight per spec §9.1.
   oxygen: 3,
   argon: 3,
@@ -803,6 +809,12 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 120, // rebalanced for idle-game scale, step #19 (×10: was 12s)
     inputs: {},
     outputs: { quartz: 1 },
+    category: 'extraction',
+  },
+  limestone_quarry: {
+    cycleSec: 60, // slightly slower than iron Mine (50s) — limestone is bulk industrial
+    inputs: {},
+    outputs: { limestone: 1 },
     category: 'extraction',
   },
 
