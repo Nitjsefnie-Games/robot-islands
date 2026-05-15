@@ -417,7 +417,23 @@ async function main(): Promise<void> {
           if (targetState) {
             inspector.open({ spec: island, state: targetState, building: hitBuilding });
             selectedSpec = island;
+            // Align hover state to the clicked building. The mousemove
+            // handler normally keeps `hoveredBuilding` in sync with the
+            // cursor, but if the click lands at a position the cursor
+            // hasn't visited yet (fast click, programmatic dispatch, or
+            // any race where the click handler fires before the latest
+            // mousemove processes), the hover layer would still draw the
+            // previously-hovered building's outline. That stale outline
+            // is the user-visible "click marks a different building"
+            // symptom — the selection outline correctly highlights the
+            // clicked building, but the leftover hover outline draws on
+            // the previously-hovered one. By syncing hoveredBuilding to
+            // the hit, the hover-suppression check inside repaintHover
+            // (hover.id === selection.id → hoverLayer.visible = false)
+            // takes effect on the next repaintHover call.
+            hoveredBuilding = { spec: island, building: hitBuilding };
             repaintSelection();
+            repaintHover();
             // Don't switch active-island on a building click — the player is
             // inspecting, not focusing. Active-island stays where it was so
             // the HUD doesn't jump.
@@ -1438,6 +1454,14 @@ async function main(): Promise<void> {
     // selected building was demolished externally (won't happen in step 2.5
     // but defensive for future tooling) the repaint clears the outline.
     repaintSelection();
+    // Hover outline also re-evaluates each frame so the hover-suppression
+    // check (hide hover when hover.id === selection.id) reconciles after a
+    // click. Without this, the hover layer keeps the previously-drawn
+    // outline visible until the next mousemove — which produces the
+    // "click marks a different building" symptom when the user clicks
+    // without moving the cursor afterward. repaintHover is cheap when
+    // hoveredBuilding is unchanged (one Graphics.clear + redraw at most).
+    repaintHover();
   });
 
   // Recenter the camera's reference point on resize so the world doesn't
@@ -1464,6 +1488,15 @@ async function main(): Promise<void> {
     // would lie once the player clicks another island.
     (window as unknown as { __active: () => IslandState }).__active = activeState;
     (window as unknown as { __activeId: () => string }).__activeId = () => activeIslandId;
+    (window as unknown as { __dbgHover: () => unknown }).__dbgHover = () => ({
+      hoveredBuilding: hoveredBuilding
+        ? { id: hoveredBuilding.building.id, defId: hoveredBuilding.building.defId, specId: hoveredBuilding.spec.id }
+        : null,
+      hoverLayerVisible: hoverLayer.visible,
+      selectedSpecId: selectedSpec?.id ?? null,
+      inspectorSelectedId: inspector.getSelectedBuildingId(),
+      selectionLayerVisible: selectionLayer.visible,
+    });
     void bind; // referenced for rebind-from-console workflows
     void TILE_PX;
   }
