@@ -173,6 +173,7 @@ export type BuildingDefId =
   | 'clay_pit_extractor'
   | 'sulfur_mine'
   | 'phosphate_mine'
+  | 'graphite_mine'
   | 'lumber_mill'
   | 'glassworks'
   | 'evaporator'
@@ -1820,6 +1821,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x6a5018,
     power: { consumes: 30 },
     requiredTile: ['phosphate_deposit'],
+    placementCost: { stone: 30, wood: 15 },
+    glyph: '⛏',
+  },
+  graphite_mine: {
+    id: 'graphite_mine',
+    displayName: 'Graphite Mine',
+    category: 'extraction',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0x2a2a2e, // anthracite gray
+    stroke: 0x101012,
+    power: { consumes: 30 },
+    requiredTile: ['graphite_vein'],
     placementCost: { stone: 30, wood: 15 },
     glyph: '⛏',
   },

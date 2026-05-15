@@ -395,6 +395,13 @@ describe('§6.1 T0 raws — phosphate', () => {
   });
 });
 
+describe('§6.1 T0 raws — graphite', () => {
+  it('graphite is in ALL_RESOURCES with xp_weight 1', () => {
+    expect(ALL_RESOURCES).toContain('graphite' as ResourceId);
+    expect(XP_WEIGHT.graphite).toBe(1);
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,

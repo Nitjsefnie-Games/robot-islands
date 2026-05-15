@@ -69,6 +69,7 @@ export type ResourceId =
   | 'clay'
   | 'sulfur'
   | 'phosphate'
+  | 'graphite'
   // Byproducts (§6.7)
   | 'oxygen'
   | 'argon'
@@ -190,6 +191,7 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'clay',
   'sulfur',
   'phosphate',
+  'graphite',
   // Byproducts (§6.7)
   'oxygen',
   'argon',
@@ -297,6 +299,7 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   clay: 1,
   sulfur: 1,
   phosphate: 1,
+  graphite: 1,
   // Byproducts (§6.7) — T1 refined weight per spec §9.1.
   oxygen: 3,
   argon: 3,
@@ -842,6 +845,12 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 60,
     inputs: {},
     outputs: { phosphate: 1 },
+    category: 'extraction',
+  },
+  graphite_mine: {
+    cycleSec: 60,
+    inputs: {},
+    outputs: { graphite: 1 },
     category: 'extraction',
   },
 

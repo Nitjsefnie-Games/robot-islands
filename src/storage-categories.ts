@@ -73,6 +73,7 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   clay: 'dry_goods',
   sulfur: 'dry_goods',
   phosphate: 'dry_goods',
+  graphite: 'dry_goods',
 
   // T0 liquids/gases.
   fresh_water: 'liquid_gas',
