@@ -222,6 +222,9 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   quantum_foam: 'rare',
   spacetime_fragment: 'rare',
   higgs_flux: 'rare',
+  // Phase 12 — T5 transcendent raws (Task 12.1)
+  zero_point_flux: 'rare',
+  neutronium: 'rare',
   // Step-20 (T6 Orbital). All five route to `rare` — the Vault is the
   // canonical T5/T6 catch-all. `antimatter_propellant` is a fuel/gas in
   // nature (§11.7) and an arguable `liquid_gas` candidate, but routing it

@@ -990,6 +990,25 @@ describe('step-20 T5→T6 Ascendant Assembly (§13.4)', () => {
   });
 });
 
+describe('§8.10 zero_point_extractor + neutronium_extractor (T5 field extractors)', () => {
+  it('zero_point_extractor is T5, 2x2, extraction category, no requiredTile', () => {
+    const def = BUILDING_DEFS.zero_point_extractor;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.category).toBe('extraction');
+    expect(def.requiredTile).toBeUndefined();
+  });
+  it('neutronium_extractor is T5, 2x2, extraction category, no requiredTile', () => {
+    const def = BUILDING_DEFS.neutronium_extractor;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(5);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.category).toBe('extraction');
+    expect(def.requiredTile).toBeUndefined();
+  });
+});
+
 describe('chemical_reactor (§8.2 / §7.5)', () => {
   it('ships as a T2 chemistry def with 2x2 footprint', () => {
     const def = BUILDING_DEFS.chemical_reactor;

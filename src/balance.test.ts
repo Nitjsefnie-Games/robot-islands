@@ -95,6 +95,8 @@ describe('Balance — every consumed resource has at least one producer', () => 
     'aetheric_current', 'tachyon_stream', 'dark_matter', 'strange_matter',
     'quantum_foam', 'spacetime_fragment', 'higgs_flux', 'helium_3',
     'casimir_energy',
+    // Phase 12 — T5 transcendent raws (Task 12.1)
+    'zero_point_flux', 'neutronium',
     // T6 fuel — produced via separate refinery def (§7.12); accept terminal
     // for this structural test.
     'antimatter_propellant', 'memetic_core',

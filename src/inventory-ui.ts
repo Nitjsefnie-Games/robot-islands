@@ -190,6 +190,9 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   quantum_foam: 'rare',
   spacetime_fragment: 'rare',
   higgs_flux: 'rare',
+  // Phase 12 — T5 transcendent raws (Task 12.1)
+  zero_point_flux: 'rare',
+  neutronium: 'rare',
   // T5→T6 transition artifact + T6 Orbital (step 20, §13.4 / §14)
   ascendant_core: 'rare',
   antimatter_propellant: 'fuel',     // §11.7 T6 launch fuel

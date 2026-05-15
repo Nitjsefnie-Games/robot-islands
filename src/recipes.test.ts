@@ -1448,3 +1448,28 @@ describe('§6.5 T4 endgame components (Task 11.4)', () => {
     expect(RECIPES.self_replication_lab!.category).toBe('manufacturing');
   });
 });
+
+describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
+  it('zero_point_flux is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('zero_point_flux' as ResourceId);
+    expect(XP_WEIGHT.zero_point_flux).toBe(300);
+  });
+  it('neutronium is in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('neutronium' as ResourceId);
+    expect(XP_WEIGHT.neutronium).toBe(300);
+  });
+  it('zero_point_extractor recipe: empty inputs → zero_point_flux', () => {
+    expect(RECIPES.zero_point_extractor).toBeDefined();
+    expect(RECIPES.zero_point_extractor!.inputs).toEqual({});
+    expect(RECIPES.zero_point_extractor!.outputs).toEqual({ zero_point_flux: 1 });
+    expect(RECIPES.zero_point_extractor!.cycleSec).toBe(1800);
+    expect(RECIPES.zero_point_extractor!.category).toBe('extraction');
+  });
+  it('neutronium_extractor recipe: empty inputs → neutronium', () => {
+    expect(RECIPES.neutronium_extractor).toBeDefined();
+    expect(RECIPES.neutronium_extractor!.inputs).toEqual({});
+    expect(RECIPES.neutronium_extractor!.outputs).toEqual({ neutronium: 1 });
+    expect(RECIPES.neutronium_extractor!.cycleSec).toBe(1800);
+    expect(RECIPES.neutronium_extractor!.category).toBe('extraction');
+  });
+});
