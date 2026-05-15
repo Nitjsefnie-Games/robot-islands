@@ -181,6 +181,9 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   // T3 chemistry/electronics.
   silicon: 'components',        // §6.4: semiconductor solid → component.
   silicon_wafer: 'components',  // §7.7: T3 semiconductor intermediate.
+  transistor: 'components',      // §7.7: T3 electronics component.
+  capacitor: 'components',       // §7.7: T3 electronics component.
+  resistor: 'components',        // §7.7: T3 electronics component.
   nitrogen: 'liquid_gas',
   cryo_coolant: 'temp_sensitive', // §4.6 lists "cryo-coolant" under temp_sensitive.
   aviation_kerosene: 'liquid_gas',

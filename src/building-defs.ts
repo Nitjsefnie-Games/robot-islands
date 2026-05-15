@@ -251,6 +251,9 @@ export type BuildingDefId =
   | 'kerosene_refinery'
   | 'lithography_lab'
   | 'wafer_lab'
+  | 'transistor_doping'
+  | 'capacitor_doping'
+  | 'resistor_doping'
   | 'drilling_rig'
   | 'aetheric_conduit'
   | 'spacetime_resonator'
@@ -2857,6 +2860,43 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x484858,
     power: { consumes: 250 },
     placementCost: { steel: 80, microchip: 5 },
+    glyph: '◈',
+  },
+  // Phase 9 — Task 9.2: Doping Chambers (§7.7). Wafer + graphite → transistor / capacitor / resistor.
+  transistor_doping: {
+    id: 'transistor_doping',
+    displayName: 'Transistor Doping Chamber',
+    category: 'electronics',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x6080a0, // doping-chamber slate-blue
+    stroke: 0x203040,
+    power: { consumes: 150 },
+    placementCost: { steel: 50, microchip: 3 },
+    glyph: '◈',
+  },
+  capacitor_doping: {
+    id: 'capacitor_doping',
+    displayName: 'Capacitor Doping Chamber',
+    category: 'electronics',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x6080a0, // doping-chamber slate-blue
+    stroke: 0x203040,
+    power: { consumes: 150 },
+    placementCost: { steel: 50, microchip: 3 },
+    glyph: '◈',
+  },
+  resistor_doping: {
+    id: 'resistor_doping',
+    displayName: 'Resistor Doping Chamber',
+    category: 'electronics',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x6080a0, // doping-chamber slate-blue
+    stroke: 0x203040,
+    power: { consumes: 150 },
+    placementCost: { steel: 50, microchip: 3 },
     glyph: '◈',
   },
   drilling_rig: {

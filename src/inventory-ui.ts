@@ -171,6 +171,9 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   // T3 refined intermediate
   silicon: 'refined',
   silicon_wafer: 'components',
+  transistor: 'components',
+  capacitor: 'components',
+  resistor: 'components',
   // T4/T5 raws + components — Rare bucket
   helium_3: 'rare',
   casimir_energy: 'rare',

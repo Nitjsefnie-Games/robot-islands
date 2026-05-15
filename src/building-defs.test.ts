@@ -205,6 +205,9 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'ceramic_kiln',
   // Phase 9 — Electronics chain (§7.7)
   'wafer_lab',
+  'transistor_doping',
+  'capacitor_doping',
+  'resistor_doping',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -1742,6 +1745,33 @@ describe('§8.1 T2 extraction buildings', () => {
       expect(def.footprint.tiles.length).toBe(9); // 3x3
       expect(def.category).toBe('electronics');
       expect(def.power?.consumes).toBe(250);
+    });
+  });
+
+  describe('§7.7 doping chambers (Task 9.2)', () => {
+    it('transistor_doping is T3, 2x2, electronics, consumes 150W', () => {
+      const def = BUILDING_DEFS.transistor_doping;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(3);
+      expect(def.footprint.tiles.length).toBe(4); // 2x2
+      expect(def.category).toBe('electronics');
+      expect(def.power?.consumes).toBe(150);
+    });
+    it('capacitor_doping is T3, 2x2, electronics, consumes 150W', () => {
+      const def = BUILDING_DEFS.capacitor_doping;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(3);
+      expect(def.footprint.tiles.length).toBe(4); // 2x2
+      expect(def.category).toBe('electronics');
+      expect(def.power?.consumes).toBe(150);
+    });
+    it('resistor_doping is T3, 2x2, electronics, consumes 150W', () => {
+      const def = BUILDING_DEFS.resistor_doping;
+      expect(def).toBeDefined();
+      expect(def.tier).toBe(3);
+      expect(def.footprint.tiles.length).toBe(4); // 2x2
+      expect(def.category).toBe('electronics');
+      expect(def.power?.consumes).toBe(150);
     });
   });
 

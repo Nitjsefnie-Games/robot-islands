@@ -168,6 +168,9 @@ export type ResourceId =
   // Step-18 T3 chemistry/electronics (§7.4 / §7.5).
   | 'silicon'
   | 'silicon_wafer'
+  | 'transistor'
+  | 'capacitor'
+  | 'resistor'
   | 'nitrogen'
   | 'cryo_coolant'
   | 'aviation_kerosene'
@@ -355,6 +358,9 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   // Step-18 T3 chemistry / electronics.
   'silicon',
   'silicon_wafer',
+  'transistor',
+  'capacitor',
+  'resistor',
   'nitrogen',
   'cryo_coolant',
   'aviation_kerosene',
@@ -537,6 +543,9 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // Step-18 T3 chemistry / electronics (§9.1 tier-3 weight = 30).
   silicon: 30,
   silicon_wafer: 30,
+  transistor: 30,
+  capacitor: 30,
+  resistor: 30,
   nitrogen: 30,
   cryo_coolant: 30,
   aviation_kerosene: 30,
@@ -1501,6 +1510,25 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 400,
     inputs: { silicon: 1 },
     outputs: { silicon_wafer: 1 },
+    category: 'electronics',
+  },
+  // Phase 9 — Task 9.2: wafer + graphite → transistor / capacitor / resistor (§7.7)
+  transistor_doping: {
+    cycleSec: 200,
+    inputs: { silicon_wafer: 1, graphite: 1 },
+    outputs: { transistor: 4 },
+    category: 'electronics',
+  },
+  capacitor_doping: {
+    cycleSec: 200,
+    inputs: { silicon_wafer: 1, graphite: 1 },
+    outputs: { capacitor: 4 },
+    category: 'electronics',
+  },
+  resistor_doping: {
+    cycleSec: 200,
+    inputs: { silicon_wafer: 1, graphite: 1 },
+    outputs: { resistor: 4 },
     category: 'electronics',
   },
   drilling_rig: {

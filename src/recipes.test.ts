@@ -1044,6 +1044,42 @@ describe('§7.7 silicon_wafer via wafer_lab (Task 9.1)', () => {
   });
 });
 
+describe('§7.7 transistor + capacitor + resistor doping chambers (Task 9.2)', () => {
+  it('transistor is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
+    expect(ALL_RESOURCES).toContain('transistor' as ResourceId);
+    expect(XP_WEIGHT.transistor).toBe(30);
+  });
+  it('capacitor is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
+    expect(ALL_RESOURCES).toContain('capacitor' as ResourceId);
+    expect(XP_WEIGHT.capacitor).toBe(30);
+  });
+  it('resistor is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
+    expect(ALL_RESOURCES).toContain('resistor' as ResourceId);
+    expect(XP_WEIGHT.resistor).toBe(30);
+  });
+  it('transistor_doping recipe: silicon_wafer + graphite → 4 transistor', () => {
+    expect(RECIPES.transistor_doping).toBeDefined();
+    expect(RECIPES.transistor_doping!.inputs).toEqual({ silicon_wafer: 1, graphite: 1 });
+    expect(RECIPES.transistor_doping!.outputs).toEqual({ transistor: 4 });
+    expect(RECIPES.transistor_doping!.cycleSec).toBe(200);
+    expect(RECIPES.transistor_doping!.category).toBe('electronics');
+  });
+  it('capacitor_doping recipe: silicon_wafer + graphite → 4 capacitor', () => {
+    expect(RECIPES.capacitor_doping).toBeDefined();
+    expect(RECIPES.capacitor_doping!.inputs).toEqual({ silicon_wafer: 1, graphite: 1 });
+    expect(RECIPES.capacitor_doping!.outputs).toEqual({ capacitor: 4 });
+    expect(RECIPES.capacitor_doping!.cycleSec).toBe(200);
+    expect(RECIPES.capacitor_doping!.category).toBe('electronics');
+  });
+  it('resistor_doping recipe: silicon_wafer + graphite → 4 resistor', () => {
+    expect(RECIPES.resistor_doping).toBeDefined();
+    expect(RECIPES.resistor_doping!.inputs).toEqual({ silicon_wafer: 1, graphite: 1 });
+    expect(RECIPES.resistor_doping!.outputs).toEqual({ resistor: 4 });
+    expect(RECIPES.resistor_doping!.cycleSec).toBe(200);
+    expect(RECIPES.resistor_doping!.category).toBe('electronics');
+  });
+});
+
 describe('nextRotateOutputBoundaryMs', () => {
   const rotatingRecipe = {
     cycleSec: 10,
