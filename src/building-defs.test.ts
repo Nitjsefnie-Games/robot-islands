@@ -247,6 +247,9 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   // Phase 10c — T3 fiber spinners (Task 10.12)
   'glass_fiber_spinner',
   'optical_fiber_drawer',
+  // Task 13.2 — Foundation Kit variants
+  'kit_assembler_enriched',
+  'kit_assembler_refined',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -2323,5 +2326,44 @@ describe('self_replication_lab (Task 11.4)', () => {
     expect(RECIPES.self_replication_lab!.inputs).toEqual({ ai_core: 1, microchip: 8, electric_motor: 4, computing_module: 2 });
     expect(RECIPES.self_replication_lab!.outputs).toEqual({ self_replication_module: 1 });
     expect(RECIPES.self_replication_lab!.cycleSec).toBe(1800);
+  });
+});
+
+
+describe('§12.3 kit_assembler_enriched (Task 13.2)', () => {
+  it('is T3 manufacturing with 2x2 footprint', () => {
+    const def = BUILDING_DEFS.kit_assembler_enriched;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(3);
+    expect(def.footprint).toEqual(SHAPES.square2);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('has power consumption 150W', () => {
+    expect(BUILDING_DEFS.kit_assembler_enriched.power?.consumes).toBe(150);
+  });
+  it('produces foundation_kit_enriched from steel + microchip + wire + gear', () => {
+    expect(RECIPES.kit_assembler_enriched).toBeDefined();
+    expect(RECIPES.kit_assembler_enriched!.inputs).toEqual({ steel: 5, microchip: 1, wire: 5, gear: 5 });
+    expect(RECIPES.kit_assembler_enriched!.outputs).toEqual({ foundation_kit_enriched: 1 });
+    expect(RECIPES.kit_assembler_enriched!.cycleSec).toBe(600);
+  });
+});
+
+describe('§12.3 kit_assembler_refined (Task 13.2)', () => {
+  it('is T4 manufacturing with 3x3 footprint', () => {
+    const def = BUILDING_DEFS.kit_assembler_refined;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(9);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('has power consumption 300W', () => {
+    expect(BUILDING_DEFS.kit_assembler_refined.power?.consumes).toBe(300);
+  });
+  it('produces foundation_kit_refined from stainless_steel + quantum_chip + fuel_cell + computing_module', () => {
+    expect(RECIPES.kit_assembler_refined).toBeDefined();
+    expect(RECIPES.kit_assembler_refined!.inputs).toEqual({ stainless_steel: 5, quantum_chip: 1, fuel_cell: 1, computing_module: 1 });
+    expect(RECIPES.kit_assembler_refined!.outputs).toEqual({ foundation_kit_refined: 1 });
+    expect(RECIPES.kit_assembler_refined!.cycleSec).toBe(1200);
   });
 });

@@ -1585,3 +1585,29 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
     expect(RECIPES.neutronium_extractor!.category).toBe('extraction');
   });
 });
+
+
+describe('§12.3 Foundation Kit Enriched + Refined (Task 13.2)', () => {
+  it('foundation_kit_enriched is in ALL_RESOURCES with xp_weight 30', () => {
+    expect(ALL_RESOURCES).toContain('foundation_kit_enriched' as ResourceId);
+    expect(XP_WEIGHT.foundation_kit_enriched).toBe(30);
+  });
+  it('foundation_kit_refined is in ALL_RESOURCES with xp_weight 100', () => {
+    expect(ALL_RESOURCES).toContain('foundation_kit_refined' as ResourceId);
+    expect(XP_WEIGHT.foundation_kit_refined).toBe(100);
+  });
+  it('kit_assembler_enriched recipe: steel + microchip + wire + gear → foundation_kit_enriched', () => {
+    expect(RECIPES.kit_assembler_enriched).toBeDefined();
+    expect(RECIPES.kit_assembler_enriched!.inputs).toEqual({ steel: 5, microchip: 1, wire: 5, gear: 5 });
+    expect(RECIPES.kit_assembler_enriched!.outputs).toEqual({ foundation_kit_enriched: 1 });
+    expect(RECIPES.kit_assembler_enriched!.cycleSec).toBe(600);
+    expect(RECIPES.kit_assembler_enriched!.category).toBe('manufacturing');
+  });
+  it('kit_assembler_refined recipe: stainless_steel + quantum_chip + fuel_cell + computing_module → foundation_kit_refined', () => {
+    expect(RECIPES.kit_assembler_refined).toBeDefined();
+    expect(RECIPES.kit_assembler_refined!.inputs).toEqual({ stainless_steel: 5, quantum_chip: 1, fuel_cell: 1, computing_module: 1 });
+    expect(RECIPES.kit_assembler_refined!.outputs).toEqual({ foundation_kit_refined: 1 });
+    expect(RECIPES.kit_assembler_refined!.cycleSec).toBe(1200);
+    expect(RECIPES.kit_assembler_refined!.category).toBe('manufacturing');
+  });
+});
