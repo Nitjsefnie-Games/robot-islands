@@ -298,7 +298,7 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.outputs.comm_sat).toBe(1);
     expect(r.inputs.exotic_alloy).toBe(6);
     expect(r.inputs.ai_core).toBe(1);
-    expect(r.inputs.optical_fiber).toBe(200);
+    expect(r.inputs.optical_fiber).toBe(50); // rebalanced Task 16.7 (was 200)
     expect(r.inputs.orbital_insertion_package).toBe(1);
     expect(r.cycleSec).toBe(1800);
     expect(r.category).toBe('manufacturing');
@@ -1586,6 +1586,17 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
   });
 });
 
+
+describe('§14.10 comm_sat optical_fiber input reduction (Task 16.7)', () => {
+  it('comm_sat_assembly inputs optical_fiber: 50 (was 200)', () => {
+    expect(RECIPES.comm_sat_assembly!.inputs).toEqual({
+      exotic_alloy: 6,
+      ai_core: 1,
+      optical_fiber: 50,
+      orbital_insertion_package: 1,
+    });
+  });
+});
 
 describe('§7.4/§7.5 petrochemical chains cycleSec rebalance (Task 16.6)', () => {
   it('naphtha_cracker cycleSec is 1000 (was 600, XP-arbitrage fix)', () => {
