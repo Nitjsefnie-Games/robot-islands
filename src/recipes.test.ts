@@ -78,6 +78,9 @@ describe('recipe graph completeness (step 18)', () => {
     // Scrap is produced by building demolition (§6.7), not by a recipe
     // cycle, so it is exempt from the orphan-input check.
     producers.add('scrap');
+    // uranium_ore is a terrain-seeded T3 raw (§6.4) with no extractor
+    // building yet; it is exempt until an extractor is added.
+    producers.add('uranium_ore');
     const violations: { recipeId: string; missing: ResourceId }[] = [];
     for (const [recipeId, recipe] of Object.entries(RECIPES)) {
       if (!recipe) continue;
@@ -1363,5 +1366,26 @@ describe('§6.5 antimatter_capsule via particle_accelerator (Task 11.2)', () => 
     expect(RECIPES.particle_accelerator!.outputs).toEqual({ antimatter_capsule: 1 });
     expect(RECIPES.particle_accelerator!.cycleSec).toBe(1800);
     expect(RECIPES.particle_accelerator!.category).toBe('electronics');
+  });
+});
+
+describe('§6.5 nuclear_fuel_rod + fuel_rod_assembler (Task 11.3)', () => {
+  it('nuclear_fuel_rod is in ALL_RESOURCES with xp_weight 100 (T4 rare)', () => {
+    expect(ALL_RESOURCES).toContain('nuclear_fuel_rod' as ResourceId);
+    expect(XP_WEIGHT.nuclear_fuel_rod).toBe(100);
+  });
+  it('fuel_rod_assembler recipe: uranium_ore + stainless_steel + coolant → nuclear_fuel_rod', () => {
+    expect(RECIPES.fuel_rod_assembler).toBeDefined();
+    expect(RECIPES.fuel_rod_assembler!.inputs).toEqual({ uranium_ore: 5, stainless_steel: 2, coolant: 2 });
+    expect(RECIPES.fuel_rod_assembler!.outputs).toEqual({ nuclear_fuel_rod: 1 });
+    expect(RECIPES.fuel_rod_assembler!.cycleSec).toBe(1200);
+    expect(RECIPES.fuel_rod_assembler!.category).toBe('manufacturing');
+  });
+  it('nuclear_reactor recipe consumes nuclear_fuel_rod with cycleSec 600', () => {
+    expect(RECIPES.nuclear_reactor).toBeDefined();
+    expect(RECIPES.nuclear_reactor!.inputs).toEqual({ nuclear_fuel_rod: 1 });
+    expect(RECIPES.nuclear_reactor!.outputs).toEqual({});
+    expect(RECIPES.nuclear_reactor!.cycleSec).toBe(600);
+    expect(RECIPES.nuclear_reactor!.category).toBe('power');
   });
 });

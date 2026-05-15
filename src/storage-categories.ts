@@ -272,4 +272,6 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   time_crystal: 'rare',
   // Phase 11 — T4 endgame (Task 11.2)
   antimatter_capsule: 'rare',
+  // Phase 11 — T4 endgame (Task 11.3)
+  nuclear_fuel_rod: 'rare',
 };

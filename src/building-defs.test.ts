@@ -59,6 +59,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'launch_tower',
   'quantum_manipulator',
   'quantum_chip_fab',
+  'fuel_rod_assembler',
   // §9.5 biome-locked uniques (Mass Driver + Carbon Forge + Tidal Array + Sunspire)
   'mass_driver',
   'carbon_forge',
@@ -2121,5 +2122,24 @@ describe('§6.5 quantum_manipulator (T4 time_crystal producer, Task 11.1)', () =
     expect(RECIPES.quantum_manipulator!.inputs).toEqual({ helium_3: 1, exotic_alloy: 1 });
     expect(RECIPES.quantum_manipulator!.outputs).toEqual({ time_crystal: 1 });
     expect(RECIPES.quantum_manipulator!.cycleSec).toBe(1800);
+  });
+});
+
+describe('§6.5 fuel_rod_assembler (T4 nuclear_fuel_rod producer, Task 11.3)', () => {
+  it('is T4, 2x2, manufacturing category', () => {
+    const def = BUILDING_DEFS.fuel_rod_assembler;
+    expect(def).toBeDefined();
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles.length).toBe(4);
+    expect(def.category).toBe('manufacturing');
+  });
+  it('has power consumption 400W', () => {
+    expect(BUILDING_DEFS.fuel_rod_assembler.power?.consumes).toBe(400);
+  });
+  it('produces nuclear_fuel_rod from uranium_ore + stainless_steel + coolant', () => {
+    expect(RECIPES.fuel_rod_assembler).toBeDefined();
+    expect(RECIPES.fuel_rod_assembler!.inputs).toEqual({ uranium_ore: 5, stainless_steel: 2, coolant: 2 });
+    expect(RECIPES.fuel_rod_assembler!.outputs).toEqual({ nuclear_fuel_rod: 1 });
+    expect(RECIPES.fuel_rod_assembler!.cycleSec).toBe(1200);
   });
 });

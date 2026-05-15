@@ -122,6 +122,7 @@ export type BuildingDefId =
   | 'launch_tower'
   | 'quantum_manipulator'
   | 'quantum_chip_fab'
+  | 'fuel_rod_assembler'
   // §9.5 biome-locked uniques (Mass Driver + Carbon Forge + Tidal Array + Sunspire)
   | 'mass_driver'
   | 'carbon_forge'
@@ -1652,6 +1653,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 1500 },
     placementCost: { steel: 400, microchip: 150, glass: 50 },
     glyph: '◈',
+  },
+  // Phase 11 — T4 endgame (Task 11.3): Fuel Rod Assembler → nuclear_fuel_rod.
+  fuel_rod_assembler: {
+    id: 'fuel_rod_assembler',
+    displayName: 'Fuel Rod Assembler',
+    category: 'manufacturing',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0x40c050,
+    stroke: 0x103820,
+    power: { consumes: 400 },
+    placementCost: { steel: 200, microchip: 30, glass: 20 },
+    glyph: '⚡',
   },
   // -------------------------------------------------------------------------
   // T5 (levels 50+, AI Core required) — Transcendent per §13 / step 13
