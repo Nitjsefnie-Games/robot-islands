@@ -2207,6 +2207,15 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
+  // Phase 16.2 — §6.6 memetic_core producer (Task 16.2). Closes the
+  // memetic_core producer gap. T5 building: eldritch + spacetime → memetic_core.
+  memetic_forge: {
+    cycleSec: 1800,
+    inputs: { eldritch_processor: 1, spacetime_fragment: 1, ai_core: 2 },
+    outputs: { memetic_core: 1 },
+    category: 'manufacturing',
+  },
+
   // §13.3 T5 special buildings — activation recipes (Task 12.4).
   // These buildings consume rare inputs to "activate"; the building itself
   // is the reward. Empty outputs so the economy loop treats them as sinks.

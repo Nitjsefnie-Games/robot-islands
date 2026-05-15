@@ -1587,6 +1587,20 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
 });
 
 
+describe('§6.6 memetic_core producer via memetic_forge (Task 16.2)', () => {
+  it('memetic_forge recipe: eldritch_processor + spacetime_fragment + ai_core → memetic_core', () => {
+    expect(RECIPES.memetic_forge).toBeDefined();
+    expect(RECIPES.memetic_forge!.inputs).toEqual({ eldritch_processor: 1, spacetime_fragment: 1, ai_core: 2 });
+    expect(RECIPES.memetic_forge!.outputs).toEqual({ memetic_core: 1 });
+    expect(RECIPES.memetic_forge!.cycleSec).toBe(1800);
+    expect(RECIPES.memetic_forge!.category).toBe('manufacturing');
+  });
+  it('memetic_core is still in ALL_RESOURCES with xp_weight 300', () => {
+    expect(ALL_RESOURCES).toContain('memetic_core' as ResourceId);
+    expect(XP_WEIGHT.memetic_core).toBe(300);
+  });
+});
+
 describe('§6.4 uranium_vein + uranium_mine (Task 16.1)', () => {
   it('uranium_mine recipe: empty inputs → uranium_ore', () => {
     expect(RECIPES.uranium_mine).toBeDefined();
