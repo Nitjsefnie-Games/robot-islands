@@ -99,6 +99,7 @@ import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
 import { mountSatelliteOverlay } from './satellite-overlay.js';
+import { mountDayNightTint } from './daynight-tint.js';
 import { tickVehicles } from './settlement.js';
 import { checkObjectives, type ObjectiveId } from './tutorial.js';
 import { renderTutorialBanner } from './tutorial-ui.js';
@@ -177,6 +178,9 @@ async function main(): Promise<void> {
   // visible through storm tints.
   const satelliteOverlay = mountSatelliteOverlay(worldState);
   world.addChild(satelliteOverlay.layer);
+  // §2.7 day/night tint — full-viewport DOM overlay above the canvas,
+  // pointer-events: none. Cheap diff-and-skip refresh per tick.
+  const dayNightTint = mountDayNightTint(document.body);
 
   // Cell grid (debug). Above ocean+islands so lines stay visible when toggled.
   const gridLayer = renderCellGrid(WORLD_HALF_SIZE_TILES);
@@ -1512,6 +1516,7 @@ async function main(): Promise<void> {
     orbitalUi.refresh();
     weatherOverlay.refresh(now);
     satelliteOverlay.refresh();
+    dayNightTint.refresh(now);
     // Settings panel — cheap when hidden (early-returns in refresh()).
     settingsUi.refresh();
     // §4 inspector: refresh while open so the live rate / power / inventory
