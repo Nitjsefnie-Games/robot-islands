@@ -209,21 +209,38 @@ describe('defaultTerrainAt — bootstrap seeds', () => {
     expect(found).toBe(true);
   });
 
-  it('home has an oil_well tile (Pump Jack requirement, §7.4 fuel chain)', () => {
+  it('home has a 2x2 oil_well cluster (Pump Jack 2x2 footprint, §4.3 every-tile rule)', () => {
+    // §4.3: requiredTile demands EVERY footprint tile match. Pump Jack is
+    // 2x2 + requiredTile: ['oil_well'], so a single seeded tile fails the
+    // gate with three grass corners. Verify a placeable 2x2 cluster exists.
     let found = false;
-    for (let x = -14; x <= 14 && !found; x++) {
-      for (let y = -14; y <= 14 && !found; y++) {
-        if (defaultTerrainAt(x, y) === 'oil_well') found = true;
+    for (let x = -14; x <= 13 && !found; x++) {
+      for (let y = -14; y <= 13 && !found; y++) {
+        if (
+          defaultTerrainAt(x, y) === 'oil_well' &&
+          defaultTerrainAt(x + 1, y) === 'oil_well' &&
+          defaultTerrainAt(x, y + 1) === 'oil_well' &&
+          defaultTerrainAt(x + 1, y + 1) === 'oil_well'
+        ) {
+          found = true;
+        }
       }
     }
     expect(found).toBe(true);
   });
 
-  it('home has a limestone tile (Limekiln requirement, §7.5 chemistry chain)', () => {
+  it('home has a 2x2 limestone cluster (Limestone Quarry 2x2 footprint, §4.3)', () => {
     let found = false;
-    for (let x = -14; x <= 14 && !found; x++) {
-      for (let y = -14; y <= 14 && !found; y++) {
-        if (defaultTerrainAt(x, y) === 'limestone') found = true;
+    for (let x = -14; x <= 13 && !found; x++) {
+      for (let y = -14; y <= 13 && !found; y++) {
+        if (
+          defaultTerrainAt(x, y) === 'limestone' &&
+          defaultTerrainAt(x + 1, y) === 'limestone' &&
+          defaultTerrainAt(x, y + 1) === 'limestone' &&
+          defaultTerrainAt(x + 1, y + 1) === 'limestone'
+        ) {
+          found = true;
+        }
       }
     }
     expect(found).toBe(true);

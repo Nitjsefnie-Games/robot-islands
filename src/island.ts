@@ -283,23 +283,24 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   const waterTiles: ReadonlyArray<readonly [number, number]> = [
     [-1, -5], [0, -5], [-1, -4], [0, -4],
   ];
-  // §7.4 / §11.5 fuel chain bootstrap: one oil_well tile so the §7.4
-  // petrochemical chain (Pump Jack → Lubricant Refinery) is reachable on
-  // home without inter-island migration. A Pump Jack is 2×2 but only one
-  // footprint tile must satisfy the §4.3 requiredTile gate, so a single
-  // seeded tile is enough. South-west sector, clear of every home building
-  // (Mine cluster ends at (-5, 3); Crate at (3, 4); Shipyard at (4..6, 6..8);
-  // coal cluster (8..9, 5..6); water cluster (-1..0, -5..-4); tree cluster
-  // (6..7, -3..-4); stone cluster (-11..-10, 4..5)). (-4, 8) sits south of
-  // every cluster and inside the radius-14 inscribed disk.
+  // §7.4 / §11.5 fuel chain bootstrap: 2×2 oil_well cluster so a Pump Jack
+  // (2×2, requiredTile: ['oil_well']) can place — §4.3 demands EVERY
+  // footprint tile satisfy requiredTile (placement.ts:189-191), not just
+  // one. A single seeded tile fails the gate with three grass corners.
+  // South sector, clear of every home building: Mine cluster ends at
+  // (-5, 3); Crate at (3, 4); Shipyard at (4..6, 6..8); coal cluster
+  // (8..9, 5..6); water cluster (-1..0, -5..-4); tree cluster (6..7, -3..-4);
+  // stone cluster (-11..-10, 4..5). (-4..-3, 8..9) sits south of every
+  // cluster and inside the radius-14 inscribed disk.
   const oilWellTiles: ReadonlyArray<readonly [number, number]> = [
-    [-4, 8],
+    [-4, 8], [-3, 8], [-4, 9], [-3, 9],
   ];
-  // §7.5 chemistry chain bootstrap: one limestone tile so a Limekiln can
-  // place its §7.5 limestone + heat → quicklime recipe. (-9, 7) sits
-  // south-west, clear of every cluster above.
+  // §7.5 chemistry chain bootstrap: 2×2 limestone cluster so a Limestone
+  // Quarry (2×2, requiredTile: ['limestone']) can place. Single tile fails
+  // the same §4.3 gate. (-9..-8, 7..8) sits south-west, clear of every
+  // cluster above (and the new oil_well cluster at (-4..-3, 8..9)).
   const limestoneTiles: ReadonlyArray<readonly [number, number]> = [
-    [-9, 7],
+    [-9, 7], [-8, 7], [-9, 8], [-8, 8],
   ];
 
   for (const t of waterTiles) if (t[0] === x && t[1] === y) return 'water';
