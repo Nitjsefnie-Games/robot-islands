@@ -1522,7 +1522,9 @@ async function main(): Promise<void> {
     routesUi.refresh(now);
     settlementUi.refresh(now);
     orbitalUi.refresh();
-    weatherOverlay.refresh(now);
+    weatherOverlay.refresh(now, () =>
+      computeVisionSources(worldState.islands.filter((s) => s.populated)),
+    );
     satelliteOverlay.refresh();
     buildingAlertsOverlay.refresh(now);
     dayNightTint.refresh(now);

@@ -1,36 +1,37 @@
 // §2.6 weather visualization layer.
 //
 // Each stratification cell carries a deterministic weather state (the pure
-// `weather()` fn in weather.ts). The simulation already uses that state for
-// vehicle destruction, route capacity, and drone scan penalties — but the
-// player couldn't SEE weather, so dispatching launches required blind
-// guesswork. This module renders the cells within visibility range of any
-// populated island as translucent tinted squares.
+// `weather()` fn in weather.ts). The simulation uses that state for vehicle
+// destruction, route capacity, and drone scan penalties — but the player
+// needed a visible signal to dispatch launches strategically.
 //
-// Vision range: BASE_VISIBILITY_CELLS = 5 cells from each populated island,
-// extended by +3 for each `weather_station_t2` and +6 for each
-// `advanced_weather_station_t3` on that island (matches §2.6 spec literal).
-// Distance is measured cell-to-cell using the island's tileToCell projection,
-// so the unit math is consistent (the `isWeatherVisible` helper in weather.ts
-// has a latent tile-vs-cell mismatch that doesn't manifest in its current
-// test set — this module side-steps it rather than reuses it).
+// Visibility: this overlay piggybacks on the SAME vision predicate the
+// ocean layer uses. If a cell's AABB intersects ANY vision source
+// (`computeVisionSources` — baseline padded ellipses around populated
+// islands + per-Lighthouse circles), the whole cell renders. This unifies
+// "what can I see" across the ocean tier, the discovery cells, and weather
+// — building a Lighthouse extends weather visibility because it extends
+// vision. The earlier ad-hoc BASE_VISIBILITY_CELLS disc that ignored
+// Lighthouses and used a fixed-radius cell-grid disc is gone.
 //
-// Performance: scans a bounded box per island (~21×21 cells for a typical
-// weather-station-equipped colony). Rebuild is throttled to once per
-// WEATHER_OVERLAY_REBUILD_MS — weather dwell is hours, so a 5s refresh is
-// already well under any visible transition.
+// The §2.6 Weather Station bonus is not yet wired through this path — the
+// spec defines Weather Stations as extenders of weather visibility
+// specifically; if we want to honour them they should appear as additional
+// vision sources for weather purposes only (a follow-up).
+//
+// Performance: visibleCellsFromVision is bounded by the source AABBs; the
+// throttled rebuild (WEATHER_OVERLAY_REBUILD_MS = 5s) keeps Graphics churn
+// negligible.
 
 import { Container, Sprite, Texture } from 'pixi.js';
 
 import { TILE_PX } from './island.js';
+import { visibleCellsFromVision, type VisionSource } from './vision-source.js';
 import { weather, type WeatherState } from './weather.js';
 import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
 
 /** Cell-size in world pixels — matches the convention in ocean.ts. */
 const CELL_PX = CELL_SIZE_TILES * TILE_PX;
-
-/** §2.6 baseline visibility radius from any populated island. */
-export const BASE_VISIBILITY_CELLS = 5;
 
 /** Rebuild cadence (ms). Weather dwells for hours; a sub-second refresh is
  *  wasteful. 5s keeps the overlay visibly live during transitions without
@@ -67,34 +68,6 @@ function tileToCellInt(t: number): number {
   return Math.floor(t / CELL_SIZE_TILES);
 }
 
-function visibilityRangeCells(spec: IslandSpec): number {
-  let range = BASE_VISIBILITY_CELLS;
-  for (const b of spec.buildings) {
-    if (b.defId === 'weather_station_t2') range += 3;
-    else if (b.defId === 'advanced_weather_station_t3') range += 6;
-  }
-  return range;
-}
-
-/** Build (or rebuild) the set of cell coords whose weather is currently
- *  visible to the player. Pure data — no rendering side-effects. */
-export function visibleWeatherCells(world: WorldState): Set<string> {
-  const cells = new Set<string>();
-  for (const isl of world.islands) {
-    if (!isl.populated) continue;
-    const islCellX = tileToCellInt(isl.cx);
-    const islCellY = tileToCellInt(isl.cy);
-    const range = visibilityRangeCells(isl);
-    for (let dy = -range; dy <= range; dy++) {
-      for (let dx = -range; dx <= range; dx++) {
-        if (dx * dx + dy * dy > range * range) continue;
-        cells.add(`${islCellX + dx},${islCellY + dy}`);
-      }
-    }
-  }
-  return cells;
-}
-
 /** Look up the biome for a cell, if a populated island sits in/near it.
  *  When no island matches, weather samples with the default Plains
  *  baseline (the `weather()` fn's `biome === undefined` branch). */
@@ -119,10 +92,13 @@ export interface WeatherOverlayHandle {
    *  reads over land and sea both. */
   readonly layer: Container;
   /** Repaint the overlay if enough time has passed since the last rebuild.
-   *  Cheap when within the throttle window — single timestamp compare. */
-  refresh(nowMs: number): void;
+   *  Cheap when within the throttle window — single timestamp compare.
+   *  `getVisionSources` is invoked at each rebuild so a freshly-placed
+   *  Lighthouse / new populated island extends weather visibility on the
+   *  next refresh. */
+  refresh(nowMs: number, getVisionSources: () => ReadonlyArray<VisionSource>): void;
   /** Force a rebuild on the next frame — call after a populated island
-   *  flips, a weather station is placed/demolished, etc. */
+   *  flips, a Lighthouse is placed/demolished, etc. */
   invalidate(): void;
 }
 
@@ -132,9 +108,9 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
   let lastRebuildMs = -Infinity;
   let dirty = true;
 
-  const rebuild = (nowMs: number): void => {
+  const rebuild = (nowMs: number, sources: ReadonlyArray<VisionSource>): void => {
     layer.removeChildren();
-    const cells = visibleWeatherCells(world);
+    const cells = visibleCellsFromVision(sources);
     for (const key of cells) {
       const idx = key.indexOf(',');
       const cellX = Number(key.slice(0, idx));
@@ -157,9 +133,9 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
 
   return {
     layer,
-    refresh(nowMs: number): void {
+    refresh(nowMs: number, getVisionSources: () => ReadonlyArray<VisionSource>): void {
       if (!dirty && nowMs - lastRebuildMs < WEATHER_OVERLAY_REBUILD_MS) return;
-      rebuild(nowMs);
+      rebuild(nowMs, getVisionSources());
     },
     invalidate(): void {
       dirty = true;
