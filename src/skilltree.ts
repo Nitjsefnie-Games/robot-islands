@@ -130,7 +130,11 @@ export type SkillEffect =
   | { readonly kind: 'mineYieldBonusMul' }
   | { readonly kind: 'mineRareTrickleMul' }
   | { readonly kind: 'loggerYieldBonusMul' }
-  | { readonly kind: 'loggerExoticTrickleMul' };
+  | { readonly kind: 'loggerExoticTrickleMul' }
+  // Robotics tertiary axis — "drone production efficiency". Multiplies the
+  // scan radius of dispatched drones for the origin island so the same fuel
+  // covers more of the unknown map per round-trip.
+  | { readonly kind: 'droneScanRadiusMul' };
 
 export interface SkillNode {
   readonly id: NodeId;
@@ -533,7 +537,11 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
     3: { effect: { kind: 'loggerExoticTrickleMul' }, description: 'Forestry exotic-species (lumber trickle)' },
   }),
   ...makeDeepNodes('drilling', rate('extraction')),
-  ...makeDeepNodes('robotics', { kind: 'constructionTimeMul' }),
+  // Robotics depth-3 = "drone production efficiency" tertiary theme;
+  // deeper depths continue the primary construction-time ramp.
+  ...makeDeepNodes('robotics', { kind: 'constructionTimeMul' }, {
+    3: { effect: { kind: 'droneScanRadiusMul' }, description: 'Drone scan radius +20%' },
+  }),
   ...makeDeepNodes('smelting', rate('smelting')),
   ...makeDeepNodes('chemistry', rate('chemistry')),
   ...makeDeepNodes('electronics', rate('electronics')),
@@ -743,6 +751,9 @@ export interface SkillMultipliers {
   /** Forestry tertiary axis — additive bonus rate (units/sec) of lumber
    *  per Logger on the island. Continuous-yield model of "exotic species". */
   readonly loggerExoticTrickleRate: number;
+  /** Robotics tertiary axis — multiplies the scan radius of drones
+   *  dispatched from this island. */
+  readonly droneScanRadius: number;
 }
 
 function blankMultipliers(): SkillMultipliers {
@@ -775,6 +786,7 @@ function blankMultipliers(): SkillMultipliers {
     mineRareTrickleRate: 0,
     loggerYieldBonus: 1,
     loggerExoticTrickleRate: 0,
+    droneScanRadius: 1,
   };
 }
 
@@ -814,6 +826,7 @@ export function effectiveSkillMultipliers(
   let mineRareTrickleRate = 0;
   let loggerYieldBonus = 1;
   let loggerExoticTrickleRate = 0;
+  let droneScanRadius = 1;
   // Rare-trickle additive base rate per skill node. Continuous yield model
   // — at depth 1 each Mine produces an extra `RARE_TRICKLE_BASE × magnitude`
   // helium_3 per second; deeper nodes scale up via the magnitude ramp.
@@ -906,6 +919,9 @@ export function effectiveSkillMultipliers(
       case 'loggerExoticTrickleMul':
         loggerExoticTrickleRate += EXOTIC_TRICKLE_BASE_PER_SEC * m;
         break;
+      case 'droneScanRadiusMul':
+        droneScanRadius *= m;
+        break;
       case 'placeholder':
         break;
       case 'unlockRecipe':
@@ -945,6 +961,7 @@ export function effectiveSkillMultipliers(
     mineRareTrickleRate,
     loggerYieldBonus,
     loggerExoticTrickleRate,
+    droneScanRadius,
   };
 }
 
