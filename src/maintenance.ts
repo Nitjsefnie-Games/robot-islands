@@ -90,10 +90,14 @@ export const MAINTENANCE_RECIPES: Readonly<Record<Tier, Partial<Record<ResourceI
  * Eternal Servitors and undefined-operatingMs (forward-compat for saved
  * buildings minted before this field existed) are treated as 1.0.
  */
-export function maintenanceFactor(b: PlacedBuilding, def: BuildingDef): number {
+export function maintenanceFactor(
+  b: PlacedBuilding,
+  def: BuildingDef,
+  thresholdMul = 1,
+): number {
   if (b.eternalServitor === true) return 1.0;
   const operating = b.operatingMs ?? 0;
-  const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier];
+  const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier] * thresholdMul;
   if (operating < threshold) return 1.0;
   const overshoot = operating - threshold;
   if (overshoot >= MAINTENANCE_DEGRADE_DURATION_MS) return 0.5;
@@ -136,10 +140,11 @@ export function tryAutoMaintain(
   def: BuildingDef,
   inventory: Record<ResourceId, number>,
   nowMs: number,
+  thresholdMul = 1,
 ): boolean {
   if (b.eternalServitor === true) return false;
   const operating = b.operatingMs ?? 0;
-  const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier];
+  const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier] * thresholdMul;
   if (operating < threshold) return false;
   const recipe = MAINTENANCE_RECIPES[def.tier];
   // Atomicity: check ALL inputs available before consuming any. Without this
@@ -212,13 +217,14 @@ export const MAINTENANCE_RAMP_SEGMENTS = 8;
 export function pickMostDegradedTarget(
   buildings: ReadonlyArray<PlacedBuilding>,
   defs: Readonly<Record<string, BuildingDef>>,
+  thresholdMul = 1,
 ): PlacedBuilding | null {
   let pick: PlacedBuilding | null = null;
   let lowest = 1.0;
   for (const b of buildings) {
     const def = defs[b.defId];
     if (!def) continue;
-    const f = maintenanceFactor(b, def);
+    const f = maintenanceFactor(b, def, thresholdMul);
     if (f >= 1.0) continue;
     if (f < lowest) {
       lowest = f;
@@ -246,10 +252,11 @@ export function pickMostDegradedTarget(
 export function nextMaintenanceBoundaryMs(
   b: PlacedBuilding,
   def: BuildingDef,
+  thresholdMul = 1,
 ): number | null {
   if (b.eternalServitor === true) return null;
   const operating = b.operatingMs ?? 0;
-  const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier];
+  const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier] * thresholdMul;
   if (operating < threshold) return threshold;
   const plateau = threshold + MAINTENANCE_DEGRADE_DURATION_MS;
   if (operating >= plateau) return null;
