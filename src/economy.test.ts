@@ -25,6 +25,7 @@ import {
   type BuildingDefId,
 } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
+import { MAINTENANCE_DEGRADE_DURATION_MS, MAINTENANCE_THRESHOLD_MS_BY_TIER } from './maintenance.js';
 import {
   accrueXp,
   advanceIsland,
@@ -1905,6 +1906,93 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
     const rates = computeRates(state, { defs: POWER_FREE });
     expect(rates.byBuilding[0]!.effectiveRate).toBeLessThan(0.02);
     expect(rates.byBuilding[0]!.effectiveRate).toBeGreaterThan(0.01);
+  });
+
+  it('always targets the most-degraded building (no fall-through to lesser-degraded)', () => {
+    // Two T1 Mines: one at the 0.5 plateau, one freshly past threshold.
+    // Materials in stock = exactly one T1 recipe (2 lubricant + 5 bolt) —
+    // could service either building. New policy: the plateau-deep one
+    // wins; the just-past-threshold one is NOT serviced.
+    const state = makeState({
+      buildings: [
+        // Listed first but only mildly degraded — old FIFO would have picked
+        // this one; the new policy MUST skip it.
+        {
+          ...MINE,
+          id: 'mine-light',
+          operatingMs: T1_THRESHOLD + 10,
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+        {
+          ...MINE,
+          id: 'mine-plateau',
+          operatingMs: T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS + 1000,
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+      ],
+      storageCaps: blankCaps(1_000_000),
+      inventory: {
+        ...blankInventory(),
+        lubricant: 2, // exactly one T1 recipe — no room for two cycles
+        bolt: 5,
+      },
+    });
+    advanceIsland(state, 1_000, { defs: POWER_FREE });
+    // The plateau-deep building is the one that got maintained.
+    const light = state.buildings.find((b) => b.id === 'mine-light')!;
+    const plateau = state.buildings.find((b) => b.id === 'mine-plateau')!;
+    expect(plateau.operatingMs).toBe(1_000); // reset to 0 then 1s of accrual
+    expect(light.operatingMs).toBeGreaterThan(T1_THRESHOLD); // untouched / still degraded
+    expect(state.inventory.lubricant).toBe(0);
+    expect(state.inventory.bolt).toBe(0);
+  });
+
+  it('waits when the most-degraded building lacks materials — does not service a lesser candidate', () => {
+    // T3 building at plateau (most degraded) but its T3 recipe inputs
+    // (electric_motor, capacitor) are NOT in stock. A T1 building is also
+    // mildly degraded and the T1 inputs ARE in stock. New policy: NEITHER
+    // is serviced — we wait for materials for the most-degraded one rather
+    // than burning T1 inputs on a cheap target.
+    const state = makeState({
+      buildings: [
+        {
+          id: 'mine-light',
+          defId: 'mine',
+          x: 0,
+          y: 0,
+          operatingMs: T1_THRESHOLD + 10,
+          placedAt: 0,
+          maintainedAt: 0,
+        } as PlacedBuilding,
+        {
+          id: 'fab-plateau',
+          defId: 'fabricator', // T3 — recipe is { lubricant, electric_motor, capacitor }
+          x: 5,
+          y: 0,
+          operatingMs:
+            MAINTENANCE_THRESHOLD_MS_BY_TIER[3] + MAINTENANCE_DEGRADE_DURATION_MS + 1000,
+          placedAt: 0,
+          maintainedAt: 0,
+        } as PlacedBuilding,
+      ],
+      storageCaps: blankCaps(1_000_000),
+      inventory: {
+        ...blankInventory(),
+        // T1 recipe satisfied; T3 recipe (electric_motor + capacitor) NOT.
+        lubricant: 100,
+        bolt: 100,
+      },
+    });
+    advanceIsland(state, 1_000, { defs: POWER_FREE });
+    const light = state.buildings.find((b) => b.id === 'mine-light')!;
+    const plateau = state.buildings.find((b) => b.id === 'fab-plateau')!;
+    // Neither was serviced — T1 inputs remain in stock, T1 timer still ticking.
+    expect(state.inventory.lubricant).toBe(100);
+    expect(state.inventory.bolt).toBe(100);
+    expect(light.operatingMs).toBe(T1_THRESHOLD + 10 + 1_000);
+    expect(plateau.operatingMs).toBeGreaterThan(MAINTENANCE_THRESHOLD_MS_BY_TIER[3]);
   });
 
   it('Eternal Servitor flag exempts a building from operatingMs accrual', () => {
