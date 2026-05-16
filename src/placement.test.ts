@@ -404,12 +404,16 @@ describe('placeBuilding', () => {
   it('uses the provided id generator (called once per placement)', () => {
     const spec = makeSpec();
     const state = makeState(spec);
+    // Two consecutive placements would normally hit the 1-slot parallel-build
+    // cap; manually free the first slot by completing its construction before
+    // placing the second (mirrors what the ticker does after T1's 30s base).
     let calls = 0;
     const gen = (): string => {
       calls += 1;
       return `gen-${calls}`;
     };
     const p1 = expectPlaced(placeBuilding(spec, state, 'solar', 0, 0, 0, gen));
+    (p1 as { constructionRemainingMs?: number }).constructionRemainingMs = 0;
     const p2 = expectPlaced(placeBuilding(spec, state, 'solar', 2, 0, 0, gen));
     expect(p1.id).toBe('gen-1');
     expect(p2.id).toBe('gen-2');
@@ -439,9 +443,10 @@ describe('placeBuilding', () => {
     state.inventory.wood = 0;
     const result = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-fail-1');
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.reason).toBe('insufficient-resources');
+    if (!result.ok && result.reason === 'insufficient-resources') {
       expect(result.missing).toEqual({ stone: 30, wood: 15 });
+    } else {
+      throw new Error(`unexpected result: ${JSON.stringify(result)}`);
     }
     // No building was committed, no id was minted.
     expect(spec.buildings).toHaveLength(0);
@@ -458,9 +463,10 @@ describe('placeBuilding', () => {
     state.inventory.iron_ingot = 0;
     const result = placeBuilding(spec, state, 'coke_oven', 0, 0, 0, () => 'p-fail-2');
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.reason).toBe('insufficient-resources');
+    if (!result.ok && result.reason === 'insufficient-resources') {
       expect(result.missing).toEqual({ iron_ingot: 30 });
+    } else {
+      throw new Error(`unexpected result: ${JSON.stringify(result)}`);
     }
     // Stone / wood NOT debited on the rejection branch.
     expect(state.inventory.stone).toBe(200);

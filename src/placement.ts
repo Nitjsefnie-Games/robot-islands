@@ -36,9 +36,11 @@ import {
 } from './shape-mask.js';
 export { rotateShape, type ShapeMask };
 import type { PlacedBuilding } from './buildings.js';
+import { constructionTimeFor } from './construction.js';
 import type { IslandState } from './economy.js';
 import { tileInscribedInEllipse } from './island.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import { effectiveSkillMultipliers } from './skilltree.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import type { IslandSpec } from './world.js';
 
@@ -63,7 +65,8 @@ export type PlacementReason =
   | 'def-not-unlocked'
   | 'biome-locked'
   | 'tile-requirement-not-met'
-  | 'insufficient-resources';
+  | 'insufficient-resources'
+  | 'queue-full';
 
 export interface PlacementValidation {
   readonly ok: boolean;
@@ -243,7 +246,28 @@ export type PlaceBuildingResult =
       readonly ok: false;
       readonly reason: 'insufficient-resources';
       readonly missing: Partial<Record<ResourceId, number>>;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: 'queue-full';
+      readonly inProgress: number;
+      readonly slots: number;
     };
+
+/** §9.3 Robotics: how many concurrent under-construction slots this island
+ *  has right now. Base 1 + Robotics `parallelBuildBonus` (additive). */
+export function parallelBuildSlots(state: IslandState): number {
+  return 1 + Math.floor(effectiveSkillMultipliers(state).parallelBuildBonus);
+}
+
+/** Count of currently-under-construction buildings on the island. */
+export function inProgressBuildCount(state: IslandState): number {
+  let n = 0;
+  for (const b of state.buildings) {
+    if ((b.constructionRemainingMs ?? 0) > 0) n++;
+  }
+  return n;
+}
 
 /**
  * Append a new PlacedBuilding to the island, after paying the §14 placement
@@ -307,6 +331,15 @@ export function placeBuilding(
   if (Object.keys(missing).length > 0) {
     return { ok: false, reason: 'insufficient-resources', missing };
   }
+  // §9.3 Robotics parallel-build cap. Base 1 + per-island skill bonus. The
+  // player can only place when there's a free construction slot on the
+  // island. Refunding the cost on a queue-full reject is handled below
+  // (we reject BEFORE the deduction).
+  const slots = parallelBuildSlots(state);
+  const inProgress = inProgressBuildCount(state);
+  if (inProgress >= slots) {
+    return { ok: false, reason: 'queue-full', inProgress, slots };
+  }
   // Deduct cost BEFORE committing the building so any subsequent error
   // path can't leave inventory paid + no building. (No fallible operations
   // sit between this and the push — but writing it this way makes the
@@ -321,6 +354,12 @@ export function placeBuilding(
   // exposes a relabel control afterward.
   const cargoLabel =
     def.storage?.category === 'generic' ? DEFAULT_CARGO_LABEL : undefined;
+  // §9.3 Robotics: construction time at placement, scaled by skill mul.
+  // Operating time only begins accruing after construction completes
+  // (the maintenance-tick loop honours constructionRemainingMs > 0 by
+  // skipping accrual; computeRates honours it by zeroing production).
+  const skillMul = effectiveSkillMultipliers(state);
+  const construction = constructionTimeFor(def, skillMul.constructionTime);
   const placed: PlacedBuilding = {
     id: idGenerator(),
     defId,
@@ -333,6 +372,7 @@ export function placeBuilding(
     placedAt: nowMs,
     operatingMs: 0,
     maintainedAt: nowMs,
+    ...(construction > 0 ? { constructionRemainingMs: construction } : {}),
   };
   spec.buildings.push(placed);
   // Bump storage caps per §4.6 categorized routing. Specialized buildings

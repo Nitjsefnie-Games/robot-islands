@@ -99,6 +99,7 @@ const REASON_LABEL: Readonly<Record<PlacementReason, string>> = {
   'biome-locked': 'BIOME MISMATCH',
   'tile-requirement-not-met': 'TILE MISMATCH',
   'insufficient-resources': 'INSUFFICIENT RESOURCES',
+  'queue-full': 'BUILD QUEUE FULL',
 };
 
 /** Pretty-print a §14 shortfall record as "NEED 5 STONE, 3 WOOD" for the
