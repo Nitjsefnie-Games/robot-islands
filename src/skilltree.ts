@@ -117,7 +117,20 @@ export type SkillEffect =
   // Network sub-path primary mechanic — divides the per-tile biofuel cost
   // of teleporter route dispatch (a new cost added so "Network reach" has
   // something to scale; previously teleporters were free + instant).
-  | { readonly kind: 'teleporterEfficiencyMul' };
+  | { readonly kind: 'teleporterEfficiencyMul' }
+  // Mining + Forestry secondary themes — building-targeted output bonuses.
+  //   - mineYieldBonusMul       → per-Mine recipe rate bonus (vein depth)
+  //   - mineRareTrickleMul      → per-Mine continuous helium_3 trickle
+  //                               (rare reveal modelled as continuous yield
+  //                               since RNG is incompatible with the
+  //                               deterministic piecewise integrator)
+  //   - loggerYieldBonusMul     → per-Logger recipe rate bonus (regrowth)
+  //   - loggerExoticTrickleMul  → per-Logger continuous lumber trickle
+  //                               (exotic species → bonus refined output)
+  | { readonly kind: 'mineYieldBonusMul' }
+  | { readonly kind: 'mineRareTrickleMul' }
+  | { readonly kind: 'loggerYieldBonusMul' }
+  | { readonly kind: 'loggerExoticTrickleMul' };
 
 export interface SkillNode {
   readonly id: NodeId;
@@ -362,23 +375,31 @@ function depth2(
   };
 }
 
-function makeDeepNodes(subPath: SubPathId, baseEffect: SkillEffect): SkillNode[] {
-  // magnitudeForDepth now returns non-zero for every depth 1-15 (slowed
-  // geometric continuation past depth 5) — the structural-fallback branch
-  // that used to fire on depth ≥ 6 is gone, every deep node is a real
-  // magnitude bump on its sub-path's axis.
+function makeDeepNodes(
+  subPath: SubPathId,
+  baseEffect: SkillEffect,
+  depthOverrides?: Readonly<Record<number, { effect: SkillEffect; description?: string }>>,
+): SkillNode[] {
+  // magnitudeForDepth returns non-zero for every depth 1-15 (slowed
+  // geometric continuation past depth 5). `depthOverrides` lets a sub-path
+  // splice in a different effect at specific depths (used for the tertiary
+  // spec themes that only appear at one or two depths).
   const nodes: SkillNode[] = [];
   for (let d = 3; d <= 15; d++) {
     const cost = costForDepth(d);
     const mag = magnitudeForDepth(d);
+    const override = depthOverrides?.[d];
+    const effect = override?.effect ?? baseEffect;
+    const description =
+      override?.description ?? `${SUBPATH_LABEL[subPath]} +${(mag * 100).toFixed(0)}%`;
     nodes.push({
       id: `${subPath}.${d}`,
       subPath,
       depth: d,
       cost,
       magnitude: mag,
-      effect: baseEffect,
-      description: `${SUBPATH_LABEL[subPath]} +${(mag * 100).toFixed(0)}%`,
+      effect,
+      description,
     });
   }
   return nodes;
@@ -460,9 +481,12 @@ function makeOrbitalNodes(subPath: SubPathId): SkillNode[] {
 export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   // Extraction branch
   depth1('mining', rate('extraction'), 'Ore output +5%'),
-  depth2('mining', rate('extraction'), 'Ore output +10%'),
-  depth1('forestry', rate('extraction'), 'Wood output +5% (latent — Logger pending)'),
-  depth2('forestry', rate('extraction'), 'Wood output +10% (latent — Logger pending)'),
+  // Mining secondary theme: "vein depth" → per-Mine yield bonus on top of
+  // the global extraction multiplier.
+  depth2('mining', { kind: 'mineYieldBonusMul' }, 'Mine vein depth +10%'),
+  depth1('forestry', rate('extraction'), 'Wood output +5%'),
+  // Forestry secondary theme: "regrowth" → per-Logger yield bonus.
+  depth2('forestry', { kind: 'loggerYieldBonusMul' }, 'Logger regrowth +10%'),
   depth1('drilling', rate('extraction'), 'Deep extraction +5% (latent — Drilling Rig pending)'),
   depth2('drilling', rate('extraction'), 'Deep extraction +10% (latent — Drilling Rig pending)'),
   // Robotics primary axis is construction speed per SPEC §9.3 themes
@@ -499,8 +523,15 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   depth2('network', { kind: 'commRangeMul' }, 'Comm range +10%'),
 
   // Deep nodes (depth 3-15) for existing sub-paths
-  ...makeDeepNodes('mining', rate('extraction')),
-  ...makeDeepNodes('forestry', rate('extraction')),
+  // Mining depth-3 = rare-reveal trickle (one-shot tertiary slot); deeper
+  // depths continue the primary ore-output ramp.
+  ...makeDeepNodes('mining', rate('extraction'), {
+    3: { effect: { kind: 'mineRareTrickleMul' }, description: 'Mining rare-reveal (helium-3 trickle)' },
+  }),
+  // Forestry depth-3 = exotic-species lumber trickle.
+  ...makeDeepNodes('forestry', rate('extraction'), {
+    3: { effect: { kind: 'loggerExoticTrickleMul' }, description: 'Forestry exotic-species (lumber trickle)' },
+  }),
   ...makeDeepNodes('drilling', rate('extraction')),
   ...makeDeepNodes('robotics', { kind: 'constructionTimeMul' }),
   ...makeDeepNodes('smelting', rate('smelting')),
@@ -701,6 +732,17 @@ export interface SkillMultipliers {
   /** Network sub-path primary axis — divides the per-tile biofuel cost of
    *  teleporter route dispatch. Default 1 (full cost). */
   readonly teleporterEfficiency: number;
+  /** Mining secondary axis — multiplies Mine-building recipe rates. Stacks
+   *  with the global recipeRate.extraction multiplier. */
+  readonly mineYieldBonus: number;
+  /** Mining tertiary axis — additive bonus rate (units/sec) of helium_3
+   *  per Mine on the island. Continuous-yield model of "rare reveal". */
+  readonly mineRareTrickleRate: number;
+  /** Forestry secondary axis — multiplies Logger-building recipe rates. */
+  readonly loggerYieldBonus: number;
+  /** Forestry tertiary axis — additive bonus rate (units/sec) of lumber
+   *  per Logger on the island. Continuous-yield model of "exotic species". */
+  readonly loggerExoticTrickleRate: number;
 }
 
 function blankMultipliers(): SkillMultipliers {
@@ -729,6 +771,10 @@ function blankMultipliers(): SkillMultipliers {
     constructionTime: 1,
     parallelBuildBonus: 0,
     teleporterEfficiency: 1,
+    mineYieldBonus: 1,
+    mineRareTrickleRate: 0,
+    loggerYieldBonus: 1,
+    loggerExoticTrickleRate: 0,
   };
 }
 
@@ -764,6 +810,15 @@ export function effectiveSkillMultipliers(
   let constructionTime = 1;
   let parallelBuildBonus = 0;
   let teleporterEfficiency = 1;
+  let mineYieldBonus = 1;
+  let mineRareTrickleRate = 0;
+  let loggerYieldBonus = 1;
+  let loggerExoticTrickleRate = 0;
+  // Rare-trickle additive base rate per skill node. Continuous yield model
+  // — at depth 1 each Mine produces an extra `RARE_TRICKLE_BASE × magnitude`
+  // helium_3 per second; deeper nodes scale up via the magnitude ramp.
+  const RARE_TRICKLE_BASE_PER_SEC = 0.001;
+  const EXOTIC_TRICKLE_BASE_PER_SEC = 0.001;
   const storageCategoryCap = out.storageCategoryCap as Record<StorageCategory, number>;
   for (const nodeId of state.unlockedNodes) {
     const node = cat.byId.get(nodeId);
@@ -837,6 +892,20 @@ export function effectiveSkillMultipliers(
       case 'teleporterEfficiencyMul':
         teleporterEfficiency *= m;
         break;
+      case 'mineYieldBonusMul':
+        mineYieldBonus *= m;
+        break;
+      case 'mineRareTrickleMul':
+        // Additive accumulation — depth-1 adds 0.001 × 1.05; deeper nodes
+        // contribute their own magnitude-scaled increments.
+        mineRareTrickleRate += RARE_TRICKLE_BASE_PER_SEC * m;
+        break;
+      case 'loggerYieldBonusMul':
+        loggerYieldBonus *= m;
+        break;
+      case 'loggerExoticTrickleMul':
+        loggerExoticTrickleRate += EXOTIC_TRICKLE_BASE_PER_SEC * m;
+        break;
       case 'placeholder':
         break;
       case 'unlockRecipe':
@@ -872,6 +941,10 @@ export function effectiveSkillMultipliers(
     constructionTime,
     parallelBuildBonus,
     teleporterEfficiency,
+    mineYieldBonus,
+    mineRareTrickleRate,
+    loggerYieldBonus,
+    loggerExoticTrickleRate,
   };
 }
 

@@ -452,10 +452,14 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.storageCap).toBe(1);
   });
 
-  it('composes mining.1 + mining.2 multiplicatively as 1.05 × 1.10 = 1.155×', () => {
+  it('mining.1 + mining.2 split across recipeRate.extraction and mineYieldBonus', () => {
+    // Post-rewiring: mining.1 still feeds extraction rate (primary theme
+    // "ore output"); mining.2 now feeds the Mine-specific yield bonus
+    // ("vein depth" — secondary theme).
     const s = makeState({ unlockedNodes: new Set(['mining.1', 'mining.2']) });
     const m = effectiveSkillMultipliers(s);
-    expect(m.recipeRate.extraction).toBeCloseTo(1.155, 9);
+    expect(m.recipeRate.extraction).toBeCloseTo(1.05, 9);
+    expect(m.mineYieldBonus).toBeCloseTo(1.10, 9);
   });
 
   it('mining.1 + power_systems.1 stacks across distinct axes', () => {
@@ -546,6 +550,26 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.storageCategoryCap.rare).toBeCloseTo(1.10, 9);
     expect(m.storageCategoryCap.dry_goods).toBe(1);
     expect(m.storageCap).toBe(1);
+  });
+
+  it('mining.2 wires mineYieldBonus; mining.3 adds rare helium_3 trickle rate', () => {
+    const s2 = makeState({ unlockedNodes: new Set(['mining.2']) });
+    const m2 = effectiveSkillMultipliers(s2);
+    expect(m2.mineYieldBonus).toBeCloseTo(1.10, 9);
+    expect(m2.mineRareTrickleRate).toBe(0);
+    const s3 = makeState({ unlockedNodes: new Set(['mining.3']) });
+    const m3 = effectiveSkillMultipliers(s3);
+    // depth-3 magnitude is 0.20; trickle base 0.001 → 0.001 × 1.20 = 0.0012/sec
+    expect(m3.mineRareTrickleRate).toBeCloseTo(0.0012, 9);
+  });
+
+  it('forestry.2 wires loggerYieldBonus; forestry.3 adds exotic lumber trickle rate', () => {
+    const s2 = makeState({ unlockedNodes: new Set(['forestry.2']) });
+    const m2 = effectiveSkillMultipliers(s2);
+    expect(m2.loggerYieldBonus).toBeCloseTo(1.10, 9);
+    const s3 = makeState({ unlockedNodes: new Set(['forestry.3']) });
+    const m3 = effectiveSkillMultipliers(s3);
+    expect(m3.loggerExoticTrickleRate).toBeCloseTo(0.0012, 9);
   });
 
   it('orbital depth-2 alternates wire the secondary axes', () => {

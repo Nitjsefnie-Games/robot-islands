@@ -833,7 +833,22 @@ export function computeRates(
     const mf = maintenanceFactor(te.building, defs[te.building.defId], skillMul.maintenanceThreshold);
     const accelMul = ctx?.accelerationMul ?? 1;
     const toxMul = toxicityMultiplier(te.building, t);
-    const effectiveRate = te.baseRate * ia * pf * mf * accelMul * varianceFactor * toxMul;
+    // Per-building-type yield bonus (Mining "vein depth", Forestry "regrowth")
+    // stacks multiplicatively on top of the global recipeRate.extraction mul
+    // for the matching building defId. Mine, deep_mine, heavy_mine etc all
+    // share the 'mine' family — match by id prefix to cover variants.
+    const defId = te.building.defId;
+    let buildingBonus = 1;
+    if (defId === 'mine' || defId === 'deep_mine' || defId === 'copper_mine'
+        || defId === 'tin_mine' || defId === 'lead_mine' || defId === 'bauxite_mine'
+        || defId === 'quartz_mine' || defId === 'sulfur_mine' || defId === 'phosphate_mine'
+        || defId === 'graphite_mine' || defId === 'limestone_quarry'
+        || defId === 'quarry' || defId === 'uranium_mine') {
+      buildingBonus = skillMul.mineYieldBonus;
+    } else if (defId === 'logger' || defId === 'heavy_logger') {
+      buildingBonus = skillMul.loggerYieldBonus;
+    }
+    const effectiveRate = te.baseRate * ia * pf * mf * accelMul * varianceFactor * toxMul * buildingBonus;
     byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate });
 
     if (effectiveRate === 0) continue;
@@ -849,6 +864,35 @@ export function computeRates(
       const delta = (need ?? 0) * effectiveRate;
       consumption[id] = (consumption[id] ?? 0) + delta;
       net[id] = (net[id] ?? 0) - delta;
+    }
+  }
+
+  // §9.3 Mining "rare reveal" + Forestry "exotic species" — continuous
+  // trickle bonuses applied per qualifying building on the island. The
+  // trickle rate is additive per node in the fold; a player with mining.3
+  // sees a small helium_3 / per-Mine rate added here, scaling with the
+  // count of Mines on the island. Skipped entirely when the multiplier
+  // is 0 (no nodes unlocked) for symmetry with no-op pass.
+  if (skillMul.mineRareTrickleRate > 0) {
+    let mines = 0;
+    for (const b of validBuildings) {
+      if (b.defId === 'mine' || b.defId === 'deep_mine') mines++;
+    }
+    const rare = mines * skillMul.mineRareTrickleRate;
+    if (rare > 0) {
+      production.helium_3 = (production.helium_3 ?? 0) + rare;
+      net.helium_3 = (net.helium_3 ?? 0) + rare;
+    }
+  }
+  if (skillMul.loggerExoticTrickleRate > 0) {
+    let loggers = 0;
+    for (const b of validBuildings) {
+      if (b.defId === 'logger' || b.defId === 'heavy_logger') loggers++;
+    }
+    const exotic = loggers * skillMul.loggerExoticTrickleRate;
+    if (exotic > 0) {
+      production.lumber = (production.lumber ?? 0) + exotic;
+      net.lumber = (net.lumber ?? 0) + exotic;
     }
   }
 
