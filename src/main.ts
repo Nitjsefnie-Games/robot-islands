@@ -99,6 +99,7 @@ import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
 import { mountSatelliteOverlay } from './satellite-overlay.js';
+import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { tickVehicles } from './settlement.js';
 import { checkObjectives, type ObjectiveId } from './tutorial.js';
@@ -733,6 +734,13 @@ async function main(): Promise<void> {
    *  a corresponding spec — but keeps the type safe). */
   const modifierMulFor = (id: string): ModifierMultipliers =>
     modifierMulsById.get(id) ?? effectiveModifierMultipliers([]);
+
+  // §4.7 maintenance badges — amber/red dot on each degrading building so
+  // status reads at a glance from the world map. Cheap throttled rebuild
+  // (REBUILD_MS = 2s) — degradation rates are hourly so 2s is overkill but
+  // costs nothing.
+  const buildingAlertsOverlay = mountBuildingAlertsOverlay(worldState, islandStates);
+  world.addChild(buildingAlertsOverlay.layer);
 
   // HUD: bottom-right panel showing inventory, rates, and level. Updated
   // once per frame inside the ticker after the economy advance.
@@ -1516,6 +1524,7 @@ async function main(): Promise<void> {
     orbitalUi.refresh();
     weatherOverlay.refresh(now);
     satelliteOverlay.refresh();
+    buildingAlertsOverlay.refresh(now);
     dayNightTint.refresh(now);
     // Settings panel — cheap when hidden (early-returns in refresh()).
     settingsUi.refresh();
