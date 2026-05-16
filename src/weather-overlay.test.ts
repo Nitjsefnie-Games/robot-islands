@@ -94,8 +94,8 @@ describe('visibleWeatherCells', () => {
         buildings: [
           {
             defId: 'weather_station_t2',
-            anchorX: 0,
-            anchorY: 0,
+            x: 0,
+            y: 0,
             rotation: 0,
             id: 'w1',
           },
