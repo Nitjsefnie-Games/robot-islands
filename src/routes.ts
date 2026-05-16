@@ -21,6 +21,7 @@
 import { cap, inv, type IslandState } from './economy.js';
 import { makeSeededRng } from './rng.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
+import { effectiveSkillMultipliers } from './skilltree.js';
 import { routeCapacityMultiplier } from './specialization.js';
 import {
   routeCapacityMultiplierForWeather,
@@ -376,6 +377,11 @@ function dispatchPhase(
     const r = selectResource(world, states, route);
     if (r === null) continue;
     const capacityMul = routeCapacityMultiplier(srcState.specializationRole);
+    // Transport sub-path skill bonus — multiplicative with the spec role
+    // multiplier. Read on the SOURCE island (where dispatch decisions get
+    // made and the player invests skill points). Reading per-route per-tick
+    // is fine because effectiveSkillMultipliers is a cheap Map fold.
+    const skillCapMul = effectiveSkillMultipliers(srcState).routeCapacity;
 
     // §2.6 weather capacity modulation
     const fromSpec = world.islands.find((i) => i.id === route.from);
@@ -393,7 +399,7 @@ function dispatchPhase(
           )
         : 1;
 
-    const capDemand = route.capacityPerSec * capacityMul * weatherMul * elapsedSec;
+    const capDemand = route.capacityPerSec * capacityMul * skillCapMul * weatherMul * elapsedSec;
     const headroom = destinationHeadroom(world, states, route.to, r);
     const desired = Math.min(capDemand, headroom);
     if (desired <= 0) continue;

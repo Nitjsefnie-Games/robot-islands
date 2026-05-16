@@ -5,16 +5,21 @@
 // into rate, cap, and power multipliers consumed by `computeRates` in
 // `economy.ts`.
 //
-// The catalog now implements depth 1-15 for all sub-paths (11 legacy + 4
-// Orbital = 15 sub-paths × 15 depths = 225 nodes total). Depth 6+ nodes use
-// `structural` placeholder effects pending future mechanic implementation.
+// The catalog implements depth 1-15 for all sub-paths (11 legacy + 4 Orbital
+// = 15 sub-paths × 15 depths = 225 nodes). Depths 1-5 use the spec's
+// doubling ramp (+5% → +80%); depths 6-15 continue with a slowed geometric
+// extension (see `magnitudeForDepth`) so late-game investment is meaningful
+// but bounded.
 //
-// Several depth-1 effects are `placeholder` because step 5 has no economic
-// surface to express them yet: Robotics (construction speed; placement
-// isn't built), Transport (route capacity; routes aren't built), Network
-// (teleporter; STILL-DEFERRED). They consume points and unlock their depth-2
-// successors normally; their `kind: 'placeholder'` effect is a no-op in
-// `effectiveSkillMultipliers`. Later steps activate them.
+// Every depth-1 placeholder slot has been wired to a live mechanic:
+//   - Robotics → maintenanceThresholdMul (later degradation)
+//   - Transport → routeCapacityMul (more units per route batch)
+//   - Network + Orbital Communication → commRangeMul (ground + sat comm reach)
+//   - Orbital Discovery → scannerCoverageMul (sat coverage radius at launch)
+//   - Orbital Resilience → debrisProtectionMul (reduces orbital hit chance)
+// `kind: 'placeholder'` and `kind: 'structural'` remain as union members for
+// forward-compat with future sub-paths but no catalog node currently uses
+// them.
 
 import type { BuildingDefId } from './building-defs.js';
 import type { IslandState } from './economy.js';
@@ -71,7 +76,19 @@ export type SkillEffect =
   | { readonly kind: 'exoticAdjacency'; readonly description: string }
   | { readonly kind: 'biomeBypass'; readonly biomes: Biome[] }
   | { readonly kind: 'structural'; readonly description: string }
-  | { readonly kind: 'launchSuccessAdditive' };
+  | { readonly kind: 'launchSuccessAdditive' }
+  // Wired in the skill-tree-finishing pass — replaces the placeholder /
+  // structural slots once the underlying mechanics shipped:
+  //   - routeCapacityMul     → routes.ts dispatched-batch capacity per island
+  //   - commRangeMul         → orbital.ts ground-station + sat comm range
+  //   - maintenanceThresholdMul → maintenance.ts threshold extension factor
+  //   - scannerCoverageMul   → orbital.ts Scanner Sat coverage radius
+  //   - debrisProtectionMul  → orbital.ts debris lodge probability reduction
+  | { readonly kind: 'routeCapacityMul' }
+  | { readonly kind: 'commRangeMul' }
+  | { readonly kind: 'maintenanceThresholdMul' }
+  | { readonly kind: 'scannerCoverageMul' }
+  | { readonly kind: 'debrisProtectionMul' };
 
 export interface SkillNode {
   readonly id: NodeId;
@@ -220,8 +237,30 @@ export function costForDepth(depth: number): number {
 }
 
 export function magnitudeForDepth(depth: number): number {
+  // §9.3 "geometric to depth 5: depth 1 = +5%, doubles each step; mixed
+  // thereafter — geometric continuation OR unique unlocks per sub-path."
+  //
+  // We pick "geometric continuation" with a SLOWED ramp post-depth-5 — pure
+  // exponential continuation (×2 per step through depth 15) would land
+  // depth-15 at +819× which is absurd, but a flat zero would make 110 deep
+  // nodes (depth 6-15 × 11 non-orbital sub-paths) cost a fortune in points
+  // for no effect (the previous `structural` placeholder).
+  //
+  // Schedule:
+  //   depth 1-5: 0.05, 0.10, 0.20, 0.40, 0.80              (×2 doubling)
+  //   depth 6-10: 1.20, 1.60, 2.00, 2.40, 2.80             (+0.40 per step)
+  //   depth 11-15: 3.00, 3.20, 3.40, 3.60, 3.80            (+0.20 per step)
+  //
+  // Cost still doubles at every depth (`costForDepth = 2^(d-1)`), so the
+  // late-depth nodes remain expensive enough that this is a credible chase.
   if (depth <= 5) {
     return 0.05 * (2 ** (depth - 1));
+  }
+  if (depth <= 10) {
+    return 0.80 + 0.40 * (depth - 5);
+  }
+  if (depth <= 15) {
+    return 2.80 + 0.20 * (depth - 10);
   }
   return 0;
 }
@@ -295,31 +334,23 @@ function depth2(
 }
 
 function makeDeepNodes(subPath: SubPathId, baseEffect: SkillEffect): SkillNode[] {
+  // magnitudeForDepth now returns non-zero for every depth 1-15 (slowed
+  // geometric continuation past depth 5) — the structural-fallback branch
+  // that used to fire on depth ≥ 6 is gone, every deep node is a real
+  // magnitude bump on its sub-path's axis.
   const nodes: SkillNode[] = [];
   for (let d = 3; d <= 15; d++) {
     const cost = costForDepth(d);
     const mag = magnitudeForDepth(d);
-    if (mag > 0) {
-      nodes.push({
-        id: `${subPath}.${d}`,
-        subPath,
-        depth: d,
-        cost,
-        magnitude: mag,
-        effect: baseEffect,
-        description: `${SUBPATH_LABEL[subPath]} +${(mag * 100).toFixed(0)}%`,
-      });
-    } else {
-      nodes.push({
-        id: `${subPath}.${d}`,
-        subPath,
-        depth: d,
-        cost,
-        magnitude: 0,
-        effect: { kind: 'structural', description: `${subPath} unique unlock (depth ${d})` },
-        description: `${SUBPATH_LABEL[subPath]} unique unlock (depth ${d})`,
-      });
-    }
+    nodes.push({
+      id: `${subPath}.${d}`,
+      subPath,
+      depth: d,
+      cost,
+      magnitude: mag,
+      effect: baseEffect,
+      description: `${SUBPATH_LABEL[subPath]} +${(mag * 100).toFixed(0)}%`,
+    });
   }
   return nodes;
 }
@@ -327,24 +358,42 @@ function makeDeepNodes(subPath: SubPathId, baseEffect: SkillEffect): SkillNode[]
 function makeOrbitalNodes(subPath: SubPathId): SkillNode[] {
   const nodes: SkillNode[] = [];
   for (let d = 1; d <= 15; d++) {
-    // Launch sub-path: depth-doubled additive launch-success bonus per
-    // §14.7. Other Orbital sub-paths remain structural placeholders for
-    // now (wiring STILL-DEFERRED to comm / scanner / resilience polish).
-    const isLaunch = subPath === 'launch';
-    const effect: SkillEffect = isLaunch
-      ? { kind: 'launchSuccessAdditive' }
-      : { kind: 'structural', description: `${subPath} depth-${d} unlock` };
-    const mag = isLaunch ? magnitudeForDepth(d) : 0;
+    // §14.9 four sub-paths, all wired to live mechanics:
+    //   launch        — additive launch-success bonus (§14.7)
+    //   communication — multiplicative comm-range bonus (overlaps Network)
+    //   discovery     — multiplicative Scanner-Sat coverage bonus
+    //   resilience    — multiplicative debris-protection bonus
+    let effect: SkillEffect;
+    let descSuffix: string;
+    switch (subPath) {
+      case 'launch':
+        effect = { kind: 'launchSuccessAdditive' };
+        descSuffix = `Launch success +${(magnitudeForDepth(d) * 100).toFixed(1)}% (additive, capped at 99%)`;
+        break;
+      case 'communication':
+        effect = { kind: 'commRangeMul' };
+        descSuffix = `Comm range +${(magnitudeForDepth(d) * 100).toFixed(0)}%`;
+        break;
+      case 'discovery':
+        effect = { kind: 'scannerCoverageMul' };
+        descSuffix = `Scanner coverage +${(magnitudeForDepth(d) * 100).toFixed(0)}%`;
+        break;
+      case 'resilience':
+        effect = { kind: 'debrisProtectionMul' };
+        descSuffix = `Debris protection +${(magnitudeForDepth(d) * 100).toFixed(0)}%`;
+        break;
+      default:
+        effect = { kind: 'structural', description: `${subPath} depth-${d} unlock` };
+        descSuffix = `${SUBPATH_LABEL[subPath]} depth-${d} unlock`;
+    }
     nodes.push({
       id: `${subPath}.${d}`,
       subPath,
       depth: d,
       cost: costForDepth(d),
-      magnitude: mag,
+      magnitude: magnitudeForDepth(d),
       effect,
-      description: isLaunch
-        ? `Launch success +${(mag * 100).toFixed(1)}% (additive, capped at 99%)`
-        : `${SUBPATH_LABEL[subPath]} depth-${d} unlock`,
+      description: descSuffix,
     });
   }
   return nodes;
@@ -358,8 +407,8 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   depth2('forestry', rate('extraction'), 'Wood output +10% (latent — Logger pending)'),
   depth1('drilling', rate('extraction'), 'Deep extraction +5% (latent — Drilling Rig pending)'),
   depth2('drilling', rate('extraction'), 'Deep extraction +10% (latent — Drilling Rig pending)'),
-  depth1('robotics', { kind: 'placeholder' }, 'Construction speed +5% (placement pending)'),
-  depth2('robotics', { kind: 'placeholder' }, 'Construction speed +10% (placement pending)'),
+  depth1('robotics', { kind: 'maintenanceThresholdMul' }, 'Maintenance threshold +5% (later degradation)'),
+  depth2('robotics', { kind: 'maintenanceThresholdMul' }, 'Maintenance threshold +10% (later degradation)'),
 
   // Refinement branch
   depth1('smelting', rate('smelting'), 'Smelter rate +5% (latent — Smelter pending)'),
@@ -374,23 +423,23 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   // Logistics branch
   depth1('storage', { kind: 'storageCapMul' }, 'Storage caps +5%'),
   depth2('storage', { kind: 'storageCapMul' }, 'Storage caps +10%'),
-  depth1('transport', { kind: 'placeholder' }, 'Route capacity +5% (routes pending)'),
-  depth2('transport', { kind: 'placeholder' }, 'Route capacity +10% (routes pending)'),
-  depth1('network', { kind: 'placeholder' }, 'Network reach +5% (teleporters pending)'),
-  depth2('network', { kind: 'placeholder' }, 'Network reach +10% (teleporters pending)'),
+  depth1('transport', { kind: 'routeCapacityMul' }, 'Route capacity +5%'),
+  depth2('transport', { kind: 'routeCapacityMul' }, 'Route capacity +10%'),
+  depth1('network', { kind: 'commRangeMul' }, 'Comm range +5%'),
+  depth2('network', { kind: 'commRangeMul' }, 'Comm range +10%'),
 
   // Deep nodes (depth 3-15) for existing sub-paths
   ...makeDeepNodes('mining', rate('extraction')),
   ...makeDeepNodes('forestry', rate('extraction')),
   ...makeDeepNodes('drilling', rate('extraction')),
-  ...makeDeepNodes('robotics', { kind: 'placeholder' }),
+  ...makeDeepNodes('robotics', { kind: 'maintenanceThresholdMul' }),
   ...makeDeepNodes('smelting', rate('smelting')),
   ...makeDeepNodes('chemistry', rate('chemistry')),
   ...makeDeepNodes('electronics', rate('electronics')),
   ...makeDeepNodes('power_systems', { kind: 'powerProductionMul' }),
   ...makeDeepNodes('storage', { kind: 'storageCapMul' }),
-  ...makeDeepNodes('transport', { kind: 'placeholder' }),
-  ...makeDeepNodes('network', { kind: 'placeholder' }),
+  ...makeDeepNodes('transport', { kind: 'routeCapacityMul' }),
+  ...makeDeepNodes('network', { kind: 'commRangeMul' }),
 
   // Orbital branch (depth 1-15)
   ...makeOrbitalNodes('launch'),
@@ -537,6 +586,20 @@ export interface SkillMultipliers {
   /** Reduction multiplier applied to building.power.consumes — values > 1
    *  reduce draw (divide consumes by this). */
   readonly powerConsumption: number;
+  /** Transport sub-path bonus — multiplies route per-batch capacity at the
+   *  dispatching island. */
+  readonly routeCapacity: number;
+  /** Network + Orbital-Communication sub-path bonus — multiplies ground-station
+   *  comm range and per-satellite comm range. */
+  readonly commRange: number;
+  /** Robotics sub-path bonus — multiplies the maintenance threshold (longer
+   *  operating-time budget before degradation starts). */
+  readonly maintenanceThreshold: number;
+  /** Orbital-Discovery sub-path bonus — multiplies Scanner-Sat coverage radius. */
+  readonly scannerCoverage: number;
+  /** Orbital-Resilience sub-path bonus — multiplies (1 - debris lodge
+   *  probability). 1.0 = no protection, 2.0 = halves lodge probability. */
+  readonly debrisProtection: number;
 }
 
 function blankMultipliers(): SkillMultipliers {
@@ -547,6 +610,11 @@ function blankMultipliers(): SkillMultipliers {
     storageCap: 1,
     powerProduction: 1,
     powerConsumption: 1,
+    routeCapacity: 1,
+    commRange: 1,
+    maintenanceThreshold: 1,
+    scannerCoverage: 1,
+    debrisProtection: 1,
   };
 }
 
@@ -567,6 +635,11 @@ export function effectiveSkillMultipliers(
   let storageCap = 1;
   let powerProduction = 1;
   let powerConsumption = 1;
+  let routeCapacity = 1;
+  let commRange = 1;
+  let maintenanceThreshold = 1;
+  let scannerCoverage = 1;
+  let debrisProtection = 1;
   for (const nodeId of state.unlockedNodes) {
     const node = cat.byId.get(nodeId);
     if (!node) continue;
@@ -585,6 +658,21 @@ export function effectiveSkillMultipliers(
         break;
       case 'powerConsumptionMul':
         powerConsumption *= m;
+        break;
+      case 'routeCapacityMul':
+        routeCapacity *= m;
+        break;
+      case 'commRangeMul':
+        commRange *= m;
+        break;
+      case 'maintenanceThresholdMul':
+        maintenanceThreshold *= m;
+        break;
+      case 'scannerCoverageMul':
+        scannerCoverage *= m;
+        break;
+      case 'debrisProtectionMul':
+        debrisProtection *= m;
         break;
       case 'placeholder':
         break;
@@ -605,6 +693,11 @@ export function effectiveSkillMultipliers(
     storageCap,
     powerProduction,
     powerConsumption,
+    routeCapacity,
+    commRange,
+    maintenanceThreshold,
+    scannerCoverage,
+    debrisProtection,
   };
 }
 

@@ -8,7 +8,7 @@
 import { cellKey, tileToCell } from './discovery.js';
 import { inv } from './economy.js';
 import { makeSeededRng } from './rng.js';
-import { launchSuccessBonus } from './skilltree.js';
+import { effectiveSkillMultipliers, launchSuccessBonus } from './skilltree.js';
 import type { ResourceId } from './recipes.js';
 import type { WorldState } from './world.js';
 
@@ -214,14 +214,20 @@ export function launchSatellite(
     state.inventory[res as ResourceId] -= qty ?? 0;
   }
 
+  // Skill bonuses baked into the launched sat's geometry — Communication +
+  // Network sub-paths boost comm range; Discovery sub-path boosts Scanner
+  // coverage. Baked once at launch so subsequent skill purchases don't
+  // retroactively grow already-orbiting sats (an existing-sat retrofit is
+  // a different mechanic — Repair Drone with upgrade payload, deferred).
+  const skill = effectiveSkillMultipliers(state);
   const sat: Satellite = {
     id: `sat_${nowMs}`,
     variant,
     spaceportIslandId,
     x: spec.cx + 100,
     y: spec.cy + 100,
-    commRange: variant === 'comm' ? 500 : 200,
-    coverageRadius: variant === 'scanner' ? 400 : 0,
+    commRange: (variant === 'comm' ? 500 : 200) * skill.commRange,
+    coverageRadius: variant === 'scanner' ? 400 * skill.scannerCoverage : 0,
     fuel: 100,
     lodges: { scan: 0, weather: 0, comm: 0 },
     locked: true,
@@ -241,7 +247,12 @@ export function groundStationCommRange(world: WorldState, islandId: string): num
   const state = world.islandStates?.get(islandId);
   const sp = state?.buildings.find((b) => b.defId === 'spaceport');
   const tier = sp?.tier ?? 1;
-  return tier === 1 ? 200 : tier === 2 ? 300 : 400;
+  const base = tier === 1 ? 200 : tier === 2 ? 300 : 400;
+  // Network + Orbital-Communication sub-paths multiplicatively boost ground-
+  // station comm range. State may be undefined for unpopulated islands; the
+  // skill multiplier defaults to 1 in that case so the base reach is unchanged.
+  if (!state) return base;
+  return base * effectiveSkillMultipliers(state).commRange;
 }
 
 function getEntityById(
@@ -651,7 +662,17 @@ export function tickDebris(world: WorldState, nowMs: number): void {
       survivors.push(sat);
       continue;
     }
-    const hitP = debrisHitProbability(field, sat);
+    // Orbital-Resilience sub-path: divides the effective hit probability by
+    // the launching island's debrisProtection multiplier (1.0 = none, 1.05
+    // at depth-1 → ~5% chance reduction, doubling per depth per the standard
+    // skill ramp). The lodge-vs-destruction split is left untouched — the
+    // mechanic that scales with skill is "do you get hit at all", not "how
+    // bad is the consequence" (sat shielding intuition).
+    const ownerState = world.islandStates?.get(sat.spaceportIslandId);
+    const protection = ownerState
+      ? effectiveSkillMultipliers(ownerState).debrisProtection
+      : 1;
+    const hitP = debrisHitProbability(field, sat) / protection;
     const rng = makeSeededRng(`${world.seed}_debris_${nowMs}_${sat.id}`);
     if (rng() >= hitP) {
       survivors.push(sat);

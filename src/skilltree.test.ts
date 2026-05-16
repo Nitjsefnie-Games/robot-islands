@@ -360,14 +360,23 @@ describe('skill tree depth', () => {
     expect(costForDepth(15)).toBe(16384);
   });
 
-  it('magnitudeForDepth doubles through depth 5, returns 0 for depth 6+', () => {
+  it('magnitudeForDepth: doubles through depth 5, slowed geometric continuation through depth 15', () => {
+    // Depth 1-5: doubling ramp 0.05 → 0.80.
     expect(magnitudeForDepth(1)).toBe(0.05);
     expect(magnitudeForDepth(2)).toBe(0.10);
     expect(magnitudeForDepth(3)).toBe(0.20);
     expect(magnitudeForDepth(4)).toBe(0.40);
     expect(magnitudeForDepth(5)).toBe(0.80);
-    expect(magnitudeForDepth(6)).toBe(0);
-    expect(magnitudeForDepth(15)).toBe(0);
+    // Depth 6-10: +0.40 per step (slowed past doubling so depth 15 doesn't
+    // blow up to +819×).
+    expect(magnitudeForDepth(6)).toBeCloseTo(1.20, 9);
+    expect(magnitudeForDepth(7)).toBeCloseTo(1.60, 9);
+    expect(magnitudeForDepth(10)).toBeCloseTo(2.80, 9);
+    // Depth 11-15: +0.20 per step. Late-game investment plateau.
+    expect(magnitudeForDepth(11)).toBeCloseTo(3.00, 9);
+    expect(magnitudeForDepth(15)).toBeCloseTo(3.80, 9);
+    // Beyond the catalog: clamp to 0.
+    expect(magnitudeForDepth(16)).toBe(0);
   });
 
   it('effectiveSkillMultipliers with deep catalog composes correctly and ignores structural placeholders', () => {
@@ -466,12 +475,49 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.recipeRate.extraction).toBe(1);
   });
 
-  it('placeholder effects do not affect any multiplier', () => {
+  it('robotics.1+2 boost maintenanceThreshold and leave other axes alone', () => {
     const s = makeState({ unlockedNodes: new Set(['robotics.1', 'robotics.2']) });
     const m = effectiveSkillMultipliers(s);
+    expect(m.maintenanceThreshold).toBeCloseTo(1.155, 9); // 1.05 × 1.10
     expect(m.recipeRate.extraction).toBe(1);
     expect(m.storageCap).toBe(1);
     expect(m.powerProduction).toBe(1);
+  });
+
+  it('transport.1+2 boost routeCapacity multiplicatively', () => {
+    const s = makeState({ unlockedNodes: new Set(['transport.1', 'transport.2']) });
+    const m = effectiveSkillMultipliers(s);
+    expect(m.routeCapacity).toBeCloseTo(1.155, 9);
+    expect(m.commRange).toBe(1);
+  });
+
+  it('network.1 boosts commRange', () => {
+    const s = makeState({ unlockedNodes: new Set(['network.1']) });
+    const m = effectiveSkillMultipliers(s);
+    expect(m.commRange).toBeCloseTo(1.05, 9);
+  });
+
+  it('orbital communication / discovery / resilience wire to their axes', () => {
+    const s = makeState({
+      unlockedNodes: new Set([
+        'communication.1',
+        'discovery.1',
+        'resilience.1',
+      ]),
+    });
+    const m = effectiveSkillMultipliers(s);
+    expect(m.commRange).toBeCloseTo(1.05, 9);
+    expect(m.scannerCoverage).toBeCloseTo(1.05, 9);
+    expect(m.debrisProtection).toBeCloseTo(1.05, 9);
+  });
+
+  it('network + communication stack on commRange', () => {
+    const s = makeState({
+      unlockedNodes: new Set(['network.1', 'communication.1']),
+    });
+    const m = effectiveSkillMultipliers(s);
+    // 1.05 × 1.05 = 1.1025
+    expect(m.commRange).toBeCloseTo(1.1025, 9);
   });
 });
 

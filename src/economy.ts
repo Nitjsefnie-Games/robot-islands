@@ -818,7 +818,7 @@ export function computeRates(
     // degradation as "output efficiency", ambiguous for power buildings,
     // and applying maintenance to power would cascade into the brownout
     // factor and double-dip on consumers. Resource recipes only.
-    const mf = maintenanceFactor(te.building, defs[te.building.defId]);
+    const mf = maintenanceFactor(te.building, defs[te.building.defId], skillMul.maintenanceThreshold);
     const accelMul = ctx?.accelerationMul ?? 1;
     const toxMul = toxicityMultiplier(te.building, t);
     const effectiveRate = te.baseRate * ia * pf * mf * accelMul * varianceFactor * toxMul;
@@ -933,9 +933,13 @@ export function findNextCapEvent(
   // gap on a T1 building (12h threshold → 4h ramp → plateau) becomes at
   // most three segments instead of one.
   const defs = ctx?.defs ?? BUILDING_DEFS;
+  // Robotics skill: stretches the maintenance threshold. The boundary
+  // walker must see the same threshold the per-segment integrator does,
+  // otherwise long offline catchup splits at the wrong moment.
+  const thresholdMul = effectiveSkillMultipliers(state).maintenanceThreshold;
   for (const b of state.buildings) {
     const def = defs[b.defId];
-    const boundary = nextMaintenanceBoundaryMs(b, def);
+    const boundary = nextMaintenanceBoundaryMs(b, def, thresholdMul);
     if (boundary === null) continue;
     const operating = b.operatingMs ?? 0;
     const eventMs = tMs + (boundary - operating);
@@ -1139,6 +1143,10 @@ export function advanceIsland(
   if (ctx?.worldSeed) {
     advanceToxicityRolls(state.buildings, ctx.worldSeed, state.lastTick, nowMs);
   }
+  // Robotics sub-path bonus: stretches maintenance thresholds (longer
+  // operating-time budget before degradation begins). Read once and reused
+  // across every maintenance check in this advanceIsland call.
+  const maintenanceThresholdMul = effectiveSkillMultipliers(state).maintenanceThreshold;
   // §4.7: attempt auto-maintain BEFORE the first segment too — a save loaded
   // with materials in inventory and an over-threshold building should
   // self-heal on the next tick without waiting for the next inventory
@@ -1147,9 +1155,9 @@ export function advanceIsland(
   // in stock, no maintenance fires this pass — the building waits rather
   // than letting a less-critical building consume the materials.
   {
-    const target = pickMostDegradedTarget(state.buildings, defs);
+    const target = pickMostDegradedTarget(state.buildings, defs, maintenanceThresholdMul);
     if (target !== null) {
-      tryAutoMaintain(target, defs[target.defId], state.inventory, t);
+      tryAutoMaintain(target, defs[target.defId], state.inventory, t, maintenanceThresholdMul);
     }
   }
   for (let safety = 0; safety < 10000; safety++) {
@@ -1270,9 +1278,9 @@ export function advanceIsland(
     // fully in stock, NO maintenance fires this segment — the building
     // waits rather than letting a less-critical one consume materials.
     {
-      const target = pickMostDegradedTarget(state.buildings, defs);
+      const target = pickMostDegradedTarget(state.buildings, defs, maintenanceThresholdMul);
       if (target !== null) {
-        tryAutoMaintain(target, defs[target.defId], state.inventory, t);
+        tryAutoMaintain(target, defs[target.defId], state.inventory, t, maintenanceThresholdMul);
       }
     }
   }
