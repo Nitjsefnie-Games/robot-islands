@@ -168,6 +168,10 @@ export type BuildingDefId =
   // Core is per §13.4 a T5 endgame artifact whose existence promotes the
   // island into the T6 access band.
   | 'ascendant_assembly'
+  // §13.4 first victory artifact — Genesis Cell producer (recipe per
+  // §13.4 literal: 4 reality_anchor + 1 zero_point_flux + 2 causal_regulator
+  // + 1 memetic_core, 24h cycle → 1 genesis_cell). T5 manufacturing.
+  | 'genesis_forge'
   // New T6 (§14 / step 20) — data-only. §14.2-14.8 / §14.12 live mechanics
   // (satellite launches, debris fields, comm graph, repair drones,
   // lodge events) are STILL-DEFERRED; these defs ship as visible catalog rows
@@ -1977,6 +1981,23 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x504010,
     power: { consumes: 4000 },
     // §14 placeholder — tune in Appendix A. 4×4 footprint bumps T5 base.
+    placementCost: { reality_anchor: 100, steel: 200, microchip: 100 },
+    glyph: '✺',
+  },
+  // §13.4 Genesis Forge: produces the genesis_cell victory artifact. Per
+  // spec literal — 24h cycle, recipe at recipes.ts. T5 manufacturing, 4×4
+  // footprint matching Ascendant Assembly's gate-artifact weight. Placement
+  // cost mirrors Ascendant Assembly so neither dominates the other as the
+  // "first endgame build" choice.
+  genesis_forge: {
+    id: 'genesis_forge',
+    displayName: 'Genesis Forge',
+    category: 'manufacturing',
+    tier: 5,
+    footprint: SHAPES.square4,
+    fill: 0x60d0a0, // genesis mint
+    stroke: 0x205040,
+    power: { consumes: 4000 },
     placementCost: { reality_anchor: 100, steel: 200, microchip: 100 },
     glyph: '✺',
   },
