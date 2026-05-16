@@ -1012,6 +1012,18 @@ async function main(): Promise<void> {
     settingsUi.toggle();
   });
 
+  // §14 orbital modal — mounted here (before dismiss-modal action wiring)
+  // so its hide() can join the Escape cascade. Reads live world.satellites
+  // + per-island spaceport state on each open / per-frame refresh while
+  // visible. No canvas reticle — launches are discrete events.
+  const orbitalUi = mountOrbitalUi(document.body, {
+    world: worldState,
+    islandStates,
+  });
+  defineAction(reg, 'toggle-orbital', () => {
+    orbitalUi.toggle();
+  });
+
   // Generic modal dismissal: hide whichever modal is open. All modal hide()
   // calls are idempotent, so the no-modal-open case is a free no-op.
   // Mutual-exclusion isn't enforced — if multiple modals happen to be open
@@ -1028,6 +1040,7 @@ async function main(): Promise<void> {
     // through user input, not synchronously during bootstrap).
     settingsUi.hide();
     graphUi.hide();
+    orbitalUi.hide();
     placementUi.cancel();
     // §4 inspector: Escape also closes the inspector + clears the
     // selection outline. Idempotent; closing while already hidden is a
@@ -1126,17 +1139,6 @@ async function main(): Promise<void> {
   disarmSettlementLaunch = () => settlementUi.setLaunchMode(false);
   defineAction(reg, 'toggle-settlement', () => {
     settlementUi.toggle();
-  });
-
-  // §14 T6 orbital launch modal. Reads live world.satellites + per-island
-  // spaceport state on each open / per-frame refresh while visible. No
-  // canvas reticle — launches are discrete events, not targeted clicks.
-  const orbitalUi = mountOrbitalUi(document.body, {
-    world: worldState,
-    islandStates,
-  });
-  defineAction(reg, 'toggle-orbital', () => {
-    orbitalUi.toggle();
   });
 
   // §15.6 persistence: schedule autosaves and a visibility-change save. The
