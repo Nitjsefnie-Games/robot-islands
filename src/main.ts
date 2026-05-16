@@ -96,6 +96,7 @@ import { makeIslandScreenPosResolver, mountRoutesUi } from './routes-ui.js';
 import { cableInflowForIsland, tickRoutes } from './routes.js';
 import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
 import { mountSettlementUi } from './settlement-ui.js';
+import { mountOrbitalUi } from './orbital-ui.js';
 import { tickVehicles } from './settlement.js';
 import { checkObjectives, type ObjectiveId } from './tutorial.js';
 import { renderTutorialBanner } from './tutorial-ui.js';
@@ -279,6 +280,8 @@ async function main(): Promise<void> {
   defineAction(reg, 'toggle-graph', () => undefined);
   defineAction(reg, 'toggle-routes', () => undefined);
   defineAction(reg, 'toggle-settlement', () => undefined);
+  // §14 T6 orbital launch modal — bound below after the UI is mounted.
+  defineAction(reg, 'toggle-orbital', () => undefined);
   // Step-11 modal — bound below after the UI is mounted.
   defineAction(reg, 'toggle-construction', () => undefined);
   // Step-19 inventory modal — bound below after the UI is mounted.
@@ -561,6 +564,7 @@ async function main(): Promise<void> {
     { icon: 'construct', action: 'toggle-construction', label: 'Construct',   kbd: 'C' },
     { icon: 'skills',    action: 'toggle-skill-tree',   label: 'Skill Tree',  kbd: 'K' },
     { icon: 'graph',     action: 'toggle-graph',        label: 'Recipe Graph', kbd: 'Y' },
+    { icon: 'rocket',    action: 'toggle-orbital',      label: 'T6 Orbital',  kbd: 'O' },
     { icon: 'grid',      action: 'toggle-grid',         label: 'Toggle Grid', kbd: 'G' },
     { icon: 'crosshair', action: 'center-home',         label: 'Center View', kbd: 'H' },
     { icon: 'settings',  action: 'toggle-settings',     label: 'Settings',    kbd: 'S' },
@@ -1124,6 +1128,17 @@ async function main(): Promise<void> {
     settlementUi.toggle();
   });
 
+  // §14 T6 orbital launch modal. Reads live world.satellites + per-island
+  // spaceport state on each open / per-frame refresh while visible. No
+  // canvas reticle — launches are discrete events, not targeted clicks.
+  const orbitalUi = mountOrbitalUi(document.body, {
+    world: worldState,
+    islandStates,
+  });
+  defineAction(reg, 'toggle-orbital', () => {
+    orbitalUi.toggle();
+  });
+
   // §15.6 persistence: schedule autosaves and a visibility-change save. The
   // HUD shows a "Saved · Ns ago" indicator driven by `lastSaveAt`; null until
   // the first save lands. `performance.now()` is fine here because we only
@@ -1476,6 +1491,7 @@ async function main(): Promise<void> {
     dronesUi.refresh(now);
     routesUi.refresh(now);
     settlementUi.refresh(now);
+    orbitalUi.refresh();
     // Settings panel — cheap when hidden (early-returns in refresh()).
     settingsUi.refresh();
     // §4 inspector: refresh while open so the live rate / power / inventory
