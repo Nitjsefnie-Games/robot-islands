@@ -97,6 +97,7 @@ import { cableInflowForIsland, tickRoutes } from './routes.js';
 import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
+import { mountWeatherOverlay } from './weather-overlay.js';
 import { tickVehicles } from './settlement.js';
 import { checkObjectives, type ObjectiveId } from './tutorial.js';
 import { renderTutorialBanner } from './tutorial-ui.js';
@@ -164,6 +165,12 @@ async function main(): Promise<void> {
   world.addChild(islandLayer);
   let fogOverlayLayer = renderFogOverlayFromState(worldState);
   world.addChild(fogOverlayLayer);
+  // §2.6 weather overlay — translucent tint per cell within any populated
+  // island's weather visibility range. Built once; refreshed via its own
+  // throttle inside the ticker. Slot 3 — entity layers (drones/vehicles)
+  // ride above so they remain visible through storms.
+  const weatherOverlay = mountWeatherOverlay(worldState);
+  world.addChild(weatherOverlay.layer);
 
   // Cell grid (debug). Above ocean+islands so lines stay visible when toggled.
   const gridLayer = renderCellGrid(WORLD_HALF_SIZE_TILES);
@@ -209,13 +216,16 @@ async function main(): Promise<void> {
     oceanLayer = renderOceanFromState(worldState, WORLD_HALF_SIZE_TILES);
     islandLayer = renderIslandLayer(worldState);
     fogOverlayLayer = renderFogOverlayFromState(worldState);
-    // Insert at the same Z slots: ocean at 0, islands at 1, fog at 2.
+    // Insert at the same Z slots: ocean 0, islands 1, fog 2, weather 3.
     world.removeChild(oldOcean);
     world.removeChild(oldIslands);
     world.removeChild(oldFog);
     world.addChildAt(oceanLayer, 0);
     world.addChildAt(islandLayer, 1);
     world.addChildAt(fogOverlayLayer, 2);
+    // Visibility-radius depends on populated islands + weather stations;
+    // both can change across a rebuild, so invalidate the throttle.
+    weatherOverlay.invalidate();
     oldOcean.destroy({ children: true, texture: true });
     oldIslands.destroy({ children: true });
     oldFog.destroy({ children: true });
@@ -1086,7 +1096,7 @@ async function main(): Promise<void> {
   });
   // Drone dots live in world space (above ocean + islands + fog overlay,
   // below the cell grid).
-  world.addChildAt(dronesUi.droneLayer, 3);
+  world.addChildAt(dronesUi.droneLayer, 4);
   // Reticle lives in screen space (NOT world container) so it stays a
   // fixed-pixel crosshair regardless of zoom.
   app.stage.addChild(dronesUi.reticleLayer);
@@ -1132,7 +1142,7 @@ async function main(): Promise<void> {
       }
     },
   });
-  world.addChildAt(settlementUi.vehicleLayer, 4);
+  world.addChildAt(settlementUi.vehicleLayer, 5);
   app.stage.addChild(settlementUi.reticleLayer);
   // Hook the forward-declared cross-panel disarm callback to the now-
   // constructed settlement panel. Called by drones-ui when it arms launch.
@@ -1494,6 +1504,7 @@ async function main(): Promise<void> {
     routesUi.refresh(now);
     settlementUi.refresh(now);
     orbitalUi.refresh();
+    weatherOverlay.refresh(now);
     // Settings panel — cheap when hidden (early-returns in refresh()).
     settingsUi.refresh();
     // §4 inspector: refresh while open so the live rate / power / inventory
