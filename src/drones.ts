@@ -336,11 +336,13 @@ export function dispatchDrone(
   // Transport skill: droneFuelEfficiency scales tiles-per-fuel-unit. A higher
   // multiplier means the same fuelLoaded covers more distance; fuel cost is
   // unchanged so the player still pays the requested amount (the range gain
-  // is the bonus).
-  const fuelEffMul = effectiveSkillMultipliers(origin).droneFuelEfficiency;
+  // is the bonus). Robotics skill: droneScanRadius widens the per-step scan
+  // footprint so each drone reveals more of the unknown map per round-trip.
+  const originSkill = effectiveSkillMultipliers(origin);
+  const fuelEffMul = originSkill.droneFuelEfficiency;
   const efficiency = (isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY) * fuelEffMul;
   const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
-  const scanRadius = isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES;
+  const scanRadius = (isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES) * originSkill.droneScanRadius;
   // §11.5: tier matches the launching island's tier. T5 is the path-drawn
   // branch; non-path drones inherit the island's current tier (T2 at L5,
   // T3 at L15, T4 at L30). T1 islands don't have Drone Pads yet so the
