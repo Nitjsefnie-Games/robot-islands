@@ -54,6 +54,7 @@ import type { SettlementVehicle } from './settlement.js';
 import { SAT_BUFFER_CAP, type Satellite } from './orbital.js';
 import type { ObjectiveId } from './tutorial.js';
 import { _seedVehicleIdCounter, tuningFor } from './settlement.js';
+import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { VictoryCondition } from './endgame.js';
 import type { NodeId, SubPathId } from './skilltree.js';
@@ -284,6 +285,37 @@ export function serializeWorld(
  * swallow the throw and return null so the game can fall back to a fresh
  * world on a corrupt save.
  */
+
+/** Defensive migration: pre-fix saves minted ids via a session-local
+ *  counter (`placed-1`, `placed-2`, …) that reset to 0 on every reload,
+ *  with no persistence-side counter seeding. Saved buildings could end up
+ *  sharing an id with new placements minted post-reload. The fix in
+ *  `placement-ui.ts` derives new ids from anchor coords (`placed-x,y`),
+ *  but legacy saves still carry colliding `placed-N` ids. This helper
+ *  detects any duplicate id within an island's buildings array and
+ *  re-keys the duplicates to the new coord-based shape, so the live game
+ *  state is collision-free regardless of save vintage.
+ *
+ *  Pure: returns a new array with possibly-renamed `id` fields. Original
+ *  input is not mutated. Building order is preserved. */
+function rekeyCollidingBuildingIds(
+  buildings: ReadonlyArray<PlacedBuilding>,
+): PlacedBuilding[] {
+  const seen = new Set<string>();
+  return buildings.map((b) => {
+    if (!seen.has(b.id)) {
+      seen.add(b.id);
+      return b;
+    }
+    // Collision — rename via the new coord-based shape. Two buildings
+    // can't share an (x, y) anchor (`validatePlacement` rejects overlap),
+    // so the new id is unique by construction.
+    const newId = `placed-${b.x},${b.y}`;
+    seen.add(newId);
+    return { ...b, id: newId };
+  });
+}
+
 export function deserializeWorld(
   snapshot: SaveSnapshot,
   nowWallMs: number = Date.now(),
@@ -324,18 +356,20 @@ export function deserializeWorld(
     // (tests) safe too. Each building gets its maintenance timestamps
     // shifted into the new perf-clock domain (drone/route timestamp
     // remap mirror).
-    buildings: s.buildings.map((b) => ({
-      ...b,
-      ...(b.placedAt !== undefined
-        ? { placedAt: b.placedAt + perfShift }
-        : {}),
-      ...(b.maintainedAt !== undefined
-        ? { maintainedAt: b.maintainedAt + perfShift }
-        : {}),
-      ...(b.toxicityExpiryMs !== undefined
-        ? { toxicityExpiryMs: b.toxicityExpiryMs + perfShift }
-        : {}),
-    })),
+    buildings: rekeyCollidingBuildingIds(
+      s.buildings.map((b) => ({
+        ...b,
+        ...(b.placedAt !== undefined
+          ? { placedAt: b.placedAt + perfShift }
+          : {}),
+        ...(b.maintainedAt !== undefined
+          ? { maintainedAt: b.maintainedAt + perfShift }
+          : {}),
+        ...(b.toxicityExpiryMs !== undefined
+          ? { toxicityExpiryMs: b.toxicityExpiryMs + perfShift }
+          : {}),
+      })),
+    ),
   }));
 
   // Drone and route timestamps were minted in the SAVED session's
