@@ -20,7 +20,7 @@ import { cellCenterTile, corridorCells, islandCells, parseCellKey } from './disc
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
-import { tierForLevel } from './skilltree.js';
+import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { rasterizePath, rollVehicleDestruction } from './weather.js';
 import { CELL_SIZE_TILES } from './world.js';
 import type { WorldState } from './world.js';
@@ -333,7 +333,12 @@ export function dispatchDrone(
   }
 
   const isPathDrawn = waypoints !== undefined && waypoints.length >= 2;
-  const efficiency = isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY;
+  // Transport skill: droneFuelEfficiency scales tiles-per-fuel-unit. A higher
+  // multiplier means the same fuelLoaded covers more distance; fuel cost is
+  // unchanged so the player still pays the requested amount (the range gain
+  // is the bonus).
+  const fuelEffMul = effectiveSkillMultipliers(origin).droneFuelEfficiency;
+  const efficiency = (isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY) * fuelEffMul;
   const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
   const scanRadius = isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES;
   // §11.5: tier matches the launching island's tier. T5 is the path-drawn

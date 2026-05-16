@@ -26,6 +26,7 @@
 
 import { checkGates, computeBuffStack } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
+import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
   BUILDING_DEFS,
   buildingUnlocked,
@@ -268,13 +269,20 @@ export function cap(
 ): number {
   const nominal = override?.[r] ?? state.storageCaps[r] ?? 0;
   if (nominal === 0) return 0;
-  const skillMul = effectiveSkillMultipliers(state).storageCap;
+  const mult = effectiveSkillMultipliers(state);
+  const skillMul = mult.storageCap;
+  // Storage sub-path (depth ≥ 2): per-category cap multiplier on top of the
+  // uniform skill mul. Looks up the resource's storage category — if it
+  // hasn't been categorised yet (forward-compat with new resources) the
+  // lookup returns undefined and the category-mul defaults to 1.
+  const cat = RESOURCE_STORAGE_CATEGORY[r];
+  const catMul = cat ? mult.storageCategoryCap[cat] ?? 1 : 1;
   // Specialization storage multiplier (§9.4 logistics_hub) reads from state
   // so every cap()-call site (outputAvail, findNextCapEvent, applyRates, the
   // HUD) sees the same effective cap without threading specMul as a param.
   // Identity role → 1.0, composes cleanly.
   const specMul = effectiveSpecializationMultipliers(state.specializationRole).storageCapMul;
-  const computedCap = nominal * skillMul * specMul;
+  const computedCap = nominal * skillMul * catMul * specMul;
   if (opts?.ignoreGrace) return computedCap;
   const grace = state.starterInventoryGrace[r] ?? 0;
   return Math.max(computedCap, grace);
