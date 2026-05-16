@@ -1,15 +1,7 @@
-// Recipe-graph modal — render layer. Lazy-imports mermaid + svg-pan-zoom
-// on first open so the initial entry bundle stays unchanged. Caches the
-// rendered SVG node after the first render; subsequent opens reuse it.
-//
-// Pattern mirrors `mountSkillTreeUi` (skilltree-ui.ts:71) — exports a
-// mount function that registers the modal shell up-front, returns a
-// handle with show/hide/toggle/isVisible. The actual mermaid render
-// runs the first time `show()` is called.
+// Recipe-graph modal — render layer. Synchronous DOM table renderer;
+// no lazy imports, no async. Pattern mirrors `mountSkillTreeUi`.
 
-import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { buildRecipeGraphMermaid } from './recipe-graph.js';
-import { RECIPES, type ResourceId } from './recipes.js';
+import { buildRecipeTableRows, type RecipeTableRow } from './recipe-graph.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 
 export interface GraphUi {
@@ -19,203 +11,154 @@ export interface GraphUi {
   isVisible(): boolean;
 }
 
-interface TooltipModel {
-  readonly title: string;
-  readonly lines: ReadonlyArray<string>;
-}
-
 export function mountGraphUi(parentEl: HTMLElement): GraphUi {
-  let rendered = false;
-  let renderingPromise: Promise<void> | null = null;
-  let cachedSvg: SVGElement | null = null;
+  const rows = buildRecipeTableRows();
 
+  // Group by category, preserving sort order within each group.
+  const byCategory = new Map<string, RecipeTableRow[]>();
+  for (const r of rows) {
+    let bucket = byCategory.get(r.category);
+    if (!bucket) {
+      bucket = [];
+      byCategory.set(r.category, bucket);
+    }
+    bucket.push(r);
+  }
+  const categories = [...byCategory.keys()].sort();
+
+  // Container
   const container = document.createElement('div');
-  container.style.position = 'relative';
+  container.style.display = 'flex';
+  container.style.flexDirection = 'column';
+  container.style.gap = '12px';
   container.style.width = '100%';
-  container.style.height = '70vh';
-  container.style.minHeight = '420px';
+  container.style.minWidth = '720px';
+  container.style.maxHeight = '70vh';
   container.style.overflow = 'auto';
-  container.style.background = '#0a0e14';
+  container.style.padding = '4px';
 
-  const placeholder = document.createElement('div');
-  placeholder.textContent = 'Generating graph…';
-  placeholder.style.color = '#cfe1f5';
-  placeholder.style.padding = '24px';
-  placeholder.style.fontFamily = 'JetBrains Mono, monospace';
-  placeholder.style.fontSize = '12px';
-  container.appendChild(placeholder);
+  // Search input
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.placeholder = 'Search by building, resource, category…';
+  search.style.padding = '8px 10px';
+  search.style.background = '#101926';
+  search.style.border = '1px solid #3a6680';
+  search.style.color = '#e0e6ed';
+  search.style.fontFamily = 'JetBrains Mono, monospace';
+  search.style.fontSize = '12px';
+  search.style.position = 'sticky';
+  search.style.top = '0';
+  search.style.zIndex = '1';
+  container.appendChild(search);
 
-  // Floating tooltip — single element, repositioned on mousemove.
-  const tooltip = document.createElement('div');
-  tooltip.style.position = 'fixed';
-  tooltip.style.display = 'none';
-  tooltip.style.pointerEvents = 'none';
-  tooltip.style.background = '#101926';
-  tooltip.style.border = '1px solid #3a6680';
-  tooltip.style.color = '#e0e6ed';
-  tooltip.style.padding = '8px 10px';
-  tooltip.style.fontFamily = 'JetBrains Mono, monospace';
-  tooltip.style.fontSize = '11px';
-  tooltip.style.lineHeight = '1.4';
-  tooltip.style.maxWidth = '320px';
-  tooltip.style.zIndex = '10000';
-  tooltip.style.whiteSpace = 'pre-wrap';
-  document.body.appendChild(tooltip);
+  // Build sections. Track row matchers + section elements so filtering can
+  // hide/show without rebuilding the DOM.
+  interface SectionRef {
+    readonly header: HTMLDivElement;
+    readonly rowEls: ReadonlyArray<{ el: HTMLDivElement; haystack: string }>;
+  }
+  const sections: SectionRef[] = [];
 
-  function tooltipForBuilding(id: BuildingDefId): TooltipModel | null {
-    const def = BUILDING_DEFS[id];
-    if (!def) return null;
-    const lines: string[] = [`Tier ${def.tier}  ·  ${def.category}`];
-    // Find ALL recipes belonging to this building (including mine variants).
-    for (const [recipeKey, recipe] of Object.entries(RECIPES)) {
-      if (!recipe) continue;
-      const owner =
-        recipeKey === 'mine_on_ore' || recipeKey === 'mine_on_coal'
-          ? 'mine'
-          : recipeKey;
-      if (owner !== id) continue;
-      lines.push(`— recipe ${recipeKey} (cycle ${recipe.cycleSec}s)`);
-      const ins = Object.entries(recipe.inputs)
-        .map(([r, n]) => `${n} ${r}`)
-        .join(', ');
-      const outs = Object.entries(recipe.outputs)
-        .map(([r, n]) => `${n} ${r}`)
-        .join(', ');
-      if (ins) lines.push(`   in : ${ins}`);
-      if (outs) lines.push(`   out: ${outs}`);
+  for (const category of categories) {
+    const bucket = byCategory.get(category)!;
+
+    const header = document.createElement('div');
+    header.textContent = category.toUpperCase();
+    header.style.color = '#7dd3e8';
+    header.style.fontFamily = 'JetBrains Mono, monospace';
+    header.style.fontSize = '11px';
+    header.style.letterSpacing = '0.1em';
+    header.style.marginTop = '8px';
+    header.style.paddingBottom = '4px';
+    header.style.borderBottom = '1px solid #243b52';
+    container.appendChild(header);
+
+    const rowEls: { el: HTMLDivElement; haystack: string }[] = [];
+    for (const row of bucket) {
+      const rowEl = document.createElement('div');
+      rowEl.style.display = 'grid';
+      rowEl.style.gridTemplateColumns = '260px 1fr 1fr 60px';
+      rowEl.style.gap = '10px';
+      rowEl.style.padding = '6px 4px';
+      rowEl.style.borderBottom = '1px solid #1a2330';
+      rowEl.style.fontFamily = 'JetBrains Mono, monospace';
+      rowEl.style.fontSize = '11px';
+      rowEl.style.color = '#cfe1f5';
+
+      // Building cell: name + tier chip
+      const bCell = document.createElement('div');
+      bCell.style.display = 'flex';
+      bCell.style.alignItems = 'center';
+      bCell.style.gap = '8px';
+      const name = document.createElement('span');
+      name.textContent = row.buildingLabel;
+      name.style.color = '#e0e6ed';
+      const tier = document.createElement('span');
+      tier.textContent = `T${row.tier}`;
+      tier.style.padding = '1px 6px';
+      tier.style.border = '1px solid #3a6680';
+      tier.style.borderRadius = '3px';
+      tier.style.fontSize = '10px';
+      tier.style.color = '#7dd3e8';
+      const recipeNote = document.createElement('span');
+      recipeNote.textContent = row.recipeKey === row.buildingId ? '' : `(${row.recipeKey})`;
+      recipeNote.style.color = '#5a7080';
+      recipeNote.style.fontSize = '10px';
+      bCell.appendChild(name);
+      bCell.appendChild(tier);
+      if (recipeNote.textContent) bCell.appendChild(recipeNote);
+
+      const inCell = document.createElement('div');
+      inCell.textContent = row.inputs.length
+        ? row.inputs.map((e) => `${e.n} ${e.resource}`).join(', ')
+        : '—';
+      if (!row.inputs.length) inCell.style.color = '#5a7080';
+
+      const outCell = document.createElement('div');
+      outCell.textContent = row.outputs.length
+        ? row.outputs.map((e) => `${e.n} ${e.resource}`).join(', ')
+        : '—';
+      if (!row.outputs.length) outCell.style.color = '#5a7080';
+
+      const cycleCell = document.createElement('div');
+      cycleCell.textContent = `${row.cycleSec}s`;
+      cycleCell.style.color = '#9ab0c8';
+      cycleCell.style.textAlign = 'right';
+
+      rowEl.appendChild(bCell);
+      rowEl.appendChild(inCell);
+      rowEl.appendChild(outCell);
+      rowEl.appendChild(cycleCell);
+      container.appendChild(rowEl);
+
+      const haystack = [
+        row.buildingLabel,
+        row.recipeKey,
+        row.category,
+        ...row.inputs.map((e) => e.resource),
+        ...row.outputs.map((e) => e.resource),
+      ]
+        .join(' ')
+        .toLowerCase();
+      rowEls.push({ el: rowEl, haystack });
     }
-    return { title: def.displayName, lines };
+    sections.push({ header, rowEls });
   }
 
-  function tooltipForResource(id: ResourceId): TooltipModel {
-    const producers: string[] = [];
-    const consumers: string[] = [];
-    for (const [recipeKey, recipe] of Object.entries(RECIPES)) {
-      if (!recipe) continue;
-      const owner =
-        recipeKey === 'mine_on_ore' || recipeKey === 'mine_on_coal'
-          ? 'mine'
-          : recipeKey;
-      const def = BUILDING_DEFS[owner as BuildingDefId];
-      const label = def?.displayName ?? owner;
-      if (id in recipe.outputs) producers.push(label);
-      if (id in recipe.inputs) consumers.push(label);
-    }
-    return {
-      title: id,
-      lines: [
-        `Producers (${producers.length}): ${producers.join(', ') || '—'}`,
-        `Consumers (${consumers.length}): ${consumers.join(', ') || '—'}`,
-      ],
-    };
-  }
-
-  function showTooltip(model: TooltipModel, x: number, y: number): void {
-    tooltip.innerHTML = '';
-    const t = document.createElement('div');
-    t.textContent = model.title;
-    t.style.fontWeight = '600';
-    t.style.color = '#7dd3e8';
-    t.style.marginBottom = '4px';
-    tooltip.appendChild(t);
-    for (const line of model.lines) {
-      const l = document.createElement('div');
-      l.textContent = line;
-      tooltip.appendChild(l);
-    }
-    tooltip.style.left = `${x + 14}px`;
-    tooltip.style.top = `${y + 14}px`;
-    tooltip.style.display = 'block';
-  }
-
-  function hideTooltip(): void {
-    tooltip.style.display = 'none';
-  }
-
-  async function renderOnce(): Promise<void> {
-    if (rendered) return;
-    if (renderingPromise) return renderingPromise;
-    renderingPromise = (async (): Promise<void> => {
-      try {
-        const [{ default: mermaid }, panZoomMod] = await Promise.all([
-          import('mermaid'),
-          import('svg-pan-zoom'),
-        ]);
-        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
-        const source = buildRecipeGraphMermaid();
-        const { svg: svgText } = await mermaid.render('recipe-graph-svg', source);
-
-        const wrap = document.createElement('div');
-        wrap.innerHTML = svgText;
-        const svg = wrap.querySelector('svg');
-        if (!svg) throw new Error('mermaid render produced no <svg>');
-        svg.style.width = '100%';
-        svg.style.height = '100%';
-
-        container.removeChild(placeholder);
-        container.appendChild(svg);
-        cachedSvg = svg as unknown as SVGElement;
-
-        // Pan-zoom — svg-pan-zoom default export.
-        const svgPanZoom = (panZoomMod as { default: (svg: SVGElement, opts?: object) => unknown }).default;
-        svgPanZoom(cachedSvg, {
-          zoomEnabled: true,
-          controlIconsEnabled: true,
-          fit: true,
-          center: true,
-          minZoom: 0.1,
-          maxZoom: 10,
-        });
-
-        // Hover tooltips on every .node.
-        const nodes = svg.querySelectorAll('g.node');
-        nodes.forEach((node) => {
-          const el = node as SVGGElement;
-          // Mermaid encodes the node id in the `id` attribute as
-          // `flowchart-bld_<...>-<n>` or similar; we look for the
-          // `bld_` / `res_` prefix in the contained text.
-          const idAttr = el.id || '';
-          const m = idAttr.match(/(bld_[a-z0-9_]+)|(res_[a-z0-9_]+)/);
-          if (!m) return;
-          const matched = m[0];
-          el.style.cursor = 'help';
-          el.addEventListener('mouseenter', (ev) => {
-            const me = ev as MouseEvent;
-            let model: TooltipModel | null = null;
-            if (matched.startsWith('bld_')) {
-              model = tooltipForBuilding(matched.slice(4) as BuildingDefId);
-            } else {
-              model = tooltipForResource(matched.slice(4) as ResourceId);
-            }
-            if (model) showTooltip(model, me.clientX, me.clientY);
-          });
-          el.addEventListener('mousemove', (ev) => {
-            const me = ev as MouseEvent;
-            tooltip.style.left = `${me.clientX + 14}px`;
-            tooltip.style.top = `${me.clientY + 14}px`;
-          });
-          el.addEventListener('mouseleave', () => hideTooltip());
-        });
-
-        rendered = true;
-      } catch (err) {
-        // Surface the error inside the modal body instead of failing silently.
-        container.innerHTML = '';
-        const errDiv = document.createElement('div');
-        errDiv.style.color = '#ff8080';
-        errDiv.style.padding = '24px';
-        errDiv.style.fontFamily = 'JetBrains Mono, monospace';
-        errDiv.style.fontSize = '12px';
-        errDiv.textContent = `Failed to render recipe graph: ${
-          err instanceof Error ? err.message : String(err)
-        }`;
-        container.appendChild(errDiv);
-      } finally {
-        renderingPromise = null;
+  function applyFilter(): void {
+    const q = search.value.trim().toLowerCase();
+    for (const section of sections) {
+      let visibleCount = 0;
+      for (const { el, haystack } of section.rowEls) {
+        const match = q === '' || haystack.includes(q);
+        el.style.display = match ? '' : 'none';
+        if (match) visibleCount++;
       }
-    })();
-    return renderingPromise;
+      section.header.style.display = visibleCount > 0 ? '' : 'none';
+    }
   }
+  search.addEventListener('input', applyFilter);
 
   const handle: ModalHandle = mountModal(parentEl, {
     title: 'RECIPE GRAPH',
@@ -231,20 +174,19 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
   return {
     show(): void {
       handle.show();
-      void renderOnce();
+      // Refocus the search input each open so users can type immediately.
+      setTimeout(() => search.focus(), 0);
     },
     hide(): void {
       handle.hide();
-      hideTooltip();
     },
     toggle(): boolean {
       if (handle.isVisible()) {
         handle.hide();
-        hideTooltip();
         return false;
       }
       handle.show();
-      void renderOnce();
+      setTimeout(() => search.focus(), 0);
       return true;
     },
     isVisible(): boolean {
