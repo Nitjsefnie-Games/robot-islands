@@ -152,7 +152,7 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
       let visibleCount = 0;
       for (const { el, haystack } of section.rowEls) {
         const match = q === '' || haystack.includes(q);
-        el.style.display = match ? '' : 'none';
+        el.style.display = match ? 'grid' : 'none';
         if (match) visibleCount++;
       }
       section.header.style.display = visibleCount > 0 ? '' : 'none';
