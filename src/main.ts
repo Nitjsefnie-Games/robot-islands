@@ -68,6 +68,7 @@ import { buildingAtTile, demolishBuilding } from './placement.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import { mountPlacementUi } from './placement-ui.js';
 import { mountSkillTreeUi } from './skilltree-ui.js';
+import { mountGraphUi } from './graph-ui.js';
 import { mountUi } from './ui.js';
 import {
   findPopulatedIslandAt,
@@ -273,6 +274,7 @@ async function main(): Promise<void> {
   // Same pattern for drone ops: stub registered here, real handler bound
   // after the UI is mounted (which needs the active-island getters).
   defineAction(reg, 'toggle-drones', () => undefined);
+  defineAction(reg, 'toggle-graph', () => undefined);
   defineAction(reg, 'toggle-routes', () => undefined);
   defineAction(reg, 'toggle-settlement', () => undefined);
   // Step-11 modal — bound below after the UI is mounted.
@@ -556,6 +558,7 @@ async function main(): Promise<void> {
     { icon: 'settle',    action: 'toggle-settlement',   label: 'Settlement',  kbd: 'V' },
     { icon: 'construct', action: 'toggle-construction', label: 'Construct',   kbd: 'C' },
     { icon: 'skills',    action: 'toggle-skill-tree',   label: 'Skill Tree',  kbd: 'K' },
+    { icon: 'graph',     action: 'toggle-graph',        label: 'Recipe Graph', kbd: 'Y' },
     { icon: 'grid',      action: 'toggle-grid',         label: 'Toggle Grid', kbd: 'G' },
     { icon: 'crosshair', action: 'center-home',         label: 'Center View', kbd: 'H' },
     { icon: 'settings',  action: 'toggle-settings',     label: 'Settings',    kbd: 'S' },
@@ -732,6 +735,11 @@ async function main(): Promise<void> {
   const skillTree = mountSkillTreeUi(document.body, { getState: activeState });
   defineAction(reg, 'toggle-skill-tree', () => {
     skillTree.toggle();
+  });
+
+  const graphUi = mountGraphUi(document.body);
+  defineAction(reg, 'toggle-graph', () => {
+    graphUi.toggle();
   });
 
   // Buildings catalog — sister modal panel to the skill tree. KeyB toggles;
@@ -1013,6 +1021,7 @@ async function main(): Promise<void> {
     // gets assigned before this action ever fires (panel-toggle happens
     // through user input, not synchronously during bootstrap).
     settingsUi.hide();
+    graphUi.hide();
     placementUi.cancel();
     // §4 inspector: Escape also closes the inspector + clears the
     // selection outline. Idempotent; closing while already hidden is a
