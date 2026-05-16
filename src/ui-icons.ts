@@ -29,6 +29,7 @@ export type IconId =
   | 'demolish'      // trash
   | 'expand'        // arrows-out
   | 'close'         // x
+  | 'graph'         // recipe graph (node-and-edge)
   | 'check';
 
 const PATHS: Record<IconId, string> = {
@@ -66,6 +67,8 @@ const PATHS: Record<IconId, string> = {
     '<polyline points="4 10 4 4 10 4" /><polyline points="14 4 20 4 20 10" /><polyline points="20 14 20 20 14 20" /><polyline points="10 20 4 20 4 14" />',
   close:
     '<line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" />',
+  graph:
+    '<circle cx="6" cy="6" r="2.2" /><circle cx="18" cy="6" r="2.2" /><circle cx="12" cy="18" r="2.2" /><line x1="7.8" y1="7.5" x2="10.5" y2="16.2" /><line x1="16.2" y1="7.5" x2="13.5" y2="16.2" /><line x1="8" y1="6" x2="16" y2="6" />',
   check:
     '<polyline points="4 12 10 18 20 6" />',
 };
