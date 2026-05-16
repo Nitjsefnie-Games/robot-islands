@@ -499,10 +499,15 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.commRange).toBe(1);
   });
 
-  it('network.1 boosts commRange', () => {
-    const s = makeState({ unlockedNodes: new Set(['network.1']) });
-    const m = effectiveSkillMultipliers(s);
-    expect(m.commRange).toBeCloseTo(1.05, 9);
+  it('network.1 wires teleporterEfficiency; network.2 wires commRange (spec themes split)', () => {
+    const s1 = makeState({ unlockedNodes: new Set(['network.1']) });
+    const m1 = effectiveSkillMultipliers(s1);
+    expect(m1.teleporterEfficiency).toBeCloseTo(1.05, 9);
+    expect(m1.commRange).toBe(1);
+    const s2 = makeState({ unlockedNodes: new Set(['network.2']) });
+    const m2 = effectiveSkillMultipliers(s2);
+    expect(m2.teleporterEfficiency).toBe(1);
+    expect(m2.commRange).toBeCloseTo(1.10, 9);
   });
 
   it('orbital communication / discovery / resilience wire to their axes', () => {
@@ -519,13 +524,13 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.debrisProtection).toBeCloseTo(1.05, 9);
   });
 
-  it('network + communication stack on commRange', () => {
+  it('network.2 + communication.1 stack on commRange', () => {
     const s = makeState({
-      unlockedNodes: new Set(['network.1', 'communication.1']),
+      unlockedNodes: new Set(['network.2', 'communication.1']),
     });
     const m = effectiveSkillMultipliers(s);
-    // 1.05 × 1.05 = 1.1025
-    expect(m.commRange).toBeCloseTo(1.1025, 9);
+    // network.2 (+10%) × communication.1 (+5%) = 1.10 × 1.05 = 1.155
+    expect(m.commRange).toBeCloseTo(1.155, 9);
   });
 
   it('power_systems.1 boosts production and depth-2 boosts consumption-efficiency (spec themes split)', () => {

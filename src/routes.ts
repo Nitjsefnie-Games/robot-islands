@@ -87,6 +87,17 @@ export interface Route {
  *  step #19: 4 → 1 t/s so a 50-tile route takes 50s instead of 12s. */
 export const T1_CARGO_SPEED_TILES_PER_SEC = 1; // rebalanced for idle-game scale, step #19 (was 4)
 
+/** §9.3 Network sub-path: per-tile biofuel cost of teleporter route dispatch.
+ *  Added so the Network sub-path's "teleporter" theme has something concrete
+ *  to scale (previously teleporters were free + instant, leaving Network with
+ *  no meaningful primary axis). Placeholder — tune in Appendix A.
+ *
+ *  Cost per dispatch tick = distance_tiles × TELEPORTER_FUEL_PER_TILE /
+ *  teleporterEfficiency (Network skill mul). If the source island lacks the
+ *  fuel, the dispatch is SKIPPED for this tick — the route stays valid,
+ *  it just doesn't deliver. */
+export const TELEPORTER_FUEL_PER_TILE = 0.005;
+
 /** T1 cargo throughput in units per second. Unchanged from step-7 — capacity
  *  is independent of speed; idle players accrue larger totals over time. */
 export const T1_CARGO_CAPACITY_UNITS_PER_SEC = 0.5;
@@ -465,6 +476,26 @@ function dispatchPhase(
     if (d.route.transitTimeSec <= 0) {
       // T4+ instant: deposit directly to destination. We still clamp at the
       // current cap so we don't overshoot.
+      // §9.3 Network: teleporter routes (the canonical T4 instant-transit
+      // type) burn biofuel proportional to distance. Other instant routes
+      // (T5 spacetime — modelled the same way but conceptually free per
+      // spec) skip the fuel debit.
+      if (d.route.type === 'teleporter') {
+        const fromSpec = world.islands.find((i) => i.id === d.route.from);
+        const toSpec = world.islands.find((i) => i.id === d.route.to);
+        if (fromSpec && toSpec) {
+          const distTiles = Math.hypot(toSpec.cx - fromSpec.cx, toSpec.cy - fromSpec.cy);
+          const efficiency = effectiveSkillMultipliers(srcState).teleporterEfficiency;
+          const fuelCost = (distTiles * TELEPORTER_FUEL_PER_TILE) / efficiency;
+          if (inv(srcState, 'biofuel') < fuelCost) {
+            // Insufficient fuel — refund the cargo we already deducted above
+            // and skip this dispatch.
+            srcState.inventory[d.resourceId] = inv(srcState, d.resourceId) + amount;
+            continue;
+          }
+          srcState.inventory.biofuel = Math.max(0, inv(srcState, 'biofuel') - fuelCost);
+        }
+      }
       const destState = states.get(d.route.to);
       if (destState) {
         const room = cap(destState, d.resourceId) - inv(destState, d.resourceId);

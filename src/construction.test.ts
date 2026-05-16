@@ -86,12 +86,9 @@ describe('nextConstructionCompletionMs', () => {
   });
 
   it('returns the EARLIEST completion event among multiple in-progress builds', () => {
-    const a = mkBuilding(5000);
-    a.id = 'a';
-    const b = mkBuilding(2000);
-    b.id = 'b';
-    const c = mkBuilding(10000);
-    c.id = 'c';
+    const a: PlacedBuilding = { ...mkBuilding(5000), id: 'a' };
+    const b: PlacedBuilding = { ...mkBuilding(2000), id: 'b' };
+    const c: PlacedBuilding = { ...mkBuilding(10000), id: 'c' };
     expect(nextConstructionCompletionMs([a, b, c], 1000)).toBe(1000 + 2000);
   });
 });

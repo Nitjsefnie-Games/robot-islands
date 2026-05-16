@@ -113,7 +113,11 @@ export type SkillEffect =
   //   - constructionTimeMul   → construction.ts (divides placement-time)
   //   - parallelBuildCapAdd   → adds to concurrent under-construction slots
   | { readonly kind: 'constructionTimeMul' }
-  | { readonly kind: 'parallelBuildCapAdd' };
+  | { readonly kind: 'parallelBuildCapAdd' }
+  // Network sub-path primary mechanic — divides the per-tile biofuel cost
+  // of teleporter route dispatch (a new cost added so "Network reach" has
+  // something to scale; previously teleporters were free + instant).
+  | { readonly kind: 'teleporterEfficiencyMul' };
 
 export interface SkillNode {
   readonly id: NodeId;
@@ -488,7 +492,10 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   // depth-2: drone fuel efficiency per spec theme
   // "Transport (route capacity, drone fuel, airship range)".
   depth2('transport', { kind: 'droneFuelEfficiencyMul' }, 'Drone fuel efficiency +10%'),
-  depth1('network', { kind: 'commRangeMul' }, 'Comm range +5%'),
+  // Network's primary spec theme is teleporter / network reach; depth-2
+  // keeps the commRange axis it had previously since "Network" semantically
+  // covers multi-hop comm too.
+  depth1('network', { kind: 'teleporterEfficiencyMul' }, 'Teleporter fuel cost ÷1.05'),
   depth2('network', { kind: 'commRangeMul' }, 'Comm range +10%'),
 
   // Deep nodes (depth 3-15) for existing sub-paths
@@ -502,7 +509,7 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   ...makeDeepNodes('power_systems', { kind: 'powerProductionMul' }),
   ...makeDeepNodes('storage', { kind: 'storageCapMul' }),
   ...makeDeepNodes('transport', { kind: 'routeCapacityMul' }),
-  ...makeDeepNodes('network', { kind: 'commRangeMul' }),
+  ...makeDeepNodes('network', { kind: 'teleporterEfficiencyMul' }),
 
   // Orbital branch (depth 1-15)
   ...makeOrbitalNodes('launch'),
@@ -691,6 +698,9 @@ export interface SkillMultipliers {
    *  slots on top of the base 1. Stored as the additive bonus, not the
    *  total. Integer-typed at the caller (Math.floor). */
   readonly parallelBuildBonus: number;
+  /** Network sub-path primary axis — divides the per-tile biofuel cost of
+   *  teleporter route dispatch. Default 1 (full cost). */
+  readonly teleporterEfficiency: number;
 }
 
 function blankMultipliers(): SkillMultipliers {
@@ -718,6 +728,7 @@ function blankMultipliers(): SkillMultipliers {
     storageCategoryCap,
     constructionTime: 1,
     parallelBuildBonus: 0,
+    teleporterEfficiency: 1,
   };
 }
 
@@ -752,6 +763,7 @@ export function effectiveSkillMultipliers(
   let repairDroneReliability = 1;
   let constructionTime = 1;
   let parallelBuildBonus = 0;
+  let teleporterEfficiency = 1;
   const storageCategoryCap = out.storageCategoryCap as Record<StorageCategory, number>;
   for (const nodeId of state.unlockedNodes) {
     const node = cat.byId.get(nodeId);
@@ -822,6 +834,9 @@ export function effectiveSkillMultipliers(
         // contribute 1 each).
         parallelBuildBonus += 1;
         break;
+      case 'teleporterEfficiencyMul':
+        teleporterEfficiency *= m;
+        break;
       case 'placeholder':
         break;
       case 'unlockRecipe':
@@ -856,6 +871,7 @@ export function effectiveSkillMultipliers(
     storageCategoryCap,
     constructionTime,
     parallelBuildBonus,
+    teleporterEfficiency,
   };
 }
 
