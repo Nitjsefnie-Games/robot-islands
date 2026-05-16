@@ -30,6 +30,7 @@ export type IconId =
   | 'expand'        // arrows-out
   | 'close'         // x
   | 'graph'         // recipe graph (node-and-edge)
+  | 'rocket'        // T6 orbital launch
   | 'check';
 
 const PATHS: Record<IconId, string> = {
@@ -69,6 +70,8 @@ const PATHS: Record<IconId, string> = {
     '<line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" />',
   graph:
     '<circle cx="6" cy="6" r="2.2" /><circle cx="18" cy="6" r="2.2" /><circle cx="12" cy="18" r="2.2" /><line x1="7.8" y1="7.5" x2="10.5" y2="16.2" /><line x1="16.2" y1="7.5" x2="13.5" y2="16.2" /><line x1="8" y1="6" x2="16" y2="6" />',
+  rocket:
+    '<path d="M12 2c3 2 5 5 5 9v6l-2 3h-6l-2-3v-6c0-4 2-7 5-9z" /><circle cx="12" cy="10" r="1.6" /><path d="M9 19l-3 3M15 19l3 3" />',
   check:
     '<polyline points="4 12 10 18 20 6" />',
 };

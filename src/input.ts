@@ -122,6 +122,8 @@ export function installDefaultBindings(reg: InputRegistry): void {
   // S = settings — rebind UI + save management. Modal-pattern panel; the
   // shared `dismiss-modal` action (Escape) also closes it.
   bind(reg, 'KeyS', 'toggle-settings');
+  // O = orbital — T6 satellite launch modal (§14.2-14.7).
+  bind(reg, 'KeyO', 'toggle-orbital');
   bind(reg, 'Equal', 'zoom-in'); // '=' / '+' on US layouts
   bind(reg, 'NumpadAdd', 'zoom-in');
   bind(reg, 'Minus', 'zoom-out');
