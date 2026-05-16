@@ -86,6 +86,7 @@ export function installDefaultBindings(reg: InputRegistry): void {
   bind(reg, 'KeyG', 'toggle-grid');
   bind(reg, 'KeyH', 'center-home');
   bind(reg, 'KeyK', 'toggle-skill-tree');
+  bind(reg, 'KeyY', 'toggle-graph');
   // KeyB = Buildings (step 9 catalog modal). Sister panel to the skill
   // tree; both share the Escape dismissal action so users get one
   // consistent "close modal" key. The dispatch handler resolves which
