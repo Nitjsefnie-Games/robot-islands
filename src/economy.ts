@@ -41,6 +41,7 @@ import {
   accrueOperatingTime,
   maintenanceFactor,
   nextMaintenanceBoundaryMs,
+  pickMostDegradedTarget,
   tryAutoMaintain,
 } from './maintenance.js';
 import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
@@ -1141,9 +1142,15 @@ export function advanceIsland(
   // §4.7: attempt auto-maintain BEFORE the first segment too — a save loaded
   // with materials in inventory and an over-threshold building should
   // self-heal on the next tick without waiting for the next inventory
-  // boundary.
-  for (const b of state.buildings) {
-    tryAutoMaintain(b, defs[b.defId], state.inventory, t);
+  // boundary. Policy (per pickMostDegradedTarget): only the single
+  // most-degraded building is considered; if its tier recipe isn't fully
+  // in stock, no maintenance fires this pass — the building waits rather
+  // than letting a less-critical building consume the materials.
+  {
+    const target = pickMostDegradedTarget(state.buildings, defs);
+    if (target !== null) {
+      tryAutoMaintain(target, defs[target.defId], state.inventory, t);
+    }
   }
   for (let safety = 0; safety < 10000; safety++) {
     if (t >= nowMs) break;
@@ -1258,10 +1265,15 @@ export function advanceIsland(
     // §4.7 auto-maintenance check. Fires at every segment boundary —
     // including inventory-cap/floor boundaries where a maintenance material
     // may have just arrived from a route delivery or a recipe completion.
-    // The pass scans every building; only over-threshold buildings with
-    // materials in stock actually transact.
-    for (const b of state.buildings) {
-      tryAutoMaintain(b, defs[b.defId], state.inventory, t);
+    // Targeting policy (pickMostDegradedTarget): always the single
+    // most-degraded over-threshold building. If its tier recipe isn't
+    // fully in stock, NO maintenance fires this segment — the building
+    // waits rather than letting a less-critical one consume materials.
+    {
+      const target = pickMostDegradedTarget(state.buildings, defs);
+      if (target !== null) {
+        tryAutoMaintain(target, defs[target.defId], state.inventory, t);
+      }
     }
   }
   state.lastTick = nowMs;

@@ -195,6 +195,40 @@ export function accrueOperatingTime(b: PlacedBuilding, dtMs: number): void {
 export const MAINTENANCE_RAMP_SEGMENTS = 8;
 
 /**
+ * Maintenance targeting policy: among all buildings whose maintenance
+ * factor is below 1.0 (i.e. at-or-past their tier threshold), return the
+ * single MOST-DEGRADED candidate. Returns `null` if no candidate exists.
+ *
+ * Eternal Servitors are excluded (maintenanceFactor returns 1.0 for them).
+ * Ties are broken by `state.buildings` array order (which is placement
+ * order in normal play; deterministic across save/load).
+ *
+ * Caller policy (economy.ts): only attempt to maintain THIS one building.
+ * If insufficient materials are available, DO NOT fall through to a
+ * less-degraded candidate — let the most-degraded one wait. This stops a
+ * cheap T1 building from soaking up shared maintenance materials that
+ * would otherwise have saved a near-plateau T3.
+ */
+export function pickMostDegradedTarget(
+  buildings: ReadonlyArray<PlacedBuilding>,
+  defs: Readonly<Record<string, BuildingDef>>,
+): PlacedBuilding | null {
+  let pick: PlacedBuilding | null = null;
+  let lowest = 1.0;
+  for (const b of buildings) {
+    const def = defs[b.defId];
+    if (!def) continue;
+    const f = maintenanceFactor(b, def);
+    if (f >= 1.0) continue;
+    if (f < lowest) {
+      lowest = f;
+      pick = b;
+    }
+  }
+  return pick;
+}
+
+/**
  * Find the next operating-time boundary at which a building's maintenance
  * factor changes — either crossing into degraded state at `threshold`, the
  * next ramp sub-segment boundary inside the 4-hour linear-degrade window,

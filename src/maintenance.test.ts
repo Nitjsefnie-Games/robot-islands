@@ -18,6 +18,7 @@ import {
   accrueOperatingTime,
   maintenanceFactor,
   nextMaintenanceBoundaryMs,
+  pickMostDegradedTarget,
   tryAutoMaintain,
 } from './maintenance.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -328,5 +329,46 @@ describe('§13.3 Servitor Conversion', () => {
     expect(state.inventory.lubricant).toBe(0);
     expect(state.inventory.phase_converter).toBe(0);
     expect(state.inventory.eldritch_processor).toBe(0);
+  });
+});
+
+describe('pickMostDegradedTarget', () => {
+  const T1_THRESHOLD = MAINTENANCE_THRESHOLD_MS_BY_TIER[1];
+
+  it('returns null when no buildings are over threshold', () => {
+    const b1 = mkBuilding('mine', T1_THRESHOLD - 1);
+    const b2 = mkBuilding('solar', T1_THRESHOLD - 100);
+    expect(pickMostDegradedTarget([b1, b2], BUILDING_DEFS)).toBeNull();
+  });
+
+  it('returns null on an empty building list', () => {
+    expect(pickMostDegradedTarget([], BUILDING_DEFS)).toBeNull();
+  });
+
+  it('picks the single over-threshold building when only one exists', () => {
+    const b1 = mkBuilding('mine', T1_THRESHOLD - 1);            // factor 1.0
+    const b2 = mkBuilding('mine', T1_THRESHOLD + 1);            // ramp start
+    expect(pickMostDegradedTarget([b1, b2], BUILDING_DEFS)).toBe(b2);
+  });
+
+  it('picks the most-degraded (lowest factor) when multiple are over threshold', () => {
+    // b1 just over threshold, b2 deep in ramp, b3 at plateau.
+    const b1 = mkBuilding('mine', T1_THRESHOLD + 1000);
+    const b2 = mkBuilding('mine', T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS / 2);
+    const b3 = mkBuilding('mine', T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS * 2);
+    expect(pickMostDegradedTarget([b1, b2, b3], BUILDING_DEFS)).toBe(b3);
+  });
+
+  it('breaks ties by array order (first listed wins)', () => {
+    const b1 = mkBuilding('mine', T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS * 2);
+    const b2 = mkBuilding('mine', T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS * 2);
+    expect(pickMostDegradedTarget([b1, b2], BUILDING_DEFS)).toBe(b1);
+  });
+
+  it('skips Eternal Servitors (their factor is always 1.0)', () => {
+    const servitor = mkBuilding('mine', T1_THRESHOLD * 100);
+    (servitor as { eternalServitor?: true }).eternalServitor = true;
+    const normal = mkBuilding('mine', T1_THRESHOLD + 1);
+    expect(pickMostDegradedTarget([servitor, normal], BUILDING_DEFS)).toBe(normal);
   });
 });
