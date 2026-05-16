@@ -99,6 +99,8 @@ import { mountSettlementUi } from './settlement-ui.js';
 import { tickVehicles } from './settlement.js';
 import { checkObjectives, type ObjectiveId } from './tutorial.js';
 import { renderTutorialBanner } from './tutorial-ui.js';
+import { checkVictory } from './endgame.js';
+import { endgameMembershipKey, renderEndgameBanner } from './endgame-ui.js';
 
 /** Pan speed for keyboard input, in screen-pixels-per-frame. */
 const PAN_PX_PER_TICK = 8;
@@ -1159,6 +1161,7 @@ async function main(): Promise<void> {
   // the frame brings (matters on tab-blur catch-up).
   let lastFrameMs = performance.now();
   let lastRenderedObjective: ObjectiveId | null = null;
+  let lastRenderedVictory: string | null = null;
   app.ticker.add(() => {
     let dx = 0;
     let dy = 0;
@@ -1272,6 +1275,25 @@ async function main(): Promise<void> {
         }
         lastRenderedObjective = current;
       }
+    }
+    // §13.4 victory banner — checkVictory is idempotent and cheap; it only
+    // walks islands once per frame and short-circuits once all conditions are
+    // recorded. DOM is only touched when membership changes.
+    const newlyVictories = checkVictory(worldState, now);
+    const victoryKey = endgameMembershipKey(worldState.endgameState);
+    if (newlyVictories.length > 0 || victoryKey !== lastRenderedVictory) {
+      const banner = renderEndgameBanner(worldState.endgameState);
+      const oldBanner = document.getElementById('endgame-banner');
+      if (oldBanner) {
+        if (banner) oldBanner.replaceWith(banner);
+        else oldBanner.remove();
+      } else if (banner) {
+        document.body.appendChild(banner);
+      }
+      if (worldState.endgameState.achieved.size > 0) {
+        worldState.endgameState.victoryBannerShown = true;
+      }
+      lastRenderedVictory = victoryKey;
     }
     // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
     // islands for ellipse overlaps. At most ONE merge runs per tick — the
