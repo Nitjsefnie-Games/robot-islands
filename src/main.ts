@@ -98,6 +98,7 @@ import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeSt
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
+import { mountSatelliteOverlay } from './satellite-overlay.js';
 import { tickVehicles } from './settlement.js';
 import { checkObjectives, type ObjectiveId } from './tutorial.js';
 import { renderTutorialBanner } from './tutorial-ui.js';
@@ -171,6 +172,11 @@ async function main(): Promise<void> {
   // ride above so they remain visible through storms.
   const weatherOverlay = mountWeatherOverlay(worldState);
   world.addChild(weatherOverlay.layer);
+  // §14 satellite + debris overlay — coloured dots at sat positions plus
+  // coverage / comm rings. Appended after weather so sat markers stay
+  // visible through storm tints.
+  const satelliteOverlay = mountSatelliteOverlay(worldState);
+  world.addChild(satelliteOverlay.layer);
 
   // Cell grid (debug). Above ocean+islands so lines stay visible when toggled.
   const gridLayer = renderCellGrid(WORLD_HALF_SIZE_TILES);
@@ -1505,6 +1511,7 @@ async function main(): Promise<void> {
     settlementUi.refresh(now);
     orbitalUi.refresh();
     weatherOverlay.refresh(now);
+    satelliteOverlay.refresh();
     // Settings panel — cheap when hidden (early-returns in refresh()).
     settingsUi.refresh();
     // §4 inspector: refresh while open so the live rate / power / inventory
