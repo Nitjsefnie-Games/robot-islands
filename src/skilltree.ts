@@ -25,6 +25,7 @@ import type { BuildingDefId } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import type { RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
+import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
 import type { Biome } from './world.js';
 
 export type BranchId = 'extraction' | 'refinement' | 'logistics' | 'orbital';
@@ -88,7 +89,25 @@ export type SkillEffect =
   | { readonly kind: 'commRangeMul' }
   | { readonly kind: 'maintenanceThresholdMul' }
   | { readonly kind: 'scannerCoverageMul' }
-  | { readonly kind: 'debrisProtectionMul' };
+  | { readonly kind: 'debrisProtectionMul' }
+  // Phase-A shallow wires — added when the prior "skill tree finished"
+  // claim missed every spec theme past the headline % bonus per sub-path:
+  //   - droneFuelEfficiencyMul → drones.ts dispatch fuel debit
+  //   - airshipRangeMul        → routes.ts airship route range/capacity
+  //   - padExplosionReduceMul  → orbital.ts launch failure pad-explosion split
+  //   - satBufferCapMul        → orbital.ts SAT_BUFFER_CAP scaling per launch
+  //   - scannerDwellRateMul    → orbital.ts scanner discovery dwell ramp
+  //   - satFuelReserveMul      → orbital.ts launchSatellite starting fuel
+  //   - repairDroneReliabilityMul → orbital.ts repair drone success roll
+  //   - storageCategoryCapMul  → economy.ts per-category cap aggregation
+  | { readonly kind: 'droneFuelEfficiencyMul' }
+  | { readonly kind: 'airshipRangeMul' }
+  | { readonly kind: 'padExplosionReduceMul' }
+  | { readonly kind: 'satBufferCapMul' }
+  | { readonly kind: 'scannerDwellRateMul' }
+  | { readonly kind: 'satFuelReserveMul' }
+  | { readonly kind: 'repairDroneReliabilityMul' }
+  | { readonly kind: 'storageCategoryCapMul'; readonly category: StorageCategory };
 
 export interface SkillNode {
   readonly id: NodeId;
@@ -357,30 +376,59 @@ function makeDeepNodes(subPath: SubPathId, baseEffect: SkillEffect): SkillNode[]
 
 function makeOrbitalNodes(subPath: SubPathId): SkillNode[] {
   const nodes: SkillNode[] = [];
+  // §14.9 four sub-paths, every spec theme wired:
+  //   launch — additive launch-success bonus (§14.7) at depth 1+,
+  //            pad-explosion mitigation at depth 2 only.
+  //   communication — comm range at depth 1+,
+  //                   store-and-forward bandwidth at depth 2 only.
+  //   discovery — Scanner coverage at depth 1+,
+  //               dwell ramp at depth 2 only.
+  //   resilience — debris protection at depth 1+,
+  //                fuel reserve at depth 2 and repair reliability at depth 3.
+  // After the depth-2/3 variant slot, deeper nodes deepen the primary axis.
   for (let d = 1; d <= 15; d++) {
-    // §14.9 four sub-paths, all wired to live mechanics:
-    //   launch        — additive launch-success bonus (§14.7)
-    //   communication — multiplicative comm-range bonus (overlaps Network)
-    //   discovery     — multiplicative Scanner-Sat coverage bonus
-    //   resilience    — multiplicative debris-protection bonus
     let effect: SkillEffect;
     let descSuffix: string;
+    const mag = magnitudeForDepth(d);
     switch (subPath) {
       case 'launch':
-        effect = { kind: 'launchSuccessAdditive' };
-        descSuffix = `Launch success +${(magnitudeForDepth(d) * 100).toFixed(1)}% (additive, capped at 99%)`;
+        if (d === 2) {
+          effect = { kind: 'padExplosionReduceMul' };
+          descSuffix = `Pad-explosion likelihood ÷${(1 + mag).toFixed(2)}`;
+        } else {
+          effect = { kind: 'launchSuccessAdditive' };
+          descSuffix = `Launch success +${(mag * 100).toFixed(1)}% (additive, capped at 99%)`;
+        }
         break;
       case 'communication':
-        effect = { kind: 'commRangeMul' };
-        descSuffix = `Comm range +${(magnitudeForDepth(d) * 100).toFixed(0)}%`;
+        if (d === 2) {
+          effect = { kind: 'satBufferCapMul' };
+          descSuffix = `Store-and-forward bandwidth +${(mag * 100).toFixed(0)}%`;
+        } else {
+          effect = { kind: 'commRangeMul' };
+          descSuffix = `Comm range +${(mag * 100).toFixed(0)}%`;
+        }
         break;
       case 'discovery':
-        effect = { kind: 'scannerCoverageMul' };
-        descSuffix = `Scanner coverage +${(magnitudeForDepth(d) * 100).toFixed(0)}%`;
+        if (d === 2) {
+          effect = { kind: 'scannerDwellRateMul' };
+          descSuffix = `Scanner dwell-ramp rate +${(mag * 100).toFixed(0)}%`;
+        } else {
+          effect = { kind: 'scannerCoverageMul' };
+          descSuffix = `Scanner coverage +${(mag * 100).toFixed(0)}%`;
+        }
         break;
       case 'resilience':
-        effect = { kind: 'debrisProtectionMul' };
-        descSuffix = `Debris protection +${(magnitudeForDepth(d) * 100).toFixed(0)}%`;
+        if (d === 2) {
+          effect = { kind: 'satFuelReserveMul' };
+          descSuffix = `Onboard fuel reserve +${(mag * 100).toFixed(0)}%`;
+        } else if (d === 3) {
+          effect = { kind: 'repairDroneReliabilityMul' };
+          descSuffix = `Repair-drone failure ÷${(1 + mag).toFixed(2)}`;
+        } else {
+          effect = { kind: 'debrisProtectionMul' };
+          descSuffix = `Debris protection +${(mag * 100).toFixed(0)}%`;
+        }
         break;
       default:
         effect = { kind: 'structural', description: `${subPath} depth-${d} unlock` };
@@ -391,7 +439,7 @@ function makeOrbitalNodes(subPath: SubPathId): SkillNode[] {
       subPath,
       depth: d,
       cost: costForDepth(d),
-      magnitude: magnitudeForDepth(d),
+      magnitude: mag,
       effect,
       description: descSuffix,
     });
@@ -418,13 +466,18 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   depth1('electronics', rate('electronics'), 'Electronics rate +5% (latent)'),
   depth2('electronics', rate('electronics'), 'Electronics rate +10% (latent)'),
   depth1('power_systems', { kind: 'powerProductionMul' }, 'Power production +5%'),
-  depth2('power_systems', { kind: 'powerProductionMul' }, 'Power production +10%'),
+  // depth-2: switch axis to consumption efficiency — spec theme
+  // "Power systems (efficiency, advanced generation)".
+  depth2('power_systems', { kind: 'powerConsumptionMul', reduce: true }, 'Power consumption -10%'),
 
   // Logistics branch
   depth1('storage', { kind: 'storageCapMul' }, 'Storage caps +5%'),
-  depth2('storage', { kind: 'storageCapMul' }, 'Storage caps +10%'),
+  // depth-2: specialized vault — rare-material handling per spec theme.
+  depth2('storage', { kind: 'storageCategoryCapMul', category: 'rare' }, 'Rare-vault caps +10%'),
   depth1('transport', { kind: 'routeCapacityMul' }, 'Route capacity +5%'),
-  depth2('transport', { kind: 'routeCapacityMul' }, 'Route capacity +10%'),
+  // depth-2: drone fuel efficiency per spec theme
+  // "Transport (route capacity, drone fuel, airship range)".
+  depth2('transport', { kind: 'droneFuelEfficiencyMul' }, 'Drone fuel efficiency +10%'),
   depth1('network', { kind: 'commRangeMul' }, 'Comm range +5%'),
   depth2('network', { kind: 'commRangeMul' }, 'Comm range +10%'),
 
@@ -600,11 +653,34 @@ export interface SkillMultipliers {
   /** Orbital-Resilience sub-path bonus — multiplies (1 - debris lodge
    *  probability). 1.0 = no protection, 2.0 = halves lodge probability. */
   readonly debrisProtection: number;
+  /** Transport sub-path — divides drone biofuel consumption per launch. */
+  readonly droneFuelEfficiency: number;
+  /** Transport sub-path — multiplies airship route effective range/capacity. */
+  readonly airshipRange: number;
+  /** Launch sub-path — DIVIDES the pad-explosion share of launch failures
+   *  (the 30% baseline). 2.0 = halves the pad-explosion chance, redirecting
+   *  failures to (less catastrophic) orbit explosions. */
+  readonly padExplosionReduce: number;
+  /** Communication sub-path — multiplies SAT_BUFFER_CAP for sats launched
+   *  while this multiplier is in effect. */
+  readonly satBufferCap: number;
+  /** Discovery sub-path — multiplies the scanner discovery dwell rate
+   *  (effective P-per-tick for Scanner Sats). */
+  readonly scannerDwellRate: number;
+  /** Resilience sub-path — multiplies a Satellite's starting onboard fuel. */
+  readonly satFuelReserve: number;
+  /** Resilience sub-path — DIVIDES repair-drone failure rate. */
+  readonly repairDroneReliability: number;
+  /** Storage sub-path (depth >= 3 unique unlocks) — per-category cap mul.
+   *  Composes multiplicatively with the global `storageCap`. */
+  readonly storageCategoryCap: Record<StorageCategory, number>;
 }
 
 function blankMultipliers(): SkillMultipliers {
   const recipeRate = {} as Record<RecipeCategory, number>;
   for (const c of ALL_RECIPE_CATEGORIES) recipeRate[c] = 1;
+  const storageCategoryCap = {} as Record<StorageCategory, number>;
+  for (const c of ALL_STORAGE_CATEGORIES) storageCategoryCap[c] = 1;
   return {
     recipeRate,
     storageCap: 1,
@@ -615,6 +691,14 @@ function blankMultipliers(): SkillMultipliers {
     maintenanceThreshold: 1,
     scannerCoverage: 1,
     debrisProtection: 1,
+    droneFuelEfficiency: 1,
+    airshipRange: 1,
+    padExplosionReduce: 1,
+    satBufferCap: 1,
+    scannerDwellRate: 1,
+    satFuelReserve: 1,
+    repairDroneReliability: 1,
+    storageCategoryCap,
   };
 }
 
@@ -640,6 +724,14 @@ export function effectiveSkillMultipliers(
   let maintenanceThreshold = 1;
   let scannerCoverage = 1;
   let debrisProtection = 1;
+  let droneFuelEfficiency = 1;
+  let airshipRange = 1;
+  let padExplosionReduce = 1;
+  let satBufferCap = 1;
+  let scannerDwellRate = 1;
+  let satFuelReserve = 1;
+  let repairDroneReliability = 1;
+  const storageCategoryCap = out.storageCategoryCap as Record<StorageCategory, number>;
   for (const nodeId of state.unlockedNodes) {
     const node = cat.byId.get(nodeId);
     if (!node) continue;
@@ -674,6 +766,32 @@ export function effectiveSkillMultipliers(
       case 'debrisProtectionMul':
         debrisProtection *= m;
         break;
+      case 'droneFuelEfficiencyMul':
+        droneFuelEfficiency *= m;
+        break;
+      case 'airshipRangeMul':
+        airshipRange *= m;
+        break;
+      case 'padExplosionReduceMul':
+        padExplosionReduce *= m;
+        break;
+      case 'satBufferCapMul':
+        satBufferCap *= m;
+        break;
+      case 'scannerDwellRateMul':
+        scannerDwellRate *= m;
+        break;
+      case 'satFuelReserveMul':
+        satFuelReserve *= m;
+        break;
+      case 'repairDroneReliabilityMul':
+        repairDroneReliability *= m;
+        break;
+      case 'storageCategoryCapMul': {
+        const cur = storageCategoryCap[node.effect.category] ?? 1;
+        storageCategoryCap[node.effect.category] = cur * m;
+        break;
+      }
       case 'placeholder':
         break;
       case 'unlockRecipe':
@@ -698,6 +816,14 @@ export function effectiveSkillMultipliers(
     maintenanceThreshold,
     scannerCoverage,
     debrisProtection,
+    droneFuelEfficiency,
+    airshipRange,
+    padExplosionReduce,
+    satBufferCap,
+    scannerDwellRate,
+    satFuelReserve,
+    repairDroneReliability,
+    storageCategoryCap,
   };
 }
 

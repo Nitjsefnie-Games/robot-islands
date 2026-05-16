@@ -68,6 +68,15 @@ export interface Satellite {
   pendingRepairDroneId: string | null;
   /** Store-and-forward buffer for disconnected satellites. */
   buffer: SatBufferEntry[];
+  /** Per-sat buffer cap baked at launch from SAT_BUFFER_CAP × the launching
+   *  island's Communication-skill bandwidth multiplier. Optional for
+   *  forward-compat with sats saved before this field existed (legacy reads
+   *  fall back to the global constant). */
+  bufferCap?: number;
+  /** Per-sat scanner dwell-rate multiplier baked at launch from the
+   *  launching island's Discovery-skill dwell-ramp multiplier. Optional
+   *  for forward-compat (legacy → 1). Only meaningful for variant: 'scanner'. */
+  dwellRateMul?: number;
   /** §14.6 in-flight move target. When set, the satellite is in transit and
    *  unlocked (`locked === false`); on arrival, position is updated and
    *  `movingTo` is cleared. Missing/undefined ≡ stationary. */
@@ -194,9 +203,16 @@ export function launchSatellite(
   const bonus = launchSuccessBonus(state);
   const successRate = Math.min(0.99, baseSuccess + bonus);
   const rng = makeSeededRng(`${world.seed}_launch_${nowMs}`);
+  // Skill bundle for the launching island. Used both here (pad-explosion
+  // mitigation) and below (sat fuel reserve, buffer cap).
+  const skill = effectiveSkillMultipliers(state);
   if (rng() > successRate) {
-    // Failure: pad explosion (30%) or orbit explosion (70%).
-    if (rng() < 0.30) {
+    // Failure: pad explosion (30% baseline) or orbit explosion. Launch sub-
+    // path's pad-explosion mitigation DIVIDES the pad-explosion share — at
+    // multiplier 2 the 30% becomes 15% and the remainder rolls as orbit
+    // explosion (less catastrophic; the Spaceport survives).
+    const padShare = 0.30 / skill.padExplosionReduce;
+    if (rng() < padShare) {
       // Pad explosion: destroy spaceport.
       state.buildings = state.buildings.filter((b) => b.defId !== 'spaceport');
     } else {
@@ -216,10 +232,12 @@ export function launchSatellite(
 
   // Skill bonuses baked into the launched sat's geometry — Communication +
   // Network sub-paths boost comm range; Discovery sub-path boosts Scanner
-  // coverage. Baked once at launch so subsequent skill purchases don't
-  // retroactively grow already-orbiting sats (an existing-sat retrofit is
-  // a different mechanic — Repair Drone with upgrade payload, deferred).
-  const skill = effectiveSkillMultipliers(state);
+  // coverage; Resilience boosts fuel reserve; Communication boosts buffer
+  // cap; Discovery boosts dwell rate. Baked once at launch so subsequent
+  // skill purchases don't retroactively grow already-orbiting sats (an
+  // existing-sat retrofit is a different mechanic — Repair Drone with
+  // upgrade payload, deferred). `skill` was bound above for the pad-
+  // explosion mitigation; reused here.
   const sat: Satellite = {
     id: `sat_${nowMs}`,
     variant,
@@ -228,11 +246,13 @@ export function launchSatellite(
     y: spec.cy + 100,
     commRange: (variant === 'comm' ? 500 : 200) * skill.commRange,
     coverageRadius: variant === 'scanner' ? 400 * skill.scannerCoverage : 0,
-    fuel: 100,
+    fuel: 100 * skill.satFuelReserve,
     lodges: { scan: 0, weather: 0, comm: 0 },
     locked: true,
     pendingRepairDroneId: null,
     buffer: [],
+    bufferCap: Math.floor(SAT_BUFFER_CAP * skill.satBufferCap),
+    dwellRateMul: skill.scannerDwellRate,
   };
 
   world.satellites.push(sat);
@@ -449,7 +469,10 @@ export function debrisDetectionRangeForIsland(
 // ---------------------------------------------------------------------------
 
 export function appendSatBuffer(sat: Satellite, entry: SatBufferEntry): void {
-  if (sat.buffer.length >= SAT_BUFFER_CAP) {
+  // Per-sat cap baked at launch from Communication skill; fall back to the
+  // global constant for legacy sats minted before bufferCap shipped.
+  const cap = sat.bufferCap ?? SAT_BUFFER_CAP;
+  if (sat.buffer.length >= cap) {
     sat.buffer.shift();
   }
   sat.buffer.push(entry);
@@ -523,9 +546,17 @@ export function tickRepairDrones(world: WorldState, nowMs: number): void {
       continue;
     }
 
-    // 5% mechanical failure roll
+    // 5% mechanical failure roll, divided by the dispatching island's
+    // Resilience-skill repair-reliability multiplier. The dispatching island
+    // is the satellite's owner (sat.spaceportIslandId) — the Repair Drone
+    // launches from the same Spaceport that fielded the sat.
+    const ownerState = world.islandStates?.get(sat.spaceportIslandId);
+    const reliabilityMul = ownerState
+      ? effectiveSkillMultipliers(ownerState).repairDroneReliability
+      : 1;
+    const failureChance = 0.05 / reliabilityMul;
     const rng = makeSeededRng(`${world.seed}_repair_${drone.id}`);
-    if (rng() < 0.05) {
+    if (rng() < failureChance) {
       // Lost in transit
       sat.pendingRepairDroneId = null;
       continue;
@@ -791,7 +822,12 @@ export function tickScannerDiscovery(
       const key = cellKey(cellX, cellY);
       if (!covered.has(key)) continue;
       const dwell = sat.dwellByCellKey[key] ?? 0;
-      const p = scannerDiscoveryProbability(dwell);
+      // Discovery sub-path's dwell-ramp bonus inflates EFFECTIVE dwell on
+      // this scanner so the saturating-exponential ramp reaches its
+      // asymptote sooner. Multiplier ≤ 1 (missing field) leaves base
+      // behaviour identical.
+      const effectiveDwell = dwell * (sat.dwellRateMul ?? 1);
+      const p = scannerDiscoveryProbability(effectiveDwell);
       if (rng() < p) {
         isl.discovered = true;
         newlyDiscovered.push(isl.id);

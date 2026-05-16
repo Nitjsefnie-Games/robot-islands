@@ -27,6 +27,16 @@ export type StorageCategory =
   | 'components'     // Component Warehouse: T2-T3 manufactured parts (bolt, gear, wire, …)
   | 'rare';          // Vault: rare/valuable (helium_3, AI core, exotic alloy, T5 raws)
 
+/** Iteration order — every StorageCategory exactly once. Used by skilltree
+ *  multiplier aggregation to initialise the per-category cap multiplier map. */
+export const ALL_STORAGE_CATEGORIES: ReadonlyArray<StorageCategory> = [
+  'dry_goods',
+  'liquid_gas',
+  'temp_sensitive',
+  'components',
+  'rare',
+];
+
 /**
  * Canonical mapping. Every ResourceId MUST appear here exactly once;
  * `storage-categories.test.ts` enforces this. The bucketing rules per §6:

@@ -399,7 +399,11 @@ function dispatchPhase(
           )
         : 1;
 
-    const capDemand = route.capacityPerSec * capacityMul * skillCapMul * weatherMul * elapsedSec;
+    // Airship-specific Transport bonus stacks only on airship routes.
+    const airshipMul = route.type === 'airship'
+      ? effectiveSkillMultipliers(srcState).airshipRange
+      : 1;
+    const capDemand = route.capacityPerSec * capacityMul * skillCapMul * airshipMul * weatherMul * elapsedSec;
     const headroom = destinationHeadroom(world, states, route.to, r);
     const desired = Math.min(capDemand, headroom);
     if (desired <= 0) continue;

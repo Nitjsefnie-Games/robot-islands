@@ -484,10 +484,13 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.powerProduction).toBe(1);
   });
 
-  it('transport.1+2 boost routeCapacity multiplicatively', () => {
+  it('transport.1 wires routeCapacity; transport.2 wires droneFuelEfficiency (spec themes split)', () => {
     const s = makeState({ unlockedNodes: new Set(['transport.1', 'transport.2']) });
     const m = effectiveSkillMultipliers(s);
-    expect(m.routeCapacity).toBeCloseTo(1.155, 9);
+    // depth-1 = routeCapacityMul (+5%)
+    expect(m.routeCapacity).toBeCloseTo(1.05, 9);
+    // depth-2 = droneFuelEfficiencyMul (+10%) — Transport's "drone fuel" spec theme
+    expect(m.droneFuelEfficiency).toBeCloseTo(1.10, 9);
     expect(m.commRange).toBe(1);
   });
 
@@ -519,6 +522,39 @@ describe('effectiveSkillMultipliers', () => {
     // 1.05 × 1.05 = 1.1025
     expect(m.commRange).toBeCloseTo(1.1025, 9);
   });
+
+  it('power_systems.1 boosts production and depth-2 boosts consumption-efficiency (spec themes split)', () => {
+    const s = makeState({ unlockedNodes: new Set(['power_systems.1', 'power_systems.2']) });
+    const m = effectiveSkillMultipliers(s);
+    expect(m.powerProduction).toBeCloseTo(1.05, 9);
+    expect(m.powerConsumption).toBeCloseTo(1.10, 9);
+  });
+
+  it('storage.2 boosts the rare-vault category cap specifically (not all categories)', () => {
+    const s = makeState({ unlockedNodes: new Set(['storage.2']) });
+    const m = effectiveSkillMultipliers(s);
+    expect(m.storageCategoryCap.rare).toBeCloseTo(1.10, 9);
+    expect(m.storageCategoryCap.dry_goods).toBe(1);
+    expect(m.storageCap).toBe(1);
+  });
+
+  it('orbital depth-2 alternates wire the secondary axes', () => {
+    const s = makeState({
+      unlockedNodes: new Set([
+        'launch.2',
+        'communication.2',
+        'discovery.2',
+        'resilience.2',
+        'resilience.3',
+      ]),
+    });
+    const m = effectiveSkillMultipliers(s);
+    expect(m.padExplosionReduce).toBeCloseTo(1.10, 9);
+    expect(m.satBufferCap).toBeCloseTo(1.10, 9);
+    expect(m.scannerDwellRate).toBeCloseTo(1.10, 9);
+    expect(m.satFuelReserve).toBeCloseTo(1.10, 9);
+    expect(m.repairDroneReliability).toBeCloseTo(1.20, 9);
+  });
 });
 
 describe('§14.7 launchSuccessBonus', () => {
@@ -532,9 +568,13 @@ describe('§14.7 launchSuccessBonus', () => {
     expect(launchSuccessBonus(s)).toBe(magnitudeForDepth(1));
   });
 
-  it('returns magnitudeForDepth(1) + magnitudeForDepth(2) when launch.1 and launch.2 are unlocked', () => {
+  it('launch.2 contributes pad-explosion mitigation, NOT launchSuccess (spec themes split)', () => {
+    // Post-catalog-refactor: launch depth-1+3+ stays additive launch-success;
+    // depth-2 is the pad-explosion mitigation slot (separate axis).
     const s = makeState({ unlockedNodes: new Set(['launch.1', 'launch.2']) });
-    expect(launchSuccessBonus(s)).toBe(magnitudeForDepth(1) + magnitudeForDepth(2));
+    expect(launchSuccessBonus(s)).toBe(magnitudeForDepth(1));
+    const m = effectiveSkillMultipliers(s);
+    expect(m.padExplosionReduce).toBeCloseTo(1.10, 9);
   });
 
   it('returns 0 when only non-launch nodes are unlocked', () => {
