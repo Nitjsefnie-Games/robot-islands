@@ -119,15 +119,26 @@ function formatMissing(
 }
 
 // ---------------------------------------------------------------------------
-// Stable id generator — sessions-local
+// Stable id generator — anchored on placement coordinates
 // ---------------------------------------------------------------------------
-let placedCounter = 0;
-function nextPlacedId(): string {
-  placedCounter += 1;
-  // `placed-N` namespace is distinct from `home-*` (demo seed),
-  // `forestne-*` (demo seed), and `art-N` (artificial-island construction),
-  // so an id collision can't happen across the session.
-  return `placed-${placedCounter}`;
+//
+// Earlier this module used a session-local counter (`placedCounter`) that
+// reset to 0 on every reload. Persistence had no `_seedPlacedIdCounter`
+// equivalent of routes.ts's id-counter seeding, so saved buildings minted
+// with ids like `placed-1`, `placed-2`, … would collide with NEW placements
+// after reload (which started counting at 1 again).
+//
+// The collision was user-visible: clicking a building would open the right
+// inspector (the click handler matched the hit by anchor coords) but the
+// selection outline drew on a DIFFERENT building, because
+// `selectedSpec.buildings.find(b => b.id === selectedId)` returned the
+// FIRST array match for the colliding id — a different building.
+//
+// Fix: derive the id from anchor coordinates. `validatePlacement` rejects
+// overlap, so two buildings can never share an (x, y) anchor. The id is
+// therefore unique by construction across reloads, with no counter to seed.
+function placedIdFor(x: number, y: number): string {
+  return `placed-${x},${y}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +361,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       localX,
       localY,
       rotation,
-      nextPlacedId,
+      () => placedIdFor(localX, localY),
     );
     if (!result.ok) return { ok: false, reason: result.reason };
     cancel();
