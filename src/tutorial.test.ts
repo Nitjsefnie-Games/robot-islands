@@ -85,8 +85,17 @@ describe('checkObjectives', () => {
         'dispatch_first_drone',
         'settle_first_island',
         'build_antenna',
+        'reach_level_15',
+        'place_steel_mill',
+        'reach_level_30',
+        'craft_ai_core',
+        'reach_level_50',
+        'craft_reality_anchor',
+        'craft_ascendant_core',
+        'craft_genesis_cell',
+        'activate_omniscient_lattice',
       ]),
-      current: 'build_antenna',
+      current: 'activate_omniscient_lattice',
     };
     const world = makeWorld();
     const newly = checkObjectives(state, world);
