@@ -15,6 +15,7 @@ import type { NetworkConsciousnessState } from './network-consciousness.js';
 import type { Objective } from './objectives.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';
+import { canTierReset } from './tier-reset.js';
 import { toDisplayName } from './ui-tokens.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import type { IslandSpec, WorldState } from './world.js';
@@ -406,6 +407,25 @@ export function mountHud(
     xpKv.appendChild(xpK);
     xpKv.appendChild(xpV);
     body.appendChild(xpKv);
+
+    // §9.7 tier reset surface — when the active island can fire a reset right
+    // now (T3+, off cooldown, materials available) flash a clickable hint
+    // that opens the Skill Tree where the reset row lives. Silent otherwise.
+    if (canTierReset(state, Date.now()).ok) {
+      const trKv = document.createElement('div');
+      trKv.classList.add('ri-kv');
+      const trK = document.createElement('span');
+      trK.classList.add('ri-kv__k');
+      trK.textContent = '↺ TIER RESET';
+      const trV = document.createElement('button');
+      trV.classList.add('ri-kv__v');
+      trV.textContent = 'available → K';
+      trV.style.cssText = 'background: transparent; border: 1px solid var(--ri-accent); color: var(--ri-accent); cursor: pointer; padding: 1px 8px; font: inherit; border-radius: 3px;';
+      trV.addEventListener('click', () => dispatchAction(reg, 'toggle-skill-tree'));
+      trKv.appendChild(trK);
+      trKv.appendChild(trV);
+      body.appendChild(trKv);
+    }
 
     const xpMeter = document.createElement('div');
     xpMeter.classList.add('ri-meter');
