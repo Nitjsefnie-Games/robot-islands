@@ -107,7 +107,13 @@ export type SkillEffect =
   | { readonly kind: 'scannerDwellRateMul' }
   | { readonly kind: 'satFuelReserveMul' }
   | { readonly kind: 'repairDroneReliabilityMul' }
-  | { readonly kind: 'storageCategoryCapMul'; readonly category: StorageCategory };
+  | { readonly kind: 'storageCategoryCapMul'; readonly category: StorageCategory }
+  // Phase-B deep mechanics (new game systems built so Robotics's spec
+  // themes can land for real):
+  //   - constructionTimeMul   → construction.ts (divides placement-time)
+  //   - parallelBuildCapAdd   → adds to concurrent under-construction slots
+  | { readonly kind: 'constructionTimeMul' }
+  | { readonly kind: 'parallelBuildCapAdd' };
 
 export interface SkillNode {
   readonly id: NodeId;
@@ -455,8 +461,12 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   depth2('forestry', rate('extraction'), 'Wood output +10% (latent — Logger pending)'),
   depth1('drilling', rate('extraction'), 'Deep extraction +5% (latent — Drilling Rig pending)'),
   depth2('drilling', rate('extraction'), 'Deep extraction +10% (latent — Drilling Rig pending)'),
-  depth1('robotics', { kind: 'maintenanceThresholdMul' }, 'Maintenance threshold +5% (later degradation)'),
-  depth2('robotics', { kind: 'maintenanceThresholdMul' }, 'Maintenance threshold +10% (later degradation)'),
+  // Robotics primary axis is construction speed per SPEC §9.3 themes
+  // ("construction speed, parallel building, drone production efficiency").
+  // depth-1 boosts the construction-time mul; depth-2 grants the first
+  // additional concurrent build slot.
+  depth1('robotics', { kind: 'constructionTimeMul' }, 'Construction time ÷1.05 (+5% speed)'),
+  depth2('robotics', { kind: 'parallelBuildCapAdd' }, '+1 concurrent build slot'),
 
   // Refinement branch
   depth1('smelting', rate('smelting'), 'Smelter rate +5% (latent — Smelter pending)'),
@@ -485,7 +495,7 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   ...makeDeepNodes('mining', rate('extraction')),
   ...makeDeepNodes('forestry', rate('extraction')),
   ...makeDeepNodes('drilling', rate('extraction')),
-  ...makeDeepNodes('robotics', { kind: 'maintenanceThresholdMul' }),
+  ...makeDeepNodes('robotics', { kind: 'constructionTimeMul' }),
   ...makeDeepNodes('smelting', rate('smelting')),
   ...makeDeepNodes('chemistry', rate('chemistry')),
   ...makeDeepNodes('electronics', rate('electronics')),
@@ -674,6 +684,13 @@ export interface SkillMultipliers {
   /** Storage sub-path (depth >= 3 unique unlocks) — per-category cap mul.
    *  Composes multiplicatively with the global `storageCap`. */
   readonly storageCategoryCap: Record<StorageCategory, number>;
+  /** Robotics sub-path primary axis — divides building construction time
+   *  at placement. Larger = faster builds. */
+  readonly constructionTime: number;
+  /** Robotics sub-path secondary axis — extra concurrent under-construction
+   *  slots on top of the base 1. Stored as the additive bonus, not the
+   *  total. Integer-typed at the caller (Math.floor). */
+  readonly parallelBuildBonus: number;
 }
 
 function blankMultipliers(): SkillMultipliers {
@@ -699,6 +716,8 @@ function blankMultipliers(): SkillMultipliers {
     satFuelReserve: 1,
     repairDroneReliability: 1,
     storageCategoryCap,
+    constructionTime: 1,
+    parallelBuildBonus: 0,
   };
 }
 
@@ -731,6 +750,8 @@ export function effectiveSkillMultipliers(
   let scannerDwellRate = 1;
   let satFuelReserve = 1;
   let repairDroneReliability = 1;
+  let constructionTime = 1;
+  let parallelBuildBonus = 0;
   const storageCategoryCap = out.storageCategoryCap as Record<StorageCategory, number>;
   for (const nodeId of state.unlockedNodes) {
     const node = cat.byId.get(nodeId);
@@ -792,6 +813,15 @@ export function effectiveSkillMultipliers(
         storageCategoryCap[node.effect.category] = cur * m;
         break;
       }
+      case 'constructionTimeMul':
+        constructionTime *= m;
+        break;
+      case 'parallelBuildCapAdd':
+        // Additive — each node grants +1 concurrent slot (the magnitude
+        // doesn't scale the bonus; depth-2 contributes 1, deeper nodes
+        // contribute 1 each).
+        parallelBuildBonus += 1;
+        break;
       case 'placeholder':
         break;
       case 'unlockRecipe':
@@ -824,6 +854,8 @@ export function effectiveSkillMultipliers(
     satFuelReserve,
     repairDroneReliability,
     storageCategoryCap,
+    constructionTime,
+    parallelBuildBonus,
   };
 }
 

@@ -1789,6 +1789,11 @@ describe('step-2.5 — placement is recognised by the live economy', () => {
     expect(pr.ok).toBe(true);
     expect(spec.buildings).toHaveLength(1);
     expect(state.buildings).toBe(spec.buildings); // live reference
+    // §9.3 Robotics: clear construction-in-progress so the building reads as
+    // operational this tick. The integration test under exercise here is
+    // "spec.buildings → state.buildings live reference is visible to
+    // computeRates" — construction-time gating is its own test suite.
+    (spec.buildings[0] as { constructionRemainingMs?: number }).constructionRemainingMs = 0;
 
     // After placement: Smelter 1/80s = 0.0125/s. (rebalanced step #19: was 1/8s = 0.125/s)
     // Strip Smelter power for this test (same reason as step-9 test above).
@@ -1995,30 +2000,11 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
     expect(plateau.operatingMs).toBeGreaterThan(MAINTENANCE_THRESHOLD_MS_BY_TIER[3]);
   });
 
-  it('Robotics skill (maintenanceThresholdMul) stretches the maintenance threshold', () => {
-    // robotics.1 = +5% threshold. A Mine at operatingMs = base T1 threshold
-    // would normally be exactly at the edge of degradation (factor 1.0); with
-    // robotics.1 the effective threshold becomes 1.05× larger, so the mine
-    // stays at factor 1.0 even at operatingMs slightly past base threshold.
-    const state = makeState({
-      buildings: [
-        {
-          ...MINE,
-          operatingMs: T1_THRESHOLD + 1000, // 1s past base, well within +5% extension
-          placedAt: 0,
-          maintainedAt: 0,
-        },
-      ],
-      storageCaps: blankCaps(1_000_000),
-      unlockedNodes: new Set(['robotics.1']),
-    });
-    const rates = computeRates(state, { defs: POWER_FREE });
-    // Without robotics.1 the Mine would be just past threshold (factor ~1.0
-    // since overshoot ≈ 1000ms / 4h = tiny). With robotics.1 the threshold
-    // grows by 5% (36 min on T1's 12h) so the building hasn't crossed yet —
-    // factor is exactly 1.0, NOT slightly below.
-    expect(rates.byBuilding[0]!.effectiveRate).toBeCloseTo(0.02, 9); // full 1/50
-  });
+  // NOTE: the prior "Robotics skill stretches the maintenance threshold"
+  // test was removed in the Robotics rewiring slice — Robotics now drives
+  // construction time / parallel build slots (its true spec themes), not
+  // maintenance. The `maintenanceThresholdMul` effect kind survives in the
+  // union as a forward-compat hook but no catalog node currently uses it.
 
   it('Eternal Servitor flag exempts a building from operatingMs accrual', () => {
     const state = makeState({

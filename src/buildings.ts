@@ -47,6 +47,14 @@ export interface PlacedBuilding {
    *  undefined and behave as if freshly placed (operatingMs = 0, factor 1.0)
    *  until the first auto-maintenance check stamps a real value. */
   readonly placedAt?: number;
+  /** §9.3 Robotics: ms of construction time remaining before this building
+   *  becomes operational. While > 0, the building does NOT produce, does NOT
+   *  contribute to power balance, and does NOT accrue maintenance time.
+   *  Mutated each tick in `advanceIsland`. Set on placement by `placeBuilding`
+   *  from BASE_CONSTRUCTION_MS_BY_TIER[def.tier] / robotics.constructionTimeMul.
+   *  Optional for forward-compat with saves minted before this field shipped
+   *  (legacy = treat as 0 = fully constructed). */
+  constructionRemainingMs?: number;
   /** §4.7 accumulated operating time since last maintenance, in ms. Ticks
    *  every advanceIsland segment regardless of whether the building actually
    *  ran (§4.7: "Idle buildings ... accrue maintenance time the same as

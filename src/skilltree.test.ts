@@ -475,10 +475,15 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.recipeRate.extraction).toBe(1);
   });
 
-  it('robotics.1+2 boost maintenanceThreshold and leave other axes alone', () => {
+  it('robotics.1 boosts constructionTime; robotics.2 adds a parallel build slot', () => {
     const s = makeState({ unlockedNodes: new Set(['robotics.1', 'robotics.2']) });
     const m = effectiveSkillMultipliers(s);
-    expect(m.maintenanceThreshold).toBeCloseTo(1.155, 9); // 1.05 × 1.10
+    // depth-1 = constructionTimeMul +5% (faster builds; dividend stays ≥ 1)
+    expect(m.constructionTime).toBeCloseTo(1.05, 9);
+    // depth-2 = parallelBuildCapAdd grants +1 concurrent slot
+    expect(m.parallelBuildBonus).toBe(1);
+    // No collateral on other axes.
+    expect(m.maintenanceThreshold).toBe(1);
     expect(m.recipeRate.extraction).toBe(1);
     expect(m.storageCap).toBe(1);
     expect(m.powerProduction).toBe(1);

@@ -26,6 +26,7 @@
 
 import { checkGates, computeBuffStack } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
+import { isOperational, nextConstructionCompletionMs, tickConstruction } from './construction.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
   BUILDING_DEFS,
@@ -454,8 +455,11 @@ export function computeRates(
     terrainAt,
   } = ctx ?? {};
   // Filter out invalid buildings once so they don't participate in heat,
-  // buffs, spaceport checks, or power balance.
-  const validBuildings = state.buildings.filter((b) => !b.invalid);
+  // buffs, spaceport checks, or power balance. Under-construction buildings
+  // (constructionRemainingMs > 0) are ALSO filtered out — they consume
+  // neither power nor recipe inputs, contribute zero output, and are
+  // invisible to adjacency-buff scans until they finish.
+  const validBuildings = state.buildings.filter((b) => !b.invalid && isOperational(b));
   // §2.7 day-night cycle. `nowMs` defaults to `state.lastTick` so existing
   // callers (and tests) that don't pass an explicit time see the multiplier
   // for the state's own clock. The integrator in `advanceIsland` passes the
@@ -953,6 +957,13 @@ export function findNextCapEvent(
     const eventMs = tMs + (boundary - operating);
     if (eventMs > tMs && eventMs < best) best = eventMs;
   }
+  // §9.3 Robotics: under-construction completion events. The integrator
+  // must split a segment at the moment a building flips operational so the
+  // post-completion segment integrates with the newly-active production.
+  const constructionEvent = nextConstructionCompletionMs(state.buildings, tMs);
+  if (constructionEvent !== null && constructionEvent > tMs && constructionEvent < best) {
+    best = constructionEvent;
+  }
   // Guard against floating-point fuzz: if best is microscopically below tMs
   // (e.g. -1e-12), clamp to tMs so the integration progresses one event at
   // a time without looping.
@@ -1253,7 +1264,16 @@ export function advanceIsland(
       // constant-rate invariant.
       const dtMs = segEndMs - t;
       for (const b of state.buildings) {
-        accrueOperatingTime(b, dtMs);
+        // §9.3 construction: tick down remaining time; operating-time
+        // only accrues once the build is complete (the spec's "Idle
+        // buildings ... accrue maintenance time" intent covers placed
+        // buildings, not still-under-construction shells).
+        const wasUnderConstruction = (b.constructionRemainingMs ?? 0) > 0;
+        if (wasUnderConstruction) {
+          tickConstruction(b, dtMs);
+        } else {
+          accrueOperatingTime(b, dtMs);
+        }
       }
     }
     // Advance t. If no progress was made (dt = 0 and segEnd === t) but we
