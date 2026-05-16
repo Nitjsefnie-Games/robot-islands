@@ -258,7 +258,7 @@ export type ResourceId =
   | 'circuit_board'
   | 'processor'
   | 'computing_module'
-  // §13.4 endgame artifact — victory condition resource. No producer yet.
+  // §13.4 first victory artifact — produced by `genesis_forge` (24h cycle).
   | 'genesis_cell'
   // Phase 11 — T4 endgame (Task 11.1)
   | 'time_crystal'
@@ -1935,6 +1935,18 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 7200,
     inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5, computing_module: 2 },
     outputs: { ascendant_core: 1 },
+    category: 'manufacturing',
+  },
+
+  // §13.4 Genesis Cell — first §13.4 victory artifact. Spec literal:
+  //   4 reality_anchor + 1 zero_point_flux + 2 causal_regulator
+  //   + 1 memetic_core + 24h cycle → 1 genesis_cell
+  // 86400 sec = 24h is the longest cycle in the catalog; lifts the artifact
+  // out of the "stack-and-batch" loop into a one-shot achievement build.
+  genesis_forge: {
+    cycleSec: 86400,
+    inputs: { reality_anchor: 4, zero_point_flux: 1, causal_regulator: 2, memetic_core: 1 },
+    outputs: { genesis_cell: 1 },
     category: 'manufacturing',
   },
 
