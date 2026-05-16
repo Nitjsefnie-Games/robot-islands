@@ -234,10 +234,11 @@ export type ResourceId =
   //
   //   ascendant_core           — T5/T6 transition artifact per §13.4 /
   //                              §14.1. Crafted at `ascendant_assembly`
-  //                              (T5 building); producing one flips the
-  //                              §14.1 ascendantCoreCrafted gate. Auto-flip
-  //                              on first production STILL-DEFERRED — current
-  //                              step seeds the flag manually on forest-ne.
+  //                              (T5 building); first local production
+  //                              auto-flips `state.ascendantCoreCrafted`
+  //                              (see economy.ts:advanceIsland — the §13
+  //                              auto-flip block fires alongside the AI-Core
+  //                              flip). The T6 launch UI gates on the flag.
   //   antimatter_propellant    — T6 launch fuel per §11.7 / §14.10. Crafted
   //                              at `antimatter_refinery` (T6).
   //   scanner_sat              — §14.3 discovery/weather satellite payload.
@@ -1929,8 +1930,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // §13.4 / §14.1: Ascendant Assembly produces the Ascendant Core (T5→T6
   // bridge artifact). Cycle is 2 hours of real time — the artifact's
-  // weight-and-cost framing makes it a meaningful gate. Auto-flip of
-  // `ascendantCoreCrafted` on first production STILL-DEFERRED.
+  // weight-and-cost framing makes it a meaningful gate. First local
+  // production auto-flips `state.ascendantCoreCrafted` (economy.ts §13
+  // auto-flip block), opening the T6 launch UI.
   ascendant_assembly: {
     cycleSec: 7200,
     inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5, computing_module: 2 },
