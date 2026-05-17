@@ -37,14 +37,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   least a deterministic spread per sat).
   *(Flagged by Agent D.)*
 
-- **§14.6 / §14.12 Repair Drone wipes Resilience-skill fuel reserve.**
-  `src/orbital.ts:578` `sat.fuel = 100` on successful repair, overwriting
-  the `100 * skill.satFuelReserve` baked at launch (`:253`). Players
-  investing in the Orbital → Resilience sub-path lose the bonus after
-  every repair. Should re-multiply by the owning island's current
-  `satFuelReserve` (or store the launch-time reserve on the sat).
-  *(Flagged by Agent D.)*
-
 - **§7.12 `reality_forge` recipe diverges from spec by ~50% of inputs
   and 1/18 of cycle time.** `src/recipes.ts:1337-1342` ships `2
   exotic_alloy + 1 ai_core + 1 casimir_energy` / 4800s; spec literal is
