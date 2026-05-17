@@ -229,8 +229,11 @@ export type ResourceId =
   // Spaceport + §14.10 satellite-assembly defs touch. §14.10 placeholder
   // recipes additionally reference Aluminum, Magnet, Optical Fiber,
   // Spacetime fragment, Memetic Core, Repair Pack, Phase Converter — those
-  // beyond Phase Converter are now in the catalog (step 18/19). The live
-  // launch mechanics (§14.2-14.8 / §14.12) remain STILL-DEFERRED.
+  // beyond Phase Converter are now in the catalog (step 18/19). Most live
+  // launch mechanics shipped (tickSatMovement, tickCommPackets, tickDebris,
+  // tickScannerDiscovery, tickRepairDrones, launchSatellite); §14 Spaceport
+  // tier I→II→III upgrade and §14.7 pad-explosion-tier-reset are the
+  // remaining STILL-DEFERRED bits.
   //
   //   ascendant_core           — T5/T6 transition artifact per §13.4 /
   //                              §14.1. Crafted at `ascendant_assembly`

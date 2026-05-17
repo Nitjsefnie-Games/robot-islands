@@ -5,18 +5,15 @@
 // and draws; the main ticker calls `tickRoutes` once per frame to deliver
 // arrivals and dispatch the next batch.
 //
-// Step-7 scope notes (STILL-DEFERRED bits flagged inline):
-//   - T1 cargo only. T2 drone cargo, T3 airship, T4 teleporter, T5 spacetime
-//     anchor all share this `Route` shape but their tier-specific capacities
-//     and transit times are STILL-DEFERRED.
+// Scope notes:
+//   - All route tiers (T1 cargo, T2 drone cargo, T3 airship, T4 teleporter,
+//     T5 spacetime anchor) share this `Route` shape and have per-tier capacity
+//     and transit-time constants wired.
 //   - Weather modulation of capacity and in-flight loss implemented per §2.6.
-//   - Multi-route contention on the same source resource IS implemented per
+//   - Multi-route contention on the same source resource is implemented per
 //     §15.4 (proportional distribution by capacity).
-//   - Funneling tier-cap check uses `state.level < FUNNELING_TIER_CAP` as a
-//     placeholder. The proper §9.2 tier-breakpoint mapping (T3 ≈ level 50)
-//     is STILL-DEFERRED to step 9 alongside tier-gating in general; `level < 3`
-//     here keeps the step-7 demo's funnel-stops-at-T3 behaviour qualitatively
-//     correct.
+//   - Tier-gating on route-class placement runs through `buildingUnlocked` at
+//     validate-placement time like every other tiered building.
 
 import { cap, inv, type IslandState } from './economy.js';
 import { makeSeededRng } from './rng.js';
