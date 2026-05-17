@@ -33,9 +33,8 @@ import type { EndgameState, VictoryCondition } from './endgame.js';
 import { regenerateTerrain, type TerrainKind, type Tile } from './island.js';
 import {
   computeIslandTiles,
+  islandInscribedAny,
   renderIslandTiles,
-  tileInscribedInEllipse,
-  tileInscribedInOffsetEllipse,
   TILE_PX,
 } from './island.js';
 import { footprintTiles } from './shape-mask.js';
@@ -210,24 +209,42 @@ export function islandConstituents(spec: IslandSpec): ConstituentEllipse[] {
   return out;
 }
 
-/** True iff the island-local tile (x, y) is fully inscribed in ANY constituent
- *  ellipse of `spec` — the primary at (0, 0) plus every `extraEllipses` entry.
- *  Closes over `spec` BY REFERENCE so §3.6 merges that mutate `extraEllipses`
- *  after construction are observed live; capturing radii at closure-build time
- *  would silently miss extra-ellipse tiles.
+/**
+ * Build an `IslandSpec` from a base lacking `terrainAt` and attach the
+ * predicate-aware `terrainAt` closure expected by `renderIsland` and the
+ * §8.1 procedural-extractor placement code.
  *
- *  Used by `biomes.ts terrainAtForBiome` to demote boundary-clipped 3×3 cluster
- *  cells to defaultTerrain — see the cluster-cell invariant there. */
-export function islandInscribedAny(spec: IslandSpec, x: number, y: number): boolean {
-  if (tileInscribedInEllipse(x, y, spec.majorRadius, spec.minorRadius)) return true;
-  if (spec.extraEllipses) {
-    for (const e of spec.extraEllipses) {
-      if (tileInscribedInOffsetEllipse(x, y, e.major, e.minor, e.offsetX, e.offsetY)) {
-        return true;
-      }
-    }
-  }
-  return false;
+ * The closure captures the returned `spec` BY REFERENCE — not the radii or
+ * `extraEllipses` literals — so any §3.4 expansion that mutates
+ * `majorRadius` / `minorRadius` and any §3.6 merge that mutates
+ * `extraEllipses` is observed live on the very next `terrainAt(x, y)` call.
+ * Capturing the geometry at closure-build time would silently miss
+ * extra-ellipse tiles and reintroduce the boundary-fragment defect there.
+ *
+ * Centralises the readonly-widening cast that would otherwise be duplicated
+ * at every spec-construction site (procedural world-gen, persistence
+ * rehydration, artificial-island construction, demo fixtures). Any future
+ * refactor of the closure contract — predicate signature, what's captured,
+ * how the cast is expressed — touches one place.
+ *
+ * WARNING for future maintainers: do NOT switch the body to
+ * `{ ...spec, terrainAt: ... }` or otherwise rebind `spec` to a snapshot
+ * before attaching the closure. The pinned by-reference invariant is
+ * asserted by a dedicated test in `biomes.test.ts`; that test will fail
+ * loudly if the reference is lost.
+ */
+export function attachTerrainAt<B extends Omit<IslandSpec, 'terrainAt'>>(base: B): IslandSpec {
+  // Shallow-spread so we own the returned spec and never mutate the caller's
+  // `base` literal (callers occasionally build the base once and re-use it).
+  const spec = { ...base } as IslandSpec;
+  (spec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt = (
+    x,
+    y,
+  ) =>
+    terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
+      islandInscribedAny(spec, px, py),
+    );
+  return spec;
 }
 
 /** Convenience: world-tile coords → world-pixel coords. */
@@ -318,6 +335,10 @@ export function useRealityForge(
   // Regenerate terrain. The inscription predicate references `spec` by
   // identity so a future §3.6 merge that mutates `extraEllipses` is
   // observed by the next terrainAt call (no closure-capture of radii).
+  // Doesn't go through `attachTerrainAt` because `regenerateTerrain` already
+  // takes a narrowed `{ biome; terrainAt? }` parameter — no readonly-widening
+  // cast is needed at this site, so the shared helper would be pure
+  // ceremony here.
   regenerateTerrain(spec, targetBiome, (x, y) =>
     terrainAtForBiome(targetBiome, spec.id, x, y, (px, py) =>
       islandInscribedAny(spec, px, py),
@@ -603,29 +624,12 @@ function makeHomeIslandSpec(): IslandSpec {
  *   - hidden-w (-50, 12) !discovered                          → 'unknown'  (within reach: 50 tiles SW)
  *   - hidden-s (35, 70) !discovered                           → 'unknown'  (within reach: ~78 tiles south)
  */
-// Helper for the fixture below: build a spec, then attach a terrainAt closure
-// that captures the spec BY REFERENCE so the inscription predicate observes
-// any future `extraEllipses` mutations (§3.6 merges) live. Capturing radii
-// literals at closure-build time would silently miss extra-ellipse tiles and
-// reintroduce the boundary-fragment defect there.
-//
-// `terrainAt` is `readonly` on the interface (rebuilt via `regenerateTerrain`
-// at runtime); the local cast below assigns the closure once at construction
-// without widening the public surface.
-function makeFixtureSpec(base: Omit<IslandSpec, 'terrainAt'>): IslandSpec {
-  const spec = { ...base } as IslandSpec;
-  (spec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt = (
-    x,
-    y,
-  ) =>
-    terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
-      islandInscribedAny(spec, px, py),
-    );
-  return spec;
-}
+// Each fixture entry flows through `attachTerrainAt` so the inscription
+// predicate captures the spec BY REFERENCE — see the helper's docblock
+// (above) for the by-reference invariant and the test pinning it.
 
 export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
-  makeFixtureSpec({
+  attachTerrainAt({
     id: 'home',
     name: 'home',
     biome: 'plains',
@@ -638,7 +642,7 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     buildings: [],
     modifiers: ['stable'],
   }),
-  makeFixtureSpec({
+  attachTerrainAt({
     id: 'forest-ne',
     name: 'forest-ne',
     biome: 'forest',
@@ -656,7 +660,7 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     ],
     modifiers: ['fertile'],
   }),
-  makeFixtureSpec({
+  attachTerrainAt({
     id: 'desert-far',
     name: 'desert-far',
     biome: 'desert',
@@ -669,7 +673,7 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     buildings: [],
     modifiers: ['mineral_rich'],
   }),
-  makeFixtureSpec({
+  attachTerrainAt({
     id: 'coast-unknown',
     name: 'coast-unknown',
     biome: 'coast',
@@ -682,7 +686,7 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     buildings: [],
     modifiers: [],
   }),
-  makeFixtureSpec({
+  attachTerrainAt({
     id: 'hidden-w',
     name: 'hidden-w',
     biome: 'plains',
@@ -695,7 +699,7 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     buildings: [],
     modifiers: [],
   }),
-  makeFixtureSpec({
+  attachTerrainAt({
     id: 'hidden-s',
     name: 'hidden-s',
     biome: 'forest',

@@ -24,10 +24,9 @@
 //
 // Pure module: no DOM, no PixiJS, no Math.random.
 
-import { BIOME_DEFS, rollModifiers, terrainAtForBiome } from './biomes.js';
-import type { TerrainKind } from './island.js';
+import { BIOME_DEFS, rollModifiers } from './biomes.js';
 import { makeSeededRng } from './rng.js';
-import { islandInscribedAny, type Biome, type IslandSpec } from './world.js';
+import { attachTerrainAt, type Biome, type IslandSpec } from './world.js';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -119,7 +118,11 @@ export function generateWorld(opts: GenOptions): IslandSpec[] {
       // the rng we just threaded through.
       const modifiers = rollModifiers(opts.seed, biome, rng);
 
-      const spec: IslandSpec = {
+      // Build via the shared `attachTerrainAt` helper — the inscription
+      // predicate captures `spec` by reference so a future §3.6 merge that
+      // mutates `extraEllipses` is observed live (no closure-capture of
+      // radii). The readonly-widening cast lives once, in the helper.
+      const spec: IslandSpec = attachTerrainAt({
         id,
         name: id,
         biome,
@@ -131,15 +134,7 @@ export function generateWorld(opts: GenOptions): IslandSpec[] {
         discovered: false,
         buildings: [],
         modifiers,
-      };
-      // Attach terrainAt AFTER construction so the inscription predicate
-      // captures `spec` by reference — a future §3.6 merge that mutates
-      // `extraEllipses` is observed live (no closure-capture of radii).
-      (spec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt =
-        (x, y) =>
-          terrainAtForBiome(biome, id, x, y, (px, py) =>
-            islandInscribedAny(spec, px, py),
-          );
+      });
       out.push(spec);
       placed.push(spec);
     }

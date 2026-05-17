@@ -175,6 +175,46 @@ export function tileInscribedInOffsetEllipse(
   return true;
 }
 
+/** True iff the island-local tile (x, y) is fully inscribed in ANY constituent
+ *  ellipse of `spec` — the primary at (0, 0) plus every `extraEllipses` entry.
+ *  Pure ellipse geometry; lives here (rather than `world.ts`) so the pure
+ *  `biomes.ts` module — which consumes this for the cluster-cell inscription
+ *  predicate — doesn't have to import the render-tainted `world.ts` to reach
+ *  it. Takes a structural shape (not the full `IslandSpec` type) so this
+ *  module stays free of a type edge back into `world.ts`; any object carrying
+ *  `majorRadius`, `minorRadius`, and (optionally) `extraEllipses` is accepted.
+ *
+ *  Used by `biomes.ts terrainAtForBiome` to demote boundary-clipped 3×3
+ *  cluster cells to defaultTerrain — see the cluster-cell invariant there.
+ *  By convention callers wrap this in a closure that captures the spec BY
+ *  REFERENCE so §3.6 merges that mutate `extraEllipses` after construction
+ *  are observed live; capturing radii at closure-build time would silently
+ *  miss extra-ellipse tiles. (See `attachTerrainAt` in `world.ts`.) */
+export function islandInscribedAny(
+  spec: {
+    readonly majorRadius: number;
+    readonly minorRadius: number;
+    readonly extraEllipses?: ReadonlyArray<{
+      readonly major: number;
+      readonly minor: number;
+      readonly offsetX: number;
+      readonly offsetY: number;
+    }>;
+  },
+  x: number,
+  y: number,
+): boolean {
+  if (tileInscribedInEllipse(x, y, spec.majorRadius, spec.minorRadius)) return true;
+  if (spec.extraEllipses) {
+    for (const e of spec.extraEllipses) {
+      if (tileInscribedInOffsetEllipse(x, y, e.major, e.minor, e.offsetX, e.offsetY)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Compute the set of tiles belonging to a circular/elliptical island centered
  * at the world origin. Result is in scan order (ascending y, then ascending x).

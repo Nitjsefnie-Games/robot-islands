@@ -548,7 +548,7 @@ const CLUSTER_TILES = 3;
  * hugging the island silhouette.
  *
  * `inscribed(px, py)` is the caller's island geometry predicate — typically
- * `(px, py) => islandInscribedAny(spec, px, py)` from `world.ts`. The
+ * `(px, py) => islandInscribedAny(spec, px, py)` from `island.ts`. The
  * predicate MUST cover every constituent ellipse on the spec; a primary-
  * ellipse-only predicate would miss §3.6-merged extras and reintroduce the
  * boundary-fragment defect there.
