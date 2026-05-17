@@ -369,8 +369,12 @@ describe('terrainAtForBiome', () => {
     // entries. We only assert that each new kind shows up SOMEWHERE
     // in its expected biome, not at a specific coordinate.
     const findAny = (biome: Biome, kind: TerrainKind) => {
-      for (let y = -12; y <= 12; y++) {
-        for (let x = -12; x <= 12; x++) {
+      // Wider scan than tile-density alone would need — clustering means
+      // the effective number of independent rolls is (range/CLUSTER_TILES)²,
+      // so low-weight rares (helium_vent is 1/16 of volcanic rares) need a
+      // larger window to show up reliably.
+      for (let y = -30; y <= 30; y++) {
+        for (let x = -30; x <= 30; x++) {
           if (terrainAtForBiome(biome, `scan-${kind}`, x, y) === kind) return true;
         }
       }
@@ -382,6 +386,30 @@ describe('terrainAtForBiome', () => {
     expect(findAny('volcanic', 'gas_seep')).toBe(true);
     expect(findAny('volcanic', 'helium_vent')).toBe(true);
     expect(findAny('arctic', 'helium_vent')).toBe(true);
+  });
+
+  it('produces axis-aligned rare clusters that fit 2×2 extractors', () => {
+    // Sweep a procedural plains island and assert at least one 2×2 anchor
+    // of some rare terrain exists — 2×2 extractor placement must be reachable
+    // on procedural islands. Sample a few island ids so a single unlucky
+    // seed can't fail the test.
+    for (const id of ['plains-A', 'plains-B', 'plains-C']) {
+      let found = false;
+      for (let y = -14; y < 14 && !found; y++) {
+        for (let x = -14; x < 14 && !found; x++) {
+          const t = terrainAtForBiome('plains', id, x, y);
+          if (t === 'grass') continue;
+          if (
+            terrainAtForBiome('plains', id, x + 1, y) === t &&
+            terrainAtForBiome('plains', id, x, y + 1) === t &&
+            terrainAtForBiome('plains', id, x + 1, y + 1) === t
+          ) {
+            found = true;
+          }
+        }
+      }
+      expect(found, `${id} should have at least one 2×2 rare cluster`).toBe(true);
+    }
   });
 });
 

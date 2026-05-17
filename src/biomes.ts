@@ -523,6 +523,12 @@ export function rollModifiersArtificial(
   return result.filter((id) => !MODIFIER_DEFS[id].naturalOnly);
 }
 
+// Edge length (in tiles) of the axis-aligned cluster cell. A single hash roll
+// per cell paints every tile in the cell with the same rare-or-default
+// terrain, so 2×2 extractors fit anywhere inside a rare cell (4 anchors) and
+// 3×3 drilling_rig fits exactly when a cell lands fully inscribed.
+const CLUSTER_TILES = 3;
+
 export function terrainAtForBiome(
   biome: Biome,
   islandId: string,
@@ -534,9 +540,14 @@ export function terrainAtForBiome(
     return defaultTerrainAt(x, y);
   }
   const def = BIOME_DEFS[biome];
-  const r = tileHash01(islandId, x, y);
-  // ~12% of tiles get a rare type. The default terrain dominates so the
-  // biome's "look" is unmistakable at a glance.
+  // Hash on the cluster-cell coords (Math.floor — NOT trunc — so negative
+  // tiles cluster correctly: floor(-2/3) === -1 vs trunc(-2/3) === 0).
+  const cellX = Math.floor(x / CLUSTER_TILES);
+  const cellY = Math.floor(y / CLUSTER_TILES);
+  const r = tileHash01(islandId, cellX, cellY);
+  // ~12% of cells get a rare type. Total rare-tile share is unchanged
+  // (12% of cells × CLUSTER_TILES² tiles/cell ÷ CLUSTER_TILES² tiles/cell).
+  // The default terrain dominates so the biome's "look" is unmistakable.
   const RARE_DENSITY = 0.12;
   if (r < RARE_DENSITY && def.rareTerrain.length > 0) {
     // Sample a rare from the rareTerrain list deterministically. Repeated
