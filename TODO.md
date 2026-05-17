@@ -118,9 +118,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   continuous trickle (mathematically equivalent over time but loses the
   "you got lucky" flavor).
   Files: `biomes.ts:210`, `skilltree.ts` (mining.3 / forestry.3).
-- **Wind power +50% on High Wind modifier** — variance machinery
-  shipped, the +50% wind-power side is deferred.
-  File: `biomes.ts:174`.
 - **§5.2 high-emission Exhaust Scrubber adjacency** — Exhaust Scrubber
   exists as a catalog row; its adjacency requirement for high-emission
   buildings isn't wired.

@@ -705,6 +705,47 @@ describe('power (§5.1)', () => {
     const cgRate = byBuilding.find((r) => r.building === COAL_GEN)?.effectiveRate;
     expect(cgRate).toBeCloseTo(0.2, 9); // 1 cycle / 5s
   });
+
+  it('§3.5 high_wind: Wind Turbine produces 40W baseline, 60W on a high_wind island', () => {
+    // wind_turbine def declares power: { produces: 40, kind: 'wind' }.
+    // requiredTile: ['water'] is a placement gate, not a runtime one — the
+    // simulated state can stand a `wind_turbine` building at (0,0) without
+    // a real terrain map and computeRates still sums its wattage.
+    const WIND_TURBINE: PlacedBuilding = { id: 'b-wind', defId: 'wind_turbine', x: 0, y: 0 };
+    const baselineState = makeState({
+      buildings: [WIND_TURBINE],
+      inventory: blankInventory(),
+    });
+    const { power: baselinePower } = computeRates(baselineState);
+    expect(baselinePower.produced).toBe(40);
+
+    const highWindState = makeState({
+      buildings: [WIND_TURBINE],
+      inventory: blankInventory(),
+    });
+    const { power: highWindPower } = computeRates(highWindState, {
+      modifierMul: effectiveModifierMultipliers(['high_wind']),
+    });
+    expect(highWindPower.produced).toBeCloseTo(60, 9); // 40 × 1.5
+  });
+
+  it('§3.5 high_wind does NOT boost non-wind producers (Solar, Coal Gen unchanged)', () => {
+    // The wind multiplier is keyed on power.kind === 'wind'. Solar (kind=undefined,
+    // solar=true) and Coal Gen (kind=undefined) should be unaffected even when
+    // the modifier is active.
+    const state = makeState({
+      buildings: [SOLAR, COAL_GEN],
+      inventory: { ...blankInventory(), coal: 50 },
+    });
+    const { power } = computeRates(state, {
+      modifierMul: effectiveModifierMultipliers(['high_wind']),
+      // Pin the world clock to a daytime tick so Solar's day/night factor is 1.
+      // solarMultiplier is computed off state.lastTick (= 0) when nowMs is
+      // unset; t=0 lands at start-of-Day per §2.7, so Solar produces full 50W.
+    });
+    // Solar 50W + Coal Gen 100W = 150W — same as the identity-modifier run.
+    expect(power.produced).toBe(150);
+  });
 });
 
 describe('skill-tree integration (§9.3)', () => {

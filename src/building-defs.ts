@@ -464,11 +464,18 @@ export interface BuildingDef {
    *  `solar: true` marks the producer as sun-driven — its `produces`
    *  output is multiplied by the §2.7 day-night `solarMultiplier` at
    *  the current world tick (Day 1.0, Dawn/Dusk 0.5, Night 0.0). Only
-   *  applies to the production side; consumers ignore the flag. */
+   *  applies to the production side; consumers ignore the flag.
+   *  `kind: 'wind'` marks the producer as wind-driven — its `produces`
+   *  output is multiplied by `ModifierMultipliers.windPowerMul`
+   *  (1.5× on `high_wind` islands per §3.5, 1.0× otherwise). Single
+   *  literal for now; generalises to `'wind' | 'solar' | …` later
+   *  (`solar` keeps its existing boolean flag for back-compat with the
+   *  §2.7 day-night multiplier wire). */
   readonly power?: {
     readonly produces?: number;
     readonly consumes?: number;
     readonly solar?: boolean;
+    readonly kind?: 'wind';
   };
   /** §15.1 / §9.5 biome restriction for biome-locked uniques (T4). Undefined
    *  means "any biome". A non-empty list restricts placement to natural
@@ -758,7 +765,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.single,
     fill: 0xc0c8d0, // pale steel-blue
     stroke: 0x404850,
-    power: { produces: 40 },
+    power: { produces: 40, kind: 'wind' },
     requiredTile: ['water'],
     placementCost: { steel: 30, wood: 10 },
     glyph: '✦',

@@ -778,7 +778,11 @@ export function computeRates(
     // Non-solar producers (Coal Gen, Biomass, Fusion Core, Casimir Tap) are
     // unaffected — their `solar` flag is undefined / false.
     const solarFactor = def.power?.solar === true ? solarMul : 1;
-    powerProduced += producesBase * solarFactor * skillMul.powerProduction;
+    // §3.5 High Wind: wind-tagged producers (`power.kind === 'wind'`,
+    // currently only `wind_turbine`) get +50% wattage on `high_wind`
+    // islands. Non-wind producers ignore the multiplier (defaults to 1×).
+    const windFactor = def.power?.kind === 'wind' ? modifierMul.windPowerMul : 1;
+    powerProduced += producesBase * solarFactor * windFactor * skillMul.powerProduction;
     // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
     // so we divide. Default 1.0 leaves draw untouched.
     powerConsumed += (def.power?.consumes ?? 0) / skillMul.powerConsumption;

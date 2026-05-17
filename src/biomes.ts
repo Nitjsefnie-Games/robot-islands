@@ -13,7 +13,8 @@
 //   - cursed_storms     → -10% on ALL recipe rates (global multiplier)
 //   - stable            → no-op (1.0); tracked so future event systems know to
 //                         skip negative rolls on this island
-//   - high_wind         → outputVariance = true (±20% variance wired)
+//   - high_wind         → outputVariance = true (±20% variance wired),
+//                         windPowerMul = 1.5 (wind producers +50% wired)
 //   - geothermal_active → free heat to all requiresHeat buildings (heat.ts)
 //   - aetheric_anomaly  → T5 raw extraction +50% rate (economy.ts)
 //   - frozen_core       → cryo recipes 2× rate (economy.ts)
@@ -171,7 +172,7 @@ export const MODIFIER_DEFS: Readonly<Record<ModifierId, ModifierDef>> = {
     description: 'Wind power +50%, but all output has ±20% random variance.',
     weight: 10,
     biomeRestriction: [],
-    placeholder: false, // Variance machinery wired; wind-power +50% STILL-DEFERRED.
+    placeholder: false, // Variance + wind-power +50% both wired (see economy.ts windPowerMul site).
     category: 'warning',
   },
   geothermal_active: {
@@ -279,12 +280,17 @@ export interface ModifierMultipliers {
   readonly t5ExtractionRateMul: number;
   /** §3.5 Frozen Core: 2× cryo recipe rate. */
   readonly cryoRecipeRateMul: number;
+  /** §3.5 High Wind: +50% wattage from wind-tagged power producers
+   *  (`power.kind === 'wind'`, currently only `wind_turbine`). 1.0 when
+   *  the modifier is absent. Applied at the producer site in `computeRates`;
+   *  non-wind producers are unaffected. */
+  readonly windPowerMul: number;
 }
 
 function blankModifierMultipliers(): ModifierMultipliers {
   const recipeRateByCategory = {} as Record<RecipeCategory, number>;
   for (const c of ALL_RECIPE_CATEGORIES) recipeRateByCategory[c] = 1;
-  return { globalRecipeRate: 1, recipeRateByCategory, outputVariance: false, t5ExtractionRateMul: 1, cryoRecipeRateMul: 1 };
+  return { globalRecipeRate: 1, recipeRateByCategory, outputVariance: false, t5ExtractionRateMul: 1, cryoRecipeRateMul: 1, windPowerMul: 1 };
 }
 
 /** Identity bundle, exported so callers (`computeRates`, tests) have a
@@ -301,7 +307,10 @@ export const IDENTITY_MODIFIER_MULTIPLIERS: ModifierMultipliers = blankModifierM
  *                       (composes with mineral_rich; both target extraction)
  *   - cursed_storms   → globalRecipeRate × 0.90
  *   - stable          → no-op (recorded for future event-system gates)
- *   - high_wind       → outputVariance = true
+ *   - high_wind       → outputVariance = true, windPowerMul × 1.5
+ *                       (the +50% applies to `power.kind === 'wind'`
+ *                       producers, currently only `wind_turbine`; the
+ *                       variance applies to all recipe outputs)
  *   - geothermal_active → no numeric multiplier (structural; handled in heat.ts)
  *   - aetheric_anomaly  → t5ExtractionRateMul × 1.50
  *   - frozen_core       → cryoRecipeRateMul × 2.0
@@ -316,6 +325,7 @@ export function effectiveModifierMultipliers(
   let outputVariance = out.outputVariance;
   let t5ExtractionRateMul = out.t5ExtractionRateMul;
   let cryoRecipeRateMul = out.cryoRecipeRateMul;
+  let windPowerMul = out.windPowerMul;
   for (const id of modifiers) {
     switch (id) {
       case 'mineral_rich':
@@ -329,6 +339,7 @@ export function effectiveModifierMultipliers(
         break;
       case 'high_wind':
         outputVariance = true;
+        windPowerMul *= 1.5;
         break;
       case 'stable':
       case 'geothermal_active':
@@ -348,7 +359,7 @@ export function effectiveModifierMultipliers(
       }
     }
   }
-  return { globalRecipeRate: global, recipeRateByCategory: cat, outputVariance, t5ExtractionRateMul, cryoRecipeRateMul };
+  return { globalRecipeRate: global, recipeRateByCategory: cat, outputVariance, t5ExtractionRateMul, cryoRecipeRateMul, windPowerMul };
 }
 
 // ---------------------------------------------------------------------------
