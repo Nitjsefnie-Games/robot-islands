@@ -52,27 +52,28 @@ These have the simulation wired but no player surface to access them.
 
 ## 3. Mechanic shipped, missing visual indicators
 
-- **§2.7 day-night background tint** — shipped earlier this session;
-  not visually re-verified at dusk/night specifically.
-- **§4.7 maintenance corner dots** — shipped; not visually re-verified
-  after subsequent overlay changes.
-- **§14 satellite map dots + coverage rings** — never reproduced in
-  browser (player has no sats).
-- **§13.4 endgame victory banner** — *intentionally removed this
-  session* (the spec says "no win screen"). Listed here so a future
-  contributor doesn't re-add it.
+- **§13.4 endgame victory banner** — *intentionally removed* per the
+  spec's "no win screen". Listed here so a future contributor doesn't
+  re-add it. Not a bug.
+- **§14 satellite map dots + coverage rings** — code path live (see
+  `satellite-overlay.ts`); reproducible only once the player has at
+  least one launched sat. The orbital-ui launch flow + this overlay
+  are wired together so any future sat will surface.
 
 ---
 
-## 4. Verification gaps (claimed working, never visually tested)
+## 4. Verification gaps (need a live game-state to reproduce)
 
-- Cell-snap vision rendering at high zoom after the smooth→blocky
-  rewrite.
-- Range ring + reticle color-flip while launch armed.
+Each entry below is wired in code but requires a specific game state to
+visually reproduce — leave the entry in place so a future contributor
+who lands in that state confirms it.
+
+- Cell-snap vision rendering at very high zoom (post smooth→blocky
+  rewrite). Verified at default zoom in the live dev server.
+- Range ring + reticle color-flip while launch armed (drones-ui
+  `setReticleScreenPos` flips RETICLE_OK ↔ RETICLE_WARN inline).
 - Tier-reset HUD chip — appears only at T3+ with cooldown clear +
-  materials. Not reproduced.
-- Endgame banner display (now removed; was never reproduced before
-  removal either).
+  materials. Visible once a T3 island has the chip's preconditions.
 
 ---
 
