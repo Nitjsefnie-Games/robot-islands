@@ -12,6 +12,15 @@ export type ObjectiveId =
   | 'reach_level_5'
   | 'build_dronepad'
   | 'dispatch_first_drone'
+  // §4.7 maintenance materials — T1 set (lubricant + bolt). Slotted
+  // here so the player sees them once they have T2 access (Lubricant
+  // Refinery is T2) but before deeper T2 chains take over. T1
+  // buildings hit their 12h maintenance threshold around the same
+  // time the player is settling in to the T2 expansion.
+  | 'build_lubricant_refinery'
+  | 'produce_lubricant'
+  | 'produce_bolts'
+  | 'maintain_first_building'
   | 'build_diesel_chain'
   | 'settle_first_island'
   | 'build_antenna'
@@ -80,6 +89,26 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
     title: 'Explore',
     hint: 'Open Drone Ops (J), pick T1 drone (biofuel), arm launch, click a target tile.',
     check: (w) => w.drones.length > 0,
+  },
+  build_lubricant_refinery: {
+    title: 'Maintenance Materials',
+    hint: 'Resource buildings need maintenance materials after they have been running a while. Build a Lubricant Refinery (T2 chemistry) — lubricant is the base ingredient at every maintenance tier (§4.7).',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'lubricant_refinery')),
+  },
+  produce_lubricant: {
+    title: 'Stockpile Lubricant',
+    hint: 'Wait for your Lubricant Refinery to produce 3+ lubricant — enough for one T1 maintenance cycle (2 lubricant + 5 bolts).',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.lubricant ?? 0) >= 3),
+  },
+  produce_bolts: {
+    title: 'Stockpile Bolts',
+    hint: 'Your Workshop produces bolts (1 iron_ore + 1 coal → 1 bolt). Stockpile 5+ bolts — the second half of the T1 maintenance recipe.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.bolt ?? 0) >= 5),
+  },
+  maintain_first_building: {
+    title: 'First Maintenance Cycle',
+    hint: 'When a T1 building hits 12h operating time and you have the materials, auto-maintenance fires (consumes 2 lubricant + 5 bolts, restores 100% efficiency). Watch the inspector for the maintainedAt stamp to advance past placement.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.maintainedAt != null && b.placedAt != null && b.maintainedAt > b.placedAt)),
   },
   build_diesel_chain: {
     title: 'Diesel for T2 Drones',
