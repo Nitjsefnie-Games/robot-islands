@@ -16,7 +16,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 |---|---|---|
 | §2.1 Stratified placement | L | Deterministic seed-based placement, edge-buffer rule, geometric-decline density, hard cap. |
 | §2.2 Discovery via drones | L | T1 drone is unreachable per spec (Drone Pad is T2). T2 / T3 / T4 / T5 dispatch all live. |
-| §2.3 Settlement | P | Vehicle dispatch + arrival + Foundation Kit live. Per-tier vehicle speeds/loadouts use one base stat set. T5 Spacetime Anchor bypass not implemented. |
+| §2.3 Settlement | P | Vehicle dispatch + arrival + Foundation Kit live. Per-tier vehicle stats (speed, range, loadout, failureRate, weatherMul) live for both ships and helicopters via SHIP_STATS / HELICOPTER_STATS. T5 Spacetime Anchor bypass not implemented. |
 | §2.4 Inter-island routes | P | Cargo / drone / airship / teleporter / cable types live. Teleporter routes consume per-tile biofuel (in-game design addition so the Network skill has a primary scaling axis). Mass-driver, T5 spacetime-anchor routes not implemented. Priority-list dispatch live; drag-to-reorder UI live in the routes ledger. |
 | §2.5 Artificial islands | P | T3 founder live, caps at 8×8. T4 / T5 founder caps N. |
 | §2.6 Weather | L | Forecast model, biome modulation, vehicle destruction rolls, route capacity modulation, in-flight loss, satellite immunity all live. Map overlay snaps to vision cells. |
@@ -35,7 +35,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §5.3 Inter-island power | L | Cable routes, capacity in W; T5 spacetime distance-independence N (covered by route gap above). |
 | §6 Resource catalog | P | T0-T5 raws/intermediates/components mostly complete. Cold-Storage temperature-sensitive resources (cryogenic compound, liquid nitrogen) absent so Cold Storage has no consumers. A handful of T2-T3 minor intermediates (e.g. Bearing) absent — substitutions noted at use sites. |
 | §6.7 Byproducts + demolition | P | Scrap recovery on demolish live; Oxygen Converter consumes scrap. Spec's "2 Scrap = 1 Pig iron co-input at Steel Mill" N. |
-| §7 Recipe chains | P | Iron/steel, copper, aluminum, oil/petrochem, glass, electronics, construction, power components, mechanical, T4 endgame, T5 transcendent: all chains have producers. Several gaps: chlor-alkali downstream consumers, alumina/plastic precursor outputs from §8.2, silicon wafer intermediate. |
+| §7 Recipe chains | P | Iron/steel, copper, aluminum, oil/petrochem, glass, electronics, construction, power components, mechanical, T4 endgame, T5 transcendent: all chains have producers. Chlor-alkali downstream live (chlorine→Lubricant Refinery, sodium_hydroxide→Bauxite Refinery, chemical_reactor co-outputs both); a few minor T2-T3 intermediates remain absent (e.g. Bearing — substitutions noted at use sites). |
 | §8 Building catalog | P | All §8.1-§8.10 buildings exist as catalog rows with placement cost + power values. Some T5 (Reality Forge, Singularity Battery, Spacetime Resonator multi-output rotation, Universe Editor, Probability Engine, Genesis Chamber) ship as inert visual rows — see TODO §1. |
 | §9.1 Per-island levels | L | Polynomial-then-exponential XP curve. Skill-point grant: `floor(1.1^level)`. |
 | §9.2 Tier breakpoints | L | T1-T5 by level; T6 by Ascendant-Core-crafted + Spaceport. |
@@ -47,7 +47,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
 | §11 Drones | P | T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Tier picker lets a higher-tier island fly a lower-tier drone (design addition). Fuel auto-computed per click (replaces manual fuel-load slider). T1 drones unreachable per spec (Drone Pad is T2). |
 | §11.7 Fuel / range / dispatch | L | Per-tier fuel matching, range = fuel × efficiency, per-craft concurrency caps, lost-on-timeout failure model. |
-| §12 Settlement vehicles | P | Ship + helicopter dispatch + arrival + Foundation Kit live for T1-T4. Per-tier vehicle stats use one base set; T5 Spacetime Anchor bypass N. Auto-placed dock lands at island centre regardless of geometry. |
+| §12 Settlement vehicles | P | Ship + helicopter dispatch + arrival + Foundation Kit live for T1-T4. Per-tier vehicle stats per `SHIP_STATS` / `HELICOPTER_STATS`; T5 Spacetime Anchor bypass N. Auto-placed dock lands at island centre regardless of geometry. |
 | §13.1 T5 access | L | Level 50 + AI core flip. |
 | §13.2-13.3 T5 buildings + capabilities | P | Time Lock (banking + spending + acceleration queue) live. Path Drone Foundry live. Lattice Node + Omniscient Lattice activation + unified-inventory pool + cross-island adjacency live. Genesis Chamber, Universe Editor, Probability Engine, Singularity Battery all N. Eternal Servitor flag honoured but no creation recipe / UI. |
 | §13.4 Endgame goals | L | Three artifacts (Genesis Cell, Omniscient Lattice activation, Ascendant Core) all craftable / activatable. Per spec there is **no win screen** — the game continues indefinitely; no banner / popup / acknowledgement fires when artifacts complete. |

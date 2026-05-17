@@ -5,9 +5,9 @@
 // advance arrivals. Tests target this module directly.
 //
 // Scope notes:
-//   - Vehicle classes (Cargo Ship + Helicopter at T1/T2) share one base stat
-//     set; per-tier variants (Heavy Freighter, Industrial Carrier, VTOL
-//     Tilt-Rotor) with distinct range/speed/loadout are STILL-DEFERRED.
+//   - Per-tier variants live in SHIP_STATS / HELICOPTER_STATS — speed,
+//     tilesPerFuel, maxKits, failureRate, and weatherMultiplier all scale
+//     with the launching island's tier (§12.6).
 //   - §2.6 weather destruction implemented. Mechanical-failure rolls are
 //     implemented (§12.5). Every dispatched vehicle still arrives
 //     deterministically unless a roll fails at the expected-arrival tick.

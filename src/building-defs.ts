@@ -985,8 +985,14 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // Fusion Core to operate. Per §7.1 the coke-making chain is heat-driven
     // ("Coal → Coke (Coke Oven)") in addition to the §8.2 catalog tagging.
     requiresHeat: true,
-    // §4.5 gating adjacency demonstration: hard heat_source gate.
-    gates: [{ matchType: 'heat_source', hard: true }],
+    // §4.5 gating adjacency: hard heat_source gate, plus §8.7 soft
+    // exhaust-scrubber gate — this is one of the spec's "high-emission"
+    // buildings, so missing an adjacent Exhaust Scrubber drops output to
+    // 50% (still produces, but unclean operation costs throughput).
+    gates: [
+      { matchType: 'heat_source', hard: true },
+      { matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 },
+    ],
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
     glyph: '▲',
@@ -1539,9 +1545,12 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel: 50, gear: 10 },
     glyph: '⌇',
   },
-  // §8.7 T2 emissions: Exhaust Scrubber (1x1). Required for clean operation
-  // of high-emission buildings per §8.7. Adjacency wire-up is STILL-DEFERRED to
-  // the §4.5 gate-system extension; this def ships as a catalog row.
+  // §8.7 T2 emissions: Exhaust Scrubber (1x1). Required for clean
+  // operation of high-emission buildings. Consumer-side wiring lives on
+  // the §4.5 gate on each emission-heavy def — currently coke_oven,
+  // naphtha_cracker, lubricant_refinery, diesel_refinery — each a soft
+  // gate (`def_id: exhaust_scrubber`, `degradeMul: 0.5`) so missing
+  // adjacency halves output but doesn't stall.
   exhaust_scrubber: {
     id: 'exhaust_scrubber',
     displayName: 'Exhaust Scrubber',
@@ -2814,6 +2823,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6a4a20, // refinery brown
     stroke: 0x2a1a08,
     power: { consumes: 200 },
+    // §8.7: soft exhaust-scrubber gate (high-emission building).
+    gates: [{ matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 }],
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
     glyph: '◇',
@@ -2960,6 +2971,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a3018, // viscous-oil brown
     stroke: 0x1a1008,
     power: { consumes: 120 },
+    // §8.7: soft exhaust-scrubber gate (high-emission building).
+    gates: [{ matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 }],
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
     glyph: '◇',
@@ -2973,6 +2986,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x504030, // diesel-tan brown
     stroke: 0x201810,
     power: { consumes: 180 },
+    // §8.7: soft exhaust-scrubber gate (high-emission building).
+    gates: [{ matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 }],
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
     glyph: '◇',

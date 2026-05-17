@@ -1077,11 +1077,12 @@ describe('chemical_reactor (§8.2 / §7.5)', () => {
     expect(def.category).toBe('chemistry');
     expect(def.footprint).toEqual(SHAPES.square2);
   });
-  it('produces chlorine from salt + fresh_water (§7.5 electrolysis)', () => {
+  it('produces chlorine + sodium_hydroxide from salt + fresh_water (§7.5 electrolysis)', () => {
     const recipe = RECIPES.chemical_reactor!;
     expect(recipe).toBeDefined();
     expect(recipe.inputs).toEqual({ salt: 1, fresh_water: 2 });
-    expect(recipe.outputs).toEqual({ chlorine: 1 });
+    // Spec §7.5 calls for both co-products of the salt-electrolysis pathway.
+    expect(recipe.outputs).toEqual({ chlorine: 1, sodium_hydroxide: 1 });
     expect(recipe.category).toBe('chemistry');
   });
   it('unlocks at level 1 of T2 (uses standard tier-2 unlock per §9.2)', () => {
