@@ -58,7 +58,8 @@ import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { VictoryCondition } from './endgame.js';
 import { cumulativeSkillPointsForLevel, type NodeId, type SubPathId } from './skilltree.js';
-import { WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
+import { islandInscribedAny, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
+import type { TerrainKind } from './island.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
  *  intended migration entry point — `loadWorld` keys on this string, so a
@@ -335,42 +336,52 @@ export function deserializeWorld(
   // `placedAt` / `maintainedAt` land in the NEW session's perf-domain.
   // `operatingMs` is a DURATION — never perfShift it; it preserves literally.
   const perfShift = nowPerfMs - snapshot.savedAtPerf - deltaMs;
-  const islands: IslandSpec[] = snapshot.world.islands.map((s) => ({
-    ...s,
-    // Forward-compat backfill: a save written before the player-mutable
-    // display-name field existed has no `name`. Default to `id` so the
-    // legacy UX (id-as-display-name) is preserved verbatim. Same SCHEMA_VERSION
-    // — mirror the `ascendantCoreCrafted` / `lastResetAt` backfill pattern.
-    name:
-      typeof (s as { name?: unknown }).name === 'string'
-        ? (s as { name: string }).name
-        : s.id,
-    // Rehydrate the per-island terrainAt closure via the same factory
-    // `world.ts` uses for `DEMO_ISLANDS`. Artificial islands and demo
-    // islands flow through the same path because `terrainAtForBiome`
-    // routes on `id === 'home'` and otherwise on `biome`.
-    terrainAt: (x, y) => terrainAtForBiome(s.biome, s.id, x, y),
-    // The buildings array is mutable on the live spec, so we clone it.
-    // The serializer already deep-copied via JSON-equivalence in the IDB
-    // layer, but explicit cloning makes the in-memory round-trip path
-    // (tests) safe too. Each building gets its maintenance timestamps
-    // shifted into the new perf-clock domain (drone/route timestamp
-    // remap mirror).
-    buildings: rekeyCollidingBuildingIds(
-      s.buildings.map((b) => ({
-        ...b,
-        ...(b.placedAt !== undefined
-          ? { placedAt: b.placedAt + perfShift }
-          : {}),
-        ...(b.maintainedAt !== undefined
-          ? { maintainedAt: b.maintainedAt + perfShift }
-          : {}),
-        ...(b.toxicityExpiryMs !== undefined
-          ? { toxicityExpiryMs: b.toxicityExpiryMs + perfShift }
-          : {}),
-      })),
-    ),
-  }));
+  const islands: IslandSpec[] = snapshot.world.islands.map((s) => {
+    const spec: IslandSpec = {
+      ...s,
+      // Forward-compat backfill: a save written before the player-mutable
+      // display-name field existed has no `name`. Default to `id` so the
+      // legacy UX (id-as-display-name) is preserved verbatim. Same SCHEMA_VERSION
+      // — mirror the `ascendantCoreCrafted` / `lastResetAt` backfill pattern.
+      name:
+        typeof (s as { name?: unknown }).name === 'string'
+          ? (s as { name: string }).name
+          : s.id,
+      // The buildings array is mutable on the live spec, so we clone it.
+      // The serializer already deep-copied via JSON-equivalence in the IDB
+      // layer, but explicit cloning makes the in-memory round-trip path
+      // (tests) safe too. Each building gets its maintenance timestamps
+      // shifted into the new perf-clock domain (drone/route timestamp
+      // remap mirror).
+      buildings: rekeyCollidingBuildingIds(
+        s.buildings.map((b) => ({
+          ...b,
+          ...(b.placedAt !== undefined
+            ? { placedAt: b.placedAt + perfShift }
+            : {}),
+          ...(b.maintainedAt !== undefined
+            ? { maintainedAt: b.maintainedAt + perfShift }
+            : {}),
+          ...(b.toxicityExpiryMs !== undefined
+            ? { toxicityExpiryMs: b.toxicityExpiryMs + perfShift }
+            : {}),
+        })),
+      ),
+    };
+    // Rehydrate the per-island terrainAt closure. The inscription predicate
+    // closes over the rehydrated spec BY REFERENCE so any §3.6 extraEllipses
+    // (round-tripped via the `...s` spread above) and any future merge that
+    // mutates them are observed live — capturing radii at closure-build
+    // time would silently miss extra-ellipse tiles. terrainAtForBiome
+    // short-circuits on `id === 'home'` so the home spec is unaffected by
+    // the predicate.
+    (spec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt =
+      (x, y) =>
+        terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
+          islandInscribedAny(spec, px, py),
+        );
+    return spec;
+  });
 
   // Drone and route timestamps were minted in the SAVED session's
   // `performance.now()` domain (which is per-page-load and resets to ~0 on

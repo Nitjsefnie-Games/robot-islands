@@ -566,7 +566,7 @@ describe('useRealityForge', () => {
     const spec = makeSpec({
       id: 'test-island',
       biome: 'plains',
-      terrainAt: (x, y) => terrainAtForBiome('plains', 'test-island', x, y),
+      terrainAt: (x, y) => terrainAtForBiome('plains', 'test-island', x, y, () => true),
       modifiers: ['stable'],
     });
     const world = makeWorld(spec);

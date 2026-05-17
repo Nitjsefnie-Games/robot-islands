@@ -25,8 +25,9 @@
 // Pure module: no DOM, no PixiJS, no Math.random.
 
 import { BIOME_DEFS, rollModifiers, terrainAtForBiome } from './biomes.js';
+import type { TerrainKind } from './island.js';
 import { makeSeededRng } from './rng.js';
-import type { Biome, IslandSpec } from './world.js';
+import { islandInscribedAny, type Biome, type IslandSpec } from './world.js';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -129,9 +130,16 @@ export function generateWorld(opts: GenOptions): IslandSpec[] {
         populated: false,
         discovered: false,
         buildings: [],
-        terrainAt: (x, y) => terrainAtForBiome(biome, id, x, y),
         modifiers,
       };
+      // Attach terrainAt AFTER construction so the inscription predicate
+      // captures `spec` by reference — a future §3.6 merge that mutates
+      // `extraEllipses` is observed live (no closure-capture of radii).
+      (spec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt =
+        (x, y) =>
+          terrainAtForBiome(biome, id, x, y, (px, py) =>
+            islandInscribedAny(spec, px, py),
+          );
       out.push(spec);
       placed.push(spec);
     }

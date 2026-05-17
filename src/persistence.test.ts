@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { terrainAtForBiome } from './biomes.js';
+import { islandInscribedAny } from './world.js';
 import type { IslandState } from './economy.js';
 import {
   _resetConstructionCounter,
@@ -290,9 +291,12 @@ describe('serialize → JSON → deserialize round-trip', () => {
     for (const spec of restored.islands) {
       expect(typeof spec.terrainAt).toBe('function');
       // Sample a handful of tiles; the rehydrated closure should match
-      // the factory exactly (same biome, same id, same x/y).
+      // the factory exactly (same biome, same id, same x/y, same inscription
+      // predicate — bound to the live spec so §3.6 extraEllipses are seen).
       for (const [x, y] of [[0, 0], [1, 2], [-3, 4], [5, -5]] as Array<[number, number]>) {
-        const expected = terrainAtForBiome(spec.biome, spec.id, x, y);
+        const expected = terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
+          islandInscribedAny(spec, px, py),
+        );
         expect(spec.terrainAt!(x, y)).toBe(expected);
       }
     }
