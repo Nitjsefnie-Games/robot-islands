@@ -529,13 +529,39 @@ export function rollModifiersArtificial(
 // 3×3 drilling_rig fits exactly when a cell lands fully inscribed.
 const CLUSTER_TILES = 3;
 
+/**
+ * Compute terrain at island-local (x, y) for a biome. Pure function.
+ *
+ * Special case: `islandId === 'home'` short-circuits to the hand-placed
+ * `defaultTerrainAt` layout so the home island's seeded ore/coal/water
+ * clusters survive unchanged. Home callers may pass any `inscribed`
+ * predicate — the short-circuit fires before it's consulted. By convention
+ * pass `() => true` for home.
+ *
+ * Cluster-cell invariant (§8.1 procedural extractor placement): rare
+ * terrain is emitted only when ALL 9 tiles of the surrounding 3×3 cluster
+ * cell are inscribed in the island (via `inscribed`). A boundary-clipped
+ * cell — where the ellipse cuts through 1–8 of the 9 cell tiles — silently
+ * demotes to `def.defaultTerrain`. This keeps every emitted rare cluster
+ * full-3×3, guaranteeing both 2×2 extractors (4 anchor positions) and 3×3
+ * drilling_rig placement, and eliminates 1–3-tile rare-color fragments
+ * hugging the island silhouette.
+ *
+ * `inscribed(px, py)` is the caller's island geometry predicate — typically
+ * `(px, py) => islandInscribedAny(spec, px, py)` from `world.ts`. The
+ * predicate MUST cover every constituent ellipse on the spec; a primary-
+ * ellipse-only predicate would miss §3.6-merged extras and reintroduce the
+ * boundary-fragment defect there.
+ */
 export function terrainAtForBiome(
   biome: Biome,
   islandId: string,
   x: number,
   y: number,
+  inscribed: (px: number, py: number) => boolean,
 ): TerrainKind {
-  // Preserve home island's hand-placed layout exactly.
+  // Preserve home island's hand-placed layout exactly — `inscribed` is
+  // unused on this branch.
   if (islandId === 'home') {
     return defaultTerrainAt(x, y);
   }
@@ -545,11 +571,23 @@ export function terrainAtForBiome(
   const cellX = Math.floor(x / CLUSTER_TILES);
   const cellY = Math.floor(y / CLUSTER_TILES);
   const r = tileHash01(islandId, cellX, cellY);
-  // ~12% of cells get a rare type. Total rare-tile share is unchanged
-  // (12% of cells × CLUSTER_TILES² tiles/cell ÷ CLUSTER_TILES² tiles/cell).
-  // The default terrain dominates so the biome's "look" is unmistakable.
+  // ~12% of cells get a rare type. Total rare-tile share dips slightly below
+  // 12% on small islands (cluster cells that straddle the ellipse boundary
+  // get demoted to defaultTerrain). The default terrain dominates so the
+  // biome's "look" is unmistakable either way.
   const RARE_DENSITY = 0.12;
   if (r < RARE_DENSITY && def.rareTerrain.length > 0) {
+    // Cluster-cell invariant: demote to default unless ALL 9 tiles of the
+    // cluster cell are inscribed. The cell's island-local origin is
+    // (cellX * CLUSTER_TILES, cellY * CLUSTER_TILES) — the floor() above
+    // already aligned (x, y) to the cell grid.
+    const ox = cellX * CLUSTER_TILES;
+    const oy = cellY * CLUSTER_TILES;
+    for (let dy = 0; dy < CLUSTER_TILES; dy++) {
+      for (let dx = 0; dx < CLUSTER_TILES; dx++) {
+        if (!inscribed(ox + dx, oy + dy)) return def.defaultTerrain;
+      }
+    }
     // Sample a rare from the rareTerrain list deterministically. Repeated
     // entries in the list (Forest's two `tree`s) skew the distribution.
     const idx = Math.floor((r / RARE_DENSITY) * def.rareTerrain.length);

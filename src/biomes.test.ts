@@ -21,8 +21,16 @@ import {
   rollModifiers,
   terrainAtForBiome,
 } from './biomes.js';
-import { defaultTerrainAt, tileInscribedInEllipse, type TerrainKind } from './island.js';
+import { computeIslandTiles, defaultTerrainAt, tileInscribedInEllipse, type TerrainKind } from './island.js';
 import type { Biome } from './world.js';
+
+/** Most tests in this file don't care about the inscription predicate — they
+ *  just verify determinism, biome distinctness, etc. — so they pass this
+ *  permissive predicate that says every tile is inscribed (no cluster-cell
+ *  demotion). The dedicated boundary-fragment test below builds a REAL
+ *  inscription predicate from `tileInscribedInEllipse` and asserts the
+ *  cluster-cell invariant. */
+const TRUE_PRED = (): boolean => true;
 
 const ALL_BIOMES: ReadonlyArray<Biome> = [
   'plains',
@@ -296,8 +304,8 @@ describe('effectiveModifierMultipliers', () => {
 
 describe('terrainAtForBiome', () => {
   it('is deterministic given the same (islandId, x, y)', () => {
-    const a = terrainAtForBiome('forest', 'forest-1', 3, -2);
-    const b = terrainAtForBiome('forest', 'forest-1', 3, -2);
+    const a = terrainAtForBiome('forest', 'forest-1', 3, -2, TRUE_PRED);
+    const b = terrainAtForBiome('forest', 'forest-1', 3, -2, TRUE_PRED);
     expect(a).toBe(b);
   });
 
@@ -309,7 +317,7 @@ describe('terrainAtForBiome', () => {
       for (let x = -14; x <= 14; x++) {
         if (!tileInscribedInEllipse(x, y, 14, 14)) continue;
         expect(
-          terrainAtForBiome('plains', 'home', x, y),
+          terrainAtForBiome('plains', 'home', x, y, TRUE_PRED),
           `home (${x},${y}) drift`,
         ).toBe(defaultTerrainAt(x, y));
       }
@@ -325,7 +333,7 @@ describe('terrainAtForBiome', () => {
       const counts = new Map<string, number>();
       for (let y = -8; y <= 8; y++) {
         for (let x = -8; x <= 8; x++) {
-          const t = terrainAtForBiome(b, `test-${b}`, x, y);
+          const t = terrainAtForBiome(b, `test-${b}`, x, y, TRUE_PRED);
           counts.set(t, (counts.get(t) ?? 0) + 1);
         }
       }
@@ -346,8 +354,8 @@ describe('terrainAtForBiome', () => {
     // Pick a coord outside any home-special list and verify forest≠desert.
     // The hash includes the islandId — even with same (x,y), different
     // biomes' default + rare palette differ.
-    const a = terrainAtForBiome('forest', 'a', 0, 0);
-    const b = terrainAtForBiome('desert', 'a', 0, 0);
+    const a = terrainAtForBiome('forest', 'a', 0, 0, TRUE_PRED);
+    const b = terrainAtForBiome('desert', 'a', 0, 0, TRUE_PRED);
     // We don't require !== (could collide if both pick a shared rare like
     // stone), so the stronger property is "the default-terrain swap shows
     // up across many points."
@@ -356,8 +364,8 @@ describe('terrainAtForBiome', () => {
     let differences = 0;
     for (let y = -5; y <= 5; y++) {
       for (let x = -5; x <= 5; x++) {
-        const fa = terrainAtForBiome('forest', 'X', x, y);
-        const da = terrainAtForBiome('desert', 'X', x, y);
+        const fa = terrainAtForBiome('forest', 'X', x, y, TRUE_PRED);
+        const da = terrainAtForBiome('desert', 'X', x, y, TRUE_PRED);
         if (fa !== da) differences++;
       }
     }
@@ -375,7 +383,7 @@ describe('terrainAtForBiome', () => {
       // larger window to show up reliably.
       for (let y = -30; y <= 30; y++) {
         for (let x = -30; x <= 30; x++) {
-          if (terrainAtForBiome(biome, `scan-${kind}`, x, y) === kind) return true;
+          if (terrainAtForBiome(biome, `scan-${kind}`, x, y, TRUE_PRED) === kind) return true;
         }
       }
       return false;
@@ -397,18 +405,57 @@ describe('terrainAtForBiome', () => {
       let found = false;
       for (let y = -14; y < 14 && !found; y++) {
         for (let x = -14; x < 14 && !found; x++) {
-          const t = terrainAtForBiome('plains', id, x, y);
+          const t = terrainAtForBiome('plains', id, x, y, TRUE_PRED);
           if (t === 'grass') continue;
           if (
-            terrainAtForBiome('plains', id, x + 1, y) === t &&
-            terrainAtForBiome('plains', id, x, y + 1) === t &&
-            terrainAtForBiome('plains', id, x + 1, y + 1) === t
+            terrainAtForBiome('plains', id, x + 1, y, TRUE_PRED) === t &&
+            terrainAtForBiome('plains', id, x, y + 1, TRUE_PRED) === t &&
+            terrainAtForBiome('plains', id, x + 1, y + 1, TRUE_PRED) === t
           ) {
             found = true;
           }
         }
       }
       expect(found, `${id} should have at least one 2×2 rare cluster`).toBe(true);
+    }
+  });
+
+  it('rare clusters never straddle the ellipse boundary (no boundary fragments)', () => {
+    // Build a real 14×14 plains island via computeIslandTiles + a terrainAt
+    // closure that uses the spec-derived inscription predicate — same path
+    // world.ts uses for procedural islands. The invariant: every rare-color
+    // tile in the result has all 8 of its 3×3 cluster cell siblings present
+    // (and same terrain). A "boundary fragment" — a rare tile in a cluster
+    // cell whose other 8 tiles are outside the ellipse — fails this check.
+    //
+    // Under commit 8fa6bba (the cluster-cell change before this fix), this
+    // test fails on plains-B's (-5,-2) cell among others (only 2/9 tiles
+    // inscribed → 2-tile ore fragment hugging the silhouette).
+    const major = 14;
+    const minor = 14;
+    const inscribed = (px: number, py: number): boolean =>
+      tileInscribedInEllipse(px, py, major, minor);
+    for (const id of ['plains-A', 'plains-B', 'plains-C', 'plains-D', 'plains-E']) {
+      const tiles = computeIslandTiles(major, minor, (x, y) =>
+        terrainAtForBiome('plains', id, x, y, inscribed),
+      );
+      const tileMap = new Map<string, TerrainKind>();
+      for (const t of tiles) tileMap.set(`${t.x},${t.y}`, t.terrain);
+      const def = 'grass'; // plains defaultTerrain
+      for (const t of tiles) {
+        if (t.terrain === def) continue;
+        const cellOx = Math.floor(t.x / 3) * 3;
+        const cellOy = Math.floor(t.y / 3) * 3;
+        for (let dx = 0; dx < 3; dx++) {
+          for (let dy = 0; dy < 3; dy++) {
+            const key = `${cellOx + dx},${cellOy + dy}`;
+            expect(
+              tileMap.get(key),
+              `${id}: tile (${t.x},${t.y}) is rare ${t.terrain} but cluster member (${cellOx + dx},${cellOy + dy}) missing/different`,
+            ).toBe(t.terrain);
+          }
+        }
+      }
     }
   });
 });

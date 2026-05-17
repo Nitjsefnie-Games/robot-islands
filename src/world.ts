@@ -34,6 +34,8 @@ import { regenerateTerrain, type TerrainKind, type Tile } from './island.js';
 import {
   computeIslandTiles,
   renderIslandTiles,
+  tileInscribedInEllipse,
+  tileInscribedInOffsetEllipse,
   TILE_PX,
 } from './island.js';
 import { footprintTiles } from './shape-mask.js';
@@ -208,6 +210,26 @@ export function islandConstituents(spec: IslandSpec): ConstituentEllipse[] {
   return out;
 }
 
+/** True iff the island-local tile (x, y) is fully inscribed in ANY constituent
+ *  ellipse of `spec` — the primary at (0, 0) plus every `extraEllipses` entry.
+ *  Closes over `spec` BY REFERENCE so §3.6 merges that mutate `extraEllipses`
+ *  after construction are observed live; capturing radii at closure-build time
+ *  would silently miss extra-ellipse tiles.
+ *
+ *  Used by `biomes.ts terrainAtForBiome` to demote boundary-clipped 3×3 cluster
+ *  cells to defaultTerrain — see the cluster-cell invariant there. */
+export function islandInscribedAny(spec: IslandSpec, x: number, y: number): boolean {
+  if (tileInscribedInEllipse(x, y, spec.majorRadius, spec.minorRadius)) return true;
+  if (spec.extraEllipses) {
+    for (const e of spec.extraEllipses) {
+      if (tileInscribedInOffsetEllipse(x, y, e.major, e.minor, e.offsetX, e.offsetY)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** Convenience: world-tile coords → world-pixel coords. */
 export function tileToWorldPx(cxTiles: number, cyTiles: number): { x: number; y: number } {
   return { x: cxTiles * TILE_PX, y: cyTiles * TILE_PX };
@@ -293,9 +315,13 @@ export function useRealityForge(
   const spec = world.islands.find((i) => i.id === islandId);
   if (!spec) return;
 
-  // Regenerate terrain.
+  // Regenerate terrain. The inscription predicate references `spec` by
+  // identity so a future §3.6 merge that mutates `extraEllipses` is
+  // observed by the next terrainAt call (no closure-capture of radii).
   regenerateTerrain(spec, targetBiome, (x, y) =>
-    terrainAtForBiome(targetBiome, spec.id, x, y),
+    terrainAtForBiome(targetBiome, spec.id, x, y, (px, py) =>
+      islandInscribedAny(spec, px, py),
+    ),
   );
 
   // Reroll modifiers — natural-only ones are excluded.
@@ -549,8 +575,10 @@ function makeHomeIslandSpec(): IslandSpec {
     buildings: [],
     // Home preserves its hand-placed terrain map exactly — terrainAtForBiome
     // delegates to defaultTerrainAtHome for islandId === 'home' (so the
-    // ore/coal/water tiles the player will Mine on still exist).
-    terrainAt: (x, y) => terrainAtForBiome('plains', 'home', x, y),
+    // ore/coal/water tiles the player will Mine on still exist). The
+    // `inscribed` predicate is unused on this branch — pass a permissive
+    // `() => true` to satisfy the signature.
+    terrainAt: (x, y) => terrainAtForBiome('plains', 'home', x, y, () => true),
     // §3.7: Stable trait by default, no other modifiers.
     modifiers: ['stable'],
   };
@@ -575,8 +603,29 @@ function makeHomeIslandSpec(): IslandSpec {
  *   - hidden-w (-50, 12) !discovered                          → 'unknown'  (within reach: 50 tiles SW)
  *   - hidden-s (35, 70) !discovered                           → 'unknown'  (within reach: ~78 tiles south)
  */
+// Helper for the fixture below: build a spec, then attach a terrainAt closure
+// that captures the spec BY REFERENCE so the inscription predicate observes
+// any future `extraEllipses` mutations (§3.6 merges) live. Capturing radii
+// literals at closure-build time would silently miss extra-ellipse tiles and
+// reintroduce the boundary-fragment defect there.
+//
+// `terrainAt` is `readonly` on the interface (rebuilt via `regenerateTerrain`
+// at runtime); the local cast below assigns the closure once at construction
+// without widening the public surface.
+function makeFixtureSpec(base: Omit<IslandSpec, 'terrainAt'>): IslandSpec {
+  const spec = { ...base } as IslandSpec;
+  (spec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt = (
+    x,
+    y,
+  ) =>
+    terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
+      islandInscribedAny(spec, px, py),
+    );
+  return spec;
+}
+
 export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
-  {
+  makeFixtureSpec({
     id: 'home',
     name: 'home',
     biome: 'plains',
@@ -587,10 +636,9 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     populated: true,
     discovered: true,
     buildings: [],
-    terrainAt: (x, y) => terrainAtForBiome('plains', 'home', x, y),
     modifiers: ['stable'],
-  },
-  {
+  }),
+  makeFixtureSpec({
     id: 'forest-ne',
     name: 'forest-ne',
     biome: 'forest',
@@ -606,10 +654,9 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
       { id: 'forestne-logger-1',              defId: 'logger',               x: 3,  y: 3 },
       { id: 'forestne-platform-constructor-1', defId: 'platform_constructor', x: -4, y: -4 },
     ],
-    terrainAt: (x, y) => terrainAtForBiome('forest', 'forest-ne', x, y),
     modifiers: ['fertile'],
-  },
-  {
+  }),
+  makeFixtureSpec({
     id: 'desert-far',
     name: 'desert-far',
     biome: 'desert',
@@ -620,10 +667,9 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     populated: false,
     discovered: true,
     buildings: [],
-    terrainAt: (x, y) => terrainAtForBiome('desert', 'desert-far', x, y),
     modifiers: ['mineral_rich'],
-  },
-  {
+  }),
+  makeFixtureSpec({
     id: 'coast-unknown',
     name: 'coast-unknown',
     biome: 'coast',
@@ -634,10 +680,9 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     populated: false,
     discovered: false,
     buildings: [],
-    terrainAt: (x, y) => terrainAtForBiome('coast', 'coast-unknown', x, y),
     modifiers: [],
-  },
-  {
+  }),
+  makeFixtureSpec({
     id: 'hidden-w',
     name: 'hidden-w',
     biome: 'plains',
@@ -648,10 +693,9 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     populated: false,
     discovered: false,
     buildings: [],
-    terrainAt: (x, y) => terrainAtForBiome('plains', 'hidden-w', x, y),
     modifiers: [],
-  },
-  {
+  }),
+  makeFixtureSpec({
     id: 'hidden-s',
     name: 'hidden-s',
     biome: 'forest',
@@ -662,9 +706,8 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
     populated: false,
     discovered: false,
     buildings: [],
-    terrainAt: (x, y) => terrainAtForBiome('forest', 'hidden-s', x, y),
     modifiers: ['cursed_storms'],
-  },
+  }),
 ];
 
 /**

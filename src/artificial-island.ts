@@ -28,9 +28,10 @@
 
 import type { Biome, IslandSpec } from './world.js';
 import { BIOME_DEFS, rollModifiersArtificial, terrainAtForBiome } from './biomes.js';
+import type { TerrainKind } from './island.js';
 import { tierForLevel } from './skilltree.js';
 import type { IslandState } from './economy.js';
-import { makeInitialIslandState } from './world.js';
+import { islandInscribedAny, makeInitialIslandState } from './world.js';
 import { canPlaceOnIsland, type BuildingDef } from './building-defs.js';
 
 // ---------------------------------------------------------------------------
@@ -220,8 +221,11 @@ export function constructIsland(
   founderState.inventory.iron_ingot = (founderState.inventory.iron_ingot ?? 0) - cost.iron_ingot;
   founderState.inventory.wood = (founderState.inventory.wood ?? 0) - cost.wood;
 
-  // Mint the new spec. terrainAt closes over biome + islandId so the spec
-  // stays self-contained (matches DEMO_ISLANDS' inline terrainAt pattern).
+  // Mint the new spec. terrainAt closes over the SPEC by reference (not just
+  // biome + islandId) so the inscription predicate observes any future §3.6
+  // merge that mutates `extraEllipses` — capturing radii literals at closure-
+  // build time would silently miss extra-ellipse tiles and reintroduce the
+  // boundary-fragment defect there.
   const biome = req.biome;
   const newSpec: IslandSpec = {
     id: islandId,
@@ -234,10 +238,14 @@ export function constructIsland(
     populated: true,
     discovered: true,
     buildings: [],
-    terrainAt: (x: number, y: number) => terrainAtForBiome(biome, islandId, x, y),
     modifiers: rollModifiersArtificial(worldSeed, biome, islandId, nowMs),
     artificial: true,
   };
+  (newSpec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt =
+    (x, y) =>
+      terrainAtForBiome(biome, islandId, x, y, (px, py) =>
+        islandInscribedAny(newSpec, px, py),
+      );
   const newState = makeInitialIslandState(newSpec, nowMs);
   return { newSpec, newState };
 }
