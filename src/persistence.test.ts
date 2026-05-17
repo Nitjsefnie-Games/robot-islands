@@ -517,7 +517,7 @@ describe('schema version', () => {
 
   it('rejects a v3-shaped snapshot (the §2.1 infinite-map bump is breaking)', () => {
     // A blob from the previous schema can't be migrated — the new generator
-    // (density 0.15, overlap 12) would produce different procedural specs in
+    // (density 0.08, overlap 16) would produce different procedural specs in
     // any unrevealed cell while the saved discovered-but-not-populated specs
     // would pin stale geometry. Reject so `loadWorld` falls back to a fresh
     // world via the `stored.v !== SCHEMA_VERSION` short-circuit.
