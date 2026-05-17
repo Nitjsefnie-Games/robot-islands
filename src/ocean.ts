@@ -140,12 +140,56 @@ export function renderOcean(
 }
 
 /**
+ * Pure computation of the cell key set that the fog-overlay layer should
+ * paint UNKNOWN_BLUE squares on. Split out from `renderOceanFogOverlay`
+ * so the fog-set logic is testable without standing up a PixiJS renderer
+ * (mirrors the pure/render split called out in AGENTS.md).
+ *
+ * A cell is fogged iff ALL three hold:
+ *   1. it belongs to some discovered island's footprint (via `islandCells`,
+ *      which walks the primary + every `extraEllipses` entry per §3.6),
+ *   2. it is NOT in `revealedCells` (the player's per-cell discovery set),
+ *   3. it is NOT in `visibleCellsFromVision(visionSources)` (current
+ *      vision — populated-island baseline padded ellipse + Lighthouse
+ *      circles).
+ *
+ * Condition (3) is the fix for the "drone discovery flips a neighbour's
+ * footprint into the fog set, masking home's vision halo" bug. Without
+ * it, an unrevealed cell of a freshly-discovered neighbour that overlaps
+ * home's vision halo composes to a solid dark grey square — fog paints
+ * UNKNOWN_BLUE on top of the ocean's VISION_BLUE, then the weather
+ * overlay layers light_fog rgba(224,232,240,0.18) on top of fog. Vision
+ * has to win on cells where both apply.
+ */
+export function computeFogCells(
+  islands: ReadonlyArray<IslandSpec>,
+  revealedCells: ReadonlySet<string>,
+  visionSources: ReadonlyArray<VisionSource>,
+): Set<string> {
+  const visibleCells = visibleCellsFromVision(visionSources);
+  // Deduplicate cells across overlapping island footprints — two islands
+  // sharing a cell would otherwise emit two fog sprites at the same world
+  // position. Sprite-cloning is cheap but dedup saves drawcalls.
+  const fogCells = new Set<string>();
+  for (const isl of islands) {
+    if (!isl.discovered) continue;
+    for (const k of islandCells(isl)) {
+      if (revealedCells.has(k)) continue;
+      if (visibleCells.has(k)) continue; // vision lights through the fog
+      fogCells.add(k);
+    }
+  }
+  return fogCells;
+}
+
+/**
  * Build the fog-overlay layer (the post-island unknown-blue mask).
  *
  * For each rendered island, enumerate its constituent cells via
  * `islandCells(spec)` (which walks the primary ellipse PLUS every
- * `extraEllipses` entry per §3.6); for every cell in that set NOT in
- * `revealedCells`, paint an UNKNOWN_BLUE 16-tile sprite. Add the returned
+ * `extraEllipses` entry per §3.6); for every cell in that set that is
+ * neither in `revealedCells` nor currently illuminated by any vision
+ * source, paint an UNKNOWN_BLUE 16-tile sprite. Add the returned
  * container ABOVE the islands layer so the squares mask the unrevealed
  * portion of each partially-revealed island.
  *
@@ -157,25 +201,22 @@ export function renderOcean(
  *                        skipped (they don't render in the first place,
  *                        so fogging them would be wasted work).
  * @param revealedCells   Same Set used by `renderOcean`.
+ * @param visionSources   Same vision sources passed to `renderOcean`.
+ *                        Cells currently inside any vision source are
+ *                        excluded from the fog set — otherwise a
+ *                        discovered neighbour's unrevealed cells that
+ *                        overlap a populated island's vision halo would
+ *                        paint UNKNOWN_BLUE over the cyan VISION_BLUE.
  * @returns A `Container` carrying one Sprite per fogged cell.
  */
 export function renderOceanFogOverlay(
   islands: ReadonlyArray<IslandSpec>,
   revealedCells: ReadonlySet<string>,
+  visionSources: ReadonlyArray<VisionSource>,
 ): Container {
   const layer = new Container();
   layer.label = 'ocean-fog-overlay';
-  // Deduplicate cells across overlapping island footprints — two islands
-  // sharing a cell would otherwise emit two fog sprites at the same world
-  // position. Sprite-cloning is cheap but dedup saves drawcalls.
-  const fogCells = new Set<string>();
-  for (const isl of islands) {
-    if (!isl.discovered) continue;
-    for (const k of islandCells(isl)) {
-      if (revealedCells.has(k)) continue;
-      fogCells.add(k);
-    }
-  }
+  const fogCells = computeFogCells(islands, revealedCells, visionSources);
   for (const k of fogCells) {
     const { cx, cy } = parseKey(k);
     layer.addChild(makeCellSquare(cx, cy, UNKNOWN_BLUE));
