@@ -92,19 +92,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   continuous trickle (mathematically equivalent over time but loses the
   "you got lucky" flavor).
   Files: `biomes.ts:210`, `skilltree.ts` (mining.3 / forestry.3).
-- **Procedural terrain generation produces no resource clusters** —
-  `terrainAtForBiome` rolls each tile independently via `tileHash01`
-  at 12% rare density, so adjacent same-type rare tiles only occur by
-  coincidence. Empirical sweep of a 14×14 plains island (556 buildable
-  tiles, 67 rares spread across tree/stone/ore/coal/limestone): zero
-  2×2 same-type rare clusters, zero 3×3. Result: on every procedural
-  island, only `requiredTile`-less buildings and 1×1 `logger` can place;
-  the 2×2 extractors (mine, quarry, *_mine, *_extractor) and 3×3
-  `drilling_rig` are unplaceable. Home sidesteps this via hand-placed
-  clusters in `island.ts:defaultTerrainAt`. Fix: roll per cluster cell
-  (axis-aligned rectangle, not disc) and paint the whole cell with the
-  chosen rare, sized so 2×2 buildings fit and 3×3 fits some of the time.
-  File: `biomes.ts:526`.
 - **Wind power +50% on High Wind modifier** — variance machinery
   shipped, the +50% wind-power side is deferred.
   File: `biomes.ts:174`.
