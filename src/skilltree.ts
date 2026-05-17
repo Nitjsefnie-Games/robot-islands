@@ -522,8 +522,8 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   depth1('forestry', rate('extraction'), 'Wood output +5%'),
   // Forestry secondary theme: "regrowth" → per-Logger yield bonus.
   depth2('forestry', { kind: 'loggerYieldBonusMul' }, 'Logger regrowth +10%'),
-  depth1('drilling', rate('extraction'), 'Deep extraction +5% (latent — Drilling Rig pending)'),
-  depth2('drilling', rate('extraction'), 'Deep extraction +10% (latent — Drilling Rig pending)'),
+  depth1('drilling', rate('extraction'), 'Deep extraction +5%'),
+  depth2('drilling', rate('extraction'), 'Deep extraction +10%'),
   // Robotics primary axis is construction speed per SPEC §9.3 themes
   // ("construction speed, parallel building, drone production efficiency").
   // depth-1 boosts the construction-time mul; depth-2 grants the first
@@ -532,12 +532,12 @@ export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
   depth2('robotics', { kind: 'parallelBuildCapAdd' }, '+1 concurrent build slot'),
 
   // Refinement branch
-  depth1('smelting', rate('smelting'), 'Smelter rate +5% (latent — Smelter pending)'),
-  depth2('smelting', rate('smelting'), 'Smelter rate +10% (latent — Smelter pending)'),
-  depth1('chemistry', rate('chemistry'), 'Chem rate +5% (latent — Reactor pending)'),
-  depth2('chemistry', rate('chemistry'), 'Chem rate +10% (latent — Reactor pending)'),
-  depth1('electronics', rate('electronics'), 'Electronics rate +5% (latent)'),
-  depth2('electronics', rate('electronics'), 'Electronics rate +10% (latent)'),
+  depth1('smelting', rate('smelting'), 'Smelter rate +5%'),
+  depth2('smelting', rate('smelting'), 'Smelter rate +10%'),
+  depth1('chemistry', rate('chemistry'), 'Chem rate +5%'),
+  depth2('chemistry', rate('chemistry'), 'Chem rate +10%'),
+  depth1('electronics', rate('electronics'), 'Electronics rate +5%'),
+  depth2('electronics', rate('electronics'), 'Electronics rate +10%'),
   depth1('power_systems', { kind: 'powerProductionMul' }, 'Power production +5%'),
   // depth-2: switch axis to consumption efficiency — spec theme
   // "Power systems (efficiency, advanced generation)".

@@ -117,13 +117,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   the deviation in SPEC.md.
   *(Flagged by Agents A, B.)*
 
-- **§9.3 UI footer lies about cost formula.** `src/skilltree-ui.ts:706`
-  says "costs grow 2^(depth-1)" — `src/skilltree.ts:287-289` actually
-  uses `Math.round(1.5 ** (depth - 1))`. The 1.5 ramp is a deliberate
-  spec deviation (documented at `:281-286`), but the UI still tells
-  players the spec formula. Trivial string fix.
-  *(Flagged by Agent A.)*
-
 - **§9.6 Auto-Patronage default priority lists substitute the wrong
   resources.** `src/settlement.ts:298` Route 2 uses `'bolt'` where spec
   §9.6 says `Brick`. `src/settlement.ts:311` Route 3 uses `'sand'`
@@ -167,16 +160,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   conserve, not multiply. Probably intentional placeholder; flag as a
   real economy bug rather than a polish item.
   *(Flagged by Agent D.)*
-
-- **§9.3 "latent" tooltips lie about live mechanics.**
-  `src/skilltree.ts:525-526, 535-540` mark drilling / smelting /
-  chemistry / electronics depth-1/2 nodes as `(latent — X pending)`
-  even though those buildings (`mine`, `smelter`, `chemical_reactor`,
-  `electronics_lab`, etc.) ship and the nodes drive a real
-  `rate('extraction')` / `rate('smelting')` / etc. multiplier today.
-  Players who buy `drilling.1` get +5% on Mine output but see "latent"
-  in the description.
-  *(Flagged by Agents C, D.)*
 
 ---
 

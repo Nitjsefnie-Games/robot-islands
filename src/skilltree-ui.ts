@@ -703,7 +703,7 @@ export function mountSkillTreeUi(
       footerL.className = 'ri-muted';
       const footerR = document.createElement('span');
       footerR.textContent =
-        'depth 1-2 require T2 · depth 3→T3 · depth 4→T4 · depth 5-7→T5 · depth 8+→T6 · costs grow 2^(depth-1)';
+        'depth 1-2 require T2 · depth 3→T3 · depth 4→T4 · depth 5-7→T5 · depth 8+→T6 · costs grow round(1.5^(depth-1))';
       footerR.className = 'ri-muted';
       footer.prepend(footerL);
       footer.appendChild(footerR);
