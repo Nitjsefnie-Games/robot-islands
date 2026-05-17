@@ -1452,6 +1452,8 @@ A locked Scanner Sat provides:
 * **Weather visibility**: real-time weather state for every cell within coverage radius. Equivalent to a Weather Station at orbital scale, and immune to weather effects on itself.
 * **Discovery**: each tick, probability `p` of revealing any undiscovered island within coverage. `p` ramps from a low initial value toward an asymptote over real-time dwell on the cell. A few minutes catches most local islands; deep-orbit islands may take hours of continuous observation to surface. The dwell ramp is per-cell, so moving the satellite resets ramps in cells outside the new coverage.
 
+Launched sats spawn at the Spaceport and travel to a player-chosen target tile, consuming onboard fuel proportional to distance; coverage / weather effects activate once the sat reaches station.
+
 During transit (between launch and lock), the satellite scans at reduced effectiveness — coverage radius reduced and `p` lowered to a fraction of the locked rate. Useful but not optimal; transit is not a substitute for parking.
 
 ### 14.6 Movement
@@ -1461,6 +1463,8 @@ A locked satellite can be relocated by the player. Each satellite has an onboard
 * Issuing a move command spends fuel proportional to relocation distance
 * Move takes real time proportional to distance and thrust
 * Movement can fail with low probability — the satellite is lost in transit and may produce a debris field
+
+The initial launch is itself a move from the Spaceport to the player-chosen target; subsequent relocations use the same fuel/speed math.
 
 When the reserve depletes, the satellite cannot move further until a Repair Drone tops it up (Repair Drones serve double duty as repair and refuel).
 
@@ -1483,7 +1487,7 @@ Each skill node bonus is a flat additive value on the probability scale (a `+5%`
 **Failure modes (probabilistic split, placeholder ~30 / ~70):**
 
 * **Pad explosion:** the Spaceport is destroyed in place. No surrounding terrain damage; no other building on the island is damaged. Fuel and the launch payload are lost. The Tracking Station and other satellites are unaffected (subject to debris consequences in 14.8).
-* **Orbit explosion:** the satellite reaches orbit but breaks up after lock. The Spaceport is preserved. A debris field is generated at the lock position.
+* **Orbit explosion:** the satellite reaches orbit but breaks up after lock. The Spaceport is preserved. A debris field is generated along the spawn→target trajectory (the breakup happens partway to the player's chosen target rather than at a fixed offset from the Spaceport).
 
 Both failure types preserve all other infrastructure on the island. The pad-explosion path is recoverable: rebuild the Spaceport and re-launch. Per-island skill-tree investment is independent of building state, so success-rate progress is not lost when a Spaceport is destroyed.
 

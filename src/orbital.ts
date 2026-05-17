@@ -6,9 +6,11 @@
 // §14.2 Spaceport + §14.7 launch success rolls with failure modes + upgrade lifecycle.
 
 import { ANTENNA_SIGNAL_RADII } from './antenna.js';
+import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { cellKey, parseCellKey, tileToCell } from './discovery.js';
 import { inv } from './economy.js';
 import { makeSeededRng } from './rng.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, launchSuccessBonus } from './skilltree.js';
 import type { ResourceId } from './recipes.js';
 import { ensureCellGenerated, type WorldState } from './world.js';
@@ -144,7 +146,7 @@ const PAYLOAD_RESOURCE: Record<SatelliteVariant, ResourceId> = {
 };
 
 /**
- * Launch a satellite from a Spaceport.
+ * Launch a satellite from a Spaceport toward a player-chosen target tile.
  *
  * Prerequisites (§14.1 T6 gate):
  *   - The island must have `ascendantCoreCrafted === true`
@@ -155,20 +157,35 @@ const PAYLOAD_RESOURCE: Record<SatelliteVariant, ResourceId> = {
  *   - 1 × `orbital_insertion_package`
  *   - 1 × `antimatter_propellant`
  *
+ * Target validation (§14.5/14.6/14.7):
+ *   - Spawn position is the Spaceport's 4×4 footprint centre
+ *     (`spec.cx + sp.x + width/2, spec.cy + sp.y + height/2`).
+ *   - `target-at-source`: target tile must not equal the spawn tile.
+ *   - `target-out-of-range`: distance from spawn → target must be reachable
+ *     with the sat's onboard fuel (`fuel / SAT_FUEL_PER_TILE`). Neither
+ *     reason consumes resources.
+ *
  * Success roll:
  *   - Base success rate depends on Spaceport tier: T1 = 30%, T2 = 50%, T3+ = 70%
  *   - Capped at 99% so there is always a small chance of failure
  *   - Deterministic RNG seeded from `${world.seed}_launch_${nowMs}`
  *
  * Failure modes:
- *   - Pad explosion (30% of failures): the Spaceport building is destroyed
- *   - Orbit explosion (70% of failures): satellite is lost; full debris
- *     mechanics are STILL-DEFERRED to a later step
+ *   - Pad explosion: the Spaceport reverts to tier I (§14.7)
+ *   - Orbit explosion: §14.8 debris field forms at the spawn→target
+ *     trajectory midpoint (the sat broke up partway to its lock cell).
+ *
+ * On success the sat spawns at the Spaceport's footprint centre and begins a
+ * `movingTo` trip toward the target tile. Onboard fuel is reduced by the
+ * trip cost — mirroring the §14.6 `requestSatMove` math so the first move
+ * (launch) and subsequent relocations share the same fuel/speed model.
  */
 export function launchSatellite(
   world: WorldState,
   spaceportIslandId: string,
   variant: SatelliteVariant,
+  targetX: number,
+  targetY: number,
   nowMs: number,
 ): { ok: true; sat: Satellite } | { ok: false; reason: string } {
   const state = world.islandStates?.get(spaceportIslandId);
@@ -195,8 +212,38 @@ export function launchSatellite(
     }
   }
 
-  // Roll launch success.
+  // Spaceport reference (also re-used for the failure path's tier-revert).
   const spaceport = state.buildings.find((b) => b.defId === 'spaceport')!;
+
+  // Spawn position = Spaceport footprint centre. Same idiom Antenna /
+  // Lighthouse use for "where this building emits from": world-tile coords
+  // are `spec.cx + b.x + width/2`, `spec.cy + b.y + height/2`. Spaceport is
+  // a 4×4 (`SHAPES.square4`) so the centre lands 2 tiles inset from the
+  // anchor on each axis.
+  const spDef = BUILDING_DEFS[spaceport.defId as BuildingDefId];
+  const spawnX = spec.cx + spaceport.x + shapeWidth(spDef.footprint) / 2;
+  const spawnY = spec.cy + spaceport.y + shapeHeight(spDef.footprint) / 2;
+
+  // Skill bundle for the launching island. Used here (sat fuel reserve, buffer
+  // cap, range/coverage scaling) and below (pad-explosion mitigation).
+  const skill = effectiveSkillMultipliers(state);
+
+  // Target validation — runs after the inventory check but BEFORE the
+  // launch-success roll so resources aren't deducted and no RNG is drawn on
+  // a bad target. The launch fuel reserve at lock-time would be
+  // `100 * skill.satFuelReserve`; that doubles as the maximum distance the
+  // sat can ferry itself to lock at `SAT_FUEL_PER_TILE` per tile.
+  const dx = targetX - spawnX;
+  const dy = targetY - spawnY;
+  const dist = Math.hypot(dx, dy);
+  if (dist <= 0) return { ok: false, reason: 'target-at-source' };
+  const launchFuel = 100 * skill.satFuelReserve;
+  const maxLaunchRange = launchFuel / SAT_FUEL_PER_TILE;
+  if (dist > maxLaunchRange) {
+    return { ok: false, reason: 'target-out-of-range' };
+  }
+
+  // Roll launch success.
   const spaceportTier = spaceport.tier ?? 1;
   const baseSuccess =
     spaceportTier === 1 ? 0.30 : spaceportTier === 2 ? 0.50 : 0.70;
@@ -204,9 +251,6 @@ export function launchSatellite(
   const bonus = launchSuccessBonus(state);
   const successRate = Math.min(0.99, baseSuccess + bonus);
   const rng = makeSeededRng(`${world.seed}_launch_${nowMs}`);
-  // Skill bundle for the launching island. Used both here (pad-explosion
-  // mitigation) and below (sat fuel reserve, buffer cap).
-  const skill = effectiveSkillMultipliers(state);
   if (rng() > successRate) {
     // Failure: pad explosion (30% baseline) or orbit explosion. Launch sub-
     // path's pad-explosion mitigation DIVIDES the pad-explosion share — at
@@ -221,8 +265,12 @@ export function launchSatellite(
       (spaceport as { tier?: number }).tier = 1;
     } else {
       // Orbit explosion: §14.8 — debris field forms at the failed lock cell.
-      const failedLockX = spec.cx + 100;
-      const failedLockY = spec.cy + 100;
+      // The sat broke up partway along the trajectory; the trajectory
+      // midpoint is the deterministic "somewhere between launch and target"
+      // pick. Mirrors how the orbit-explosion site was previously a fixed
+      // offset from the Spaceport; now it tracks the player's target choice.
+      const failedLockX = spawnX + dx / 2;
+      const failedLockY = spawnY + dy / 2;
       const { cellX, cellY } = tileToCell(failedLockX, failedLockY);
       addDebrisFragments(world, cellX, cellY, ORBIT_EXPLOSION_FRAGMENTS);
     }
@@ -234,25 +282,33 @@ export function launchSatellite(
     state.inventory[res as ResourceId] -= qty ?? 0;
   }
 
+  // Trip math — mirrors `requestSatMove`: fuel proportional to distance,
+  // travel time proportional to distance at SAT_MOVE_SPEED_TILES_PER_SEC.
+  const fuelCost = dist * SAT_FUEL_PER_TILE;
+  const travelSec = dist / SAT_MOVE_SPEED_TILES_PER_SEC;
+
   // Skill bonuses baked into the launched sat's geometry — Communication +
   // Network sub-paths boost comm range; Discovery sub-path boosts Scanner
   // coverage; Resilience boosts fuel reserve; Communication boosts buffer
   // cap; Discovery boosts dwell rate. Baked once at launch so subsequent
   // skill purchases don't retroactively grow already-orbiting sats (an
   // existing-sat retrofit is a different mechanic — Repair Drone with
-  // upgrade payload, deferred). `skill` was bound above for the pad-
-  // explosion mitigation; reused here.
+  // upgrade payload, deferred).
   const sat: Satellite = {
     id: `sat_${nowMs}`,
     variant,
     spaceportIslandId,
-    x: spec.cx + 100,
-    y: spec.cy + 100,
+    x: spawnX,
+    y: spawnY,
     commRange: (variant === 'comm' ? 500 : 200) * skill.commRange,
     coverageRadius: variant === 'scanner' ? 400 * skill.scannerCoverage : 0,
-    fuel: 100 * skill.satFuelReserve,
+    fuel: launchFuel - fuelCost,
     lodges: { scan: 0, weather: 0, comm: 0 },
-    locked: true,
+    // §14.6: the launch IS the first move — sat spawns at the Spaceport and
+    // ferries itself to the player-chosen target. Unlocked while in transit;
+    // `tickSatMovement` flips locked back to true on arrival.
+    locked: false,
+    movingTo: { x: targetX, y: targetY, arrivalMs: nowMs + travelSec * 1000 },
     pendingRepairDroneId: null,
     buffer: [],
     bufferCap: Math.floor(SAT_BUFFER_CAP * skill.satBufferCap),
