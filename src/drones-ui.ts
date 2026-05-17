@@ -30,7 +30,6 @@ import {
   DRONE_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
   MAX_FUEL_PER_DRONE,
-  MIN_FUEL_PER_DRONE,
   T4_PULSE_FUEL_COST,
   dispatchDrone,
   droneCurrentPosition,
@@ -40,7 +39,7 @@ import {
 } from './drones.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
-import { tierForLevel } from './skilltree.js';
+import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
 
 function styled(el: HTMLElement, css: string): void {
@@ -119,11 +118,14 @@ export interface DroneUiDeps {
 export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUiHandle {
   let visible = false;
   let launchMode = false;
-  let fuelLoaded = 20; // sane default — 80 tiles round-trip, 40 tiles outbound
   // Player-selected drone tier, capped at island tier at refresh time. Defaults
   // to 1 (cheapest / biofuel) so a fresh L5 player can experience T1 drones
   // without having to first build the T2 diesel chain.
   let selectedTier: DroneTier = 1;
+  // Cached at refresh() so attemptLaunch + range-ring see the same numbers.
+  // maxLaunchFuel = min(MAX_FUEL_PER_DRONE, on-hand fuel of the selected tier).
+  let maxLaunchFuel = 0;
+  let currentEfficiency = DRONE_TIER_EFFICIENCY;
 
   // -------------------------------------------------------------------------
   // Side dock panel
@@ -310,77 +312,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
 
   body.appendChild(statBlock);
 
-  // -------------------------------------------------------------------------
-  // Fuel slider — stenciled tick rail
-  // -------------------------------------------------------------------------
-  const sliderWrap = document.createElement('div');
-  styled(sliderWrap, 'display: flex; flex-direction: column; gap: 4px');
-
-  const sliderHead = document.createElement('div');
-  styled(sliderHead, 'display: flex; justify-content: space-between; align-items: baseline');
-  const sliderHeadL = document.createElement('span');
-  sliderHeadL.textContent = 'FUEL LOAD';
-  styled(
-    sliderHeadL,
-    [
-      `color: ${'var(--ri-fg-3)'}`,
-      'font-size: 9.5px',
-      'letter-spacing: 0.12em',
-    ].join(';'),
-  );
-  const sliderHeadR = document.createElement('span');
-  sliderHeadR.classList.add('ri-mono');
-  styled(sliderHeadR, `color: ${'var(--ri-warn)'}; font-size: 11px; font-weight: 600`);
-  sliderHead.appendChild(sliderHeadL);
-  sliderHead.appendChild(sliderHeadR);
-
-  const slider = document.createElement('input');
-  slider.type = 'range';
-  slider.min = String(MIN_FUEL_PER_DRONE);
-  slider.max = String(MAX_FUEL_PER_DRONE);
-  slider.step = '5';
-  slider.value = String(fuelLoaded);
-  styled(
-    slider,
-    [
-      'width: 100%',
-      'height: 18px',
-      'background: transparent',
-      'cursor: pointer',
-      'accent-color: var(--ri-accent)',
-    ].join(';'),
-  );
-  slider.addEventListener('input', () => {
-    fuelLoaded = Number(slider.value);
-    refresh(performance.now());
-    // Keep the world-space range ring in sync with the slider while launch
-    // mode is armed. Cheap (single Graphics.clear + one circle).
-    if (launchMode) repaintRangeRing();
-  });
-
-  // Tick rail underneath the slider — stencil/printed feel.
-  const tickRail = document.createElement('div');
-  styled(
-    tickRail,
-    [
-      'display: flex',
-      'justify-content: space-between',
-      `color: ${'var(--ri-fg-4)'}`,
-      'font-size: 9px',
-      'letter-spacing: 0.08em',
-      'padding: 0 2px',
-    ].join(';'),
-  );
-  for (const v of [10, 20, 30, 40, 50]) {
-    const t = document.createElement('span');
-    t.textContent = String(v);
-    tickRail.appendChild(t);
-  }
-
-  sliderWrap.appendChild(sliderHead);
-  sliderWrap.appendChild(slider);
-  sliderWrap.appendChild(tickRail);
-  body.appendChild(sliderWrap);
+  // Fuel slider removed — fuel auto-computed at click time as the exact
+  // amount needed for the round-trip (round up to integer units, cap at
+  // MAX_FUEL_PER_DRONE). The OUTBND + FLIGHT readouts show the
+  // max-affordable range based on the lesser of MAX_FUEL_PER_DRONE and
+  // current fuel-resource inventory.
 
   // -------------------------------------------------------------------------
   // Arm-launch button — toggles canvas reticle mode
@@ -571,10 +507,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // Pixi layer: range ring (WORLD space, inside world container)
   // -------------------------------------------------------------------------
   // Drawn around the active origin when launch mode is armed. Radius =
-  // (fuelLoaded × DRONE_TIER_EFFICIENCY) / 2 tiles = the per-launch
-  // outbound max-distance the player can reach with the current fuel
-  // slider value. Updates when the slider moves or when the active
-  // origin changes (next launch-mode arm).
+  // max-affordable outbound = (min(MAX_FUEL, on-hand) × efficiency) / 2
+  // tiles. Clicking inside the ring auto-computes the exact fuel cost
+  // for the round-trip; clicking outside is rejected by the reticle.
   const rangeRingLayer = new Container();
   rangeRingLayer.label = 'launch-range-ring';
   rangeRingLayer.visible = false;
@@ -583,7 +518,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   function repaintRangeRing(): void {
     rangeRingGfx.clear();
     const originSpec = deps.getOriginSpec();
-    const outboundTiles = (fuelLoaded * DRONE_TIER_EFFICIENCY) / 2;
+    const outboundTiles = (maxLaunchFuel * currentEfficiency) / 2;
     if (outboundTiles <= 0) return;
     const radiusPx = outboundTiles * TILE_PX;
     const cx = originSpec.cx * TILE_PX;
@@ -651,7 +586,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const dx = wp.x - originSpec.cx;
     const dy = wp.y - originSpec.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const outbound = (fuelLoaded * DRONE_TIER_EFFICIENCY) / 2;
+    const outbound = (maxLaunchFuel * currentEfficiency) / 2;
     ensurePainted(dist > outbound ? RETICLE_WARN : RETICLE_OK);
   }
   function hideReticleFn(): void {
@@ -859,11 +794,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
     const onhand = inv(origin, fuelResource);
     fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
-    fuelStat.valueEl.style.color = onhand >= fuelLoaded ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
-    sliderHeadR.textContent = `${fuelLoaded} u`;
-    rangeStat.valueEl.textContent = `${(fuelLoaded * DRONE_TIER_EFFICIENCY) / 2} t`;
-    const flightSec = (fuelLoaded * DRONE_TIER_EFFICIENCY) / DRONE_SPEED_TILES_PER_SEC;
-    etaStat.valueEl.textContent = `${flightSec.toFixed(0)}s`;
+    // Fuel auto-computed at click time. The OUTBND + FLIGHT readouts show
+    // the MAX-affordable range for this island right now = min(MAX_FUEL,
+    // available) units × current efficiency / 2 (round-trip). Cached on
+    // the closure so attemptLaunch + the range ring agree on the limit.
+    currentEfficiency = DRONE_TIER_EFFICIENCY * effectiveSkillMultipliers(origin).droneFuelEfficiency;
+    maxLaunchFuel = Math.floor(Math.min(MAX_FUEL_PER_DRONE, onhand));
+    const maxOutbound = (maxLaunchFuel * currentEfficiency) / 2;
+    fuelStat.valueEl.style.color = maxLaunchFuel > 0 ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
+    rangeStat.valueEl.textContent = `${maxOutbound.toFixed(0)} t max`;
+    const maxFlightSec = (maxLaunchFuel * currentEfficiency) / DRONE_SPEED_TILES_PER_SEC;
+    etaStat.valueEl.textContent = `${maxFlightSec.toFixed(0)}s max`;
 
     // Active island must carry a Drone Pad to launch — otherwise the arm
     // button is gated. Same `defId` discipline the settlement panel uses
@@ -872,7 +813,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const inFlight = deps.world.drones.some(
       (d) => d.fromIslandId === origin.id && (d.status === 'active' || d.status === undefined),
     );
-    const canLaunch = hasDronePad && onhand >= fuelLoaded && !inFlight;
+    const canLaunch = hasDronePad && maxLaunchFuel > 0 && !inFlight;
     armBtn.disabled = !canLaunch;
     armBtn.style.opacity = canLaunch ? '1' : '0.5';
     armBtn.style.cursor = canLaunch ? 'pointer' : 'not-allowed';
@@ -941,7 +882,18 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const oy = originSpec.cy;
     const dx = targetWorldTileX - ox;
     const dy = targetWorldTileY - oy;
-    const r = dispatchDrone(deps.world, origin, ox, oy, dx, dy, fuelLoaded, nowMs, undefined, selectedTier);
+    // Auto-compute exact fuel for the round-trip. Range = fuel × efficiency,
+    // outbound = range / 2 → fuel = (2 × outboundDist) / efficiency. Round
+    // up to integer units (dispatchDrone expects an integer-ish fuel value)
+    // and cap at MAX_FUEL_PER_DRONE; if even max-fuel can't reach the target
+    // dispatchDrone will reject with 'insufficient-fuel' (or the click was
+    // outside the ring and the reticle already warned the player).
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const fuelNeeded = Math.min(
+      MAX_FUEL_PER_DRONE,
+      Math.max(1, Math.ceil((2 * dist) / currentEfficiency)),
+    );
+    const r = dispatchDrone(deps.world, origin, ox, oy, dx, dy, fuelNeeded, nowMs, undefined, selectedTier);
     if (r.ok) {
       setLaunchMode(false);
       refresh(nowMs);
