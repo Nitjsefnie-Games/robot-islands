@@ -28,26 +28,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   §9.2 tier-breakpoint mapping STILL-DEFERRED"). One-constant fix: 3 → 15.
   *(Flagged by Agent A.)*
 
-- **§2.6 / §11.5 drone tiers shifted by one across code + UI + tutorial.**
-  Code treats T1 as an entry-level drone but spec says Drone Pad is T2
-  and T1 drones are unreachable. Touchpoints, all the same root issue:
-  - `src/drones.ts:88-95` `DRONE_TIER_MULTIPLIERS = {1:1.5, 2:1.0, 3:0.7,
-    4:0.5, 5:0.5, 6:0.2}`. Spec §2.6 vehicle vulnerability table is
-    T2=1.5, T3=1.0, T4=0.7, T5=0.5. Code's T2 sits where spec's T3 should
-    be — every T2/T3/T4 drone is one tier sturdier than spec.
-  - `src/drones-ui.ts` `selectedTier = 1` default lets the player launch a
-    T1 drone via the picker (spec: no T1 drone exists).
-  - `src/tutorial.ts:61, 66, 81` hints reference "T1 drone (biofuel)"
-    and a `build_biofuel_plant` → `produce_biofuel` → `dispatch_first_drone`
-    chain that points at a non-existent unlock.
-  - `src/tutorial.ts:86` `build_diesel_chain` hint says "T2 drones are
-    tougher in storms" — exactly the opposite of spec (T2 is the fragile
-    tier x1.5).
-  Fix per spec: drop T1 entry from `DroneTier`/`DRONE_TIER_MULTIPLIERS`,
-  shift T2/T3/T4/T5 values to match §2.6, drop T6 (spec has no T6 drone —
-  T6 is satellites). Tutorial + UI fall out of the corrected enum.
-  *(Flagged by Agents C, D; root cause is one shifted table.)*
-
 - **§14.3 Relay Sat variant entirely absent from code.** SPEC.md status
   table claims "Scanner / Sweeper / Comm / Relay variants buildable" but:
   - `src/orbital.ts:30` `SatelliteVariant = 'scanner' | 'sweeper' | 'comm'`

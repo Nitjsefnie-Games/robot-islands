@@ -25,8 +25,11 @@ import { rasterizePath, rollVehicleDestruction } from './weather.js';
 import { CELL_SIZE_TILES, ensureCellGenerated } from './world.js';
 import type { WorldState } from './world.js';
 
-/** Drone tier per §11.5. Step 6 only emits tier-2 drones; the field exists so
- *  future tiers can be added without reshaping the data model. */
+/** Drone tier per §11.5. Drone Pad (T2) is the gate to launch any drone;
+ *  once built, the Drone Ops tier picker lets the player pick any tier from
+ *  T1 up to the launching island's current tier (T1 = biofuel = cheap entry
+ *  option for short scouts). Higher tiers cost richer fuel grades but fly
+ *  farther and are more weather-rugged. */
 export type DroneTier = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface Drone {
