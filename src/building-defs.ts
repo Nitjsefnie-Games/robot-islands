@@ -1864,13 +1864,12 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '✺',
   },
   // §8.4: Singularity Battery — "effectively infinite electrical power
-  // storage" per spec. Power-storage mechanic per §13.3 STILL-DEFERRED to step 14+.
-  // Per the §8.4 note ("not a resource storage building") this def carries
-  // NO `storage` contribution — it never raised any resource cap. The earlier
-  // step-13 `storageCap: 10000` placeholder is removed by the §4.6
-  // categorized-storage cleanup; resource caps are now category-routed and
-  // a power-buffer doesn't fit any category. Tiny consumption (100W) models
-  // continuous standby overhead.
+  // storage" per spec. Wired into the §5.1 power balance: each battery
+  // grants a giant `singularityStoredWs` buffer that charges from surplus
+  // and discharges into deficits (see `economy.ts` brownout path). Per
+  // the §8.4 note ("not a resource storage building") this def carries
+  // NO `storage` contribution — it never raises any resource cap. Tiny
+  // consumption (100W) models continuous standby overhead.
   singularity_battery: {
     id: 'singularity_battery',
     displayName: 'Singularity Battery',
@@ -3799,8 +3798,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xd8b840, // ascendant gold + antenna-blue blend
     stroke: 0x483820,
-    // Antenna placeholder — tune in Appendix A. T6 antenna ALSO acts as the
-    // satellite dish for §14 orbital launches (dish dual-role STILL-DEFERRED).
+    // Antenna placeholder — tune in Appendix A. T6 antenna also acts as
+    // the satellite dish for §14 orbital launches: its signal radius adds
+    // to the ground-station comm range of an island with a Spaceport
+    // (see `groundStationCommRange` in orbital.ts).
     power: { consumes: 400 },
     placementCost: { antimatter_propellant: 40, steel: 80, reality_anchor: 40 },
     glyph: '⟁',

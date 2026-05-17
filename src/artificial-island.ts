@@ -22,9 +22,9 @@
 //     doesn't know about the world's island list. The UI's pre-validation
 //     plus `validateConstruction`'s material/tier checks together keep the
 //     pure layer cleanly testable.
-//   - T3 caps at major=8, minor=8 (§2.5). T4 (12, 12) and T5 (16, 16) are
-//     STILL-DEFERRED — when those founder tiers land, extend `MAX_RADIUS_BY_TIER`
-//     instead of branching here.
+//   - T3 caps at major=8, minor=8 (§2.5). T4 = 12×12 and T5 = 16×16 are
+//     live (see `MAX_RADIUS_BY_TIER`); the cap lookup keys on the founder
+//     state's tier at validate time.
 
 import type { Biome, IslandSpec } from './world.js';
 import { BIOME_DEFS, rollModifiersArtificial } from './biomes.js';
@@ -130,9 +130,8 @@ export function computeConstructionCost(req: ConstructionRequirements): Construc
  *   1. founder is T3+ (level ≥ 15 via `tierForLevel`).
  *   2. founder has at least one `platform_constructor` placed.
  *   3. requested biome is in BIOME_DEFS.
- *   4. radii are within the T3 cap (major ≤ 8 AND minor ≤ 8). T4/T5 caps
- *      are STILL-DEFERRED (future founders will use higher tiers and the cap
- *      function will lift accordingly).
+ *   4. radii are within the founder-tier cap from `MAX_RADIUS_BY_TIER`
+ *      (T3 = 8, T4 = 12, T5 = 16 per §2.5).
  *   5. founder's inventory has ≥ each material cost.
  *
  * Position validity (overlap with existing islands, off-map placement) is
@@ -155,7 +154,9 @@ export function validateConstruction(
   // Biome sanity check.
   if (!(req.biome in BIOME_DEFS)) return { ok: false, reason: 'invalid-biome' };
 
-  // Radii cap. T3 founder caps at 8×8 per §2.5; T4/T5 STILL-DEFERRED.
+  // Radii cap per §2.5: T3 = 8, T4 = 12, T5 = 16. Tiers below 3 fall back
+  // to the T3 cap — they're already rejected above by the tier gate, but
+  // the lookup needs a default to satisfy TypeScript.
   const cap = MAX_RADIUS_BY_TIER[tier as 3 | 4 | 5] ?? MAX_RADIUS_BY_TIER[3];
   if (req.majorRadius > cap || req.minorRadius > cap) {
     return { ok: false, reason: 'radius-too-large' };

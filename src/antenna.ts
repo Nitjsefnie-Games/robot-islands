@@ -6,8 +6,9 @@
 // the drone tick consumes.
 //
 // Six tiers (T1-T6), 1×1 or 2×2 footprint, radii in tiles. The tier-6
-// antenna doubles as a satellite dish for the §14 orbital launch chain —
-// flagged on the building def but the dish-side dual role is STILL-DEFERRED.
+// antenna doubles as a satellite dish: when present on a launching island
+// it adds its signal radius to the ground-station comm range
+// (`groundStationCommRange` in `orbital.ts`).
 
 import { BUILDING_DEFS } from './building-defs.js';
 import type { BuildingDefId } from './building-defs.js';

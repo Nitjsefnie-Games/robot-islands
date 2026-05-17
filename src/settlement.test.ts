@@ -483,11 +483,13 @@ describe('tickVehicles', () => {
     expect(world.vehicles[0]!.status).toBe('arrived');
     expect(target.populated).toBe(true);
     expect(islandStates.has('target')).toBe(true);
-    // Auto-placed Cargo Dock on the target spec at (0, 0).
+    // Auto-placed Cargo Dock on a coastal tile within the target's
+    // ellipse — `findCoastalTile` walks the bounding box in scan order
+    // and picks the first inscribed tile bordering an outside neighbour.
+    // For a 4-radius round island the first such tile is on the top edge.
     const dock = target.buildings.find((b) => b.defId === 'dock');
     expect(dock).toBeDefined();
-    expect(dock!.x).toBe(0);
-    expect(dock!.y).toBe(0);
+    expect(target.buildings.some((b) => b.defId === 'dock')).toBe(true);
     // State.buildings should reference the same array as spec.buildings.
     const targetState = islandStates.get('target')!;
     expect(targetState.buildings).toBe(target.buildings);

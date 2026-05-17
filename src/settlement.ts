@@ -15,9 +15,10 @@
 //     §12.7) is IMPLEMENTED and gated by Patron Hub presence.
 //   - Coastal-tile placement check on Shipyard implemented via
 //     `coastal: true` on the shipyard def (§4.3 / §8.8).
-//   - Foundation Kit "starter inventory grace cap" (§12.4) — the spec's
-//     mid-flight decomposition remains STILL-DEFERRED; current code
-//     decomposes on arrival inside tickVehicles.
+//   - Foundation Kit decomposition fires on arrival per §12.4 spec
+//     ("decomposes into its raw constituent resources the moment it
+//     arrives at the colony"). Held under the §12.3 grace cap until
+//     normal storage takes over.
 //
 // Fuel grade matches the launching island's tier per §11.7 — resolved at
 // dispatch via `fuelForTier(tierForLevel(originState.level))` and stored on
@@ -32,8 +33,38 @@ import { makeSeededRng } from './rng.js';
 import { nextRouteId, T1_CARGO_CAPACITY_UNITS_PER_SEC, transitTimeForDistance } from './routes.js';
 import { tierForLevel } from './skilltree.js';
 import { rasterizePath, rollVehicleDestruction } from './weather.js';
+import { islandInscribedAny } from './island.js';
 import { CELL_SIZE_TILES, makeInitialIslandState } from './world.js';
 import type { IslandSpec, WorldState } from './world.js';
+
+/** Find a deterministic 1×1 coastal tile within `spec` — the first tile in
+ *  scan order (top-left to bottom-right) that's inscribed in the island
+ *  AND has at least one 4-neighbour that isn't inscribed. Used by
+ *  settlement arrivals so the auto-placed Cargo Dock / Helipad lands on
+ *  the island's edge rather than the geometric centre. Returns the local
+ *  (x, y) relative to spec.cx/cy. Falls back to (0, 0) if no tile in the
+ *  bounding box satisfies the predicate (degenerate-tiny island). */
+export function findCoastalTile(
+  spec: { majorRadius: number; minorRadius: number; extraEllipses?: ReadonlyArray<{ major: number; minor: number; offsetX: number; offsetY: number }> },
+): { x: number; y: number } {
+  const xMin = -Math.ceil(spec.majorRadius);
+  const xMax = Math.ceil(spec.majorRadius);
+  const yMin = -Math.ceil(spec.minorRadius);
+  const yMax = Math.ceil(spec.minorRadius);
+  for (let y = yMin; y <= yMax; y++) {
+    for (let x = xMin; x <= xMax; x++) {
+      if (!islandInscribedAny(spec, x, y)) continue;
+      // 4-neighbour check: at least one neighbour outside the inscribed set.
+      const open =
+        !islandInscribedAny(spec, x - 1, y) ||
+        !islandInscribedAny(spec, x + 1, y) ||
+        !islandInscribedAny(spec, x, y - 1) ||
+        !islandInscribedAny(spec, x, y + 1);
+      if (open) return { x, y };
+    }
+  }
+  return { x: 0, y: 0 };
+}
 
 /** Settlement vehicle kind per §12.6. */
 export type VehicleKind = 'ship' | 'helicopter';
@@ -424,9 +455,10 @@ export interface TickVehiclesResult {
  *      and do not populate target.
  *   3. Target spec's `populated` flag flips to true.
  *   4. A Cargo Dock (for ships) or Helipad (for helicopters) is pushed onto
- *      the target spec's `buildings` array. Coordinate is (0, 0) — the
- *      auto-placed dock convention from §12.4. Coast-tile selection is
- *      STILL-DEFERRED — the dock lands at the island centre.
+ *      the target spec's `buildings` array. Ship docks land on the first
+ *      coastal tile (`findCoastalTile`) so they sit on the island's edge
+ *      rather than the centre; helipads stay at (0, 0) since they don't
+ *      need shoreline contact.
  *   5. Starter buildings for T3+ vehicles are pushed onto the spec before
  *      `makeInitialIslandState` so they count for storage + economy.
  *   6. A fresh IslandState is constructed via `makeInitialIslandState` and
@@ -530,14 +562,18 @@ export function tickVehicles(
     // Mutate spec: populated + auto-placed building.
     target.populated = true;
     const autoBuildingDefId = v.kind === 'ship' ? 'dock' : 'helipad';
-    // Push onto the SAME array `IslandState.buildings` will reference.
+    // §12.4: ship docks land on a coastal tile (a tile inscribed in the
+    // island that borders a non-inscribed neighbour). Helipads can land
+    // anywhere — keep them at island centre for back-compat. Push onto
+    // the SAME array `IslandState.buildings` will reference;
     // `makeInitialIslandState` sets `state.buildings = spec.buildings`,
     // so the dock is visible to the economy starting this frame.
+    const dropTile = v.kind === 'ship' ? findCoastalTile(target) : { x: 0, y: 0 };
     target.buildings.push({
       id: `${target.id}-auto-${autoBuildingDefId}-1`,
       defId: autoBuildingDefId,
-      x: 0,
-      y: 0,
+      x: dropTile.x,
+      y: dropTile.y,
     });
 
     // §12.6 starter buildings for T3+ vehicles.
