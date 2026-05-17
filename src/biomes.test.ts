@@ -227,6 +227,7 @@ describe('effectiveModifierMultipliers', () => {
     expect(m.recipeRateByCategory.smelting).toBe(1);
     expect(m.recipeRateByCategory.manufacturing).toBe(1);
     expect(m.recipeRateByCategory.power).toBe(1);
+    expect(m.windPowerMul).toBe(1);
   });
 
   it('mineral_rich applies +25% to extraction only', () => {
@@ -274,13 +275,23 @@ describe('effectiveModifierMultipliers', () => {
     expect(m.outputVariance).toBe(false);
     expect(m.t5ExtractionRateMul).toBe(1);
     expect(m.cryoRecipeRateMul).toBe(1);
+    expect(m.windPowerMul).toBe(1);
   });
 
-  it('high_wind sets outputVariance=true and leaves rates unchanged', () => {
+  it('high_wind sets outputVariance=true, windPowerMul=1.5, and leaves recipe rates unchanged', () => {
     const m = effectiveModifierMultipliers(['high_wind']);
     expect(m.globalRecipeRate).toBe(1);
     for (const c of Object.values(m.recipeRateByCategory)) expect(c).toBe(1);
     expect(m.outputVariance).toBe(true);
+    expect(m.windPowerMul).toBeCloseTo(1.5, 12);
+  });
+
+  it('high_wind composes with mineral_rich: windPowerMul=1.5, extraction=1.25, variance=true', () => {
+    const m = effectiveModifierMultipliers(['high_wind', 'mineral_rich']);
+    expect(m.windPowerMul).toBeCloseTo(1.5, 12);
+    expect(m.recipeRateByCategory.extraction).toBeCloseTo(1.25, 12);
+    expect(m.outputVariance).toBe(true);
+    expect(m.globalRecipeRate).toBe(1);
   });
 
   it('mineral_rich + fertile compose multiplicatively on extraction (1.25 × 1.5)', () => {
@@ -300,6 +311,7 @@ describe('effectiveModifierMultipliers', () => {
       expect(c).toBe(1);
     }
     expect(IDENTITY_MODIFIER_MULTIPLIERS.outputVariance).toBe(false);
+    expect(IDENTITY_MODIFIER_MULTIPLIERS.windPowerMul).toBe(1);
   });
 });
 
