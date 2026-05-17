@@ -151,12 +151,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
 
 These have the simulation wired but no player surface to access them.
 
-- **Skill-tree branch-lock visual** — committed sub-paths have no
-  visual flag; sibling-locked sub-paths don't read as "blocked until you
-  complete the committed one". Players discover the lock by clicking
-  and getting rejected.
-- **Tier-reset cost preview** — action works; the UI doesn't preview
-  the steel+gear cost before commit.
 - **Multi-island HUD** — HUD shows the active island only. Top-bar
   chips give per-island level/power; the detail panel doesn't switch.
   File: `main.ts:620`.
@@ -209,8 +203,6 @@ These have the simulation wired but no player surface to access them.
 - Drone dispatch ETA prediction in the dock (current code shows max-
   flight-time only).
 - Per-island per-resource net rate sparkline in the HUD detail panel.
-- Save-export / save-import for backup + cross-device sync (idb-keyval
-  is the only persistence path today).
 
 ---
 
