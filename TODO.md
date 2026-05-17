@@ -1,57 +1,520 @@
 # TODO
 
-Snapshot of known unfinished work. Most §1 items have shipped this
-sweep; what remains is whatever the section-1 list still calls out.
+Consolidated punch list from the 4-agent sweep (200% file coverage,
+~244 raw findings, deduped + verified against source + SPEC.md).
 
-Organised by category. Within each category, items are ordered roughly by
-player-facing impact (highest first). Spec section references are §-numbers
-from `SPEC.md`.
-
----
-
-## 1. Missing mechanics (new systems to build)
-
-These are systems the spec defines but the codebase doesn't implement at
-all. Building them requires new state, new tick paths, or new UI surfaces.
-
----
-
-## 2. Mechanic shipped, no UI to invoke
-
-These have the simulation wired but no player surface to access them.
-
+> **Meta** — `SPEC.md` "Implementation Status" table is out of sync with
+> code in three load-bearing places. Future agents who trust the table
+> will mis-plan:
+> - §14.3 claims "Scanner / Sweeper / Comm / **Relay** variants buildable"
+>   — Relay nowhere in `orbital.ts` `SatelliteVariant`, no `relay_sat_assembly`
+>   recipe, no UI variant. (See §1 below.)
+> - §2.1 marked **L** with note "Density 0.15" — silently abandons the
+>   spec's geometric-decline up-to-4-per-cell rule. (See §1 below.)
+> - §2.4 marked **P** listing route types `cargo / drone / airship /
+>   teleporter / cable` — `mass_driver` missing from `RouteType` despite
+>   §9.5 Mass Driver building and §15.1 `Route.type = 'mass_driver'`. (§1.)
 
 ---
 
-## 3. Mechanic shipped, missing visual indicators
+## 1. Spec divergence — real bugs a player would notice
 
-- **§13.4 endgame victory banner** — *intentionally removed* per the
-  spec's "no win screen". Listed here so a future contributor doesn't
-  re-add it. Not a bug.
-- **§14 satellite map dots + coverage rings** — code path live (see
-  `satellite-overlay.ts`); reproducible only once the player has at
-  least one launched sat. The orbital-ui launch flow + this overlay
-  are wired together so any future sat will surface.
+- **§10 Funneling cuts off at level 3 instead of crossing T3 (level 15).**
+  `src/routes.ts:108` `FUNNELING_TIER_CAP = 3` is compared as `destState.level
+  < FUNNELING_TIER_CAP` at `src/routes.ts:297` and `:502`. Per §9.2 T3
+  starts at level 15, so funneling dies 12 levels early — every colony
+  between L3 and L15 silently loses the funnel-XP bonus that's supposed
+  to carry it through T1-T2. The in-code comment self-flags ("Proper
+  §9.2 tier-breakpoint mapping STILL-DEFERRED"). One-constant fix: 3 → 15.
+  *(Flagged by Agent A.)*
+
+- **§2.6 / §11.5 drone tiers shifted by one across code + UI + tutorial.**
+  Code treats T1 as an entry-level drone but spec says Drone Pad is T2
+  and T1 drones are unreachable. Touchpoints, all the same root issue:
+  - `src/drones.ts:88-95` `DRONE_TIER_MULTIPLIERS = {1:1.5, 2:1.0, 3:0.7,
+    4:0.5, 5:0.5, 6:0.2}`. Spec §2.6 vehicle vulnerability table is
+    T2=1.5, T3=1.0, T4=0.7, T5=0.5. Code's T2 sits where spec's T3 should
+    be — every T2/T3/T4 drone is one tier sturdier than spec.
+  - `src/drones-ui.ts` `selectedTier = 1` default lets the player launch a
+    T1 drone via the picker (spec: no T1 drone exists).
+  - `src/tutorial.ts:61, 66, 81` hints reference "T1 drone (biofuel)"
+    and a `build_biofuel_plant` → `produce_biofuel` → `dispatch_first_drone`
+    chain that points at a non-existent unlock.
+  - `src/tutorial.ts:86` `build_diesel_chain` hint says "T2 drones are
+    tougher in storms" — exactly the opposite of spec (T2 is the fragile
+    tier x1.5).
+  Fix per spec: drop T1 entry from `DroneTier`/`DRONE_TIER_MULTIPLIERS`,
+  shift T2/T3/T4/T5 values to match §2.6, drop T6 (spec has no T6 drone —
+  T6 is satellites). Tutorial + UI fall out of the corrected enum.
+  *(Flagged by Agents C, D; root cause is one shifted table.)*
+
+- **§14.3 Relay Sat variant entirely absent from code.** SPEC.md status
+  table claims "Scanner / Sweeper / Comm / Relay variants buildable" but:
+  - `src/orbital.ts:30` `SatelliteVariant = 'scanner' | 'sweeper' | 'comm'`
+    (no `relay`).
+  - `src/orbital-ui.ts:47-67` `VARIANTS` lists scanner/comm/sweeper only.
+  - No `relay_sat_assembly` recipe, no `relay_sat` payload.
+  Per §14.10 the recipe should be `6 Exotic Alloy + 1 AI core + 200
+  Optical Fiber + 1 OIP`. Either ship the variant (recipe + variant + UI)
+  or strike "Relay" from the spec status table.
+  *(Flagged by Agents C, D; same root issue.)*
+
+- **§14.7 every satellite spawns at the same hardcoded offset from its
+  Spaceport.** `src/orbital.ts:224-225` (orbit-explosion lock cell) and
+  `:249-250` (success path) both use `spec.cx + 100, spec.cy + 100`.
+  Multiple sats from the same Spaceport stack into the exact same lock
+  cell; every orbit-explosion debris field lands in the same SE quadrant.
+  Should be a launch-parameter-driven position (player-chosen, or at
+  least a deterministic spread per sat).
+  *(Flagged by Agent D.)*
+
+- **§14.6 / §14.12 Repair Drone wipes Resilience-skill fuel reserve.**
+  `src/orbital.ts:578` `sat.fuel = 100` on successful repair, overwriting
+  the `100 * skill.satFuelReserve` baked at launch (`:253`). Players
+  investing in the Orbital → Resilience sub-path lose the bonus after
+  every repair. Should re-multiply by the owning island's current
+  `satFuelReserve` (or store the launch-time reserve on the sat).
+  *(Flagged by Agent D.)*
+
+- **§4.7 T2 maintenance still consumes `bolt: 5` instead of the spec
+  literal `bearing: 5`.** `src/maintenance.ts:69` self-flags the gap
+  ("bearing shipped in Task 6.2 but maintenance recipes haven't been
+  retuned yet"). T3 was migrated to its spec literal at `:75`; T2 was
+  missed. `bearing` exists in the catalog (`src/recipes.ts:412`). Drop-in
+  fix: `2: { lubricant: 3, bearing: 5 }`.
+  *(Flagged by Agents A indirectly, C, D — all converge.)*
+
+- **§7.12 `reality_forge` recipe diverges from spec by ~50% of inputs
+  and 1/18 of cycle time.** `src/recipes.ts:1337-1342` ships `2
+  exotic_alloy + 1 ai_core + 1 casimir_energy` / 4800s; spec literal is
+  `4 ai_core + 1 antimatter_capsule + 1 time_crystal + 1 exotic_alloy` /
+  24h. The 1260-line comment cites "missing T4 raws" but both
+  `antimatter_capsule` and `time_crystal` now exist in the catalog (recipes
+  at `:745-747`). Either bring recipe in line with spec or update SPEC.md
+  to acknowledge the simplification.
+  *(Flagged by Agents B, C — same finding.)*
+
+- **§7.12 `antimatter_refinery` recipe wrong inputs + 4× spec cycle.**
+  `src/recipes.ts:1996-2001` uses `1 exotic_alloy + 1 reality_anchor + 2
+  casimir_energy` / 7200s. Spec §7.12 says `1 antimatter_capsule + 1
+  plasma_containment_vessel + 5 cryogenic_hydrogen` / 30 min. Both spec
+  inputs exist in catalog. Off-spec on inputs, scale, and conceptual chain
+  (ties T6 fuel back to T4 antimatter chain per spec; current ties to T5
+  reality_anchor).
+  *(Flagged by Agent C.)*
+
+- **§14.10 `comm_sat_assembly` `optical_fiber` reduced 200 → 50 with no
+  spec authority.** `src/recipes.ts:2015` — the in-line comment
+  literally says `"Agent C: extreme ratio, suspected copy-paste from
+  spec"`, but spec §14.10 is the spec. Either restore 200 or document
+  the deviation in SPEC.md.
+  *(Flagged by Agents B, C.)*
+
+- **§9.4 `logistics_hub` invented a recipe-rate buff the spec doesn't
+  ask for.** `src/specialization.ts:91-101` declares
+  `buffCategory: 'logistics'` with `buffMultiplier: 2.0` PLUS the
+  spec'd `+100% route capacity` + `+50% storage cap` extras. §9.4
+  only specifies the latter three (route cap, storage cap, -25% prod
+  penalty); the 2.0 recipe-rate buff on "logistics"-tagged recipes is
+  unspec'd and effectively double-credits any recipe carrying both the
+  category tag and the role's penalty.
+  *(Flagged by Agent A.)*
+
+- **§13.3 Omniscient Lattice activates without route-connectivity check.**
+  `src/lattice.ts:35-49` counts every T5-mastered island with a Lattice
+  Node toward the activation threshold (N=20) regardless of whether
+  those islands are networked. §13.3 ties N to "Network Consciousness
+  threshold (§9.6)" and §9.6 explicitly defines "networked" as
+  route-graph-reachable from home. Fix: filter `nodeIslands` against
+  `networkedIslandIds(world)` before length-check.
+  *(Flagged by Agent A.)*
+
+- **§2.4 `any` route seeds priority with EVERY resource (opposite of
+  spec).** `src/routes-ui.ts:518` `priorityList: isAny ? [...ALL_RESOURCES]
+  : []`. Spec §2.4: "Resources not on the priority list are not moved
+  by this route." A fresh `any` route therefore moves every resource in
+  alphabetic order until the player edits — the inverse of the spec
+  contract ("configurable bulk movers"). Should default to `[]` and let
+  the player add entries.
+  *(Flagged by Agent B.)*
+
+- **§15.1 / §9.5 `RouteType` is missing `'mass_driver'`.** `src/routes.ts:33-39`
+  enumerates `cargo | drone | airship | teleporter | cable | spacetime`.
+  Spec §15.1 says `Route.type = 'mass_driver'` for the §9.5 Plains
+  biome-unique Mass Driver building (which IS in BUILDING_DEFS). The
+  building exists with nothing to dispatch.
+  *(Flagged by Agent A.)*
+
+- **§2.1 world-gen silently caps at 1 island per cell.**
+  `src/world-gen.ts:73-129` returns at most one island per cell at
+  density 0.15. Spec §2.1: geometric-decline up to 4 per cell
+  (P(2nd)=P(3rd|2nd)=P(4th|3rd)=0.30, hard cap 4). Module head comment
+  reinterprets this as "folded into density 0.15" — that lowers the
+  1st-island rate, never produces 2+/cell. SPEC.md status table marks
+  §2.1 L but only notes density, not the geometric collapse.
+  *(Flagged by Agents A, B.)*
+
+- **§2.7 `solarMultiplier` is piecewise-constant, not linear ramp.**
+  `src/daynight.ts:60-71` returns dawn=0.5, day=1.0, dusk=0.5,
+  night=0.0. Spec §2.7: "Dawn: 50% output (linear ramp 0 → 100)";
+  "Dusk: 50% output (linear ramp 100 → 0)". The module head justifies
+  the simplification as a time-average — fine for offline integrals,
+  wrong for any UI readout or weather-phase-boundary code that samples
+  instantaneously. Worth either implementing the ramp or documenting
+  the deviation in SPEC.md.
+  *(Flagged by Agents A, B.)*
+
+- **§9.3 UI footer lies about cost formula.** `src/skilltree-ui.ts:706`
+  says "costs grow 2^(depth-1)" — `src/skilltree.ts:287-289` actually
+  uses `Math.round(1.5 ** (depth - 1))`. The 1.5 ramp is a deliberate
+  spec deviation (documented at `:281-286`), but the UI still tells
+  players the spec formula. Trivial string fix.
+  *(Flagged by Agent A.)*
+
+- **§9.6 Auto-Patronage default priority lists substitute the wrong
+  resources.** `src/settlement.ts:298` Route 2 uses `'bolt'` where spec
+  §9.6 says `Brick`. `src/settlement.ts:311` Route 3 uses `'sand'`
+  where spec says `Copper ore`. Bolt and sand are quiet stand-ins;
+  Brick and copper_ore both exist in the catalog.
+  *(Flagged by Agent D.)*
+
+- **§12.4 T3 Heavy Lift starter buildings land in a straight east row
+  with no inscription check.** `src/settlement.ts:184-200`
+  `computeStarterBuildings` hardcodes `(2,0), (4,0), (6,0), (8,0),
+  (10,0)`. A small Volcanic colony (r=7) inscribed disk doesn't reach
+  tile (8,0), so the rightmost starter buildings can land outside the
+  ellipse and start invalid. Spec says "deterministic default positions"
+  — fine — but should validate inscription.
+  *(Flagged by Agent D.)*
+
+- **§13.3 `useRealityForge` is dead production code AND a misnomer.**
+  `src/world.ts:327-367` — only callers are its own test file. Function
+  name is wrong (Reality Forge crafts T5 components per §8.3 / §7.12;
+  this function does the Universe Editor mechanic from §13.3, which is
+  separately implemented in `src/universe-editor.ts → editIslandBiome`
+  and is what `inspector-ui.ts` actually calls). Delete (or rename and
+  consolidate with `editIslandBiome` to remove the parallel branch).
+  *(Flagged by Agents B, C.)*
+
+- **§13.4 `endgame.ts` ships a banner + checker the spec forbids.**
+  `src/endgame.ts:18` `victoryBannerShown` field + `:29-60` `checkVictory`
+  function. Spec §13.4 + impl-status row §13.4 are explicit: "No win
+  screen / popup / acknowledgement fires when artifacts complete."
+  `checkVictory` is never called outside `endgame.test.ts`. Persistence
+  serializes the field, which is the only thing keeping it from being
+  pure dead code. Either fully remove or shrink to an achievement
+  ledger (which is what `achieved: Set<…>` already does — drop the
+  banner field).
+  *(Flagged by Agents C — extends Agent A's notes.)*
+
+- **§5.3 cable inflow doesn't deduct source W.** `src/routes.ts:147-164`
+  `cableInflowForIsland` adds capacity to the destination without
+  removing it from the source. Comment acknowledges. Spec §5.3 says
+  cables "transmit electrical power between islands" — power should
+  conserve, not multiply. Probably intentional placeholder; flag as a
+  real economy bug rather than a polish item.
+  *(Flagged by Agent D.)*
+
+- **§9.3 "latent" tooltips lie about live mechanics.**
+  `src/skilltree.ts:525-526, 535-540` mark drilling / smelting /
+  chemistry / electronics depth-1/2 nodes as `(latent — X pending)`
+  even though those buildings (`mine`, `smelter`, `chemical_reactor`,
+  `electronics_lab`, etc.) ship and the nodes drive a real
+  `rate('extraction')` / `rate('smelting')` / etc. multiplier today.
+  Players who buy `drilling.1` get +5% on Mine output but see "latent"
+  in the description.
+  *(Flagged by Agents C, D.)*
 
 ---
 
-## 4. Verification gaps (need a live game-state to reproduce)
+## 2. Missing mechanics (spec calls for it, code doesn't ship it)
 
-Each entry below is wired in code but requires a specific game state to
-visually reproduce — leave the entry in place so a future contributor
-who lands in that state confirms it.
+- **§4.6 generic-storage label picker at placement time.**
+  `src/placement.ts:47-53` `DEFAULT_CARGO_LABEL = 'iron_ore'` is a
+  hardcoded stand-in; spec §4.6 says the player labels at placement.
+  Relabel-after-placement is the workaround. Every Crate / Warehouse
+  starts holding iron_ore regardless of player intent. *(A, B, C.)*
 
-- Cell-snap vision rendering at very high zoom (post smooth→blocky
-  rewrite). Verified at default zoom in the live dev server.
-- Range ring + reticle color-flip while launch armed (drones-ui
-  `setReticleScreenPos` flips RETICLE_OK ↔ RETICLE_WARN inline).
-- Tier-reset HUD chip — appears only at T3+ with cooldown clear +
-  materials. Visible once a T3 island has the chip's preconditions.
+- **§2.6 Weather Station visibility extension not wired through the
+  weather overlay.** `src/weather-overlay.ts:17-20` self-documents the
+  gap — "The §2.6 Weather Station bonus is not yet wired through this
+  path". Spec §2.6 promises Weather Station (T2) `+3 cells` and
+  Advanced Weather Station (T3) `+6 cells, +1-cycle forecast`. *(D.)*
+
+- **§3.4 Coast island rotation never randomized.** `src/world.ts:177`
+  carries `rotation` as forward-compat but always sets it to 0. Spec
+  §3.4: "Coast islands generate with a biome-randomized rotation
+  (multiples of 22.5 degrees from world seed)." SPEC.md status §3.1-3.4
+  marks shape as L. *(B.)*
+
+- **§14.10 Repair Drone recipe / Repair Pack ambiguity.** §14.10
+  literal: `Repair Drone = 2 Exotic Alloy + 50 Carbon Steel + 1
+  Foundation Kit`. §14.12 says Repair Drone consumes a `Repair Pack`
+  instead of OIP. `src/orbital.ts:525` correctly checks `repair_pack`.
+  Either §14.10 should be updated (Foundation Kit → Repair Pack) or the
+  code reconciled. Spec drift, not code drift. *(D.)*
+
+- **§14.5 satellite coverage skips perimeter cells.**
+  `src/orbital.ts:791-806` `cellsCoveredBySat` admits only cells whose
+  CENTRE is within `coverageRadius`. Cells whose centre is outside but
+  whose area overlaps are skipped — under-counts perimeter coverage,
+  visible at tight radii. *(D.)*
 
 ---
 
-## 5. Polish / nice-to-have
+## 3. Stale STILL-DEFERRED / out-of-date comments
 
+A flat list. One sweep-and-clean commit. All verified against the
+current implementation (each comment claims something is deferred that
+the code now ships).
+
+- `src/building-defs.ts:16-33` — header says §13.3 (time banking, free
+  creation, biome reassignment, network unity, Probability Engine) is
+  STILL-DEFERRED. All live (`spendTimeLock`, `genesis_chamber`,
+  `editIslandBiome`, `latticeActive`, `probability_engine` in
+  drone scan bias).
+- `src/building-defs.ts:42` — T4 omnidirectional pulse "STILL-DEFERRED
+  — only the def is added in step 12." `firePulse` is wired.
+- `src/building-defs.ts:176-183, 2038-2040` — "§14.2-14.8 / §14.12 …
+  Spaceport upgrade, satellite launches, debris fields, comm graph,
+  Repair Drone operations … all STILL-DEFERRED." All live in
+  `orbital.ts`.
+- `src/building-defs.ts:1610` — Cryogenic Compute Center "Arctic
+  ambient cold halves compute-recipe power draw — STILL-DEFERRED;
+  modelled at static 1200W."
+- `src/building-defs.ts:1711-1712` — Launch Tower T4 pulse "STILL-DEFERRED".
+- `src/building-defs.ts:1905-1909` — Genesis Chamber free-creation
+  "STILL-DEFERRED to step 14"; mechanic lives in
+  `src/economy.ts:542-598, 792-804`.
+- `src/buildings.ts:71` — Eternal Servitor "Conversion Kit recipe and
+  Reality-Forge conversion mechanic that flips this flag are
+  STILL-DEFERRED"; `convertToServitor` is the next function in the
+  same file and is wired through `inspector-ui.ts:1372`.
+- `src/economy.ts:155` — "§9.7 Tier Reset path that clears [the
+  specializationRole] back to null is STILL-DEFERRED"; `tier-reset.ts`
+  ships.
+- `src/maintenance.ts:32-34` — "T6 is forward-compat — Spaceport (§14)
+  exists as a def but live mechanics are STILL-DEFERRED."
+- `src/orbital.ts:164-167` — `launchSatellite` docblock "full debris
+  mechanics are STILL-DEFERRED to a later step"; `addDebrisFragments`
+  fires on the orbit-explosion path; full debris tick lives in the
+  same file.
+- `src/placement.ts:14-18` — "broader §4.5 catalog of buff/gating
+  adjacencies (Cooling Tower → Crystal Lab unlocks, Wastewater
+  Treatment → Refinery efficiency) is STILL-DEFERRED". Wastewater
+  Treatment + Exhaust Scrubber soft-gates are live per impl-status §4.5;
+  only Cooling Tower → Crystal Lab remains. Comment overstates.
+- `src/recipes.ts:1158` — Cryogenic Compute Center "STILL-DEFERRED —
+  modelled at static 1200W." (See also building-defs.ts:1610.)
+- `src/recipes.ts:1260-1264` — Reality Forge "missing T4 raws"; both
+  `antimatter_capsule` and `time_crystal` ship.
+- `src/recipes.ts:1807` — `metal_rolling_mill` "sheet_metal, pipe,
+  beam STILL-DEFERRED until they have an explicit consumer";
+  `sheet_metal_mill` / `pipe_mill` / `beam_mill` ARE defined.
+- `src/recipes.ts:1817-1818` — Lithography Lab wafer intermediate
+  "STILL-DEFERRED"; `wafer_lab` + `silicon_wafer` ship (unused by
+  Lithography Lab though — see §1 below if you want to wire the chain).
+- `src/recipes.ts:1961-1966` — T6 orbital recipes "data-only ship.
+  §14.2-14.8 / §14.12 launch + debris + lodge + repair mechanics are
+  STILL-DEFERRED — payloads/fuel inert until the live launch system
+  lands." Launch system is live.
+- `src/network-consciousness.ts:14-16` — milestone-4 buff comment says
+  "Omniscient Lattice unlock arrives with the T5 endgame artifact, not
+  implemented yet"; Lattice is live.
+- `src/specialization.ts:12` — "§9.7 Tier Reset is STILL-DEFERRED";
+  tier-reset.ts ships.
+- `src/main.ts:670` — "multi-island HUD is a STILL-DEFERRED step-14
+  polish concern"; `hud.ts` paints multi-island.
+- `src/world.ts:177` — `rotation` "not yet wired — always 0 for now"
+  (see §2 above — partly genuine missing mechanic for Coast islands).
+
+---
+
+## 4. Tuning placeholders (Appendix A backlog)
+
+Numeric values shipped as designer-eye placeholders, all carrying
+explicit "tune in Appendix A" markers. Not bugs; balance pass owes
+them explicit values + rationale.
+
+- **`src/building-defs.ts` ~80 `placementCost` entries** marked
+  `// §14 placeholder — tune in Appendix A.` One per def, copy-paste
+  pattern by tier (e.g. every T2 chemistry plant at `steel:50, gear:10`).
+- **Antenna + Lighthouse signal radii.** `src/antenna.ts:21-28`
+  (80→700 across 6 tiers), `src/lighthouse.ts:36-43` (50→300). Whole
+  Antenna / Lighthouse system is a §11 design addition; not in spec §8
+  catalog.
+- **Construction times per tier.** `src/construction.ts:22-29`
+  `BASE_CONSTRUCTION_MS_BY_TIER = 30s / 2m / 5m / 15m / 30m / 60m`.
+- **`src/land-reclamation.ts:56-59`** stone-only `5 × r²` cost; spec
+  §3.4 says "scales superlinearly … material cost" without basket. T2-T3
+  components should plausibly appear in late-game expansions.
+- **`src/tier-reset.ts:68-71`** `{ steel: level², gear: floor(level²/2) }`
+  — both T2 components. Spec §9.7 calls for "T2-T3 components".
+- **`src/universe-editor.ts:34-38`** `UNIVERSE_EDITOR_COST = {
+  reality_anchor: 5, memetic_core: 2, phase_converter: 1 }`.
+- **`src/orbital.ts` constants block** (lines 28, 111-130, 533) — debris
+  hit constant, fragment counts, sat fuel/move/cleanup rates, repair-drone
+  travel time, tracking detection radius, all "placeholder Appendix A".
+- **`src/orbital.ts:200-202`** Spaceport tier I/II/III base success
+  rates `0.30 / 0.50 / 0.70` hardcoded inline (spec says T1≈0.30, T3≈0.70;
+  T2 is invented interpolation).
+- **`src/orbital.ts:273-274`** ground-station comm range per tier
+  `200 / 300 / 400` — three magic numbers no Appendix-A tag.
+- **`src/artificial-island.ts:55-60`** `STEEL_PER_TILE=5,
+  IRON_INGOT_PER_TILE=3, WOOD_PER_TILE=10`, hard-biome 1.5× surcharge.
+- **`src/world-gen.ts:165-172`** biome weight table `{plains:25,
+  forest:20, coast:15, volcanic:10, desert:15, arctic:15}` — spec has no
+  biome-frequency target.
+- **`src/economy.ts:1122-1129`** `xpForLevel` coefficient was rebalanced
+  from 100 to 25 (step #19); SPEC.md §9.1 still says `100 * n^2.2`.
+- **`src/skilltree.ts:287-289 + :298-300`** `costForDepth = round(1.5^(d-1))`
+  + `skillPointsForLevelUp = floor(1.1^L)` together make the tree ~100×
+  cheaper than spec's `2^(d-1)` cost + flat-1/level grant. Documented
+  deliberate deviation — but SPEC.md still cites the spec literals as
+  Appendix A placeholders. Reconcile (update SPEC.md or document
+  deviation explicitly).
+- **`src/recipes.ts` step #19 ×10/×20/×40/×60 cycle multipliers**
+  through most recipes; SPEC.md cycle-time placeholders untouched.
+- **`src/weather.ts:42`** `catastrophic: 0` (100% capacity kill); spec
+  §2.6 silent on catastrophic. Code extrapolated; may be too harsh.
+- **`src/routes.ts:96`** `TELEPORTER_FUEL_PER_TILE = 0.005` — entire
+  teleporter-fuel mechanic is an in-game design addition (not in spec).
+
+---
+
+## 5. Dead code / dead exports
+
+- **`src/world.ts:327-367`** `useRealityForge` — only callers in
+  `world.test.ts`. Replaced in production by `editIslandBiome`. Delete
+  or consolidate (see §1).
+- **`src/endgame.ts:29-60`** `checkVictory` + `:18` `victoryBannerShown`
+  field — only test consumers, contradicts spec "no win screen".
+  Persistence serializes the field, which is the only thing keeping it
+  alive. Reduce `EndgameState` to the achievement Set only.
+- **`src/hud.ts:327-335`** `renderMultiIslandBar` — no-op stub
+  documented "deprecated, kept as no-op stub", zero non-test consumers.
+- **`src/world.ts:62-68`** `DISCOVERY_RADIUS_TILES = 24` exported as
+  DEPRECATED with no in-tree consumer; kept "for external debug
+  tools". Pure dead export.
+- **`src/main.ts:700-737`** `forest-ne` demo-seed block (bumps level
+  50, sets `aiCoreCrafted = true`, seeds T4/T5 inventory). Comment at
+  `:679-685` notes the block is now a no-op in production because
+  forest-ne is no longer auto-populated per §3.7. Either re-purpose
+  for a dev/test fixture path or excise.
+
+---
+
+## 6. Brittle patterns / type-discipline notes
+
+- **Two-place constants that must stay in sync.**
+  - `FUNNELING_BONUS_PERCENT` in `src/routes.ts:103` and
+    `FUNNELING_BONUS_PERCENT_FOR_DRAIN` in `src/economy.ts:1113`.
+    Documented in both comments; drift caught by economy test.
+  - `BASELINE_STORAGE_CAP = 2000` in `src/world.ts:953` AND
+    `src/persistence.ts:568` (same constant, copied "to keep in sync").
+  - `CELL_SIZE_TILES = 16` declared in `src/world.ts`, re-exported from
+    `src/discovery.ts:19`, AND inlined as a literal in
+    `src/vision-source.ts:69` and `src/satellite-overlay.ts:51-52`
+    (`d.cellX * 16 * TILE_PX`). Three sources of truth.
+  - `LATTICE_ACTIVATION_THRESHOLD = 20` in `src/lattice.ts:12` is
+    independent of `NC_THRESHOLDS` in `network-consciousness.ts` despite
+    spec saying "N = 20 = Network Consciousness threshold".
+  - `src/orbital-ui.ts:170-173` duplicates the Spaceport upgrade cost
+    table from `src/orbital.ts:877-879`. UI shows numbers, backend
+    charges them — drift = mis-display.
+  - `src/specialization.ts` `ROLE_DEFS` (UI strings) and
+    `effectiveSpecializationMultipliers` (switch over magic numbers)
+    are parallel data. Tests cover both surfaces.
+  - `src/skilltree-ui.ts:317-323` `ROLE_CONFIRM_SUMMARY` is a third
+    copy of role-effect text alongside `ROLE_DEFS.description`.
+
+- **Hardcoded def-id lists where tag-driven lookup would be cleaner.**
+  `src/economy.ts:854-862` walks a long literal list (`mine | deep_mine
+  | copper_mine | tin_mine | …`) for the Mining `buildingBonus`. Every
+  new mining building has to be added here or silently loses the bonus.
+
+- **`as unknown as { … }` casts to mutate `readonly` fields.** Pervasive
+  pattern: `src/world.ts:349` (modifiers reassign), `src/routes-ui.ts:694`
+  (priorityList mutate), `src/inspector-ui.ts:751, 109`
+  (Mutable<PlacedBuilding>), `src/reactor-toxicity.ts:84`
+  (toxicityExpiryMs), `src/buildings.ts:137` (eternalServitor flip),
+  `src/orbital.ts:221` (spaceport tier revert). Each is pragmatic at
+  its site; collectively they undercut the `readonly` contract on
+  PlacedBuilding / Route / IslandSpec.
+
+- **`src/persistence.ts:346-348 / SCHEMA_VERSION = 4`** drops any
+  v1/v2/v3 save to an unknown-schema error. Comments accept the
+  trade-off but it's a real player-cost for long-time saves; no
+  migration path exists.
+
+- **`src/world.ts:938-946`** `startingInventory()` explicitly violates
+  §3.7 ("Empty inventory: no starter resources, no Foundation Kit") by
+  seeding 60 stone + 40 wood + 1 foundation_kit. The 22-line
+  justification comment notes that §3.7 + §14 placement costs together
+  make the game unplayable; the divergence is real and unilateral. Update
+  SPEC.md §3.7 or carry the gap as a known exception in impl-status.
+
+- **`src/recipes.ts:1060-1072`** `steel_mill_from_scrap` (600s, synthetic,
+  fires inside a regular Steel Mill via scrap-substitution) and
+  `steel_mill_scrap` (200s, real T2 building def) coexist with the SAME
+  inputs but 3× different cycle times. Player-visible "Steel Mill Scrap"
+  is the 3× faster one; designer-discovery gotcha.
+
+- **`src/recipe-graph.ts:24-29`** `ownerOf` only knows about
+  `mine_on_ore` / `mine_on_coal`. Steel Mill's `steel_mill_from_scrap`
+  variant will surface in the recipe-graph modal as the literal
+  synthetic id ("steel_mill_from_scrap") instead of "Steel Mill".
+
+- **`src/biomes.ts:524-525`** `rerollModifiers` mixes `Date.now()` into
+  the seed. Player-action one-shot (Universe Editor) so not a
+  save-replay break, but the sibling `rollModifiersArtificial` takes
+  `nowMs` as a parameter — pass it here for symmetry.
+
+- **`src/storage-categories.ts`** ~150 resources × 1 hand-mapped
+  category. No test enforces correct category choice; new resources
+  silently land somewhere reasonable-looking and stick.
+
+- **`src/inventory-ui.ts:41-200+`** parallel resource-category map.
+  Overlaps `RESOURCE_STORAGE_CATEGORY` from `storage-categories.ts`
+  with different category labels; two-place classification.
+
+---
+
+## 7. Dropped — verified STALE or FALSE
+
+- (Audit A MED) **`src/network-consciousness.ts:47-52` milestone 3 and
+  4 both = 1.25.** Re-read §9.6: milestone 4 (20 islands) "unlocks
+  Network Consciousness, prerequisite for Omniscient Lattice" — the
+  unlock IS the reward, not a numeric buff. Spec is silent on extra %.
+  The dup is consistent; A flagged for tuning attention, not as a bug.
+- (Audit A LOW) **`src/heat.ts:163` `localeCompare` on string ids vs
+  spec "lowest source building ID".** Strings, lexicographic order;
+  matches spec intent in practice. No-op finding.
+- (Audit C LOW) **`src/orbital.ts:535` repair drone id `repair_${nowMs}`
+  collision risk.** Same-ms collision is theoretical at human click
+  cadence. Same boat as `sat_${nowMs}`. Note for future; not bug-list.
+- (Audit B LOW) **`src/satellite-overlay.ts` only renders scanner /
+  comm / sweeper.** True, but consequence of the `SatelliteVariant`
+  union — already captured under §1 Relay finding.
+- (Audit C MED) **`src/discovery.ts:120-142` `pointToSegmentDistSq2`
+  inline copy of `drones.ts` version.** Documented as cycle-avoidance.
+  Both are pure math — duplication risk only if someone changes one
+  formula. Worth a watch but not actionable now.
+- (Audit B MED) **`src/economy.ts:484-490` 4-pass composition order
+  asserted by comments only.** Reordering is unlikely; tests cover the
+  end-to-end. Code-discipline note only.
+- (Audit D MED) **`src/main.ts:1699-1706` `window.__cam / __reg / etc.`
+  debug handles ship in production.** True but harmless; gating under
+  `import.meta.env.DEV` is a polish item, not a TODO entry-worthy bug.
+- (Audit B LOW) **`src/persistence.ts` IDB `console.warn`-and-continue
+  paths.** Documented design; toast-on-save-fail is a UX wishlist, not
+  a defect.
+- (Audit C MED) **`src/island-merge.ts:130-162` absorbed-building
+  collision risk.** Spec §3.6 promises non-collision by geometric
+  construction; current code trusts it. Defensive guard would be polish.
+- (Audit D LOW) **`src/orbital.ts:215` `padShare = 0.30 /
+  skill.padExplosionReduce`.** Matches spec §14.7 "30/70 split,
+  divisible by Launch-skill mitigation".
 
 ---
 
