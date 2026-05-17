@@ -94,11 +94,8 @@ describe('checkObjectives', () => {
         'craft_ai_core',
         'reach_level_50',
         'craft_reality_anchor',
-        'craft_ascendant_core',
-        'craft_genesis_cell',
-        'activate_omniscient_lattice',
       ]),
-      current: 'activate_omniscient_lattice',
+      current: 'craft_reality_anchor',
     };
     const world = makeWorld();
     const newly = checkObjectives(state, world);

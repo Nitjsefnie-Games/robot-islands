@@ -23,11 +23,7 @@ export type ObjectiveId =
   | 'craft_ai_core'
   // T5 transcendence
   | 'reach_level_50'
-  | 'craft_reality_anchor'
-  // §13.4 victory conditions
-  | 'craft_ascendant_core'
-  | 'craft_genesis_cell'
-  | 'activate_omniscient_lattice';
+  | 'craft_reality_anchor';
 
 export interface TutorialState {
   completed: Set<ObjectiveId>;
@@ -130,21 +126,11 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
     hint: 'Forge a Reality Anchor in the Reality Forge — foundational T5 component.',
     check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.reality_anchor ?? 0) > 0),
   },
-  craft_ascendant_core: {
-    title: 'Ignite the Ascendant Core',
-    hint: 'Build an Ascendant Assembly and produce an Ascendant Core (T5→T6 gate).',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.ascendant_core ?? 0) > 0),
-  },
-  craft_genesis_cell: {
-    title: 'Forge a Genesis Cell',
-    hint: 'Build a Genesis Forge — 24h cycle producing the first §13.4 victory artifact.',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.genesis_cell ?? 0) > 0),
-  },
-  activate_omniscient_lattice: {
-    title: 'Omniscient Lattice',
-    hint: 'Connect enough Lattice Nodes across networked T5 islands to activate the Lattice.',
-    check: (w) => w.latticeActive === true,
-  },
+  // Per spec §13.4: "No win screen. The game continues indefinitely after
+  // Ascendant Core; the player has effectively become a god-tier robot
+  // consciousness." The tutorial chain therefore deliberately STOPS at
+  // craft_reality_anchor — players keep finding things to build past T5
+  // without the game framing any artifact as "the finish."
 };
 
 export function checkObjectives(state: TutorialState, world: WorldState): ObjectiveId[] {
