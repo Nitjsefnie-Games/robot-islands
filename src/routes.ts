@@ -103,9 +103,9 @@ export const T1_CARGO_CAPACITY_UNITS_PER_SEC = 0.5;
 export const FUNNELING_BONUS_PERCENT = 0.5;
 
 /** Tier at which funneling bonus zeroes out per §10 ("crosses Tier 3").
- *  Placeholder: level-based. Proper §9.2 tier-breakpoint mapping STILL-DEFERRED
- *  to step 9. */
-export const FUNNELING_TIER_CAP = 3;
+ *  Level 15 is the T3 breakpoint per §9.2, so the bonus applies for
+ *  `destState.level < 15` and zeroes out once the colony reaches T3. */
+export const FUNNELING_TIER_CAP = 15;
 
 // ---------------------------------------------------------------------------
 // Route id generation

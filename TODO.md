@@ -19,15 +19,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
 
 ## 1. Spec divergence — real bugs a player would notice
 
-- **§10 Funneling cuts off at level 3 instead of crossing T3 (level 15).**
-  `src/routes.ts:108` `FUNNELING_TIER_CAP = 3` is compared as `destState.level
-  < FUNNELING_TIER_CAP` at `src/routes.ts:297` and `:502`. Per §9.2 T3
-  starts at level 15, so funneling dies 12 levels early — every colony
-  between L3 and L15 silently loses the funnel-XP bonus that's supposed
-  to carry it through T1-T2. The in-code comment self-flags ("Proper
-  §9.2 tier-breakpoint mapping STILL-DEFERRED"). One-constant fix: 3 → 15.
-  *(Flagged by Agent A.)*
-
 - **§14.3 Relay Sat variant entirely absent from code.** SPEC.md status
   table claims "Scanner / Sweeper / Comm / Relay variants buildable" but:
   - `src/orbital.ts:30` `SatelliteVariant = 'scanner' | 'sweeper' | 'comm'`
