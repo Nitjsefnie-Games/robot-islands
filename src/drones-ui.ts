@@ -266,37 +266,34 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   }
 
   const tierStat = statRow('TIER');
-  // Tier picker — chips built ONCE at mount (one per possible tier 1..6),
-  // refresh just toggles their visibility + selected styling. Per-frame
-  // replaceChildren would destroy/recreate the chip DOM between mousedown
-  // and mouseup, so real mouse clicks would never register (`click` event
-  // needs matching mousedown+mouseup targets); only synthetic `.click()`
-  // would work. Build-once-mutate-styles avoids the trap.
-  tierStat.valueEl.style.display = 'flex';
-  tierStat.valueEl.style.gap = '4px';
-  const tierChips: HTMLButtonElement[] = [];
+  // Tier picker — a compact `<select>` rather than a chip row. With 6
+  // possible tiers a chip row overflowed the narrow dock; the dropdown
+  // stays the same width regardless of how many tiers the island has
+  // unlocked. Options are built once; refresh toggles `disabled` on
+  // out-of-range entries and syncs `.value` to `selectedTier`.
+  const tierSelect = document.createElement('select');
+  tierSelect.style.cssText = [
+    'background: var(--ri-elev)',
+    'color: var(--ri-accent)',
+    'border: 1px solid var(--ri-border)',
+    'font: inherit',
+    'font-size: 11px',
+    'padding: 1px 4px',
+    'cursor: pointer',
+    'border-radius: 3px',
+  ].join(';');
   for (let t = 1; t <= 6; t++) {
-    const chip = document.createElement('button');
-    chip.textContent = `T${t}`;
-    chip.style.cssText = [
-      'background: transparent',
-      'border: 1px solid var(--ri-border)',
-      'color: var(--ri-fg-2)',
-      'font: inherit',
-      'padding: 1px 6px',
-      'cursor: pointer',
-      'border-radius: 3px',
-      'font-size: 11px',
-    ].join(';');
-    const tierVal = t as DroneTier;
-    chip.addEventListener('click', () => {
-      selectedTier = tierVal;
-      refresh(performance.now());
-      if (launchMode) repaintRangeRing();
-    });
-    tierStat.valueEl.appendChild(chip);
-    tierChips.push(chip);
+    const opt = document.createElement('option');
+    opt.value = String(t);
+    opt.textContent = `T${t}`;
+    tierSelect.appendChild(opt);
   }
+  tierSelect.addEventListener('change', () => {
+    selectedTier = Number(tierSelect.value) as DroneTier;
+    refresh(performance.now());
+    if (launchMode) repaintRangeRing();
+  });
+  tierStat.valueEl.appendChild(tierSelect);
   // Fuel label is dynamic — §11.7 tier-matched grade per the launching
   // island's tier. The row's left-hand label is overwritten in refresh()
   // (e.g. BIOFUEL on a T1 island, AVIATION KEROSENE on a T3 island).
@@ -776,16 +773,18 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // was never explicitly chosen via the picker.
     const islandTier = tierForLevel(origin.level);
     if (selectedTier > islandTier) selectedTier = islandTier as DroneTier;
-    // Show only chips T1..islandTier; highlight the selected one. The chip
-    // DOM was built once at mount — this loop just toggles display + the
-    // selected-state border/color so real mouse clicks aren't disrupted.
-    for (let t = 1; t <= 6; t++) {
-      const chip = tierChips[t - 1];
-      if (!chip) continue;
-      chip.style.display = t <= islandTier ? '' : 'none';
-      const isSelected = t === selectedTier;
-      chip.style.borderColor = isSelected ? 'var(--ri-accent)' : 'var(--ri-border)';
-      chip.style.color = isSelected ? 'var(--ri-accent)' : 'var(--ri-fg-2)';
+    // Disable out-of-range tier options + sync the select's current value.
+    // Options were built once at mount; only attribute changes here, so
+    // real clicks aren't disrupted by per-frame DOM rebuild (the bug we
+    // tripped on with the chip-row variant).
+    for (let i = 0; i < tierSelect.options.length; i++) {
+      const opt = tierSelect.options[i];
+      if (!opt) continue;
+      const tierNum = Number(opt.value);
+      opt.disabled = tierNum > islandTier;
+    }
+    if (Number(tierSelect.value) !== selectedTier) {
+      tierSelect.value = String(selectedTier);
     }
     // §11.7 tier-matched fuel — label + on-hand inventory follow the
     // PLAYER-SELECTED drone tier (T1 → BIOFUEL, T2 → DIESEL, …) not the
