@@ -151,10 +151,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
 
 These have the simulation wired but no player surface to access them.
 
-- **Routes drag-to-reorder priority editor** — priority list IS used
-  by the dispatch loop but only configurable via the data model. UI is
-  a static display.
-  Files: `routes-ui.ts:455, 509`.
 - **Inspector construction-time text** — cyan tint + progress arc on
   the building shows that a build is in progress, but the inspector
   doesn't show "Construction: 89s remaining" text.

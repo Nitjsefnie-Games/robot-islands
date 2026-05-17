@@ -451,10 +451,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     else if (islands.length >= 2) toSel.value = islands[1]!.id;
 
     cargoSel.replaceChildren();
-    // "any" — default priority list = ALL_RESOURCES in catalog order.
-    // A full drag-to-reorder priority editor is STILL-DEFERRED to a later UI
-    // pass; this is the spec-required filter option (§2.4 'any' rule)
-    // exposed at minimum interactivity.
+    // "any" — default priority list = ALL_RESOURCES in catalog order. The
+    // per-route priority list is editable in the ledger via the
+    // drag-to-reorder UL (`renderPriorityEditor` below).
     const oAny = document.createElement('option');
     oAny.value = '__any__';
     oAny.textContent = 'any (priority)';
@@ -505,9 +504,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const dx = spec1.cx - spec2.cx;
     const dy = spec1.cy - spec2.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    // '__any__' → filter null + priority list. Full drag-to-reorder
-    // priority editor is STILL-DEFERRED to a later UI pass; the default
-    // order is the catalog order in ALL_RESOURCES.
+    // '__any__' → filter null + priority list. Default order is the
+    // catalog order in ALL_RESOURCES; players reorder per-route via
+    // the ledger's drag-to-reorder UL (`renderPriorityEditor` below).
     const isAny = cargoChoice === '__any__';
     const route: Route = {
       id: nextRouteId(),
