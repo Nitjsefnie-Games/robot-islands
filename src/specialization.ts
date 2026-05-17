@@ -13,8 +13,11 @@
 //
 // Multiplier values are placeholders per §9.4. The pattern matches each
 // role's "buff category × buffMul, all other categories × penaltyMul",
-// with research_beacon as the special case: no recipe buff at all, plus
-// an `xpMul = 1.5` that the economy's `accrueXp` reads directly.
+// with two special cases: research_beacon has no recipe buff at all but
+// gets `xpMul = 1.5` (read directly by the economy's `accrueXp`); and
+// logistics_hub has no recipe buff either — its spec'd bonuses are
+// `routeCapacityMultiplier` + `storageCapMul = 1.5`, with the 0.75
+// penalty applied uniformly to every recipe category.
 
 import { ALL_RECIPE_CATEGORIES, type RecipeCategory } from './recipes.js';
 import type { Tier } from './skilltree.js';
@@ -43,9 +46,12 @@ export interface RoleDef {
   readonly description: string;
   /** Recipe category the buff multiplier targets, or `'all'` for the
    *  research_beacon case (no per-category buff — the penalty multiplier
-   *  applies uniformly). */
-  readonly buffCategory: RecipeCategory | 'all';
-  readonly buffMultiplier: number;
+   *  applies uniformly). OPTIONAL — roles whose §9.4 bonus is not a
+   *  recipe-rate buff (e.g. `logistics_hub`, whose spec'd extras are
+   *  route capacity + storage cap + a flat production penalty) omit
+   *  both `buffCategory` and `buffMultiplier`. */
+  readonly buffCategory?: RecipeCategory | 'all';
+  readonly buffMultiplier?: number;
   readonly penaltyMultiplier: number;
   readonly extra?: RoleExtra;
   /** Tier required to declare this role. §9.4 sets T3 uniformly; we keep
@@ -92,9 +98,11 @@ export const ROLE_DEFS: Readonly<Record<RoleId, RoleDef>> = {
     id: 'logistics_hub',
     displayName: 'Logistics Hub',
     description:
-      'Logistics recipes ×2.0, storage caps ×1.5, and route capacity ×2.0; ×0.75 on all other production.',
-    buffCategory: 'logistics',
-    buffMultiplier: 2.0,
+      'Route capacity ×2.0, storage caps ×1.5; ×0.75 on all production.',
+    // §9.4 Logisticist has NO recipe-rate buff — the role's bonuses are
+    // route capacity (wired via `routeCapacityMultiplier`) and storage
+    // cap (wired via `storageCapMul`), plus a uniform 0.75 production
+    // penalty. `buffCategory` / `buffMultiplier` are intentionally absent.
     penaltyMultiplier: 0.75,
     extra: 'route_capacity_double',
     tierRequirement: 3,
@@ -179,7 +187,7 @@ export const IDENTITY_SPECIALIZATION: SpecializationMultipliers = blankSpecMulti
  *   effectiveRate = baseRate × specRecipeCat × specGlobal × ...
  *
  * For "1 category gets the buff, all others get the penalty" roles
- * (foundry / refinery / mining / logistics_hub):
+ * (foundry / refinery / mining):
  *   - globalRecipeRate = penaltyMultiplier
  *   - recipeRateByCategory[buffCategory] = buffMultiplier / penaltyMultiplier
  *
@@ -191,7 +199,11 @@ export const IDENTITY_SPECIALIZATION: SpecializationMultipliers = blankSpecMulti
  * For research_beacon: globalRecipeRate = penaltyMultiplier directly, every
  * category stays at 1.0 (the penalty applies uniformly), xpMul = 1.5.
  *
- * For logistics_hub: storageCapMul = 1.5 in addition to the recipe split.
+ * For logistics_hub: §9.4 grants NO per-category recipe buff. The role's
+ * bonuses are route capacity (via `routeCapacityMultiplier`) and storage
+ * cap (`storageCapMul = 1.5`); recipe production gets the flat 0.75 penalty
+ * uniformly. Earlier revisions carried an unspec'd ×2.0 buff on
+ * `logistics`-tagged recipes — removed for spec parity.
  *
  * Null role → identity bundle (no buff, no penalty).
  */
@@ -228,11 +240,10 @@ export function effectiveSpecializationMultipliers(
       return out;
     }
     case 'logistics_hub': {
-      // logistics × 2.0, storage caps × 1.5, others × 0.75
-      const buff = 2.0;
-      const pen = 0.75;
-      out.globalRecipeRate = pen;
-      recipeRateByCategory.logistics = buff / pen;
+      // §9.4: +100% route capacity (via routeCapacityMultiplier), +50%
+      // storage cap, -25% production (uniform). No per-category recipe
+      // buff — every recipe gets the 0.75 penalty.
+      out.globalRecipeRate = 0.75;
       out.storageCapMul = 1.5;
       return out;
     }
