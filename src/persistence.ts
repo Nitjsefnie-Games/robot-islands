@@ -42,7 +42,7 @@
 
 import { del, get, set } from 'idb-keyval';
 
-import { islandCells } from './discovery.js';
+import { islandCells, tileToCell } from './discovery.js';
 import type { IslandState } from './economy.js';
 import type { Drone } from './drones.js';
 import { _seedConstructionCounter } from './construction-ui.js';
@@ -78,8 +78,17 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  even after a 30-hour offline gap. A clean reseed is simpler than a
  *  half-correct migration.
  *
+ *  §2.1 infinite map: bumped v3 → v4 because the lazy per-cell generator
+ *  is keyed to `WorldState.generatedCells`. A v3 save predates the field
+ *  and predates the density retune (0.30 → 0.15, overlap 4 → 12). Loading
+ *  it under v4 would re-roll every visited cell against the new generator
+ *  and produce a different island layout in any unrevealed area while
+ *  carrying forward the player's stale, denser saved specs — visually
+ *  jarring and impossible to migrate cleanly. Rejecting v3 outright (the
+ *  caller falls back to a fresh world) avoids the half-state.
+ *
  *  See the comment on `SCHEMA_VERSION` for the reasoning. */
-export const STORAGE_KEY = 'robot-islands:save:v3';
+export const STORAGE_KEY = 'robot-islands:save:v4';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this.
@@ -97,8 +106,14 @@ export const STORAGE_KEY = 'robot-islands:save:v3';
  *  BuildingDefIds are additive (`ALL_RESOURCES` backfill in
  *  `deserializeWorld` zeroes new inventory keys; placed buildings list is
  *  preserved as-is). A v3 save loads cleanly without losing pre-T6
- *  progress. */
-export const SCHEMA_VERSION = 3 as const;
+ *  progress.
+ *
+ *  §2.1 infinite map: bumped 3 → 4. The new generator (density 0.15,
+ *  overlap 12 tiles, lazy per-cell via `ensureCellGenerated`) cannot be
+ *  back-compatibly applied to v3 saves whose discovered-but-unpopulated
+ *  specs were rolled by the old denser placeholder. See STORAGE_KEY for
+ *  the full reasoning. */
+export const SCHEMA_VERSION = 4 as const;
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -165,6 +180,10 @@ export interface SerializedWorld {
   readonly latticeNodeIslands?: ReadonlyArray<string>;
   /** §14.4 in-flight comm packets. Backfilled to `[]` on legacy saves. */
   readonly commPackets?: ReadonlyArray<import('./orbital.js').CommPacket>;
+  /** §2.1 infinite map — cell keys (`"cellX,cellY"`) the procedural
+   *  generator has already considered. Serialized as a sorted array so
+   *  the blob diffs cleanly between saves (mirrors `revealedCells`). */
+  readonly generatedCells?: ReadonlyArray<string>;
 }
 
 /** Top-level snapshot. The `v` field is the schema-version anchor: this
@@ -262,6 +281,10 @@ export function serializeWorld(
       latticeActive: world.latticeActive,
       latticeNodeIslands: [...world.latticeNodeIslands],
       commPackets: [...world.commPackets],
+      // §2.1 infinite map — sorted for deterministic save-blob ordering
+      // (mirror of `revealedCells`). Absent if the world predates the
+      // field (`makeInitialWorld` always seeds it on a fresh game).
+      generatedCells: world.generatedCells ? [...world.generatedCells].sort() : undefined,
     },
     islandStates: stateEntries,
   };
@@ -513,6 +536,13 @@ export function deserializeWorld(
     latticeActive: snapshot.world.latticeActive ?? false,
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
     commPackets: [...(snapshot.world.commPackets ?? [])],
+    // §2.1 infinite map. Start from the saved `generatedCells` set so the
+    // generator doesn't re-roll any cell the prior session already
+    // considered (mints a duplicate `gen-X-Y` id, since `generateCellIslands`
+    // is deterministic per cell). Then UNION the cells covered by every
+    // populated spec's centre as a safety net for hand-edited saves where
+    // `generatedCells` was trimmed below the populated set.
+    generatedCells: deserializeGeneratedCells(islands, snapshot.world.generatedCells),
   };
 
   const islandStates = new Map<string, IslandState>();
@@ -722,6 +752,29 @@ function deserializeRevealedCells(
     // merged islands get their absorbed-lobe cells seeded too.
     if (!spec.populated && !spec.discovered) continue;
     for (const k of islandCells(spec)) out.add(k);
+  }
+  return out;
+}
+
+/** Backfill the `generatedCells` Set on load. Saved blob's array is unioned
+ *  with each populated spec's home cell (`tileToCell(spec.cx, spec.cy)`) so
+ *  the generator never re-rolls the cell containing a settled island.
+ *
+ *  Note: we deliberately key off the spec's centre cell only, not its full
+ *  footprint. The generator runs once per cell and is content with "this
+ *  cell already has an island"; using the centre matches how the procedural
+ *  generator anchors its candidates (`generateCellIslands` places at the
+ *  cell centre + jitter), so a populated spec's centre cell maps 1:1 to
+ *  the cell the generator would otherwise have rolled into. */
+function deserializeGeneratedCells(
+  islands: ReadonlyArray<IslandSpec>,
+  saved: ReadonlyArray<string> | undefined,
+): Set<string> {
+  const out = new Set<string>(saved ?? []);
+  for (const spec of islands) {
+    if (!spec.populated) continue;
+    const { cellX, cellY } = tileToCell(spec.cx, spec.cy);
+    out.add(`${cellX},${cellY}`);
   }
   return out;
 }
