@@ -17,7 +17,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §2.1 Stratified placement | L | Deterministic seed-based placement, edge-buffer rule, geometric-decline density, hard cap. |
 | §2.2 Discovery via drones | L | T1 drone is unreachable per spec (Drone Pad is T2). T2 / T3 / T4 / T5 dispatch all live. |
 | §2.3 Settlement | P | Vehicle dispatch + arrival + Foundation Kit live. Per-tier vehicle speeds/loadouts use one base stat set. T5 Spacetime Anchor bypass not implemented. |
-| §2.4 Inter-island routes | P | Cargo / drone / airship / teleporter / cable types live. Teleporter routes consume per-tile biofuel (in-game design addition so the Network skill has a primary scaling axis). Mass-driver, T5 spacetime-anchor routes not implemented. Priority-list dispatch live; drag-to-reorder UI N. |
+| §2.4 Inter-island routes | P | Cargo / drone / airship / teleporter / cable types live. Teleporter routes consume per-tile biofuel (in-game design addition so the Network skill has a primary scaling axis). Mass-driver, T5 spacetime-anchor routes not implemented. Priority-list dispatch live; drag-to-reorder UI live in the routes ledger. |
 | §2.5 Artificial islands | P | T3 founder live, caps at 8×8. T4 / T5 founder caps N. |
 | §2.6 Weather | L | Forecast model, biome modulation, vehicle destruction rolls, route capacity modulation, in-flight loss, satellite immunity all live. Map overlay snaps to vision cells. |
 | §2.7 Day-night cycle | L | Solar multiplier per phase, weather-phase modulation (+25% severe-storm Night/Dawn), full-viewport tint overlay. |
