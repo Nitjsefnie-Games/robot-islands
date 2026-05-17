@@ -28,15 +28,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   or strike "Relay" from the spec status table.
   *(Flagged by Agents C, D; same root issue.)*
 
-- **§14.7 every satellite spawns at the same hardcoded offset from its
-  Spaceport.** `src/orbital.ts:224-225` (orbit-explosion lock cell) and
-  `:249-250` (success path) both use `spec.cx + 100, spec.cy + 100`.
-  Multiple sats from the same Spaceport stack into the exact same lock
-  cell; every orbit-explosion debris field lands in the same SE quadrant.
-  Should be a launch-parameter-driven position (player-chosen, or at
-  least a deterministic spread per sat).
-  *(Flagged by Agent D.)*
-
 - **§7.12 `reality_forge` recipe diverges from spec by ~50% of inputs
   and 1/18 of cycle time.** `src/recipes.ts:1337-1342` ships `2
   exotic_alloy + 1 ai_core + 1 casimir_energy` / 4800s; spec literal is

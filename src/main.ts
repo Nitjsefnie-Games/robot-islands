@@ -393,6 +393,14 @@ async function main(): Promise<void> {
       placementUi.cancel();
       return;
     }
+    // §14 orbital launch: right-click disarms the satellite launch reticle
+    // without committing. Re-opens the orbital modal so the player lands
+    // back where the arm was triggered.
+    if (e.button === 2 && orbitalUi.isLaunchMode()) {
+      orbitalUi.setLaunchMode(false);
+      orbitalUi.show();
+      return;
+    }
     if (e.button !== 0) return;
     dragging = true;
     lastX = e.clientX;
@@ -436,6 +444,19 @@ async function main(): Promise<void> {
       if (sx < 0 || sx > rect.width || sy < 0 || sy > rect.height) return;
       const wp = screenToWorldTile(sx, sy);
       settlementUi.attemptLaunch(wp.x, wp.y, performance.now());
+      return;
+    }
+    // §14 orbital launch: same disambiguation as drone / settlement launch.
+    // Modal armed a satellite + variant; the canvas click picks the target
+    // tile. Mutual-exclusion with sister panels is enforced by their
+    // onLaunchModeChanged callbacks.
+    if (accumDrag < CLICK_DRAG_PX_MAX && orbitalUi.isLaunchMode()) {
+      const rect = app.canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      if (sx < 0 || sx > rect.width || sy < 0 || sy > rect.height) return;
+      const wp = screenToWorldTile(sx, sy);
+      orbitalUi.attemptLaunch(wp.x, wp.y, performance.now());
       return;
     }
     // Step-2.5: small click in placement mode commits a placement.
@@ -547,6 +568,9 @@ async function main(): Promise<void> {
     if (settlementUi.isLaunchMode()) {
       settlementUi.setReticleScreenPos(sx, sy);
     }
+    if (orbitalUi.isLaunchMode()) {
+      orbitalUi.setReticleScreenPos(sx, sy);
+    }
     if (placementUi.isActive()) {
       placementUi.setCursorScreenPos(sx, sy);
     }
@@ -595,6 +619,7 @@ async function main(): Promise<void> {
   app.canvas.addEventListener('mouseleave', () => {
     dronesUi.hideReticle();
     settlementUi.hideReticle();
+    orbitalUi.hideReticle();
     placementUi.hidePreview();
     terrainTooltip.hide();
     // Clear hover outline so it doesn't ghost at the last cursor position
@@ -999,6 +1024,7 @@ async function main(): Promise<void> {
     return (
       dronesUi.isLaunchMode() ||
       settlementUi.isLaunchMode() ||
+      orbitalUi.isLaunchMode() ||
       placementUi.isActive()
     );
   }
@@ -1106,13 +1132,39 @@ async function main(): Promise<void> {
     settingsUi.toggle();
   });
 
+  // Forward declaration for cross-panel disarms used by the orbital UI.
+  // orbitalUi mounts before dronesUi/settlementUi, so its
+  // onLaunchModeChanged callback can't capture them directly — we wire
+  // these setters once those panels are constructed below. No-op until
+  // then (the player can't arm a launch during bootstrap).
+  let disarmDronesLaunch: () => void = () => undefined;
+  let disarmSettlementLaunchFromOrbital: () => void = () => undefined;
+
   // §14 orbital modal — mounted here (before dismiss-modal action wiring)
   // so its hide() can join the Escape cascade. Reads live world.satellites
   // + per-island spaceport state on each open / per-frame refresh while
-  // visible. No canvas reticle — launches are discrete events.
+  // visible. Launch flow: armed via the modal's "Arm Launch" button →
+  // modal hides → canvas reticle follows the cursor → click commits.
+  // Mutual-exclusion with drone/settlement/placement modes is enforced via
+  // onLaunchModeChanged (the sister-panel disarms below mirror this).
   const orbitalUi = mountOrbitalUi(document.body, {
     world: worldState,
     islandStates,
+    screenToWorldTile,
+    onLaunchModeChanged: (armed) => {
+      if (armed) {
+        placementUi.cancel();
+        // Sister panel disarms — both panels are constructed by the time the
+        // player can click "Arm Launch" in the modal; the forward-declared
+        // setters above are wired once those panels mount.
+        disarmDronesLaunch();
+        disarmSettlementLaunchFromOrbital();
+        if (hoveredBuilding) {
+          hoveredBuilding = null;
+          repaintHover();
+        }
+      }
+    },
   });
   defineAction(reg, 'toggle-orbital', () => {
     orbitalUi.toggle();
@@ -1162,12 +1214,13 @@ async function main(): Promise<void> {
     screenToWorldTile,
     onDiscoveryChanged: rebuildWorldLayers,
     // Mutual-exclusion: when launch mode arms, cancel any in-progress
-    // placement or settlement-arm so a mouseup-commit can't ambiguously
-    // route to multiple consumers.
+    // placement / settlement-arm / orbital-launch so a mouseup-commit can't
+    // ambiguously route to multiple consumers.
     onLaunchModeChanged: (armed) => {
       if (armed) {
         placementUi.cancel();
         disarmSettlementLaunch();
+        orbitalUi.setLaunchMode(false);
         // Clear hover affordance when entering an armed mode — the mode's
         // own overlay takes over, and a stale hover outline beneath would
         // read as conflicting affordance.
@@ -1181,6 +1234,14 @@ async function main(): Promise<void> {
   // Drone dots live in world space (above ocean + islands + fog overlay,
   // below the cell grid).
   world.addChildAt(dronesUi.droneLayer, 4);
+  // §14 orbital launch reticle + range ring — mounted alongside the drone
+  // reticle. Reticle in screen space (fixed pixel size); range ring in
+  // world space (radius reads in tiles regardless of zoom).
+  app.stage.addChild(orbitalUi.reticleLayer);
+  // The handle exposes `rangeRingLayer` as an implementation detail beyond
+  // the formal interface; cast to access it. Same pattern dronesUi uses.
+  const orbitalRangeRing = (orbitalUi as unknown as { rangeRingLayer: import('pixi.js').Container }).rangeRingLayer;
+  world.addChild(orbitalRangeRing);
   // Reticle lives in screen space (NOT world container) so it stays a
   // fixed-pixel crosshair regardless of zoom.
   app.stage.addChild(dronesUi.reticleLayer);
@@ -1188,6 +1249,9 @@ async function main(): Promise<void> {
   // tiles at any zoom. Appended (not addChildAt) so it sits above the
   // ocean/island/drone layers but below the screen-space reticle stack.
   world.addChild(dronesUi.rangeRingLayer);
+  // Wire the orbital-side forward-decl so an orbital arm-launch can disarm
+  // the dronesUi panel.
+  disarmDronesLaunch = () => dronesUi.setLaunchMode(false);
   defineAction(reg, 'toggle-drones', () => {
     dronesUi.toggle();
   });
@@ -1226,6 +1290,7 @@ async function main(): Promise<void> {
       if (armed) {
         // Disarm sister modes so a click can't ambiguously route to two.
         dronesUi.setLaunchMode(false);
+        orbitalUi.setLaunchMode(false);
         placementUi.cancel();
       }
     },
@@ -1235,6 +1300,8 @@ async function main(): Promise<void> {
   // Hook the forward-declared cross-panel disarm callback to the now-
   // constructed settlement panel. Called by drones-ui when it arms launch.
   disarmSettlementLaunch = () => settlementUi.setLaunchMode(false);
+  // Same for the orbital-side disarm: orbital arming disarms settlement.
+  disarmSettlementLaunchFromOrbital = () => settlementUi.setLaunchMode(false);
   defineAction(reg, 'toggle-settlement', () => {
     settlementUi.toggle();
   });

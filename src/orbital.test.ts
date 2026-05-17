@@ -137,7 +137,7 @@ function stockRepairResources(state: IslandState): void {
 describe('satellite launch prerequisites', () => {
   it('rejects when island does not exist', () => {
     const world = makeWorld();
-    const result = launchSatellite(world, 'missing', 'scanner', 0);
+    const result = launchSatellite(world, 'missing', 'scanner', 50, 50, 0);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('no-island');
@@ -147,7 +147,7 @@ describe('satellite launch prerequisites', () => {
     const world = makeWorld();
     const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 0);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 0);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('no-spaceport');
@@ -158,7 +158,7 @@ describe('satellite launch prerequisites', () => {
     const state = makeIslandState({ id: 'home', ascendantCoreCrafted: false });
     addSpaceport(state);
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 0);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 0);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('no-ascendant-core');
@@ -169,7 +169,7 @@ describe('satellite launch prerequisites', () => {
     const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state);
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 0);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 0);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('insufficient-resources');
@@ -187,7 +187,7 @@ describe('satellite launch success roll', () => {
     addSpaceport(state, 1);
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 0);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 0);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(world.satellites).toHaveLength(1);
@@ -200,7 +200,7 @@ describe('satellite launch success roll', () => {
     addSpaceport(state, 2);
     stockLaunchResources(state, 'comm');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'comm', 3);
+    const result = launchSatellite(world, 'home', 'comm', 50, 50, 3);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(world.satellites).toHaveLength(1);
@@ -212,7 +212,7 @@ describe('satellite launch success roll', () => {
     addSpaceport(state, 3);
     stockLaunchResources(state, 'sweeper');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'sweeper', 1);
+    const result = launchSatellite(world, 'home', 'sweeper', 50, 50, 1);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(world.satellites).toHaveLength(1);
@@ -224,11 +224,82 @@ describe('satellite launch success roll', () => {
     addSpaceport(state, 1);
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 5);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 5);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('launch-failure');
     expect(world.satellites).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §14.5/14.6/14.7 target validation
+// ---------------------------------------------------------------------------
+
+describe('satellite launch target validation', () => {
+  it('rejects target-at-source (target tile equals Spaceport footprint centre)', () => {
+    const world = makeWorld();
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
+    addSpaceport(state, 3);
+    stockLaunchResources(state, 'scanner');
+    world.islandStates = new Map([['home', state]]);
+    // Spaceport at building-local (0,0) on home (cx=0, cy=0), 4×4 footprint
+    // → spawn = (0 + 0 + 2, 0 + 0 + 2) = (2, 2). Targeting (2, 2) is the
+    // zero-distance launch the validator rejects.
+    const result = launchSatellite(world, 'home', 'scanner', 2, 2, 1);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('target-at-source');
+    // Resources must NOT be deducted on a validation failure.
+    expect(state.inventory.scanner_sat).toBe(1);
+    expect(state.inventory.orbital_insertion_package).toBe(1);
+    expect(state.inventory.antimatter_propellant).toBe(1);
+    expect(world.satellites).toHaveLength(0);
+  });
+
+  it('rejects target-out-of-range when target is past sat.fuel / SAT_FUEL_PER_TILE', () => {
+    const world = makeWorld();
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
+    addSpaceport(state, 3);
+    stockLaunchResources(state, 'scanner');
+    world.islandStates = new Map([['home', state]]);
+    // Default satFuelReserve multiplier = 1 → launchFuel = 100,
+    // maxLaunchRange = 100 / 0.05 = 2000 tiles. Target (5000, 0) is past it.
+    const result = launchSatellite(world, 'home', 'scanner', 5000, 0, 1);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('target-out-of-range');
+    // Resources must NOT be deducted on a validation failure.
+    expect(state.inventory.scanner_sat).toBe(1);
+    expect(state.inventory.orbital_insertion_package).toBe(1);
+    expect(state.inventory.antimatter_propellant).toBe(1);
+    expect(world.satellites).toHaveLength(0);
+  });
+
+  it('on success: sat spawns at footprint centre, locked=false, movingTo set to target', () => {
+    const world = makeWorld();
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
+    addSpaceport(state, 3);
+    stockLaunchResources(state, 'scanner');
+    world.islandStates = new Map([['home', state]]);
+    // Spawn (2,2) → target (50, 50). dist = hypot(48, 48) = 67.882...
+    const nowMs = 1;
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, nowMs);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.sat.x).toBe(2);
+    expect(result.sat.y).toBe(2);
+    expect(result.sat.locked).toBe(false);
+    expect(result.sat.movingTo).toBeDefined();
+    expect(result.sat.movingTo!.x).toBe(50);
+    expect(result.sat.movingTo!.y).toBe(50);
+    const dist = Math.hypot(50 - 2, 50 - 2);
+    const expectedArrival = nowMs + (dist / SAT_MOVE_SPEED_TILES_PER_SEC) * 1000;
+    expect(result.sat.movingTo!.arrivalMs).toBeCloseTo(expectedArrival, 6);
+    // Onboard fuel reduced by trip cost — same model as requestSatMove so
+    // launch and subsequent moves share fuel/speed semantics.
+    const expectedFuel = 100 - dist * SAT_FUEL_PER_TILE;
+    expect(result.sat.fuel).toBeCloseTo(expectedFuel, 6);
   });
 });
 
@@ -245,7 +316,7 @@ describe('satellite launch failure modes', () => {
     addSpaceport(state, 3);
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 5);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 5);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('launch-failure');
@@ -265,7 +336,7 @@ describe('satellite launch failure modes', () => {
     addSpaceport(state, 1);
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 9);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 9);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('launch-failure');
@@ -287,7 +358,7 @@ describe('satellite stats per variant', () => {
     addSpaceport(state, 3);
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 1);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 1);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.sat.coverageRadius).toBe(400);
@@ -301,7 +372,7 @@ describe('satellite stats per variant', () => {
     addSpaceport(state, 3);
     stockLaunchResources(state, 'comm');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'comm', 1);
+    const result = launchSatellite(world, 'home', 'comm', 50, 50, 1);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.sat.commRange).toBe(500);
@@ -315,7 +386,7 @@ describe('satellite stats per variant', () => {
     addSpaceport(state, 3);
     stockLaunchResources(state, 'sweeper');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'sweeper', 1);
+    const result = launchSatellite(world, 'home', 'sweeper', 50, 50, 1);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.sat.commRange).toBe(200);
@@ -335,7 +406,7 @@ describe('satellite launch resource consumption', () => {
     addSpaceport(state, 3);
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'scanner', 1);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 1);
     expect(result.ok).toBe(true);
     expect(state.inventory.scanner_sat).toBe(0);
     expect(state.inventory.orbital_insertion_package).toBe(0);
@@ -1033,24 +1104,47 @@ describe('tickDebris', () => {
 });
 
 describe('launchSatellite orbit-explosion debris', () => {
-  it('creates a debris field at the failed lock cell on orbit explosion', () => {
+  it('creates a debris field along the spawn→target trajectory on orbit explosion', () => {
     const world = makeWorld();
     const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state, 1);
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
     // nowMs=9 at T1: first roll fails, second roll ≈0.99 ≥ 0.30 → orbit explosion.
-    const result = launchSatellite(world, 'home', 'scanner', 9);
+    // Spawn = home (0,0) + spaceport (0,0) + footprint-centre offset (2,2) = (2,2).
+    // Target (50,50) → trajectory midpoint = (26, 26).
+    // cell size = 16, so cellX = Math.floor(26/16) = 1, cellY = 1.
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 9);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('launch-failure');
-    // Failed lock point is home (0,0) + 100 = (100,100).
-    // cell size = 16, so cellX = Math.floor(100/16) = 6, cellY = 6.
     expect(world.debrisFields).toHaveLength(1);
     const field = world.debrisFields[0]!;
-    expect(field.cellX).toBe(6);
-    expect(field.cellY).toBe(6);
+    expect(field.cellX).toBe(1);
+    expect(field.cellY).toBe(1);
     expect(field.fragments).toBe(ORBIT_EXPLOSION_FRAGMENTS);
+  });
+
+  it('trajectory midpoint shifts with the player-chosen target (not the old fixed (cx+100, cy+100) site)', () => {
+    // Confirm that targeting a DIFFERENT tile parks the debris field in a
+    // DIFFERENT cell than the legacy (cellX=6, cellY=6) hardcode would have
+    // landed on. Spawn (2,2) + target (200,200) → midpoint (101,101) → cell
+    // (6,6), which would coincide with the old hardcode — so pick a target
+    // whose midpoint clearly lives elsewhere. (400,0) → midpoint (201,1) →
+    // cell (12,0), unambiguously not (6,6).
+    const world = makeWorld();
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
+    addSpaceport(state, 1);
+    stockLaunchResources(state, 'scanner');
+    world.islandStates = new Map([['home', state]]);
+    const result = launchSatellite(world, 'home', 'scanner', 400, 0, 9);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('launch-failure');
+    expect(world.debrisFields).toHaveLength(1);
+    const field = world.debrisFields[0]!;
+    expect(field.cellX).toBe(12);
+    expect(field.cellY).toBe(0);
   });
 });
 
@@ -1306,7 +1400,7 @@ describe('§14.7 launchSatellite uses launchSuccessBonus', () => {
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
     // nowMs=5 → rng≈0.70 > 0.30 → fails without bonus
-    const result = launchSatellite(world, 'home', 'scanner', 5);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 5);
     expect(result.ok).toBe(false);
   });
 
@@ -1322,7 +1416,7 @@ describe('§14.7 launchSatellite uses launchSuccessBonus', () => {
     world.islandStates = new Map([['home', state]]);
     // nowMs=5 → rng≈0.70. With bonus 0.05, threshold is 0.35, so still fails.
     // Use nowMs=0 → rng≈0.23. Threshold 0.35 > 0.23 → success.
-    const result = launchSatellite(world, 'home', 'scanner', 0);
+    const result = launchSatellite(world, 'home', 'scanner', 50, 50, 0);
     expect(result.ok).toBe(true);
   });
 
@@ -1353,7 +1447,7 @@ describe('§14.7 launchSatellite uses launchSuccessBonus', () => {
       addSpaceport(s, 1);
       stockLaunchResources(s, 'scanner');
       w.islandStates = new Map([['home', s]]);
-      const result = launchSatellite(w, 'home', 'scanner', t);
+      const result = launchSatellite(w, 'home', 'scanner', 50, 50, t);
       if (result.ok) foundSuccess = true;
       else foundFailure = true;
       if (foundSuccess && foundFailure) break;
