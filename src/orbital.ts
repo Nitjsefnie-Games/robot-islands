@@ -573,9 +573,16 @@ export function tickRepairDrones(world: WorldState, nowMs: number): void {
       continue;
     }
 
-    // Success: clear all lodges, refuel to full
+    // Success: clear all lodges, refuel to full. Mirror the launch-site
+    // math (see launchSatellite: `fuel: 100 * skill.satFuelReserve`) so
+    // that Orbital → Resilience skill investment in satFuelReserve is not
+    // silently wiped every repair cycle. Fall back to 1 if the owning
+    // island's state is unavailable (corrupt save / lost island).
+    const reserveMul = ownerState
+      ? effectiveSkillMultipliers(ownerState).satFuelReserve
+      : 1;
     sat.lodges = { scan: 0, weather: 0, comm: 0 };
-    sat.fuel = 100;
+    sat.fuel = 100 * reserveMul;
     sat.pendingRepairDroneId = null;
   }
   world.repairDrones = remaining;
