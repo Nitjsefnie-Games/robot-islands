@@ -97,6 +97,7 @@ import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeSt
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
+import { mountAntennaOverlay } from './antenna-overlay.js';
 import { mountSatelliteOverlay } from './satellite-overlay.js';
 import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
@@ -179,6 +180,12 @@ async function main(): Promise<void> {
   // visible through storm tints.
   const satelliteOverlay = mountSatelliteOverlay(worldState);
   world.addChild(satelliteOverlay.layer);
+  // §11 Antenna signal-range overlay — faint cyan rings around every
+  // antenna so the player can see where drone scans actually transmit.
+  // Sits between satellite-overlay and the satellite dots so signal rings
+  // read cleanly without occluding sats.
+  const antennaOverlay = mountAntennaOverlay(worldState);
+  world.addChild(antennaOverlay.layer);
   // §2.7 day/night tint — full-viewport DOM overlay above the canvas,
   // pointer-events: none. Cheap diff-and-skip refresh per tick.
   const dayNightTint = mountDayNightTint(document.body);
@@ -1614,6 +1621,7 @@ async function main(): Promise<void> {
       computeVisionSources(worldState.islands.filter((s) => s.populated)),
     );
     satelliteOverlay.refresh();
+    antennaOverlay.refresh();
     buildingAlertsOverlay.refresh(now);
     dayNightTint.refresh(now);
     // Settings panel — cheap when hidden (early-returns in refresh()).

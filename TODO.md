@@ -151,11 +151,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
 
 These have the simulation wired but no player surface to access them.
 
-- **Multi-island HUD** — HUD shows the active island only. Top-bar
-  chips give per-island level/power; the detail panel doesn't switch.
-  File: `main.ts:620`.
-- **Antenna signal-range overlay** — drones outside antenna range lose
-  scanned cells; no on-map indication of where signal reaches.
 - **Hover a coloured terrain cell to show its type + consumer buildings**
   — every non-default terrain tile (oil_well, gas_seep, copper_vein …)
   is rendered with a distinguishing colour but there's no on-map
