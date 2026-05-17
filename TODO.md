@@ -57,29 +57,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   the migration step runs exactly once.
   Files: `world-gen.ts:23,59`, `world.ts:788` (`DEFAULT_GEN_OPTS`),
   `persistence.ts` (migration path).
-- **§4.7 maintenance degradation only affects recipe rate** — spec
-  §4.7 calls maintenance a "function of presence, not productivity":
-  every building accrues `operatingMs` and demands maintenance
-  materials regardless of whether it's producing. But the engine only
-  multiplies the maintenance factor into `effectiveRate` for resource
-  recipes (`economy.ts:863`). Power producers, storage, antennas,
-  lighthouses, drone pads, shipyards, lab/utility buildings — anything
-  without a `recipe` — suffer ZERO consequence from being neglected.
-  They burn through maintenance materials with no payoff for keeping
-  them maintained, which makes the system pointless for ~half the
-  catalog. Spec wording "output efficiency degrades from 100% to 50%"
-  needs a defined "output" per building category:
-    - power producers: `power.produces` × maintFactor (note: cascades
-      into brownout — needs care to avoid double-dipping)
-    - antennas / lighthouses: signal range / vision radius × maintFactor
-    - storage: cap × maintFactor (forces overflow / loss)
-    - drone pads / shipyards: vehicle capacity or dispatch rate ×
-      maintFactor
-  OR the spec can be reread to mean "if a building has no productive
-  output, skip maintenance accrual entirely so it doesn't waste
-  materials". Either interpretation is sane; pick one and ship it.
-  Files: `economy.ts:839-863` (factor application site), `maintenance.ts`
-  (accrual + tryAutoMaintain), spec §4.7.
 - **§3.5 rare-find rolls system** — the "Cursed Storms doubled-rare"
   modifier is wired as -10% production (which works) but doubled-rare
   is deferred since there's no rare-find roll system. Same for Mining

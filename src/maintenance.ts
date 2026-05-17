@@ -171,10 +171,12 @@ export function tryAutoMaintain(
  * Accrue `dtMs` to the building's operatingMs counter. Pure mutation. Skips
  * Eternal Servitors per §13.3 — they never accumulate maintenance debt.
  *
- * Called from the advanceIsland segment loop after `applyRates` (so the
- * timer tracks wall-clock progress regardless of whether the building
- * actually produced this segment, per §4.7 "Idle buildings ... accrue
- * maintenance time the same as actively-producing ones").
+ * Called from the advanceIsland segment loop after `applyRates`. The
+ * caller now filters out buildings without a productive recipe so this
+ * function is only invoked for buildings whose `effectiveRate` actually
+ * uses `maintenanceFactor` — power/storage/utility buildings never
+ * accrue, because the spec's "output efficiency degrades" wording only
+ * has bite when there's a recipe rate to degrade.
  */
 export function accrueOperatingTime(b: PlacedBuilding, dtMs: number): void {
   if (b.eternalServitor === true) return;

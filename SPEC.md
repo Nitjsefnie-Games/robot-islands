@@ -29,7 +29,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §4.4 Adjacency rules | L | 4-neighbor metadata computation. |
 | §4.5 Adjacency effects | P | Heat (§5.2) and reactor toxicity live. Broader catalog of buff/gating adjacencies (Cooling Tower → Crystal Lab, Wastewater Treatment → Refinery efficiency, etc.) N. |
 | §4.6 Storage caps | L | Specialized + generic storage, per-resource caps, destruction clamping. |
-| §4.7 Maintenance | P | Operating-time accrual, threshold + 4h linear degrade, auto-maintain materials check, atomic recipe consumption, most-degraded targeting policy all live. Eternal Servitor flag is honoured but no recipe / UI flips it (Servitor Conversion Kit + Reality Forge mechanic N). |
+| §4.7 Maintenance | P | Operating-time accrual, threshold + 4h linear degrade, auto-maintain materials check, atomic recipe consumption, most-degraded targeting policy all live. Per §4.7 interpretation: only buildings with productive recipe outputs accrue operating time — power producers / storage / antennas / drone pads / shipyards skip accrual since their maintenance factor has no effect on output. Eternal Servitor flag is honoured but no recipe / UI flips it (Servitor Conversion Kit + Reality Forge mechanic N). |
 | §5.1 Electrical grid | L | Per-island brownout factor, active-only summing, gating predicate. |
 | §5.2 Heat adjacency | L | N:1 source assignment, free-source priority, fuel-burn scaling with served count. |
 | §5.3 Inter-island power | L | Cable routes, capacity in W; T5 spacetime distance-independence N (covered by route gap above). |
@@ -510,6 +510,14 @@ When resource `r` hits its cap, only buildings actively producing `r` stall. Oth
 If a storage building is destroyed (by launch failure, debris damage, demolition, etc.), its capacity disappears immediately. If current inventory of any affected resource now exceeds the reduced cap, the excess is lost — inventory clamps down to the new cap.
 
 ### 4.7 Maintenance
+
+**Scope.** Only buildings with productive recipe outputs accrue operating
+time (and therefore demand maintenance). Power producers, storage,
+antennas, lighthouses, drone pads, shipyards, and other recipe-less
+catalog rows never accrue, since their primary output isn't routed
+through the maintenance factor and degrading would have no gameplay
+effect. Eternal Servitors are always exempt.
+
 
 Every placed building has an internal operating-time counter that ticks at wall-clock real-time from the moment of placement until the moment of destruction. Idle buildings, stalled buildings, and inactive buildings (per §5.1) all accrue maintenance time the same as actively-producing ones — maintenance is a function of presence, not productivity. This is what gives Eternal Servitor conversion (§13.3) its long-term value: exempt-from-maintenance is exempt from a real ongoing cost regardless of how the building is used.
 

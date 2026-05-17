@@ -1331,9 +1331,23 @@ export function advanceIsland(
         const wasUnderConstruction = (b.constructionRemainingMs ?? 0) > 0;
         if (wasUnderConstruction) {
           tickConstruction(b, dtMs);
-        } else {
-          accrueOperatingTime(b, dtMs);
+          continue;
         }
+        // §4.7 maintenance interpretation: skip accrual for buildings
+        // with no productive recipe outputs. The maintenanceFactor is
+        // only multiplied into recipe `effectiveRate`; a building whose
+        // contribution is power / storage / signal-range / vehicle
+        // dispatch (Solar, Crate, Antenna, Drone Pad, Shipyard, etc.)
+        // sees zero gameplay change from degrading, so burning materials
+        // to keep it "maintained" is pointless. Resource-producing
+        // recipes (Mine, Smelter, Reactor, …) accrue and need
+        // maintenance as before. Coal Gen / similar recipes with empty
+        // outputs are treated as non-productive (their output is
+        // electricity, modelled outside `recipe.outputs`).
+        const recipe = resolveRecipe(BUILDING_DEFS[b.defId], b, ctx?.terrainAt);
+        if (!recipe) continue;
+        if (Object.keys(recipe.outputs).length === 0) continue;
+        accrueOperatingTime(b, dtMs);
       }
     }
     // Advance t. If no progress was made (dt = 0 and segEnd === t) but we
