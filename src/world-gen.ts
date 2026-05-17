@@ -1,26 +1,22 @@
 // Procedural world generation per SPEC §2.1 (stratification cell grid),
 // §2.3 (biome roll), §3.4 (initial radii by biome), §3.5 (modifier roll).
 //
-// Procedural generation runs ONCE at first start of a fresh game. The
-// resolved island list is persisted via the existing v2 snapshot path;
-// reloading restores the same world without re-running the generator.
-// Demo home and the 5 hand-placed demos remain in DEMO_ISLANDS for
-// continuity — generated islands are appended around them and an overlap
-// check keeps procedural placements off the hand-placed ones.
+// **Per-cell determinism.** Every cell `(X, Y)` seeds its own RNG from
+// `${seed}_cell_${X}_${Y}`, so `generateCellIslands(seed, X, Y, ...)`
+// returns the SAME island candidate regardless of whether it's called in
+// isolation (lazy generation as a drone enters the cell) or in a bulk
+// boot-time sweep. The cross-cell `overlapsAny` check is the only
+// order-dependent part: if cell (X, Y)'s candidate overlaps a previously-
+// placed island in a neighbour cell, the candidate is dropped. As long as
+// the caller hands the same neighbour-island list at each invocation, the
+// drop decision is also deterministic.
 //
-// Algorithm summary:
-//   1. For every cell `(cx, cy)` in the [-N, +N]² grid, decide independently
-//      whether to place an island (probability = `density`). The home cell
-//      (0, 0) is always skipped.
-//   2. If placing: roll a biome from a weighted distribution (placeholder
-//      table at the head of `rollBiome` below), pick a jittered position
-//      inside the cell, take the biome's initialMajor/MinorRadius, and roll
-//      modifiers via `rollModifiers`.
-//   3. Skip the placement if it overlaps any already-placed island
-//      (procedural-so-far OR caller-supplied existing islands). Overlap test
-//      is a conservative distance-based ellipse approximation:
-//          dist(c1, c2) < max(maj1, min1) + max(maj2, min2) + buffer
-//      with `buffer = 4` tiles.
+// **Lazy + infinite.** Callers can mix bulk generation (`generateWorld`
+// for boot) with on-demand single-cell generation (`generateCellIslands`)
+// as the player discovers new cells via drones / satellites / routes.
+// There is no `halfExtentCells` cap on the lazy path; the bulk path's
+// `halfExtentCells` exists only to bootstrap the cells visible at game
+// start.
 //
 // Pure module: no DOM, no PixiJS, no Math.random.
 
@@ -51,95 +47,112 @@ export interface GenOptions {
 }
 
 /**
- * Generate procedural islands per the SPEC §2.1 cell-grid rules. Returns a
- * fresh array of `IslandSpec` objects. Pure — same `opts` always yields the
- * same output (deterministic given `seed`).
+ * Generate the procedural islands within a single cell `(cellX, cellY)`.
+ * Pure + per-cell deterministic — same `(seed, cellX, cellY)` always
+ * returns the same candidate set, regardless of generation order.
+ *
+ * Currently returns at most one island per cell (the §2.1 geometric-decline
+ * additional-islands path is folded into the density tuning above; future
+ * step can fan multiple anchors out from this function if needed).
+ *
+ * `neighborSpecs` is the cross-cell overlap context. The function only
+ * reads from it (never mutates); pass islands from neighbour cells (±1 on
+ * both axes) so the cross-cell buffer is enforced. If `neighborSpecs`
+ * changes between calls (e.g. a §3.6 merge absorbed a neighbour), the
+ * overlap decision can change — that's by design.
+ *
+ * Skip rules:
+ *   - Home cell (0, 0) returns `[]`.
+ *   - Density gate: first rng call must be < `density`.
+ *   - Overlap: candidate's centre-circle gates against `neighborSpecs`
+ *     via the `OVERLAP_BUFFER_TILES`-padded ellipse approximation. On
+ *     overlap, returns `[]` (the cell is "stranded" — gives §2.1's
+ *     "almost stranded but one next island always reachable" feel when
+ *     density + buffer are tuned together).
  */
-export function generateWorld(opts: GenOptions): IslandSpec[] {
-  const rng = makeSeededRng(opts.seed);
-  const out: IslandSpec[] = [];
+export function generateCellIslands(
+  seed: string,
+  cellX: number,
+  cellY: number,
+  cellSizeTiles: number,
+  density: number,
+  neighborSpecs: ReadonlyArray<IslandSpec>,
+): IslandSpec[] {
+  if (cellX === 0 && cellY === 0) return [];
 
-  // Collect every island we've placed so far (caller-supplied + procedural)
-  // for the overlap check. The check is cheap (linear scan, small N), and
-  // we mutate the array as we go.
-  const placed: IslandSpec[] = [...(opts.existingIslands ?? [])];
+  // Per-cell rng — output depends only on (seed, cellX, cellY), not on
+  // generation order of other cells.
+  const rng = makeSeededRng(`${seed}_cell_${cellX}_${cellY}`);
 
-  const N = opts.halfExtentCells;
-  const cell = opts.cellSizeTiles;
+  const placeRoll = rng();
+  if (placeRoll >= density) return [];
 
-  // Row-major iteration so the rng is consumed in a stable order. Changing
-  // the iteration order silently changes the generated world for the same
-  // seed, so this is part of the determinism contract.
-  for (let cy = -N; cy <= N; cy++) {
-    for (let cx = -N; cx <= N; cx++) {
-      // Home cell skip. Use coordinates (not id) — the home island sits at
-      // tile (0, 0), so its cell is unambiguously (0, 0).
-      if (cx === 0 && cy === 0) continue;
+  const biome = rollBiome(rng);
+  const def = BIOME_DEFS[biome];
 
-      // Density gate. Consume one rng call per cell regardless of whether
-      // we place — keeps the sequence aligned even if `density` changes.
-      const placeRoll = rng();
-      if (placeRoll >= opts.density) continue;
+  // Position: cell centre + jitter inside ±40% of the cell extent in
+  // each axis. ±40% (vs ±50%) leaves a small margin off the cell edge
+  // to reduce inter-cell collisions; the overlap check below catches
+  // anything that slips through. Snapped to integer tile coords because
+  // the renderer + economy assume integer-tile island centres.
+  const cellCx = cellX * cellSizeTiles + cellSizeTiles / 2;
+  const cellCy = cellY * cellSizeTiles + cellSizeTiles / 2;
+  const jitterX = (rng() - 0.5) * 2 * (cellSizeTiles * 0.4);
+  const jitterY = (rng() - 0.5) * 2 * (cellSizeTiles * 0.4);
+  const islandCx = Math.round(cellCx + jitterX);
+  const islandCy = Math.round(cellCy + jitterY);
 
-      // Biome roll.
-      const biome = rollBiome(rng);
-      const def = BIOME_DEFS[biome];
+  // Radii from the biome's catalog default per §3.4.
+  const majorRadius = def.initialMajorRadius;
+  const minorRadius = def.initialMinorRadius;
 
-      // Position: cell centre + jitter inside ±40% of the cell extent in
-      // each axis. The ±40% (instead of ±50%) leaves a small margin off
-      // the cell edge to reduce inter-cell collisions — and the overlap
-      // check below catches anything that slips through. Snapped to
-      // integer tile coords because the renderer + economy assume
-      // integer-tile island centres.
-      const cellCx = cx * cell + cell / 2;
-      const cellCy = cy * cell + cell / 2;
-      const jitterX = (rng() - 0.5) * 2 * (cell * 0.4);
-      const jitterY = (rng() - 0.5) * 2 * (cell * 0.4);
-      const islandCx = Math.round(cellCx + jitterX);
-      const islandCy = Math.round(cellCy + jitterY);
-
-      // Radii from the biome's catalog default per §3.4.
-      const majorRadius = def.initialMajorRadius;
-      const minorRadius = def.initialMinorRadius;
-
-      // Overlap check against every already-placed island (caller-supplied
-      // hand-placed islands AND every procedural island we've placed so
-      // far). Conservative distance-based ellipse approximation per the
-      // task brief.
-      if (overlapsAny(islandCx, islandCy, majorRadius, minorRadius, placed)) {
-        // Skip placement. We still consumed the biome + position + jitter
-        // rng calls so the sequence stays stable.
-        continue;
-      }
-
-      const id = `gen-${cx}-${cy}`;
-      // Modifier roll per §3.5 via the existing pure rng-driven function.
-      // `seed` is advisory inside `rollModifiers` — the entropy comes from
-      // the rng we just threaded through.
-      const modifiers = rollModifiers(opts.seed, biome, rng);
-
-      // Build via the shared `attachTerrainAt` helper — the inscription
-      // predicate captures `spec` by reference so a future §3.6 merge that
-      // mutates `extraEllipses` is observed live (no closure-capture of
-      // radii). The readonly-widening cast lives once, in the helper.
-      const spec: IslandSpec = attachTerrainAt({
-        id,
-        name: id,
-        biome,
-        cx: islandCx,
-        cy: islandCy,
-        majorRadius,
-        minorRadius,
-        populated: false,
-        discovered: false,
-        buildings: [],
-        modifiers,
-      });
-      out.push(spec);
-      placed.push(spec);
-    }
+  if (overlapsAny(islandCx, islandCy, majorRadius, minorRadius, neighborSpecs)) {
+    return [];
   }
 
+  const id = `gen-${cellX}-${cellY}`;
+  const modifiers = rollModifiers(seed, biome, rng);
+  const spec: IslandSpec = attachTerrainAt({
+    id,
+    name: id,
+    biome,
+    cx: islandCx,
+    cy: islandCy,
+    majorRadius,
+    minorRadius,
+    populated: false,
+    discovered: false,
+    buildings: [],
+    modifiers,
+  });
+  return [spec];
+}
+
+/**
+ * Generate procedural islands within `[-halfExtentCells, +halfExtentCells]²`
+ * by calling `generateCellIslands` per cell. Pure — same `opts` always
+ * yields the same output. Used at boot to bootstrap the visible cells; the
+ * lazy on-demand path (`generateCellIslands` directly) handles infinite
+ * generation as the player discovers new cells.
+ */
+export function generateWorld(opts: GenOptions): IslandSpec[] {
+  const out: IslandSpec[] = [];
+  const placed: IslandSpec[] = [...(opts.existingIslands ?? [])];
+  const N = opts.halfExtentCells;
+  for (let cy = -N; cy <= N; cy++) {
+    for (let cx = -N; cx <= N; cx++) {
+      const islands = generateCellIslands(
+        opts.seed,
+        cx,
+        cy,
+        opts.cellSizeTiles,
+        opts.density,
+        placed,
+      );
+      out.push(...islands);
+      placed.push(...islands);
+    }
+  }
   return out;
 }
 
@@ -178,6 +191,12 @@ function rollBiome(rng: () => number): Biome {
  *  circles) so the worst case is "a slightly larger gap than strictly
  *  necessary." The buffer keeps two islands from joining at generation
  *  time per the §2.1 minimum-spacing requirement. */
+/** Cross-cell minimum-spacing buffer in tiles. Spec §2.1 calls for
+ *  "almost stranded but one next island always reachable" feel — tuned
+ *  alongside `DEFAULT_GEN_OPTS.density` in `world.ts`. Raise to bias
+ *  toward stranded; lower to bias toward dense. */
+export const OVERLAP_BUFFER_TILES = 12;
+
 function overlapsAny(
   cx: number,
   cy: number,
@@ -185,14 +204,13 @@ function overlapsAny(
   minor: number,
   others: ReadonlyArray<IslandSpec>,
 ): boolean {
-  const BUFFER_TILES = 4;
   const myMax = Math.max(major, minor);
   for (const o of others) {
     const otherMax = Math.max(o.majorRadius, o.minorRadius);
     const dx = cx - o.cx;
     const dy = cy - o.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < myMax + otherMax + BUFFER_TILES) return true;
+    if (dist < myMax + otherMax + OVERLAP_BUFFER_TILES) return true;
   }
   return false;
 }
