@@ -4,10 +4,10 @@
 // state and draws; the main ticker calls `tickVehicles` once per frame to
 // advance arrivals. Tests target this module directly.
 //
-// Step-12 scope notes (STILL-DEFERRED bits flagged inline elsewhere):
-//   - One generic ship + one generic helicopter class (T1 + T2). T3+ tiered
-//     vehicles (Heavy Freighter, Industrial Carrier, VTOL Tilt-Rotor) and
-//     their per-tier loadouts/speeds STILL-DEFERRED to a later step.
+// Scope notes:
+//   - Vehicle classes (Cargo Ship + Helicopter at T1/T2) share one base stat
+//     set; per-tier variants (Heavy Freighter, Industrial Carrier, VTOL
+//     Tilt-Rotor) with distinct range/speed/loadout are STILL-DEFERRED.
 //   - §2.6 weather destruction implemented. Mechanical-failure rolls are
 //     implemented (§12.5). Every dispatched vehicle still arrives
 //     deterministically unless a roll fails at the expected-arrival tick.
@@ -15,9 +15,9 @@
 //     §12.7) is IMPLEMENTED and gated by Patron Hub presence.
 //   - Coastal-tile placement check on Shipyard implemented via
 //     `coastal: true` on the shipyard def (§4.3 / §8.8).
-//   - Foundation Kit "starter inventory grace cap" (§12.4) remains
-//     STILL-DEFERRED — step 12 consumes the kit on dispatch. Decomposition
-//     into raw recipe inputs on arrival is implemented in tickVehicles.
+//   - Foundation Kit "starter inventory grace cap" (§12.4) — the spec's
+//     mid-flight decomposition remains STILL-DEFERRED; current code
+//     decomposes on arrival inside tickVehicles.
 //
 // Fuel grade matches the launching island's tier per §11.7 — resolved at
 // dispatch via `fuelForTier(tierForLevel(originState.level))` and stored on

@@ -92,6 +92,19 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   continuous trickle (mathematically equivalent over time but loses the
   "you got lucky" flavor).
   Files: `biomes.ts:210`, `skilltree.ts` (mining.3 / forestry.3).
+- **Procedural terrain generation produces no resource clusters** —
+  `terrainAtForBiome` rolls each tile independently via `tileHash01`
+  at 12% rare density, so adjacent same-type rare tiles only occur by
+  coincidence. Empirical sweep of a 14×14 plains island (556 buildable
+  tiles, 67 rares spread across tree/stone/ore/coal/limestone): zero
+  2×2 same-type rare clusters, zero 3×3. Result: on every procedural
+  island, only `requiredTile`-less buildings and 1×1 `logger` can place;
+  the 2×2 extractors (mine, quarry, *_mine, *_extractor) and 3×3
+  `drilling_rig` are unplaceable. Home sidesteps this via hand-placed
+  clusters in `island.ts:defaultTerrainAt`. Fix: roll per cluster cell
+  (axis-aligned rectangle, not disc) and paint the whole cell with the
+  chosen rare, sized so 2×2 buildings fit and 3×3 fits some of the time.
+  File: `biomes.ts:526`.
 - **Wind power +50% on High Wind modifier** — variance machinery
   shipped, the +50% wind-power side is deferred.
   File: `biomes.ts:174`.
@@ -160,35 +173,7 @@ These have the simulation wired but no player surface to access them.
 
 ---
 
-## 5. Stale annotations (mechanic shipped, comment says deferred)
-
-These markers are obsolete — the underlying mechanic ships now but the
-old `STILL-DEFERRED` comment remains.
-
-- **`recipes.ts:233`** — "launch mechanics (§14.2-14.8 / §14.12) remain
-  STILL-DEFERRED" — most of these mechanics shipped (tickSatMovement,
-  tickCommPackets, tickDebris, tickScannerDiscovery, tickRepairDrones,
-  launchSatellite). The comment is misleading; rewrite to flag only what
-  remains (Spaceport tier upgrade, pad-explosion-tier-reset).
-- **`world.ts:935`** — "Production-trigger flip on first ascendant_core
-  STILL-DEFERRED" — this IS wired in `economy.ts:1163` (§13 auto-flip
-  block).
-- **`drones.ts:11`** — "Tier-gating on Drone Pad STILL-DEFERRED to step
-  9" — tier-gating on building placement is now via `buildingUnlocked`.
-- **`routes.ts:11, 17`** — "transit times STILL-DEFERRED" / "tier-gating
-  STILL-DEFERRED" — both shipped (transit time per route type;
-  buildingUnlocked at validate-placement).
-- **`drones.ts:9`** — "omnidirectional pulse, T5 path-drawn, all
-  STILL-DEFERRED" — T4 pulse + T5 path-drawn both shipped.
-- **`placement.ts:22-24`** — "Placement-time material cost" /
-  "Demolition" both flagged STILL-DEFERRED but both shipped.
-- **Several `Step-N scope notes` headers** in `drones.ts:7`,
-  `routes.ts:8`, `settlement.ts:7` — refer to a multi-step build plan
-  that's been superseded. Worth scrubbing.
-
----
-
-## 6. Polish / nice-to-have
+## 5. Polish / nice-to-have
 
 - Spaceport tier upgrade UI button + cost display.
 - Satellite-launch result toast (success / failure split) instead of

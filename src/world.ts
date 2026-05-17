@@ -932,7 +932,8 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     aiCoreCrafted: false,
     // §14.1 T6 access gate (first half). Defaults to false; the step-20
     // demo seeds this true manually on forest-ne alongside aiCoreCrafted.
-    // Production-trigger flip on first ascendant_core STILL-DEFERRED.
+    // Auto-flips to true on first `ascendant_core` production via the §13
+    // auto-flip block in `economy.ts:advanceIsland`.
     ascendantCoreCrafted: false,
     // §9.7 Tier Reset cooldown anchor. Null on a fresh island — the player
     // hasn't ever paid for a reset yet, so the 24h block doesn't apply.
