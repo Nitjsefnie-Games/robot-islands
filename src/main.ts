@@ -195,9 +195,15 @@ async function main(): Promise<void> {
     return renderOcean(ws.revealedCells, visionSources, halfSize);
   }
   /** Bake the post-island fog overlay. One UNKNOWN_BLUE square per cell
-   *  in a discovered island's footprint that isn't in `revealedCells`. */
+   *  in a discovered island's footprint that isn't in `revealedCells`
+   *  AND isn't currently lit by a vision source — without the vision
+   *  exclusion, a freshly-discovered neighbour island's unrevealed
+   *  footprint cells would paint over home's vision halo, producing the
+   *  drone-discovery dark-grey-square bug. */
   function renderFogOverlayFromState(ws: WorldState): Container {
-    return renderOceanFogOverlay(ws.islands, ws.revealedCells);
+    const populated = ws.islands.filter((s) => s.populated);
+    const visionSources = computeVisionSources(populated);
+    return renderOceanFogOverlay(ws.islands, ws.revealedCells, visionSources);
   }
   function renderIslandLayer(ws: WorldState): Container {
     const layer = new Container();
