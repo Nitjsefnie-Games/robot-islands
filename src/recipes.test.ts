@@ -249,6 +249,28 @@ describe('byproducts', () => {
   });
 });
 
+describe('§6.7 Steel Mill scrap substitution (steel_mill_from_scrap)', () => {
+  it('steel_mill_from_scrap recipe exists with 2 scrap → 1 steel + 1 slag', () => {
+    const r = RECIPES.steel_mill_from_scrap;
+    expect(r).toBeDefined();
+    expect(r!.inputs).toEqual({ scrap: 2 });
+    expect(r!.outputs).toEqual({ steel: 1, slag: 1 });
+  });
+
+  it('steel_mill_from_scrap matches base steel_mill cycleSec (same output rate per §6.7)', () => {
+    expect(RECIPES.steel_mill_from_scrap!.cycleSec).toBe(RECIPES.steel_mill!.cycleSec);
+  });
+
+  it('steel_mill_from_scrap is tagged as smelting (same category as base)', () => {
+    expect(RECIPES.steel_mill_from_scrap!.category).toBe('smelting');
+    expect(RECIPES.steel_mill_from_scrap!.category).toBe(RECIPES.steel_mill!.category);
+  });
+
+  it('outputs match the base steel_mill — substitution preserves yields, only the input differs', () => {
+    expect(RECIPES.steel_mill_from_scrap!.outputs).toEqual(RECIPES.steel_mill!.outputs);
+  });
+});
+
 describe('microchip chain', () => {
   it('pcb_etcher outputs pcb: 1', () => {
     expect(RECIPES.pcb_etcher!.outputs.pcb).toBe(1);

@@ -599,9 +599,11 @@ export function computeRates(
 
     // Tile-aware recipe pickup — see resolveRecipe in recipes.ts. For most
     // buildings this is the same as `RECIPES[def.id]`; Mine branches on
-    // its footprint terrain when `terrainAt` is provided.
+    // its footprint terrain when `terrainAt` is provided; Steel Mill swaps
+    // to the §6.7 scrap-substitution variant when pig_iron is empty but
+    // scrap is on hand (inventory snapshot passed through here).
     const def = defs[b.defId];
-    const recipe = resolveRecipe(def, b, terrainAt);
+    const recipe = resolveRecipe(def, b, terrainAt, ctx?.inventory ?? state.inventory);
     if (!recipe) continue;
     // §4.5 buff-adjacency multiplier — computed once per building from its
     // 4-neighbor footprint border. Captured here so pass 2's nominal-rate
@@ -763,7 +765,7 @@ export function computeRates(
     // recipe presence here, so the variant chosen doesn't matter — but we
     // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
     // confusion about which lookup is "the" lookup).
-    const recipe = resolveRecipe(def, b, terrainAt);
+    const recipe = resolveRecipe(def, b, terrainAt, ctx?.inventory ?? state.inventory);
     let active: boolean;
     if (!recipe) {
       active = true;

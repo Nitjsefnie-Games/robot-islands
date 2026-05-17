@@ -2787,3 +2787,112 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
     expect(anyTriggered).toBe(true);
   });
 });
+
+// -----------------------------------------------------------------------
+// §6.7 Steel Mill scrap substitution — economy integration
+// -----------------------------------------------------------------------
+
+describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
+  // Steel Mill base recipe: 1 pig_iron / 600s → 1 steel + 1 slag. The §6.7
+  // substitution variant `steel_mill_from_scrap` swaps the input to 2 scrap
+  // per 600s cycle while preserving the same output rate. Selection is
+  // per-tick, driven by inventory: pig_iron > 0 → base, else if scrap > 0 →
+  // scrap variant, else stalled on pig_iron (the visible bottleneck).
+  //
+  // Power-free catalog for the Steel Mill keeps these tests isolated from
+  // §5.1 brownout — we're verifying recipe selection and consumption math,
+  // not power balance.
+  function powerFreeSteelMillCatalog(): DefCatalog {
+    const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    const { power: _p, ...rest } = base.steel_mill;
+    base.steel_mill = rest as BuildingDef;
+    return base;
+  }
+
+  it('with only pig_iron in inventory: produces steel at the base rate (regression)', () => {
+    // 10 cycles × 600s = 6000s. Each cycle: −1 pig_iron, +1 steel, +1 slag.
+    // Start pig_iron = 100; expect 90 left, 10 steel, 10 slag produced.
+    // No scrap touched.
+    const MILL: PlacedBuilding = { id: 'sm', defId: 'steel_mill', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [MILL],
+      inventory: {
+        ...blankInventory(),
+        pig_iron: 100,
+        scrap: 0,
+      },
+      storageCaps: blankCaps(10_000),
+      level: 5, // T2 building — bypass §9.7 tier-band runtime gate
+    });
+    advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
+    expect(state.inventory.pig_iron).toBeCloseTo(90, 6);
+    expect(state.inventory.steel).toBeCloseTo(10, 6);
+    expect(state.inventory.slag).toBeCloseTo(10, 6);
+    expect(state.inventory.scrap).toBe(0); // never consumed
+  });
+
+  it('with only scrap in inventory: runs the substitution variant — same output rate, 2 scrap per cycle', () => {
+    // 10 cycles × 600s = 6000s. Each cycle: −2 scrap, +1 steel, +1 slag.
+    // Start scrap = 100; expect 80 left, 10 steel, 10 slag produced (same
+    // throughput as the pig_iron baseline above).
+    const MILL: PlacedBuilding = { id: 'sm', defId: 'steel_mill', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [MILL],
+      inventory: {
+        ...blankInventory(),
+        pig_iron: 0,
+        scrap: 100,
+      },
+      storageCaps: blankCaps(10_000),
+      level: 5,
+    });
+    advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
+    expect(state.inventory.scrap).toBeCloseTo(80, 6);
+    expect(state.inventory.steel).toBeCloseTo(10, 6);
+    expect(state.inventory.slag).toBeCloseTo(10, 6);
+    expect(state.inventory.pig_iron).toBe(0); // never consumed
+  });
+
+  it('with both inputs: drains pig_iron first, then switches to scrap mid-run', () => {
+    // Start pig_iron = 5, scrap = 100. The mill should run on pig_iron for
+    // 5 cycles (3000s), then switch to scrap for the remaining 5 cycles
+    // (3000s, consuming 10 scrap). End state: pig_iron = 0, scrap = 90,
+    // steel = 10, slag = 10. Verifies the piecewise integrator re-resolves
+    // at the pig_iron depletion event rather than stalling.
+    const MILL: PlacedBuilding = { id: 'sm', defId: 'steel_mill', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [MILL],
+      inventory: {
+        ...blankInventory(),
+        pig_iron: 5,
+        scrap: 100,
+      },
+      storageCaps: blankCaps(10_000),
+      level: 5,
+    });
+    advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
+    expect(state.inventory.pig_iron).toBeCloseTo(0, 6);
+    expect(state.inventory.scrap).toBeCloseTo(90, 6); // 100 − (5 cycles × 2)
+    expect(state.inventory.steel).toBeCloseTo(10, 6);
+    expect(state.inventory.slag).toBeCloseTo(10, 6);
+  });
+
+  it('with neither input: stalls (no steel, no consumption)', () => {
+    // Both stockpiles at 0 — substitution rule falls back to the base
+    // recipe so the missing-pig_iron bottleneck stays visible. No production.
+    const MILL: PlacedBuilding = { id: 'sm', defId: 'steel_mill', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [MILL],
+      inventory: {
+        ...blankInventory(),
+        pig_iron: 0,
+        scrap: 0,
+      },
+      storageCaps: blankCaps(10_000),
+      level: 5,
+    });
+    advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
+    expect(state.inventory.steel).toBe(0);
+    expect(state.inventory.slag).toBe(0);
+  });
+});
