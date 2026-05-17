@@ -49,6 +49,7 @@ import {
   maintenanceFactor,
 } from './maintenance.js';
 import { ALL_RESOURCES, resolveRecipe, type Recipe, type ResourceId } from './recipes.js';
+import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
 import { RESOURCE_STORAGE_CATEGORY, type StorageCategory } from './storage-categories.js';
 import {
   BIOME_MAX_RADII,
@@ -532,6 +533,18 @@ export function mountInspectorUi(
     return { wrap, body: inner };
   }
 
+  // Construction section — visible only while constructionRemainingMs > 0.
+  // Sits above Recipe so the "X.Xs remaining (NN%)" readout is the first
+  // thing a player sees on a fresh placement.
+  const constructionSection = makeSection('Construction');
+  const constructionStatus = document.createElement('span');
+  constructionStatus.classList.add('ri-mono');
+  styled(
+    constructionStatus,
+    [`color: ${'var(--ri-accent)'}`, 'font-size: 11px', 'letter-spacing: 0.04em', 'font-weight: 600'].join(';'),
+  );
+  constructionSection.body.appendChild(constructionStatus);
+
   // Recipe section
   const recipeSection = makeSection('Recipe');
   const recipeStatus = document.createElement('span');
@@ -542,6 +555,31 @@ export function mountInspectorUi(
   recipeSection.body.appendChild(recipeStatus);
   // The list of input/output rate lines is rebuilt every refresh — clear &
   // rebuild on each paint rather than maintain a stable child set.
+
+  // Skill / modifier / specialization bonus annotation. Shown only when the
+  // composite recipe-rate multiplier exceeds 1.0 (or yield bonus for
+  // mine/logger drops above identity). Helps players see why a Smelter is
+  // running 1.15× vs nominal — the ×N skills are otherwise invisible since
+  // `effective` already bakes them in.
+  const bonusesRow = document.createElement('div');
+  styled(
+    bonusesRow,
+    ['display: flex', 'justify-content: space-between', 'gap: 6px'].join(';'),
+  );
+  const bonusesLabel = document.createElement('span');
+  bonusesLabel.textContent = 'BONUSES';
+  styled(
+    bonusesLabel,
+    [`color: ${'var(--ri-fg-3)'}`, 'font-size: 9.5px', 'letter-spacing: 0.1em'].join(';'),
+  );
+  const bonusesValue = document.createElement('span');
+  bonusesValue.classList.add('ri-mono');
+  styled(
+    bonusesValue,
+    [`color: ${'var(--ri-accent)'}`, 'font-size: 11px', 'font-weight: 600'].join(';'),
+  );
+  bonusesRow.appendChild(bonusesLabel);
+  bonusesRow.appendChild(bonusesValue);
 
   // Effective rate readout
   const effectiveRow = document.createElement('div');
@@ -957,9 +995,13 @@ export function mountInspectorUi(
   body.appendChild(nameRow);
   body.appendChild(titleRow);
   body.appendChild(subtitleRow);
+  body.appendChild(constructionSection.wrap);
   body.appendChild(recipeSection.wrap);
   // Effective rate row sits below the recipe lines but inside the recipe
   // section visually — append a thin spacer + row to the recipe section body.
+  // Bonuses sits between recipe lines and effective rate so the skill stack
+  // is visible before the cycles/s readout it produces.
+  recipeSection.body.appendChild(bonusesRow);
   recipeSection.body.appendChild(effectiveRow);
   body.appendChild(powerSection.wrap);
   body.appendChild(gateSection.wrap);
@@ -1006,8 +1048,10 @@ export function mountInspectorUi(
       );
       row.appendChild(left);
       row.appendChild(right);
-      // Insert BEFORE the effective-rate row so the cycle line stays last.
-      recipeSection.body.insertBefore(row, effectiveRow);
+      // Insert BEFORE the bonuses row (which itself sits above effective)
+      // so the per-resource rate lines stay above the bonuses + effective
+      // summary rows.
+      recipeSection.body.insertBefore(row, bonusesRow);
       recipeLineEls.push(row);
     }
     for (let i = 0; i < recipeLineEls.length; i++) {
@@ -1084,6 +1128,20 @@ export function mountInspectorUi(
     categoryEl.textContent = CATEGORY_LABEL[def.category].toUpperCase();
     footprintEl.textContent = `${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}  ·  rot ${(building.rotation ?? 0) * 90}°`;
 
+    // §9.3 Construction status — show "X.Xs remaining" while
+    // constructionRemainingMs > 0. The cyan arc overlay on the building tile
+    // (drawn by building-alerts-overlay) tells the player something is in
+    // progress; this readout puts a number on it. Total construction time
+    // isn't stored on the building (only remaining), so we don't compute
+    // percent — the visible arc carries that information.
+    const remainingMs = building.constructionRemainingMs ?? 0;
+    if (remainingMs > 0) {
+      constructionStatus.textContent = `${(remainingMs / 1000).toFixed(1)}s remaining`;
+      constructionSection.wrap.style.display = '';
+    } else {
+      constructionSection.wrap.style.display = 'none';
+    }
+
     // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1).
     const recipe = resolveRecipe(BUILDING_DEFS[building.defId], building, spec.terrainAt);
     if (!recipe) {
@@ -1093,6 +1151,7 @@ export function mountInspectorUi(
       ensureRecipeLineCount(0);
       effectiveValue.textContent = '—';
       effectiveValue.style.color = 'var(--ri-fg-3)';
+      bonusesRow.style.display = 'none';
     } else {
       // Find the per-building effective rate from a fresh computeRates pass.
       // The HUD also calls computeRates each frame, so the second call here
@@ -1126,6 +1185,27 @@ export function mountInspectorUi(
 
       effectiveValue.textContent = effective.toFixed(3);
       effectiveValue.style.color = effective > 0 ? 'var(--ri-accent)' : 'var(--ri-fg-4)';
+
+      // Bonuses readout: surface the per-category skill multiplier so
+      // players see why a Smelter is running 1.15× vs nominal. Mine /
+      // Logger get their tier-specific yield bonus folded in too.
+      const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
+      const catMul = skillMul.recipeRate[recipe.category] ?? 1;
+      let mineLogBonus = 1;
+      if (def.category === 'extraction') {
+        if (building.defId.includes('mine')) mineLogBonus *= skillMul.mineYieldBonus;
+        if (building.defId.includes('logger')) mineLogBonus *= skillMul.loggerYieldBonus;
+      }
+      const compositeMul = catMul * mineLogBonus;
+      if (compositeMul > 1.0001) {
+        const parts: string[] = [];
+        if (catMul > 1.0001) parts.push(`${recipe.category} ×${catMul.toFixed(2)}`);
+        if (mineLogBonus > 1.0001) parts.push(`yield ×${mineLogBonus.toFixed(2)}`);
+        bonusesValue.textContent = parts.join(' · ') + ` = ×${compositeMul.toFixed(2)}`;
+        bonusesRow.style.display = '';
+      } else {
+        bonusesRow.style.display = 'none';
+      }
     }
 
     // Power section
