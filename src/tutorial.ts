@@ -7,9 +7,12 @@ export type ObjectiveId =
   | 'place_quarry'
   | 'place_mine'
   | 'place_workshop'
-  | 'reach_level_5'
+  | 'build_biofuel_plant'
+  | 'produce_biofuel'
   | 'build_dronepad'
   | 'dispatch_first_drone'
+  | 'reach_level_5'
+  | 'build_diesel_chain'
   | 'settle_first_island'
   | 'build_antenna'
   // T3 / mid-game gates
@@ -57,10 +60,15 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
     hint: 'Place a Workshop to craft iron ingots.',
     check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'workshop')),
   },
-  reach_level_5: {
-    title: 'Grow',
-    hint: 'Reach level 5 to unlock Tier 2.',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => tierForLevel(s.level) >= 2),
+  build_biofuel_plant: {
+    title: 'Fuel Source',
+    hint: 'Place a Biofuel Plant — it turns 2 wood into 1 biofuel. Drones need fuel to fly.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'biofuel_plant')),
+  },
+  produce_biofuel: {
+    title: 'Stockpile Biofuel',
+    hint: 'Wait for your Biofuel Plant to produce 10+ biofuel — enough to dispatch your first drone.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.biofuel ?? 0) >= 10),
   },
   build_dronepad: {
     title: 'Take Flight',
@@ -69,8 +77,18 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
   },
   dispatch_first_drone: {
     title: 'Explore',
-    hint: 'Dispatch your first drone.',
+    hint: 'Open Drone Ops (J), arm launch, click a target tile.',
     check: (w) => w.drones.length > 0,
+  },
+  reach_level_5: {
+    title: 'Grow',
+    hint: 'Reach level 5 to unlock Tier 2. (Heads-up: at T2 your drones switch fuel from biofuel to DIESEL — the next step covers it.)',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => tierForLevel(s.level) >= 2),
+  },
+  build_diesel_chain: {
+    title: 'Diesel for T2 Drones',
+    hint: 'At T2 your drones need diesel, not biofuel. Build a Pump Jack (crude oil), a Naphtha Cracker, and a Diesel Refinery; stockpile 10+ diesel.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.diesel ?? 0) >= 10),
   },
   settle_first_island: {
     title: 'Expand',

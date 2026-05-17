@@ -80,9 +80,12 @@ describe('checkObjectives', () => {
         'place_quarry',
         'place_mine',
         'place_workshop',
-        'reach_level_5',
+        'build_biofuel_plant',
+        'produce_biofuel',
         'build_dronepad',
         'dispatch_first_drone',
+        'reach_level_5',
+        'build_diesel_chain',
         'settle_first_island',
         'build_antenna',
         'reach_level_15',
@@ -199,6 +202,8 @@ describe('checkObjectives', () => {
       ] })]]),
     });
     checkObjectives(state, world);
-    expect(state.current).toBe('reach_level_5');
+    // build_biofuel_plant is the next step after place_workshop now that
+    // the tutorial guides through fuel production before drone dispatch.
+    expect(state.current).toBe('build_biofuel_plant');
   });
 });
