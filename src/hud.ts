@@ -338,6 +338,69 @@ export function renderMultiIslandBar(
 // Mount HUD
 // ---------------------------------------------------------------------------
 
+// Per-(island, resource) rolling history of net rates. Sampled every
+// HUD `update()` call (one per frame); the rendered HUD shows the most
+// recent N samples as an inline SVG sparkline next to each rate row so a
+// player can see if production is climbing or stalling without watching
+// the number tick. Module-level + ring-buffer rather than DOM state so
+// the panel can be re-rendered every frame without losing history.
+const SPARK_HISTORY_LEN = 60;
+const sparkHistory: Map<string, number[]> = new Map();
+
+function sparkKey(islandId: string, resourceId: ResourceId): string {
+  return `${islandId}:${resourceId}`;
+}
+
+function pushSparkSample(islandId: string, resourceId: ResourceId, rate: number): void {
+  const key = sparkKey(islandId, resourceId);
+  const buf = sparkHistory.get(key) ?? [];
+  buf.push(rate);
+  if (buf.length > SPARK_HISTORY_LEN) buf.shift();
+  sparkHistory.set(key, buf);
+}
+
+function renderSparkline(samples: ReadonlyArray<number>, tone: 'success' | 'danger'): SVGSVGElement {
+  const w = 60;
+  const h = 14;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', String(w));
+  svg.setAttribute('height', String(h));
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.style.cssText = 'display: inline-block; vertical-align: middle; margin-right: 4px';
+  if (samples.length < 2) return svg;
+  // Symmetric scale around 0 so a flipping sign is visible (negatives
+  // dip below the midline; positives sit above).
+  const peak = Math.max(0.0001, ...samples.map((s) => Math.abs(s)));
+  const mid = h / 2;
+  const stepX = w / Math.max(1, samples.length - 1);
+  let d = '';
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i] ?? 0;
+    const x = i * stepX;
+    const y = mid - (s / peak) * (mid - 1);
+    d += (i === 0 ? 'M' : ' L') + x.toFixed(2) + ' ' + y.toFixed(2);
+  }
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', 'none');
+  path.setAttribute(
+    'stroke',
+    tone === 'success' ? 'var(--ri-success, #60d0a0)' : 'var(--ri-danger, #e6504c)',
+  );
+  path.setAttribute('stroke-width', '1');
+  svg.appendChild(path);
+  // Zero baseline.
+  const base = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  base.setAttribute('x1', '0');
+  base.setAttribute('x2', String(w));
+  base.setAttribute('y1', String(mid));
+  base.setAttribute('y2', String(mid));
+  base.setAttribute('stroke', 'var(--ri-border-strong, #2a3340)');
+  base.setAttribute('stroke-width', '0.5');
+  svg.appendChild(base);
+  return svg;
+}
+
 export function mountHud(
   parentEl: HTMLElement,
   _world: WorldState,
@@ -517,6 +580,13 @@ export function mountHud(
     ratesHead.textContent = 'Output rates';
     body.appendChild(ratesHead);
 
+    // Sample every resource's current net rate for the active island so
+    // sparklines build full history even for resources that drop out of
+    // the top-5 list briefly.
+    for (const r of ALL_RESOURCES) {
+      pushSparkSample(state.id, r, net[r] ?? 0);
+    }
+
     const topRates = ALL_RESOURCES
       .map((r) => ({ r, rate: net[r] ?? 0 }))
       .filter((e) => e.rate !== 0)
@@ -553,6 +623,10 @@ export function mountHud(
           }
         }
         v.textContent = vText;
+        const samples = sparkHistory.get(sparkKey(state.id, r)) ?? [];
+        const tone: 'success' | 'danger' = rate > 0 ? 'success' : 'danger';
+        const spark = renderSparkline(samples, tone);
+        v.prepend(spark);
         row.appendChild(k);
         row.appendChild(v);
         body.appendChild(row);

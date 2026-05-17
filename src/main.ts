@@ -98,6 +98,8 @@ import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
 import { mountAntennaOverlay } from './antenna-overlay.js';
+import { mountTerrainTooltip } from './terrain-tooltip.js';
+import { mountToastSurface } from './toast.js';
 import { mountSatelliteOverlay } from './satellite-overlay.js';
 import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
@@ -189,6 +191,12 @@ async function main(): Promise<void> {
   // §2.7 day/night tint — full-viewport DOM overlay above the canvas,
   // pointer-events: none. Cheap diff-and-skip refresh per tick.
   const dayNightTint = mountDayNightTint(document.body);
+  // Terrain hover tooltip — surfaces the terrain id and consumer-building
+  // list when the cursor hovers a non-default tile.
+  const terrainTooltip = mountTerrainTooltip(document.body);
+  // Toast surface (top-center transient banners) — singleton, used by the
+  // §14 launch flow and any future "global event" notifier.
+  mountToastSurface(document.body);
 
   // Cell grid (debug). Above ocean+islands so lines stay visible when toggled.
   const gridLayer = renderCellGrid(WORLD_HALF_SIZE_TILES);
@@ -551,6 +559,7 @@ async function main(): Promise<void> {
         hoveredBuilding = null;
         repaintHover();
       }
+      terrainTooltip.hide();
       return;
     }
     const wt = screenToWorldTile(sx, sy);
@@ -561,6 +570,20 @@ async function main(): Promise<void> {
       const localY = wt.y - island.cy;
       const b = buildingAtTile(island, localX, localY);
       if (b) next = { spec: island, building: b };
+      // Terrain hover tooltip — show only on populated islands. If the
+      // cursor is on a building we still surface the underlying terrain
+      // for context.
+      const localTileX = Math.floor(localX);
+      const localTileY = Math.floor(localY);
+      const terrainFn = island.terrainAt;
+      if (terrainFn) {
+        const terrain = terrainFn(localTileX, localTileY);
+        terrainTooltip.setHover(e.clientX, e.clientY, terrain);
+      } else {
+        terrainTooltip.hide();
+      }
+    } else {
+      terrainTooltip.hide();
     }
     const prevId = hoveredBuilding?.building.id ?? null;
     const nextId = next?.building.id ?? null;
@@ -573,6 +596,7 @@ async function main(): Promise<void> {
     dronesUi.hideReticle();
     settlementUi.hideReticle();
     placementUi.hidePreview();
+    terrainTooltip.hide();
     // Clear hover outline so it doesn't ghost at the last cursor position
     // when the user leaves the canvas.
     if (hoveredBuilding) {
