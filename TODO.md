@@ -151,12 +151,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
 
 These have the simulation wired but no player surface to access them.
 
-- **Inspector construction-time text** — cyan tint + progress arc on
-  the building shows that a build is in progress, but the inspector
-  doesn't show "Construction: 89s remaining" text.
-- **Inspector skill-bonus annotations** — buildings affected by skill
-  multipliers (every Mine, Logger, Smelter etc.) don't display "base rate
-  × N skills" — multipliers are invisible.
 - **Skill-tree branch-lock visual** — committed sub-paths have no
   visual flag; sibling-locked sub-paths don't read as "blocked until you
   complete the committed one". Players discover the lock by clicking
