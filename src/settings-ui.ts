@@ -41,6 +41,7 @@ import {
   type InputRegistry,
 } from './input.js';
 import {
+  clearPrefs,
   clearSave,
   isValidSaveSnapshot,
   importSave,
@@ -357,7 +358,7 @@ export function mountSettingsUi(
             )
           )
             return;
-          void clearSave().then(() => {
+          void Promise.all([clearSave(), clearPrefs()]).then(() => {
             window.location.reload();
           });
         },

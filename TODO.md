@@ -221,12 +221,6 @@ These have the simulation wired but no player surface to access them.
 - Per-island per-resource net rate sparkline in the HUD detail panel.
 - Save-export / save-import for backup + cross-device sync (idb-keyval
   is the only persistence path today).
-- **Remember map zoom + camera position across refreshes** — every
-  reload re-centres on home at the default zoom. Persist
-  `cam.tx / cam.ty / cam.zoom` alongside the v3 save snapshot (or in a
-  separate `prefs:v1` idb-keyval key so it doesn't churn the main save)
-  and restore on boot. Bonus: also remember the active-island selection
-  and the open-panel state.
 
 ---
 

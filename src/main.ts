@@ -54,7 +54,7 @@ import {
 import { TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
 import { renderOcean, renderOceanFogOverlay } from './ocean.js';
-import { loadWorld, saveWorld } from './persistence.js';
+import { loadPrefs, loadWorld, savePrefs, saveWorld, type OpenPanelId } from './persistence.js';
 import { mountSettingsUi } from './settings-ui.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -149,6 +149,9 @@ async function main(): Promise<void> {
   // populated before the renderer hooks up.
   const restored = await loadWorld();
   const worldState: WorldState = restored ? restored.world : makeInitialWorld(performance.now());
+  // Load UI prefs (camera + active-island + open-panel) in parallel with
+  // world; applied below after the camera is constructed.
+  const restoredPrefs = await loadPrefs();
 
   // Ocean + island + fog-overlay layers are baked from the current world
   // state. They get rebuilt when discovery changes (drone-tick reveals new
@@ -257,8 +260,18 @@ async function main(): Promise<void> {
     x: app.renderer.screen.width / 2,
     y: app.renderer.screen.height / 2,
   });
-  // Initial centring on home (world origin).
-  centerOn(cam, { x: 0, y: 0 }, viewportCentre());
+  // Restore saved camera if prefs exist; otherwise centre on home (world
+  // origin). The prefs blob is clamped + validated by loadPrefs(), so zoom
+  // out of [MIN_ZOOM..MAX_ZOOM] won't sneak through — but re-clamp here
+  // defensively in case a future MIN/MAX change leaves an old save out of
+  // range, rather than booting with a zoom we can't reach with the keys.
+  if (restoredPrefs) {
+    cam.tx = restoredPrefs.cam.tx;
+    cam.ty = restoredPrefs.cam.ty;
+    cam.zoom = clampZoom(restoredPrefs.cam.zoom);
+  } else {
+    centerOn(cam, { x: 0, y: 0 }, viewportCentre());
+  }
 
   const reg = makeRegistry();
   installDefaultBindings(reg);
@@ -710,11 +723,18 @@ async function main(): Promise<void> {
   // -----------------------------------------------------------------------
   //
   // `activeIslandId` is the single source of truth for which populated
-  // colony every panel currently targets. Defaults to 'home' on fresh
-  // start AND restored loads (transient — not persisted, per the brief).
+  // colony every panel currently targets. Defaults to 'home' on a fresh
+  // start, OR restores the last-active id from prefs (validated against
+  // the live spec map so a saved id that no longer exists — e.g. an
+  // absorbed merged island — falls back to home cleanly).
   // The two getters resolve to the live spec/state on every call so
   // panels see fresh values after a click-to-switch without re-mounting.
-  let activeIslandId: string = 'home';
+  let activeIslandId: string =
+    restoredPrefs &&
+    islandSpecsById.has(restoredPrefs.activeIslandId) &&
+    (islandSpecsById.get(restoredPrefs.activeIslandId)?.populated ?? false)
+      ? restoredPrefs.activeIslandId
+      : 'home';
   function activeSpec(): IslandSpec {
     const s = islandSpecsById.get(activeIslandId);
     if (!s) throw new Error(`main: active spec missing for ${activeIslandId}`);
@@ -1184,11 +1204,91 @@ async function main(): Promise<void> {
   // forget (`void`) so the timer / event handler doesn't await — failures
   // are swallowed by `saveWorld`'s try/catch.
   const SAVE_INTERVAL_MS = 30_000;
+  // Map of UI panel handles keyed by the OpenPanelId — used to (a) snapshot
+  // which panel is open at save time and (b) re-open the saved panel on
+  // boot. Centralising the lookup here keeps the prefs round-trip honest:
+  // adding a panel means adding it to this map, otherwise saving it as
+  // open is impossible (TypeScript catches the new OpenPanelId at compile).
+  const panels: Record<OpenPanelId, { isVisible(): boolean; toggle(): boolean }> = {
+    'skill-tree': skillTree,
+    'buildings': buildingsUi,
+    'drones': dronesUi,
+    'graph': graphUi,
+    'routes': routesUi,
+    'settlement': settlementUi,
+    'orbital': orbitalUi,
+    'construction': constructionUi,
+    'inventory': inventoryUi,
+    'settings': settingsUi,
+  };
+  const currentOpenPanel = (): OpenPanelId | null => {
+    for (const id of Object.keys(panels) as OpenPanelId[]) {
+      if (panels[id].isVisible()) return id;
+    }
+    return null;
+  };
+  // Restore the saved open panel exactly once at boot. Use the panel's
+  // `toggle()` to open it (every panel reports as hidden post-mount, so
+  // toggle flips to visible) — keeps us off internal show() variants whose
+  // signatures differ between panels.
+  if (restoredPrefs && restoredPrefs.openPanel !== null) {
+    const handle = panels[restoredPrefs.openPanel];
+    if (!handle.isVisible()) handle.toggle();
+  }
+  // Debounced prefs save: cam pan/zoom and active-island changes need a
+  // tighter cadence than the 30s world autosave — a player who pans then
+  // refreshes 3 seconds later expects their view to come back. We compare
+  // the live values against the last-saved snapshot once per frame inside
+  // the ticker (cheap — three numbers + a string + a panel scan) and
+  // re-arm a 500ms debounce timer on any change. The timer batches
+  // multiple frames of fast panning into a single IDB write.
+  let lastSavedCam = { tx: cam.tx, ty: cam.ty, zoom: cam.zoom };
+  let lastSavedActive = activeIslandId;
+  let lastSavedOpenPanel: OpenPanelId | null = currentOpenPanel();
+  let prefsSaveTimer: number | null = null;
+  const PREFS_SAVE_DEBOUNCE_MS = 500;
+  function flushPrefsSave(): void {
+    if (prefsSaveTimer !== null) {
+      clearTimeout(prefsSaveTimer);
+      prefsSaveTimer = null;
+    }
+    const op = currentOpenPanel();
+    void savePrefs({
+      cam: { tx: cam.tx, ty: cam.ty, zoom: cam.zoom },
+      activeIslandId,
+      openPanel: op,
+    });
+    lastSavedCam = { tx: cam.tx, ty: cam.ty, zoom: cam.zoom };
+    lastSavedActive = activeIslandId;
+    lastSavedOpenPanel = op;
+  }
+  function schedulePrefsSave(): void {
+    if (prefsSaveTimer !== null) clearTimeout(prefsSaveTimer);
+    prefsSaveTimer = window.setTimeout(flushPrefsSave, PREFS_SAVE_DEBOUNCE_MS);
+  }
+  /** Called once per frame: detect dirty prefs and arm the debounce. */
+  function maybeSchedulePrefsSave(): void {
+    const op = currentOpenPanel();
+    if (
+      cam.tx !== lastSavedCam.tx ||
+      cam.ty !== lastSavedCam.ty ||
+      cam.zoom !== lastSavedCam.zoom ||
+      activeIslandId !== lastSavedActive ||
+      op !== lastSavedOpenPanel
+    ) {
+      schedulePrefsSave();
+    }
+  }
+
   // `lastSaveAt` is declared earlier alongside the settings UI mount so the
   // panel's getLastSavedAt closure can read the live value; this block
   // owns the writes via triggerSave.
   const triggerSave = (): void => {
     void saveWorld(worldState, islandStates);
+    // Flush any pending prefs save synchronously alongside the world save —
+    // ensures the 30s autosave and the visibility-change save always land
+    // a fresh prefs blob even if the debounce timer was mid-flight.
+    flushPrefsSave();
     lastSaveAt = performance.now();
   };
   // setInterval fires the autosave timer; the closure captures the live
@@ -1223,6 +1323,10 @@ async function main(): Promise<void> {
     if (dx !== 0 || dy !== 0) panCam(cam, dx, dy);
     world.position.set(cam.tx, cam.ty);
     world.scale.set(cam.zoom);
+    // Per-frame dirty-check for camera / active-island / open-panel prefs.
+    // Arms the 500ms debounce timer if anything changed; the timer batches
+    // bursts of pan/zoom frames into a single IDB write.
+    maybeSchedulePrefsSave();
 
     const now = performance.now();
     // Capture the previous frame's timestamp BEFORE we overwrite
