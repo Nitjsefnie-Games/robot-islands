@@ -51,9 +51,9 @@ export interface GenOptions {
  * Pure + per-cell deterministic — same `(seed, cellX, cellY)` always
  * returns the same candidate set, regardless of generation order.
  *
- * Currently returns at most one island per cell (the §2.1 geometric-decline
- * additional-islands path is folded into the density tuning above; future
- * step can fan multiple anchors out from this function if needed).
+ * Returns at most one island per cell — this is the design choice per
+ * §2.1 (single island per cell, density gates the first-island roll).
+ * Multi-island-per-cell fan-out is intentionally not implemented.
  *
  * `neighborSpecs` is the cross-cell overlap context. The function only
  * reads from it (never mutates); pass islands from neighbour cells (±1 on
@@ -67,8 +67,8 @@ export interface GenOptions {
  *   - Overlap: candidate's centre-circle gates against `neighborSpecs`
  *     via the `OVERLAP_BUFFER_TILES`-padded ellipse approximation. On
  *     overlap, returns `[]` (the cell is "stranded" — gives §2.1's
- *     "almost stranded but one next island always reachable" feel when
- *     density + buffer are tuned together).
+ *     "stranded but reachable" feel when density + buffer are tuned
+ *     together).
  */
 export function generateCellIslands(
   seed: string,
@@ -192,10 +192,12 @@ function rollBiome(rng: () => number): Biome {
  *  necessary." The buffer keeps two islands from joining at generation
  *  time per the §2.1 minimum-spacing requirement. */
 /** Cross-cell minimum-spacing buffer in tiles. Spec §2.1 calls for
- *  "almost stranded but one next island always reachable" feel — tuned
- *  alongside `DEFAULT_GEN_OPTS.density` in `world.ts`. Raise to bias
- *  toward stranded; lower to bias toward dense. */
-export const OVERLAP_BUFFER_TILES = 12;
+ *  "stranded but reachable" feel — tuned alongside
+ *  `DEFAULT_GEN_OPTS.density` in `world.ts`. The current pairing
+ *  (density 0.08, buffer 16; single island per cell) keeps neighbour
+ *  islands at least one cell apart in practice. Raise to bias toward
+ *  stranded; lower to bias toward dense. */
+export const OVERLAP_BUFFER_TILES = 16;
 
 function overlapsAny(
   cx: number,

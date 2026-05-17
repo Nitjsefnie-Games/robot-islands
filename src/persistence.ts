@@ -80,12 +80,12 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *
  *  §2.1 infinite map: bumped v3 → v4 because the lazy per-cell generator
  *  is keyed to `WorldState.generatedCells`. A v3 save predates the field
- *  and predates the density retune (0.30 → 0.15, overlap 4 → 12). Loading
- *  it under v4 would re-roll every visited cell against the new generator
- *  and produce a different island layout in any unrevealed area while
- *  carrying forward the player's stale, denser saved specs — visually
- *  jarring and impossible to migrate cleanly. Rejecting v3 outright (the
- *  caller falls back to a fresh world) avoids the half-state.
+ *  and predates the density / overlap retune (now density 0.08, overlap
+ *  16). Loading it under v4 would re-roll every visited cell against the
+ *  new generator and produce a different island layout in any unrevealed
+ *  area while carrying forward the player's stale, denser saved specs —
+ *  visually jarring and impossible to migrate cleanly. Rejecting v3
+ *  outright (the caller falls back to a fresh world) avoids the half-state.
  *
  *  See the comment on `SCHEMA_VERSION` for the reasoning. */
 export const STORAGE_KEY = 'robot-islands:save:v4';
@@ -108,8 +108,8 @@ export const STORAGE_KEY = 'robot-islands:save:v4';
  *  preserved as-is). A v3 save loads cleanly without losing pre-T6
  *  progress.
  *
- *  §2.1 infinite map: bumped 3 → 4. The new generator (density 0.15,
- *  overlap 12 tiles, lazy per-cell via `ensureCellGenerated`) cannot be
+ *  §2.1 infinite map: bumped 3 → 4. The new generator (density 0.08,
+ *  overlap 16 tiles, lazy per-cell via `ensureCellGenerated`) cannot be
  *  back-compatibly applied to v3 saves whose discovered-but-unpopulated
  *  specs were rolled by the old denser placeholder. See STORAGE_KEY for
  *  the full reasoning. */

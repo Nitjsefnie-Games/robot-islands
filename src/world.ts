@@ -797,10 +797,14 @@ export const WORLD_SEED = 'rio-2026';
 /** Default world-gen options. Boot-time bulk generation covers cells in
  *  `[-halfExtentCells, +halfExtentCells]²`; the player extends the world
  *  outward as drones / satellites enter new cells via
- *  `ensureCellGenerated` (lazy, infinite). Density 0.15 biases toward
- *  "almost stranded but one next island always reachable" per §2.1, paired
- *  with `OVERLAP_BUFFER_TILES = 12` so 14-tile Plains islands don't
- *  stack into peanut shapes. */
+ *  `ensureCellGenerated` (lazy, infinite).
+ *
+ *  Density 0.08, single island per cell (no multi-island fan-out): tuned
+ *  via the V3 sweep of the §2.1 density study to bias toward "stranded
+ *  but reachable" — most cells stay empty ocean; the cells that do roll
+ *  an island sit far enough apart that the next neighbour is always a
+ *  drone-hop away but rarely the next cell over. Paired with
+ *  `OVERLAP_BUFFER_TILES = 16` so cross-cell placements never crowd. */
 export const DEFAULT_GEN_OPTS: {
   readonly seed: string;
   readonly halfExtentCells: number;
@@ -810,7 +814,7 @@ export const DEFAULT_GEN_OPTS: {
   seed: WORLD_SEED,
   halfExtentCells: 10,
   cellSizeTiles: CELL_SIZE_TILES,
-  density: 0.15,
+  density: 0.08,
 };
 
 /**

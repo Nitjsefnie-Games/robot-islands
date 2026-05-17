@@ -14,7 +14,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 
 | Section | Status | Notes |
 |---|---|---|
-| §2.1 Stratified placement | L | Lazy per-cell generation via `ensureCellGenerated`; boot sweep handles cells in `[-10, +10]²`, lazy hook extends infinitely as drones / satellites enter new cells. Density 0.15, overlap buffer 12 tiles. |
+| §2.1 Stratified placement | L | Lazy per-cell generation via `ensureCellGenerated`; boot sweep handles cells in `[-10, +10]²`, lazy hook extends infinitely as drones / satellites enter new cells. Single island per cell, density 0.08, overlap buffer 16 tiles. |
 | §2.2 Discovery via drones | L | T1 / T2 / T3 / T4 / T5 dispatch; Drone Pad (T2) is the gate, launchable drone tier ranges from T1 up to current island tier. |
 | §2.3 Settlement | P | Vehicle dispatch + arrival + Foundation Kit. Per-tier vehicle stats (speed, range, loadout, failureRate, weatherMul) for both ships and helicopters via SHIP_STATS / HELICOPTER_STATS. T5 Spacetime Anchor bypass not implemented. |
 | §2.4 Inter-island routes | P | Cargo / drone / airship / teleporter / cable types. Teleporter routes consume per-tile biofuel so the Network skill has a primary scaling axis. Mass-driver and T5 spacetime-anchor routes not implemented. Priority-list dispatch with drag-to-reorder UI in the routes ledger. |
@@ -87,14 +87,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 
 ### 2.1 Stratified Island Placement
 
-The world is partitioned into invisible square cells of side R (the discovery guarantee radius). Each cell contains at least one island, placed at a random point within the cell using a deterministic seed. The point is sampled uniformly over the cell's interior, with an edge buffer equal to the maximum possible biome major-radius (currently 14 for Plains) — guarantees every island fits entirely inside its cell with no boundary overhang. Additional islands appear via geometric decline (placeholder probabilities):
-
-* P(2nd island in cell) = 0.30
-* P(3rd | 2nd exists) = 0.30
-* P(4th | 3rd exists) = 0.30
-* Hard cap: 4 islands per cell
-
-Practical density: ~1.4 islands per cell on average. Within a cell containing multiple islands, each is placed at a distinct random point subject to a minimum-spacing rule — placeholder: distance between any two islands' centers must exceed the sum of their major radii plus 2 tiles, preventing unintentional joining at generation time.
+The world is partitioned into invisible square cells of side R (the discovery guarantee radius). Each cell holds at most one island, placed at a random point within the cell using a deterministic seed. The point is sampled uniformly over the cell's interior, with an edge buffer equal to the maximum possible biome major-radius (currently 14 for Plains) — guarantees every island fits entirely inside its cell with no boundary overhang. The first-island roll is `density = 0.08` placeholder; cells that fail the roll stay open ocean. Inter-island spacing is enforced by a 16-tile buffer between ellipse edges — a candidate that would land too close to any already-placed neighbour drops, and the cell stays empty.
 
 The player only sees discovered islands. The cell grid is invisible. From the player's perspective the world is procedurally random; from the engine's perspective it is fully seed-deterministic.
 
@@ -1831,7 +1824,7 @@ The following numeric values are placeholders to be set during prototype play:
 * Network Consciousness buff values (production-rate-only multipliers, applied across all networked T3+ islands)
 * Modifier roll count distribution (placeholder: 50/30/15/5 for 0/1/2/3 modifiers)
 * Per-modifier rarity weights (placeholder table in §3.5)
-* Stratification cell additional-island geometric decline rate (placeholder 0.30 per step, capped at 4)
+* Stratification cell first-island placement probability (placeholder 0.08; single island per cell, no fan-out)
 * Foundation Kit variant recipe ratios (Standard / Enriched / Refined)
 * T4/T5 recipe extreme costs
 * Time Lock banked-time cap per building (placeholder: 24 real-time-hour equivalent)

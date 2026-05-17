@@ -9,8 +9,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
 > - §14.3 claims "Scanner / Sweeper / Comm / **Relay** variants buildable"
 >   — Relay nowhere in `orbital.ts` `SatelliteVariant`, no `relay_sat_assembly`
 >   recipe, no UI variant. (See §1 below.)
-> - §2.1 marked **L** with note "Density 0.15" — silently abandons the
->   spec's geometric-decline up-to-4-per-cell rule. (See §1 below.)
 > - §2.4 marked **P** listing route types `cargo / drone / airship /
 >   teleporter / cable` — `mass_driver` missing from `RouteType` despite
 >   §9.5 Mass Driver building and §15.1 `Route.type = 'mass_driver'`. (§1.)
@@ -97,15 +95,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   biome-unique Mass Driver building (which IS in BUILDING_DEFS). The
   building exists with nothing to dispatch.
   *(Flagged by Agent A.)*
-
-- **§2.1 world-gen silently caps at 1 island per cell.**
-  `src/world-gen.ts:73-129` returns at most one island per cell at
-  density 0.15. Spec §2.1: geometric-decline up to 4 per cell
-  (P(2nd)=P(3rd|2nd)=P(4th|3rd)=0.30, hard cap 4). Module head comment
-  reinterprets this as "folded into density 0.15" — that lowers the
-  1st-island rate, never produces 2+/cell. SPEC.md status table marks
-  §2.1 L but only notes density, not the geometric collapse.
-  *(Flagged by Agents A, B.)*
 
 - **§2.7 `solarMultiplier` is piecewise-constant, not linear ramp.**
   `src/daynight.ts:60-71` returns dawn=0.5, day=1.0, dusk=0.5,
