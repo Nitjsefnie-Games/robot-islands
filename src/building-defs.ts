@@ -168,9 +168,10 @@ export type BuildingDefId =
   // Core is per §13.4 a T5 endgame artifact whose existence promotes the
   // island into the T6 access band.
   | 'ascendant_assembly'
-  // §13.4 first victory artifact — Genesis Cell producer (recipe per
-  // §13.4 literal: 4 reality_anchor + 1 zero_point_flux + 2 causal_regulator
-  // + 1 memetic_core, 24h cycle → 1 genesis_cell). T5 manufacturing.
+  // §13.4 Genesis Cell producer — T5 manufacturing. Recipe per §13.4
+  // literal: 4 reality_anchor + 1 zero_point_flux + 2 causal_regulator
+  // + 1 memetic_core, 24h cycle → 1 genesis_cell. NOT a victory artifact
+  // (spec is explicit: no win screen, game continues indefinitely).
   | 'genesis_forge'
   // New T6 (§14 / step 20) — data-only. §14.2-14.8 / §14.12 live mechanics
   // (satellite launches, debris fields, comm graph, repair drones,
@@ -1984,11 +1985,12 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { reality_anchor: 100, steel: 200, microchip: 100 },
     glyph: '✺',
   },
-  // §13.4 Genesis Forge: produces the genesis_cell victory artifact. Per
-  // spec literal — 24h cycle, recipe at recipes.ts. T5 manufacturing, 4×4
-  // footprint matching Ascendant Assembly's gate-artifact weight. Placement
-  // cost mirrors Ascendant Assembly so neither dominates the other as the
-  // "first endgame build" choice.
+  // §13.4 Genesis Forge: produces the genesis_cell T5 transcendent
+  // artifact. Per spec — 24h cycle, recipe at recipes.ts. T5 manufacturing,
+  // 4×4 footprint matching Ascendant Assembly's weight. Placement cost
+  // mirrors Ascendant Assembly so the two long-cycle endgame producers
+  // are economically interchangeable. NOT a victory artifact (idle game,
+  // no finish state per §13.4).
   genesis_forge: {
     id: 'genesis_forge',
     displayName: 'Genesis Forge',
