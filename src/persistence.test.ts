@@ -112,12 +112,12 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('serializeWorld', () => {
-  it('produces a snapshot with v: 3 and a savedAt timestamp', () => {
+  it('produces a snapshot with v: 4 and a savedAt timestamp', () => {
     const world = makeInitialWorld(0);
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(3);
+    expect(snap.v).toBe(4);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -511,8 +511,57 @@ describe('schema version', () => {
     expect(() => deserializeWorld(future, 0, 0)).toThrow(/unknown schema version/);
   });
 
-  it('exports STORAGE_KEY containing v3 so it does not collide with stale v1/v2 saves', () => {
-    expect(STORAGE_KEY).toMatch(/v3$/);
+  it('exports STORAGE_KEY containing v4 so it does not collide with stale v1/v2/v3 saves', () => {
+    expect(STORAGE_KEY).toMatch(/v4$/);
+  });
+
+  it('rejects a v3-shaped snapshot (the §2.1 infinite-map bump is breaking)', () => {
+    // A blob from the previous schema can't be migrated — the new generator
+    // (density 0.15, overlap 12) would produce different procedural specs in
+    // any unrevealed cell while the saved discovered-but-not-populated specs
+    // would pin stale geometry. Reject so `loadWorld` falls back to a fresh
+    // world via the `stored.v !== SCHEMA_VERSION` short-circuit.
+    const world = makeInitialWorld(0);
+    const snap = serializeWorld(world, new Map(), 0);
+    const v3Shaped = { ...snap, v: 3 } as unknown as SaveSnapshot;
+    expect(() => deserializeWorld(v3Shaped, 0, 0)).toThrow(/unknown schema version/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2.1 infinite map — `generatedCells` round-trip
+// ---------------------------------------------------------------------------
+
+describe('§2.1 generatedCells persistence', () => {
+  it('round-trips an explicit generatedCells set through serialize → JSON → deserialize', () => {
+    const world = makeInitialWorld(0);
+    // Seed an arbitrary cell beyond the boot extent so the round-trip can't
+    // be conflated with the populated-cell union backfill.
+    world.generatedCells = new Set(['100,-50', '0,0', '-3,4']);
+    const snap = serializeWorld(world, new Map(), 0);
+    expect(snap.world.generatedCells).toEqual(['-3,4', '0,0', '100,-50']);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.generatedCells).toBeDefined();
+    // Restored set is a superset (the backfill unions in populated cells)
+    // but must contain every cell we explicitly saved.
+    for (const key of ['100,-50', '0,0', '-3,4']) {
+      expect(restored.generatedCells!.has(key)).toBe(true);
+    }
+  });
+
+  it('backfills home cell when generatedCells is missing from the saved blob', () => {
+    const world = makeInitialWorld(0);
+    const snap = serializeWorld(world, new Map(), 0);
+    // Strip the field as a legacy-shape simulation.
+    const stripped = {
+      ...snap,
+      world: { ...snap.world, generatedCells: undefined },
+    } as SaveSnapshot;
+    const { world: restored } = deserializeWorld(stripped, 0, 0);
+    // Home sits at tile (0, 0); cell (0, 0) must be marked generated so the
+    // lazy hook doesn't try to re-roll an island into the player's home cell.
+    expect(restored.generatedCells!.has('0,0')).toBe(true);
   });
 });
 
