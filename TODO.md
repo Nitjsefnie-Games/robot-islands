@@ -131,6 +131,16 @@ These have the simulation wired but no player surface to access them.
   File: `main.ts:620`.
 - **Antenna signal-range overlay** — drones outside antenna range lose
   scanned cells; no on-map indication of where signal reaches.
+- **Hover a coloured terrain cell to show its type + consumer buildings**
+  — every non-default terrain tile (oil_well, gas_seep, copper_vein …)
+  is rendered with a distinguishing colour but there's no on-map
+  affordance telling the player what it is or which buildings need it.
+  Want: hovering a tile (or a 3×3 cluster cell) surfaces a small
+  tooltip with the terrain id and a one-line list of `requiredTile`
+  consumers from `BUILDING_DEFS` (e.g. "copper_vein — needs Copper Mine
+  (2×2)"). Pure-data lookup, no new sim.
+  Files: `building-defs.ts` (consumer lookup), `inspector-ui.ts` or a
+  new hover-tooltip surface near `main.ts`'s mouse handlers.
 
 ---
 
