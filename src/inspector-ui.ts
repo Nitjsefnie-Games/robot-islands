@@ -56,7 +56,9 @@ import {
   ISLAND_NAME_MAX_LEN,
   renameIsland,
   type IslandSpec,
+  type WorldState,
 } from './world.js';
+import { editIslandBiome, UNIVERSE_EDITOR_COST } from './universe-editor.js';
 import { mountPanel, Zone } from './ui-zones.js';
 
 
@@ -174,6 +176,12 @@ export interface InspectorUi {
 }
 
 export interface InspectorDeps {
+  /** Live world reference — needed by the §13.3 Universe Editor flow which
+   *  mutates the active island's spec biome and re-rolls modifiers in
+   *  place. The inspector only reads `deps.world.seed` + walks
+   *  `deps.world.islandStates`; mutations stay scoped to the active
+   *  island. */
+  readonly world: WorldState;
   /** Called when the player confirms a demolish action. main.ts removes the
    *  building, credits scrap, rebuilds world layers, and closes the
    *  inspector. Returning false here keeps the inspector open (e.g. if the
@@ -195,6 +203,11 @@ export interface InspectorDeps {
    *  on their own ticker pass, so the callback typically just bumps the
    *  autosave dirty flag. */
   onRenameIsland(target: InspectorTarget, name: string): void;
+  /** §13.3 Universe Editor — called after `editIslandBiome` mutates the
+   *  active island's biome + terrain + modifiers. main.ts rebuilds world
+   *  layers (new terrain colors), invalidates modifier-multiplier caches,
+   *  and refreshes the inspector against the same selected building. */
+  onIslandBiomeReassigned?(islandId: string): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -873,6 +886,21 @@ export function mountInspectorUi(
   });
   maintenanceSection.body.appendChild(convertBtn);
 
+  // §13.3 Universe Editor — biome-reassign action. Shown only when the
+  // selected building is a `universe_editor`. Cost preview + confirm
+  // dialog with the spec's "real cost" wording.
+  const universeEditorSection = makeSection('Universe Editor (§13.3)');
+  const ueCaption = document.createElement('span');
+  styled(
+    ueCaption,
+    [`color: ${'var(--ri-fg-3)'}`, 'font-size: 10.5px', 'letter-spacing: 0.02em'].join(';'),
+  );
+  universeEditorSection.body.appendChild(ueCaption);
+  const ueBiomeRow = document.createElement('div');
+  styled(ueBiomeRow, 'display: flex; gap: 4px; flex-wrap: wrap; padding-top: 4px');
+  universeEditorSection.body.appendChild(ueBiomeRow);
+  universeEditorSection.wrap.style.display = 'none';
+
   // §3.4 Land Reclamation section — shown only when the selected building
   // is a `land_reclamation_hub`. Two buttons (+1 major / +1 minor) wired
   // to deps.onExpandIsland; each shows its current-radius cost or the
@@ -1008,6 +1036,7 @@ export function mountInspectorUi(
   body.appendChild(storageSection.wrap);
   body.appendChild(heatSection.wrap);
   body.appendChild(maintenanceSection.wrap);
+  body.appendChild(universeEditorSection.wrap);
   body.appendChild(reclamationSection.wrap);
   body.appendChild(constraintsSection.wrap);
 
@@ -1388,6 +1417,69 @@ export function mountInspectorUi(
       reclamationSection.wrap.style.display = '';
     } else {
       reclamationSection.wrap.style.display = 'none';
+    }
+
+    // §13.3 Universe Editor section — biome-reassign buttons for each
+    // §3.2 biome other than the current one. Each fires `editIslandBiome`
+    // through a confirm dialog so the player can't trigger it accidentally.
+    if (def.id === 'universe_editor') {
+      const costParts: string[] = [];
+      for (const [r, need] of Object.entries(UNIVERSE_EDITOR_COST)) {
+        const have = state.inventory[r as ResourceId] ?? 0;
+        costParts.push(`${need} ${r} (${have})`);
+      }
+      const canAfford = Object.entries(UNIVERSE_EDITOR_COST).every(
+        ([r, need]) => (state.inventory[r as ResourceId] ?? 0) >= (need ?? 0),
+      );
+      ueCaption.textContent =
+        `Reassign biome — wipes modifiers (excl. natural-only), re-rolls terrain. Cost: ${costParts.join(', ')}`;
+      // Rebuild biome buttons each refresh (cheap).
+      while (ueBiomeRow.firstChild) ueBiomeRow.removeChild(ueBiomeRow.firstChild);
+      const biomes: ReadonlyArray<{ id: 'plains' | 'forest' | 'desert' | 'volcanic' | 'arctic' | 'coast'; label: string }> = [
+        { id: 'plains', label: 'Plains' },
+        { id: 'forest', label: 'Forest' },
+        { id: 'desert', label: 'Desert' },
+        { id: 'volcanic', label: 'Volcanic' },
+        { id: 'arctic', label: 'Arctic' },
+        { id: 'coast', label: 'Coast' },
+      ];
+      for (const b of biomes) {
+        const isCurrent = spec.biome === b.id;
+        const btn = document.createElement('button');
+        btn.textContent = b.label + (isCurrent ? ' ★' : '');
+        styled(
+          btn,
+          [
+            'background: transparent',
+            `color: ${isCurrent ? 'var(--ri-accent)' : canAfford ? 'var(--ri-fg-1)' : 'var(--ri-fg-4)'}`,
+            `border: 1px solid ${isCurrent ? 'var(--ri-accent)' : canAfford ? 'var(--ri-accent-dim)' : 'var(--ri-fg-4)'}`,
+            'padding: 4px 8px',
+            'cursor: ' + (isCurrent || !canAfford ? 'not-allowed' : 'pointer'),
+            'font-family: ui-monospace, monospace',
+            'font-size: 10.5px',
+            'border-radius: 2px',
+          ].join(';'),
+        );
+        btn.disabled = isCurrent || !canAfford;
+        btn.addEventListener('click', () => {
+          if (!target) return;
+          const proceed = window.confirm(
+            `Reassign ${spec.name ?? spec.id} to ${b.label}?\n\n` +
+              'Terrain will re-roll, modifiers will wipe (natural-only excluded). ' +
+              'Buildings on now-wrong tiles will go invalid until you demolish them.',
+          );
+          if (!proceed) return;
+          const r = editIslandBiome(deps.world, spec.id, b.id);
+          if (r.ok) {
+            deps.onIslandBiomeReassigned?.(spec.id);
+            paint();
+          }
+        });
+        ueBiomeRow.appendChild(btn);
+      }
+      universeEditorSection.wrap.style.display = '';
+    } else {
+      universeEditorSection.wrap.style.display = 'none';
     }
 
     // Constraints section — shown when requiredTile or requiredBiomes apply.

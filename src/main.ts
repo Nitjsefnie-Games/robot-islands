@@ -1004,6 +1004,7 @@ async function main(): Promise<void> {
   }
 
   const inspector = mountInspectorUi(document.body, {
+    world: worldState,
     onDemolish: (target: InspectorTarget) => {
       const result = demolishBuilding(target.spec, target.state, target.building.id);
       if (!result.ok) return;
@@ -1035,6 +1036,17 @@ async function main(): Promise<void> {
     // commit). `_name` is unused — present for API symmetry with the
     // callback signature and to surface the intended value in tooling.
     onRenameIsland: (_target: InspectorTarget, _name: string) => {
+      inspector.refresh();
+    },
+    // §13.3 Universe Editor — biome / modifiers / terrain mutated for one
+    // island. Refresh the modifier-multiplier cache for that island and
+    // rebuild render layers so the new terrain colors appear immediately.
+    onIslandBiomeReassigned: (islandId: string) => {
+      const spec = islandSpecsById.get(islandId);
+      if (spec) {
+        modifierMulsById.set(spec.id, effectiveModifierMultipliers(spec.modifiers));
+      }
+      rebuildWorldLayers();
       inspector.refresh();
     },
   });

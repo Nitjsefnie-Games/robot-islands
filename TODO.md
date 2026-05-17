@@ -14,23 +14,6 @@ from `SPEC.md`.
 These are systems the spec defines but the codebase doesn't implement at
 all. Building them requires new state, new tick paths, or new UI surfaces.
 
-- **§4.5 adjacency effects (catalog)** — placement records adjacency
-  metadata; effect computation is wired only for heat (§5.2) and reactor
-  toxicity. The broader catalog of buff/gating adjacencies (Cooling
-  Tower → Crystal Lab unlocks rare recipes, Wastewater Treatment →
-  Refinery efficiency, etc.) is unimplemented.
-  Files: `placement.ts:14, 21`, `building-defs.ts:1530`.
-- **§4.7 Servitor Conversion Kit + Reality Forge mechanic** — the
-  `eternalServitor` flag on `PlacedBuilding` is honoured by `maintenanceFactor`,
-  but no recipe at the Reality Forge produces a Conversion Kit and no UI
-  applies one to a placed building. Players can't actually create
-  Eternal Servitors.
-  Files: `buildings.ts:71`, `maintenance.ts:23`.
-- **§13.3 Reality Forge biome reassignment** — Reality Forge ships as
-  an inert catalog row. The mechanic to pick a target biome, re-roll
-  terrain from world seed under the new biome, and invalidate buildings
-  on now-wrong tiles isn't implemented.
-  File: `building-defs.ts:1902`.
 - **§2.1 infinite map + density tuning** — SPEC.md line 3 calls the
   world "infinite" and §2.1 says each cell contains at least one island
   with additional islands per cell via geometric decline (placeholder
@@ -57,10 +40,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   the migration step runs exactly once.
   Files: `world-gen.ts:23,59`, `world.ts:788` (`DEFAULT_GEN_OPTS`),
   `persistence.ts` (migration path).
-- **§4.7 Servitor / §5.2 dish dual-role / etc — many catalog rows
-  shipped as inert defs** awaiting their owning mechanic. See
-  `building-defs.ts` lines 1293, 1464, 1498, 1516, 1587, 1688, 1922,
-  2065 for the full set of "def ships, mechanic deferred" markers.
 
 ---
 
