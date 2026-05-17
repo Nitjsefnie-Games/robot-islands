@@ -14,7 +14,6 @@ describe('§9.2 tier helper discipline — no hardcoded level boundaries', () =>
   const files = [
     'lattice.ts',
     'buildings-ui.ts',
-    'objectives.ts',
     'tutorial.ts',
   ];
 

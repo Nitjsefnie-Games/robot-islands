@@ -63,7 +63,6 @@ import { mountConstructionUi } from './construction-ui.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
 import { expandIsland, type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
-import { currentObjective, makeGameSnapshot } from './objectives.js';
 import { buildingAtTile, demolishBuilding } from './placement.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import { mountPlacementUi } from './placement-ui.js';
@@ -1118,6 +1117,10 @@ async function main(): Promise<void> {
   // Reticle lives in screen space (NOT world container) so it stays a
   // fixed-pixel crosshair regardless of zoom.
   app.stage.addChild(dronesUi.reticleLayer);
+  // Range ring lives in WORLD space so the radius reads correctly in
+  // tiles at any zoom. Appended (not addChildAt) so it sits above the
+  // ocean/island/drone layers but below the screen-space reticle stack.
+  world.addChild(dronesUi.rangeRingLayer);
   defineAction(reg, 'toggle-drones', () => {
     dronesUi.toggle();
   });
@@ -1489,11 +1492,9 @@ async function main(): Promise<void> {
     const power = islandPower.get(activeS.id)!;
     const saveAgeSec =
       lastSaveAt === null ? null : Math.max(0, Math.floor((now - lastSaveAt) / 1000));
-    // Objectives banner: compute the current short-term goal from a
-    // snapshot view of world + per-island states. Cheap — `makeGameSnapshot`
-    // copies no large arrays, just packages live references.
-    const objSnap = makeGameSnapshot(worldState, islandStates, activeIslandId);
-    const objective = currentObjective(objSnap);
+    // Objective display lives in the bottom-center tutorial banner only
+    // (`tutorial-ui.ts`). The HUD's previous "Next objective" line + the
+    // separate objectives.ts system were removed in the consolidation.
     hud.update(
       activeS,
       net,
@@ -1502,7 +1503,6 @@ async function main(): Promise<void> {
       ncState,
       saveAgeSec,
       worldState.vehicles.length,
-      objective,
       activeIslandId,
       islandPower,
     );

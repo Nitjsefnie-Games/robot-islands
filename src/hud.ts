@@ -12,13 +12,13 @@ import { dayPhase, dayPhaseName, solarMultiplier, type DayPhase } from './daynig
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import { dispatchAction, type InputRegistry } from './input.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
-import type { Objective } from './objectives.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';
 import { canTierReset } from './tier-reset.js';
 import { toDisplayName } from './ui-tokens.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import type { IslandSpec, WorldState } from './world.js';
+
 
 /**
  * Mounts a fixed-position panel and returns an `update` function. Calling
@@ -40,7 +40,6 @@ export interface HudHandle {
     ncState: NetworkConsciousnessState,
     saveAgeSec: number | null,
     vehiclesEnRoute: number,
-    objective: Objective | null,
     activeIslandId: string,
     islandPower: Map<string, PowerBalance>,
   ): void;
@@ -375,7 +374,6 @@ export function mountHud(
     ncState: NetworkConsciousnessState,
     _saveAgeSec: number | null,
     vehiclesEnRoute: number,
-    objective: Objective | null,
     _activeIslandId: string,
     _islandPower: Map<string, PowerBalance>,
   ): void {
@@ -568,20 +566,9 @@ export function mountHud(
     invBtn.addEventListener('click', () => dispatchAction(reg, 'toggle-inventory'));
     body.appendChild(invBtn);
 
-    // ---- Objective --------------------------------------------------------
-    if (objective) {
-      const objDiv = document.createElement('div');
-      objDiv.classList.add('objective');
-      const objLab = document.createElement('div');
-      objLab.classList.add('lab');
-      objLab.textContent = 'Next objective';
-      const objTxt = document.createElement('div');
-      objTxt.classList.add('txt');
-      objTxt.textContent = objective.label;
-      objDiv.appendChild(objLab);
-      objDiv.appendChild(objTxt);
-      body.appendChild(objDiv);
-    }
+    // Objective display lives in the bottom-center tutorial banner
+    // (tutorial-ui.ts). The HUD's previous "Next objective" row was a
+    // redundant second render of the same string and has been removed.
   }
 
   return { el: panel, update };

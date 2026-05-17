@@ -83,6 +83,11 @@ export interface DroneUiHandle {
    *  Add directly to the stage, not the world container — it shouldn't
    *  pan/zoom with the camera. */
   readonly reticleLayer: Container;
+  /** Container for the max-range ring drawn around the active origin when
+   *  launch mode is armed. Add to world (it's in world-tile space so the
+   *  ring's distance reading is correct at any zoom). Visibility is
+   *  managed internally by setLaunchMode and the fuel slider. */
+  readonly rangeRingLayer: Container;
 }
 
 /** All the bits the UI needs handed in. The main module wires this once at
@@ -314,6 +319,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   slider.addEventListener('input', () => {
     fuelLoaded = Number(slider.value);
     refresh(performance.now());
+    // Keep the world-space range ring in sync with the slider while launch
+    // mode is armed. Cheap (single Graphics.clear + one circle).
+    if (launchMode) repaintRangeRing();
   });
 
   // Tick rail underneath the slider — stencil/printed feel.
@@ -408,12 +416,15 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       armBtn.style.borderColor = 'var(--ri-warn)';
       armBtn.style.background = 'rgba(245, 167, 66, 0.08)';
       reticleLayer.visible = true;
+      repaintRangeRing();
+      rangeRingLayer.visible = true;
     } else {
       armBtn.textContent = '◇ ARM LAUNCH';
       armBtn.style.color = 'var(--ri-fg-1)';
       armBtn.style.borderColor = 'var(--ri-border-strong)';
       armBtn.style.background = 'var(--ri-elev)';
       reticleLayer.visible = false;
+      rangeRingLayer.visible = false;
     }
     deps.onLaunchModeChanged?.(on);
   }
@@ -520,6 +531,39 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       trails.set(d.id, t);
     }
     return t;
+  }
+
+  // -------------------------------------------------------------------------
+  // Pixi layer: range ring (WORLD space, inside world container)
+  // -------------------------------------------------------------------------
+  // Drawn around the active origin when launch mode is armed. Radius =
+  // (fuelLoaded × DRONE_TIER_EFFICIENCY) / 2 tiles = the per-launch
+  // outbound max-distance the player can reach with the current fuel
+  // slider value. Updates when the slider moves or when the active
+  // origin changes (next launch-mode arm).
+  const rangeRingLayer = new Container();
+  rangeRingLayer.label = 'launch-range-ring';
+  rangeRingLayer.visible = false;
+  const rangeRingGfx = new Graphics();
+  rangeRingLayer.addChild(rangeRingGfx);
+  function repaintRangeRing(): void {
+    rangeRingGfx.clear();
+    const originSpec = deps.getOriginSpec();
+    const outboundTiles = (fuelLoaded * DRONE_TIER_EFFICIENCY) / 2;
+    if (outboundTiles <= 0) return;
+    const radiusPx = outboundTiles * TILE_PX;
+    const cx = originSpec.cx * TILE_PX;
+    const cy = originSpec.cy * TILE_PX;
+    // Two concentric strokes: a soft filled disc to suggest the reachable
+    // area, then a crisper rim line so the boundary reads precisely.
+    rangeRingGfx.circle(cx, cy, radiusPx).fill({ color: VISION_BLUE, alpha: 0.05 });
+    rangeRingGfx.circle(cx, cy, radiusPx).stroke({ width: 2, color: VISION_BLUE, alpha: 0.55 });
+    // Centre crosshair so the origin tile is unambiguous at any zoom.
+    const cross = TILE_PX;
+    rangeRingGfx.moveTo(cx - cross, cy).lineTo(cx + cross, cy)
+      .stroke({ width: 1, color: VISION_BLUE, alpha: 0.5 });
+    rangeRingGfx.moveTo(cx, cy - cross).lineTo(cx, cy + cross)
+      .stroke({ width: 1, color: VISION_BLUE, alpha: 0.5 });
   }
 
   // -------------------------------------------------------------------------
@@ -867,6 +911,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     attemptLaunch,
     droneLayer,
     reticleLayer,
+    rangeRingLayer,
   };
 }
 
