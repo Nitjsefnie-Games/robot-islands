@@ -48,8 +48,11 @@ export type ResourceId =
   | 'coal'
   // §6.7 demolition byproduct. T1 dry-good per spec ("Scrap is a T1 resource
   // in the dry-goods storage category"). The §6.7 Steel-recipe substitution
-  // ("2 Scrap = 1 Pig iron's worth of steel input") is STILL-DEFERRED — for step
-  // 2.5 the resource exists only as the credit returned on demolition.
+  // ("2 Scrap = 1 Pig iron's worth of steel input") is wired via the
+  // `steel_mill_from_scrap` synthetic recipe selected at runtime by
+  // `resolveRecipe` when a Steel Mill has no pig_iron stockpile but has
+  // scrap on hand. The substitution preserves the base Steel Mill's
+  // output rate (1 steel + 1 slag per 600s cycle).
   | 'scrap'
   // Step-18 T0 raws (§6.1 / §6.2). Added so every §7 recipe input has at
   // least one producer in the catalog. §8.1 tile-gating is live for all
@@ -861,18 +864,32 @@ export interface Recipe {
 
 /**
  * A recipe id. Most ids match a `BuildingDefId` 1:1 — the recipe table is
- * keyed by the building that runs it. A few synthetic ids cover tile-variant
+ * keyed by the building that runs it. A few synthetic ids cover variant
  * recipes for a single building kind, selected at runtime by
  * `resolveRecipe`:
  *
  *   - `mine_on_ore`  — Mine on an ore-vein footprint  → iron_ore
  *   - `mine_on_coal` — Mine on a coal-vein footprint → coal
+ *   - `steel_mill_from_scrap` — Steel Mill running the §6.7 substitution:
+ *                               2 scrap → 1 steel + 1 slag (same 600s cycle
+ *                               as the base recipe so output rate is
+ *                               preserved). Resolver picks this variant
+ *                               when the island has no pig_iron stockpile
+ *                               but does have scrap on hand. Inputs are
+ *                               NOT mixed within a cycle; the building
+ *                               runs one variant or the other per tick
+ *                               and the piecewise integrator re-resolves
+ *                               at each event (e.g. pig_iron depletion).
  *
  * The legacy `mine` entry stays as a fallback recipe (= same as
  * `mine_on_ore`) so callers that don't pass a terrain closure into
  * `resolveRecipe` keep the pre-tile-aware behaviour.
  */
-export type RecipeId = BuildingDefId | 'mine_on_ore' | 'mine_on_coal';
+export type RecipeId =
+  | BuildingDefId
+  | 'mine_on_ore'
+  | 'mine_on_coal'
+  | 'steel_mill_from_scrap';
 
 /**
  * Recipe binding by recipe id. Buildings without a recipe (Solar, Dock,
@@ -904,7 +921,10 @@ export type RecipeId = BuildingDefId | 'mine_on_ore' | 'mine_on_coal';
  *                         Coal Furnace / Geothermal Vent / Plasma Heater /
  *                         Fusion Core; see heat.ts)
  *     steel_mill      -> 1 steel     / 15s from 1 pig_iron
- *                        (§7.1 scrap co-input STILL-DEFERRED)
+ *                        §6.7 substitution: when an island has no pig_iron
+ *                        stockpile but has scrap, `resolveRecipe` switches
+ *                        the building to the synthetic `steel_mill_from_scrap`
+ *                        recipe (2 scrap → 1 steel + 1 slag, same cycleSec).
  *
  *   T2 manufacturing:
  *     assembler       -> 1 gear      /  8s from 1 iron_ingot + 2 bolt
@@ -1028,6 +1048,18 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   steel_mill: {
     cycleSec: 600, // rebalanced for idle-game scale, step #19 (×40: was 15s)
     inputs: { pig_iron: 1 },
+    outputs: { steel: 1, slag: 1 },
+    category: 'smelting',
+  },
+  // §6.7 Steel Mill scrap-substitution variant. Same cycleSec + outputs as
+  // the base `steel_mill` recipe (spec literal: "produces the same output
+  // rate either way"); the only difference is the input — 2 scrap per cycle
+  // replacing 1 pig iron at the spec's 2:1 ratio. Synthetic recipe id (no
+  // matching BuildingDefId) selected at runtime by `resolveRecipe` when the
+  // base Steel Mill building has scrap on hand but no pig_iron stockpile.
+  steel_mill_from_scrap: {
+    cycleSec: 600,
+    inputs: { scrap: 2 },
     outputs: { steel: 1, slag: 1 },
     category: 'smelting',
   },
@@ -2297,6 +2329,7 @@ export function resolveRecipe(
   def: BuildingDef,
   b: PlacedBuilding,
   terrainAt?: (x: number, y: number) => TerrainKind,
+  inventory?: Partial<Record<ResourceId, number>>,
 ): Recipe | undefined {
   if (def.id === 'mine' && terrainAt) {
     let sawCoal = false;
@@ -2323,6 +2356,24 @@ export function resolveRecipe(
     // tile. Return undefined defensively so the rate loop sees a no-op
     // building rather than picking up a stale (legacy) iron_ore recipe.
     return undefined;
+  }
+  // §6.7 Steel Mill scrap substitution. Choice is per-tick, driven by the
+  // current inventory snapshot. Prefer pig_iron whenever any is on hand;
+  // fall back to the scrap variant only when the pig_iron stockpile is
+  // empty AND scrap is available. With both stockpiles empty the resolver
+  // returns the base recipe so `inputAvail` surfaces the pig_iron shortage
+  // in the usual way (returning the scrap variant when neither input is
+  // present would mask the real bottleneck behind a less-visible one).
+  // Mixed-input cycles are out of scope: the spec literal is "produces
+  // the same output rate either way", and `findNextCapEvent` will trip
+  // on pig_iron hitting 0 so the segment boundary naturally re-resolves
+  // to the scrap variant when the stockpile runs out.
+  if (def.id === 'steel_mill' && inventory) {
+    const pigIron = inventory.pig_iron ?? 0;
+    const scrap = inventory.scrap ?? 0;
+    if (pigIron <= 0 && scrap > 0) {
+      return RECIPES.steel_mill_from_scrap;
+    }
   }
   return RECIPES[def.id as RecipeId];
 }

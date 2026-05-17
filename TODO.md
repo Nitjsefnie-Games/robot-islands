@@ -52,11 +52,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   as a satellite dish for orbital launches. Dish-side dual-role isn't
   implemented; T6 antenna only does signal range.
   Files: `antenna.ts:10`, `building-defs.ts:3699, 3775`.
-- **§6.7 Scrap as steel co-input** — Scrap is producible (demolition)
-  and consumed by Oxygen Converter, but the spec's "2 Scrap = 1 Pig iron's
-  worth of steel input" co-input substitution at the Steel Mill isn't
-  applied.
-  Files: `recipes.ts:51, 904`.
 - **§7.3 chlor-alkali variant consumer recipes** — Chlor-alkali plant
   produces; the downstream consumer chain that uses Chlorine / Sodium
   Hydroxide as inputs for plastic precursor / alumina is deferred.

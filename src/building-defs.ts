@@ -1021,7 +1021,13 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x2a2e36,
     power: { consumes: 120 },
     // §7.1: spec's "Pig iron + Scrap → Steel" includes Scrap as a co-input.
-    // The §6.7 Scrap substitution is now handled by the Oxygen Converter.
+    // The §6.7 "2 Scrap = 1 Pig iron's worth of steel input" substitution is
+    // wired on THIS building: when there's no pig_iron stockpile but scrap
+    // is on hand, `resolveRecipe` in recipes.ts swaps in the
+    // `steel_mill_from_scrap` synthetic recipe (same 600s cycle, 2 scrap →
+    // 1 steel + 1 slag) so output rate is preserved. The separate
+    // `steel_mill_scrap` building (below) is a faster scrap-only T2
+    // alternative, distinct from the substitution mechanic.
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 150, iron_ingot: 60, wood: 20 },
     glyph: '△',
