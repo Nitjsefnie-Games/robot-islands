@@ -213,8 +213,11 @@ export function launchSatellite(
     // explosion (less catastrophic; the Spaceport survives).
     const padShare = 0.30 / skill.padExplosionReduce;
     if (rng() < padShare) {
-      // Pad explosion: destroy spaceport.
-      state.buildings = state.buildings.filter((b) => b.defId !== 'spaceport');
+      // Pad explosion: §14.7 spec — revert the Spaceport to tier I (the
+      // upgrade investment is lost, but the building itself stays). Prior
+      // behaviour filtered the spaceport out of `buildings` entirely; that
+      // overshot the spec and was a functional regression.
+      (spaceport as { tier?: number }).tier = 1;
     } else {
       // Orbit explosion: §14.8 — debris field forms at the failed lock cell.
       const failedLockX = spec.cx + 100;

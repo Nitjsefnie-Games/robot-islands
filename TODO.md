@@ -39,15 +39,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   the spacetime_fragment side of its `(spacetime_fragment OR tachyon_stream
   per cycle)` rotation. Rotation deferred.
   Files: `building-defs.ts:1811`, `recipes.ts:1812`.
-- **§14 Spaceport tier I/II/III upgrade lifecycle** — the `tier` field
-  on a placed Spaceport exists, but no upgrade-recipe consumption path
-  promotes I→II→III. Permanently stuck at tier 1 = 30% launch success.
-  File: `building-defs.ts:2024`.
-- **§14.7 Pad-explosion → tier reset** — current behaviour DELETES the
-  Spaceport entirely. Spec says it should revert to tier I (losing only
-  the upgrade investment). Functional regression, not just missing
-  feature.
-  Files: `orbital.ts:198-202`, `building-defs.ts:2026`.
 - **§14 Antenna T6 dish dual-role** — T6 Antenna is supposed to double
   as a satellite dish for orbital launches. Dish-side dual-role isn't
   implemented; T6 antenna only does signal range.
@@ -182,7 +173,6 @@ These have the simulation wired but no player surface to access them.
 
 ## 5. Polish / nice-to-have
 
-- Spaceport tier upgrade UI button + cost display.
 
 ---
 

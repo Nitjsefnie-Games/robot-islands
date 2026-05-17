@@ -17,7 +17,7 @@
 // `.ri-*` class palette (no inline-styled chrome competing with other modals).
 
 import type { IslandState } from './economy.js';
-import { launchSatellite, type SatelliteVariant } from './orbital.js';
+import { launchSatellite, upgradeSpaceport, type SatelliteVariant } from './orbital.js';
 import type { ResourceId } from './recipes.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 import type { WorldState } from './world.js';
@@ -162,6 +162,71 @@ export function mountOrbitalUi(
       commons.appendChild(cell);
     }
     card.appendChild(commons);
+
+    // §14.2 Spaceport tier I/II/III upgrade affordance. Hidden once at
+    // max tier; cost preview ahead of the button so the player can see
+    // what the next tier will require before committing.
+    if (tier < 3) {
+      const nextTier = tier + 1;
+      const upgradeCost: Partial<Record<ResourceId, number>> = tier === 1
+        ? { phase_converter: 5, memetic_core: 2, cryogenic_hydrogen: 50 }
+        : { reality_anchor: 10, memetic_core: 5, antimatter_propellant: 100 };
+      const upgradeRow = document.createElement('div');
+      upgradeRow.style.cssText = 'display: flex; align-items: center; gap: 10px; padding: 4px 0; border-top: 1px dashed var(--ri-border-strong); padding-top: 8px;';
+      const upgradeLeft = document.createElement('div');
+      upgradeLeft.style.cssText = 'flex: 1; display: flex; flex-direction: column;';
+      const upgradeTitle = document.createElement('span');
+      upgradeTitle.textContent = `Upgrade to T${nextTier}`;
+      upgradeTitle.style.color = 'var(--ri-accent)';
+      upgradeLeft.appendChild(upgradeTitle);
+      const upgradeCostLine = document.createElement('span');
+      const costParts: string[] = [];
+      let canAfford = true;
+      for (const [r, amt] of Object.entries(upgradeCost)) {
+        const have = inv(state, r as ResourceId);
+        const need = amt ?? 0;
+        if (have < need) canAfford = false;
+        costParts.push(`${r}: ${have}/${need}`);
+      }
+      upgradeCostLine.textContent = costParts.join('  ·  ');
+      upgradeCostLine.style.cssText = `color: ${canAfford ? 'var(--ri-fg-2)' : 'var(--ri-warn)'}; font-size: 11px;`;
+      upgradeLeft.appendChild(upgradeCostLine);
+      upgradeRow.appendChild(upgradeLeft);
+      const upgradeBtn = document.createElement('button');
+      upgradeBtn.textContent = 'Upgrade';
+      upgradeBtn.classList.add('ri-btn');
+      upgradeBtn.style.cssText = `
+        background: var(--ri-elev);
+        color: var(--ri-accent);
+        border: 1px solid var(--ri-accent);
+        padding: 4px 12px;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        cursor: pointer;
+        border-radius: 3px;
+      `;
+      if (!canAfford) {
+        upgradeBtn.disabled = true;
+        upgradeBtn.style.opacity = '0.4';
+        upgradeBtn.style.cursor = 'not-allowed';
+        upgradeBtn.title = 'Missing materials';
+      }
+      upgradeBtn.addEventListener('click', () => {
+        if (!canAfford) return;
+        const r = upgradeSpaceport(deps.world, state.id);
+        const toast = getToastHandle();
+        if (r.ok) {
+          flash(`Spaceport upgraded to T${nextTier}`);
+          toast?.show(`Spaceport upgraded to T${nextTier}`, 'success');
+        } else {
+          flash(`Upgrade failed: ${r.reason}`);
+          toast?.show(`Upgrade failed: ${r.reason}`, 'failure');
+        }
+        render();
+      });
+      upgradeRow.appendChild(upgradeBtn);
+      card.appendChild(upgradeRow);
+    }
 
     // Per-variant launch row.
     for (const v of VARIANTS) {

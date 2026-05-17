@@ -237,10 +237,12 @@ describe('satellite launch success roll', () => {
 // ---------------------------------------------------------------------------
 
 describe('satellite launch failure modes', () => {
-  it('pad explosion destroys the spaceport (nowMs=5, T1, second roll≈0.20 < 0.30)', () => {
+  it('pad explosion reverts the spaceport to tier I (§14.7 — was destroyed pre-fix)', () => {
     const world = makeWorld();
     const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
-    addSpaceport(state, 1);
+    // T3 spaceport so we can prove the tier-revert path: post-pad-explosion
+    // the building must persist with tier === 1.
+    addSpaceport(state, 3);
     stockLaunchResources(state, 'scanner');
     world.islandStates = new Map([['home', state]]);
     const result = launchSatellite(world, 'home', 'scanner', 5);
@@ -251,8 +253,10 @@ describe('satellite launch failure modes', () => {
     expect(state.inventory.scanner_sat).toBe(1);
     expect(state.inventory.orbital_insertion_package).toBe(1);
     expect(state.inventory.antimatter_propellant).toBe(1);
-    // Spaceport should be destroyed.
-    expect(state.buildings.some((b) => b.defId === 'spaceport')).toBe(false);
+    // §14.7: Spaceport persists; tier reverts to I.
+    const sp = state.buildings.find((b) => b.defId === 'spaceport');
+    expect(sp).toBeDefined();
+    expect(sp?.tier ?? 1).toBe(1);
   });
 
   it('orbit explosion does not destroy the spaceport (nowMs=9, T1, second roll≈0.99 ≥ 0.30)', () => {
