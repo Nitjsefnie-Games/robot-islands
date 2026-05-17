@@ -57,13 +57,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   the migration step runs exactly once.
   Files: `world-gen.ts:23,59`, `world.ts:788` (`DEFAULT_GEN_OPTS`),
   `persistence.ts` (migration path).
-- **§3.5 rare-find rolls system** — the "Cursed Storms doubled-rare"
-  modifier is wired as -10% production (which works) but doubled-rare
-  is deferred since there's no rare-find roll system. Same for Mining
-  "rare reveal" / Forestry "exotic species" — currently modelled as
-  continuous trickle (mathematically equivalent over time but loses the
-  "you got lucky" flavor).
-  Files: `biomes.ts:210`, `skilltree.ts` (mining.3 / forestry.3).
 - **§4.7 Servitor / §5.2 dish dual-role / etc — many catalog rows
   shipped as inert defs** awaiting their owning mechanic. See
   `building-defs.ts` lines 1293, 1464, 1498, 1516, 1587, 1688, 1922,

@@ -22,7 +22,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §2.6 Weather | L | Forecast model, biome modulation, vehicle destruction rolls, route capacity modulation, in-flight loss, satellite immunity all live. Map overlay snaps to vision cells. |
 | §2.7 Day-night cycle | L | Solar multiplier per phase, weather-phase modulation (+25% severe-storm Night/Dawn), full-viewport tint overlay. |
 | §3.1-3.4 Island spec / biomes / tile types / shape | L | All six biomes, ellipse geometry, Land Reclamation expansion, max-size table. |
-| §3.5 Modifiers | P | Roll distribution, biome-tagged sampling, Stable exclusivity all live. High Wind variance live but +50% wind-power side N. Cursed Storms -10% prod live but doubled-rare-find side N (no rare-find rolls system yet). |
+| §3.5 Modifiers | L | Roll distribution, biome-tagged sampling, Stable exclusivity all live. High Wind variance + +50% wind-power live. Cursed Storms -10% global prod + 2× rare-find trickle (Mining helium_3 + Forestry exotic-species) live via `rareFindMul`. |
 | §3.6 Joining | L | Geometric overlap detection, largest-absorbs, ellipse list, building global coords via offsets, route redirect/delete, modifier voiding. |
 | §3.7 Starting state | L | Empty home Plains island, no starter inventory, no Foundation Kit, Drone Pad gated at L5. |
 | §4.1-4.3 Building footprint / rotation / placement | L | All shape masks, 4 rotations, terrain-requirement gates. |

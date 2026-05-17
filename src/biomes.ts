@@ -208,7 +208,9 @@ export const MODIFIER_DEFS: Readonly<Record<ModifierId, ModifierDef>> = {
     description: '-10% production overall, but rare resource finds doubled.',
     weight: 3,
     biomeRestriction: [],
-    placeholder: false, // -10% is wired; doubled-rare is STILL-DEFERRED (no rare-find rolls yet).
+    // -10% global recipe rate + 2× rare-find trickle for both Mining
+    // helium_3 reveal and Forestry exotic-species drops.
+    placeholder: false,
     category: 'warning',
   },
   stable: {
@@ -285,12 +287,17 @@ export interface ModifierMultipliers {
    *  the modifier is absent. Applied at the producer site in `computeRates`;
    *  non-wind producers are unaffected. */
   readonly windPowerMul: number;
+  /** §3.5 Cursed Storms: doubled rare-find rate. Multiplies both the
+   *  Mining "rare reveal" trickle (`helium_3` per Mine) and the Forestry
+   *  "exotic species" trickle (`lumber` bonus per Logger). 1.0 when the
+   *  modifier is absent. */
+  readonly rareFindMul: number;
 }
 
 function blankModifierMultipliers(): ModifierMultipliers {
   const recipeRateByCategory = {} as Record<RecipeCategory, number>;
   for (const c of ALL_RECIPE_CATEGORIES) recipeRateByCategory[c] = 1;
-  return { globalRecipeRate: 1, recipeRateByCategory, outputVariance: false, t5ExtractionRateMul: 1, cryoRecipeRateMul: 1, windPowerMul: 1 };
+  return { globalRecipeRate: 1, recipeRateByCategory, outputVariance: false, t5ExtractionRateMul: 1, cryoRecipeRateMul: 1, windPowerMul: 1, rareFindMul: 1 };
 }
 
 /** Identity bundle, exported so callers (`computeRates`, tests) have a
@@ -326,6 +333,7 @@ export function effectiveModifierMultipliers(
   let t5ExtractionRateMul = out.t5ExtractionRateMul;
   let cryoRecipeRateMul = out.cryoRecipeRateMul;
   let windPowerMul = out.windPowerMul;
+  let rareFindMul = out.rareFindMul;
   for (const id of modifiers) {
     switch (id) {
       case 'mineral_rich':
@@ -336,6 +344,10 @@ export function effectiveModifierMultipliers(
         break;
       case 'cursed_storms':
         global *= 0.9;
+        // §3.5 "rare resource finds doubled" — multiplies both the
+        // Mining helium_3 trickle and the Forestry exotic-species
+        // trickle (see economy.ts where the trickle composes with this).
+        rareFindMul *= 2;
         break;
       case 'high_wind':
         outputVariance = true;
@@ -359,7 +371,7 @@ export function effectiveModifierMultipliers(
       }
     }
   }
-  return { globalRecipeRate: global, recipeRateByCategory: cat, outputVariance, t5ExtractionRateMul, cryoRecipeRateMul, windPowerMul };
+  return { globalRecipeRate: global, recipeRateByCategory: cat, outputVariance, t5ExtractionRateMul, cryoRecipeRateMul, windPowerMul, rareFindMul };
 }
 
 // ---------------------------------------------------------------------------
