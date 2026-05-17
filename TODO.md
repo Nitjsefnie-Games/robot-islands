@@ -73,16 +73,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   the deviation in SPEC.md.
   *(Flagged by Agents B, C.)*
 
-- **§9.4 `logistics_hub` invented a recipe-rate buff the spec doesn't
-  ask for.** `src/specialization.ts:91-101` declares
-  `buffCategory: 'logistics'` with `buffMultiplier: 2.0` PLUS the
-  spec'd `+100% route capacity` + `+50% storage cap` extras. §9.4
-  only specifies the latter three (route cap, storage cap, -25% prod
-  penalty); the 2.0 recipe-rate buff on "logistics"-tagged recipes is
-  unspec'd and effectively double-credits any recipe carrying both the
-  category tag and the role's penalty.
-  *(Flagged by Agent A.)*
-
 - **§13.3 Omniscient Lattice activates without route-connectivity check.**
   `src/lattice.ts:35-49` counts every T5-mastered island with a Lattice
   Node toward the activation threshold (N=20) regardless of whether

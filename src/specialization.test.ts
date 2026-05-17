@@ -78,11 +78,13 @@ describe('effectiveSpecializationMultipliers — per §9.4', () => {
     expect(mul.xpMul).toBe(1);
   });
 
-  it('logistics_hub: logistics × 2.0, others × 0.75, storageCapMul = 1.5', () => {
+  it('logistics_hub: all recipes × 0.75 (no per-category buff per §9.4), storageCapMul = 1.5', () => {
+    // §9.4 Logisticist grants +100% route capacity + +50% storage cap +
+    // -25% production penalty. There is NO per-category recipe-rate buff
+    // (route capacity is wired via `routeCapacityMultiplier`, not the
+    // recipe-rate fold). Every recipe category lands at the 0.75 penalty.
     const mul = effectiveSpecializationMultipliers('logistics_hub');
-    expect(rateFor(mul, 'logistics')).toBeCloseTo(2.0, 12);
     for (const cat of ALL_RECIPE_CATEGORIES) {
-      if (cat === 'logistics') continue;
       expect(rateFor(mul, cat)).toBeCloseTo(0.75, 12);
     }
     expect(mul.storageCapMul).toBeCloseTo(1.5, 12);
@@ -109,9 +111,29 @@ describe('effectiveSpecializationMultipliers — per §9.4', () => {
       expect(def.penaltyMultiplier).toBeGreaterThan(0);
       expect(def.penaltyMultiplier).toBeLessThanOrEqual(1);
       const mul = effectiveSpecializationMultipliers(id);
-      if (def.buffCategory !== 'all') {
+      // Only roles that DECLARE a per-category recipe buff (foundry /
+      // refinery / mining) carry both `buffCategory` and `buffMultiplier`.
+      // `logistics_hub` per §9.4 has no recipe buff at all (route capacity
+      // + storage cap are its bonuses); `research_beacon` uses 'all' as a
+      // sentinel with no real per-category effect.
+      if (
+        def.buffCategory !== undefined &&
+        def.buffMultiplier !== undefined &&
+        def.buffCategory !== 'all'
+      ) {
         expect(rateFor(mul, def.buffCategory)).toBeCloseTo(def.buffMultiplier, 12);
       }
     }
+  });
+
+  it('logistics_hub ROLE_DEFS entry omits buffCategory/buffMultiplier per §9.4', () => {
+    // Regression guard: §9.4 grants logistics_hub NO recipe-rate buff.
+    // The role def must not advertise one — earlier revisions carried
+    // an unspec'd `buffCategory: 'logistics'` + `buffMultiplier: 2.0`
+    // that double-credited logistics-tagged recipes under the role's
+    // own 0.75 penalty.
+    const def = ROLE_DEFS.logistics_hub;
+    expect(def.buffCategory).toBeUndefined();
+    expect(def.buffMultiplier).toBeUndefined();
   });
 });

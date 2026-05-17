@@ -281,8 +281,8 @@ export function mountSkillTreeUi(
         wrap.appendChild(row('OTHERS', valueSpan(`${MIN}50%`, 'var(--ri-warn)')));
         break;
       case 'logistics_hub':
-        wrap.appendChild(row('LOGISTICS', valueSpan('+100% · STG +50%', 'var(--ri-accent)')));
-        wrap.appendChild(row('OTHERS', valueSpan(`${MIN}25%`, 'var(--ri-warn)')));
+        wrap.appendChild(row('ROUTE CAP', valueSpan('+100% · STG +50%', 'var(--ri-accent)')));
+        wrap.appendChild(row('PRODUCTION', valueSpan(`${MIN}25%`, 'var(--ri-warn)')));
         break;
       case 'research_beacon': {
         const mixed = document.createElement('span');
@@ -318,7 +318,7 @@ export function mountSkillTreeUi(
     refinery: '+50% chemistry recipe rate, ×0.75 on all other production.',
     mining: '+75% extraction recipe rate, ×0.50 on all other production.',
     logistics_hub:
-      '+100% logistics recipe rate, +50% storage caps, ×0.75 on all other production.',
+      '+100% route capacity, +50% storage caps, ×0.75 on all production.',
     research_beacon: '+50% skill XP on this island, ×0.75 on all recipe rates.',
   };
 
