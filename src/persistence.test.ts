@@ -75,6 +75,10 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     xp: 0,
     level: 1,
     unspentSkillPoints: 0,
+    // Default to "migration already applied" so the round-trip tests below
+    // assert serialization preservation; the migration-specific test
+    // explicitly overrides this flag to false.
+    skillPointGrantMigrationApplied: true,
     unlockedNodes: new Set(),
     subPathProgress: new Map(),
     funnelPending: emptyFunnel(),
@@ -207,6 +211,39 @@ describe('serialize → JSON → deserialize round-trip', () => {
     expect(r.level).toBe(50);
     expect(r.xp).toBeCloseTo(12345.6, 5);
     expect(r.unspentSkillPoints).toBe(7);
+  });
+
+  it('skill-point grant migration: tops up an unmigrated L50 save by the cumulative delta', () => {
+    // Legacy save shape: no skillPointGrantMigrationApplied flag (or false).
+    // The deserializer must observe the missing flag and add the cumulative
+    // top-up = cumulative(L50) - L50 (≈ 1,256 - 50 = 1,206).
+    const home = makeIslandState({
+      level: 50,
+      unspentSkillPoints: 7,
+      // Drop the default-true flag — this island predates the migration.
+      skillPointGrantMigrationApplied: undefined,
+    });
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>([['home', home]]);
+    const snap = serializeWorld(world, states, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    const r = restored.get('home')!;
+    // 7 starting + (cumulative L50 ~ 1256) - (L50 old grant 50) = 1213
+    expect(r.unspentSkillPoints).toBeGreaterThan(1200);
+    expect(r.unspentSkillPoints).toBeLessThan(1300);
+    // Flag is now set so a subsequent load doesn't double-apply.
+    expect(r.skillPointGrantMigrationApplied).toBe(true);
+  });
+
+  it('skill-point grant migration: a freshly-minted island stays at its 0 points (flag pre-set)', () => {
+    const home = makeIslandState(); // flag defaults to true via factory
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>([['home', home]]);
+    const snap = serializeWorld(world, states, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.get('home')!.unspentSkillPoints).toBe(0);
   });
 
   it('restores unlockedNodes back to a Set with identical membership', () => {

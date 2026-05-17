@@ -278,8 +278,39 @@ export function tierRequiredForDepth(depth: number): Tier {
   return 2;
 }
 
+/** Spec §9.3 placeholder is `2^(depth-1)`, but combined with the flat
+ *  1-point-per-level grant that costs the full tree ~500k levels —
+ *  every node past depth ~6 is unreachable. The 1.5 ramp keeps the
+ *  shape (each node costs more than the last) while landing the
+ *  whole-sub-path total at ~874 points (vs the spec's 32,767) so a
+ *  late-game island at L70+ can credibly complete sub-paths. */
 export function costForDepth(depth: number): number {
-  return 2 ** (depth - 1);
+  return Math.round(1.5 ** (depth - 1));
+}
+
+/** Skill points granted on a single level-up. Spec §9.3 doesn't
+ *  prescribe a curve; flat 1/level made the late-game tree unreachable.
+ *  The 1.1^L geometric grant keeps early-game grants tiny (L1-L7 still
+ *  award 1 point) and ramps so L70 grants ~790 and L100 grants ~13,780.
+ *  Combined with costForDepth's slowed ramp, this lands the full tree
+ *  around L75 — matching the spec's "very-late-game L70+ reaches
+ *  depth 7-10" claim. */
+export function skillPointsForLevelUp(level: number): number {
+  return Math.max(1, Math.floor(1.1 ** level));
+}
+
+/** Cumulative skill points an island SHOULD have received from level 1
+ *  through the given level under the current `skillPointsForLevelUp`
+ *  schedule. Used by the persistence-layer migration that tops up
+ *  islands carried over from the pre-curve flat-1-per-level era so
+ *  long-lived saves don't penalise the player for having levelled
+ *  before the new grant ramp shipped. */
+export function cumulativeSkillPointsForLevel(level: number): number {
+  let total = 0;
+  for (let l = 1; l <= level; l++) {
+    total += skillPointsForLevelUp(l);
+  }
+  return total;
 }
 
 export function magnitudeForDepth(depth: number): number {

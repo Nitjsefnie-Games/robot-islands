@@ -9,10 +9,12 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   canSpend,
   costForDepth,
+  cumulativeSkillPointsForLevel,
   effectiveSkillMultipliers,
   launchSuccessBonus,
   magnitudeForDepth,
   nodeRequiredTier,
+  skillPointsForLevelUp,
   spendPoint,
   t5Unlocked,
   t6Unlocked,
@@ -353,11 +355,42 @@ describe('skill tree depth', () => {
     expect(nodeRequiredTier({ id: 'x.8', subPath: 'mining', depth: 8, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(6);
   });
 
-  it('costForDepth doubles each depth', () => {
+  it('costForDepth grows as 1.5^(depth-1) (rounded)', () => {
     expect(costForDepth(1)).toBe(1);
-    expect(costForDepth(5)).toBe(16);
-    expect(costForDepth(10)).toBe(512);
-    expect(costForDepth(15)).toBe(16384);
+    expect(costForDepth(5)).toBe(5); // 1.5^4 = 5.0625 → 5
+    expect(costForDepth(10)).toBe(38); // 1.5^9 = 38.44 → 38
+    expect(costForDepth(15)).toBe(292); // 1.5^14 = 291.93 → 292
+  });
+
+  it('skillPointsForLevelUp: 1.1^L floored, min 1 to keep early-game ungated', () => {
+    expect(skillPointsForLevelUp(1)).toBe(1);
+    expect(skillPointsForLevelUp(7)).toBe(1); // 1.94 → 1
+    expect(skillPointsForLevelUp(8)).toBe(2); // 2.14 → 2
+    expect(skillPointsForLevelUp(20)).toBe(6); // 6.73 → 6
+    expect(skillPointsForLevelUp(50)).toBe(117);
+    expect(skillPointsForLevelUp(70)).toBe(789); // 789.7 → 789
+  });
+
+  it('cumulativeSkillPointsForLevel: monotonic, matches expected sums at key levels', () => {
+    expect(cumulativeSkillPointsForLevel(0)).toBe(0);
+    expect(cumulativeSkillPointsForLevel(5)).toBe(5);   // five L1=1 grants
+    // L8 = 1+1+1+1+1+1+1+2 = 9
+    expect(cumulativeSkillPointsForLevel(8)).toBe(9);
+    // Higher landmarks (worked out in the slice's commit body):
+    expect(cumulativeSkillPointsForLevel(50)).toBeGreaterThan(1000);
+    expect(cumulativeSkillPointsForLevel(50)).toBeLessThan(1500);
+    expect(cumulativeSkillPointsForLevel(70)).toBeGreaterThan(7000);
+    expect(cumulativeSkillPointsForLevel(70)).toBeLessThan(10000);
+  });
+
+  it('full sub-path cost (sum d1..d15) lands ~870 points, reachable by L50ish', () => {
+    let totalCost = 0;
+    for (let d = 1; d <= 15; d++) totalCost += costForDepth(d);
+    // Whole sub-path is between 800 and 950 under the 1.5 ramp.
+    expect(totalCost).toBeGreaterThan(800);
+    expect(totalCost).toBeLessThan(950);
+    // And L50's cumulative grant covers more than one sub-path's worth.
+    expect(cumulativeSkillPointsForLevel(50)).toBeGreaterThan(totalCost);
   });
 
   it('magnitudeForDepth: doubles through depth 5, slowed geometric continuation through depth 15', () => {
