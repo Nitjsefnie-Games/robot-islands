@@ -312,6 +312,13 @@ export function dispatchDrone(
   fuelLoaded: number,
   nowMs: number,
   waypoints?: ReadonlyArray<{ x: number; y: number }>,
+  /** Player-selected drone tier. The Drone Ops UI now exposes a picker
+   *  capped at the island's current tier; the picker passes that selection
+   *  in here so a T5 island can fly a cheap T2 drone for short hops
+   *  instead of always burning plasma_charge. Defaults to the island tier
+   *  (legacy behavior) when undefined. The path-drawn branch forces T5
+   *  regardless of the selector since path-drawn IS the T5 mechanic. */
+  selectedTier?: DroneTier,
 ): DispatchResult {
   // 1. direction
   const mag = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -326,13 +333,30 @@ export function dispatchDrone(
     }
   }
 
-  // 3. fuel — §11.7 tier-matched grade only, no fallback to lower grades
-  const fuelResource: ResourceId = fuelForTier(tierForLevel(origin.level));
+  const isPathDrawn = waypoints !== undefined && waypoints.length >= 2;
+  // §11.5: drone tier resolution. Path-drawn always = T5 (it's the T5
+  // mechanic). Otherwise honor the player's selectedTier when it's ≤ the
+  // island's current tier; fall back to the island tier when omitted or
+  // out of range.
+  const islandTier = tierForLevel(origin.level);
+  let resolvedTier: DroneTier;
+  if (isPathDrawn) {
+    resolvedTier = 5;
+  } else if (selectedTier !== undefined && selectedTier >= 1 && selectedTier <= islandTier) {
+    resolvedTier = selectedTier;
+  } else {
+    resolvedTier = islandTier;
+  }
+
+  // 3. fuel — §11.7 tier-matched grade only, NO fallback to lower grades.
+  //    The player chose this drone tier explicitly via the picker, so the
+  //    fuel resource follows the chosen tier (a T1 drone needs biofuel even
+  //    if launched from a T5 island).
+  const fuelResource: ResourceId = fuelForTier(resolvedTier);
   if (inv(origin, fuelResource) < fuelLoaded || fuelLoaded <= 0) {
     return { ok: false, reason: 'insufficient-fuel' };
   }
 
-  const isPathDrawn = waypoints !== undefined && waypoints.length >= 2;
   // Transport skill: droneFuelEfficiency scales tiles-per-fuel-unit. A higher
   // multiplier means the same fuelLoaded covers more distance; fuel cost is
   // unchanged so the player still pays the requested amount (the range gain
@@ -343,11 +367,7 @@ export function dispatchDrone(
   const efficiency = (isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY) * fuelEffMul;
   const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
   const scanRadius = (isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES) * originSkill.droneScanRadius;
-  // §11.5: tier matches the launching island's tier. T5 is the path-drawn
-  // branch; non-path drones inherit the island's current tier (T2 at L5,
-  // T3 at L15, T4 at L30). T1 islands don't have Drone Pads yet so the
-  // value won't reach this site in practice; clamping isn't necessary.
-  const tier: DroneTier = isPathDrawn ? 5 : tierForLevel(origin.level);
+  const tier: DroneTier = resolvedTier;
 
   let outboundTiles: number;
   let travelSec: number;

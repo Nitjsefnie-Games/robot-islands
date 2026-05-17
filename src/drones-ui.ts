@@ -36,6 +36,7 @@ import {
   droneCurrentPosition,
   firePulse,
   type Drone,
+  type DroneTier,
 } from './drones.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
@@ -119,6 +120,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   let visible = false;
   let launchMode = false;
   let fuelLoaded = 20; // sane default — 80 tiles round-trip, 40 tiles outbound
+  // Player-selected drone tier, capped at island tier at refresh time. Defaults
+  // to 1 (cheapest / biofuel) so a fresh L5 player can experience T1 drones
+  // without having to first build the T2 diesel chain.
+  let selectedTier: DroneTier = 1;
 
   // -------------------------------------------------------------------------
   // Side dock panel
@@ -259,8 +264,37 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   }
 
   const tierStat = statRow('TIER');
-  tierStat.valueEl.textContent = 'T2';
-  tierStat.valueEl.style.color = 'var(--ri-accent)';
+  // Tier picker — chips built ONCE at mount (one per possible tier 1..6),
+  // refresh just toggles their visibility + selected styling. Per-frame
+  // replaceChildren would destroy/recreate the chip DOM between mousedown
+  // and mouseup, so real mouse clicks would never register (`click` event
+  // needs matching mousedown+mouseup targets); only synthetic `.click()`
+  // would work. Build-once-mutate-styles avoids the trap.
+  tierStat.valueEl.style.display = 'flex';
+  tierStat.valueEl.style.gap = '4px';
+  const tierChips: HTMLButtonElement[] = [];
+  for (let t = 1; t <= 6; t++) {
+    const chip = document.createElement('button');
+    chip.textContent = `T${t}`;
+    chip.style.cssText = [
+      'background: transparent',
+      'border: 1px solid var(--ri-border)',
+      'color: var(--ri-fg-2)',
+      'font: inherit',
+      'padding: 1px 6px',
+      'cursor: pointer',
+      'border-radius: 3px',
+      'font-size: 11px',
+    ].join(';');
+    const tierVal = t as DroneTier;
+    chip.addEventListener('click', () => {
+      selectedTier = tierVal;
+      refresh(performance.now());
+      if (launchMode) repaintRangeRing();
+    });
+    tierStat.valueEl.appendChild(chip);
+    tierChips.push(chip);
+  }
   // Fuel label is dynamic — §11.7 tier-matched grade per the launching
   // island's tier. The row's left-hand label is overwritten in refresh()
   // (e.g. BIOFUEL on a T1 island, AVIATION KEROSENE on a T3 island).
@@ -801,9 +835,27 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // Stat block always tracks the current slider.
     const origin = deps.getOrigin();
     const originSpec = deps.getOriginSpec();
+    // Clamp the selectedTier to the island's current max-tier so a high-tier
+    // island that downgrades (tier reset) doesn't keep launching invalid
+    // tiers. Default to the island's tier on first arming if selectedTier
+    // was never explicitly chosen via the picker.
+    const islandTier = tierForLevel(origin.level);
+    if (selectedTier > islandTier) selectedTier = islandTier as DroneTier;
+    // Show only chips T1..islandTier; highlight the selected one. The chip
+    // DOM was built once at mount — this loop just toggles display + the
+    // selected-state border/color so real mouse clicks aren't disrupted.
+    for (let t = 1; t <= 6; t++) {
+      const chip = tierChips[t - 1];
+      if (!chip) continue;
+      chip.style.display = t <= islandTier ? '' : 'none';
+      const isSelected = t === selectedTier;
+      chip.style.borderColor = isSelected ? 'var(--ri-accent)' : 'var(--ri-border)';
+      chip.style.color = isSelected ? 'var(--ri-accent)' : 'var(--ri-fg-2)';
+    }
     // §11.7 tier-matched fuel — label + on-hand inventory follow the
-    // launching island's tier (T1 → BIOFUEL, T3 → AVIATION KEROSENE …).
-    const fuelResource = fuelForTier(tierForLevel(origin.level));
+    // PLAYER-SELECTED drone tier (T1 → BIOFUEL, T2 → DIESEL, …) not the
+    // island tier, so a T5 island launching a T2 drone shows DIESEL here.
+    const fuelResource = fuelForTier(selectedTier);
     fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
     const onhand = inv(origin, fuelResource);
     fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
@@ -889,7 +941,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const oy = originSpec.cy;
     const dx = targetWorldTileX - ox;
     const dy = targetWorldTileY - oy;
-    const r = dispatchDrone(deps.world, origin, ox, oy, dx, dy, fuelLoaded, nowMs);
+    const r = dispatchDrone(deps.world, origin, ox, oy, dx, dy, fuelLoaded, nowMs, undefined, selectedTier);
     if (r.ok) {
       setLaunchMode(false);
       refresh(nowMs);
