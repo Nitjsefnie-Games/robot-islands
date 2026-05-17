@@ -4,6 +4,75 @@ A browser-based 2D idle game. The player roleplays a self-expanding industrial r
 
 \---
 
+## Implementation Status
+
+Per-section snapshot of what is live in the code today. Sections not
+listed are fully implemented. For the granular punch list (sub-mechanics,
+catalog gaps, UI deferrals, stale annotations) see `TODO.md`.
+
+Legend: **L** = live · **P** = partial · **N** = not implemented.
+
+| Section | Status | Notes |
+|---|---|---|
+| §2.1 Stratified placement | L | Deterministic seed-based placement, edge-buffer rule, geometric-decline density, hard cap. |
+| §2.2 Discovery via drones | L | T1 drone is unreachable per spec (Drone Pad is T2). T2 / T3 / T4 / T5 dispatch all live. |
+| §2.3 Settlement | P | Vehicle dispatch + arrival + Foundation Kit live. Per-tier vehicle speeds/loadouts use one base stat set. T5 Spacetime Anchor bypass not implemented. |
+| §2.4 Inter-island routes | P | Cargo / drone / airship / teleporter / cable types live. Teleporter routes consume per-tile biofuel (in-game design addition so the Network skill has a primary scaling axis). Mass-driver, T5 spacetime-anchor routes not implemented. Priority-list dispatch live; drag-to-reorder UI N. |
+| §2.5 Artificial islands | P | T3 founder live, caps at 8×8. T4 / T5 founder caps N. |
+| §2.6 Weather | L | Forecast model, biome modulation, vehicle destruction rolls, route capacity modulation, in-flight loss, satellite immunity all live. Map overlay snaps to vision cells. |
+| §2.7 Day-night cycle | L | Solar multiplier per phase, weather-phase modulation (+25% severe-storm Night/Dawn), full-viewport tint overlay. |
+| §3.1-3.4 Island spec / biomes / tile types / shape | L | All six biomes, ellipse geometry, Land Reclamation expansion, max-size table. |
+| §3.5 Modifiers | P | Roll distribution, biome-tagged sampling, Stable exclusivity all live. High Wind variance live but +50% wind-power side N. Cursed Storms -10% prod live but doubled-rare-find side N (no rare-find rolls system yet). |
+| §3.6 Joining | L | Geometric overlap detection, largest-absorbs, ellipse list, building global coords via offsets, route redirect/delete, modifier voiding. |
+| §3.7 Starting state | L | Empty home Plains island, no starter inventory, no Foundation Kit, Drone Pad gated at L5. |
+| §4.1-4.3 Building footprint / rotation / placement | L | All shape masks, 4 rotations, terrain-requirement gates. |
+| §4.4 Adjacency rules | L | 4-neighbor metadata computation. |
+| §4.5 Adjacency effects | P | Heat (§5.2) and reactor toxicity live. Broader catalog of buff/gating adjacencies (Cooling Tower → Crystal Lab, Wastewater Treatment → Refinery efficiency, etc.) N. |
+| §4.6 Storage caps | L | Specialized + generic storage, per-resource caps, destruction clamping. |
+| §4.7 Maintenance | P | Operating-time accrual, threshold + 4h linear degrade, auto-maintain materials check, atomic recipe consumption, most-degraded targeting policy all live. Eternal Servitor flag is honoured but no recipe / UI flips it (Servitor Conversion Kit + Reality Forge mechanic N). |
+| §5.1 Electrical grid | L | Per-island brownout factor, active-only summing, gating predicate. |
+| §5.2 Heat adjacency | L | N:1 source assignment, free-source priority, fuel-burn scaling with served count. |
+| §5.3 Inter-island power | L | Cable routes, capacity in W; T5 spacetime distance-independence N (covered by route gap above). |
+| §6 Resource catalog | P | T0-T5 raws/intermediates/components mostly complete. Cold-Storage temperature-sensitive resources (cryogenic compound, liquid nitrogen) absent so Cold Storage has no consumers. A handful of T2-T3 minor intermediates (e.g. Bearing) absent — substitutions noted at use sites. |
+| §6.7 Byproducts + demolition | P | Scrap recovery on demolish live; Oxygen Converter consumes scrap. Spec's "2 Scrap = 1 Pig iron co-input at Steel Mill" N. |
+| §7 Recipe chains | P | Iron/steel, copper, aluminum, oil/petrochem, glass, electronics, construction, power components, mechanical, T4 endgame, T5 transcendent: all chains have producers. Several gaps: chlor-alkali downstream consumers, alumina/plastic precursor outputs from §8.2, silicon wafer intermediate. |
+| §8 Building catalog | P | All §8.1-§8.10 buildings exist as catalog rows with placement cost + power values. Some T5 (Reality Forge, Singularity Battery, Spacetime Resonator multi-output rotation, Universe Editor, Probability Engine, Genesis Chamber) ship as inert visual rows — see TODO §1. |
+| §9.1 Per-island levels | L | Polynomial-then-exponential XP curve. Skill-point grant: `floor(1.1^level)`. |
+| §9.2 Tier breakpoints | L | T1-T5 by level; T6 by Ascendant-Core-crafted + Spaceport. |
+| §9.3 Skill tree | L | All 15 sub-paths × depth 1-15 = 225 nodes, every node drives a live effect. Cost ramp `round(1.5^(d-1))` so depth 15 sits at 292 points (whole sub-path ≈ 870, full tree ≈ 13,100). Commit threshold N=3 points; branch lock active. Sub-path completion enforced. |
+| §9.4 Specialization passive | L | All five roles declarable from T3+; recipe-category buff/penalty applied via tagged recipes. |
+| §9.5 Biome-locked uniques | L | All six biome uniques in catalog; placement gated by biome; artificial-island block honoured. |
+| §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff live. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) N. |
+| §9.7 Tier Reset | P | Reset logic + cost formula + cooldown + spec'd preserve/clear sets live. Merged-island reset integration N. UI cost-preview N. |
+| §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
+| §11 Drones | P | T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Tier picker lets a higher-tier island fly a lower-tier drone (design addition). Fuel auto-computed per click (replaces manual fuel-load slider). T1 drones unreachable per spec (Drone Pad is T2). |
+| §11.7 Fuel / range / dispatch | L | Per-tier fuel matching, range = fuel × efficiency, per-craft concurrency caps, lost-on-timeout failure model. |
+| §12 Settlement vehicles | P | Ship + helicopter dispatch + arrival + Foundation Kit live for T1-T4. Per-tier vehicle stats use one base set; T5 Spacetime Anchor bypass N. Auto-placed dock lands at island centre regardless of geometry. |
+| §13.1 T5 access | L | Level 50 + AI core flip. |
+| §13.2-13.3 T5 buildings + capabilities | P | Time Lock (banking + spending + acceleration queue) live. Path Drone Foundry live. Lattice Node + Omniscient Lattice activation + unified-inventory pool + cross-island adjacency live. Genesis Chamber, Universe Editor, Probability Engine, Singularity Battery all N. Eternal Servitor flag honoured but no creation recipe / UI. |
+| §13.4 Endgame goals | L | Three artifacts (Genesis Cell, Omniscient Lattice activation, Ascendant Core) all craftable / activatable. Per spec there is **no win screen** — the game continues indefinitely; no banner / popup / acknowledgement fires when artifacts complete. |
+| §14.1 T6 access | L | Per-island gate (Ascendant Core + Spaceport). |
+| §14.2 Buildings | P | Spaceport + Orbital Tracking Station exist. Spaceport tier I/II/III in-place upgrade lifecycle N. T6 Antenna's satellite-dish dual role N. |
+| §14.3 Satellite variants | L | Scanner / Sweeper / Comm / Relay variants buildable from a Spaceport. Stat ceilings scale with Spaceport tier (currently always tier I). |
+| §14.4 Communication network | L | Asymmetric comm radius, store-and-forward buffers per sat (cap configurable via Communication skill), packet hand-off through connected graph. |
+| §14.5 Coverage / discovery / weather | L | Scanner Sat weather visibility + per-cell dwell-ramp discovery (rate configurable via Discovery skill). |
+| §14.6 Movement | L | Onboard fuel reserve (Resilience-skill multiplied), move-command spends fuel proportional to distance, low-probability failure with in-transit loss. |
+| §14.7 Launch + failure | P | Success rate = base + Launch-skill bonuses, clamped 0-0.99. Pad-explosion / orbit-explosion split (~30/70, divisible by Launch-skill mitigation). Pad explosion currently DESTROYS the Spaceport; spec says it should revert to tier I (functional regression). |
+| §14.8 Debris | L | Per-cell field with discrete fragment count, hit-probability formula, lodge vs destruction split, Kessler cascade, Orbital Tracking Station detection range, Sweeper cleanup over real time. |
+| §14.9 Orbital skill sub-path | L | Four sub-paths (Launch / Communication / Discovery / Resilience) drive live mechanics. |
+| §14.10 Recipes | P | Satellite variant recipes ship with some substitutions where the spec ingredient isn't in the catalog yet. Antimatter Propellant production live. Orbital Insertion Package live. |
+| §14.11 Tier interactions | L | Scanner Sats extend weather visibility; T5 path drones get partial dark-mode mitigation through sat coverage; Mass Driver vs Spaceport distinction respected. |
+| §14.12 Repair Drone operations | L | Repair Pack consumption, smaller fuel load, ~50% travel time, target lock-out + pending-repair state, mechanical-failure roll (Resilience-skill divisible), restore lodges + refuel on success. |
+| §15.1 Data structures | L | World / Island / PlacedBuilding / Route / Drone / SettlementVehicle / Satellite / DebrisField shapes all match spec. |
+| §15.2 Tick model | L | Per-island advance + global route/drone/vehicle/sat ticks. |
+| §15.3 Piecewise integration | L | Event-driven `findNextCapEvent` with cap/floor/maintenance/construction boundaries; offline-catchup handles 24h+ gaps. |
+| §15.4 Inter-island flow | L | Proportional distribution under contention. |
+| §15.5 Offline math | L | Persisted state survives reload; `lastTick` shifts to current perf-clock domain; weather/toxicity rolls deterministic at any catchup duration. |
+| §15.6 Stack | L | Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React, no backend, fully client-side. |
+| §15.7 Build order | — | Reference ordering, not a runtime concern. |
+
+\---
+
 ## 1\. Core Loop
 
 **Moment-to-moment:** view an island, place buildings, plan adjacency, dispatch drones, manage routes between islands, spend skill points.
