@@ -15,7 +15,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | Section | Status | Notes |
 |---|---|---|
 | §2.1 Stratified placement | L | Lazy per-cell generation via `ensureCellGenerated`; boot sweep handles cells in `[-10, +10]²`, lazy hook extends infinitely as drones / satellites enter new cells. Density 0.15, overlap buffer 12 tiles. |
-| §2.2 Discovery via drones | L | T1 drone is unreachable per spec (Drone Pad is T2). T2 / T3 / T4 / T5 dispatch all live. |
+| §2.2 Discovery via drones | L | T1 / T2 / T3 / T4 / T5 dispatch all live; Drone Pad (T2) is the gate, launchable drone tier ranges from T1 up to current island tier. |
 | §2.3 Settlement | P | Vehicle dispatch + arrival + Foundation Kit live. Per-tier vehicle stats (speed, range, loadout, failureRate, weatherMul) live for both ships and helicopters via SHIP_STATS / HELICOPTER_STATS. T5 Spacetime Anchor bypass not implemented. |
 | §2.4 Inter-island routes | P | Cargo / drone / airship / teleporter / cable types live. Teleporter routes consume per-tile biofuel (in-game design addition so the Network skill has a primary scaling axis). Mass-driver, T5 spacetime-anchor routes not implemented. Priority-list dispatch live; drag-to-reorder UI live in the routes ledger. |
 | §2.5 Artificial islands | L | T3 / T4 / T5 founder caps live in `MAX_RADIUS_BY_TIER` (8 / 12 / 16). |
@@ -45,7 +45,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff live. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) N. |
 | §9.7 Tier Reset | L | Reset logic + cost formula + cooldown + spec'd preserve/clear sets live. Merged-island reset operates on the absorber's IslandState transparently (no merge-specific code needed). UI cost preview live in the Skill Tree's reset row + confirm dialog. |
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
-| §11 Drones | P | T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Tier picker lets a higher-tier island fly a lower-tier drone (design addition). Fuel auto-computed per click (replaces manual fuel-load slider). T1 drones unreachable per spec (Drone Pad is T2). |
+| §11 Drones | P | T1/T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Drone Pad (T2) is the gate; once built, the tier picker lets the player launch any tier from T1 up to the launching island's current tier (T1 = biofuel = cheap entry option for short scouts). Fuel auto-computed per click (replaces manual fuel-load slider). |
 | §11.7 Fuel / range / dispatch | L | Per-tier fuel matching, range = fuel × efficiency, per-craft concurrency caps, lost-on-timeout failure model. |
 | §12 Settlement vehicles | P | Ship + helicopter dispatch + arrival + Foundation Kit live for T1-T4. Per-tier vehicle stats per `SHIP_STATS` / `HELICOPTER_STATS`; T5 Spacetime Anchor bypass N. Auto-placed dock lands at island centre regardless of geometry. |
 | §13.1 T5 access | L | Level 50 + AI core flip. |
@@ -111,9 +111,10 @@ Drones travel in real time. They scan for islands within a corridor along their 
 
 Drones can fail and never return. Failure modes (per §11.4): fuel exhaustion mid-journey, or destruction by weather (per-cell roll, see §2.6). Fuel is a real game resource produced by infrastructure on the launching island; fuel grade matches the launching island's tier per §11.7.
 
-**Drone tiers** are determined by the launching island's tier. Drone Pad is a T2 building (§8.8), so T2 is the lowest available drone tier — there is no T1 drone in the spec:
+**Drone tiers.** Drone Pad (T2) gates drone launches; once built, the player can launch any drone tier from T1 up to the launching island's current tier. T1 drones are the entry option (biofuel-fueled, short range); higher tiers cost richer fuel grades but fly farther and are more weather-rugged:
 
-* T2 drone: entry-level — modest range, modest scan corridor, biome-type detection at distance
+* T1 drone: cheap entry option — biofuel-fueled, short range, narrow scan corridor; the most weather-fragile tier
+* T2 drone: modest range, modest scan corridor, biome-type detection at distance
 * T3 drone: long-range expedition, wider scan, multi-target (records all islands within capsule corridor)
 * T4 drone: omnidirectional pulse, launched from a Launch Tower — single disk scan of radius `R\_T4 = 3R` centered on the launch site, where `R` is the stratification cell side length (placeholder: T4 pulse covers a 3-cell-radius disk)
 
@@ -245,6 +246,7 @@ Visibility is extended by:
 
 |Vehicle|Multiplier on base destruction chance|
 |-|-|
+|T1 drone|x1.5 (cheap entry option; most fragile)|
 |T2 drone|x1.5 (fragile, entry-level)|
 |T3 drone|x1.0|
 |T4 drone|x0.7 (sensors avoid worst)|
@@ -1144,8 +1146,9 @@ A drone is lost (does not return, fuel and unit consumed) if any of the followin
 
 ### 11.5 Drone Tiers
 
-Tier matches the launching island's tier. T2 is the entry-level drone (Drone Pad is T2; there is no T1 drone in the spec):
+Drone Pad (T2) gates drone launches; once built, the player picks any tier from T1 up to the launching island's current tier via the Drone Ops tier picker. A higher-tier island can deliberately launch a cheap lower-tier drone (e.g. T1 biofuel scout from a T5 island) for short hops instead of always burning the highest-grade fuel:
 
+* T1: cheap entry option — biofuel-fueled, short range, narrow scan corridor; most weather-fragile tier
 * T2: range R, scan corridor radius W (capsule shape per §11.2), biome-type detection at distance
 * T3: range 3R, scan corridor radius 2W, multi-target — records all islands within the capsule corridor
 * T4: omnidirectional pulse from Launch Tower — single disk of radius `R\_T4 = 3R` centered on origin (no flight path; not corridor-shaped). `R` is the stratification cell side length (§2.1), so T4 covers a 3-cell-radius disk per launch.
