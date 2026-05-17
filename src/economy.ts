@@ -49,7 +49,7 @@ import {
 import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers, type NodeId, type SubPathId } from './skilltree.js';
+import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, type SubPathId } from './skilltree.js';
 import {
   effectiveSpecializationMultipliers,
   IDENTITY_SPECIALIZATION,
@@ -131,6 +131,12 @@ export interface IslandState {
   level: number;
   /** Skill points granted by level-ups but not yet spent. */
   unspentSkillPoints: number;
+  /** Set true after the one-time grant-curve migration tops up this island's
+   *  unspentSkillPoints for level-ups taken under the old flat 1-per-level
+   *  schedule. Persistence applies the top-up when loading any save without
+   *  this flag set. Forward-compat: missing field on legacy saves = needs
+   *  migration, present-and-true = already migrated. */
+  skillPointGrantMigrationApplied?: boolean;
   /** Set of unlocked skill-tree node ids (§9.3). */
   unlockedNodes: Set<NodeId>;
   /** Per-sub-path progress, sparse: only sub-paths with ≥1 spent point have entries. */
@@ -1131,7 +1137,11 @@ function levelUpIfReady(state: IslandState): void {
     if (state.xp < need) return;
     state.xp -= need;
     state.level += 1;
-    state.unspentSkillPoints += 1;
+    // Skill-point grant scales with level (1.1^L floor) so the late-game
+    // tree (depth 6+ nodes costing 8-292 points each under the new
+    // costForDepth curve) is actually reachable. See `skillPointsForLevelUp`
+    // and the cumulative-points worked example in its doc comment.
+    state.unspentSkillPoints += skillPointsForLevelUp(state.level);
   }
 }
 

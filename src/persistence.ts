@@ -57,7 +57,7 @@ import { _seedVehicleIdCounter, tuningFor } from './settlement.js';
 import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { VictoryCondition } from './endgame.js';
-import type { NodeId, SubPathId } from './skilltree.js';
+import { cumulativeSkillPointsForLevel, type NodeId, type SubPathId } from './skilltree.js';
 import { WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
@@ -639,6 +639,18 @@ export function deserializeWorld(
     // would push into the spec's array but not the state's.
     const spec = islands.find((i) => i.id === entry.id);
     if (spec) live.buildings = spec.buildings;
+    // §9.3 grant-curve migration. Pre-migration saves got 1 skill point per
+    // level-up; the new schedule is `floor(1.1^L)`. Top up by the difference
+    // so a long-lived L50 save lands the 1,256 cumulative points it would
+    // have under the new schedule (vs the 50 it received under the old one).
+    // The flag prevents double-application across multiple loads.
+    if (live.skillPointGrantMigrationApplied !== true) {
+      const oldGrantTotal = live.level;
+      const newGrantTotal = cumulativeSkillPointsForLevel(live.level);
+      const topUp = Math.max(0, newGrantTotal - oldGrantTotal);
+      live.unspentSkillPoints += topUp;
+      live.skillPointGrantMigrationApplied = true;
+    }
     islandStates.set(entry.id, live);
   }
 
