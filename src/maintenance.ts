@@ -19,8 +19,9 @@
 //
 // §13.3 Eternal Servitor exemption: a PlacedBuilding flagged with
 // `eternalServitor: true` skips all maintenance accrual and degradation.
-// The Servitor-Conversion-Kit recipe and Reality Forge mechanic that flips
-// the flag are STILL-DEFERRED — this module only honours the flag if present.
+// The Servitor-Conversion-Kit cost is consumed in `convertToServitor`
+// (`buildings.ts`); the player triggers it from the inspector "Convert"
+// button when the active island has an operational Reality Forge.
 
 import type { BuildingDef } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';

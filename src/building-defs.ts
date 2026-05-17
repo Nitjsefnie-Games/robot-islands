@@ -1511,11 +1511,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel: 400, microchip: 20, glass: 30 },
     glyph: '☢',
   },
-  // §8.7 T2 cooling: Cooling Tower (2x2). Adjacency anchor — required for
-  // some chemistry recipes (e.g. Crystal Growth Lab → rare crystals per
-  // §4.5). The adjacency-effect wire-up that recipe-unlocks downstream
-  // buildings is STILL-DEFERRED; this def ships as a catalog row so the player
-  // can place it now in anticipation of those gates landing.
+  // §8.7 T2 cooling: Cooling Tower (2x2). Adjacency anchor. The spec's
+  // "Crystal Growth Lab unlocks rare recipes" example requires a Crystal
+  // Lab building (not in the catalog yet); when that ships, wire its
+  // recipe gate to require an adjacent Cooling Tower.
   cooling_tower: {
     id: 'cooling_tower',
     displayName: 'Cooling Tower',
@@ -1531,8 +1530,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // §8.7 T2 treatment: Wastewater Treatment (2x2). Adjacency anchor —
   // prevents efficiency penalty for chemistry per §4.5 ("Refinery without
   // adjacent Wastewater Treatment operates only on low-grade recipe,
-  // efficiency -50%"). Soft-gate wire-up on downstream chemistry recipes
-  // is STILL-DEFERRED; def ships as a catalog row.
+  // efficiency -50%"). Consumer-side wiring lives on the §4.5 gate of
+  // each chemistry plant (sulfuric_acid_plant, hcl_plant,
+  // chlor_alkali_plant); missing adjacency halves their output via
+  // `degradeMul: 0.5`.
   wastewater_treatment: {
     id: 'wastewater_treatment',
     displayName: 'Wastewater Treatment',
@@ -1884,10 +1885,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '▦',
   },
   // §8.9 / §13.3: Time Lock — banks offline-time stockpile per island and
-  // spends to accelerate any chosen island's tick rate at 3×. Time-banking
-  // mechanics per §13.3 STILL-DEFERRED to step 14: in step 13 the def ships as a
-  // visible catalog row + power-consuming placeholder. No recipe (the
-  // banking/spending model isn't an inputs→outputs recipe).
+  // spends to accelerate any chosen island's tick rate at 3×. Banking +
+  // spending + acceleration queue all live (see `timeLockBankedMin` +
+  // `accelerationQueue` + `accelerationRemainingMin` on IslandState).
+  // The Time Lock def itself only declares standby power here.
   time_lock: {
     id: 'time_lock',
     displayName: 'Time Lock',
@@ -1920,10 +1921,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '✺',
   },
   // §8.9 / §13.3: Universe Editor — reassigns an island's biome and
-  // regenerates terrain. Biome reassignment per §13.3 STILL-DEFERRED to step 14;
-  // def ships as a visible catalog row + power-consuming placeholder. No
-  // recipe (the biome-rewrite invocation isn't a continuous production
-  // cycle).
+  // regenerates terrain. Player triggers via the inspector's "Universe
+  // Editor" section when this building is selected: pick a target biome
+  // and the Editor consumes UNIVERSE_EDITOR_COST, mutates `spec.biome`,
+  // re-rolls modifiers (excluding natural-only), and marks now-invalid
+  // buildings via `editIslandBiome` in `universe-editor.ts`.
   universe_editor: {
     id: 'universe_editor',
     displayName: 'Universe Editor',
@@ -1939,9 +1941,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §8.9 / §13.3: Lattice Node — one per networked T5 island; activates
   // Omniscient Lattice (unified inventory + cross-island adjacency) when
-  // N nodes are placed across N T5-mastered islands. Network unity per
-  // §13.3 (Omniscient Lattice) STILL-DEFERRED to step 14; def ships as an inert
-  // placeholder with a small standby power draw. No recipe.
+  // enough nodes are placed across T5-mastered islands. Activation is
+  // live (see `latticeActive` + `latticeNodeIslands` on WorldState and
+  // the unified-inventory path in `economy.ts`); the node itself only
+  // declares standby power here.
   lattice_node: {
     id: 'lattice_node',
     displayName: 'Lattice Node',
@@ -2044,9 +2047,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
 
   // §14.2 Spaceport — single building serving as launch facility, ground-
   // side comm antenna, and repair-launch facility. Tier I/II/III in-place
-  // upgrade lifecycle per §14.2 STILL-DEFERRED — ships as a single tier with no
-  // upgrade. §14.7 pad-explosion failure (Spaceport returns to tier I on
-  // destruction) — STILL-DEFERRED. No recipe — this is a special placement
+  // upgrade lifecycle live (`upgradeSpaceport` in orbital.ts; UI button in
+  // orbital-ui.ts). §14.7 pad-explosion reverts the spaceport to tier I
+  // rather than destroying it. No recipe — this is a special placement
   // (the T6 gate building itself).
   spaceport: {
     id: 'spaceport',
@@ -2901,6 +2904,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc0a020, // sulfuric amber
     stroke: 0x504010,
     power: { consumes: 120 },
+    // §4.5 Wastewater Treatment soft-gate: chemistry plants run at -50%
+    // without an adjacent Wastewater Treatment per §8.7. Same pattern as
+    // the Exhaust Scrubber gate on emission-heavy buildings.
+    gates: [{ matchType: 'def_id', defId: 'wastewater_treatment', degradeMul: 0.5 }],
     placementCost: { stone: 100, iron_ingot: 30, wood: 10 },
     glyph: '◇',
   },
@@ -2913,6 +2920,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa0b020, // chlorine-yellow
     stroke: 0x404010,
     power: { consumes: 80 },
+    // §4.5 Wastewater Treatment soft-gate.
+    gates: [{ matchType: 'def_id', defId: 'wastewater_treatment', degradeMul: 0.5 }],
     placementCost: { stone: 80, iron_ingot: 20, wood: 10 },
     glyph: '◇',
   },
@@ -2938,6 +2947,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x80d050, // chlorine-green
     stroke: 0x305018,
     power: { consumes: 150 },
+    // §4.5 Wastewater Treatment soft-gate.
+    gates: [{ matchType: 'def_id', defId: 'wastewater_treatment', degradeMul: 0.5 }],
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
     glyph: '◇',
@@ -3723,7 +3734,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   //   T3: 1×1, radius 220, 25 W
   //   T4: 2×2, radius 320, 60 W (comm tower)
   //   T5: 2×2, radius 480, 150 W (exotic signal)
-  //   T6: 2×2, radius 700, 400 W (doubles as satellite dish — §14 dish dual-role STILL-DEFERRED)
+  //   T6: 2×2, radius 700, 400 W (doubles as satellite dish; signal radius adds to ground-station comm range in `groundStationCommRange`)
   //
   // Antenna placeholder — tune in Appendix A.
   antenna_t1: {
