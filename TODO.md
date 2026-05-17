@@ -31,34 +31,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   terrain from world seed under the new biome, and invalidate buildings
   on now-wrong tiles isn't implemented.
   File: `building-defs.ts:1902`.
-- **§13.3 Singularity Battery power storage** — ships as inert; the
-  "effectively infinite electrical power storage" mechanic per §13.3 is
-  deferred. Building exists, does nothing.
-  File: `building-defs.ts:1845`.
-- **§13.3 Spacetime Resonator multi-output rotation** — produces only
-  the spacetime_fragment side of its `(spacetime_fragment OR tachyon_stream
-  per cycle)` rotation. Rotation deferred.
-  Files: `building-defs.ts:1811`, `recipes.ts:1812`.
-- **§14 Antenna T6 dish dual-role** — T6 Antenna is supposed to double
-  as a satellite dish for orbital launches. Dish-side dual-role isn't
-  implemented; T6 antenna only does signal range.
-  Files: `antenna.ts:10`, `building-defs.ts:3699, 3775`.
-- **§3.6 merged-island Tier Reset integration** — Tier Reset on a
-  merged island is documented as deferred until §3.6's merge mechanic
-  shipped. §3.6 has shipped; the merge-aware reset code hasn't.
-  File: `tier-reset.ts:35`.
-- **Foundation Kit mid-flight decomposition** — currently decomposes
-  on arrival. Spec implies in-flight decomposition for the §12.3
-  grace-cap mechanic.
-  File: `settlement.ts:19`.
-- **Settlement dock landing position** — newly-settled colonies'
-  starter dock auto-places at island centre regardless of geometry. Real
-  placement (coastal tile, corner-of-buildable-area) deferred.
-  File: `settlement.ts:429`.
-- **T4/T5 founder tiers for Platform Constructor** — T3 founder caps
-  artificial islands at 8×8 per §2.5. T4 (12×12) and T5 (16×16) caps in
-  `MAX_RADIUS_BY_TIER` are deferred.
-  Files: `artificial-island.ts:26, 134, 158`.
 - **§2.1 infinite map + density tuning** — SPEC.md line 3 calls the
   world "infinite" and §2.1 says each cell contains at least one island
   with additional islands per cell via geometric decline (placeholder

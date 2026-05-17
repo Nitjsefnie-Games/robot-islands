@@ -31,8 +31,12 @@
 // 24-real-time-hour cooldown between resets on the same island
 // (placeholder per §9.7).
 //
-// Merged islands (§3.6) operate as a single identity per spec — that
-// integration is STILL-DEFERRED until §3.6 ships and is not handled here.
+// Merged islands (§3.6) operate as a single identity per spec; the
+// absorber's IslandState IS what `executeTierReset` mutates. Because the
+// merged ellipse list and absorbed-buildings live on IslandSpec /
+// `state.buildings` (preserved by reset per §9.7), no merge-specific
+// handling is needed here — the reset works on a merged island the same
+// way it works on any other.
 
 import { inv, type IslandState } from './economy.js';
 import { nodeById } from './skilltree.js';

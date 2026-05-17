@@ -5,6 +5,7 @@
 //
 // §14.2 Spaceport + §14.7 launch success rolls with failure modes + upgrade lifecycle.
 
+import { ANTENNA_SIGNAL_RADII } from './antenna.js';
 import { cellKey, tileToCell } from './discovery.js';
 import { inv } from './economy.js';
 import { makeSeededRng } from './rng.js';
@@ -270,7 +271,14 @@ export function groundStationCommRange(world: WorldState, islandId: string): num
   const state = world.islandStates?.get(islandId);
   const sp = state?.buildings.find((b) => b.defId === 'spaceport');
   const tier = sp?.tier ?? 1;
-  const base = tier === 1 ? 200 : tier === 2 ? 300 : 400;
+  let base = tier === 1 ? 200 : tier === 2 ? 300 : 400;
+  // §14.2: T6 Antenna doubles as a satellite dish — if present on the
+  // launching island, the antenna's signal radius adds to the
+  // ground-station comm range. Multiple T6 antennas don't stack (single
+  // dish boost per island).
+  if (state?.buildings.some((b) => b.defId === 'antenna_t6')) {
+    base += ANTENNA_SIGNAL_RADII['antenna_t6'] ?? 0;
+  }
   // Network + Orbital-Communication sub-paths multiplicatively boost ground-
   // station comm range. State may be undefined for unpopulated islands; the
   // skill multiplier defaults to 1 in that case so the base reach is unchanged.
