@@ -585,6 +585,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const dist = Math.sqrt(dx * dx + dy * dy);
     const outbound = (maxLaunchFuel * currentEfficiency) / 2;
     ensurePainted(dist > outbound ? RETICLE_WARN : RETICLE_OK);
+    // ETA prediction — round-trip flight time at DRONE_SPEED_TILES_PER_SEC
+    // for the cursor target. Updates the FLIGHT readout live as the cursor
+    // moves so the player previews their target's ETA before committing.
+    const roundTripSec = (2 * dist) / DRONE_SPEED_TILES_PER_SEC;
+    if (dist > outbound) {
+      etaStat.valueEl.textContent = `${roundTripSec.toFixed(0)}s · out of range`;
+      etaStat.valueEl.style.color = 'var(--ri-warn)';
+    } else {
+      etaStat.valueEl.textContent = `${roundTripSec.toFixed(0)}s to target`;
+      etaStat.valueEl.style.color = 'var(--ri-accent)';
+    }
   }
   function hideReticleFn(): void {
     reticleGfx.position.set(-9999, -9999);

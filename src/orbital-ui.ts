@@ -21,6 +21,7 @@ import { launchSatellite, type SatelliteVariant } from './orbital.js';
 import type { ResourceId } from './recipes.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 import type { WorldState } from './world.js';
+import { getToastHandle } from './toast.js';
 
 export interface OrbitalUiHandle {
   show(): void;
@@ -107,11 +108,16 @@ export function mountOrbitalUi(
       variant,
       performance.now(),
     );
+    const toast = getToastHandle();
     if (result.ok) {
-      flash(`Launched ${variant} sat from ${nameForIsland(deps.world, islandId)}`);
+      const msg = `Launched ${variant} sat from ${nameForIsland(deps.world, islandId)}`;
+      flash(msg);
+      toast?.show(msg, 'success');
     } else {
       const label = FAIL_REASON_LABEL[result.reason] ?? result.reason;
-      flash(`Launch failed: ${label}`);
+      const msg = `Launch failed: ${label}`;
+      flash(msg);
+      toast?.show(msg, 'failure');
     }
   };
 
