@@ -22,7 +22,7 @@ import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { rasterizePath, rollVehicleDestruction } from './weather.js';
-import { CELL_SIZE_TILES } from './world.js';
+import { CELL_SIZE_TILES, ensureCellGenerated } from './world.js';
 import type { WorldState } from './world.js';
 
 /** Drone tier per §11.5. Step 6 only emits tier-2 drones; the field exists so
@@ -583,6 +583,18 @@ export function tickDrones(
             const cells = corridorCells(a.x, a.y, b.x, b.y, effectiveRadius);
             cells.forEach((c) => expandedCorridor.add(c));
           }
+        }
+
+        // §2.1 lazy generation: any cell the drone's corridor touches must
+        // have its procedural islands minted before the antenna / rare-island
+        // reads below — a newly-generated rare island in `expandedCorridor`
+        // must be eligible for `discoverRareIslands` on the very same tick.
+        // Cells outside antenna range still need this hook: the drone is
+        // physically crossing them, and a later visit (or another sensor)
+        // must see the same deterministic island set.
+        for (const k of expandedCorridor) {
+          const { cellX, cellY } = parseCellKey(k);
+          ensureCellGenerated(world, cellX, cellY);
         }
 
         if (d.tier === 5) {

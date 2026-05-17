@@ -6,12 +6,12 @@
 // §14.2 Spaceport + §14.7 launch success rolls with failure modes + upgrade lifecycle.
 
 import { ANTENNA_SIGNAL_RADII } from './antenna.js';
-import { cellKey, tileToCell } from './discovery.js';
+import { cellKey, parseCellKey, tileToCell } from './discovery.js';
 import { inv } from './economy.js';
 import { makeSeededRng } from './rng.js';
 import { effectiveSkillMultipliers, launchSuccessBonus } from './skilltree.js';
 import type { ResourceId } from './recipes.js';
-import type { WorldState } from './world.js';
+import { ensureCellGenerated, type WorldState } from './world.js';
 
 export const SAT_BUFFER_CAP = 100;
 
@@ -646,6 +646,13 @@ export function tickSatMovement(world: WorldState, nowMs: number): void {
     sat.y = sat.movingTo.y;
     sat.locked = true;
     sat.movingTo = undefined;
+    // §2.1 lazy generation: ensure the destination cell is minted so debris
+    // reads (`tickDebris` keys off `tileToCell(sat.x, sat.y)`) and any
+    // overlapping coverage on the next scanner tick see a stable island set.
+    {
+      const { cellX, cellY } = tileToCell(sat.x, sat.y);
+      ensureCellGenerated(world, cellX, cellY);
+    }
     survivors.push(sat);
   }
   world.satellites = survivors;
@@ -816,6 +823,14 @@ export function tickScannerDiscovery(
     if (sat.variant !== 'scanner') continue;
     if (!sat.locked) continue;
     const covered = cellsCoveredBySat(sat);
+    // §2.1 lazy generation: mint any procedural islands inside the sat's
+    // coverage footprint before the discovery loop reads `world.islands`,
+    // so a freshly-minted candidate becomes eligible for discovery this
+    // tick.
+    for (const key of covered) {
+      const { cellX, cellY } = parseCellKey(key);
+      ensureCellGenerated(world, cellX, cellY);
+    }
     if (!sat.dwellByCellKey) sat.dwellByCellKey = {};
     // Drop dwell entries no longer covered.
     for (const key of Object.keys(sat.dwellByCellKey)) {
