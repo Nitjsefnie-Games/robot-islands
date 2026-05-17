@@ -22,6 +22,7 @@ import {
   terrainAtForBiome,
 } from './biomes.js';
 import { computeIslandTiles, defaultTerrainAt, tileInscribedInEllipse, type TerrainKind } from './island.js';
+import { attachTerrainAt } from './world.js';
 import type { Biome } from './world.js';
 
 /** Most tests in this file don't care about the inscription predicate — they
@@ -457,6 +458,83 @@ describe('terrainAtForBiome', () => {
         }
       }
     }
+  });
+
+  it('terrainAt observes live spec mutations (by-reference closure invariant)', () => {
+    // Pins the load-bearing invariant of `attachTerrainAt`: the rehydrated
+    // closure captures the spec BY REFERENCE, not by value. A future refactor
+    // that switches the helper body to `{ ...spec, terrainAt: ... }` (e.g.
+    // as part of an immutability pass) would freeze `extraEllipses` at
+    // attach-time and silently reintroduce the boundary-fragment defect for
+    // §3.6 merges. The assertions below FAIL under that regression.
+    //
+    // Probe coordinate (24, 0) was chosen empirically. It satisfies three
+    // constraints simultaneously (verified by direct calculation against
+    // `tileHash01` — see the script in the I3 review):
+    //
+    //   1. Geometry — cluster cell origin (24, 0) (covering tiles
+    //      (24..26, 0..2)) is FULLY OUTSIDE the primary r=14 ellipse — its
+    //      nearest corner sits at radius 24 > 14, so every cell tile fails
+    //      `tileInscribedInEllipse(_, _, 14, 14)`.
+    //   2. Geometry — the same cell is FULLY INSIDE an extra ellipse with
+    //      semi-axes (8, 8) at offset (22, 0): the farthest corner (27, 3)
+    //      from extra centre (22, 0) is at squared-radius 25 + 9 = 34, well
+    //      under the boundary 64. So `inscribed` flips false → true on the
+    //      mutation.
+    //   3. Hash — `tileHash01('closure-ref-test', 8, 0) ≈ 0.0053 < 0.12`, so
+    //      the cluster cell IS a rare-roll cell. This is what makes the test
+    //      DISCRIMINATIVE: if the cell weren't rare, both by-reference and
+    //      by-value implementations would return `defaultTerrain` and the
+    //      test would pass vacuously. The pre-condition `expectedUnclipped
+    //      !== 'grass'` below guards against future seed or hash drift
+    //      silently breaking the discrimination.
+    const spec = attachTerrainAt({
+      id: 'closure-ref-test',
+      name: 'closure-ref-test',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 14,
+      minorRadius: 14,
+      populated: false,
+      discovered: false,
+      buildings: [],
+      modifiers: [],
+    });
+    const probeX = 24;
+    const probeY = 0;
+    // Pre-mutation: the cluster cell sits entirely outside the primary
+    // ellipse, so the inscription predicate fails on all 9 tiles and the
+    // cell is demoted to defaultTerrain.
+    expect(spec.terrainAt!(probeX, probeY)).toBe('grass');
+    // What the SAME hash would produce if the cell were treated as fully
+    // inscribed — this is the value the by-reference closure MUST return
+    // after we push the extra ellipse that covers the cell.
+    const expectedUnclipped = terrainAtForBiome(
+      'plains',
+      spec.id,
+      probeX,
+      probeY,
+      () => true,
+    );
+    // Discrimination guard: if this hash ever stops rolling rare, the test
+    // becomes vacuous (both by-ref and by-value return 'grass'). Fail
+    // explicitly so a future maintainer fixes the probe instead of
+    // silently losing the invariant.
+    expect(
+      expectedUnclipped,
+      'I3 probe cell must hash rare or the test is vacuous',
+    ).not.toBe('grass');
+    // §3.6-style mutation: push an extra ellipse that fully covers the
+    // probe's 3×3 cluster cell.
+    spec.extraEllipses = [
+      { major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
+    ];
+    // Post-mutation: a by-REFERENCE closure observes the new extra and the
+    // cell now passes inscription, so terrainAt yields the unclipped rare.
+    // A by-VALUE closure would still see the old (no-extras) snapshot,
+    // demote to 'grass', and fail this assertion.
+    expect(spec.terrainAt!(probeX, probeY)).toBe(expectedUnclipped);
   });
 });
 

@@ -42,7 +42,6 @@
 
 import { del, get, set } from 'idb-keyval';
 
-import { terrainAtForBiome } from './biomes.js';
 import { islandCells } from './discovery.js';
 import type { IslandState } from './economy.js';
 import type { Drone } from './drones.js';
@@ -58,8 +57,7 @@ import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { VictoryCondition } from './endgame.js';
 import { cumulativeSkillPointsForLevel, type NodeId, type SubPathId } from './skilltree.js';
-import { islandInscribedAny, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
-import type { TerrainKind } from './island.js';
+import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
  *  intended migration entry point — `loadWorld` keys on this string, so a
@@ -337,12 +335,20 @@ export function deserializeWorld(
   // `operatingMs` is a DURATION — never perfShift it; it preserves literally.
   const perfShift = nowPerfMs - snapshot.savedAtPerf - deltaMs;
   const islands: IslandSpec[] = snapshot.world.islands.map((s) => {
-    const spec: IslandSpec = {
+    // Rehydrate the per-island terrainAt closure via the shared
+    // `attachTerrainAt` helper. The helper binds the closure to the spec
+    // it returns BY REFERENCE so §3.6 extraEllipses (round-tripped via the
+    // `...s` spread below) and any future in-place merge that mutates them
+    // are observed live — capturing radii at closure-build time would
+    // silently miss extra-ellipse tiles. `terrainAtForBiome` short-circuits
+    // on `id === 'home'` so the home spec is unaffected by the predicate.
+    return attachTerrainAt({
       ...s,
       // Forward-compat backfill: a save written before the player-mutable
       // display-name field existed has no `name`. Default to `id` so the
-      // legacy UX (id-as-display-name) is preserved verbatim. Same SCHEMA_VERSION
-      // — mirror the `ascendantCoreCrafted` / `lastResetAt` backfill pattern.
+      // legacy UX (id-as-display-name) is preserved verbatim. Same
+      // SCHEMA_VERSION — mirror the `ascendantCoreCrafted` / `lastResetAt`
+      // backfill pattern.
       name:
         typeof (s as { name?: unknown }).name === 'string'
           ? (s as { name: string }).name
@@ -367,20 +373,7 @@ export function deserializeWorld(
             : {}),
         })),
       ),
-    };
-    // Rehydrate the per-island terrainAt closure. The inscription predicate
-    // closes over the rehydrated spec BY REFERENCE so any §3.6 extraEllipses
-    // (round-tripped via the `...s` spread above) and any future merge that
-    // mutates them are observed live — capturing radii at closure-build
-    // time would silently miss extra-ellipse tiles. terrainAtForBiome
-    // short-circuits on `id === 'home'` so the home spec is unaffected by
-    // the predicate.
-    (spec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt =
-      (x, y) =>
-        terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
-          islandInscribedAny(spec, px, py),
-        );
-    return spec;
+    });
   });
 
   // Drone and route timestamps were minted in the SAVED session's

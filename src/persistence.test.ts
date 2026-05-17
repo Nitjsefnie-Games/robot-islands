@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { terrainAtForBiome } from './biomes.js';
-import { islandInscribedAny } from './world.js';
+import { islandInscribedAny } from './island.js';
 import type { IslandState } from './economy.js';
 import {
   _resetConstructionCounter,
@@ -38,6 +38,7 @@ import {
   type SaveSnapshot,
 } from './persistence.js';
 import {
+  attachTerrainAt,
   makeInitialIslandState,
   makeInitialWorld,
   type IslandSpec,
@@ -372,6 +373,77 @@ describe('serialize → JSON → deserialize round-trip', () => {
       { major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: -3 },
       { major: 7, minor: 4, rotation: 0, offsetX: -15, offsetY: 12 },
     ]);
+  });
+
+  it('rehydrated terrainAt on a procedural spec with extras matches the original', () => {
+    // The existing "rehydrates terrainAt …" round-trip test at :286 only
+    // exercises home, where `terrainAtForBiome` short-circuits on
+    // `islandId === 'home'` and never consults the inscription predicate.
+    // This test covers the OTHER branch: a non-home procedural spec with a
+    // §3.6 extra ellipse, where the rehydrated closure's predicate path is
+    // the actual load-bearing thing.
+    //
+    // The probe (24, 0) mirrors the I3 by-reference test: cluster cell
+    // (8, 0) sits fully outside the primary r=14 ellipse and fully inside
+    // an extra at offset (22, 0) with semi-axes (8, 8). The hash for id
+    // `'closure-ref-test'` on cell (8, 0) lands rare (≈0.0053 < 0.12), so
+    // the cell only emits a non-default tile when the inscription predicate
+    // is consulted AND sees the extra ellipse. If a future regression drops
+    // `extraEllipses` before binding the rehydrated closure (or binds the
+    // closure to a snapshot instead of the live spec), the rehydrated
+    // terrainAt would demote to default and the assertion would fail.
+    const world = makeInitialWorld(0);
+    const procedural = attachTerrainAt({
+      id: 'closure-ref-test',
+      name: 'closure-ref-test',
+      biome: 'plains',
+      cx: 200,
+      cy: 200,
+      majorRadius: 14,
+      minorRadius: 14,
+      populated: false,
+      discovered: true, // discovered so it survives round-trip without special handling
+      buildings: [],
+      modifiers: [],
+      extraEllipses: [
+        { major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
+      ],
+    });
+    world.islands.push(procedural);
+    const probeX = 24;
+    const probeY = 0;
+    const expected = procedural.terrainAt!(probeX, probeY);
+    // Discrimination guard — if the cell stops being a rare-roll cell, the
+    // assertions below pass vacuously (every tile = default). Force the
+    // test to fail loudly so a maintainer picks a fresh probe.
+    expect(
+      expected,
+      'I4 probe cell must hash rare or the test is vacuous',
+    ).not.toBe('grass');
+    const snap = serializeWorld(world, new Map(), 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    const rSpec = restored.islands.find((s) => s.id === 'closure-ref-test')!;
+    // The rehydrated extra MUST round-trip into the same shape that
+    // attachTerrainAt's predicate consults — verify the field survives.
+    expect(rSpec.extraEllipses).toEqual([
+      { major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
+    ]);
+    // The load-bearing assertion: the rehydrated closure agrees with the
+    // pre-serialization closure at the probe AND at every sibling tile of
+    // the 3×3 cluster cell. Any mismatch points at the predicate path —
+    // either the closure isn't bound to the live spec, or extras dropped
+    // before binding.
+    for (let dy = 0; dy < 3; dy++) {
+      for (let dx = 0; dx < 3; dx++) {
+        const x = 24 + dx;
+        const y = 0 + dy;
+        expect(
+          rSpec.terrainAt!(x, y),
+          `(${x},${y}) drift after round-trip`,
+        ).toBe(procedural.terrainAt!(x, y));
+      }
+    }
   });
 
   it('preserves single-ellipse islands (no extras) — extraEllipses stays undefined', () => {

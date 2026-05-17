@@ -27,11 +27,10 @@
 //     instead of branching here.
 
 import type { Biome, IslandSpec } from './world.js';
-import { BIOME_DEFS, rollModifiersArtificial, terrainAtForBiome } from './biomes.js';
-import type { TerrainKind } from './island.js';
+import { BIOME_DEFS, rollModifiersArtificial } from './biomes.js';
 import { tierForLevel } from './skilltree.js';
 import type { IslandState } from './economy.js';
-import { islandInscribedAny, makeInitialIslandState } from './world.js';
+import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { canPlaceOnIsland, type BuildingDef } from './building-defs.js';
 
 // ---------------------------------------------------------------------------
@@ -221,13 +220,13 @@ export function constructIsland(
   founderState.inventory.iron_ingot = (founderState.inventory.iron_ingot ?? 0) - cost.iron_ingot;
   founderState.inventory.wood = (founderState.inventory.wood ?? 0) - cost.wood;
 
-  // Mint the new spec. terrainAt closes over the SPEC by reference (not just
-  // biome + islandId) so the inscription predicate observes any future §3.6
-  // merge that mutates `extraEllipses` — capturing radii literals at closure-
-  // build time would silently miss extra-ellipse tiles and reintroduce the
-  // boundary-fragment defect there.
+  // Mint the new spec via the shared `attachTerrainAt` helper — its closure
+  // captures the spec by reference so any future §3.6 merge that mutates
+  // `extraEllipses` is observed live (no closure-capture of radii). The
+  // helper centralises the readonly-widening cast that was previously
+  // inlined here.
   const biome = req.biome;
-  const newSpec: IslandSpec = {
+  const newSpec: IslandSpec = attachTerrainAt({
     id: islandId,
     name: displayName ?? islandId,
     biome,
@@ -240,12 +239,7 @@ export function constructIsland(
     buildings: [],
     modifiers: rollModifiersArtificial(worldSeed, biome, islandId, nowMs),
     artificial: true,
-  };
-  (newSpec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt =
-    (x, y) =>
-      terrainAtForBiome(biome, islandId, x, y, (px, py) =>
-        islandInscribedAny(newSpec, px, py),
-      );
+  });
   const newState = makeInitialIslandState(newSpec, nowMs);
   return { newSpec, newState };
 }
