@@ -1649,9 +1649,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { saltwater: 1 },
     outputs: { salt: 1 },
     category: 'manufacturing',
-    // Orphan output: `salt` currently has no consumer in the catalog
-    // (§7.3 chlor-alkali variants STILL-DEFERRED). Producer ships for chain
-    // completeness; consumer recipes STILL-DEFERRED.
+    // Salt feeds the salt-pathway `chemical_reactor` (Salt + power →
+    // Chlorine + Sodium hydroxide), giving evaporator output a downstream
+    // consumer for the alumina + lubricant chains.
   },
   electrolyzer: {
     cycleSec: 100, // rebalanced for idle-game scale, step #19 (×10: was 10s)
@@ -1771,11 +1771,12 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   chemical_reactor: {
     cycleSec: 800,           // matches chlor_alkali_plant — electrolysis pace
     inputs: { salt: 1, fresh_water: 2 },
-    outputs: { chlorine: 1 },
+    outputs: { chlorine: 1, sodium_hydroxide: 1 },
     category: 'chemistry',
-    // §7.5 spec: Salt + power → Chlorine (+ Sodium hydroxide co-product
-    // STILL-DEFERRED). Acid / plastic precursor / alumina outputs from §8.2
-    // are STILL-DEFERRED — those resource ids aren't in the catalog yet.
+    // §7.5 spec: Salt + power (electrolysis) → Chlorine + Sodium hydroxide.
+    // Downstream consumers are wired: chlorine feeds Lubricant Refinery
+    // (this file), sodium_hydroxide feeds Bauxite Refinery for alumina
+    // (chain in `bauxite_refinery` above).
   },
   lubricant_refinery: {
     cycleSec: 1000, // rebalanced for idle-game scale, step #19 (×40: was 25s)

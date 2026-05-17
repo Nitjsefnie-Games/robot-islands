@@ -48,10 +48,9 @@ export const ALL_STORAGE_CATEGORIES: ReadonlyArray<StorageCategory> = [
  *                natural gas, hydrogen, biofuel, naphtha, chlorine,
  *                lubricant, diesel, aviation kerosene, nitrogen,
  *                cryogenic_hydrogen, plasma_charge (T5 fuel/propellant).
- *   temp_sensitive — cryo_coolant (per §4.6 "cryo-coolant" example).
- *                cryogenic_compound + liquid_nitrogen aren't in the catalog
- *                yet (STILL-DEFERRED) — Cold Storage capacity will gain consumers
- *                when they ship.
+ *   temp_sensitive — cryo_coolant (per §4.6 "cryo-coolant" example),
+ *                cryogenic_compound and liquid_nitrogen (shipped via Phase 10
+ *                / Phase 5 chemistry chains). Cold Storage carries all three.
  *   components — T2-T3 manufactured parts: bolt, gear, wire, sheet_metal
  *                (shipped in Task 6.1), microchip, quantum_chip. Silicon is a T3
  *                semiconductor intermediate but lives in components since

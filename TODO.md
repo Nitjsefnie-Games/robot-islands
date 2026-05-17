@@ -43,18 +43,10 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   as a satellite dish for orbital launches. Dish-side dual-role isn't
   implemented; T6 antenna only does signal range.
   Files: `antenna.ts:10`, `building-defs.ts:3699, 3775`.
-- **§7.3 chlor-alkali variant consumer recipes** — Chlor-alkali plant
-  produces; the downstream consumer chain that uses Chlorine / Sodium
-  Hydroxide as inputs for plastic precursor / alumina is deferred.
-  Files: `recipes.ts:1618, 1619`.
 - **§3.6 merged-island Tier Reset integration** — Tier Reset on a
   merged island is documented as deferred until §3.6's merge mechanic
   shipped. §3.6 has shipped; the merge-aware reset code hasn't.
   File: `tier-reset.ts:35`.
-- **Settlement vehicle per-tier loadouts/speeds** — every vehicle uses
-  one base stat set. Per-tier variation (T1 Cargo Ship vs T2 Heavy
-  Freighter range/speed/loadout) deferred.
-  File: `settlement.ts:10`.
 - **Foundation Kit mid-flight decomposition** — currently decomposes
   on arrival. Spec implies in-flight decomposition for the §12.3
   grace-cap mechanic.
@@ -67,10 +59,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   artificial islands at 8×8 per §2.5. T4 (12×12) and T5 (16×16) caps in
   `MAX_RADIUS_BY_TIER` are deferred.
   Files: `artificial-island.ts:26, 134, 158`.
-- **Cold Storage consumers** — `temp_sensitive` storage category exists,
-  but the resources that should land in it (cryogenic compound, liquid
-  nitrogen) aren't in the catalog yet, so Cold Storage has no consumers.
-  File: `storage-categories.ts:53`.
 - **§2.1 infinite map + density tuning** — SPEC.md line 3 calls the
   world "infinite" and §2.1 says each cell contains at least one island
   with additional islands per cell via geometric decline (placeholder
@@ -127,10 +115,6 @@ all. Building them requires new state, new tick paths, or new UI surfaces.
   continuous trickle (mathematically equivalent over time but loses the
   "you got lucky" flavor).
   Files: `biomes.ts:210`, `skilltree.ts` (mining.3 / forestry.3).
-- **§5.2 high-emission Exhaust Scrubber adjacency** — Exhaust Scrubber
-  exists as a catalog row; its adjacency requirement for high-emission
-  buildings isn't wired.
-  File: `building-defs.ts:1530`.
 - **§4.7 Servitor / §5.2 dish dual-role / etc — many catalog rows
   shipped as inert defs** awaiting their owning mechanic. See
   `building-defs.ts` lines 1293, 1464, 1498, 1516, 1587, 1688, 1922,
