@@ -885,12 +885,16 @@ export function computeRates(
   // sees a small helium_3 / per-Mine rate added here, scaling with the
   // count of Mines on the island. Skipped entirely when the multiplier
   // is 0 (no nodes unlocked) for symmetry with no-op pass.
+  // §3.5 Cursed Storms doubles both trickle rates via `rareFindMul`. The
+  // multiplier composes with the existing skill-tree per-node accumulation
+  // so depth-3 Mining + Cursed Storms gives the full 2× boost on top of
+  // the depth scaling, matching the spec's "doubled rare finds" intent.
   if (skillMul.mineRareTrickleRate > 0) {
     let mines = 0;
     for (const b of validBuildings) {
       if (b.defId === 'mine' || b.defId === 'deep_mine') mines++;
     }
-    const rare = mines * skillMul.mineRareTrickleRate;
+    const rare = mines * skillMul.mineRareTrickleRate * modifierMul.rareFindMul;
     if (rare > 0) {
       production.helium_3 = (production.helium_3 ?? 0) + rare;
       net.helium_3 = (net.helium_3 ?? 0) + rare;
@@ -901,7 +905,7 @@ export function computeRates(
     for (const b of validBuildings) {
       if (b.defId === 'logger' || b.defId === 'heavy_logger') loggers++;
     }
-    const exotic = loggers * skillMul.loggerExoticTrickleRate;
+    const exotic = loggers * skillMul.loggerExoticTrickleRate * modifierMul.rareFindMul;
     if (exotic > 0) {
       production.lumber = (production.lumber ?? 0) + exotic;
       net.lumber = (net.lumber ?? 0) + exotic;
