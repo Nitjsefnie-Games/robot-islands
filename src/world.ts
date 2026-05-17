@@ -42,7 +42,7 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Route } from './routes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { pointInVision, type VisionSource } from './vision-source.js';
-import { generateWorld } from './world-gen.js';
+import { generateCellIslands, generateWorld } from './world-gen.js';
 
 /** Stratification cell side length, in tiles. SPEC §2.1 calls this R. */
 export const CELL_SIZE_TILES = 16;
@@ -776,6 +776,15 @@ export interface WorldState {
   latticeNodeIslands: string[];
   /** §14.4 in-flight comm packets. Mutable. */
   commPackets: import('./orbital.js').CommPacket[];
+  /** §2.1 infinite map — set of cell keys (`"cellX,cellY"`) that have
+   *  already been considered by the procedural generator. New cells the
+   *  player reaches via drone / satellite / route are generated lazily
+   *  via `ensureCellGenerated` (see `world.ts`); the cell is added here
+   *  on first generation so subsequent calls short-circuit. Optional for
+   *  back-compat with pre-§2.1-infinite saves; absent === treat the v4
+   *  migration's "every cell in `[-10, +10]²` was generated at boot" set
+   *  as the implicit baseline. */
+  generatedCells?: Set<string>;
 
 }
 
@@ -785,10 +794,13 @@ export interface WorldState {
  *  so reloads don't depend on this constant staying stable. */
 export const WORLD_SEED = 'rio-2026';
 
-/** Default world-gen options. Cell extent of ±10 with R=16 spans the
- *  ~320-tile-radius region, which sits comfortably inside the renderer's
- *  WORLD_HALF_SIZE_TILES=250 ocean (cell-edge tiles at ±160). Density 0.3
- *  yields ~130 procedural islands on top of the hand-placed demos. */
+/** Default world-gen options. Boot-time bulk generation covers cells in
+ *  `[-halfExtentCells, +halfExtentCells]²`; the player extends the world
+ *  outward as drones / satellites enter new cells via
+ *  `ensureCellGenerated` (lazy, infinite). Density 0.15 biases toward
+ *  "almost stranded but one next island always reachable" per §2.1, paired
+ *  with `OVERLAP_BUFFER_TILES = 12` so 14-tile Plains islands don't
+ *  stack into peanut shapes. */
 export const DEFAULT_GEN_OPTS: {
   readonly seed: string;
   readonly halfExtentCells: number;
@@ -798,7 +810,7 @@ export const DEFAULT_GEN_OPTS: {
   seed: WORLD_SEED,
   halfExtentCells: 10,
   cellSizeTiles: CELL_SIZE_TILES,
-  density: 0.3,
+  density: 0.15,
 };
 
 /**
@@ -835,7 +847,50 @@ export function makeInitialWorld(_nowMs: number): WorldState {
     if (!spec.populated && !spec.discovered) continue;
     for (const k of islandCells(spec)) revealedCells.add(k);
   }
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null, victoryBannerShown: false }, latticeActive: false, latticeNodeIslands: [], commPackets: [] };
+  // §2.1 infinite map — record every cell the boot sweep considered so
+  // subsequent lazy `ensureCellGenerated` calls don't re-roll them.
+  const generatedCells = new Set<string>();
+  const N = DEFAULT_GEN_OPTS.halfExtentCells;
+  for (let cy = -N; cy <= N; cy++) {
+    for (let cx = -N; cx <= N; cx++) generatedCells.add(`${cx},${cy}`);
+  }
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null, victoryBannerShown: false }, latticeActive: false, latticeNodeIslands: [], commPackets: [], generatedCells };
+}
+
+/**
+ * §2.1 infinite map — lazily generate the islands in cell `(cellX, cellY)`
+ * if not already done. Drones / satellites / routes / discovery call this
+ * as they enter new cells; the function short-circuits if the cell is
+ * already in `world.generatedCells`. Newly-minted island specs are pushed
+ * onto `world.islands` (so existing render / vision pipelines see them
+ * without further hooks).
+ *
+ * Cross-cell overlap honours the 8 neighbour cells' existing islands via
+ * a centre-distance check; if the cell's candidate would overlap, the
+ * candidate is dropped (the cell is "stranded") and the cell still gets
+ * marked generated so the negative result is sticky.
+ *
+ * Returns the new islands (possibly empty). Pure-mutating: only touches
+ * `world.islands` and `world.generatedCells`.
+ */
+export function ensureCellGenerated(world: WorldState, cellX: number, cellY: number): IslandSpec[] {
+  if (!world.generatedCells) world.generatedCells = new Set<string>();
+  const key = `${cellX},${cellY}`;
+  if (world.generatedCells.has(key)) return [];
+  world.generatedCells.add(key);
+  // Pull neighbour-cell islands for the overlap check. We pass ALL
+  // existing islands (cheap linear scan, and the spec already promises
+  // the buffer applies cross-cell to ANY existing island).
+  const newSpecs = generateCellIslands(
+    world.seed,
+    cellX,
+    cellY,
+    CELL_SIZE_TILES,
+    DEFAULT_GEN_OPTS.density,
+    world.islands,
+  );
+  for (const s of newSpecs) world.islands.push(s);
+  return newSpecs;
 }
 
 // ---------------------------------------------------------------------------
