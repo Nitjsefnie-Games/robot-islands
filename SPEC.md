@@ -978,7 +978,7 @@ Three branches, each with sub-paths.
 * Discovery (Scanner Sat dwell ramp, coverage radius)
 * Resilience (debris-lodge slowdown reduction, onboard fuel reserve, repair-launch reliability)
 
-**Node depth and cost.** Each sub-path has 10 to 15 nodes ordered by depth (depth 1 = shallow and cheap; deepest = expensive and game-warping). Deeper nodes gate behind tier breakpoints (depth 1-2 require T2, depth 3 requires T3, depth 4 requires T4, depth 5-7 require T5, depth 8+ requires T6). Skill-point cost grows geometrically with depth — placeholder: `cost(depth) = 2^(depth - 1)`, so depth 1 costs 1 point, depth 5 costs 16, depth 10 costs 512, depth 15 costs ~16k. Combined with the exponential XP softcap past level 50 (§9.1), the deepest nodes are practically unreachable except by extremely-late-game islands.
+**Node depth and cost.** Each sub-path has 10 to 15 nodes ordered by depth (depth 1 = shallow and cheap; deepest = expensive and game-warping). Deeper nodes gate behind tier breakpoints (depth 1-2 require T2, depth 3 requires T3, depth 4 requires T4, depth 5-7 require T5, depth 8+ requires T6). Skill-point cost grows geometrically with depth — placeholder: `cost(depth) = round(1.5^(depth - 1))`, so depth 1 costs 1 point, depth 5 costs 5, depth 10 costs 38, depth 15 costs ~292. Combined with the exponential XP softcap past level 50 (§9.1), the deepest nodes remain heavy commitments reachable only by mature islands.
 
 **Magnitude.** Effect magnitude doubles with depth through depth 5 — placeholder: depth 1 = +5%, depth 2 = +10%, depth 3 = +20%, depth 4 = +40%, depth 5 = +80% on the relevant stat. From depth 6 onward, magnitudes either continue geometric (for "more of the same") OR convert into unique unlocks: new recipes, structural rule changes, exotic adjacency effects, biome-locked content access without the biome. The mix between geometric scaling and unique unlocks is per-sub-path, tuned to keep deep investment interesting beyond just "+%".
 
@@ -1816,7 +1816,7 @@ The following numeric values are placeholders to be set during prototype play:
 * Funneling XP bonus percentage (placeholder 50%; applied to imported-and-consumed resources only, while destination is below Tier 3)
 * Skill tree node effect magnitudes (geometric to depth 5: depth 1 = +5%, doubles each step; mixed thereafter — geometric continuation OR unique unlocks per sub-path)
 * Skill tree node count per sub-path (placeholder 10-15)
-* Skill tree node cost scaling (placeholder `cost(depth) = 2^(depth - 1)`)
+* Skill tree node cost scaling (placeholder `cost(depth) = round(1.5^(depth - 1))`)
 * Sub-path commitment threshold (placeholder N = 3 points spent in the sub-path)
 * Recipe cycle times
 * Recipe input/output ratios
