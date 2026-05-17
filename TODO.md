@@ -47,14 +47,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   `satFuelReserve` (or store the launch-time reserve on the sat).
   *(Flagged by Agent D.)*
 
-- **§4.7 T2 maintenance still consumes `bolt: 5` instead of the spec
-  literal `bearing: 5`.** `src/maintenance.ts:69` self-flags the gap
-  ("bearing shipped in Task 6.2 but maintenance recipes haven't been
-  retuned yet"). T3 was migrated to its spec literal at `:75`; T2 was
-  missed. `bearing` exists in the catalog (`src/recipes.ts:412`). Drop-in
-  fix: `2: { lubricant: 3, bearing: 5 }`.
-  *(Flagged by Agents A indirectly, C, D — all converge.)*
-
 - **§7.12 `reality_forge` recipe diverges from spec by ~50% of inputs
   and 1/18 of cycle time.** `src/recipes.ts:1337-1342` ships `2
   exotic_alloy + 1 ai_core + 1 casimir_energy` / 4800s; spec literal is

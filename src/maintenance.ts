@@ -52,21 +52,11 @@ export const MAINTENANCE_DEGRADE_DURATION_MS = 4 * 60 * 60 * 1000;
  *  cycle fires. Materials must all be present in `state.inventory` for the
  *  cycle to consume; partial fulfilment is not allowed.
  *
- *  Substitutions from §4.7's table (resources marked in spec but absent in
- *  our catalog, replaced with the closest existing resource):
- *
- *    - T2: spec says "5 Bearing" — bearing isn't in our catalog yet, sub 5 bolt.
- *    - T3: spec says "1 Electric motor + 1 Capacitor" — neither in our
- *      catalog yet; sub 1 microchip + 1 quantum_chip to keep T3 maintenance
- *      meaningfully more demanding than T2 without inventing resources.
- *    - T6 maintenance matches §4.7 spec literal.
- *
  *  Lubricant counts match §4.7 literally for every tier. */
 export const MAINTENANCE_RECIPES: Readonly<Record<Tier, Partial<Record<ResourceId, number>>>> = {
   1: { lubricant: 2, bolt: 5 },
-  // T2: spec literal is `3 Lubricant + 5 Bearing`; bearing shipped in
-  // Task 6.2 but maintenance recipes haven't been retuned yet, still using bolt.
-  2: { lubricant: 3, bolt: 5 },
+  // T2 maintenance matches §4.7 spec literal.
+  2: { lubricant: 3, bearing: 5 },
   // T3: spec literal is `5 Lubricant + 1 Electric motor + 1 Capacitor`.
   // Both motor + capacitor are now in the catalog (Tasks 10.6 / 9.2). The
   // earlier microchip + quantum_chip stand-in caused a chicken-and-egg —
