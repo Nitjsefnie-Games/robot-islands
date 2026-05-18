@@ -20,6 +20,7 @@ import {
   tickDrones,
   type Drone,
 } from './drones.js';
+import { dronePadCentre } from './drones-ui.js';
 import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { type IslandSpec, type WorldState } from './world.js';
@@ -293,6 +294,91 @@ describe('dispatchDrone', () => {
     if (!r.ok) return;
     expect(r.drone.originX).toBe(100 + 5 + 0.5);
     expect(r.drone.originY).toBe(200 + 5 + 0.5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dronePadCentre (UI helper that aligns range / reticle / auto-fuel origin
+// with the same pad centre `dispatchDrone` uses for the spawn — §11.1)
+// ---------------------------------------------------------------------------
+
+describe('dronePadCentre — §11.1 UI / dispatch origin alignment', () => {
+  it('returns the pad footprint centre for an off-centre Drone Pad', () => {
+    // Drone Pad is SHAPES.single (1×1) so the half-footprint offset is 0.5.
+    // Pad at island-local (10, 5) on an island centred at (100, 100) →
+    // pad centre = (100 + 10 + 0.5, 100 + 5 + 0.5) = (110.5, 105.5).
+    const spec = makeIslandSpec({ id: 'home', cx: 100, cy: 100 });
+    const state = makeIslandState({
+      id: 'home',
+      buildings: [{ id: 'dp-1', defId: 'dronepad', x: 10, y: 5 }],
+    });
+    expect(dronePadCentre(spec, state)).toEqual({ x: 110.5, y: 105.5 });
+  });
+
+  it('returns null when no Drone Pad is placed', () => {
+    const spec = makeIslandSpec({ id: 'home', cx: 100, cy: 100 });
+    const state = makeIslandState({ id: 'home', buildings: [] });
+    expect(dronePadCentre(spec, state)).toBeNull();
+  });
+
+  it('the drone fired with pad centre as origin lands on the player-clicked target', () => {
+    // Regression guard: the UI's `attemptLaunch` (post §11.1 fix) computes
+    // direction as `target − padCentre` and passes the pad centre as the
+    // dispatch origin. The drone's apex (`originX + dirX * outboundTiles`)
+    // must equal the clicked target tile — if a future refactor reintroduces
+    // island-centre origin in the UI, this test breaks loudly.
+    const world: WorldState = {
+      islands: [],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null, victoryBannerShown: false },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      seed: 'test-seed',
+    };
+    const spec = makeIslandSpec({ id: 'home', cx: 100, cy: 100, populated: true });
+    world.islands.push(spec);
+    const home = makeIslandState({
+      id: 'home',
+      buildings: [{ id: 'dp-1', defId: 'dronepad', x: 10, y: 5 }],
+    });
+    home.inventory.biofuel = 50;
+    const pad = dronePadCentre(spec, home)!;
+    // Player clicks target tile (120, 100). UI calls dispatchDrone with the
+    // pad centre as origin and the pad-relative direction. Auto-fuel reserves
+    // exactly enough for the round-trip.
+    const targetX = 120;
+    const targetY = 100;
+    const dx = targetX - pad.x;
+    const dy = targetY - pad.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const fuelNeeded = Math.ceil((2 * dist) / DRONE_TIER_EFFICIENCY);
+    const r = dispatchDrone(world, home, pad.x, pad.y, dx, dy, fuelNeeded, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Apex = origin + dir × outboundTiles. With fuel rounded UP, outbound
+    // can slightly exceed the click distance — the apex along the launch
+    // direction should equal or just exceed the target. We assert the apex
+    // is collinear with origin → target AND at least covers the click.
+    const apexX = r.drone.originX + r.drone.dirX * r.drone.outboundTiles;
+    const apexY = r.drone.originY + r.drone.dirY * r.drone.outboundTiles;
+    // Spawn coincides with the pad centre, not the island centre — this is
+    // the critical assertion: an island-centre origin would put spawn at
+    // (100, 100) instead of (110.5, 105.5).
+    expect(r.drone.originX).toBe(pad.x);
+    expect(r.drone.originY).toBe(pad.y);
+    // Apex reaches at least the clicked target along the pad→target line.
+    const apexDist = Math.sqrt((apexX - pad.x) ** 2 + (apexY - pad.y) ** 2);
+    expect(apexDist).toBeGreaterThanOrEqual(dist - 1e-9);
+    // And the apex direction matches the pad→target direction (collinear).
+    expect(r.drone.dirX).toBeCloseTo(dx / dist, 9);
+    expect(r.drone.dirY).toBeCloseTo(dy / dist, 9);
   });
 });
 

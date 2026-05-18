@@ -411,9 +411,12 @@ export function dispatchDrone(
   // this branch is not expected to fire in practice. When multiple Drone
   // Pads exist on one island, we pick the first one in placement order
   // (deterministic; the dispatch flow only launches one drone at a time).
-  // NOTE: the direction vector is still caller-supplied (computed relative
-  // to the island centre by the UI), so the apex of an off-centre Drone Pad
-  // is offset by `(padCentre - islandCentre)` from the player's click target.
+  // §11.1 alignment (post-fix): drones-ui.ts now passes the pad footprint
+  // centre as `originX/originY` AND uses it as the basis for the direction
+  // vector, so the UI's apex prediction matches the actual flight geometry.
+  // The internal lookup below therefore agrees with the caller-supplied
+  // origin in normal play — the fallback path stays alive only as defence
+  // against a hypothetical future caller that drifts back to island centre.
   let spawnX = originX;
   let spawnY = originY;
   const originSpec = world.islands.find((i) => i.id === origin.id);

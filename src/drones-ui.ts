@@ -23,6 +23,7 @@
 
 import { Container, Graphics } from 'pixi.js';
 
+import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
@@ -39,8 +40,33 @@ import {
 } from './drones.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
+
+/** Resolve the Drone Pad's footprint centre on the launching island.
+ *  §11.1: drone launches originate from the Drone Pad's footprint centre,
+ *  NOT the island geometric centre. Returns null when no Drone Pad is
+ *  placed (callers — the range ring, reticle reachability colouring,
+ *  attemptLaunch — fall back to the island centre, identical to the
+ *  pre-fix behaviour).
+ *
+ *  Mirrors the `spaceportSpawn` idiom in `orbital-ui.ts`. When multiple
+ *  Drone Pads exist on one island the first in placement order is used —
+ *  same deterministic policy `dispatchDrone` applies for its internal
+ *  fallback spawn lookup. */
+export function dronePadCentre(
+  spec: IslandSpec,
+  state: IslandState,
+): { x: number; y: number } | null {
+  const pad = state.buildings.find((b) => b.defId === 'dronepad');
+  if (!pad) return null;
+  const def = BUILDING_DEFS[pad.defId as BuildingDefId];
+  return {
+    x: spec.cx + pad.x + shapeWidth(def.footprint) / 2,
+    y: spec.cy + pad.y + shapeHeight(def.footprint) / 2,
+  };
+}
 
 function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
@@ -515,11 +541,18 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   function repaintRangeRing(): void {
     rangeRingGfx.clear();
     const originSpec = deps.getOriginSpec();
+    const origin = deps.getOrigin();
     const outboundTiles = (maxLaunchFuel * currentEfficiency) / 2;
     if (outboundTiles <= 0) return;
     const radiusPx = outboundTiles * TILE_PX;
-    const cx = originSpec.cx * TILE_PX;
-    const cy = originSpec.cy * TILE_PX;
+    // §11.1: range ring centres on the Drone Pad footprint centre (the actual
+    // drone launch origin) — falling back to island centre only when no pad
+    // is placed, matching the pre-fix behaviour for that null-safe edge.
+    const padCentre = dronePadCentre(originSpec, origin);
+    const originX = padCentre?.x ?? originSpec.cx;
+    const originY = padCentre?.y ?? originSpec.cy;
+    const cx = originX * TILE_PX;
+    const cy = originY * TILE_PX;
     // Two concentric strokes: a soft filled disc to suggest the reachable
     // area, then a crisper rim line so the boundary reads precisely.
     rangeRingGfx.circle(cx, cy, radiusPx).fill({ color: VISION_BLUE, alpha: 0.05 });
@@ -578,10 +611,20 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     reticleGfx.position.set(x, y);
     // Update colour: amber when the cursor's world-tile distance from the
     // active origin exceeds the configured outbound range, cyan otherwise.
+    // §11.1: distance is measured from the Drone Pad footprint centre — the
+    // actual launch origin — not the island geometric centre. Pre-fix used
+    // `spec.cx/cy`, which mispredicted reach by `(padCentre − islandCentre)`
+    // for any off-centre pad. Falls back to island centre when no pad is
+    // placed (UI gates arm-launch on pad presence, so this branch is
+    // null-safe scaffolding only).
     const originSpec = deps.getOriginSpec();
+    const origin = deps.getOrigin();
+    const padCentre = dronePadCentre(originSpec, origin);
+    const originX = padCentre?.x ?? originSpec.cx;
+    const originY = padCentre?.y ?? originSpec.cy;
     const wp = deps.screenToWorldTile(x, y);
-    const dx = wp.x - originSpec.cx;
-    const dy = wp.y - originSpec.cy;
+    const dx = wp.x - originX;
+    const dy = wp.y - originY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const outbound = (maxLaunchFuel * currentEfficiency) / 2;
     ensurePainted(dist > outbound ? RETICLE_WARN : RETICLE_OK);
@@ -888,8 +931,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   ): { ok: boolean; reason?: string } {
     const originSpec = deps.getOriginSpec();
     const origin = deps.getOrigin();
-    const ox = originSpec.cx;
-    const oy = originSpec.cy;
+    // §11.1: launch geometry — origin AND direction vector — both anchor on
+    // the Drone Pad footprint centre. Pre-fix this used `spec.cx/cy`, so a
+    // drone launched from an off-centre pad arced to a point offset from the
+    // player's clicked target by `(padCentre − islandCentre)`. The
+    // `dispatchDrone` call's `originX/originY` params also receive the pad
+    // centre so the UI agrees with `drones.ts`'s internal pad lookup (the
+    // params are kept on the API as defence against future UI drift —
+    // `drones.ts` independently resolves the pad centre for the spawn).
+    const padCentre = dronePadCentre(originSpec, origin);
+    const ox = padCentre?.x ?? originSpec.cx;
+    const oy = padCentre?.y ?? originSpec.cy;
     const dx = targetWorldTileX - ox;
     const dy = targetWorldTileY - oy;
     // Auto-compute exact fuel for the round-trip. Range = fuel × efficiency,
