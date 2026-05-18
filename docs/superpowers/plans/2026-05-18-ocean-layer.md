@@ -509,134 +509,123 @@ git commit -m "feat(persistence): v4 → v5 ocean migration — re-derive terrai
 
 ---
 
-### Task 4: Submarine cable variant
+### Task 4: Submarine cable as new `RouteType` (REVISED — see note)
 
-**Spec section:** §4
+**REVISED 2026-05-18**: the original Task 4 (and spec §4) assumed cable was a tile-placed building. Reality: `cable` is a `RouteType` (inter-island route between two `power_substation` buildings). The §5.3 unified pool walks islands+routes via `computeCableNetworkBalance`, not cells. This task is rewritten to match. Spec §4 has been updated in the same commit cycle.
+
+**Spec section:** §4 (revised)
 
 **Files:**
-- Create: `src/submarine-cable.ts` (or extend `src/routes.ts` if cable lives there)
-- Modify: `src/building-defs.ts` (add `submarine_cable` def)
-- Modify: `src/recipes.ts` (add `submarine_cable` recipe + `lead_sheath` resource if missing)
-- Modify: `src/placement.ts` (placement validation: submarine cable on ocean only, land cable on land only)
-- Test: `src/submarine-cable.test.ts` (new)
+- Modify: `src/routes.ts` — add `'submarine_cable'` to `RouteType` union; extend `isPowerLink` to include it
+- Modify: `src/building-defs.ts` — `power_substation` may need a flag/connection-variant update to accept submarine cable routes (verify the existing cable route's structure first)
+- Modify: `src/recipes.ts` — add `submarine_cable` recipe + `lead_sheath` resource if missing
+- Modify: `src/routes-ui.ts` (or wherever route creation UI lives) — extend the route-type picker / creation flow to offer submarine_cable as a tier-3 option
+- Test: `src/routes.test.ts` extension OR new `src/submarine-cable.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Understand the existing cable route structure**
+
+Before writing tests, read:
+- `src/routes.ts` — `RouteType` union, `Route` discriminated union shape, `isPowerLink`, `computeCableNetworkBalance`
+- `src/building-defs.ts` — `power_substation` def, `cable` route's interaction with substations
+- `src/routes.test.ts` — how existing cable routes are tested (so submarine_cable tests mirror the pattern)
+- `src/routes-ui.ts` (if exists) — how the player creates routes
+- Whatever recipe produces the existing `cable` resource (if there is one) — submarine_cable should mirror
+
+- [ ] **Step 2: Write the failing tests**
+
+Sketch (adjust to match existing route-test patterns):
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { canPlaceCable } from './submarine-cable.js';
-// Plus existing helpers from world-gen for fixtures.
-
-describe('submarine_cable placement', () => {
-  it('accepts submarine_cable on ocean tiles', () => {
-    const world = /* fixture with ocean tile at (5, 5) */;
-    expect(canPlaceCable(world, 'submarine_cable', 5, 5)).toBe(true);
+describe('§4 submarine_cable RouteType', () => {
+  it("'submarine_cable' is a valid RouteType", () => {
+    // Construct a Route with type: 'submarine_cable' between two islands;
+    // verify the type system accepts it and the route is well-formed.
   });
 
-  it('rejects submarine_cable on land tiles', () => {
-    const world = /* fixture with island tile at (0, 0) */;
-    expect(canPlaceCable(world, 'submarine_cable', 0, 0)).toBe(false);
+  it('isPowerLink returns true for submarine_cable', () => {
+    expect(isPowerLink('submarine_cable')).toBe(true);
   });
 
-  it('rejects land cable on ocean tiles', () => {
-    const world = /* fixture with ocean tile at (5, 5) */;
-    expect(canPlaceCable(world, 'cable', 5, 5)).toBe(false);
+  it('submarine_cable routes contribute to §5.3 unified pool', () => {
+    // Build a world: island A populated with substation, island B populated with substation,
+    // submarine_cable route between them. computeCableNetworkBalance should show both islands
+    // in the same connected component.
+  });
+
+  it('a fresh submarine_cable route requires both endpoints to have power_substation', () => {
+    // Same constraint as land cable.
   });
 });
 
-describe('§5.3 pool unification across cable types', () => {
-  it('land cable adjacent to submarine cable across an island edge joins one §5.3 pool', () => {
-    // Setup: land cable at (0, 0), submarine cable at (1, 0); (0, 0) is island, (1, 0) is ocean.
-    const world = /* fixture */;
-    const pool = computeCablePool(world);
-    expect(pool.has('0,0') && pool.has('1,0')).toBe(true);
-    // Both keys belong to the same connected component.
-    expect(pool.get('0,0').componentId).toBe(pool.get('1,0').componentId);
+describe('§4 submarine_cable recipe', () => {
+  it('exists with inputs { rubber: 2, lead_sheath: 1, copper_wire: 1 }', () => {
+    const r = RECIPES.submarine_cable_recipe!;
+    expect(r.inputs).toEqual({ rubber: 2, lead_sheath: 1, copper_wire: 1 });
+    expect(r.outputs).toEqual({ submarine_cable: 1 });
   });
 });
 ```
 
-- [ ] **Step 2: Run tests, verify they fail**
+Adjust the recipe-name and resource-name placeholders to match what actually fits the codebase (e.g. if the existing `cable` is the resource AND the route type uses it as a transmission medium, you may need to name the new resource carefully).
 
-Run: `npx vitest run src/submarine-cable.test.ts`
-Expected: FAIL — `canPlaceCable` not exported.
+- [ ] **Step 3: Run tests, verify they fail**
 
-- [ ] **Step 3: Implement validation in `src/submarine-cable.ts`**
+Run: `npx vitest run src/routes.test.ts -t "submarine_cable"` FOREGROUND.
+Expected: FAIL — RouteType doesn't include 'submarine_cable' yet.
+
+- [ ] **Step 4: Extend `RouteType` and `isPowerLink` in `src/routes.ts`**
 
 ```typescript
-import type { World } from './world.js';
-import { isOceanTile } from './world.js'; // implementer: add this helper to world.ts if missing
+export type RouteType = 'cargo' | 'drone' | 'airship' | 'teleporter' | 'cable' | 'spacetime' | 'mass_driver' | 'submarine_cable';
+//                                                                                                                ^^^^^^^^^^^^^^^^^
+```
 
-export function canPlaceCable(world: World, variant: 'cable' | 'submarine_cable', tileX: number, tileY: number): boolean {
-  const ocean = isOceanTile(world, tileX, tileY);
-  if (variant === 'submarine_cable') return ocean;
-  if (variant === 'cable') return !ocean;
-  return false;
+Extend `isPowerLink`:
+
+```typescript
+function isPowerLink(t: RouteType): boolean {
+  return t === 'cable' || t === 'spacetime' || t === 'submarine_cable';
 }
 ```
 
-`isOceanTile` (add to `world.ts`):
+- [ ] **Step 5: Add recipe + resources in `src/recipes.ts`**
+
+Add `submarine_cable` ResourceId. Add `lead_sheath` if missing (with a minimal stub recipe). Add `submarine_cable_recipe`:
 
 ```typescript
-export function isOceanTile(world: World, tileX: number, tileY: number): boolean {
-  for (const isl of world.islands) {
-    // tile-in-ellipse check using existing geometry helper
-    if (tileInsideIsland(isl, tileX, tileY)) return false;
-  }
-  return true;
-}
-```
-
-- [ ] **Step 4: Add `submarine_cable` building def in `src/building-defs.ts`**
-
-Mirror the existing `cable` def with the variant field changed and the placement cost slightly higher per the spec recipe:
-
-```typescript
-submarine_cable: {
-  id: 'submarine_cable',
-  displayName: 'Submarine Cable',
-  tier: 3,
-  footprint: SHAPES.single,
+submarine_cable_recipe: {
+  id: 'submarine_cable_recipe',
+  building: 'submarine_cable_factory', // or wherever the existing cable recipe builds — match its building
+  inputs: { rubber: 2, lead_sheath: 1, copper_wire: 1 },
+  outputs: { submarine_cable: 1 },
+  cycleSec: 60, // mirror existing cable recipe cycle
   category: 'infrastructure',
-  placementCost: { rubber: 2, lead_sheath: 1, copper_wire: 1 },
-  power: { transmits: true }, // same §5.3 transmission semantics as land cable
-  oceanPlacement: true,
-  glyph: '═',
 } as const,
 ```
 
-If `lead_sheath` or `copper_wire` resources don't exist yet, add them in `src/recipes.ts` `ResourceId` and a recipe to produce them (mirror existing chemistry/metal-mill patterns).
+Verify the existing cable recipe FIRST — submarine_cable should mirror its `building` field. If land cable doesn't have a recipe (it's a primitive game-state object, not a craftable resource), then submarine_cable similarly may be a route-creation action rather than a producible resource. Adapt.
 
-- [ ] **Step 5: Wire placement validation in `src/placement.ts`**
+- [ ] **Step 6: Wire route-creation UI**
 
-In the placement validator (the function that decides whether a placement attempt is legal), add the cable-variant check before footprint validation:
-
-```typescript
-import { canPlaceCable } from './submarine-cable.js';
-
-// Inside the placement validator:
-if (def.id === 'cable' || def.id === 'submarine_cable') {
-  if (!canPlaceCable(world, def.id as 'cable' | 'submarine_cable', tileX, tileY)) {
-    return { ok: false, reason: 'wrong-tile-type' };
-  }
-}
-```
-
-- [ ] **Step 6: Ensure §5.3 pool unification picks up cross-cable adjacency**
-
-The §5.3 unified-pool computation (commit `a92d541`) walks cable cells as a graph and groups by 4-neighbor adjacency. Verify that the existing graph-walker treats `cable` and `submarine_cable` as equivalent edges. If it currently filters by `def.id === 'cable'`, change to `def.power?.transmits === true` so the new submarine variant joins naturally.
+In whatever file lets the player create routes (`src/routes-ui.ts` is likely), extend the route-type picker to offer `'submarine_cable'` as a tier-3 unlock. Mirror how `'cable'` is offered today. If `routes-ui.ts` hardcodes `type: 'cargo'` for all UI-created routes (as the mass_driver task discovered for that type), this step degrades to "add the type to the enum and accept that UI creation is a separate follow-up" — same scope-discipline call as mass_driver.
 
 - [ ] **Step 7: Run tests + build**
 
-Run: `npm test` (foreground), expect prior + 3 new = 1758.
-Run: `npm run build` (foreground), exit 0.
+Run: `npm test` FOREGROUND. Expect ~1768 + new tests.
+Run: `npm run build` FOREGROUND. Exit 0.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/submarine-cable.ts src/submarine-cable.test.ts src/building-defs.ts src/recipes.ts src/placement.ts src/world.ts
-git commit -m "feat(routes): submarine_cable variant — ocean placement, §5.3 pool unification (Task 4)"
+git add src/routes.ts src/routes.test.ts src/building-defs.ts src/recipes.ts src/routes-ui.ts # or whatever you touched
+git commit -m "feat(routes): submarine_cable RouteType — inter-island power transmission (Task 4)"
 ```
+
+### What this task does NOT cover
+
+- Tile-placed cable cells (no such thing in the codebase; not building it).
+- Anchor-picker for ocean platforms (that's Task 5 — independent of submarine cable per the spec revision).
+- Power infrastructure for ocean platforms (handled via anchor's existing power pool; no submarine cable required to power platforms).
 
 ---
 
@@ -695,7 +684,6 @@ Expected: FAIL — `candidateAnchors` not exported.
 
 ```typescript
 import type { World } from './world.js';
-import { cablePoolComponentAt } from './routes.js'; // implementer: add this helper if missing
 
 export interface AnchorCandidate {
   readonly islandId: string;
@@ -704,28 +692,30 @@ export interface AnchorCandidate {
   readonly inventoryHeadroom: number; // headroom on the main output resource
 }
 
+/** Maximum distance (in cells) from the placement cell to consider an
+ *  island as an anchor candidate. Appendix-A placeholder; tuning the
+ *  player loop. */
+export const ANCHOR_MAX_RANGE_CELLS = 50;
+
 export function candidateAnchors(
   world: World,
   placementCellX: number,
   placementCellY: number,
 ): AnchorCandidate[] {
-  const component = cablePoolComponentAt(world, placementCellX, placementCellY);
-  if (!component) return [];
-  const populated = world.islands.filter(
-    isl => isl.populated && component.islandIds.has(isl.id),
-  );
-  return populated
+  return world.islands
+    .filter(isl => isl.populated)
     .map(isl => ({
       islandId: isl.id,
       islandName: isl.name,
       distanceCells: Math.hypot(isl.cx - placementCellX * CELL_SIZE_TILES, isl.cy - placementCellY * CELL_SIZE_TILES) / CELL_SIZE_TILES,
       inventoryHeadroom: 0, // implementer: query the island's main-output cap headroom
     }))
+    .filter(c => c.distanceCells <= ANCHOR_MAX_RANGE_CELLS)
     .sort((a, b) => a.distanceCells - b.distanceCells);
 }
 ```
 
-`cablePoolComponentAt(world, x, y)` is a new helper in `src/routes.ts` that returns the §5.3 cable component containing the given cell (or `null`). Use the existing pool-computation infrastructure from commit `a92d541`.
+**REVISED**: per the post-brainstorm spec correction, ocean platforms do NOT trace a cable component back to land. The cable model is now route-based (Task 4 revision); anchor selection is simply "pick any populated island within range." No `cablePoolComponentAt` helper needed.
 
 - [ ] **Step 4: Implement the picker modal**
 
@@ -751,8 +741,8 @@ After the player commits a placement tile for a building with `oceanPlacement: t
 ```typescript
 const candidates = candidateAnchors(world, cellX, cellY);
 if (candidates.length === 0) {
-  // No reachable populated island — show error toast, abort placement.
-  return { ok: false, reason: 'no-cable-component-to-populated-island' };
+  // No populated island within ANCHOR_MAX_RANGE_CELLS — show error toast, abort placement.
+  return { ok: false, reason: 'no-anchor-in-range' };
 }
 const picked = await anchorPicker.pick(candidates);
 if (picked === null) return { ok: false, reason: 'cancelled' };

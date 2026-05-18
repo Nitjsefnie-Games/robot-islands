@@ -13,13 +13,13 @@ A new gameplay layer that turns the previously-decorative ocean between islands 
 | # | Decision | Value |
 |---|---|---|
 | 1 | Fantasy | Resource extraction (placeable buildings on ocean tiles) |
-| 2 | Anchoring | Cable-tethered to a populated island |
+| 2 | Anchoring | Player-anchored to a populated island at placement (not cable-traced) |
 | 3 | Resource theme | T5-T6 exotic inputs |
 | 4 | Terrain types | 5: shallows, deep, trench, hydrothermal_vent, nodule_field |
 | 5 | Route integration | Logical extensions of anchor island (output → anchor inventory) |
 | 6 | Discovery | Sat Scanner + Sonar Buoy, two-axis (surface + depth) |
 | 7 | Tier curve | T2 entry, 12-building catalog with ~25 recipes |
-| 8 | Cable | New `submarine_cable` variant at T3 |
+| 8 | Cable | New `submarine_cable` `RouteType` for inter-island routes; NOT a tile-placed building |
 | 9 | Features are clusters | Not points; building footprints must match contiguous terrain blocks |
 | 10 | No richness modifier | Cluster size is the only feature differentiator |
 | 11 | Anchor pick | Player-selected at placement (not auto-nearest) |
@@ -30,13 +30,13 @@ A new gameplay layer that turns the previously-decorative ocean between islands 
 
 ## 1. Overview
 
-The ocean — currently the 3-tier fog backdrop between islands — becomes a real placement surface for T2+ extraction infrastructure. Every populated island can extend cable out into the surrounding water and anchor specialized rigs that pull T5/T6 exotic inputs the land chains can't supply at scale.
+The ocean — currently the 3-tier fog backdrop between islands — becomes a real placement surface for T2+ extraction infrastructure. Ocean platforms are tile-placed on ocean cells (subject to per-building terrain requirements) and anchor to a player-chosen populated island at placement. Each platform is logically a building on its anchor island — output deposits there, power draws from the anchor's pool — without any visible cable cell on the ocean (the anchor relationship is declarative, not spatial).
+
+**Cable model (post-design revision)**: the codebase's `cable` is a `RouteType` (inter-island power-transmission route between two islands' substations), NOT a tile-placed building. The original design draft assumed tile-placed cable cells; that's been reconciled. `submarine_cable` is introduced as a NEW `RouteType` sibling to `cable` / `spacetime` for inter-island routes that visually route across ocean. Ocean platforms do NOT require submarine cable to function — they require a player-picked anchor only. Submarine cable is independently useful for unifying §5.3 power pools across coast islands that are too far apart for overland cable.
 
 Five ocean terrain types (shallows / deep / trench / hydrothermal_vent / nodule_field) gate which rigs go where. Bulk extractors (deuterium, He-3) work on common terrain. Rare-feature extractors (vent tap, nodule harvester, trench drill) only work on seeded multi-cell clusters the player must discover via the new T2 **Sonar Buoy** building or via existing T6 Scanner Sat coverage.
 
-All rigs are logical extensions of their anchor island: outputs flow back through cable into the player-selected anchor's inventory; no new route type, no new dispatch graph. The cable itself is a real spatial investment — land cable can't go on water; T3 unlocks `submarine_cable` (chemistry-chain gate) as the only way to extend infrastructure offshore.
-
-Net player loop: T2 buoy + open-water extractor near home Coast → discover vents/nodules → T3 submarine cable to reach them → T4-T5 specialized rigs convert exotic raw materials into the T5/T6 chains. Ocean is a mid-to-late-game pull-forward of exotic supply, not a survival/food layer.
+Net player loop: T2 buoy + open-water extractor anchored to home Coast → discover vents/nodules → T3-T4 specialized rigs anchored to whichever populated island the player prefers → T4-T5 processors convert exotic raw materials into the T5/T6 chains. Ocean is a mid-to-late-game pull-forward of exotic supply, not a survival/food layer.
 
 ---
 
@@ -146,52 +146,62 @@ Saves at schemas v1-v3 still drop to "unknown schema" per existing policy.
 
 ---
 
-## 4. Cable + Anchor Model
+## 4. Submarine Cable + Anchor Model
 
-### Submarine cable
+### Submarine cable (new `RouteType`)
 
-A new `submarine_cable` building variant. Same §5.3 power-pool semantics as land cable (binary-gated unified pool, commit `a92d541`). Placement rules:
+The codebase's `cable` is a `RouteType` — an inter-island route between two islands' `power_substation` buildings, NOT a tile-placed building. The §5.3 unified pool is computed by `computeCableNetworkBalance` walking the island-route graph (commit `a92d541`).
 
-- Placed on ocean tiles only; land cable rejected on water, submarine cable rejected on land. Clean type separation.
-- Connects to land cable at coast adjacency: a submarine cable cell adjacent to a land cable cell across an island edge joins both into one §5.3 unified pool. No special interconnect building.
-- Same capacity per cell as land cable; placement cost slightly higher per the recipe difference.
-- Visual: slightly darker tint than land cable so the player can see which segments are submarine.
+`submarine_cable` is added as a new `RouteType` sibling to `cable` and `spacetime`:
+
+- A route from `power_substation` on island A to `power_substation` on island B; the route is visually rendered across ocean (vs. overland for `cable`).
+- `isPowerLink('submarine_cable')` returns true so it joins the §5.3 unified pool automatically.
+- Recipe: `2 rubber + 1 lead_sheath + 1 copper_wire` per the spec (Appendix-A placeholders); requires the chemistry chain for lead/rubber, gating availability to T3.
+- Tier-3 unlock.
+- Visual: rendered as a line between the two substations, traced through ocean rather than overland, slightly darker tint than land cable.
+- Optional: a per-tile distance cost or capacity penalty vs. overland cable (designer's call; Appendix-A).
+
+**Submarine cable does NOT relate to ocean platforms directly.** It's an independent inter-island power-transmission tool. Ocean platforms anchor to ONE island and use that island's power pool — whether that pool has submarine cable connections to other islands is invisible to the platform.
 
 ### Anchor island rule
 
 Every ocean productive building gets an `anchorIslandId` set **by the player** at placement time:
 
-- After the player commits the placement tile, a picker modal opens listing every populated island in the §5.3 cable component the platform will join.
-- Each option shows: island name + glyph, current distance in tiles, current inventory headroom for the platform's main output. Closest populated island is pre-highlighted as the default.
-- Player confirms → `anchorIslandId` is recorded on the building. Cancel → placement aborted, no building created.
-- Single-island case (common bootstrap): picker shows 1 option, pre-selected; Enter commits.
+- After the player commits the ocean placement tile, a picker modal opens listing every populated island within a reasonable range (e.g. 50-cell tile-distance — Appendix-A placeholder).
+- Each option shows: island name + glyph, distance in tiles, current inventory headroom for the platform's main output. Closest populated island is pre-highlighted as the default.
+- Player confirms → `anchorIslandId` is recorded on the building. Cancel → placement aborted.
+- Single-populated-island case (common bootstrap): picker shows 1 option, pre-selected; Enter commits.
 
 The picker reuses the modal pattern established by the §4.6 placement-time label picker (commits `a96210a` + `144fd15`) — same modal infrastructure, same Enter/Escape keybinds.
+
+There is NO "cable component" walking at anchor-pick time. The picker simply lists populated islands within range.
 
 ### Output flow
 
 The platform is logically a building on `anchorIslandId`'s `buildings[]` array, indexed by an island ID that isn't the platform's geographic location. The existing `advanceIsland` loop produces correctly — no new dispatch code:
 
 - Output deposits to `state.inventory[resourceId]` on the anchor island state.
-- Storage cap applies (anchor's normal capacity, with any §5.3 cable-extension effects).
+- Storage cap applies (anchor's normal capacity, with any §5.3 cable-extension effects through the pool).
 - Cap-throttle uses the existing economy ramp logic.
 - Recipes that consume inputs (e.g. processors) draw from the anchor's inventory.
 
+Power for the platform draws from the anchor island's power pool (which is the §5.3 unified pool the anchor participates in — may include submarine cable links to other coast islands). No special platform-side power infrastructure.
+
 ### Edge cases pinned
 
-- **Multiple populated islands in the cable component**: player picks at placement. No tiebreak needed (it's their decision).
-- **Component grows later (a new island gets populated)**: anchor doesn't drift. Platform stays bound to its placement-time anchor.
 - **Anchor becomes unpopulated** (tier-reset, abandonment, future depopulation): platform halts with `paused: 'anchor-depopulated'` until the anchor is repopulated.
-- **Cable component breaks** (cable cell deleted, severing the platform from anchor): platform halts with `paused: 'anchor-disconnected'`. Re-laying cable restores production.
+- **Anchor pool has no power**: platform halts via the existing brownout mechanic (no new paused reason; uses the same `paused: 'no-power'` or equivalent that land buildings hit).
+- **Anchor relocation**: not supported in initial scope. Player workaround: delete the platform and rebuild.
 - **Terrain access lost** (hypothetical future event removing a vent): platform halts with `paused: 'terrain-lost'`. Defensive; not expected in initial scope.
-- **Anchor relocation**: not supported in initial scope. Player workaround: delete the platform and rebuild. (Re-anchor inspector UI can land in a follow-up if desired.)
 
 ### Files
 
-- `src/submarine-cable.ts` (new, or `routes.ts` extension) — cable variant + adjacency rules. Probably folds into existing cable code with a `variant: 'submarine'` discriminator on the building def.
-- `src/placement.ts` — new state in the placement state machine: after tile commit, transition to `awaiting-anchor`; emit anchor picker; on confirm, complete placement with `anchorIslandId`.
-- `src/economy.ts` — `paused` reason enum gains `'anchor-depopulated'`, `'anchor-disconnected'`, `'terrain-lost'`. No change to `advanceIsland` (platforms are normal buildings on the anchor).
-- `src/inspector-ui.ts` — warning chips for the three new paused reasons.
+- `src/routes.ts` — add `'submarine_cable'` to `RouteType` union; extend `isPowerLink` to include it; visual rendering tweak.
+- `src/building-defs.ts` — possibly extend `power_substation` to accept submarine cable as a connection variant (verify what the existing cable route does in this regard).
+- `src/recipes.ts` — `submarine_cable` recipe + missing resources (e.g. `lead_sheath`).
+- `src/placement.ts` — new state in the placement state machine for ocean buildings: after tile commit, transition to `awaiting-anchor`; emit anchor picker; on confirm, complete placement with `anchorIslandId`.
+- `src/economy.ts` — `paused` reason enum gains `'anchor-depopulated'` and `'terrain-lost'`. (No `'anchor-disconnected'` since there's no cable component to break.)
+- `src/inspector-ui.ts` — warning chips for the new paused reasons.
 - The anchor picker modal: lives alongside the cargo-label picker (`src/cargo-label-picker.ts`); same modal shell.
 
 ---
@@ -299,8 +309,11 @@ Mouse-over on any cell (land OR ocean) opens a small DOM tooltip positioned near
 
 ### Submarine cable visual
 
-- Same render path as land cable, distinguished by slightly darker tint (e.g. existing cable is light-grey; submarine is steel-blue).
-- Inspector header for a submarine cable cell: shows it's submarine + the §5.3 pool it joins.
+Submarine cable is an inter-island route (NOT a tile-placed building per the revised §4). Rendering:
+
+- Same render path as land `cable` routes — a line drawn from substation to substation.
+- Distinguished by slightly darker tint (e.g. existing cable is light-grey; submarine is steel-blue) so the player can see at a glance which routes are undersea.
+- Route is rendered through ocean cells (visually). No per-cell rendering or tile-overlay; just the line.
 
 ### Sonar Buoy range ring
 
