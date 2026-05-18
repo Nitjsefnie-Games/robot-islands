@@ -1242,13 +1242,13 @@ describe('Auto-Patronage §9.6 / §12.7', () => {
       rt => rt.filter === null && rt.priorityList.includes('iron_ingot'),
     );
     expect(kitRoute).toBeDefined();
-    expect(kitRoute!.priorityList).toEqual(['iron_ingot', 'bolt', 'lumber', 'glass', 'gear']);
+    expect(kitRoute!.priorityList).toEqual(['iron_ingot', 'brick', 'lumber', 'glass', 'gear']);
 
     const rawRoute = newRoutes.find(
       rt => rt.filter === null && rt.priorityList.includes('wood'),
     );
     expect(rawRoute).toBeDefined();
-    expect(rawRoute!.priorityList).toEqual(['wood', 'stone', 'coal', 'iron_ore', 'sand']);
+    expect(rawRoute!.priorityList).toEqual(['wood', 'stone', 'coal', 'iron_ore', 'copper_ore']);
   });
 
   it('no-ops when no Patron Hub exists', () => {

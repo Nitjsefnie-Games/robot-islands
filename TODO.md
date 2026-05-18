@@ -75,13 +75,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   the deviation in SPEC.md.
   *(Flagged by Agents A, B.)*
 
-- **§9.6 Auto-Patronage default priority lists substitute the wrong
-  resources.** `src/settlement.ts:298` Route 2 uses `'bolt'` where spec
-  §9.6 says `Brick`. `src/settlement.ts:311` Route 3 uses `'sand'`
-  where spec says `Copper ore`. Bolt and sand are quiet stand-ins;
-  Brick and copper_ore both exist in the catalog.
-  *(Flagged by Agent D.)*
-
 - **§5.3 cable inflow doesn't deduct source W.** `src/routes.ts:147-164`
   `cableInflowForIsland` adds capacity to the destination without
   removing it from the source. Comment acknowledges. Spec §5.3 says
