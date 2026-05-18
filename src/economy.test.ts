@@ -135,7 +135,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
       inventory: { ...blankInventory() },
     });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(2, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(5.88235294117647, 9);
   });
 
   it('back-propagates input depletion: Workshop stops eating iron_ore when coal hits 0', () => {
@@ -154,7 +154,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
       inventory: { ...blankInventory(), coal: 50 },
     });
     advanceIsland(state, 6_000_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(70, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(100, 6);
     expect(state.inventory.coal).toBeCloseTo(0, 6);
     expect(state.inventory.bolt).toBeCloseTo(50, 6);
   });
@@ -201,7 +201,7 @@ describe('XP accrual', () => {
       inventory: blankInventory(),
     });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.xp).toBeCloseTo(2, 9);
+    expect(state.xp).toBeCloseTo(5.88235294117647, 9);
   });
 
   it('weights bolt production at 10× iron_ore (xp_weight: bolt=10, iron_ore=1)', () => {
@@ -216,11 +216,11 @@ describe('XP accrual', () => {
       inventory: { ...blankInventory(), coal: 50 },
     });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.xp).toBeCloseTo(12, 6);
+    expect(state.xp).toBeCloseTo(36.185383244206776, 6);
     // And verify the inventory looks right: iron_ore net = +0.01/s × 100 = 1
-    expect(state.inventory.iron_ore).toBeCloseTo(1, 6);
-    expect(state.inventory.bolt).toBeCloseTo(1, 6);
-    expect(state.inventory.coal).toBeCloseTo(49, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(2.8520499108734403, 6);
+    expect(state.inventory.bolt).toBeCloseTo(3.0303030303030303, 6);
+    expect(state.inventory.coal).toBeCloseTo(46.96969696969697, 6);
   });
 
   it('stalled buildings earn zero XP', () => {
@@ -277,11 +277,11 @@ describe('computeRates', () => {
       inventory: { ...blankInventory(), coal: 50 },
     });
     const { production, net } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.02, 9);
-    expect(production.bolt).toBeCloseTo(0.01, 9);
-    expect(net.iron_ore).toBeCloseTo(0.01, 9); // +0.02 - 0.01
-    expect(net.coal).toBeCloseTo(-0.01, 9);
-    expect(net.bolt).toBeCloseTo(0.01, 9);
+    expect(production.iron_ore).toBeCloseTo(0.058823529411764705, 9);
+    expect(production.bolt).toBeCloseTo(0.030303030303030304, 9);
+    expect(net.iron_ore).toBeCloseTo(0.0285204991087344, 9); // +0.02 - 0.01
+    expect(net.coal).toBeCloseTo(-0.030303030303030304, 9);
+    expect(net.bolt).toBeCloseTo(0.030303030303030304, 9);
   });
 
   it('zeroes building rate when inputAvail = 0', () => {
@@ -351,8 +351,8 @@ describe('computeRates', () => {
     const { byBuilding, net } = computeRates(state, { defs });
     const mineRate = byBuilding.find((b) => b.building.id === 'b-mine');
     // Base rate 1/50 = 0.02, degraded by 0.5 → 0.01
-    expect(mineRate?.effectiveRate).toBeCloseTo(0.01, 9);
-    expect(net.iron_ore ?? 0).toBeCloseTo(0.01, 9);
+    expect(mineRate?.effectiveRate).toBeCloseTo(0.029411764705882353, 9);
+    expect(net.iron_ore ?? 0).toBeCloseTo(0.029411764705882353, 9);
   });
 
   it('§4.5 soft-gated consumer demand uses gated rate in inputAvail (not nominal)', () => {
@@ -387,7 +387,7 @@ describe('computeRates', () => {
     });
     const { byBuilding } = computeRates(state, { defs });
     const workshopRate = byBuilding.find((b) => b.building.id === 'b-workshop');
-    expect(workshopRate?.effectiveRate).toBeCloseTo(0.005, 9);
+    expect(workshopRate?.effectiveRate).toBeCloseTo(0.015151515151515152, 9);
   });
 
   it('§13.3 unified inventory: consumer runs when override has stockpile', () => {
@@ -472,9 +472,9 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     });
     const { production, byBuilding } = computeRates(state, { defs: POWER_FREE });
     // Each mine at 0.02 × 1.10 = 0.022; aggregate iron_ore = 0.044.
-    expect(production.iron_ore).toBeCloseTo(0.044, 9);
+    expect(production.iron_ore).toBeCloseTo(0.12941176470588237, 9);
     for (const r of byBuilding) {
-      expect(r.effectiveRate).toBeCloseTo(0.022, 9);
+      expect(r.effectiveRate).toBeCloseTo(0.06470588235294118, 9);
     }
   });
 
@@ -494,9 +494,9 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     const midRate = byBuilding.find((r) => r.building === mid)?.effectiveRate;
     const westRate = byBuilding.find((r) => r.building === west)?.effectiveRate;
     const eastRate = byBuilding.find((r) => r.building === east)?.effectiveRate;
-    expect(midRate).toBeCloseTo(0.02 * 1.2, 9);
-    expect(westRate).toBeCloseTo(0.02 * 1.1, 9);
-    expect(eastRate).toBeCloseTo(0.02 * 1.1, 9);
+    expect(midRate).toBeCloseTo(0.07058823529411765, 9);
+    expect(westRate).toBeCloseTo(0.06470588235294118, 9);
+    expect(eastRate).toBeCloseTo(0.06470588235294118, 9);
   });
 
   it('buff stack is observable in actual production over time', () => {
@@ -509,7 +509,7 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
       inventory: blankInventory(),
     });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(4.4, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(12.941176470588237, 6);
   });
 });
 
@@ -621,7 +621,7 @@ describe('power (§5.1)', () => {
     expect(power.produced).toBe(0);
     expect(power.consumed).toBe(0);
     expect(power.factor).toBe(1);
-    expect(byBuilding[0]?.effectiveRate).toBeCloseTo(0.02, 9); // mine 1/50s (rebalanced step #19)
+    expect(byBuilding[0]?.effectiveRate).toBeCloseTo(0.058823529411764705, 9); // mine 1/50s (rebalanced step #19)
   });
 
   it('powerFactor = 1 when supply meets demand (Solar + Coal Gen feed Mine + Workshop)', () => {
@@ -637,10 +637,10 @@ describe('power (§5.1)', () => {
     // Mine still at full 0.02/s, Workshop at full 0.01/s. (rebalanced step #19)
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBeCloseTo(0.02, 9);
-    expect(wsRate).toBeCloseTo(0.01, 9);
+    expect(mineRate).toBeCloseTo(0.058823529411764705, 9);
+    expect(wsRate).toBeCloseTo(0.030303030303030304, 9);
     // Coal Gen also burns coal at 1/5s = 0.2/s nominally (unchanged).
-    expect(net.coal).toBeCloseTo(-0.01 - 0.2, 9); // workshop 0.01 + coal_gen 0.2
+    expect(net.coal).toBeCloseTo(-0.5303030303030303, 9); // workshop 0.01 + coal_gen 0.2
   });
 
   it('partial brownout: Coal Gen alone (100W) under-supplies Mine 80W + Workshop 60W → factor ≈ 0.714', () => {
@@ -656,8 +656,8 @@ describe('power (§5.1)', () => {
     const expectedFactor = 100 / 140;
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR_80)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBeCloseTo(0.02 * expectedFactor, 9); // rebalanced step #19
-    expect(wsRate).toBeCloseTo(0.01 * expectedFactor, 9); // rebalanced step #19
+    expect(mineRate).toBeCloseTo((1 / 17) * expectedFactor, 9); // rebalanced step #19; 2026-05-18 ÷3 (Mine 50→17)
+    expect(wsRate).toBeCloseTo((1 / 33) * expectedFactor, 9); // rebalanced step #19; 2026-05-18 ÷3 (Workshop 100→33)
   });
 
   it('producer stalled (no fuel): Coal Gen drops out of P_produced when coal=0', () => {
@@ -692,8 +692,8 @@ describe('power (§5.1)', () => {
     expect(power.factor).toBe(0.5);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBeCloseTo(0.02 * 0.5, 9); // rebalanced step #19
-    expect(wsRate).toBeCloseTo(0.01 * 0.5, 9); // rebalanced step #19
+    expect(mineRate).toBeCloseTo(0.029411764705882353, 9); // rebalanced step #19
+    expect(wsRate).toBeCloseTo(0.015151515151515152, 9); // rebalanced step #19
   });
 
   it('output-stalled consumer still draws power (lights on at full bin)', () => {
@@ -716,7 +716,7 @@ describe('power (§5.1)', () => {
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
     expect(mineRate).toBe(0); // output-stalled
-    expect(wsRate).toBeCloseTo(0.01 * 0.5, 9); // half-rate (rebalanced step #19)
+    expect(wsRate).toBeCloseTo(0.015151515151515152, 9); // half-rate (rebalanced step #19)
   });
 
   it('power_systems.1 unlocked: Coal Gen produces 105W instead of 100W', () => {
@@ -746,7 +746,7 @@ describe('power (§5.1)', () => {
     expect(power.consumed).toBe(0);
     expect(power.factor).toBe(1);
     const cgRate = byBuilding.find((r) => r.building === COAL_GEN)?.effectiveRate;
-    expect(cgRate).toBeCloseTo(0.2, 9); // 1 cycle / 5s
+    expect(cgRate).toBeCloseTo(0.5, 9); // 1 cycle / 5s
   });
 
   it('§3.5 high_wind: Wind Turbine produces 40W baseline, 60W on a high_wind island', () => {
@@ -800,7 +800,7 @@ describe('skill-tree integration (§9.3)', () => {
       unlockedNodes: new Set(['mining.1']),
     });
     const { production } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.021, 9);
+    expect(production.iron_ore).toBeCloseTo(0.061764705882352944, 9);
   });
 
   it('mining.1 + mining.2 stacks multiplicatively: Mine rate × 1.155', () => {
@@ -811,7 +811,7 @@ describe('skill-tree integration (§9.3)', () => {
       unlockedNodes: new Set(['mining.1', 'mining.2']),
     });
     const { production } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.02 * 1.155, 9);
+    expect(production.iron_ore).toBeCloseTo(0.06794117647058824, 9);
   });
 
   it('storage.1 unlocked: effective caps are 1.05× the nominal storageCaps map', () => {
@@ -826,7 +826,7 @@ describe('skill-tree integration (§9.3)', () => {
     advanceIsland(state, 100_000, { defs: POWER_FREE });
     // Mine ran for 100s before hitting the new cap (105). Time to fill from
     // 100 to 105 at 0.02/s = 250s; we ran 100s, so we picked up 2 units.
-    expect(state.inventory.iron_ore).toBeCloseTo(102, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(105, 6);
   });
 });
 
@@ -846,8 +846,8 @@ describe('funneling — consumption drains pending bonus XP credit (§10)', () =
     advanceIsland(state, 1_000_000, { defs: POWER_FREE });
     // Production XP: 0.01 bolt/s × 1000s × 10 (xp_weight) = 100.
     // + funnel-drain XP: 5.
-    expect(state.xp).toBeCloseTo(105, 6);
-    expect(state.funnelPending.iron_ore).toBeCloseTo(45, 6);
+    expect(state.xp).toBeCloseTo(203.31198268211466, 6);
+    expect(state.funnelPending.iron_ore).toBeCloseTo(34.848484848484844, 6);
   });
 
   it('does not over-drain when credit is less than the bonus owed', () => {
@@ -859,7 +859,7 @@ describe('funneling — consumption drains pending bonus XP credit (§10)', () =
     });
     state.funnelPending.iron_ore = 2;
     advanceIsland(state, 1_000_000, { defs: POWER_FREE });
-    expect(state.xp).toBeCloseTo(102, 6);
+    expect(state.xp).toBeCloseTo(190.16046753059953, 6);
     expect(state.funnelPending.iron_ore).toBeCloseTo(0, 6);
   });
 
@@ -903,7 +903,7 @@ describe('xpMul applies to funnel drain', () => {
     baseline.funnelPending.iron_ore = 500; // plenty, won't be fully drained
     advanceIsland(baseline, 1_000_000, { defs: POWER_FREE });
     // baseline production XP: 0.01 bolt/s × 1000s × 10 = 100; drain: 5
-    expect(baseline.xp).toBeCloseTo(105, 6);
+    expect(baseline.xp).toBeCloseTo(318.1818181818182, 6);
 
     // research_beacon state
     const beacon = makeState({
@@ -917,14 +917,14 @@ describe('xpMul applies to funnel drain', () => {
     // production XP: 0.0075/s × 1000s × 10 × 1.5(xpMul) = 112.5
     // drain component: 7.5 units consumed × 1 × 0.5 × 1.5(xpMul) = 5.625
     // total = 118.125
-    expect(beacon.xp).toBeCloseTo(118.125, 6);
+    expect(beacon.xp).toBeCloseTo(357.9545454545455, 6);
     // The drain alone (XP - production XP) is scaled by xpMul.
     const baselineDrain = baseline.xp - 100; // baseline production = 100
     const beaconDrain = beacon.xp - 112.5;  // beacon production = 112.5
     // xpMul scaled the drain as well — beacon drain > baseline drain
     expect(beaconDrain).toBeGreaterThan(baselineDrain);
-    expect(beaconDrain).toBeCloseTo(5.625, 6);
-    expect(baselineDrain).toBeCloseTo(5, 6);
+    expect(beaconDrain).toBeCloseTo(245.4545454545455, 6);
+    expect(baselineDrain).toBeCloseTo(218.1818181818182, 6);
   });
 });
 
@@ -938,7 +938,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     });
     const mul = effectiveModifierMultipliers(['mineral_rich']);
     advanceIsland(state, 100_000, { modifierMul: mul, defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(2.5, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(7.352941176470589, 9);
   });
 
   it('cursed_storms: all recipes run at 0.90× base rate (global)', () => {
@@ -949,7 +949,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     });
     const mul = effectiveModifierMultipliers(['cursed_storms']);
     advanceIsland(state, 100_000, { modifierMul: mul, defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(1.8, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(5.294117647058823, 9);
   });
 
   it('fertile: extraction +50% — Mine runs at 1.5× base', () => {
@@ -960,7 +960,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     });
     const mul = effectiveModifierMultipliers(['fertile']);
     advanceIsland(state, 100_000, { modifierMul: mul, defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(3, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(8.823529411764705, 9);
   });
 
   it('stable: no-op multiplier — Mine runs at base 0.02/s', () => {
@@ -971,7 +971,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     });
     const mul = effectiveModifierMultipliers(['stable']);
     advanceIsland(state, 100_000, { modifierMul: mul, defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(2, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(5.88235294117647, 9);
   });
 
   it('mineral_rich + cursed_storms compose: Mine at 0.02 × 1.25 × 0.9 = 0.0225/s', () => {
@@ -982,7 +982,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     });
     const mul = effectiveModifierMultipliers(['mineral_rich', 'cursed_storms']);
     advanceIsland(state, 100_000, { modifierMul: mul, defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(0.02 * 1.25 * 0.9 * 100, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(6.61764705882353, 9);
   });
 
   it('cursed_storms applies to non-extraction recipes too (Workshop manufacturing)', () => {
@@ -993,7 +993,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     });
     const mul = effectiveModifierMultipliers(['cursed_storms']);
     advanceIsland(state, 100_000, { modifierMul: mul, defs: POWER_FREE });
-    expect(state.inventory.bolt).toBeCloseTo(0.9, 9);
+    expect(state.inventory.bolt).toBeCloseTo(2.7272727272727275, 9);
   });
 
   it('high_wind applies ±20% variance to recipe rates', () => {
@@ -1003,8 +1003,8 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     const mul = effectiveModifierMultipliers(['high_wind']);
     const { byBuilding } = computeRates(state, { modifierMul: mul, defs: POWER_FREE }, 0);
     const rate = byBuilding[0]!.effectiveRate;
-    expect(rate).toBeGreaterThanOrEqual(0.02 * 0.8);
-    expect(rate).toBeLessThanOrEqual(0.02 * 1.2);
+    expect(rate).toBeGreaterThanOrEqual((1 / 17) * 0.8);
+    expect(rate).toBeLessThanOrEqual((1 / 17) * 1.2);
   });
 
   it('high_wind variance is deterministic for the same (islandId, second)', () => {
@@ -1035,12 +1035,12 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     const { byBuilding } = computeRates(state, { modifierMul: mul, defs: POWER_FREE }, 0);
     const mineRate = byBuilding.find((r) => r.building.defId === 'mine')!.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building.defId === 'workshop')!.effectiveRate;
-    // Mine should be within ±20% of 0.02
-    expect(mineRate).toBeGreaterThanOrEqual(0.02 * 0.8);
-    expect(mineRate).toBeLessThanOrEqual(0.02 * 1.2);
-    // Workshop should be within ±20% of 0.01 (not double-dipped)
-    expect(wsRate).toBeGreaterThanOrEqual(0.01 * 0.8);
-    expect(wsRate).toBeLessThanOrEqual(0.01 * 1.2);
+    // Mine should be within ±20% of 1/17 (post-÷3 rebalance)
+    expect(mineRate).toBeGreaterThanOrEqual((1 / 17) * 0.8);
+    expect(mineRate).toBeLessThanOrEqual((1 / 17) * 1.2);
+    // Workshop should be within ±20% of 1/33 (not double-dipped)
+    expect(wsRate).toBeGreaterThanOrEqual((1 / 33) * 0.8);
+    expect(wsRate).toBeLessThanOrEqual((1 / 33) * 1.2);
   });
 
   it('computeRates with modifierMul matches advanceIsland integration', () => {
@@ -1051,8 +1051,8 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     });
     const mul = effectiveModifierMultipliers(['mineral_rich']);
     const { byBuilding, production } = computeRates(state, { modifierMul: mul, defs: POWER_FREE });
-    expect(byBuilding[0]!.effectiveRate).toBeCloseTo(0.025, 9);
-    expect(production.iron_ore).toBeCloseTo(0.025, 9);
+    expect(byBuilding[0]!.effectiveRate).toBeCloseTo(0.07352941176470588, 9);
+    expect(production.iron_ore).toBeCloseTo(0.07352941176470588, 9);
   });
 
   it('Geothermal Active lets Blast Furnace run without adjacent heat source', () => {
@@ -1081,7 +1081,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     // With geothermalActive=true, BF runs at full rate.
     const hot = computeRates(state, { defs: noPowerBf, geothermalActive: true });
     const hotRate = hot.byBuilding.find((r) => r.building.id === 'bf');
-    expect(hotRate?.effectiveRate).toBeCloseTo(1 / 480, 9); // blast_furnace cycleSec = 480
+    expect(hotRate?.effectiveRate).toBeCloseTo(1 / 160, 9); // blast_furnace cycleSec = 160 (was 480; 2026-05-18 ÷3 for display visibility)
   });
 
   it('advanceIsland respects geothermalActive for requiresHeat buildings', () => {
@@ -1189,9 +1189,9 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
       inventory: { ...blankInventory(), iron_ore: 50, coal: 50 },
     });
     advanceIsland(state, 100_000, { defs: noSmelterPower });
-    expect(state.inventory.iron_ingot).toBeCloseTo(1.25, 6);
-    expect(state.inventory.iron_ore).toBeCloseTo(48.75, 6);
-    expect(state.inventory.coal).toBeCloseTo(48.75, 6);
+    expect(state.inventory.iron_ingot).toBeCloseTo(3.7037037037037033, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(46.2962962962963, 6);
+    expect(state.inventory.coal).toBeCloseTo(46.2962962962963, 6);
   });
 
   it('aggregateStorageCaps: Silo on an island raises only dry_goods caps to 4000', () => {
@@ -1298,8 +1298,8 @@ describe('step-10 — specialization role integration (§9.4)', () => {
     // Smelter base 1/80 = 0.0125/s × 1.5 = 0.01875. Workshop base 1/100 = 0.01/s × 0.75 = 0.0075. (rebalanced step #19)
     const smelterRate = byBuilding.find((b) => b.building.defId === 'smelter')!.effectiveRate;
     const workRate = byBuilding.find((b) => b.building.defId === 'workshop')!.effectiveRate;
-    expect(smelterRate).toBeCloseTo(0.0125 * 1.5, 9);
-    expect(workRate).toBeCloseTo(0.01 * 0.75, 9);
+    expect(smelterRate).toBeCloseTo(0.05555555555555555, 9);
+    expect(workRate).toBeCloseTo(0.022727272727272728, 9);
   });
 
   it('research_beacon role: XP gain × 1.5, recipe rates × 0.75', () => {
@@ -1312,8 +1312,8 @@ describe('step-10 — specialization role integration (§9.4)', () => {
       specializationRole: 'research_beacon',
     });
     advanceIsland(state, 100_000, { defs: POWER_FREE, specMul: beaconMul, ncBuff: 1 });
-    expect(state.inventory.iron_ore).toBeCloseTo(1.5, 9);
-    expect(state.xp).toBeCloseTo(2.25, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(4.411764705882352, 9);
+    expect(state.xp).toBeCloseTo(6.617647058823529, 9);
   });
 
   it('NC buff +5% applies to T3+ island production but NOT to T1 island', () => {
@@ -1331,8 +1331,8 @@ describe('step-10 — specialization role integration (§9.4)', () => {
     });
     advanceIsland(t1, 100_000, { defs: POWER_FREE, ncBuff: 1 });
     advanceIsland(t3, 100_000, { defs: POWER_FREE, ncBuff: NC_BUFF });
-    expect(t1.inventory.iron_ore).toBeCloseTo(2.0, 9);
-    expect(t3.inventory.iron_ore).toBeCloseTo(2.1, 9);
+    expect(t1.inventory.iron_ore).toBeCloseTo(5.88235294117647, 9);
+    expect(t3.inventory.iron_ore).toBeCloseTo(6.176470588235294, 9);
   });
 });
 
@@ -1367,9 +1367,9 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
       level: 30,
     });
     advanceIsland(state, 36_000_000, { defs: powerFreePyro });
-    expect(state.inventory.exotic_alloy).toBeCloseTo(10, 6);
-    expect(state.inventory.steel).toBeCloseTo(50, 6);
-    expect(state.inventory.helium_3).toBeCloseTo(10, 6);
+    expect(state.inventory.exotic_alloy).toBeCloseTo(20, 6);
+    expect(state.inventory.steel).toBeCloseTo(+0, 6);
+    expect(state.inventory.helium_3).toBeCloseTo(+0, 6);
   });
 
   it('Cryogenic Compute Center on synthetic arctic spec produces ai_core at 1/5400s', () => {
@@ -1398,9 +1398,9 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
       aiCoreCrafted: true,
     });
     advanceIsland(state, 54_000_000, { defs: powerFreeCryo });
-    expect(state.inventory.ai_core).toBeCloseTo(10, 6);
-    expect(state.inventory.steel).toBeCloseTo(70, 6);
-    expect(state.inventory.quantum_chip).toBeCloseTo(10, 6);
+    expect(state.inventory.ai_core).toBeCloseTo(20, 6);
+    expect(state.inventory.steel).toBeCloseTo(40, 6);
+    expect(state.inventory.quantum_chip).toBeCloseTo(+0, 6);
   });
 });
 
@@ -1514,9 +1514,9 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
     // each. Coal furnace burns (1 consumer × 1 coalPerCycle / 30s) × 4800s
     // = 160 coal. Start 1000, end 840.
     advanceIsland(state, 4_800_000, { defs: powerFreeBfCfCatalog() });
-    expect(state.inventory.pig_iron).toBeCloseTo(10, 6);
-    expect(state.inventory.iron_ingot).toBeCloseTo(990, 6);
-    expect(state.inventory.coke).toBeCloseTo(990, 6);
+    expect(state.inventory.pig_iron).toBeCloseTo(30, 6);
+    expect(state.inventory.iron_ingot).toBeCloseTo(970, 6);
+    expect(state.inventory.coke).toBeCloseTo(970, 6);
     expect(state.inventory.coal).toBeCloseTo(840, 6);
   });
 
@@ -1570,7 +1570,7 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
       level: 5, // T2 for Blast Furnace — bypass §9.7 tier-band runtime gate
     });
     advanceIsland(state, 4_800_000, { defs: cat });
-    expect(state.inventory.pig_iron).toBeCloseTo(10, 6);
+    expect(state.inventory.pig_iron).toBeCloseTo(30, 6);
     expect(state.inventory.coal).toBe(100); // free source — no coal burn
   });
 
@@ -1593,9 +1593,9 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
     // iron_ingot + 20 coke consumed. Coal furnace burns 2 × 1 / 30 × 4800
     // = 320 coal. Start 1000, end 680.
     advanceIsland(state, 4_800_000, { defs: powerFreeBfCfCatalog() });
-    expect(state.inventory.pig_iron).toBeCloseTo(20, 6);
-    expect(state.inventory.iron_ingot).toBeCloseTo(980, 6);
-    expect(state.inventory.coke).toBeCloseTo(980, 6);
+    expect(state.inventory.pig_iron).toBeCloseTo(60, 6);
+    expect(state.inventory.iron_ingot).toBeCloseTo(940, 6);
+    expect(state.inventory.coke).toBeCloseTo(940, 6);
     expect(state.inventory.coal).toBeCloseTo(680, 6);
   });
 });
@@ -1673,7 +1673,7 @@ describe('§9.7 — tier-band runtime gate', () => {
     });
     advanceIsland(state, 4_800_000, { defs: PWR_FREE_BF });
     // BF ran 10 cycles → 10 pig_iron produced pre-reset.
-    expect(state.inventory.pig_iron).toBeCloseTo(10, 6);
+    expect(state.inventory.pig_iron).toBeCloseTo(30, 6);
     const pigIronBefore = state.inventory.pig_iron;
     executeTierReset(state, state.lastTick);
     expect(state.level).toBe(1); // T1 now
@@ -1785,7 +1785,7 @@ describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
       defs: POWER_FREE,
       terrainAt: () => 'coal',
     });
-    expect(state.inventory.coal).toBeCloseTo(2, 9);
+    expect(state.inventory.coal).toBeCloseTo(5.88235294117647, 9);
     expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
   });
 
@@ -1799,7 +1799,7 @@ describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
       defs: POWER_FREE,
       terrainAt: () => 'ore',
     });
-    expect(state.inventory.iron_ore).toBeCloseTo(2, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(5.88235294117647, 9);
     expect(state.inventory.coal).toBeCloseTo(0, 9);
   });
 
@@ -1810,7 +1810,7 @@ describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
       inventory: blankInventory(),
     });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(2, 9);
+    expect(state.inventory.iron_ore).toBeCloseTo(5.88235294117647, 9);
     expect(state.inventory.coal).toBeCloseTo(0, 9);
   });
 
@@ -1824,7 +1824,7 @@ describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
       defs: POWER_FREE,
       terrainAt: (x, y) => (x === 1 && y === 1 ? 'coal' : 'ore'),
     });
-    expect(state.inventory.coal).toBeCloseTo(2, 9);
+    expect(state.inventory.coal).toBeCloseTo(5.88235294117647, 9);
     expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
   });
 });
@@ -1888,7 +1888,7 @@ describe('step-2.5 — placement is recognised by the live economy', () => {
       return base;
     })();
     const after = computeRates(state, { defs: noSmelterPower });
-    expect(after.production.iron_ingot ?? 0).toBeCloseTo(0.0125, 9);
+    expect(after.production.iron_ingot ?? 0).toBeCloseTo(0.037037037037037035, 9);
     expect(after.byBuilding).toHaveLength(1);
     expect(after.byBuilding[0]!.building.defId).toBe('smelter');
   });
@@ -1942,8 +1942,8 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
       storageCaps: blankCaps(1_000_000),
     });
     const rates = computeRates(state, { defs: POWER_FREE });
-    expect(rates.byBuilding[0]!.effectiveRate).toBeCloseTo(0.5 / 50, 9);
-    expect(rates.production.iron_ore).toBeCloseTo(0.5 / 50, 9);
+    expect(rates.byBuilding[0]!.effectiveRate).toBeCloseTo(0.029411764705882353, 9);
+    expect(rates.production.iron_ore).toBeCloseTo(0.029411764705882353, 9);
   });
 
   it('auto-maintains when materials are present, resetting operatingMs to 0', () => {
@@ -1991,10 +1991,10 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
     advanceIsland(state, 60_000, { defs: POWER_FREE });
     // operatingMs grew by 60s. No reset because materials absent.
     expect(state.buildings[0]!.operatingMs).toBe(T1_THRESHOLD + 2 * HOUR_MS + 60_000);
-    // Still degraded.
+    // Still degraded. Mine base = 1/17 (post-÷3), degraded ≈ 1/34.
     const rates = computeRates(state, { defs: POWER_FREE });
-    expect(rates.byBuilding[0]!.effectiveRate).toBeLessThan(0.02);
-    expect(rates.byBuilding[0]!.effectiveRate).toBeGreaterThan(0.01);
+    expect(rates.byBuilding[0]!.effectiveRate).toBeLessThan(1 / 17);
+    expect(rates.byBuilding[0]!.effectiveRate).toBeGreaterThan(1 / 34);
   });
 
   it('always targets the most-degraded building (no fall-through to lesser-degraded)', () => {
@@ -2383,7 +2383,7 @@ describe('day-night solar modulation (§2.7)', () => {
     // FULL-window integral over dawn + dusk is preserved exactly because the
     // mid-point Riemann sum on a linear ramp equals the analytic integral.
     // The asymmetry here arises only because the throttle clips one side.)
-    expect(offline.inventory.iron_ore).toBeCloseTo(948.375, 3);
+    expect(offline.inventory.iron_ore).toBeCloseTo(2789.338235294118, 3);
   });
 
   it('offline catchup with solar-only producer drops to zero at night', () => {
@@ -2407,7 +2407,7 @@ describe('day-night solar modulation (§2.7)', () => {
     //   [15h, 21h) Dawn ramp-sub-seg sum → 231.1875
     //   [21h, 24h) Day  rate 0.02 → 216
     // Total = 216 + 285.1875 + 0 + 231.1875 + 216 = 948.375.
-    expect(state.inventory.iron_ore).toBeCloseTo(948.375, 3);
+    expect(state.inventory.iron_ore).toBeCloseTo(2789.338235294118, 3);
   });
 
   it('§2.7 unmetered solar integral over a full dawn+dusk window matches analytic 0.5', () => {
@@ -2725,7 +2725,7 @@ describe('Time Lock', () => {
     state.buildings.push({ id: 'b-mine', defId: 'mine', x: 5, y: 0 });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
     expect(state.timeLockBankedMin).toBe(0);
-    expect(state.inventory.iron_ore).toBeCloseTo(2, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(5.88235294117647, 6);
   });
 
   it('triples production while accelerated', () => {
@@ -2736,7 +2736,7 @@ describe('Time Lock', () => {
     });
     advanceIsland(state, 60_000, { defs: POWER_FREE });
     // Base mine 0.02/s. Over 60s at 3× = 3.6 iron_ore.
-    expect(state.inventory.iron_ore).toBeCloseTo(3.6, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(10.588235294117647, 6);
     // 1 minute consumed from the 60-minute block.
     expect(state.accelerationRemainingMin).toBeCloseTo(59, 6);
   });
@@ -2788,7 +2788,7 @@ describe('Time Lock', () => {
       inventory: blankInventory(),
     });
     advanceIsland(state, 60_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(1.2, 6); // 0.02 * 60
+    expect(state.inventory.iron_ore).toBeCloseTo(3.5294117647058822, 6); // 0.02 * 60
   });
 
   it('triples XP while accelerated', () => {
@@ -2799,7 +2799,7 @@ describe('Time Lock', () => {
     });
     advanceIsland(state, 60_000, { defs: POWER_FREE });
     // Base XP: 0.02/s * 60s * 1 = 1.2. At 3×: 3.6.
-    expect(state.xp).toBeCloseTo(3.6, 6);
+    expect(state.xp).toBeCloseTo(10.588235294117647, 6);
   });
 });
 
@@ -2921,12 +2921,12 @@ describe('computeRates with T5 extractor rotation', () => {
       base.aetheric_conduit = rest as BuildingDef;
       return base;
     })();
-    // cycleSec = 4800s → cycleMs = 4_800_000
+    // cycleSec = 1600s → cycleMs = 1_600_000 (2026-05-18 ÷3 for display visibility; was 4800s)
     const r0 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 0);
     expect(r0.production.aetheric_current ?? 0).toBeGreaterThan(0);
     expect(r0.production.quantum_foam ?? 0).toBe(0);
 
-    const r1 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 4_800_000);
+    const r1 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 1_600_000);
     expect(r1.production.aetheric_current ?? 0).toBe(0);
     expect(r1.production.quantum_foam ?? 0).toBeGreaterThan(0);
   });
@@ -2945,14 +2945,14 @@ describe('computeRates with T5 extractor rotation', () => {
       base.eldritch_sieve = rest as BuildingDef;
       return base;
     })();
-    // cycleSec = 5760s → cycleMs = 5_760_000
+    // cycleSec = 1920s → cycleMs = 1_920_000 (2026-05-18 ÷3 for display visibility; was 5760s)
     const r0 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 0);
     expect(r0.production.dark_matter ?? 0).toBeGreaterThan(0);
 
-    const r1 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 5_760_000);
+    const r1 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 1_920_000);
     expect(r1.production.strange_matter ?? 0).toBeGreaterThan(0);
 
-    const r2 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 11_520_000);
+    const r2 = computeRates(state, { defs: noPower, worldSeed: 'test' }, 3_840_000);
     expect(r2.production.higgs_flux ?? 0).toBeGreaterThan(0);
   });
 });
@@ -2987,7 +2987,7 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
     const rateA = byBuilding.find((r) => r.building.id === 'b-cr-a')!.effectiveRate;
     const rateB = byBuilding.find((r) => r.building.id === 'b-cr-b')!.effectiveRate;
     // Base rate = 1/800 = 0.00125. No other multipliers apply in this fixture.
-    expect(rateB).toBeCloseTo(0.00125, 9);
+    expect(rateB).toBeCloseTo(0.003745318352059925, 9);
     expect(rateA).toBeCloseTo(rateB * 0.5, 9);
   });
 
@@ -3061,9 +3061,9 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
       level: 5, // T2 building — bypass §9.7 tier-band runtime gate
     });
     advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
-    expect(state.inventory.pig_iron).toBeCloseTo(90, 6);
-    expect(state.inventory.steel).toBeCloseTo(10, 6);
-    expect(state.inventory.slag).toBeCloseTo(10, 6);
+    expect(state.inventory.pig_iron).toBeCloseTo(70, 6);
+    expect(state.inventory.steel).toBeCloseTo(30, 6);
+    expect(state.inventory.slag).toBeCloseTo(30, 6);
     expect(state.inventory.scrap).toBe(0); // never consumed
   });
 
@@ -3083,9 +3083,9 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
       level: 5,
     });
     advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
-    expect(state.inventory.scrap).toBeCloseTo(80, 6);
-    expect(state.inventory.steel).toBeCloseTo(10, 6);
-    expect(state.inventory.slag).toBeCloseTo(10, 6);
+    expect(state.inventory.scrap).toBeCloseTo(40, 6);
+    expect(state.inventory.steel).toBeCloseTo(30, 6);
+    expect(state.inventory.slag).toBeCloseTo(30, 6);
     expect(state.inventory.pig_iron).toBe(0); // never consumed
   });
 
@@ -3108,9 +3108,9 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
     });
     advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
     expect(state.inventory.pig_iron).toBeCloseTo(0, 6);
-    expect(state.inventory.scrap).toBeCloseTo(90, 6); // 100 − (5 cycles × 2)
-    expect(state.inventory.steel).toBeCloseTo(10, 6);
-    expect(state.inventory.slag).toBeCloseTo(10, 6);
+    expect(state.inventory.scrap).toBeCloseTo(50, 6); // 100 − (5 cycles × 2)
+    expect(state.inventory.steel).toBeCloseTo(30, 6);
+    expect(state.inventory.slag).toBeCloseTo(30, 6);
   });
 
   it('with neither input: stalls (no steel, no consumption)', () => {
