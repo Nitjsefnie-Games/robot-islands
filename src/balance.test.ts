@@ -106,7 +106,7 @@ describe('Balance — every consumed resource has at least one producer', () => 
     'genesis_cell',
     // T6 satellite payloads — separate assembly recipe (§14.10) not in
     // the basic recipes catalog.
-    'scanner_sat', 'comm_sat', 'sweeper_sat', 'repair_drone',
+    'scanner_sat', 'relay_sat', 'sweeper_sat', 'repair_drone',
     'ascendant_core', 'orbital_insertion_package', 'repair_pack',
     // T1 composite (§12.3) — Foundation Kit assembly recipe handled
     // outside the per-building RECIPES map (placement-time consumable).

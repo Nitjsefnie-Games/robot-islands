@@ -53,7 +53,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §13.4 Endgame goals | L | Three artifacts (Genesis Cell, Omniscient Lattice activation, Ascendant Core) all craftable / activatable. Per spec there is **no win screen** — the game continues indefinitely; no banner / popup / acknowledgement fires when artifacts complete. |
 | §14.1 T6 access | L | Per-island gate (Ascendant Core + Spaceport). |
 | §14.2 Buildings | L | Spaceport + Orbital Tracking Station exist. Spaceport tier I/II/III in-place upgrade lifecycle (`upgradeSpaceport` consumes the §14.2 cost table and bumps `placed.tier` in place; UI affordance in the orbital modal). T6 Antenna doubles as a satellite dish: its signal radius adds to ground-station comm range when present on a launching island. |
-| §14.3 Satellite variants | L | Scanner / Sweeper / Comm / Relay variants buildable from a Spaceport. Stat ceilings scale with Spaceport tier. |
+| §14.3 Satellite variants | L | Scanner / Sweeper / Relay variants buildable from a Spaceport. Stat ceilings scale with Spaceport tier. |
 | §14.4 Communication network | L | Asymmetric comm radius, store-and-forward buffers per sat (cap configurable via Communication skill), packet hand-off through connected graph. |
 | §14.5 Coverage / discovery / weather | L | Scanner Sat weather visibility + per-cell dwell-ramp discovery (rate configurable via Discovery skill). |
 | §14.6 Movement | L | Onboard fuel reserve (Resilience-skill multiplied), move-command spends fuel proportional to distance, low-probability failure manifests as a 5–20% misdrop in a random direction with extra fuel burned for the offset (clamped to 0 — sat stranded, recoverable via Repair Drone). |

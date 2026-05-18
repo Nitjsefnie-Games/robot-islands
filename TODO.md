@@ -6,9 +6,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
 > **Meta** — `SPEC.md` "Implementation Status" table is out of sync with
 > code in three load-bearing places. Future agents who trust the table
 > will mis-plan:
-> - §14.3 claims "Scanner / Sweeper / Comm / **Relay** variants buildable"
->   — Relay nowhere in `orbital.ts` `SatelliteVariant`, no `relay_sat_assembly`
->   recipe, no UI variant. (See §1 below.)
 > - §2.4 marked **P** listing route types `cargo / drone / airship /
 >   teleporter / cable` — `mass_driver` missing from `RouteType` despite
 >   §9.5 Mass Driver building and §15.1 `Route.type = 'mass_driver'`. (§1.)
@@ -16,17 +13,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
 ---
 
 ## 1. Spec divergence — real bugs a player would notice
-
-- **§14.3 Relay Sat variant entirely absent from code.** SPEC.md status
-  table claims "Scanner / Sweeper / Comm / Relay variants buildable" but:
-  - `src/orbital.ts:30` `SatelliteVariant = 'scanner' | 'sweeper' | 'comm'`
-    (no `relay`).
-  - `src/orbital-ui.ts:47-67` `VARIANTS` lists scanner/comm/sweeper only.
-  - No `relay_sat_assembly` recipe, no `relay_sat` payload.
-  Per §14.10 the recipe should be `6 Exotic Alloy + 1 AI core + 200
-  Optical Fiber + 1 OIP`. Either ship the variant (recipe + variant + UI)
-  or strike "Relay" from the spec status table.
-  *(Flagged by Agents C, D; same root issue.)*
 
 - **§7.12 `reality_forge` recipe diverges from spec by ~50% of inputs
   and 1/18 of cycle time.** `src/recipes.ts:1337-1342` ships `2

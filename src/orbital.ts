@@ -29,7 +29,7 @@ export const SCANNER_DWELL_TIME_CONSTANT_MS = 5 * 60 * 1000;
  *  while leaving room for multi-station networks to extend reach. */
 export const ORBITAL_TRACKING_DETECTION_RADIUS_TILES = 1500;
 
-export type SatelliteVariant = 'scanner' | 'sweeper' | 'comm';
+export type SatelliteVariant = 'scanner' | 'sweeper' | 'relay';
 
 export interface SatBufferEntry {
   readonly type: 'discovery' | 'weather' | 'debris';
@@ -118,7 +118,7 @@ export const SAT_DESTRUCTION_FRAGMENTS = 10; // §14.8 placeholder
 export const SAT_CROSS_SECTION: Record<SatelliteVariant, number> = {
   scanner: 1.2, // larger optics
   sweeper: 1.0,
-  comm: 0.8, // sleeker
+  relay: 0.8, // sleeker
 };
 
 /** §14.6 / Appendix A placeholders for satellite maneuvering. */
@@ -146,7 +146,7 @@ export const REPAIR_DRONE_MIN_FUEL = 1;
 const PAYLOAD_RESOURCE: Record<SatelliteVariant, ResourceId> = {
   scanner: 'scanner_sat',
   sweeper: 'sweeper_sat',
-  comm: 'comm_sat',
+  relay: 'relay_sat',
 };
 
 /**
@@ -157,7 +157,7 @@ const PAYLOAD_RESOURCE: Record<SatelliteVariant, ResourceId> = {
  *   - The island must have at least one `spaceport` building
  *
  * Consumables (deducted from the island's inventory on success):
- *   - 1 × variant-specific satellite payload (`scanner_sat`, `sweeper_sat`, or `comm_sat`)
+ *   - 1 × variant-specific satellite payload (`scanner_sat`, `sweeper_sat`, or `relay_sat`)
  *   - 1 × `orbital_insertion_package`
  *   - 1 × `antimatter_propellant`
  *
@@ -304,7 +304,7 @@ export function launchSatellite(
     spaceportIslandId,
     x: spawnX,
     y: spawnY,
-    commRange: (variant === 'comm' ? 500 : 200) * skill.commRange,
+    commRange: (variant === 'relay' ? 500 : 200) * skill.commRange,
     coverageRadius: variant === 'scanner' ? 400 * skill.scannerCoverage : 0,
     fuel: launchFuel - fuelCost,
     lodges: { scan: 0, weather: 0, comm: 0 },

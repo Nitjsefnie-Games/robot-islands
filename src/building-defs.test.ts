@@ -89,7 +89,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'orbital_tracking_station',
   'antimatter_refinery',
   'scanner_sat_assembly',
-  'comm_sat_assembly',
+  'relay_sat_assembly',
   'oip_assembly',
   'repair_drone_assembly',
   // Step-18 recipe-graph closure (§7.1-§7.12)
@@ -1794,7 +1794,7 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
     'orbital_tracking_station',
     'antimatter_refinery',
     'scanner_sat_assembly',
-    'comm_sat_assembly',
+    'relay_sat_assembly',
     'sweeper_sat_assembly',
     'oip_assembly',
     'repair_pack_assembly',
@@ -1838,7 +1838,7 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
   it('satellite-assembly defs are 3×3 manufacturing consumers', () => {
     for (const id of [
       'scanner_sat_assembly',
-      'comm_sat_assembly',
+      'relay_sat_assembly',
       'sweeper_sat_assembly',
       'oip_assembly',
       'repair_pack_assembly',

@@ -3,11 +3,11 @@
 //
 // Variants are colour-coded:
 //   scanner  → cyan      (vision)
-//   comm     → green     (network)
+//   relay    → green     (network)
 //   sweeper  → amber     (debris cleanup)
 //
 // Each sat also gets a faint coverage ring (scanner) / comm-range ring
-// (comm) to make the §14.5 effective area legible at a glance.
+// (relay) to make the §14.5 effective area legible at a glance.
 //
 // Debris fields render as small magenta crosses sized by fragment count so
 // Kessler hotspots stand out. Pure PixiJS Graphics — no DOM.
@@ -20,7 +20,7 @@ import type { WorldState } from './world.js';
 
 const VARIANT_COLOR: Record<SatelliteVariant, number> = {
   scanner: 0x7dd3e8,
-  comm: 0x60d0a0,
+  relay: 0x60d0a0,
   sweeper: 0xe6b800,
 };
 
@@ -75,7 +75,7 @@ export function mountSatelliteOverlay(world: WorldState): SatelliteOverlayHandle
           alpha: RING_ALPHA,
         });
       }
-      if (sat.variant === 'comm' && sat.commRange > 0) {
+      if (sat.variant === 'relay' && sat.commRange > 0) {
         gfx.circle(px, py, sat.commRange * TILE_PX).stroke({
           color,
           width: 1,

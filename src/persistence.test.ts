@@ -1503,7 +1503,7 @@ describe('satellite movingTo persistence', () => {
     const world = makeInitialWorld(0);
     world.satellites.push({
       id: 'sat2',
-      variant: 'comm',
+      variant: 'relay',
       spaceportIslandId: 'home',
       x: 50,
       y: 50,

@@ -8,7 +8,7 @@
 // Body per populated island with a Spaceport:
 //   - Header: island name + Spaceport tier + Ascendant-Core gate indicator
 //   - Inventory readout for the five launch consumables
-//   - Three "Arm Launch …" buttons (scanner / comm / sweeper), disabled when
+//   - Three "Arm Launch …" buttons (scanner / relay / sweeper), disabled when
 //     materials or gate aren't satisfied. Arming a launch HIDES the modal and
 //     turns on a canvas reticle the player clicks to pick a target tile.
 // Footer:
@@ -97,9 +97,9 @@ const VARIANTS: ReadonlyArray<VariantSpec> = [
     summary: 'Extends ocean fog vision around its current cell',
   },
   {
-    variant: 'comm',
-    label: 'Comm Sat',
-    payload: 'comm_sat',
+    variant: 'relay',
+    label: 'Relay Sat',
+    payload: 'relay_sat',
     summary: 'Relays buffered packets between distant Spaceports',
   },
   {
