@@ -588,6 +588,8 @@ When the gate passes, all islands in the component share one brownout factor `mi
 
 T5 Spacetime Anchor (`route.type === 'spacetime'`) links count as infinite-capacity for the gate, so any component containing one trivially passes — matching the spec's distance-independent framing.
 
+The §4 ocean layer adds `route.type === 'submarine_cable'` as a sibling power-link RouteType. It behaves identically to land `cable` for §5.3 purposes — `isPowerLink` returns true, capacities sum into the same component total, dispatch never moves cargo across it. The two differ only in visual rendering (submarine cable traces across ocean cells) and in the player-facing recipe / tier-gating that governs route creation. Both endpoints of a submarine cable still terminate at `power_substation` buildings like land cable.
+
 \---
 
 ## 6\. Resource Catalog
@@ -1664,7 +1666,7 @@ interface Route {
   id: string;
   from: IslandId;
   to: IslandId;
-  type: 'cargo' | 'drone' | 'airship' | 'mass\_driver' | 'teleporter' | 'cable' | 'spacetime';
+  type: 'cargo' | 'drone' | 'airship' | 'mass\_driver' | 'teleporter' | 'cable' | 'spacetime' | 'submarine\_cable';
   capacityPerSec: number;
   filter: ResourceId | null;
   priorityList?: ResourceId[];      // ordered priority list when filter === null ("any") — see §2.4

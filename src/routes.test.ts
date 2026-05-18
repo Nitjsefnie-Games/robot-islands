@@ -13,6 +13,7 @@ import {
   dispatchAttempt,
   FUNNELING_BONUS_PERCENT,
   FUNNELING_TIER_CAP,
+  isPowerLink,
   MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
   MASS_DRIVER_DIESEL_PER_UNIT,
   nextRouteId,
@@ -1154,5 +1155,195 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     expect(balances.get('b')?.cableCapacityTotal).toBe(0);
     expect(balances.get('a')?.unified).toBe(false);
     expect(balances.get('b')?.unified).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §4 submarine_cable RouteType — inter-island power transmission variant
+// that visually routes across ocean. Behaves identically to land `cable`
+// for §5.3 unified-pool purposes (`isPowerLink` returns true; does NOT
+// dispatch cargo). The two route types differ only in visual rendering
+// (Task 11 future work) and player intent (long-range coast-to-coast).
+// ---------------------------------------------------------------------------
+
+function submarineCableRoute(
+  from: string,
+  to: string,
+  capacityPerSec = 100,
+): Route {
+  return {
+    id: nextRouteId(),
+    from,
+    to,
+    type: 'submarine_cable',
+    capacityPerSec,
+    filter: null,
+    priorityList: [],
+    transitTimeSec: 0,
+    inFlight: [],
+  };
+}
+
+describe('§4 submarine_cable RouteType', () => {
+  // Reuse the same building fixtures the §5.3 cable suite uses — copying
+  // here keeps this block self-contained while the tests assert equivalent
+  // power-link semantics for the new RouteType.
+  const solar = (idSuffix: string, x = 0, y = 0): { id: string; defId: 'solar'; x: number; y: number } => ({
+    id: `sl-${idSuffix}`,
+    defId: 'solar',
+    x,
+    y,
+  });
+  const solars = (
+    idSuffix: string,
+    count: number,
+  ): Array<{ id: string; defId: 'solar'; x: number; y: number }> =>
+    Array.from({ length: count }, (_, i) => solar(`${idSuffix}-${i}`, i * 2, 0));
+  const mine = (idSuffix: string, x = 0, y = 0): { id: string; defId: 'mine'; x: number; y: number } => ({
+    id: `mn-${idSuffix}`,
+    defId: 'mine',
+    x,
+    y,
+  });
+
+  it("'submarine_cable' is a valid RouteType (type-system + runtime)", () => {
+    // Type-level: this object must compile under the discriminated union.
+    // Runtime: the literal round-trips intact, and the Route is well-formed
+    // (id, capacity, transit time match the spec contract).
+    const r: Route = submarineCableRoute('island-a', 'island-b', 50);
+    expect(r.type).toBe('submarine_cable');
+    expect(r.from).toBe('island-a');
+    expect(r.to).toBe('island-b');
+    expect(r.capacityPerSec).toBe(50);
+    expect(r.transitTimeSec).toBe(0);
+    expect(r.filter).toBeNull();
+    expect(r.priorityList).toEqual([]);
+    expect(r.inFlight).toEqual([]);
+  });
+
+  it('isPowerLink returns true for submarine_cable', () => {
+    expect(isPowerLink('submarine_cable')).toBe(true);
+    // Sanity-check the rest of the union to pin behaviour: only the three
+    // power-link types should return true.
+    expect(isPowerLink('cable')).toBe(true);
+    expect(isPowerLink('spacetime')).toBe(true);
+    expect(isPowerLink('cargo')).toBe(false);
+    expect(isPowerLink('drone')).toBe(false);
+    expect(isPowerLink('airship')).toBe(false);
+    expect(isPowerLink('teleporter')).toBe(false);
+    expect(isPowerLink('mass_driver')).toBe(false);
+  });
+
+  it('submarine_cable routes contribute to §5.3 unified pool — gate FAILS when undersized', () => {
+    // Mirror of the land-cable "50W < 80W required → fails" test at routes.test.ts:705.
+    // A: 2 solars (100W produced), no consumers → surplus 100W.
+    // B: 2 mines (80W consumed), no producers → deficit 80W.
+    // required = min(100, 80) = 80. Submarine cable capacity 50W < 80 → fails.
+    const a = makeState('a', { buildings: solars('a', 2) });
+    const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
+    const world = makeWorld([submarineCableRoute('a', 'b', 50)]);
+    const states = new Map<string, IslandState>([['a', a], ['b', b]]);
+    const balances = computeCableNetworkBalance(world, states);
+    const balA = balances.get('a')!;
+    const balB = balances.get('b')!;
+    // Same referent — both islands map to the same component.
+    expect(balA).toBe(balB);
+    expect(balA.producedTotal).toBe(100);
+    expect(balA.consumedTotal).toBe(80);
+    expect(balA.requiredTransmission).toBe(80);
+    expect(balA.cableCapacityTotal).toBe(50);
+    expect(balA.unified).toBe(false);
+  });
+
+  it('submarine_cable routes contribute to §5.3 unified pool — gate PASSES when oversized', () => {
+    // Mirror of the land-cable "100W > 80W required → passes" test at routes.test.ts:725.
+    const a = makeState('a', { buildings: solars('a', 2) });
+    const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
+    const world = makeWorld([submarineCableRoute('a', 'b', 100)]);
+    const states = new Map<string, IslandState>([['a', a], ['b', b]]);
+    const balances = computeCableNetworkBalance(world, states);
+    const bal = balances.get('a')!;
+    expect(bal.producedTotal).toBe(100);
+    expect(bal.consumedTotal).toBe(80);
+    expect(bal.requiredTransmission).toBe(80);
+    expect(bal.cableCapacityTotal).toBe(100);
+    expect(bal.unified).toBe(true);
+  });
+
+  it('submarine_cable capacity sums with land cable capacity in the same component', () => {
+    // Mixed-type component: one land cable + one submarine cable both connect A↔B.
+    // Their capacities add (mirrors the chain test at routes.test.ts:742) — proving
+    // the new RouteType is just another bucket in the §5.3 capacity sum.
+    const a = makeState('a', { buildings: solars('a', 2) });
+    const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
+    const world = makeWorld([
+      cableRoute('a', 'b', 30),
+      submarineCableRoute('a', 'b', 60),
+    ]);
+    const states = new Map<string, IslandState>([['a', a], ['b', b]]);
+    const balances = computeCableNetworkBalance(world, states);
+    const bal = balances.get('a')!;
+    expect(bal.requiredTransmission).toBe(80);
+    expect(bal.cableCapacityTotal).toBe(90); // 30 + 60
+    expect(bal.unified).toBe(true); // 90 ≥ 80
+  });
+});
+
+describe('§4 submarine_cable does not dispatch cargo (mirrors §5.3 cable)', () => {
+  it('skips submarine_cable routes in dispatch even with non-empty priorityList and capacity', () => {
+    // Mirrors the §5.3 cable dispatch-skip test at routes.test.ts:878.
+    // submarine_cable is a power-transmission route variant — it must
+    // never move resources, regardless of how its priorityList is filled.
+    const src = makeState('a', {
+      inventory: { ...blankInventory(), iron_ore: 10 },
+    });
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(),
+      from: 'a',
+      to: 'b',
+      type: 'submarine_cable',
+      capacityPerSec: 1,
+      filter: null,
+      priorityList: ['iron_ore'],
+      transitTimeSec: 1,
+      inFlight: [],
+    };
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2);
+    expect(out.length).toBe(0);
+    expect(src.inventory.iron_ore).toBe(10);
+    expect(r.inFlight.length).toBe(0);
+  });
+
+  it('deliverArrivals skips submarine_cable routes (no in-flight delivery path)', () => {
+    // Manually seed an in-flight batch on a submarine_cable route to prove
+    // deliverArrivals takes the same `continue` early-exit as for `cable`.
+    // (Such a batch could only appear via direct mutation — the dispatch
+    // path can't produce one — but the invariant must hold either way.)
+    const src = makeState('a');
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(),
+      from: 'a',
+      to: 'b',
+      type: 'submarine_cable',
+      capacityPerSec: 1,
+      filter: null,
+      priorityList: [],
+      transitTimeSec: 0,
+      inFlight: [
+        { resourceId: 'iron_ore', amount: 5, arrivalTime: 0, dispatchTime: 0 },
+      ],
+    };
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    const arrivals = deliverArrivals(world, states, 1000);
+    expect(arrivals.length).toBe(0);
+    expect(dst.inventory.iron_ore).toBe(0);
+    // The route's inFlight is intentionally left alone — cable routes
+    // never have a deliveries pipeline that touches inFlight.
+    expect(r.inFlight.length).toBe(1);
   });
 });

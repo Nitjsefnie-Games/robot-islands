@@ -39,7 +39,11 @@ import { CELL_SIZE_TILES, type WorldState } from './world.js';
  *  exists so future tiers can be added without reshaping the data model.
  *  `mass_driver` is the §9.5 Plains-unique T4 long-range launcher
  *  (Route.type per §15.1) — runs through the standard cargo dispatch
- *  path with a higher capacity constant + Diesel fuel debit. */
+ *  path with a higher capacity constant + Diesel fuel debit.
+ *  `submarine_cable` (§4 ocean layer) is an inter-island power-
+ *  transmission variant of `cable` that visually routes across ocean;
+ *  it behaves identically to land `cable` for §5.3 unified-pool
+ *  purposes (see `isPowerLink` and the dispatch skip below). */
 export type RouteType =
   | 'cargo'
   | 'drone'
@@ -47,7 +51,8 @@ export type RouteType =
   | 'mass_driver'
   | 'teleporter'
   | 'cable'
-  | 'spacetime';
+  | 'spacetime'
+  | 'submarine_cable';
 
 /** A batch of cargo currently in transit on a route. Created at dispatch,
  *  removed when `arrivalTime <= nowMs`. */
@@ -175,9 +180,13 @@ export function _seedRouteIdCounter(value: number): void {
 // §5.3 Cable network: binary-gated unified power pool.
 // ---------------------------------------------------------------------------
 
-/** Internal: a cable / spacetime route counts toward the connected component. */
-function isPowerLink(t: RouteType): boolean {
-  return t === 'cable' || t === 'spacetime';
+/** Whether a `RouteType` participates in the §5.3 inter-island power
+ *  pool. The three power-link types — land `cable`, T5 `spacetime`, and
+ *  the §4 ocean-layer `submarine_cable` variant — are all summed into
+ *  the same component capacity. Exported so tests can pin the contract
+ *  without rebuilding the network analysis path. */
+export function isPowerLink(t: RouteType): boolean {
+  return t === 'cable' || t === 'spacetime' || t === 'submarine_cable';
 }
 
 /**
@@ -446,7 +455,7 @@ export function deliverArrivals(
   const delivered: Array<{ destIslandId: string; resourceId: ResourceId; amount: number }> = [];
 
   for (const route of world.routes) {
-    if (route.type === 'cable') continue; // §5.3: cables transmit power, not items.
+    if (route.type === 'cable' || route.type === 'submarine_cable') continue; // §5.3 / §4: power-link routes transmit power, not items.
     const destState = states.get(route.to);
     if (!destState) {
       // Destination state missing (e.g., island despawned mid-flight). Drop
@@ -572,7 +581,7 @@ function dispatchPhase(
   // source side, so dest-cap clamping has to happen per-route.
   const demands: RouteDemand[] = [];
   for (const route of world.routes) {
-    if (route.type === 'cable') continue; // §5.3: cables transmit power, not items.
+    if (route.type === 'cable' || route.type === 'submarine_cable') continue; // §5.3 / §4: power-link routes transmit power, not items.
     const srcState = states.get(route.from);
     if (!srcState) continue;
     const r = selectResource(world, states, route);
