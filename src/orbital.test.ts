@@ -2132,3 +2132,141 @@ describe('§14.3 Mirror Sat — launch + stats', () => {
     expect(result.reason).toBe('insufficient-resources');
   });
 });
+
+// ---------------------------------------------------------------------------
+// §5 (ocean-layer design) — Scanner Sat ocean-cell discovery
+// ---------------------------------------------------------------------------
+//
+// Task 7: extends `tickScannerDiscovery` to also write `revealedCells` and
+// `depthRevealedCells` for every cell in the sat's coverage disk, mirroring
+// the Sonar Buoy reveal contract (§5 design doc). The same `cellsCoveredBySat`
+// area-overlap geometry that drives island discovery is reused unchanged — no
+// new disk math, just an additional flip-target inside the existing tick.
+//
+// Geometry note: `cellsCoveredBySat` is the source of truth for "what cells
+// does this sat see this tick" (tile-domain area-overlap per commit fb7bd51).
+// The `revealOceanCells` helper from `discovery.ts` uses a different geometry
+// (cell-domain center-disk: `dx² + dy² ≤ r²` in cell coords) — re-routing
+// through it would change the covered cell set vs the island-discovery branch
+// of the same tick. Per design-doc §5 ("Same coverage math, additional
+// flip-target") we walk `covered` directly instead.
+//
+// In-transit guard: relies on the existing `if (!sat.locked) continue;` at
+// the top of the per-sat loop. Power gate: scanners are not power-gated per
+// §14 ("satellites operate above the weather layer"); same as today.
+describe('§5 Scanner Sat ocean cell discovery', () => {
+  it('Scanner Sat coverage writes revealedCells AND depthRevealedCells for cells in coverage', () => {
+    // Sat at world tile (0, 0) — inside cell (0, 0). Coverage radius 400
+    // tiles = 25 cells, well past the cell-(0,0) AABB. `cellsCoveredBySat`
+    // admits a non-empty set; every key in it should land in both reveal
+    // Sets after the tick.
+    const sat = makeMinimalSat({
+      id: 'sat1',
+      x: 0,
+      y: 0,
+      variant: 'scanner',
+      coverageRadius: 400,
+      locked: true,
+    });
+    const world = makeBfsWorld({
+      islands: [],
+      islandStates: new Map(),
+      satellites: [sat],
+    });
+    const expected = cellsCoveredBySat(sat);
+    expect(expected.size).toBeGreaterThan(0);
+    tickScannerDiscovery(world, 1000, 0);
+    for (const key of expected) {
+      expect(world.revealedCells.has(key)).toBe(true);
+      expect(world.depthRevealedCells.has(key)).toBe(true);
+    }
+    // Sanity: the reveal sets have the same cardinality as the coverage set
+    // (no other writers in this fixture — no islands, no drones).
+    expect(world.revealedCells.size).toBe(expected.size);
+    expect(world.depthRevealedCells.size).toBe(expected.size);
+  });
+
+  it('Scanner Sat over island+ocean reveals BOTH the island (existing) AND ocean cells (new)', () => {
+    // Island centred at world tile (0, 0) is inside cell (0, 0). The sat
+    // sits at (0, 0) with coverage 400 tiles; its coverage disk straddles
+    // every cell touching the island AND surrounding ocean cells. After
+    // a forced-success discovery tick: island.discovered flips, AND every
+    // covered cell is in revealedCells + depthRevealedCells.
+    const island = makeMinimalIsland({ id: 'target', cx: 0, cy: 0, discovered: false });
+    const sat = makeMinimalSat({
+      id: 'sat1',
+      x: 0,
+      y: 0,
+      variant: 'scanner',
+      coverageRadius: 400,
+      locked: true,
+    });
+    const world = makeBfsWorld({
+      islands: [island],
+      islandStates: new Map(),
+      satellites: [sat],
+    });
+    // Pre-warm dwell so discovery probability is near asymptote (~0.05).
+    sat.dwellByCellKey = { '0,0': SCANNER_DWELL_TIME_CONSTANT_MS * 10 };
+    const expected = cellsCoveredBySat(sat);
+    // nowMs=20 with seed '0_scan_sat1_20' yields rng ≈ 0.018 < 0.05 → island
+    // discovery succeeds (same forced-success seed as the §14.5 dwell test).
+    const newlyDiscovered = tickScannerDiscovery(world, 1000, 20);
+    expect(newlyDiscovered).toContain('target');
+    expect(world.islands[0]!.discovered).toBe(true);
+    // Ocean-cell reveal: every covered cell, including the cell containing
+    // the island, lands in both reveal Sets. (Land cells getting written to
+    // depthRevealedCells is harmless — the §5 render rule gates feature
+    // glyphs on terrain being rare, so over-coverage doesn't render.)
+    for (const key of expected) {
+      expect(world.revealedCells.has(key)).toBe(true);
+      expect(world.depthRevealedCells.has(key)).toBe(true);
+    }
+  });
+
+  it('in-transit Scanner Sat (locked: false) does not reveal ocean cells', () => {
+    // Same fixture as the first test but the sat is in transit. The existing
+    // `if (!sat.locked) continue;` short-circuits the whole per-sat tick —
+    // including the new ocean-reveal branch.
+    const sat = makeMinimalSat({
+      id: 'sat1',
+      x: 0,
+      y: 0,
+      variant: 'scanner',
+      coverageRadius: 400,
+      locked: false,
+    });
+    const world = makeBfsWorld({
+      islands: [],
+      islandStates: new Map(),
+      satellites: [sat],
+    });
+    tickScannerDiscovery(world, 1000, 0);
+    expect(world.depthRevealedCells.size).toBe(0);
+    // Surface-discovery set also stays empty — the only writer in this
+    // fixture is the (skipped) sat.
+    expect(world.revealedCells.size).toBe(0);
+  });
+
+  it('Non-scanner sat does not reveal ocean cells', () => {
+    // A relay sat (variant !== 'scanner') is skipped by the early-continue at
+    // the top of the loop — no reveal happens even if it's locked. Pins that
+    // the ocean-reveal branch lives inside the same scanner-gated block.
+    const sat = makeMinimalSat({
+      id: 'sat1',
+      x: 0,
+      y: 0,
+      variant: 'relay',
+      coverageRadius: 400,
+      locked: true,
+    });
+    const world = makeBfsWorld({
+      islands: [],
+      islandStates: new Map(),
+      satellites: [sat],
+    });
+    tickScannerDiscovery(world, 1000, 0);
+    expect(world.depthRevealedCells.size).toBe(0);
+    expect(world.revealedCells.size).toBe(0);
+  });
+});

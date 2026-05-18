@@ -973,6 +973,25 @@ export function tickScannerDiscovery(
     for (const key of covered) {
       sat.dwellByCellKey[key] = (sat.dwellByCellKey[key] ?? 0) + tickDeltaMs;
     }
+    // Ocean-layer §5 (design doc): every cell in coverage is also a
+    // depth-discovery flip-target. Mirrors the Sonar Buoy reveal contract
+    // (both `revealedCells` and `depthRevealedCells` get the key). We walk
+    // `covered` directly rather than calling `revealOceanCells` because
+    // `cellsCoveredBySat` is the source of truth for "which cells does this
+    // sat see" (tile-domain area-overlap per commit fb7bd51); the helper
+    // uses a different geometry (cell-domain center-disk) and routing
+    // through it would change the covered set vs the island-discovery
+    // branch below. Per design-doc §5 ("Same coverage math, additional
+    // flip-target") we reuse the existing `covered` set verbatim.
+    //
+    // Land cells inside `covered` (e.g. the cell containing a populated
+    // island's centre) also land in `depthRevealedCells`. Harmless — the
+    // §5 feature-glyph render rule gates on terrain being rare, so
+    // over-coverage doesn't render anything spurious.
+    for (const key of covered) {
+      world.revealedCells.add(key);
+      world.depthRevealedCells.add(key);
+    }
     // Discovery rolls per island in covered cells.
     const rng = makeSeededRng(`${world.seed}_scan_${sat.id}_${nowMs}`);
     for (const isl of world.islands) {

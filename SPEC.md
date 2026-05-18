@@ -1463,7 +1463,7 @@ The first satellite from a fresh Spaceport must be launched within the Spaceport
 A locked Scanner Sat provides:
 
 * **Weather visibility**: real-time weather state for every cell within coverage radius. Equivalent to a Weather Station at orbital scale, and immune to weather effects on itself.
-* **Discovery**: each tick, probability `p` of revealing any undiscovered island within coverage. `p` ramps from a low initial value toward an asymptote over real-time dwell on the cell. A few minutes catches most local islands; deep-orbit islands may take hours of continuous observation to surface. The dwell ramp is per-cell, so moving the satellite resets ramps in cells outside the new coverage.
+* **Discovery**: each tick, probability `p` of revealing any undiscovered island within coverage. `p` ramps from a low initial value toward an asymptote over real-time dwell on the cell. A few minutes catches most local islands; deep-orbit islands may take hours of continuous observation to surface. The dwell ramp is per-cell, so moving the satellite resets ramps in cells outside the new coverage. Scanner Sat coverage also reveals ocean cells (both surface + depth) inside its disk, per §5 of the ocean-layer design doc.
 
 Launched sats spawn at the Spaceport and travel to a player-chosen target tile, consuming onboard fuel proportional to distance; coverage / weather effects activate once the sat reaches station.
 
