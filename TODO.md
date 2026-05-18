@@ -31,24 +31,6 @@ Check kimi quota before considering kimi delegation.
 Consolidated punch list from the 4-agent sweep (200% file coverage,
 ~244 raw findings, deduped + verified against source + SPEC.md).
 
-> **Meta** — `SPEC.md` "Implementation Status" table is out of sync with
-> code in one load-bearing place. Future agents who trust the table
-> will mis-plan:
-> - §2.4 marked **P** listing route types `cargo / drone / airship /
->   teleporter / cable` — `mass_driver` missing from `RouteType` despite
->   §9.5 Mass Driver building and §15.1 `Route.type = 'mass_driver'`. (§1.)
-
----
-
-## 1. Spec divergence — real bugs a player would notice
-
-- **§15.1 / §9.5 `RouteType` is missing `'mass_driver'`.** `src/routes.ts:33-39`
-  enumerates `cargo | drone | airship | teleporter | cable | spacetime`.
-  Spec §15.1 says `Route.type = 'mass_driver'` for the §9.5 Plains
-  biome-unique Mass Driver building (which IS in BUILDING_DEFS). The
-  building exists with nothing to dispatch.
-  *(Flagged by Agent A.)*
-
 ---
 
 ## 2. Missing mechanics (spec calls for it, code doesn't ship it)

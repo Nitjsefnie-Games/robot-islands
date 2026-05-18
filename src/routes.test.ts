@@ -13,6 +13,8 @@ import {
   dispatchAttempt,
   FUNNELING_BONUS_PERCENT,
   FUNNELING_TIER_CAP,
+  MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
+  MASS_DRIVER_DIESEL_PER_UNIT,
   nextRouteId,
   reorderPriorityList,
   tickRoutes,
@@ -963,5 +965,144 @@ describe('§2.6 in-flight weather losses', () => {
     // crossed cell then applies a 5% loss sampled with rng = 0.6697…
     // → 5 * (1 - 0.05 * 0.6697049676440656) = 4.832573758088984.
     expect(delivered).toBeCloseTo(4.832573758088984, 9);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §9.5 / §15.1 — Mass Driver route type
+// ---------------------------------------------------------------------------
+
+function massDriverRoute(
+  from: string,
+  to: string,
+  filter: ResourceId | null,
+  priorityList: ResourceId[] = [],
+  capacityPerSec = MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
+  transitTimeSec = 10,
+): Route {
+  return {
+    id: nextRouteId(),
+    from,
+    to,
+    type: 'mass_driver',
+    capacityPerSec,
+    filter,
+    priorityList,
+    transitTimeSec,
+    inFlight: [],
+  };
+}
+
+describe('§9.5 / §15.1 mass_driver route type', () => {
+  it('is constructable with type === "mass_driver"', () => {
+    const r = massDriverRoute('a', 'b', 'iron_ore');
+    expect(r.type).toBe('mass_driver');
+  });
+
+  it('default capacity placeholder is ~5× T1 cargo (per §9.5 "~5× airship")', () => {
+    // T1 cargo capacity is 0.5 u/s; airship reuses the same per-second
+    // base today (no separate constant). Mass Driver placeholder is 2.5
+    // u/s = 5× cargo, anchoring on the only existing constant. Adjust
+    // when airship gets its own capacity constant.
+    expect(MASS_DRIVER_CAPACITY_UNITS_PER_SEC).toBeCloseTo(2.5, 9);
+  });
+
+  it('dispatches like cargo on the standard happy path', () => {
+    const src = makeState('a', {
+      inventory: { ...blankInventory(), iron_ore: 100, diesel: 100 },
+    });
+    const dst = makeState('b');
+    const r = massDriverRoute('a', 'b', 'iron_ore');
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 1);
+    expect(out.length).toBe(1);
+    expect(out[0]?.resourceId).toBe('iron_ore');
+    // capacity 2.5/s × 1s = 2.5 desired, dest headroom 100 ⇒ 2.5 dispatched.
+    expect(out[0]?.amount).toBeCloseTo(MASS_DRIVER_CAPACITY_UNITS_PER_SEC, 9);
+    expect(src.inventory.iron_ore).toBeCloseTo(100 - 2.5, 9);
+    // In-flight batch created (positive transit time).
+    expect(r.inFlight.length).toBe(1);
+  });
+
+  it('consumes Diesel proportional to dispatch volume', () => {
+    const src = makeState('a', {
+      inventory: { ...blankInventory(), iron_ore: 100, diesel: 100 },
+    });
+    const dst = makeState('b');
+    const r = massDriverRoute('a', 'b', 'iron_ore');
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 1);
+    const dispatched = out[0]?.amount ?? 0;
+    const expectedDiesel = 100 - dispatched * MASS_DRIVER_DIESEL_PER_UNIT;
+    expect(src.inventory.diesel).toBeCloseTo(expectedDiesel, 9);
+  });
+
+  it('skips dispatch and refunds cargo when source has no Diesel', () => {
+    const src = makeState('a', {
+      inventory: { ...blankInventory(), iron_ore: 100, diesel: 0 },
+    });
+    const dst = makeState('b');
+    const r = massDriverRoute('a', 'b', 'iron_ore');
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 1);
+    // Route stays valid but nothing ships; cargo NOT deducted.
+    expect(out.length).toBe(0);
+    expect(src.inventory.iron_ore).toBe(100);
+    expect(r.inFlight.length).toBe(0);
+  });
+
+  it('skips dispatch when source has insufficient Diesel for full ask', () => {
+    // 0.001 diesel can fuel only a sliver of the 2.5-unit dispatch. Per the
+    // teleporter-pattern handler, if the required fuel exceeds what's on
+    // hand, the dispatch is skipped wholesale (no partial volumes shipped
+    // off a budget-too-small fuel pile).
+    const src = makeState('a', {
+      inventory: { ...blankInventory(), iron_ore: 100, diesel: 0.001 },
+    });
+    const dst = makeState('b');
+    const r = massDriverRoute('a', 'b', 'iron_ore');
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 1);
+    expect(out.length).toBe(0);
+    expect(src.inventory.iron_ore).toBe(100);
+    expect(src.inventory.diesel).toBeCloseTo(0.001, 9);
+  });
+
+  it('still creates in-flight batches (transit > 0; weather-affected per §2.6)', () => {
+    const src = makeState('a', {
+      inventory: { ...blankInventory(), iron_ore: 100, diesel: 100 },
+    });
+    const dst = makeState('b');
+    const r = massDriverRoute('a', 'b', 'iron_ore', [], MASS_DRIVER_CAPACITY_UNITS_PER_SEC, 5);
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    tickRoutes(world, states, 0, 1);
+    expect(r.inFlight.length).toBe(1);
+    expect(r.inFlight[0]?.arrivalTime).toBe(5000);
+    // Advance past arrival.
+    const result = tickRoutes(world, states, 6000, 0);
+    expect(result.arrivals.length).toBe(1);
+    expect(dst.inventory.iron_ore).toBeGreaterThan(0);
+  });
+
+  it('mass_driver routes count toward connectedness (not power-link)', () => {
+    // Cable balance treats mass_driver as a non-power link — same as cargo.
+    // The component graph for cable analysis must NOT pick it up.
+    const a = makeState('a');
+    const b = makeState('b');
+    const r = massDriverRoute('a', 'b', 'iron_ore');
+    const world = makeWorld([r]);
+    const states = new Map([['a', a], ['b', b]]);
+    const balances = computeCableNetworkBalance(world, states);
+    // Both islands should be in their OWN trivial components — mass_driver
+    // is not a power link, so no shared cable component.
+    expect(balances.get('a')?.cableCapacityTotal).toBe(0);
+    expect(balances.get('b')?.cableCapacityTotal).toBe(0);
+    expect(balances.get('a')?.unified).toBe(false);
+    expect(balances.get('b')?.unified).toBe(false);
   });
 });
