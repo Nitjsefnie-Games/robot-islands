@@ -187,6 +187,7 @@ export type BuildingDefId =
   | 'scanner_sat_assembly'
   | 'relay_sat_assembly'
   | 'sweeper_sat_assembly'
+  | 'mirror_sat_assembly'
   | 'oip_assembly'
   | 'repair_pack_assembly'
   | 'repair_drone_assembly'
@@ -2142,6 +2143,24 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square3,
     fill: 0x709020,
     stroke: 0x203030,
+    power: { consumes: 600 },
+    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    glyph: '◇',
+  },
+  // §14.3 / §14.10: Mirror Sat Assembly — produces Mirror Sat payloads for
+  // §14.3 orbital reflectors that additively boost effective solar output
+  // on ground islands within their Lorentzian range (§2.7 composition).
+  // Stats mirror the other *_sat_assembly buildings: T6, square3, 600W,
+  // identical placementCost so all four sat assemblies cost the same
+  // physical investment (the variant cost lives in §14.10 recipe inputs).
+  mirror_sat_assembly: {
+    id: 'mirror_sat_assembly',
+    displayName: 'Mirror Sat Assembly',
+    category: 'manufacturing',
+    tier: 6,
+    footprint: SHAPES.square3,
+    fill: 0xd0b040,
+    stroke: 0x402a10,
     power: { consumes: 600 },
     placementCost: { steel: 250, microchip: 60, glass: 30 },
     glyph: '◇',

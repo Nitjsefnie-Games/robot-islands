@@ -338,6 +338,18 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.category).toBe('manufacturing');
   });
 
+  it('mirror_sat_assembly has correct inputs, outputs, and cycleSec (§14.3)', () => {
+    const r = RECIPES.mirror_sat_assembly!;
+    expect(r.outputs.mirror_sat).toBe(1);
+    expect(r.inputs.exotic_alloy).toBe(4);
+    expect(r.inputs.ai_core).toBe(1);
+    expect(r.inputs.aluminum).toBe(150);
+    expect(r.inputs.optical_glass).toBe(10);
+    expect(r.inputs.orbital_insertion_package).toBe(1);
+    expect(r.cycleSec).toBe(1800);
+    expect(r.category).toBe('manufacturing');
+  });
+
   it('oip_assembly has correct inputs, outputs, and cycleSec', () => {
     const r = RECIPES.oip_assembly!;
     expect(r.outputs.orbital_insertion_package).toBe(1);

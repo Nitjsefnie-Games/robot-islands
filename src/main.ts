@@ -83,6 +83,7 @@ import {
 import { mountDronesUi } from './drones-ui.js';
 import { tickDrones } from './drones.js';
 import {
+  effectiveSolarBoostFor,
   tickCommPackets,
   tickDebris,
   tickRepairDrones,
@@ -1496,6 +1497,19 @@ async function main(): Promise<void> {
     // per-island ctx the advance loop will use, so the gate decision is
     // taken against the same modifiers / specMul / NC buff the integrator
     // will see this frame.
+    // §14.3 Mirror Sat: precompute per-island solar boost ONCE per tick.
+    // Each populated island gets the aggregate of every locked mirror sat's
+    // Lorentzian contribution to that island's centre. Cheap (O(sats ×
+    // islands)) and avoids re-summing inside the cable helper and the per-
+    // island advance loop.
+    const solarBoostByIsland = new Map<string, number>();
+    for (const spec of worldState.islands) {
+      if (!spec.populated) continue;
+      solarBoostByIsland.set(
+        spec.id,
+        effectiveSolarBoostFor(worldState, { x: spec.cx, y: spec.cy }),
+      );
+    }
     const cableLocalCtxFor = (id: string): RatesContext => {
       const spec = islandSpecsById.get(id);
       const isLatticeIsland = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(id);
@@ -1509,6 +1523,7 @@ async function main(): Promise<void> {
         crossIsland: crossIslandById.get(id),
         caps: isLatticeIsland ? unifiedCaps : undefined,
         geothermalActive: spec?.modifiers.includes('geothermal_active') === true,
+        solarBoost: solarBoostByIsland.get(id),
       };
     };
     const cableBalances = computeCableNetworkBalance(worldState, islandStates, cableLocalCtxFor);
@@ -1536,6 +1551,7 @@ async function main(): Promise<void> {
         cableComponent,
         worldSeed: worldState.seed,
         geothermalActive,
+        solarBoost: solarBoostByIsland.get(s.id),
       }, nowWall);
       const { net, power } = computeRates(s, {
         modifierMul: modifierMulFor(s.id),
@@ -1547,6 +1563,7 @@ async function main(): Promise<void> {
         caps: isLatticeIsland ? unifiedCaps : undefined,
         cableComponent,
         geothermalActive,
+        solarBoost: solarBoostByIsland.get(s.id),
       }, undefined, nowWall);
       islandNets.set(s.id, net);
       islandPower.set(s.id, power);
@@ -1685,6 +1702,7 @@ async function main(): Promise<void> {
       cableComponent: postTickCableComponent,
       geothermalActive: postTickGeothermal,
       accelerationMul: postTickActiveS.accelerationRemainingMin > 0 ? 3 : 1,
+      solarBoost: solarBoostByIsland.get(postTickActiveS.id),
     }, undefined, nowWall);
     islandNets.set(activeIslandId, postNet);
     islandPower.set(activeIslandId, postPower);
@@ -1713,6 +1731,7 @@ async function main(): Promise<void> {
         cableComponent: activeCableComponent,
         geothermalActive: activeGeothermal,
         accelerationMul: activeS.accelerationRemainingMin > 0 ? 3 : 1,
+        solarBoost: solarBoostByIsland.get(activeS.id),
       }, undefined, nowWall);
       islandNets.set(activeS.id, activeNet);
       islandPower.set(activeS.id, activePower);

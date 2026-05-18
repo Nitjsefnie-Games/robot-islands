@@ -2445,6 +2445,60 @@ describe('day-night solar modulation (§2.7)', () => {
   });
 });
 
+describe('§14.3 Mirror Sat — effectiveSolar composition (additive ramp + Σ boost, cap at 1)', () => {
+  // §2.7 + §14.3: solar producers gate on `min(1, solarMultiplier(t) + ctx.solarBoost)`.
+  // The aggregate `solarBoost` is computed once per tick in main.ts (sum of all
+  // mirror sats whose per-target contribution > 0.05) and threaded via
+  // RatesContext, mirroring `cableComponent`.
+  const HOUR = 60 * 60 * 1000;
+
+  it('mid-Day with one mirror in range: boost capped at 1.0 (no over-production)', () => {
+    // Mid-Day mul = 1.0; +0.7 mirror boost would saturate at 1.0.
+    // Solar nameplate = 50W → produced = 50W, not 50 × 1.7 = 85W.
+    const state = makeState({ buildings: [SOLAR], lastTick: 0 });
+    const { power } = computeRates(state, { solarBoost: 0.7 }, 0, 0);
+    expect(power.produced).toBe(50);
+  });
+
+  it('deep night with one mirror in range: produces boost × nameplate (additive proves it)', () => {
+    // Night mul = 0; +0.35 mirror boost → effective 0.35 → 50 × 0.35 = 17.5W.
+    // (Multiplicative composition would be 0 × 0.35 = 0; additive proves the rule.)
+    const state = makeState({ buildings: [SOLAR], lastTick: 12 * HOUR });
+    const { power } = computeRates(state, { solarBoost: 0.35 }, 12 * HOUR, 12 * HOUR);
+    expect(power.produced).toBeCloseTo(17.5, 12);
+  });
+
+  it('deep night with multiple mirrors stacked past 1.0: capped at 1.0 → full nameplate', () => {
+    // Three mirrors at d=0 → Σ boost = 2.1. min(1, 0 + 2.1) = 1.0 → 50W (full).
+    // Demonstrates "fourth mirror is wasted" saturation visible to the player.
+    const state = makeState({ buildings: [SOLAR], lastTick: 12 * HOUR });
+    const { power } = computeRates(state, { solarBoost: 2.1 }, 12 * HOUR, 12 * HOUR);
+    expect(power.produced).toBe(50);
+  });
+
+  it('no mirror boost (ctx omitted): solar gate identical to baseline §2.7 (regression)', () => {
+    // ctx.solarBoost defaults to 0 — ensures the new ctx field doesn't
+    // accidentally affect islands without any mirror coverage.
+    const state = makeState({ buildings: [SOLAR], lastTick: 0 });
+    const dayNoMirror = computeRates(state, undefined, 0, 0);
+    expect(dayNoMirror.power.produced).toBe(50);
+    const nightState = makeState({ buildings: [SOLAR], lastTick: 12 * HOUR });
+    const nightNoMirror = computeRates(nightState, undefined, 12 * HOUR, 12 * HOUR);
+    expect(nightNoMirror.power.produced).toBe(0);
+  });
+
+  it('mirror boost does NOT affect non-solar producers (Coal Gen unchanged)', () => {
+    // Coal Gen is not `solar: true`; mirror boost must not raise its wattage.
+    const state = makeState({
+      buildings: [COAL_GEN],
+      inventory: { ...blankInventory(), coal: 50 },
+      lastTick: 12 * HOUR,
+    });
+    const { power } = computeRates(state, { solarBoost: 0.7 }, 12 * HOUR, 12 * HOUR);
+    expect(power.produced).toBe(100);
+  });
+});
+
 
 describe('accrueXp funnel provenance §10.1', () => {
   it('does not drain funnel for consumption covered by local production', () => {

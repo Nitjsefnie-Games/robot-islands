@@ -39,6 +39,8 @@ import {
   SWEEPER_CLEAN_RATE_PER_SEC,
   REPAIR_DRONE_FUEL_PER_TILE,
   REPAIR_DRONE_MIN_FUEL,
+  mirrorBoost,
+  effectiveSolarBoostFor,
   type SatelliteVariant,
   type Satellite,
   type SatBufferEntry,
@@ -122,6 +124,7 @@ function stockLaunchResources(
   state.inventory.scanner_sat = variant === 'scanner' ? 1 : 0;
   state.inventory.sweeper_sat = variant === 'sweeper' ? 1 : 0;
   state.inventory.relay_sat = variant === 'relay' ? 1 : 0;
+  state.inventory.mirror_sat = variant === 'mirror' ? 1 : 0;
   state.inventory.orbital_insertion_package = 1;
   state.inventory.antimatter_propellant = 1;
 }
@@ -1857,5 +1860,187 @@ describe('§14.12 dispatchRepairDrone proportional fuel', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('insufficient-fuel');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §14.3 Mirror Sat — Lorentzian boost falloff (additive to §2.7 solar)
+// ---------------------------------------------------------------------------
+
+describe('§14.3 Mirror Sat — mirrorBoost Lorentzian falloff', () => {
+  // Per-sat fields are locked per the design brief: peakBoost = 0.7, rHalf = 200.
+  // The contribution at any point is:
+  //   raw = peakBoost / (1 + (d / rHalf)²)
+  //   return raw < 0.05 ? 0 : raw
+  function makeMirror(x: number, y: number): Satellite {
+    return {
+      id: 'm1',
+      variant: 'mirror',
+      spaceportIslandId: 'home',
+      x,
+      y,
+      commRange: 200,
+      coverageRadius: 0,
+      fuel: 100,
+      lodges: { scan: 0, weather: 0, comm: 0 },
+      locked: true,
+      pendingRepairDroneId: null,
+      buffer: [],
+      peakBoost: 0.7,
+      rHalf: 200,
+    };
+  }
+
+  it('at d=0 returns exactly peakBoost (0.7)', () => {
+    const sat = makeMirror(0, 0);
+    expect(mirrorBoost(sat, { x: 0, y: 0 })).toBeCloseTo(0.7, 12);
+  });
+
+  it('at d=rHalf (200) returns peakBoost/2 (0.35) — half-power point', () => {
+    const sat = makeMirror(0, 0);
+    expect(mirrorBoost(sat, { x: 200, y: 0 })).toBeCloseTo(0.35, 12);
+  });
+
+  it('at d=2·rHalf (400) returns peakBoost/5 (0.14)', () => {
+    const sat = makeMirror(0, 0);
+    // raw = 0.7 / (1 + 4) = 0.14
+    expect(mirrorBoost(sat, { x: 400, y: 0 })).toBeCloseTo(0.14, 12);
+  });
+
+  it('returns 0 when raw drops below the 0.05 hard cutoff', () => {
+    // raw < 0.05 ⇔ 0.7 / (1 + (d/200)²) < 0.05 ⇔ (d/200)² > 13 ⇔ d > 200√13 ≈ 721.11.
+    const sat = makeMirror(0, 0);
+    // d = 800: raw = 0.7 / (1 + 16) ≈ 0.0412 → below cutoff → zeroed.
+    expect(mirrorBoost(sat, { x: 800, y: 0 })).toBe(0);
+    // d = 720 (just under the threshold): raw ≈ 0.7 / (1 + (3.6)²) ≈ 0.7 / 13.96 ≈ 0.05014
+    //   → strictly above the strict-less-than cutoff → returned as-is.
+    expect(mirrorBoost(sat, { x: 720, y: 0 })).toBeGreaterThan(0.05);
+    // d = 730: raw ≈ 0.7 / (1 + 13.3225) ≈ 0.04887 → below cutoff → 0.
+    expect(mirrorBoost(sat, { x: 730, y: 0 })).toBe(0);
+  });
+
+  it('distance is Euclidean (mirror at (3, 4) is d=5 from origin)', () => {
+    const sat = makeMirror(3, 4);
+    const raw = 0.7 / (1 + (5 / 200) ** 2);
+    expect(mirrorBoost(sat, { x: 0, y: 0 })).toBeCloseTo(raw, 12);
+  });
+});
+
+describe('§14.3 Mirror Sat — effectiveSolarBoostFor (Σ across world.satellites)', () => {
+  function makeMirrorWorld(positions: Array<{ x: number; y: number; locked?: boolean }>): WorldState {
+    const w = makeWorld();
+    w.satellites = positions.map((p, i) => ({
+      id: `m${i}`,
+      variant: 'mirror' as const,
+      spaceportIslandId: 'home',
+      x: p.x,
+      y: p.y,
+      commRange: 200,
+      coverageRadius: 0,
+      fuel: 100,
+      lodges: { scan: 0, weather: 0, comm: 0 },
+      locked: p.locked ?? true,
+      pendingRepairDroneId: null,
+      buffer: [],
+      peakBoost: 0.7,
+      rHalf: 200,
+    }));
+    return w;
+  }
+
+  it('returns 0 when no satellites are present', () => {
+    const w = makeWorld();
+    expect(effectiveSolarBoostFor(w, { x: 0, y: 0 })).toBe(0);
+  });
+
+  it('returns 0 when only non-mirror satellites are present', () => {
+    const w = makeWorld();
+    w.satellites = [{
+      id: 's1',
+      variant: 'scanner',
+      spaceportIslandId: 'home',
+      x: 0, y: 0,
+      commRange: 200,
+      coverageRadius: 400,
+      fuel: 100,
+      lodges: { scan: 0, weather: 0, comm: 0 },
+      locked: true,
+      pendingRepairDroneId: null,
+      buffer: [],
+    }];
+    expect(effectiveSolarBoostFor(w, { x: 0, y: 0 })).toBe(0);
+  });
+
+  it('sums boost contributions from multiple mirrors', () => {
+    // Two mirrors at d=0 (overlapping) should give 0.7 + 0.7 = 1.4 (UNCAPPED at this layer).
+    // The cap-at-1 lives in the §2.7 composition step, not here.
+    const w = makeMirrorWorld([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+    expect(effectiveSolarBoostFor(w, { x: 0, y: 0 })).toBeCloseTo(1.4, 12);
+  });
+
+  it('ignores in-transit mirrors (locked === false)', () => {
+    // Sat in transit shouldn't reflect sunlight — mirrors only contribute
+    // while parked at their lock cell.
+    const w = makeMirrorWorld([{ x: 0, y: 0, locked: false }, { x: 0, y: 0, locked: true }]);
+    expect(effectiveSolarBoostFor(w, { x: 0, y: 0 })).toBeCloseTo(0.7, 12);
+  });
+
+  it('ignores out-of-range mirrors via the per-sat 0.05 cutoff', () => {
+    // 10 mirrors all individually below cutoff at d=800 should sum to 0,
+    // not to 10× their raw value.
+    const positions = Array.from({ length: 10 }, () => ({ x: 800, y: 0 }));
+    const w = makeMirrorWorld(positions);
+    expect(effectiveSolarBoostFor(w, { x: 0, y: 0 })).toBe(0);
+  });
+});
+
+describe('§14.3 Mirror Sat — launch + stats', () => {
+  it('successful mirror launch sets peakBoost=0.7 and rHalf=200', () => {
+    const world = makeWorld();
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
+    addSpaceport(state, 3);
+    stockLaunchResources(state, 'mirror');
+    world.islandStates = new Map([['home', state]]);
+    const result = launchSatellite(world, 'home', 'mirror', 50, 50, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.sat.variant).toBe('mirror');
+    expect(result.sat.peakBoost).toBe(0.7);
+    expect(result.sat.rHalf).toBe(200);
+    // Coverage radius = 0 (not a scanner). Comm range nominal 200.
+    expect(result.sat.coverageRadius).toBe(0);
+    expect(result.sat.commRange).toBe(200);
+  });
+
+  it('mirror launch deducts mirror_sat + OIP + propellant', () => {
+    const world = makeWorld();
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
+    addSpaceport(state, 3);
+    stockLaunchResources(state, 'mirror');
+    state.inventory.mirror_sat = 2; // start with extras to confirm exact deduction.
+    state.inventory.orbital_insertion_package = 2;
+    state.inventory.antimatter_propellant = 2;
+    world.islandStates = new Map([['home', state]]);
+    const result = launchSatellite(world, 'home', 'mirror', 50, 50, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(state.inventory.mirror_sat).toBe(1);
+    expect(state.inventory.orbital_insertion_package).toBe(1);
+    expect(state.inventory.antimatter_propellant).toBe(1);
+  });
+
+  it('mirror launch rejects when mirror_sat payload is missing', () => {
+    const world = makeWorld();
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
+    addSpaceport(state, 3);
+    // OIP + propellant present, but no mirror_sat.
+    state.inventory.orbital_insertion_package = 1;
+    state.inventory.antimatter_propellant = 1;
+    state.inventory.mirror_sat = 0;
+    world.islandStates = new Map([['home', state]]);
+    const result = launchSatellite(world, 'home', 'mirror', 50, 50, 1);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('insufficient-resources');
   });
 });

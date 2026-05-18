@@ -108,6 +108,12 @@ const VARIANTS: ReadonlyArray<VariantSpec> = [
     payload: 'sweeper_sat',
     summary: 'Removes debris fragments from its cell over time',
   },
+  {
+    variant: 'mirror',
+    label: 'Mirror Sat',
+    payload: 'mirror_sat',
+    summary: 'Reflects sunlight, boosting solar output on islands in range (also at night)',
+  },
 ];
 
 const COMMON_RESOURCES: ReadonlyArray<ResourceId> = [

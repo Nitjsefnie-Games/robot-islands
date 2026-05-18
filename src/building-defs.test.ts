@@ -90,6 +90,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'antimatter_refinery',
   'scanner_sat_assembly',
   'relay_sat_assembly',
+  'mirror_sat_assembly',
   'oip_assembly',
   'repair_drone_assembly',
   // Step-18 recipe-graph closure (§7.1-§7.12)
@@ -1796,13 +1797,14 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
     'scanner_sat_assembly',
     'relay_sat_assembly',
     'sweeper_sat_assembly',
+    'mirror_sat_assembly',
     'oip_assembly',
     'repair_pack_assembly',
     'repair_drone_assembly',
   ] as const;
   const ALL_T6_IDS = ['spaceport', ...T6_NON_SPACEPORT_IDS] as const;
 
-  it('all 9 T6 defs are present with tier 6', () => {
+  it('all 10 T6 defs are present with tier 6', () => {
     for (const id of ALL_T6_IDS) {
       expect(BUILDING_DEFS[id]).toBeDefined();
       expect(BUILDING_DEFS[id].tier).toBe(6);
@@ -1840,6 +1842,7 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
       'scanner_sat_assembly',
       'relay_sat_assembly',
       'sweeper_sat_assembly',
+      'mirror_sat_assembly',
       'oip_assembly',
       'repair_pack_assembly',
       'repair_drone_assembly',

@@ -107,6 +107,14 @@ export interface RatesContext {
    *  `computeCableNetworkBalance` (routes.ts) and threaded per-island into
    *  the ctx by main.ts. */
   readonly cableComponent?: CableComponentBalance;
+  /** §14.3 Mirror Sat aggregate boost: sum of `mirrorBoost(sat, islandCentre)`
+   *  over every locked mirror sat in the world whose contribution survives
+   *  the per-sat 0.05 cutoff. Composes additively with `solarMultiplier(t)`
+   *  in the §2.7 gate (`effectiveSolar = min(1, ramp + Σ boost)`). Default 0
+   *  preserves baseline §2.7 behaviour for islands without any mirror
+   *  coverage (and for unit tests that omit it). Pre-computed once per
+   *  island per tick in main.ts via `effectiveSolarBoostFor`. */
+  readonly solarBoost?: number;
 }
 
 /**
@@ -526,7 +534,15 @@ export function computeRates(
   // one (production code does — see param doc). Tests typically omit it, so
   // fall back to `t` and keep the long-standing `lastTick = 12*HOUR ⇒ Night`
   // fixture convention working unchanged.
-  const solarMul = solarMultiplier(solarClockMs ?? t);
+  // §2.7 + §14.3: effective solar multiplier composes the day-night ramp
+  // additively with the sum of in-range Mirror Sat boosts (passed in via
+  // ctx.solarBoost; defaults to 0 for islands without mirror coverage).
+  // Cap at 1.0 so stacking past full-day doesn't over-produce — saturation
+  // is visible to the player as "extra mirrors are wasted past full sun".
+  // Additive (not multiplicative) so mirrors function at night, where
+  // solarMultiplier(night) = 0 would zero out a multiplicative term.
+  const rampMul = solarMultiplier(solarClockMs ?? t);
+  const solarMul = Math.min(1, rampMul + (ctx?.solarBoost ?? 0));
   const varianceFactor = computeVarianceFactor(state, modifierMul, t);
   // The §5.1 active flag depends on inputAvail, and inputAvail must be
   // computed at NOMINAL rate (independent of powerFactor) to avoid a circular

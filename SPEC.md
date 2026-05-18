@@ -283,6 +283,8 @@ The world has a 24-real-hour day-night cycle. Time-of-day is global — the same
 
 A solar-dependent island must plan for night-time stockpile via Battery (T2) or Singularity Battery (T5) reserves; otherwise its economy stalls during the night phase.
 
+**Mirror Sat boost (§14.3).** A T6 Mirror Sat parked in orbit contributes an additive boost to its ground islands' effective solar multiplier with Lorentzian falloff in lateral distance — `raw = peakBoost / (1 + (d / r_half)²)`, zeroed below `raw < 0.05`. Effective multiplier per island per tick is `min(1, solarMultiplier(t) + Σ mirrorBoost(sat, islandCentre))`, summed over all locked mirror sats reaching the island. The composition is **additive** so mirrors function at night (multiplicative would zero out alongside `solarMultiplier(night) = 0`); the cap at 1.0 makes "fourth mirror is wasted past full sun" visible to the player as saturation.
+
 **Weather modulation by phase:** severe-storm formation rate increases by ~25% during Night and Dawn (placeholder). Other states unchanged.
 
 The day-night cycle is global, so the player can plan around it: dispatch fuel-hungry tasks on solar-heavy islands during Day, schedule sensitive launches during Day or Dusk if solar power is the launch infrastructure's input. The cycle is purely time-driven and does not depend on the player's session — at offline resolution, day/night is just `phase(t)` evaluated at the relevant tick.
@@ -1425,9 +1427,10 @@ If the Spaceport is destroyed by a pad explosion (§14.7), it returns at tier I 
 |Scanner Sat|Large|Modest|Discovery + weather scan|
 |Sweeper Sat|Medium|Modest|Passive debris cleanup|
 |Relay Sat|None|Very large|Comm-graph extension only|
+|Mirror Sat|N/A (boost ring at r\_half = 200 tiles)|Modest|Reflects sunlight to ground islands — additive boost to §2.7 effective solar multiplier with Lorentzian falloff (peakBoost = 0.7, half-power at d = 200 tiles, cut off at raw < 0.05 around d ≈ 720). Per-sat fields locked.|
 |Repair Drone|N/A|N/A|Single-use maintenance, no orbital lock|
 
-Stat ceilings per variant scale with the launching Spaceport's tier. Final stats per launch = variant base × Spaceport-tier multiplier.
+Stat ceilings per variant scale with the launching Spaceport's tier. Final stats per launch = variant base × Spaceport-tier multiplier. Mirror Sat's peakBoost / r\_half are LOCKED per the §14.3 implementation; they do not scale with Spaceport tier (saturation cap at 1.0 in §2.7 composition is the deliberate balance valve).
 
 ### 14.4 Communication Network
 
@@ -1544,9 +1547,12 @@ Deep nodes unlock at higher tier breakpoints and cost more skill points.
 Scanner Sat   = 4 Exotic Alloy + 2 AI core + 1 Spacetime fragment + 50 Aluminum + 1 Orbital Insertion Package
 Sweeper Sat   = 4 Exotic Alloy + 1 AI core + 100 Carbon Steel + 20 Magnet + 1 Orbital Insertion Package
 Relay Sat     = 6 Exotic Alloy + 1 AI core + 200 Optical Fiber + 1 Orbital Insertion Package
+Mirror Sat    = 4 Exotic Alloy + 1 AI core + 150 Aluminum + 10 Optical Glass + 1 Orbital Insertion Package
 Repair Drone  = 2 Exotic Alloy + 50 Carbon Steel + 1 Foundation Kit
 Orbital Insertion Package = 100 Iron ingot + 30 Brick + 20 Glass + 10 Carbon Fiber + 5 AI core
 ```
+
+(Mirror Sat's 150 Aluminum is bulk reflective surface; 10 Optical Glass is sun-tracking precision optics.)
 
 All values are placeholders to be tuned. Costs are deliberately heavy: a T6 launch must represent real production commitment, so launch failures land with weight.
 

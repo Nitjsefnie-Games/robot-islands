@@ -258,6 +258,7 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   relay_sat: 'rare',
   orbital_insertion_package: 'rare',
   sweeper_sat: 'rare',
+  mirror_sat: 'rare',
   repair_drone: 'rare',
   repair_pack: 'rare',
   // §13.4 T5 endgame artifact — victory condition resource.

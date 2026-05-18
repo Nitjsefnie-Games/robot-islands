@@ -211,6 +211,7 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   relay_sat: 'components',            // §14.3 satellite payload
   orbital_insertion_package: 'components', // §14.7 T6 Foundation-Kit equivalent
   sweeper_sat: 'components',          // §14.8 debris sweeper payload
+  mirror_sat: 'components',           // §14.3 Mirror Sat payload (solar reflector)
   repair_drone: 'rare',               // §14.12 orbital repair unit
   repair_pack: 'components',          // §14.12 repair consumable
   // Misc
