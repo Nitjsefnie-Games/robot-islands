@@ -30,6 +30,7 @@
 // cell. The buoy's reveal disk is centered on that cell.
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { isOperational } from './construction.js';
 import { revealOceanCells, tileToCell } from './discovery.js';
 import type { WorldState } from './world.js';
 
@@ -78,6 +79,10 @@ export function tickSonarBuoys(world: WorldState): void {
     let powered: boolean | null = null;
     for (const b of spec.buildings) {
       if (b.defId !== SONAR_BUOY_DEF_ID) continue;
+      // §9.3 construction-in-progress buildings aren't active; biome-edit
+      // invalidated buildings are also excluded (mirrors the
+      // `economy.ts:525` precedent `!b.invalid && isOperational(b)`).
+      if (b.invalid || !isOperational(b)) continue;
       if (powered === null) powered = islandIsPowered(spec);
       if (!powered) break; // every buoy on this island is gated identically
       // Footprint center in world-tile coords; floor to stratification cell.
