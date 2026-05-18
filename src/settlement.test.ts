@@ -24,6 +24,7 @@ import {
 import { deserializeWorld, serializeWorld, type SaveSnapshot } from './persistence.js';
 import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { type IslandSpec, type WorldState } from './world.js';
+import { islandInscribedAny } from './island.js';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -203,6 +204,123 @@ describe('per-tier vehicle stats', () => {
     const newState = islandStates.get(targetSpec.id);
     expect(newState).toBeDefined();
     expect(newState!.unspentSkillPoints).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §12.4 starter building inscription — small biomes
+// ---------------------------------------------------------------------------
+
+describe('§12.4 starter building inscription', () => {
+  function makeArrivalSetup(targetRadius: number): {
+    world: WorldState;
+    home: IslandSpec;
+    homeState: IslandState;
+    target: IslandSpec;
+    islandStates: Map<string, IslandState>;
+  } {
+    const home = makeIslandSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      discovered: true,
+      majorRadius: 14,
+      minorRadius: 14,
+      buildings: [{ id: 'sy', defId: 'shipyard', x: 0, y: 0 }],
+    });
+    // Target is the colony being settled — distinct location, small radius.
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 0,
+      populated: false,
+      discovered: true,
+      majorRadius: targetRadius,
+      minorRadius: targetRadius,
+    });
+    const world = freshWorld([home, target]);
+    const homeState = makeIslandState({ id: 'home' });
+    homeState.inventory.biofuel = 50;
+    homeState.inventory.foundation_kit = 3;
+    const islandStates = new Map<string, IslandState>([['home', homeState]]);
+    return { world, home, homeState, target, islandStates };
+  }
+
+  it('T4 ship into a Volcanic r=7 colony: every starter is inscribed and unique', () => {
+    const { world, home, homeState, target, islandStates } = makeArrivalSetup(7);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+    // T4 ship places: solar, workshop, mine, coal_gen, crate.
+    const starters = target.buildings.filter((b) => b.id.startsWith('target-starter-'));
+    expect(starters.length).toBe(5);
+    const seen = new Set<string>();
+    for (const b of starters) {
+      expect(islandInscribedAny(target, b.x, b.y)).toBe(true);
+      const key = `${b.x},${b.y}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+    // Starter tiles must not collide with the auto-placed dock either.
+    const dock = target.buildings.find((b) => b.defId === 'dock');
+    expect(dock).toBeDefined();
+    expect(seen.has(`${dock!.x},${dock!.y}`)).toBe(false);
+  });
+
+  it('T4 ship into an Arctic r=7 colony: every starter is inscribed', () => {
+    const { world, home, homeState, target, islandStates } = makeArrivalSetup(7);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+    const starters = target.buildings.filter((b) => b.id.startsWith('target-starter-'));
+    expect(starters.length).toBe(5);
+    for (const b of starters) {
+      expect(islandInscribedAny(target, b.x, b.y)).toBe(true);
+    }
+  });
+
+  it('T4 ship into a Plains r=14 colony: 5 unique inscribed starters', () => {
+    const { world, home, homeState, target, islandStates } = makeArrivalSetup(14);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 5, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+    const starters = target.buildings.filter((b) => b.id.startsWith('target-starter-'));
+    expect(starters.length).toBe(5);
+    const seen = new Set<string>();
+    for (const b of starters) {
+      expect(islandInscribedAny(target, b.x, b.y)).toBe(true);
+      seen.add(`${b.x},${b.y}`);
+    }
+    expect(seen.size).toBe(5);
+  });
+
+  it('starter placement is deterministic for identical inputs', () => {
+    // Two parallel settlements with the same target geometry — assertions on
+    // starter coords must match exactly.
+    const a = makeArrivalSetup(7);
+    const ra = dispatchVehicle(a.world, a.home, a.homeState, a.target, 'ship', 4, 5, 1, 0);
+    expect(ra.ok).toBe(true);
+    if (!ra.ok) return;
+    tickVehicles(a.world, a.islandStates, ra.vehicle.expectedArrivalTime + 1);
+    const startersA = a.target.buildings
+      .filter((b) => b.id.startsWith('target-starter-'))
+      .map((b) => `${b.defId}@${b.x},${b.y}`);
+
+    _resetVehicleIdCounter();
+    _resetRouteIdCounter();
+    const b = makeArrivalSetup(7);
+    const rb = dispatchVehicle(b.world, b.home, b.homeState, b.target, 'ship', 4, 5, 1, 0);
+    expect(rb.ok).toBe(true);
+    if (!rb.ok) return;
+    tickVehicles(b.world, b.islandStates, rb.vehicle.expectedArrivalTime + 1);
+    const startersB = b.target.buildings
+      .filter((b) => b.id.startsWith('target-starter-'))
+      .map((b) => `${b.defId}@${b.x},${b.y}`);
+    expect(startersA).toEqual(startersB);
   });
 });
 
