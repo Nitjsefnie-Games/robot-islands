@@ -696,27 +696,34 @@ describe('power (§5.1)', () => {
     expect(wsRate).toBeCloseTo(0.015151515151515152, 9); // rebalanced step #19
   });
 
-  it('output-stalled consumer still draws power (lights on at full bin)', () => {
-    // Mine has iron_ore at cap (output-stalled, recipe rate 0) but is still
-    // active for §5.1 — its inputAvail is 1 (no inputs). It still counts
-    // 40W toward P_consumed. With Solar 50W producing and Mine 40W +
-    // Workshop 60W demanding = 100W → factor = 0.5. Workshop runs at half.
+  it('output-stalled consumer draws ZERO power (§5.1 throughput-scaled rebalance)', () => {
+    // §5.1 throughput-scaled-power rebalance: a Mine with iron_ore at cap
+    // (output-stalled, outputAvail = 0) now contributes 0W to P_consumed
+    // instead of its nominal 40W. Workshop's inputAvail is unaffected
+    // (it has stockpiled iron_ore from the Mine's cap-pile + coal), so
+    // it still draws full 60W. With Solar 50W vs 60W demand, factor =
+    // min(1, 50/60) ≈ 0.833. Workshop runs at 1/33 × 0.833 /s.
+    //
+    // (Previously this test asserted full 100W draw + factor 0.5 — that
+    // was the pre-rebalance "lights on at full bin" behaviour, which the
+    // user explicitly called out as wasteful.)
     const state = makeState({
       buildings: [SOLAR, MINE_PWR, WORKSHOP_PWR],
       inventory: {
         ...blankInventory(),
-        iron_ore: 100, // mine at cap → output-stalled but still drawing power
+        iron_ore: 100, // mine at cap → output-stalled → no power draw
         coal: 50,
       },
     });
     const { power, byBuilding } = computeRates(state);
     expect(power.produced).toBe(50);
-    expect(power.consumed).toBe(100); // mine still counts, even output-stalled
-    expect(power.factor).toBe(0.5);
+    expect(power.consumed).toBe(60); // mine 40W zeroed; workshop 60W remains
+    expect(power.factor).toBeCloseTo(50 / 60, 9);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBe(0); // output-stalled
-    expect(wsRate).toBeCloseTo(0.015151515151515152, 9); // half-rate (rebalanced step #19)
+    expect(mineRate).toBe(0); // still output-stalled at the recipe level
+    // Workshop nominal 1/33 × powerFactor (50/60). (rebalanced step #19)
+    expect(wsRate).toBeCloseTo((1 / 33) * (50 / 60), 9);
   });
 
   it('power_systems.1 unlocked: Coal Gen produces 105W instead of 100W', () => {
@@ -788,6 +795,159 @@ describe('power (§5.1)', () => {
     });
     // Solar 50W + Coal Gen 100W = 150W — same as the identity-modifier run.
     expect(power.produced).toBe(150);
+  });
+});
+
+describe('§5.1 power scales with effective throughput (rebalance)', () => {
+  // Building power draw scales by nominal throughput fraction:
+  //   nominalThroughputFrac = gateMul × inputAvail × (outputAvail > 0 ? 1 : 0)
+  // Composed BEFORE powerFactor (preserves the existing circular-dep break).
+  // Maintenance bills are explicitly UNTOUCHED — a stalled building still
+  // wears down at full rate.
+
+  it('output-cap stalled consumer contributes 0W (and powerFactor = 1)', () => {
+    // Coal Gen produces 100W; Mine consumes 40W but its iron_ore is at cap.
+    // Pre-rebalance: powerConsumed = 40, factor = min(1, 100/40) = 1.
+    // Post-rebalance: powerConsumed = 0, factor = 1 (consumed = 0 short
+    // -circuit). The difference is observable on power.consumed itself.
+    const state = makeState({
+      buildings: [COAL_GEN, MINE_PWR],
+      inventory: { ...blankInventory(), coal: 50, iron_ore: 100 },
+    });
+    const { power } = computeRates(state);
+    expect(power.consumed).toBe(0); // mine output-stalled → 0 draw
+    expect(power.factor).toBe(1);
+  });
+
+  it('soft-gate degraded consumer draws proportional power (0.5× gate → 20W from 40W)', () => {
+    // Soft-gate the Mine to 0.5×. Mine's nominal draw is 40W; throughput
+    // fraction = 0.5 × 1 × 1 = 0.5 → powerConsumed contribution = 20W.
+    // Coal Gen produces 100W so factor = 1.
+    const defs: DefCatalog = {
+      ...BUILDING_DEFS,
+      mine: {
+        ...BUILDING_DEFS.mine,
+        gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: 0.5 }],
+      },
+    };
+    const state = makeState({
+      buildings: [COAL_GEN, MINE_PWR],
+      inventory: { ...blankInventory(), coal: 50 },
+    });
+    const { power } = computeRates(state, { defs });
+    expect(power.consumed).toBeCloseTo(20, 9);
+    expect(power.factor).toBe(1);
+  });
+
+  it('partially input-starved consumer draws proportional power (inputAvail = 0.5 → half draw)', () => {
+    // Mine produces iron_ore at 1/17 /s nominal. A heavier-than-stock-supply
+    // Workshop wants iron_ore at 1/33 /s + coal at 1/33 /s. We arrange the
+    // Mine's supply to be exactly HALF of the Workshop's iron_ore demand
+    // (via a §4.5 soft-gate on the Mine), with iron_ore stock = 0 so
+    // inputAvail is forced through the externalSupply branch.
+    //
+    // Math:
+    //   Mine nominal iron_ore supply  = 1/17 = 0.0588 /s (rebalanced step #19)
+    //   Workshop nominal iron_ore demand = 1/33 = 0.0303 /s
+    //   To force inputAvail = 0.5, supply must be 0.5 × demand.
+    //   gateMul on Mine = (0.5 × 1/33) / (1/17) = 0.5 × 17/33 ≈ 0.2576.
+    //
+    // Workshop's nominal power = 60W. Expected draw = 60 × 0.5 = 30W.
+    //
+    // We also want Coal Gen to cover the full 100W produced side so the
+    // power.factor stays = 1 and doesn't muddy the assertion on consumed.
+    const defs: DefCatalog = {
+      ...BUILDING_DEFS,
+      mine: {
+        ...BUILDING_DEFS.mine,
+        gates: [
+          {
+            matchType: 'def_id',
+            defId: 'coal_furnace',
+            hard: false,
+            degradeMul: 0.5 * (1 / 33) / (1 / 17), // ≈ 0.2576
+          },
+        ],
+      },
+    };
+    const state = makeState({
+      buildings: [COAL_GEN, MINE_PWR, WORKSHOP_PWR],
+      inventory: { ...blankInventory(), coal: 50, iron_ore: 0 },
+    });
+    const { power } = computeRates(state, { defs });
+    // Mine: gateMul ≈ 0.2576, ia = 1 (no inputs), oa = 1 → frac ≈ 0.2576.
+    //   Mine contribution = 40 × 0.2576 ≈ 10.303W
+    // Workshop: gateMul = 1, ia = 0.5 (half-supplied iron_ore), oa = 1.
+    //   Workshop contribution = 60 × 0.5 = 30W
+    // Total ≈ 40.303W.
+    expect(power.consumed).toBeCloseTo(40 * (0.5 * (1 / 33) / (1 / 17)) + 60 * 0.5, 6);
+    expect(power.factor).toBe(1);
+  });
+
+  it('multiple factors compose multiplicatively (gateMul 0.5 × inputAvail 0.5 → 0.25× draw)', () => {
+    // Compose a soft-gate AND input-starvation on the SAME building. The
+    // Workshop is soft-gated to 0.5× and its iron_ore inputAvail is also
+    // 0.5 (Mine's iron_ore supply is exactly half the gated Workshop's
+    // demand, with stock = 0). Throughput fraction = 0.5 × 0.5 × 1 = 0.25.
+    // Workshop power = 60W × 0.25 = 15W.
+    //
+    // Math for the Mine's gate that yields inputAvail = 0.5 on the
+    // soft-gated Workshop:
+    //   Workshop gated demand = 0.5 × 1/33 = 0.01515 /s (§4.5 pass-2
+    //     applies effectiveMul to nominalRate, so demand IS gated).
+    //   We want supply = 0.5 × gated_demand = 0.0076 /s.
+    //   Mine nominal supply = 1/17 = 0.0588 /s.
+    //   Mine gateMul = 0.0076 / 0.0588 = 0.5 × 0.5 × (1/33) / (1/17)
+    //                = 0.25 × 17/33 ≈ 0.1288.
+    const mineGate = 0.5 * 0.5 * (1 / 33) / (1 / 17);
+    const defs: DefCatalog = {
+      ...BUILDING_DEFS,
+      mine: {
+        ...BUILDING_DEFS.mine,
+        gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: mineGate }],
+      },
+      workshop: {
+        ...BUILDING_DEFS.workshop,
+        gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: 0.5 }],
+      },
+    };
+    const state = makeState({
+      buildings: [COAL_GEN, MINE_PWR, WORKSHOP_PWR],
+      inventory: { ...blankInventory(), coal: 50, iron_ore: 0 },
+    });
+    const { power } = computeRates(state, { defs });
+    // Mine: 40 × mineGate × 1 × 1
+    // Workshop: 60 × 0.5 × 0.5 × 1 = 15
+    const expectedMine = 40 * mineGate;
+    const expectedWorkshop = 60 * 0.5 * 0.5;
+    expect(power.consumed).toBeCloseTo(expectedMine + expectedWorkshop, 6);
+  });
+
+  it('maintenance bills are NOT affected by throughput (regression sentinel)', () => {
+    // Per the §5.1 rebalance carve-out: power scales with throughput, but
+    // maintenance.ts is intentionally UNTOUCHED. A building output-cap
+    // stalled (zero power draw, zero production) must STILL accrue
+    // operatingMs at the full wall-clock rate — the player can't escape
+    // maintenance pressure by deliberately capping outputs.
+    //
+    // Two Mines on separate states, identical placedAt/maintainedAt/etc.
+    // One has iron_ore stock = 99 (Mine runs at full rate). The other has
+    // iron_ore = 100 = cap (Mine is output-cap stalled, draws 0W now). Both
+    // states are advanced by the same dt. operatingMs MUST accrue
+    // identically on both.
+    const dt = 5_000;
+    const runningState = makeState({
+      buildings: [{ ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      inventory: { ...blankInventory(), iron_ore: 0 },
+    });
+    const stalledState = makeState({
+      buildings: [{ ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      inventory: { ...blankInventory(), iron_ore: 100 }, // at cap → output-stalled
+    });
+    advanceIsland(runningState, dt, { defs: POWER_FREE });
+    advanceIsland(stalledState, dt, { defs: POWER_FREE });
+    expect(runningState.buildings[0]!.operatingMs).toBe(dt);
+    expect(stalledState.buildings[0]!.operatingMs).toBe(dt); // SAME — carve-out
   });
 });
 

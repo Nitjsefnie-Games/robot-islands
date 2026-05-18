@@ -447,8 +447,11 @@ function inputAvail(
 export interface PowerBalance {
   /** Total W produced by active producers. */
   readonly produced: number;
-  /** Total W demanded by active consumers (at nominal full draw — output-stalled
-   *  consumers still count, only inputAvail = 0 disables them). */
+  /** Total W demanded by active consumers, scaled per-building by NOMINAL
+   *  throughput fraction (gateMul × inputAvail × (outputAvail > 0 ? 1 : 0))
+   *  per the §5.1 throughput-scaled-power rebalance. Output-cap stalled and
+   *  soft-gate degraded buildings contribute proportionally less (or zero);
+   *  heat-failed / hard-gate / tier-gated consumers contribute zero. */
   readonly consumed: number;
   /** `consumed === 0 ? 1 : min(1, produced / consumed)`. */
   readonly factor: number;
@@ -807,10 +810,28 @@ export function computeRates(
   // Pass 3: power balance. A building is `active` for §5.1 iff:
   //   - it has no recipe (Solar / Dock / Crate / Silo — passively active), OR
   //   - its recipe has inputAvail > 0 AND its heat gate (if any) passes.
-  // Output-stalled buildings (baseRate = 0 but inputAvail > 0) still count
-  // toward P_consumed: the lights are on even when the bin is full. Heat-
-  // failed consumers, by contrast, are fully inactive — no power, no
-  // production, no consumption — per §5.1 "active iff all gates pass".
+  //
+  // Per the §5.1 throughput-scaled-power rebalance: a consumer's draw scales
+  // by its NOMINAL throughput fraction:
+  //
+  //   nominalThroughputFrac = gateResult.effectiveMul   // §4.5 soft-gate (0..1)
+  //                         × inputAvail                 // partial sibling supply (0..1)
+  //                         × (outputAvail > 0 ? 1 : 0)  // hard 0 on cap-full
+  //
+  //   powerConsumed += (def.power.consumes / skillMul.powerConsumption)
+  //                  × nominalThroughputFrac
+  //
+  // All three factors are NOMINAL (pre-powerFactor) — they're already in
+  // scope from earlier passes or cheap to recompute via `outputAvail()`.
+  // Composing here preserves the existing circular-dep break: the chain is
+  // `powerConsumed_nominal → powerFactor → effectiveRate`, never the reverse.
+  // Output-cap stalled and soft-gate-degraded buildings no longer waste
+  // full wattage producing nothing / less. Maintenance bills in
+  // `maintenance.ts` are intentionally NOT scaled by throughput — a
+  // stalled building still wears down at full rate; the player can't
+  // escape maintenance pressure by capping output. Heat-failed consumers
+  // remain fully inactive (no power, no production, no consumption) per
+  // §5.1 "active iff all gates pass".
   let powerProduced = 0;
   let powerConsumed = 0;
   for (const b of validBuildings) {
@@ -835,13 +856,22 @@ export function computeRates(
     // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
     // confusion about which lookup is "the" lookup).
     const recipe = resolveRecipe(def, b, terrainAt, ctx?.inventory ?? state.inventory);
+    // §5.1 throughput-scaled draw: compose the three NOMINAL gates that
+    // determine how much work the building actually does this tick. We
+    // recompute outputAvail here (cheap, same helper Pass 1 used) rather
+    // than threading it through `Tentative`, keeping the diff localised
+    // to Pass 3 per the rebalance brief.
     let active: boolean;
+    let nominalThroughputFrac: number;
     if (!recipe) {
       active = true;
+      nominalThroughputFrac = 1; // Solar / Dock / Crate / Silo — full passive draw if any.
     } else {
       const idx = tentative.findIndex((t) => t.building === b);
       const ia = idx >= 0 ? (inputAvailByIdx[idx] ?? 0) : 0;
       active = ia > 0;
+      const oa = outputAvail(state, recipe, t, ctx?.caps);
+      nominalThroughputFrac = gateResult.effectiveMul * ia * oa;
     }
     if (!active) continue;
     const producesBase = def.power?.produces ?? 0;
@@ -854,9 +884,10 @@ export function computeRates(
     // islands. Non-wind producers ignore the multiplier (defaults to 1×).
     const windFactor = def.power?.kind === 'wind' ? modifierMul.windPowerMul : 1;
     powerProduced += producesBase * solarFactor * windFactor * skillMul.powerProduction;
+    // §5.1 rebalance: per-building draw scales by nominal throughput fraction.
     // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
     // so we divide. Default 1.0 leaves draw untouched.
-    powerConsumed += (def.power?.consumes ?? 0) / skillMul.powerConsumption;
+    powerConsumed += ((def.power?.consumes ?? 0) * nominalThroughputFrac) / skillMul.powerConsumption;
   }
   // §13.3 Genesis Chamber tier-based power draw (converted kW → W).
   for (const b of validBuildings) {
