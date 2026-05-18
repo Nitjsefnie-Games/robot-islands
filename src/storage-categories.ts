@@ -327,4 +327,22 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   heavy_isotope_slurry: 'rare',
   vent_sulfide: 'dry_goods',
   vent_exotic: 'rare',
+  // Ocean-layer §3 — Task 9 processor outputs.
+  //   lithium_brine / bromine / heavy_water are aqueous-or-solution
+  //     intermediates → liquid_gas (lithium_brine mirrors lithium-chemistry
+  //     handling; bromine is a halogen stored as liquid under pressure;
+  //     heavy_water is D2O, an aqueous isotope variant).
+  //   salt is reused — already categorised as dry_goods at the
+  //     evaporator-output entry above (not re-declared here).
+  //   rare_earth_concentrate / refined_cobalt are processed mineral powders
+  //     → dry_goods (mirror rare_earth + ingot-family handling).
+  //   exotic_alloy_seed / tritium_seed are T5 exotics → rare (mirror
+  //     reality_anchor / antimatter_capsule).
+  lithium_brine: 'liquid_gas',
+  bromine: 'liquid_gas',
+  rare_earth_concentrate: 'dry_goods',
+  refined_cobalt: 'dry_goods',
+  exotic_alloy_seed: 'rare',
+  tritium_seed: 'rare',
+  heavy_water: 'liquid_gas',
 };

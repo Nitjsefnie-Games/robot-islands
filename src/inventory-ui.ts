@@ -276,6 +276,19 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   heavy_isotope_slurry: 'rare',
   vent_sulfide: 'raw',
   vent_exotic: 'rare',
+  // Ocean-layer §3 — Task 9 processor outputs.
+  //   lithium_brine / bromine / heavy_water → 'liquid' (matches storage
+  //     liquid_gas category).
+  //   rare_earth_concentrate / refined_cobalt → 'raw' (processed mineral
+  //     powders sit in the ore-family chip).
+  //   exotic_alloy_seed / tritium_seed → 'rare' (T5 exotic finals).
+  lithium_brine: 'liquid',
+  bromine: 'liquid',
+  rare_earth_concentrate: 'raw',
+  refined_cobalt: 'raw',
+  exotic_alloy_seed: 'rare',
+  tritium_seed: 'rare',
+  heavy_water: 'liquid',
 };
 
 /** Filter chips shown above the resource list. `'all'` is the default. */
