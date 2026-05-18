@@ -53,13 +53,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   (multiples of 22.5 degrees from world seed)." SPEC.md status §3.1-3.4
   marks shape as L. *(B.)*
 
-- **§14.10 Repair Drone recipe / Repair Pack ambiguity.** §14.10
-  literal: `Repair Drone = 2 Exotic Alloy + 50 Carbon Steel + 1
-  Foundation Kit`. §14.12 says Repair Drone consumes a `Repair Pack`
-  instead of OIP. `src/orbital.ts:525` correctly checks `repair_pack`.
-  Either §14.10 should be updated (Foundation Kit → Repair Pack) or the
-  code reconciled. Spec drift, not code drift. *(D.)*
-
 - **§14.5 satellite coverage skips perimeter cells.**
   `src/orbital.ts:791-806` `cellsCoveredBySat` admits only cells whose
   CENTRE is within `coverageRadius`. Cells whose centre is outside but
@@ -171,14 +164,6 @@ them explicit values + rationale.
 - **`src/world-gen.ts:165-172`** biome weight table `{plains:25,
   forest:20, coast:15, volcanic:10, desert:15, arctic:15}` — spec has no
   biome-frequency target.
-- **`src/economy.ts:1122-1129`** `xpForLevel` coefficient was rebalanced
-  from 100 to 25 (step #19); SPEC.md §9.1 still says `100 * n^2.2`.
-- **`src/skilltree.ts:287-289 + :298-300`** `costForDepth = round(1.5^(d-1))`
-  + `skillPointsForLevelUp = floor(1.1^L)` together make the tree ~100×
-  cheaper than spec's `2^(d-1)` cost + flat-1/level grant. Documented
-  deliberate deviation — but SPEC.md still cites the spec literals as
-  Appendix A placeholders. Reconcile (update SPEC.md or document
-  deviation explicitly).
 - **`src/recipes.ts` step #19 ×10/×20/×40/×60 cycle multipliers**
   through most recipes; SPEC.md cycle-time placeholders untouched.
 - **`src/weather.ts:42`** `catastrophic: 0` (100% capacity kill); spec
@@ -245,13 +230,6 @@ them explicit values + rationale.
   v1/v2/v3 save to an unknown-schema error. Comments accept the
   trade-off but it's a real player-cost for long-time saves; no
   migration path exists.
-
-- **`src/world.ts:938-946`** `startingInventory()` explicitly violates
-  §3.7 ("Empty inventory: no starter resources, no Foundation Kit") by
-  seeding 60 stone + 40 wood + 1 foundation_kit. The 22-line
-  justification comment notes that §3.7 + §14 placement costs together
-  make the game unplayable; the divergence is real and unilateral. Update
-  SPEC.md §3.7 or carry the gap as a known exception in impl-status.
 
 - **`src/recipes.ts:1060-1072`** `steel_mill_from_scrap` (600s, synthetic,
   fires inside a regular Steel Mill via scrap-substitution) and
