@@ -541,6 +541,14 @@ export function deserializeWorld(
     // populated spec's centre as a safety net for hand-edited saves where
     // `generatedCells` was trimmed below the populated set.
     generatedCells: deserializeGeneratedCells(islands, snapshot.world.generatedCells),
+    // Ocean-layer §2 forward-compat backfill: pre-§ocean saves predate
+    // both fields. Default each to empty — Task 1 only introduces the
+    // data primitives; the v4→v5 schema bump and `generateOceanTerrain`
+    // re-derivation land in the dedicated ocean-gen + persistence tasks.
+    // Until then a loaded world reads every cell as the implicit `deep`
+    // via `terrainAt`'s fallback, and no ocean cells are depth-revealed.
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
   };
 
   const islandStates = new Map<string, IslandState>();

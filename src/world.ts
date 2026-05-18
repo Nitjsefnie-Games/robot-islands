@@ -38,6 +38,7 @@ import {
   renderIslandTiles,
   TILE_PX,
 } from './island.js';
+import type { OceanCellSpec } from './ocean-cell.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Route } from './routes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
@@ -756,6 +757,24 @@ export interface WorldState {
    *  migration's "every cell in `[-10, +10]²` was generated at boot" set
    *  as the implicit baseline. */
   generatedCells?: Set<string>;
+  /** Ocean-layer §2 — sparse terrain map keyed `"cellX,cellY"`. Cells NOT
+   *  in the map are implicit `deep` (the default tier; saves memory for
+   *  the vast empty seas between islands). Populated during world-gen
+   *  after island placement (`generateOceanTerrain`, future ocean-gen
+   *  module); consumed by placement validation, render glyphs, and the
+   *  sonar-buoy reveal path via `ocean-cell.ts` helpers (`terrainAt`,
+   *  `footprintMatches`). Mutable — generation, save migration, and
+   *  feature edits all write through the same map instance. */
+  oceanCells: Map<string, OceanCellSpec>;
+  /** Ocean-layer §5 — set of ocean cell keys (`"cellX,cellY"`) the player
+   *  has revealed for DEPTH (the ocean-layer feature glyph). Separate
+   *  from `revealedCells` (surface discovery): a cell can be
+   *  surface-known but depth-unknown until a Sonar Buoy or Scanner Sat
+   *  upgrade covers it. Starts empty on a fresh game and on v4→v5
+   *  migrations — players who already explored have surface visibility
+   *  but no depth knowledge yet. Mutable: discovery writers add cell
+   *  keys as sonar coverage advances. */
+  depthRevealedCells: Set<string>;
 
 }
 
@@ -829,7 +848,14 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   for (let cy = -N; cy <= N; cy++) {
     for (let cx = -N; cx <= N; cx++) generatedCells.add(`${cx},${cy}`);
   }
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], commPackets: [], generatedCells };
+  // Ocean-layer §2 — empty map at boot. World-gen will fill it in a later
+  // task (`generateOceanTerrain`); for now a fresh world implicitly reads
+  // every cell as `deep` via `terrainAt`'s fallback.
+  const oceanCells = new Map<string, OceanCellSpec>();
+  // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
+  // Sat upgrades populate it as the player builds those revealers.
+  const depthRevealedCells = new Set<string>();
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], commPackets: [], generatedCells, oceanCells, depthRevealedCells };
 }
 
 /**
