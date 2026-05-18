@@ -46,7 +46,7 @@ import {
   isValidSaveSnapshot,
   importSave,
   serializeWorld,
-  STORAGE_KEY,
+  STORAGE_KEY_DISPLAY,
 } from './persistence.js';
 import { mountModal } from './ui-modal.js';
 import type { IslandState } from './economy.js';
@@ -385,7 +385,7 @@ export function mountSettingsUi(
       footerL.textContent = 'S or esc to close · esc during capture cancels';
       footerL.className = 'ri-muted';
       const footerR = document.createElement('span');
-      footerR.textContent = 'storage key · ' + STORAGE_KEY;
+      footerR.textContent = 'storage key · ' + STORAGE_KEY_DISPLAY;
       footerR.className = 'ri-muted';
       footer.prepend(footerL);
       footer.appendChild(footerR);
