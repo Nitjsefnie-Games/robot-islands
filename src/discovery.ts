@@ -148,14 +148,31 @@ function pointToSegmentDistSq2(
  * trivially revealed at game start) and by `renderOceanFogOverlay` to mask
  * the unrevealed portion of each partially-revealed island.
  *
- * A cell is included iff at least one tile inscribed in any of the island's
- * constituent ellipses falls inside that cell. Walking the tile-bbox and
- * snapping to the cell grid (the previous implementation) double-rounded
- * outward — the tile bbox already overshoots the ellipse, then floor/ceil
- * to cell coords added another up-to-16-tile margin per axis. Corner cells
- * with zero inscribed tiles slipped in, which the fog overlay then painted
- * UNKNOWN_BLUE squares over — masking the vision halo where it crossed
- * those cells in open ocean.
+ * A cell is included iff the rendered footprint of at least one inscribed
+ * tile (from any of the island's constituent ellipses) overlaps that cell.
+ * Walking the tile-bbox and snapping to the cell grid (the original
+ * implementation) double-rounded outward — the tile bbox already overshoots
+ * the ellipse, then floor/ceil to cell coords added another up-to-16-tile
+ * margin per axis. Corner cells with zero inscribed tiles slipped in, which
+ * the fog overlay then painted UNKNOWN_BLUE squares over — masking the
+ * vision halo where it crossed those cells in open ocean.
+ *
+ * Renderer-convention detail: `renderIslandTiles` paints tile (X, Y) at
+ * centre-origin — the rendered square spans world-pixel range
+ * `[(X-0.5)·TILE_PX, (X+0.5)·TILE_PX)` (and same for Y), i.e. tile-coord
+ * range `[X-0.5, X+0.5)`. Cell sprites are top-left aligned — cell (cx, cy)
+ * spans tile-coord range `[cx·16, (cx+1)·16)`. When an inscribed tile sits
+ * at X = 16·k for any integer k, its rendered footprint straddles cells
+ * k-1 and k. A naive `Math.floor(X / 16)` only adds cell k, leaving a
+ * half-tile sliver of the rendered tile in cell k-1 — which then renders
+ * against the UNKNOWN_BLUE void (the user-visible "island sticks past the
+ * cyan ocean" bug at island edges that fall on cell multiples of 16).
+ *
+ * Fix: enumerate cells from the rendered tile's footprint corners. For an
+ * inscribed tile (x, y), both `floor((x-0.5)/16)` and `floor((x+0.5-ε)/16)`
+ * are candidate cell-X values; they differ only when x = 16k. The
+ * y-axis is symmetric. So normally 1 cell is added per tile, 2 when a
+ * single axis sits on a cell boundary, 4 when both do.
  *
  * The inscribed-tile walk is bounded by the same per-constituent tile bbox
  * `computeIslandTiles` uses (`xMin = -ceil(major)`..`xMax = ceil(major)-1`,
@@ -178,9 +195,19 @@ export function islandCells(spec: IslandSpec): string[] {
         if (!tileInscribedInOffsetEllipse(x, y, c.major, c.minor, cxAbs, cyAbs)) {
           continue;
         }
-        const cellX = Math.floor(x / CELL_SIZE_TILES);
-        const cellY = Math.floor(y / CELL_SIZE_TILES);
-        seen.add(cellKey(cellX, cellY));
+        // Rendered tile spans tile-coord range [x-0.5, x+0.5) × [y-0.5, y+0.5).
+        // Take the cell of each rendered-footprint corner so a tile sitting on
+        // a cell boundary (x = 16k or y = 16k) contributes to BOTH adjacent
+        // cells, not just the one `Math.floor(x/16)` picks.
+        const cxLow = Math.floor((x - 0.5) / CELL_SIZE_TILES);
+        const cxHigh = Math.floor((x + 0.5) / CELL_SIZE_TILES);
+        const cyLow = Math.floor((y - 0.5) / CELL_SIZE_TILES);
+        const cyHigh = Math.floor((y + 0.5) / CELL_SIZE_TILES);
+        for (let cy = cyLow; cy <= cyHigh; cy++) {
+          for (let cx = cxLow; cx <= cxHigh; cx++) {
+            seen.add(cellKey(cx, cy));
+          }
+        }
       }
     }
   }
