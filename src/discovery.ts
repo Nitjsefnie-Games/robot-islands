@@ -142,6 +142,45 @@ function pointToSegmentDistSq2(
 }
 
 /**
+ * Ocean-layer §5 — disk reveal helper shared by Sonar Buoy (Task 6) and the
+ * Scanner Sat ocean extension (Task 7). Given a center cell `(cx, cy)` and a
+ * radius `r` in cells, walks every cell `(cx+dx, cy+dy)` inside the closed
+ * disk `dx² + dy² ≤ r²` and writes it into `revealedCells` and/or
+ * `depthRevealedCells` per the `surface` / `depth` flags.
+ *
+ * Centralised here (rather than inlined in `sonar-buoy.ts`) so the disk
+ * geometry stays consistent across every consumer that ever needs "cells
+ * inside a radius around a point." Same convention as `corridorCells` (this
+ * module's other geometry helper): radius is in **cells**, not tiles — the
+ * caller has already converted whatever tile-domain radius is in play.
+ *
+ * Pure-mutating: only touches the two Sets on `state`. No allocation outside
+ * the loop. Caller chooses which sets to write — passing both `false` is a
+ * no-op (defensive — the caller would normally just skip the call).
+ */
+export function revealOceanCells(
+  state: {
+    revealedCells: Set<string>;
+    depthRevealedCells: Set<string>;
+  },
+  centerCellX: number,
+  centerCellY: number,
+  radiusCells: number,
+  options: { surface: boolean; depth: boolean },
+): void {
+  if (!options.surface && !options.depth) return;
+  const r2 = radiusCells * radiusCells;
+  for (let dy = -radiusCells; dy <= radiusCells; dy++) {
+    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+      if (dx * dx + dy * dy > r2) continue;
+      const key = cellKey(centerCellX + dx, centerCellY + dy);
+      if (options.surface) state.revealedCells.add(key);
+      if (options.depth) state.depthRevealedCells.add(key);
+    }
+  }
+}
+
+/**
  * Enumerate the set of cell keys covered by an island's footprint. Used at
  * world-init time so populated islands' immediate cells start revealed (the
  * home island shouldn't read as pitch-dark — its own footprint cells are

@@ -48,6 +48,7 @@
 // `recipes.ts` keys its RECIPES table by `BuildingDefId`.
 
 import type { TerrainKind } from './island.js';
+import type { OceanTerrain } from './ocean-cell.js';
 import type { ResourceId } from './recipes.js';
 import { SHAPES, type ShapeMask } from './shape-mask.js';
 import { tierForLevel } from './skilltree.js';
@@ -378,7 +379,13 @@ export type BuildingDefId =
   | 'teleporter_pad'
   | 'spacetime_anchor'
   | 'power_substation'
-  | 'terrain_modifier';
+  | 'terrain_modifier'
+  // Ocean-layer §5 — T2 active depth-discovery building. Placed on any
+  // ocean cell adjacent to a populated anchor island; while powered, marks
+  // every cell within SONAR_BUOY_RADIUS_TILES in both `revealedCells` and
+  // `depthRevealedCells`. The `oceanPlacement` / `terrainReqs` flags on
+  // this def are declared but NOT yet enforced — Task 8 wires placement.
+  | 'sonar_buoy';
 
 /**
  * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's
@@ -542,6 +549,20 @@ export interface BuildingDef {
    *  forward-compatibility hook (no shipped def currently leaves it
    *  undefined). */
   readonly placementCost?: Partial<Record<ResourceId, number>>;
+  /** Ocean-layer §4 / §5 — when `true`, this building is placed on an OCEAN
+   *  cell (anchored to a player-picked populated island), not on a tile of
+   *  some island's footprint. Declared here so the placement pipeline can
+   *  branch on a single boolean; **NOT YET ENFORCED** — Task 8 wires the
+   *  `placement.ts` / `placement-ui.ts` integration that consults this flag
+   *  plus `terrainReqs` against `world.oceanCells`. For Task 6 (Sonar Buoy
+   *  scaffolding) the flag is declared on the def for forward compat and
+   *  ignored by the existing land-only placement path. */
+  readonly oceanPlacement?: boolean;
+  /** Ocean-layer §4 / §5 — when `oceanPlacement === true`, the list of
+   *  acceptable `OceanTerrain` values under the building's footprint. Empty
+   *  / undefined ⇒ no terrain restriction (placement allowed on any ocean
+   *  cell). Enforcement deferred to Task 8 (see `oceanPlacement` above). */
+  readonly terrainReqs?: ReadonlyArray<OceanTerrain>;
 }
 
 /** Read-only catalog. Keys = BuildingDefId; every defId MUST have an entry. */
@@ -3836,6 +3857,37 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 400 },
     placementCost: { antimatter_propellant: 40, steel: 80, reality_anchor: 40 },
     glyph: '⟁',
+  },
+  // ---------------------------------------------------------------------------
+  // Ocean-layer §5 — Sonar Buoy (T2 active depth-discovery building)
+  // ---------------------------------------------------------------------------
+  //
+  // 1×1 ocean-placed building. While the anchor island is powered, marks
+  // every cell within `SONAR_BUOY_RADIUS_TILES` of the buoy in BOTH
+  // `revealedCells` and `depthRevealedCells`. The reveal tick lives in
+  // `sonar-buoy.ts:tickSonarBuoys`, called from main.ts each frame.
+  //
+  // `oceanPlacement` + `terrainReqs` are declared but not yet enforced —
+  // Task 8 wires the ocean placement pipeline. For now this def lives in
+  // the catalog so the per-tick reveal logic has a defId to match on.
+  //
+  // `wire` is the codebase's name for what the spec/plan calls "copper wire";
+  // there is no separate `copper_wire` ResourceId.
+  //
+  // Sonar Buoy placeholder — tune in Appendix A.
+  sonar_buoy: {
+    id: 'sonar_buoy',
+    displayName: 'Sonar Buoy',
+    category: 'special',
+    tier: 2,
+    footprint: SHAPES.single,
+    fill: 0x4090a8, // sonar cyan-teal
+    stroke: 0x103040,
+    power: { consumes: 50 },
+    placementCost: { iron_ingot: 20, wire: 10, microchip: 5 },
+    oceanPlacement: true,
+    terrainReqs: ['shallows', 'deep', 'trench', 'hydrothermal_vent', 'nodule_field'],
+    glyph: '◌',
   },
   // ---------------------------------------------------------------------------
   // T3 microchip intermediate chain (§7.7)
