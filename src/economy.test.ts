@@ -2237,6 +2237,42 @@ describe('day-night solar modulation (§2.7)', () => {
     expect(power.produced).toBe(0);
   });
 
+  it('§2.7 wall-clock domain: solarClockMs overrides nowMs (post-refresh regression)', () => {
+    // User-reported bug after the §2.7 ramp landed (8e8b4dd) AND the Sunspire
+    // flag landed (a4f9f98): basic Solar still pushed full 50W into the
+    // network at night-time after a page refresh.
+    //
+    // Root cause: `solarMultiplier` was sampled in `performance.now()` domain
+    // via `state.lastTick`, which resets to ~0 on every page reload — placing
+    // every freshly-loaded session in mid-Day per the §2.7 EPOCH_PHASE_OFFSET.
+    // Wall-clock cycle (the HUD's `hud.ts:307` `Date.now()` phase label, and
+    // the spec's §2.7 "purely time-driven and does not depend on the player's
+    // session") would say Night, but the economy gate would say Day. Power
+    // produced read full 50W while the HUD read "solar 0.0×" — the
+    // contradiction the user observed.
+    //
+    // Fix: thread a `solarClockMs` (wall-clock domain) into `computeRates`
+    // separately from `nowMs` (perf domain). When provided, the solar gate
+    // samples it instead of `nowMs ?? state.lastTick`. Production callers
+    // pass `Date.now()` so the gate matches the HUD; tests omit it and keep
+    // their existing `nowMs = 12*HOUR ⇒ Night` convention.
+    const state = makeState({
+      buildings: [SOLAR],
+      // `lastTick = 0` would historically yield mid-Day solar (mul = 1.0).
+      // This mirrors the post-refresh production case where state.lastTick
+      // (perf-domain) is small while the wall clock is mid-Night.
+      lastTick: 0,
+    });
+    // Explicit wall-clock sample at deep night → multiplier 0 → 0W produced,
+    // even though the perf-domain time would otherwise read mid-Day.
+    const night = computeRates(state, undefined, 0, 12 * HOUR);
+    expect(night.power.produced).toBe(0);
+    // And the inverse: wall-clock noon with a synthetic-night `nowMs` still
+    // produces full 50W, proving solarClockMs is the active sample.
+    const noon = computeRates(state, undefined, 12 * HOUR, 0);
+    expect(noon.power.produced).toBe(50);
+  });
+
   it('mixed island: at night only coal generator contributes; at noon both do', () => {
     // SOLAR (50W) + COAL_GEN (100W) into MINE (40W) + WORKSHOP (60W) = 100W demand.
     const buildings = [SOLAR, COAL_GEN, MINE_PWR, WORKSHOP_PWR];

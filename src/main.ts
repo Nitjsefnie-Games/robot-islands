@@ -1437,6 +1437,13 @@ async function main(): Promise<void> {
     maybeSchedulePrefsSave();
 
     const now = performance.now();
+    // §2.7 wall-clock anchor for the day-night cycle. Captured once per
+    // frame and threaded to advanceIsland + computeRates so the solar
+    // multiplier samples Date.now() instead of `performance.now()` (which
+    // resets to ~0 on every page refresh, snapping the cycle back to
+    // mid-Day and breaking the spec's "purely time-driven, does not
+    // depend on the player's session" guarantee).
+    const nowWall = Date.now();
     // Capture the previous frame's timestamp BEFORE we overwrite
     // `lastFrameMs` — §11 telemetry's `tickDrones` needs the prev-tick
     // time to compute the per-tick capsule corridor (drone position at
@@ -1505,7 +1512,7 @@ async function main(): Promise<void> {
         cableInflowW,
         worldSeed: worldState.seed,
         geothermalActive,
-      });
+      }, nowWall);
       const { net, power } = computeRates(s, {
         modifierMul: modifierMulFor(s.id),
         specMul: specMulFor(s),
@@ -1516,7 +1523,7 @@ async function main(): Promise<void> {
         caps: isLatticeIsland ? unifiedCaps : undefined,
         cableInflowW,
         geothermalActive,
-      });
+      }, undefined, nowWall);
       islandNets.set(s.id, net);
       islandPower.set(s.id, power);
     }
@@ -1652,7 +1659,7 @@ async function main(): Promise<void> {
       cableInflowW: postTickCableInflowW,
       geothermalActive: postTickGeothermal,
       accelerationMul: postTickActiveS.accelerationRemainingMin > 0 ? 3 : 1,
-    });
+    }, undefined, nowWall);
     islandNets.set(activeIslandId, postNet);
     islandPower.set(activeIslandId, postPower);
 
@@ -1680,7 +1687,7 @@ async function main(): Promise<void> {
         cableInflowW: activeCableInflowW,
         geothermalActive: activeGeothermal,
         accelerationMul: activeS.accelerationRemainingMin > 0 ? 3 : 1,
-      });
+      }, undefined, nowWall);
       islandNets.set(activeS.id, activeNet);
       islandPower.set(activeS.id, activePower);
     }
@@ -1724,7 +1731,10 @@ async function main(): Promise<void> {
     satelliteOverlay.refresh();
     antennaOverlay.refresh();
     buildingAlertsOverlay.refresh(now);
-    dayNightTint.refresh(now);
+    // §2.7 visual tint shares the same wall-clock anchor as the economy's
+    // solar gate (Date.now), so the overlay agrees with the power balance
+    // and the HUD phase label (which also reads Date.now in hud.ts).
+    dayNightTint.refresh(nowWall);
     // Settings panel — cheap when hidden (early-returns in refresh()).
     settingsUi.refresh();
     // §4 inspector: refresh while open so the live rate / power / inventory

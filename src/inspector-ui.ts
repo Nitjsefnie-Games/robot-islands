@@ -1186,7 +1186,10 @@ export function mountInspectorUi(
       // The HUD also calls computeRates each frame, so the second call here
       // is a minor cost; it's the simplest way to read THIS building's
       // current effectiveRate without threading it through the inspector deps.
-      const rates = computeRates(state, { terrainAt: spec.terrainAt });
+      // §2.7 wall-clock anchor for solar — same domain as main.ts's
+      // per-frame computeRates so the inspector's per-building rate agrees
+      // with the HUD's island-wide rate during night-time brownouts.
+      const rates = computeRates(state, { terrainAt: spec.terrainAt }, undefined, Date.now());
       const br = rates.byBuilding.find((r) => r.building.id === building.id);
       const effective = br?.effectiveRate ?? 0;
       // Header status line — show cycle time + base rate (= 1 / cycleSec).
@@ -1304,7 +1307,7 @@ export function mountInspectorUi(
     // existing inspector pattern of re-deriving rates per refresh rather
     // than threading the snapshot in via deps.
     if (def.requiresHeat || def.heatSource) {
-      const heat = computeRates(state, { terrainAt: spec.terrainAt }).heat;
+      const heat = computeRates(state, { terrainAt: spec.terrainAt }, undefined, Date.now()).heat;
       if (def.requiresHeat) {
         const has = heat.hasHeat.get(building.id) === true;
         if (has) {
