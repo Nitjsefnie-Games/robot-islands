@@ -798,9 +798,16 @@ async function main(): Promise<void> {
       forestNe.inventory.iron_ingot = 600; // rebalanced step #19 (was 200)
       forestNe.inventory.wood = 2000; // rebalanced step #19 (was 600)
       forestNe.inventory.helium_3 = 100; // rebalanced step #19 (was 50)
-      // T4 / T5 seeds so a hypothetical Reality Forge run could draw inputs.
+      // T4 / T5 seeds. Reality Forge inputs per §7.12 (4 ai_core + 1
+      // antimatter_capsule + 1 time_crystal + 1 exotic_alloy / 24h cycle)
+      // are all stocked so the demo island can fire a Reality Forge run
+      // end-to-end. casimir_energy and quantum_chip are general T4/T5
+      // plant stock — not Reality Forge inputs, retained for other T4/T5
+      // recipes.
       forestNe.inventory.exotic_alloy = 50; // rebalanced step #19 (was 20)
       forestNe.inventory.ai_core = 30; // rebalanced step #19 (was 10)
+      forestNe.inventory.antimatter_capsule = 5; // Reality Forge §7.12
+      forestNe.inventory.time_crystal = 5; // Reality Forge §7.12
       forestNe.inventory.casimir_energy = 30; // rebalanced step #19 (was 10)
       forestNe.inventory.quantum_chip = 30; // rebalanced step #19 (added)
     }
