@@ -4,6 +4,7 @@
 // latticeActive + latticeNodeIslands) but does not touch economy state.
 
 import type { PlacedBuilding } from './buildings.js';
+import { networkedIslandIds } from './network-consciousness.js';
 import type { ResourceId } from './recipes.js';
 import { tierForLevel } from './skilltree.js';
 import type { WorldState } from './world.js';
@@ -26,16 +27,29 @@ function hasLatticeNode(spec: WorldState['islands'][number]): boolean {
 /**
  * Compute whether the Omniscient Lattice should be active.
  *
- * If already active, returns true immediately. Otherwise scans every island
- * for T5-mastered islands that also contain a Lattice Node. When the count
- * reaches `LATTICE_ACTIVATION_THRESHOLD`, mutates `world.latticeActive`
- * to true and records the participating island IDs in
- * `world.latticeNodeIslands`.
+ * Re-evaluates every call (no early-return on a previously-set
+ * `latticeActive`): if the strict gate stops being satisfied — e.g. a
+ * networked island goes offline, a Lattice Node is destroyed, a route is
+ * deleted — the flag flips back to false. The flag re-flips to true the
+ * moment the network catches up. This avoids carrying a stale active flag
+ * across saves loaded from the older lax-gate version (which counted
+ * non-networked T5+Node islands).
+ *
+ * Strict gate per §13.3 + §9.6: an island counts toward activation only if
+ *   (1) it has at least one valid Lattice Node,
+ *   (2) its IslandState is T5-mastered (level ≥ 50 AND AI core crafted), and
+ *   (3) it is route-graph-reachable from home (the §9.6 Network
+ *       Consciousness membership rule).
+ *
+ * When the count reaches `LATTICE_ACTIVATION_THRESHOLD`, mutates
+ * `world.latticeActive` to true and records the participating island IDs in
+ * `world.latticeNodeIslands`. Below threshold, mutates back to inactive.
  */
 export function computeLatticeActive(world: WorldState): boolean {
-  if (world.latticeActive) return true;
+  const networked = networkedIslandIds(world);
   const nodeIslands: string[] = [];
   for (const spec of world.islands) {
+    if (!networked.has(spec.id)) continue;
     if (!isT5Mastered(world, spec.id)) continue;
     if (!hasLatticeNode(spec)) continue;
     nodeIslands.push(spec.id);
@@ -45,6 +59,8 @@ export function computeLatticeActive(world: WorldState): boolean {
     world.latticeNodeIslands = nodeIslands;
     return true;
   }
+  world.latticeActive = false;
+  world.latticeNodeIslands = [];
   return false;
 }
 

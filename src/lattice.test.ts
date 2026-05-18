@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Route } from './routes.js';
 import {
   computeLatticeActive,
   crossIslandNeighbors,
@@ -17,6 +18,22 @@ function makeTestWorld() {
   }
   (world as typeof world & { islandStates: typeof map }).islandStates = map;
   return world as typeof world & { islandStates: typeof map };
+}
+
+/** Add a cargo route from `home` to `toId` so `toId` is networked. */
+function networkTo(world: ReturnType<typeof makeTestWorld>, toId: string): void {
+  const route: Route = {
+    id: `route-${world.routes.length}`,
+    from: 'home',
+    to: toId,
+    type: 'cargo',
+    capacityPerSec: 1,
+    filter: null,
+    priorityList: [],
+    transitTimeSec: 1,
+    inFlight: [],
+  };
+  world.routes.push(route);
 }
 
 describe('computeLatticeActive', () => {
@@ -52,7 +69,7 @@ describe('computeLatticeActive', () => {
     expect(world.latticeActive).toBe(false);
   });
 
-  it('activates at exactly the threshold', () => {
+  it('activates at exactly the threshold when all are networked', () => {
     const world = makeTestWorld();
     for (let i = 0; i < LATTICE_ACTIVATION_THRESHOLD; i++) {
       world.islands.push({
@@ -72,10 +89,126 @@ describe('computeLatticeActive', () => {
       s.level = 50;
       s.aiCoreCrafted = true;
       world.islandStates.set(`t5-${i}`, s);
+      networkTo(world, `t5-${i}`);
     }
     expect(computeLatticeActive(world)).toBe(true);
     expect(world.latticeActive).toBe(true);
     expect(world.latticeNodeIslands.length).toBe(LATTICE_ACTIVATION_THRESHOLD);
+  });
+
+  it('does NOT activate at threshold when none are networked (§13.3 strict gate)', () => {
+    const world = makeTestWorld();
+    for (let i = 0; i < LATTICE_ACTIVATION_THRESHOLD; i++) {
+      world.islands.push({
+        id: `t5-${i}`,
+        name: `t5-${i}`,
+        biome: 'plains',
+        cx: 100 + i * 10,
+        cy: 0,
+        majorRadius: 10,
+        minorRadius: 10,
+        populated: true,
+        discovered: true,
+        buildings: [{ id: `node-${i}`, defId: 'lattice_node', x: 0, y: 0 }],
+        modifiers: [],
+      });
+      const s = makeInitialIslandState(world.islands[world.islands.length - 1]!, 0);
+      s.level = 50;
+      s.aiCoreCrafted = true;
+      world.islandStates.set(`t5-${i}`, s);
+      // No route added — t5-i remains disconnected from home.
+    }
+    expect(computeLatticeActive(world)).toBe(false);
+    expect(world.latticeActive).toBe(false);
+    expect(world.latticeNodeIslands).toEqual([]);
+  });
+
+  it('does NOT activate when 19 of 20 are networked (one isolated)', () => {
+    const world = makeTestWorld();
+    for (let i = 0; i < LATTICE_ACTIVATION_THRESHOLD; i++) {
+      world.islands.push({
+        id: `t5-${i}`,
+        name: `t5-${i}`,
+        biome: 'plains',
+        cx: 100 + i * 10,
+        cy: 0,
+        majorRadius: 10,
+        minorRadius: 10,
+        populated: true,
+        discovered: true,
+        buildings: [{ id: `node-${i}`, defId: 'lattice_node', x: 0, y: 0 }],
+        modifiers: [],
+      });
+      const s = makeInitialIslandState(world.islands[world.islands.length - 1]!, 0);
+      s.level = 50;
+      s.aiCoreCrafted = true;
+      world.islandStates.set(`t5-${i}`, s);
+      // Network only the first 19; t5-19 stays isolated.
+      if (i < LATTICE_ACTIVATION_THRESHOLD - 1) networkTo(world, `t5-${i}`);
+    }
+    expect(computeLatticeActive(world)).toBe(false);
+    expect(world.latticeActive).toBe(false);
+  });
+
+  it('flips inactive → active when a previously-isolated island becomes networked', () => {
+    const world = makeTestWorld();
+    for (let i = 0; i < LATTICE_ACTIVATION_THRESHOLD; i++) {
+      world.islands.push({
+        id: `t5-${i}`,
+        name: `t5-${i}`,
+        biome: 'plains',
+        cx: 100 + i * 10,
+        cy: 0,
+        majorRadius: 10,
+        minorRadius: 10,
+        populated: true,
+        discovered: true,
+        buildings: [{ id: `node-${i}`, defId: 'lattice_node', x: 0, y: 0 }],
+        modifiers: [],
+      });
+      const s = makeInitialIslandState(world.islands[world.islands.length - 1]!, 0);
+      s.level = 50;
+      s.aiCoreCrafted = true;
+      world.islandStates.set(`t5-${i}`, s);
+      if (i < LATTICE_ACTIVATION_THRESHOLD - 1) networkTo(world, `t5-${i}`);
+    }
+    // 19 networked, 1 isolated — gate fails.
+    expect(computeLatticeActive(world)).toBe(false);
+    // Player builds the route that brings the 20th into the graph.
+    networkTo(world, `t5-${LATTICE_ACTIVATION_THRESHOLD - 1}`);
+    expect(computeLatticeActive(world)).toBe(true);
+    expect(world.latticeActive).toBe(true);
+    expect(world.latticeNodeIslands.length).toBe(LATTICE_ACTIVATION_THRESHOLD);
+  });
+
+  it('flips active → inactive when a networked island becomes isolated (re-evaluates every call)', () => {
+    const world = makeTestWorld();
+    for (let i = 0; i < LATTICE_ACTIVATION_THRESHOLD; i++) {
+      world.islands.push({
+        id: `t5-${i}`,
+        name: `t5-${i}`,
+        biome: 'plains',
+        cx: 100 + i * 10,
+        cy: 0,
+        majorRadius: 10,
+        minorRadius: 10,
+        populated: true,
+        discovered: true,
+        buildings: [{ id: `node-${i}`, defId: 'lattice_node', x: 0, y: 0 }],
+        modifiers: [],
+      });
+      const s = makeInitialIslandState(world.islands[world.islands.length - 1]!, 0);
+      s.level = 50;
+      s.aiCoreCrafted = true;
+      world.islandStates.set(`t5-${i}`, s);
+      networkTo(world, `t5-${i}`);
+    }
+    expect(computeLatticeActive(world)).toBe(true);
+    // Cut the route to t5-0; only 19 remain networked.
+    world.routes = world.routes.filter((r) => r.to !== 't5-0');
+    expect(computeLatticeActive(world)).toBe(false);
+    expect(world.latticeActive).toBe(false);
+    expect(world.latticeNodeIslands).toEqual([]);
   });
 
   it('ignores non-T5 islands with lattice nodes', () => {
@@ -123,14 +256,6 @@ describe('computeLatticeActive', () => {
       world.islandStates.set(`t5-${i}`, s);
     }
     expect(computeLatticeActive(world)).toBe(false);
-  });
-
-  it('remains active once triggered', () => {
-    const world = makeTestWorld();
-    world.latticeActive = true;
-    world.latticeNodeIslands = ['home'];
-    expect(computeLatticeActive(world)).toBe(true);
-    expect(world.latticeNodeIslands).toEqual(['home']);
   });
 
   it('counts only islands with both T5 mastery and a node', () => {
