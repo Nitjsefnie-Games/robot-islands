@@ -33,16 +33,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
 
 ---
 
-## 2. Missing mechanics (spec calls for it, code doesn't ship it)
-
-- **§4.6 generic-storage label picker at placement time.**
-  `src/placement.ts:47-53` `DEFAULT_CARGO_LABEL = 'iron_ore'` is a
-  hardcoded stand-in; spec §4.6 says the player labels at placement.
-  Relabel-after-placement is the workaround. Every Crate / Warehouse
-  starts holding iron_ore regardless of player intent. *(A, B, C.)*
-
----
-
 ## 4. Tuning placeholders (Appendix A backlog)
 
 Numeric values shipped as designer-eye placeholders, all carrying

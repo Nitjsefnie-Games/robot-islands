@@ -361,6 +361,88 @@ describe('placeBuilding', () => {
     }
   });
 
+  // -------------------------------------------------------------------------
+  // §4.6 placement-time cargo-label picker — `cargoLabelOverride` argument
+  // -------------------------------------------------------------------------
+  it('honours a placement-time cargoLabelOverride for generic Crate (copper_ore example)', () => {
+    // §4.6: placement-time picker passes the player's choice through.
+    // Verifying the Crate is created with the chosen label AND the storage-
+    // cap bump lands on that label, not the default iron_ore fallback.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const before = { ...state.storageCaps };
+    const placed = expectPlaced(
+      placeBuilding(
+        spec,
+        state,
+        'crate',
+        0,
+        0,
+        0,
+        () => 'p-crate-copper',
+        undefined,
+        'copper_ore',
+      ),
+    );
+    expect(placed.cargoLabel).toBe('copper_ore');
+    // copper_ore bumps by +100; iron_ore stays at baseline since the
+    // default fallback was overridden.
+    expect(state.storageCaps.copper_ore).toBe((before.copper_ore ?? 0) + 100);
+    expect(state.storageCaps.iron_ore).toBe(before.iron_ore);
+  });
+
+  it('falls back to DEFAULT_CARGO_LABEL when cargoLabelOverride is omitted on a generic Crate', () => {
+    // §4.6 backward-compat: programmatic placement that bypasses the picker
+    // (synthetic test fixtures, scripted seeds) still gets a sensible
+    // default. Mirrors today's pre-picker behaviour so no fixture had to
+    // change after the picker landed.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const placed = expectPlaced(
+      placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'p-crate-default'),
+    );
+    expect(placed.cargoLabel).toBe('iron_ore');
+  });
+
+  it('ignores cargoLabelOverride on a non-generic-storage def (Mine carries no cargoLabel)', () => {
+    // §4.6 only applies to generic-category storage. Passing the override
+    // to a Mine (no storage at all) or a specialized Silo (category-routed)
+    // must not somehow stamp a cargoLabel onto the placed building.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const mine = expectPlaced(
+      placeBuilding(
+        spec,
+        state,
+        'mine',
+        0,
+        0,
+        0,
+        () => 'p-mine-no-label',
+        undefined,
+        'copper_ore',
+      ),
+    );
+    expect(mine.cargoLabel).toBeUndefined();
+    // Same for a specialized Silo — the override is silently dropped because
+    // the def routes by storage.category, not by label.
+    (mine as { constructionRemainingMs?: number }).constructionRemainingMs = 0;
+    const silo = expectPlaced(
+      placeBuilding(
+        spec,
+        state,
+        'silo',
+        4,
+        0,
+        0,
+        () => 'p-silo-no-label',
+        undefined,
+        'copper_ore',
+      ),
+    );
+    expect(silo.cargoLabel).toBeUndefined();
+  });
+
   it('bumps category-matching caps when placing a specialized Silo (dry_goods only)', () => {
     // §4.6: Silo is specialized for dry_goods. Bumps every dry_goods resource
     // by +2000, leaves every other category at baseline.
