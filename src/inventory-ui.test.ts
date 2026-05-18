@@ -11,6 +11,7 @@ import {
   RESOURCE_CATEGORY,
   RESOURCE_FILTER_LABEL,
   RESOURCE_FILTER_ORDER,
+  inventoryRowVisible,
 } from './inventory-ui.js';
 import { ALL_RESOURCES } from './recipes.js';
 
@@ -76,5 +77,40 @@ describe('RESOURCE_FILTER_ORDER', () => {
     for (const c of RESOURCE_FILTER_ORDER) {
       expect(RESOURCE_FILTER_LABEL[c]).toBeTruthy();
     }
+  });
+});
+
+describe('inventoryRowVisible — "show empty" toggle', () => {
+  it('hides count=0 rows when showEmpty=false (default)', () => {
+    // iron_ore has stock, wood is empty
+    expect(inventoryRowVisible('iron_ore', 5, 'all', '', false)).toBe(true);
+    expect(inventoryRowVisible('wood', 0, 'all', '', false)).toBe(false);
+  });
+
+  it('shows count=0 rows when showEmpty=true', () => {
+    expect(inventoryRowVisible('iron_ore', 5, 'all', '', true)).toBe(true);
+    expect(inventoryRowVisible('wood', 0, 'all', '', true)).toBe(true);
+  });
+
+  it('treats negative stock as empty when showEmpty=false', () => {
+    // defensive — shouldn't happen, but the predicate is `<= 0`
+    expect(inventoryRowVisible('wood', -1, 'all', '', false)).toBe(false);
+    expect(inventoryRowVisible('wood', -1, 'all', '', true)).toBe(true);
+  });
+
+  it('applies the activeFilter on top of the showEmpty toggle', () => {
+    // wood is a raw — visible under 'raw' filter, hidden under 'fuel'
+    expect(inventoryRowVisible('wood', 5, 'raw', '', false)).toBe(true);
+    expect(inventoryRowVisible('wood', 5, 'fuel', '', false)).toBe(false);
+    // showEmpty doesn't override a category mismatch
+    expect(inventoryRowVisible('wood', 0, 'fuel', '', true)).toBe(false);
+  });
+
+  it('applies the search query on top of the showEmpty toggle', () => {
+    // search matches "iron" — iron_ore visible, wood not
+    expect(inventoryRowVisible('iron_ore', 5, 'all', 'iron', false)).toBe(true);
+    expect(inventoryRowVisible('wood', 5, 'all', 'iron', false)).toBe(false);
+    // showEmpty doesn't override a search miss
+    expect(inventoryRowVisible('wood', 0, 'all', 'iron', true)).toBe(false);
   });
 });

@@ -288,6 +288,30 @@ export const RESOURCE_FILTER_ORDER: ReadonlyArray<ResourceFilter> = [
   'misc',
 ];
 
+/**
+ * Pure visibility predicate for a single resource row. Exported for tests.
+ *
+ * "Show empty" semantics: when `showEmpty === false` (default) a row is hidden
+ * if the player has zero of the resource on hand. When `showEmpty === true`,
+ * the row is shown regardless of stock. The `activeFilter` / `searchQuery`
+ * predicates still apply on top.
+ */
+export function inventoryRowVisible(
+  r: ResourceId,
+  have: number,
+  activeFilter: ResourceFilter,
+  searchQuery: string,
+  showEmpty: boolean,
+): boolean {
+  if (activeFilter !== 'all') {
+    const cat = RESOURCE_CATEGORY[r];
+    if (cat !== activeFilter) return false;
+  }
+  if (searchQuery && !r.includes(searchQuery)) return false;
+  if (!showEmpty && have <= 0) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Mount
 // ---------------------------------------------------------------------------
@@ -492,19 +516,8 @@ export function mountInventoryUi(
     }
   }
 
-  function rowVisible(
-    r: ResourceId,
-    have: number,
-    capVal: number,
-    rate: number,
-  ): boolean {
-    if (activeFilter !== 'all') {
-      const cat = RESOURCE_CATEGORY[r];
-      if (cat !== activeFilter) return false;
-    }
-    if (searchQuery && !r.includes(searchQuery)) return false;
-    if (!showEmpty && have === 0 && capVal === 0 && rate === 0) return false;
-    return true;
+  function rowVisible(r: ResourceId, have: number): boolean {
+    return inventoryRowVisible(r, have, activeFilter, searchQuery, showEmpty);
   }
 
   function makeMeter(pct: number, tone: string | undefined): HTMLDivElement {
@@ -533,9 +546,9 @@ export function mountInventoryUi(
 
     for (const r of ALL_RESOURCES) {
       const have = inv(state, r);
+      if (!rowVisible(r, have)) continue;
       const capVal = cap(state, r);
       const rate = net[r] ?? 0;
-      if (!rowVisible(r, have, capVal, rate)) continue;
       const pct = capVal > 0 ? (have / capVal) * 100 : 0;
       rows.push({ r, have, capVal, rate, pct });
     }
