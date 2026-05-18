@@ -35,7 +35,7 @@ import {
   type BuildingDefId,
 } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
-import { nextPhaseBoundaryMs, solarMultiplier } from './daynight.js';
+import { nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
 import { resolveHeatAssignments, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
 import { footprintTiles } from './shape-mask.js';
@@ -1283,6 +1283,13 @@ export function advanceIsland(
     // quadrant lasts 6h; offline catchup of N days produces ≤ 4N + extras
     // segments instead of an under-integrated single segment.
     const nextPhaseMs = nextPhaseBoundaryMs(t);
+    // §2.7 ramp sub-segment boundary: inside Dawn / Dusk, solarMultiplier
+    // varies linearly. The §15.3 piecewise-constant-rate invariant requires
+    // each segment to integrate a constant rate, so we sub-divide the ramp
+    // into `SOLAR_RAMP_SEGMENTS` evenly-spaced sub-segments and clamp the
+    // segment end to the next ramp tick. Inside the flat Day / Night
+    // quadrants this collapses to `nextPhaseBoundaryMs(t)`.
+    const nextSolarMs = nextSolarBoundaryMs(t) ?? Infinity;
     // §13.3 bound segment to the end of active acceleration so the multiplier
     // stays constant within the segment.
     let nextAccelMs = Infinity;
@@ -1303,7 +1310,7 @@ export function advanceIsland(
     }
     // Clamp to nowMs; findNextCapEvent already returns nowMs when nothing
     // changes, but if all rates are zero we still need to exit the loop.
-    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextAccelMs, nextBatteryMs, nextRotationMs, nowMs);
+    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextSolarMs, nextAccelMs, nextBatteryMs, nextRotationMs, nowMs);
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps);
