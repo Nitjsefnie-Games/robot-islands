@@ -21,9 +21,9 @@ npx vitest run src/economy.test.ts
 npx vitest run -t "Mine fills iron_ore to exactly cap"
 ```
 
-## Dev server is already running
+## Dev server — serves built `dist/` (vite preview, no HMR)
 
-A systemd unit `robot-islands-dev.service` runs `npm run dev` and is reverse-proxied to `https://islands.nitjsefni.eu/`. Vite HMR auto-pushes source edits — **do NOT restart the service for code changes**. Restart only when `vite.config.ts` or `package.json` deps change. For visual smoke-tests, the page is open in the user's browser via the Daedalus Chrome extension; `mcp__daedalus__screenshot` against the active tab is the standard verification path.
+A systemd unit `robot-islands-dev.service` runs `vite preview --host 0.0.0.0 --port 5173` on port 5173 and is reverse-proxied to `https://islands.nitjsefni.eu/`. It serves the static built bundle from `dist/` — **no HMR**. The browser only sees source changes after a fresh `npm run build` AND a manual page reload (HMR was leaving the tab in a half-applied broken-import state during multi-file edits; preview is the stable alternative). **Do NOT restart the service for code changes** — restart only when `vite.config.ts` or `package.json` deps change. For visual smoke-tests, the page is open in the user's browser via the Daedalus Chrome extension; `mcp__daedalus__screenshot` against the active tab is the standard verification path. After editing source you must `npm run build` and reload the browser tab before screenshotting — the live tab is stale until then.
 
 ## Source of truth
 
