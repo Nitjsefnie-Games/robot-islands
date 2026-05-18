@@ -352,6 +352,14 @@ export function placeBuilding(
    *  generic-storage defs (specialized storage uses category-routing; non-
    *  storage defs carry no cargo label at all). */
   cargoLabelOverride?: ResourceId,
+  /** §4 ocean-layer (Task 10) — anchor island id for an ocean-placed
+   *  building. Required for any def with `oceanPlacement: true` (the
+   *  placement-UI ocean path threads the player's pick from the anchor
+   *  modal); ignored / unused on land defs. Stored verbatim on the minted
+   *  PlacedBuilding so the economy tick can resolve the anchor at every
+   *  segment via `oceanPlatformPausedReason`. Optional so non-ocean
+   *  callers (test fixtures, land placement) can omit it without churn. */
+  anchorIslandId?: string,
 ): PlaceBuildingResult {
   const def = BUILDING_DEFS[defId];
   // §14 placement-cost gate. Re-checked here even though validatePlacement
@@ -404,6 +412,11 @@ export function placeBuilding(
     y: anchorY,
     rotation,
     ...(cargoLabel !== undefined ? { cargoLabel } : {}),
+    // §4 ocean-layer: persist the player-picked anchor island id for any
+    // def with `oceanPlacement: true`. The economy tick reads this on
+    // every segment to credit the anchor's inventory and power pool
+    // (`oceanPlatformPausedReason` in economy.ts).
+    ...(anchorIslandId !== undefined ? { anchorIslandId } : {}),
     // §4.7 maintenance seeds. operatingMs starts at zero; placedAt and
     // maintainedAt mark the perf-clock moment the timer began.
     placedAt: nowMs,

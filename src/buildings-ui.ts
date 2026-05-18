@@ -137,16 +137,15 @@ export function mountBuildingsUi(
 
       filters.appendChild(makeChip('all', 'All'));
       const presentCategories = new Set<BuildingCategory>();
-      // Ocean-placement defs are excluded from the LAND catalog (they need a
-      // separate ocean-catalog UI, deferred). Filter when computing the
-      // category set so e.g. a category populated only by ocean defs doesn't
-      // render an empty filter chip. Pairs with the iteration filter in
-      // buildBody below and the `def-is-ocean` early-reject in
-      // `validatePlacement` (placement.ts) — defense-in-depth for the routing
-      // gap where a player could otherwise click "Seawater Intake Rig" in the
-      // land catalog and place it on land tiles.
+      // §4 ocean-layer (Task 10): ocean defs are now reachable from the
+      // build catalog. Task 8's defensive filter (skip oceanPlacement defs)
+      // is dropped — placement-ui's `attemptCommit` routes ocean defs
+      // through `validateOceanPlacement` + the anchor picker, so clicking
+      // a "Seawater Intake Rig" card no longer dead-ends. The land
+      // validator (`validatePlacement`) still carries the `def-is-ocean`
+      // defense-in-depth reject in case anything else (test fixture,
+      // future drag-drop API) routes an ocean def through it.
       for (const id of ALL_BUILDING_DEF_IDS) {
-        if (BUILDING_DEFS[id].oceanPlacement === true) continue;
         presentCategories.add(BUILDING_DEFS[id].category);
       }
       for (const cat of Object.keys(CATEGORY_LABEL) as BuildingCategory[]) {
@@ -161,14 +160,14 @@ export function mountBuildingsUi(
 
       for (const defId of ALL_BUILDING_DEF_IDS) {
         const def = BUILDING_DEFS[defId];
-        // Skip ocean-placement defs entirely in the land catalog — they
-        // route through the ocean placement flow (validateOceanPlacement +
-        // anchor picker), not through `validatePlacement`. Rendering a
-        // clickable card here would let the player route an ocean def
-        // through the LAND placement path, which then fails (or worse,
-        // succeeds with a land tile pre-Fix). The validator carries the
-        // defense-in-depth reject; this is the UI half of the pair.
-        if (def.oceanPlacement === true) continue;
+        // §4 ocean-layer (Task 10): ocean defs are now first-class catalog
+        // cards. Clicking one routes through placement-ui's
+        // `attemptCommit` ocean branch — `validateOceanPlacement` + anchor
+        // picker — instead of the land path. Task 8's "filter out ocean
+        // defs" pair (here + in `validatePlacement`) has been retired; the
+        // land-validator's `def-is-ocean` reject remains as a
+        // defense-in-depth guard for any non-UI caller that still tries
+        // the land path.
         const card = document.createElement('div');
         card.className = 'bcard';
         card.dataset.defid = defId;

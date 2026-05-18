@@ -14,7 +14,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
-import type { IslandState } from './economy.js';
+import type { IslandState, PausedReason } from './economy.js';
 import { TILE_PX, desaturate, lighten } from './island.js';
 import { MAINTENANCE_RECIPES } from './maintenance.js';
 import type { ResourceId } from './recipes.js';
@@ -42,11 +42,26 @@ export interface PlacedBuilding {
    *  attach a resource to a previously-unlabeled Crate. Mutable: the
    *  inspector's §4.6 relabel path reassigns this field. */
   cargoLabel?: ResourceId;
-  // TODO(Task 10): anchorIslandId?: string — for ocean buildings to credit
-  // output back to a player-picked island. See validateOceanPlacement in
-  // placement.ts (the ocean placement flow returns candidate anchors via
-  // candidateAnchors; the picker UI selects one and Task 10 will persist it
-  // here so the economy tick knows which IslandState to credit).
+  /** §4 ocean-layer anchor (Task 10). Set at placement time for any def with
+   *  `oceanPlacement: true`; the named island credits the platform's output
+   *  and supplies its power from the §5.3 unified pool. Per the §4 design
+   *  doc (`docs/superpowers/specs/2026-05-18-ocean-layer-design.md`), an
+   *  ocean platform lives logically on `anchorIslandId`'s `buildings[]` —
+   *  the existing per-island economy tick credits anchor inventory + power
+   *  with no separate dispatch path. Required for any ocean def to function:
+   *  a missing or stale anchor (anchor unpopulated / deleted) halts the
+   *  building with `paused === 'anchor-depopulated'` instead of producing.
+   *  Undefined for non-ocean defs (forward-compat: legacy saves and land
+   *  buildings simply omit the field). */
+  anchorIslandId?: string;
+  /** §4 ocean-layer paused state (Task 10). Mutated by the economy tick when
+   *  an ocean platform's preconditions fail (anchor unpopulated, terrain
+   *  no longer ocean). When set, the building skips production / consumption
+   *  / power-draw for that tick. Cleared back to undefined when the
+   *  precondition recovers. Optional / undefined for non-paused buildings
+   *  (the common case) and for every land building (which has no analogous
+   *  pause state at present). */
+  paused?: PausedReason;
   /** §4.7 maintenance: wall-clock perf-domain timestamp this building was
    *  placed at. Optional for forward-compat with saved buildings minted
    *  before the maintenance system shipped — those load with the field

@@ -3292,3 +3292,268 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
     expect(state.inventory.slag).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §4 ocean-layer — anchor crediting + paused reasons (Task 10)
+// ---------------------------------------------------------------------------
+//
+// Per the §4 design doc (`docs/superpowers/specs/2026-05-18-ocean-layer-design.md`):
+// "The platform is logically a building on `anchorIslandId`'s `buildings[]`
+// array, indexed by an island ID that isn't the platform's geographic
+// location. The existing `advanceIsland` loop produces correctly — no new
+// dispatch code." Outputs flow to the anchor's inventory; power deltas land
+// in the anchor's pool. We exercise that path by placing the ocean platform
+// directly onto the anchor IslandState's `buildings` and asserting on the
+// anchor's inventory + power balance.
+describe('§4 ocean anchor crediting + paused reasons (Task 10)', () => {
+  // Minimal IslandSpec for the anchor — only `id`, `populated`, `cx`, `cy`
+  // are read by the ocean-paused checks; the rest are defaults the renderer
+  // would expect but the pure tick loop ignores.
+  function makeAnchorSpec(over: {
+    id: string;
+    populated?: boolean;
+    cx?: number;
+    cy?: number;
+  }): import('./world.js').IslandSpec {
+    return {
+      id: over.id,
+      name: over.id,
+      biome: 'plains',
+      cx: over.cx ?? 0,
+      cy: over.cy ?? 0,
+      majorRadius: 14,
+      minorRadius: 14,
+      populated: over.populated ?? true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    };
+  }
+
+  // Minimal WorldState stub — same pattern as placement.test.ts:894 — only
+  // the fields the ocean checks read are populated; rest are unsafe-casted.
+  function makeWorld(
+    islands: import('./world.js').IslandSpec[],
+    oceanCells: Map<string, import('./ocean-cell.js').OceanCellSpec> = new Map(),
+  ): import('./world.js').WorldState {
+    return { islands, oceanCells } as unknown as import('./world.js').WorldState;
+  }
+
+  it('ocean platform output deposits to anchor inventory (anchorIslandId routes to anchor state)', () => {
+    // Seawater Intake Rig (T2 extractor, 200W consumer) anchored to a
+    // populated island. Per §4 design doc, the platform lives on the
+    // anchor's buildings[]; output (dilute_brine, 1/60s cycle in rotation
+    // slot 0) deposits to the anchor's inventory directly.
+    //
+    // Power: 200W draw with no producer would brownout. To exercise the
+    // crediting path in isolation we strip power from the catalog so the
+    // platform's recipe runs at full nominal rate.
+    const anchorSpec = makeAnchorSpec({ id: 'A', populated: true });
+    // Local coords (80, 80) → world tile (80, 80) — well outside the
+    // anchor's r=14 ellipse so `isOceanTile` returns true (open ocean).
+    const platform: PlacedBuilding = {
+      id: 'p1',
+      defId: 'seawater_intake_rig',
+      x: 80,
+      y: 80,
+      anchorIslandId: 'A',
+    };
+    anchorSpec.buildings.push(platform);
+    const world = makeWorld([anchorSpec]);
+    const state = makeState({
+      id: 'A',
+      buildings: anchorSpec.buildings,
+      inventory: blankInventory(),
+      storageCaps: blankCaps(1000),
+      level: 10,
+    });
+    // Strip power off the platform def so this test isolates the crediting
+    // path from the power-brownout path (covered separately below).
+    const powerFreePlatform: DefCatalog = (() => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.seawater_intake_rig;
+      base.seawater_intake_rig = rest as BuildingDef;
+      return base;
+    })();
+    advanceIsland(state, 60_000, { defs: powerFreePlatform, world });
+    // Seawater Intake Rig has rotateOutputs: [dilute_brine, he3_dilute].
+    // Both have cycleSec=60 (3 cycles within 60s after the ÷3 rebalance).
+    // The first cycle slot at t=0 produces dilute_brine. We assert that
+    // SOMETHING from the rotation pair landed on the anchor — the rotating
+    // output is the design-doc point, not the specific resource.
+    const got = state.inventory.dilute_brine + state.inventory.he3_dilute;
+    expect(got).toBeGreaterThan(0);
+    // Anchor's `paused` is undefined (active building).
+    expect(platform.paused).toBeUndefined();
+  });
+
+  it('ocean platform halts with paused="anchor-depopulated" when anchor is unpopulated', () => {
+    // Anchor exists but populated=false (post-abandonment / tier-reset).
+    // Per §4 design doc edge cases: "Anchor becomes unpopulated: platform
+    // halts with `paused: 'anchor-depopulated'` until the anchor is
+    // repopulated."
+    const anchorSpec = makeAnchorSpec({ id: 'A', populated: false });
+    const platform: PlacedBuilding = {
+      id: 'p1',
+      defId: 'seawater_intake_rig',
+      x: 0,
+      y: 0,
+      anchorIslandId: 'A',
+    };
+    anchorSpec.buildings.push(platform);
+    const world = makeWorld([anchorSpec]);
+    const state = makeState({
+      id: 'A',
+      buildings: anchorSpec.buildings,
+      inventory: blankInventory(),
+      storageCaps: blankCaps(1000),
+      level: 10,
+    });
+    advanceIsland(state, 60_000, { defs: BUILDING_DEFS, world });
+    expect(platform.paused).toBe('anchor-depopulated');
+    expect(state.inventory.dilute_brine).toBe(0);
+    expect(state.inventory.he3_dilute).toBe(0);
+  });
+
+  it('ocean platform halts with paused="anchor-depopulated" when anchorIslandId points at nothing', () => {
+    // Missing anchor (deleted island, stale save, future-edge race) is
+    // indistinguishable from depopulated for the platform — both halt
+    // production. Same paused reason so the inspector only needs one chip.
+    const anchorSpec = makeAnchorSpec({ id: 'A', populated: true });
+    const platform: PlacedBuilding = {
+      id: 'p1',
+      defId: 'seawater_intake_rig',
+      x: 0,
+      y: 0,
+      anchorIslandId: 'GHOST',
+    };
+    anchorSpec.buildings.push(platform);
+    const world = makeWorld([anchorSpec]);
+    const state = makeState({
+      id: 'A',
+      buildings: anchorSpec.buildings,
+      inventory: blankInventory(),
+      storageCaps: blankCaps(1000),
+      level: 10,
+    });
+    advanceIsland(state, 60_000, { defs: BUILDING_DEFS, world });
+    expect(platform.paused).toBe('anchor-depopulated');
+  });
+
+  it('ocean platform halts with paused="terrain-lost" when its cell is no longer ocean', () => {
+    // Defensive case (design doc §4 edge: "Terrain access lost (hypothetical
+    // future event removing a vent): platform halts with paused: 'terrain-
+    // lost'. Defensive; not expected in initial scope.")
+    //
+    // We fake the condition by anchoring the platform at world tile (0,0)
+    // (cellX=0,cellY=0) and having the only island sit AT (0,0) so
+    // `isOceanTile(0,0)` returns false (the cell is inside the island).
+    // The platform's `x,y` here are world-tile coords (= cellX * 16 for
+    // tile (0,0) → 0, 0). Anchor A sits at world (cx=0, cy=0) — same
+    // island, same tile, but `isOceanTile` walks every island and rejects.
+    const anchorSpec = makeAnchorSpec({ id: 'A', populated: true, cx: 0, cy: 0 });
+    const platform: PlacedBuilding = {
+      id: 'p1',
+      defId: 'seawater_intake_rig',
+      x: 0,
+      y: 0,
+      anchorIslandId: 'A',
+    };
+    anchorSpec.buildings.push(platform);
+    const world = makeWorld([anchorSpec]);
+    const state = makeState({
+      id: 'A',
+      buildings: anchorSpec.buildings,
+      inventory: blankInventory(),
+      storageCaps: blankCaps(1000),
+      level: 10,
+    });
+    advanceIsland(state, 60_000, { defs: BUILDING_DEFS, world });
+    expect(platform.paused).toBe('terrain-lost');
+    expect(state.inventory.dilute_brine).toBe(0);
+  });
+
+  it('geothermal_vent_generator on anchor contributes 2000W to anchor pool', () => {
+    // Geothermal Vent Generator is the lone ocean-side POWER PRODUCER
+    // (def.power.produces = 2000W, no consumes, T6, hydrothermal_vent
+    // terrain). When anchored to a populated island, its produces wattage
+    // adds to that island's powerProduced — same as a Solar / Coal Gen on
+    // the island would.
+    const anchorSpec = makeAnchorSpec({ id: 'A', populated: true });
+    // Place a known land-side consumer to make the power balance non-trivial
+    // and a Solar to ensure factor==1 baseline (so geothermal's contribution
+    // is observable in `power.produced`).
+    const MINE_PWR_ON_A: PlacedBuilding = { id: 'mn', defId: 'mine', x: 0, y: 0 };
+    // T6 generator needs `ascendantCoreCrafted && hasSpaceport` to unlock
+    // via `buildingUnlocked` (building-defs.ts:4200). Without a Spaceport
+    // on the anchor, pass-3 skips the generator via `isBuildingActive(b)`
+    // and `power.produced` stays at zero.
+    const SPACEPORT_ON_A: PlacedBuilding = { id: 'sp', defId: 'spaceport', x: 4, y: 0 };
+    const generator: PlacedBuilding = {
+      id: 'g1',
+      defId: 'geothermal_vent_generator',
+      // Local coords (80, 80) → world tile (80, 80). Far from anchor's r=14
+      // ellipse so `isOceanTile` returns true (open ocean). Adjacency /
+      // land-tile checks are no-ops for ocean defs so the placement is
+      // economically silent except for power.
+      x: 80,
+      y: 80,
+      anchorIslandId: 'A',
+    };
+    anchorSpec.buildings.push(MINE_PWR_ON_A, SPACEPORT_ON_A, generator);
+    const world = makeWorld([anchorSpec]);
+    const state = makeState({
+      id: 'A',
+      buildings: anchorSpec.buildings,
+      inventory: { ...blankInventory(), iron_ore: 0 },
+      storageCaps: blankCaps(1000),
+      level: 50,
+      aiCoreCrafted: true,
+      ascendantCoreCrafted: true,
+    });
+    const { power } = computeRates(state, { defs: BUILDING_DEFS, world });
+    // Generator produces 2000W to the anchor pool. Mine draws 40W (T1) and
+    // Spaceport draws 3000W (T6 gate) — combined 3040W demand exceeds the
+    // 2000W generator output, so factor < 1. The geometric assertion is
+    // simply "the generator's 2000W contributed to the anchor pool"; if it
+    // hadn't, `power.produced` would be 0 (the test FAILED before adding
+    // the `b.paused` skip-in-pass-3 wiring).
+    expect(power.produced).toBeGreaterThanOrEqual(2000);
+    expect(power.consumed).toBeGreaterThan(0);
+  });
+
+  it('ocean platform power draw deducts from anchor pool (trench_drill 1000W)', () => {
+    // Trench Drill (T4, 1000W consumer) anchored to A. Without any producer
+    // on A, the per-§5.1 throughput-scaled draw lands in `power.consumed`;
+    // factor drops to 0 (no production) and the platform stalls. The point
+    // is to verify the draw lands in the ANCHOR pool, not a separate one.
+    const anchorSpec = makeAnchorSpec({ id: 'A', populated: true });
+    const drill: PlacedBuilding = {
+      id: 'd1',
+      defId: 'trench_drill',
+      x: 80,
+      y: 80,
+      anchorIslandId: 'A',
+    };
+    // Add a Solar to verify the draw is REAL (factor < 1 / consumed > 0).
+    const SOLAR_ON_A: PlacedBuilding = { id: 's1', defId: 'solar', x: 0, y: 0 };
+    anchorSpec.buildings.push(SOLAR_ON_A, drill);
+    const world = makeWorld([anchorSpec]);
+    const state = makeState({
+      id: 'A',
+      buildings: anchorSpec.buildings,
+      inventory: blankInventory(),
+      storageCaps: blankCaps(1000),
+      level: 50,
+      aiCoreCrafted: true,
+      ascendantCoreCrafted: true,
+    });
+    const { power } = computeRates(state, { defs: BUILDING_DEFS, world });
+    // Solar produces 50W (Day baseline at lastTick=0 per the §2.7 epoch
+    // offset). Drill nominal draw 1000W, scaled by throughput frac (here:
+    // inputAvail=1, outputAvail=1, gateMul=1 → frac=1). consumed ≈ 1000W.
+    expect(power.consumed).toBeGreaterThanOrEqual(1000);
+    // Brownout: 50W produced << 1000W consumed.
+    expect(power.factor).toBeLessThan(0.1);
+  });
+});
