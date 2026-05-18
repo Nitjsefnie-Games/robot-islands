@@ -33,6 +33,42 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
 
 ---
 
+## Next major after Ocean — Multi-biome §3.6 merge rework
+
+Current §3.6 merge collapses absorbed island's biome into absorber's:
+former-Coast water tiles become Plains grass, ore deposits disappear,
+biome modifiers (Coast wave power, Volcanic free heat) are voided.
+Player loses everything they invested in the absorbed island except
+the building positions. That's a straight downgrade — the opposite of
+what a player merging two specialized islands wants.
+
+Design locked 2026-05-18 (skip this brainstorm next time, it's done):
+
+1. **Per-constituent biome + seed**. `extraEllipses` entries gain
+   `biome: Biome` and `seedId: string`. `terrainAt` dispatches per
+   tile to the constituent that contains it.
+2. **Overlap rule**: where primary + extra both contain a tile,
+   absorber's primary biome wins. Single, easy-to-reason rule.
+3. **§3.5 modifiers per-constituent**: a building gets modifier bonuses
+   only from the constituent its tile sits in. Coast wave-power
+   applies only to former-Coast tiles.
+4. **Reclamation outward** uses absorber's primary biome (consistent
+   "new growth is always primary" rule).
+5. **Migration skipped** — solo-dev playtesting, no live joined-island
+   saves to preserve.
+
+Files: `src/world.ts` (extraEllipses type extension, terrainAt closure
+dispatch), `src/island-merge.ts` (performMerge propagates biome+seed
+on the appended ellipse), `src/biomes.ts` (per-constituent modifier
+application surface), `src/economy.ts` / `src/heat.ts` /
+`src/reactor-toxicity.ts` (any modifier-application site needs to
+look up the building's constituent, not the island's primary biome).
+
+Estimated ~4-6 commits. Independent of Ocean; queue when Ocean Tasks
+9-12 land.
+
+---
+
 ## 4. Tuning placeholders (Appendix A backlog)
 
 Numeric values shipped as designer-eye placeholders, all carrying
