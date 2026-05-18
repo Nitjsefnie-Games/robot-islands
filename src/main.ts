@@ -83,6 +83,7 @@ import {
 } from './world.js';
 import { mountDronesUi } from './drones-ui.js';
 import { tickDrones } from './drones.js';
+import { tickSonarBuoys } from './sonar-buoy.js';
 import {
   effectiveSolarBoostFor,
   tickCommPackets,
@@ -1617,6 +1618,13 @@ async function main(): Promise<void> {
     tickScannerDiscovery(worldState, orbitalDeltaMs, now);
     tickCommPackets(worldState);
     tickRepairDrones(worldState, now);
+
+    // Ocean-layer §5 — Sonar Buoy depth-discovery. Idempotent (Set writes),
+    // cheap (per-buoy disk is ≤81 cells at the placeholder radius of 4).
+    // Order: after the scanner-sat tick so both depth-revealing systems run
+    // in the same frame and any cell newly covered by either is visible to
+    // the fog/glyph overlay rebuilt below.
+    tickSonarBuoys(worldState);
 
     // Step-12 / §12: settlement vehicles tick after drones so a frame can
     // see new discoveries AND a brand-new arrival in the same pass. On
