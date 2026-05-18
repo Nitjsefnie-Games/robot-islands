@@ -203,8 +203,10 @@ describe('checkObjectives', () => {
       ] })]]),
     });
     checkObjectives(state, world);
-    // build_biofuel_plant is the next step after place_workshop now that
-    // the tutorial guides through fuel production before drone dispatch.
-    expect(state.current).toBe('build_biofuel_plant');
+    // reach_level_5 is the next step after place_workshop — the fuel chain
+    // (build_biofuel_plant, produce_biofuel) is intentionally slotted AFTER
+    // build_dronepad so the player doesn't stockpile biofuel they can't
+    // spend yet (drones are the only T1 biofuel consumer).
+    expect(state.current).toBe('reach_level_5');
   });
 });

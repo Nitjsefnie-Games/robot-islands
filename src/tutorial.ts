@@ -7,10 +7,14 @@ export type ObjectiveId =
   | 'place_quarry'
   | 'place_mine'
   | 'place_workshop'
-  | 'build_biofuel_plant'
-  | 'produce_biofuel'
   | 'reach_level_5'
   | 'build_dronepad'
+  // Biofuel chain slotted AFTER the Drone Pad: biofuel's only T1 consumer
+  // is drone launches, so producing it before the Pad exists wastes
+  // wood on an unspendable stockpile. The gate (Drone Pad needs T2) is
+  // introduced before the consumer-introducing objectives.
+  | 'build_biofuel_plant'
+  | 'produce_biofuel'
   | 'dispatch_first_drone'
   // §4.7 maintenance materials — T1 set (lubricant + bolt). Slotted
   // here so the player sees them once they have T2 access (Lubricant
@@ -65,16 +69,6 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
     hint: 'Place a Workshop to craft iron ingots.',
     check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'workshop')),
   },
-  build_biofuel_plant: {
-    title: 'Cheap Drone Fuel',
-    hint: 'Place a Biofuel Plant — 2 wood → 1 biofuel. Powers cheap T1 drones once you have a Drone Pad.',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'biofuel_plant')),
-  },
-  produce_biofuel: {
-    title: 'Stockpile Biofuel',
-    hint: 'Wait for your Biofuel Plant to produce 10+ biofuel — enough for your first T1 drone dispatch.',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.biofuel ?? 0) >= 10),
-  },
   reach_level_5: {
     title: 'Grow',
     hint: 'Reach level 5 to unlock Tier 2 — the Drone Pad is a T2 building.',
@@ -84,6 +78,16 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
     title: 'Take Flight',
     hint: 'Build a Drone Pad to scout the world.',
     check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'dronepad')),
+  },
+  build_biofuel_plant: {
+    title: 'Cheap Drone Fuel',
+    hint: 'Place a Biofuel Plant — 2 wood → 1 biofuel. Powers the cheap T1 drones your new Drone Pad can launch.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'biofuel_plant')),
+  },
+  produce_biofuel: {
+    title: 'Stockpile Biofuel',
+    hint: 'Wait for your Biofuel Plant to produce 10+ biofuel — enough for your first T1 drone dispatch.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.biofuel ?? 0) >= 10),
   },
   dispatch_first_drone: {
     title: 'Explore',
