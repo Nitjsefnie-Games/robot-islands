@@ -42,6 +42,11 @@ export interface PlacedBuilding {
    *  attach a resource to a previously-unlabeled Crate. Mutable: the
    *  inspector's §4.6 relabel path reassigns this field. */
   cargoLabel?: ResourceId;
+  // TODO(Task 10): anchorIslandId?: string — for ocean buildings to credit
+  // output back to a player-picked island. See validateOceanPlacement in
+  // placement.ts (the ocean placement flow returns candidate anchors via
+  // candidateAnchors; the picker UI selects one and Task 10 will persist it
+  // here so the economy tick knows which IslandState to credit).
   /** §4.7 maintenance: wall-clock perf-domain timestamp this building was
    *  placed at. Optional for forward-compat with saved buildings minted
    *  before the maintenance system shipped — those load with the field

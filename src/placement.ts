@@ -45,7 +45,8 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { candidateAnchors } from './anchor-picker.js';
-import type { IslandSpec, WorldState } from './world.js';
+import { isOceanTile, type IslandSpec, type WorldState } from './world.js';
+import { CELL_SIZE_TILES } from './constants.js';
 
 /** Fallback cargo label for a freshly-placed generic-storage building (Crate,
  *  Warehouse) when the caller of `placeBuilding` does NOT supply an explicit
@@ -72,7 +73,15 @@ export type PlacementReason =
   | 'biome-locked'
   | 'tile-requirement-not-met'
   | 'insufficient-resources'
-  | 'queue-full';
+  | 'queue-full'
+  /** Defense-in-depth: the def carries `oceanPlacement: true` and must route
+   *  through `validateOceanPlacement` + the anchor picker, not the land
+   *  validator. The UI (buildings-ui.ts) filters ocean defs out of the land
+   *  catalog so the player never reaches this path — this reason fires only
+   *  on programmatic / test paths that bypass the catalog. Surfaced FIRST so
+   *  the routing bug is visible even when other gates (tier, biome) would
+   *  also fail. */
+  | 'def-is-ocean';
 
 export interface PlacementValidation {
   readonly ok: boolean;
@@ -153,6 +162,15 @@ export function validatePlacement(
   rotation: Rotation,
 ): PlacementValidation {
   const def = BUILDING_DEFS[defId];
+  // Defense-in-depth routing guard: an ocean def must NEVER be validated
+  // through the land path. The catalog UI (buildings-ui.ts) filters them
+  // out, but a programmatic caller (test fixture, future drag-drop API)
+  // could still reach this path. Bail out FIRST — before tier/biome so the
+  // routing bug surfaces as `def-is-ocean` rather than getting masked by
+  // `def-not-unlocked` on an island that hasn't reached the def's tier.
+  if (def.oceanPlacement === true) {
+    return { ok: false, reason: 'def-is-ocean' };
+  }
   const hasSpaceport = spec.buildings.some((b) => b.defId === 'spaceport');
   if (
     !buildingUnlocked(
@@ -634,7 +652,15 @@ export function demolishBuilding(
 export type OceanPlacementReason =
   | 'def-not-ocean'
   | 'terrain-mismatch'
-  | 'no-anchor-in-range';
+  | 'no-anchor-in-range'
+  /** At least one tile under the placement cell footprint falls inside an
+   *  island's union ellipse — the player tried to anchor an ocean building
+   *  on top of land. Detected BEFORE the terrain-match check because
+   *  `terrainAt` defaults unmapped cells to `'deep'` (the ocean default),
+   *  which means cells INSIDE an island's tile grid would otherwise satisfy
+   *  `['shallows', 'deep']` terrainReqs and silently accept the placement.
+   *  See `isOceanTile` in world.ts. */
+  | 'land-overlap';
 
 export interface OceanPlacementValidation {
   readonly ok: boolean;
@@ -668,6 +694,46 @@ export function validateOceanPlacement(
   // rotation-invariant — pass the unrotated mask.
   const w = shapeWidth(def.footprint);
   const h = shapeHeight(def.footprint);
+  // Land-overlap guard — BEFORE the terrain match. `terrainAt` defaults
+  // unmapped cells to `'deep'` (see ocean-cell.ts), so a placement whose
+  // footprint cells fall INSIDE an island's tile grid (and therefore are
+  // not stored in `world.oceanCells`) would silently satisfy any
+  // terrainReqs that include `'deep'` — letting an Open-Water Extractor
+  // place in the middle of an island. We walk the footprint cell-by-cell
+  // and reject if any tile under any cell sits inside any island's union
+  // footprint.
+  //
+  // Sampling strategy per cell: the four corner tiles + the center tile
+  // are enough to catch any island whose footprint covers a region of
+  // useful size (islands have major/minor ≥ ~7 tiles; the 5-sample test
+  // catches any ellipse whose interior overlaps the 16×16 cell). Walking
+  // every tile in the cell (256/cell × 4 cells = 1024 ops) would be
+  // wasteful for a per-cursor-hover validator. Falls through to the
+  // terrain check only when the entire footprint is on open ocean.
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      const cx = cellX + dx;
+      const cy = cellY + dy;
+      const tx0 = cx * CELL_SIZE_TILES;
+      const ty0 = cy * CELL_SIZE_TILES;
+      const tx1 = tx0 + CELL_SIZE_TILES - 1;
+      const ty1 = ty0 + CELL_SIZE_TILES - 1;
+      const txc = tx0 + Math.floor(CELL_SIZE_TILES / 2);
+      const tyc = ty0 + Math.floor(CELL_SIZE_TILES / 2);
+      const samples: ReadonlyArray<readonly [number, number]> = [
+        [tx0, ty0],
+        [tx1, ty0],
+        [tx0, ty1],
+        [tx1, ty1],
+        [txc, tyc],
+      ];
+      for (const [sx, sy] of samples) {
+        if (!isOceanTile(world, sx, sy)) {
+          return { ok: false, reason: 'land-overlap' };
+        }
+      }
+    }
+  }
   // Terrain match. If `terrainReqs` is undefined / empty, the def accepts
   // any ocean terrain (matches the sonar_buoy "any discovered ocean" rule
   // in the §3 table). `footprintMatches` short-circuits on the first

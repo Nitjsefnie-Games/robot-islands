@@ -354,6 +354,25 @@ export function pointInIsland(spec: IslandSpec, wx: number, wy: number): boolean
 }
 
 /**
+ * True iff world tile `(wx, wy)` does NOT fall inside any island's union
+ * footprint. Pure helper wrapping `pointInIsland` against `world.islands`.
+ *
+ * Used by `validateOceanPlacement` (placement.ts) to gate the §3 ocean-
+ * footprint check so a placement whose cell footprint overlaps island
+ * tiles is rejected with `land-overlap` rather than slipping through on
+ * `terrainAt`'s implicit-`deep` fallback for unmapped cells. (Cells
+ * INSIDE an island's tile grid aren't stored in `world.oceanCells`, so
+ * `terrainAt` would otherwise default them to `deep` and falsely accept
+ * Open-Water Extractor placement on the middle of an island.)
+ */
+export function isOceanTile(world: WorldState, wx: number, wy: number): boolean {
+  for (const isl of world.islands) {
+    if (pointInIsland(isl, wx, wy)) return false;
+  }
+  return true;
+}
+
+/**
  * Point-in-ellipse hit-test for active-island selection. Returns the first
  * populated island whose union-footprint covers `(wx, wy)` (in world-tile
  * coords), or null if the point lies outside every populated island.

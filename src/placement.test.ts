@@ -1026,4 +1026,36 @@ describe('§3 ocean building footprint validation', () => {
     const v = validateOceanPlacement(world, 'nodule_harvester', 10, 10);
     expect(v.ok).toBe(true);
   });
+
+  it('§3 rejects Open-Water Extractor when footprint overlaps an island (land-overlap)', () => {
+    // Open-Water Extractor's terrainReqs = ['shallows', 'deep']. Without the
+    // land-overlap guard the placement would pass: cells inside an island's
+    // tile grid aren't stored in `world.oceanCells`, so `terrainAt` defaults
+    // them to `'deep'` (in the allowed set) and the terrain match silently
+    // succeeds. Stage a 2×2 footprint anchored at cell (0,0) — tile (0,0)
+    // lies inside the home island's r=14 ellipse, so the land-overlap
+    // sampler rejects before the terrain match runs.
+    const cells = oceanCells([]); // empty — every cell defaults to `deep`
+    const world = makeOceanWorld(cells, [nearbyPopulatedIsland()]);
+    const v = validateOceanPlacement(world, 'open_water_extractor', 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('land-overlap');
+  });
+});
+
+describe('§3 land validator defense-in-depth', () => {
+  it('§3 land validator rejects ocean defs (defense-in-depth)', () => {
+    // Buildings-ui.ts filters ocean defs out of the land catalog UI, but a
+    // programmatic / test caller could still reach `validatePlacement` with
+    // an ocean def. The validator returns `def-is-ocean` FIRST — before
+    // tier / biome / geometry — so the routing bug isn't masked by another
+    // gate. Pick a tile (5, 5) inside the r=14 home spec to ensure no
+    // geometry pre-empts the ocean check. vent_tap is T4; even at level 1
+    // the result must be `def-is-ocean`, not `def-not-unlocked`.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const result = validatePlacement(spec, state, 'vent_tap', 5, 5, 0);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('def-is-ocean');
+  });
 });
