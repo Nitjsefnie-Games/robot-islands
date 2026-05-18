@@ -1198,12 +1198,11 @@ describe('IslandState.declaredAt / lastResetAt perfShift (§9.7)', () => {
 // ---------------------------------------------------------------------------
 
 describe('WorldState-level fields round-trip', () => {
-  it('preserves endgameState (achieved Set, firstAchievedMs, victoryBannerShown)', () => {
+  it('preserves endgameState (achieved Set, firstAchievedMs)', () => {
     const world = makeInitialWorld(0);
     world.endgameState = {
       achieved: new Set<VictoryCondition>(['genesis_cell_crafted', 'ascendant_core_crafted']),
       firstAchievedMs: 12_345,
-      victoryBannerShown: true,
     };
     const snap = serializeWorld(world, new Map(), 0, 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
@@ -1214,7 +1213,6 @@ describe('WorldState-level fields round-trip', () => {
     expect(restored.endgameState.achieved.has('omniscient_lattice_active')).toBe(false);
     expect(restored.endgameState.achieved.size).toBe(2);
     expect(restored.endgameState.firstAchievedMs).toBe(12_345);
-    expect(restored.endgameState.victoryBannerShown).toBe(true);
   });
 
   it('preserves latticeActive and latticeNodeIslands', () => {

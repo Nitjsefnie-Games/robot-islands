@@ -82,17 +82,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   Brick and copper_ore both exist in the catalog.
   *(Flagged by Agent D.)*
 
-- **§13.4 `endgame.ts` ships a banner + checker the spec forbids.**
-  `src/endgame.ts:18` `victoryBannerShown` field + `:29-60` `checkVictory`
-  function. Spec §13.4 + impl-status row §13.4 are explicit: "No win
-  screen / popup / acknowledgement fires when artifacts complete."
-  `checkVictory` is never called outside `endgame.test.ts`. Persistence
-  serializes the field, which is the only thing keeping it from being
-  pure dead code. Either fully remove or shrink to an achievement
-  ledger (which is what `achieved: Set<…>` already does — drop the
-  banner field).
-  *(Flagged by Agents C — extends Agent A's notes.)*
-
 - **§5.3 cable inflow doesn't deduct source W.** `src/routes.ts:147-164`
   `cableInflowForIsland` adds capacity to the destination without
   removing it from the source. Comment acknowledges. Spec §5.3 says
@@ -260,10 +249,6 @@ them explicit values + rationale.
 
 ## 5. Dead code / dead exports
 
-- **`src/endgame.ts:29-60`** `checkVictory` + `:18` `victoryBannerShown`
-  field — only test consumers, contradicts spec "no win screen".
-  Persistence serializes the field, which is the only thing keeping it
-  alive. Reduce `EndgameState` to the achievement Set only.
 - **`src/hud.ts:327-335`** `renderMultiIslandBar` — no-op stub
   documented "deprecated, kept as no-op stub", zero non-test consumers.
 - **`src/world.ts:62-68`** `DISCOVERY_RADIUS_TILES = 24` exported as

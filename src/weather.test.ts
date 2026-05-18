@@ -141,7 +141,7 @@ describe('isWeatherVisible', () => {
       satellites: [],
       repairDrones: [],
     debrisFields: [],
-      endgameState: { achieved: new Set(), firstAchievedMs: null, victoryBannerShown: false },
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
