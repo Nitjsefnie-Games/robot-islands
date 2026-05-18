@@ -396,7 +396,22 @@ export type BuildingDefId =
   | 'open_water_extractor'
   | 'nodule_harvester'
   | 'trench_drill'
-  | 'vent_tap';
+  | 'vent_tap'
+  // Ocean-layer §3 — Task 9 processor catalog. 4 chemistry processors + 1
+  // passive power source. All ocean-placed; processors accept shallows OR
+  // deep, Geothermal Vent Generator requires hydrothermal_vent (a rare
+  // terrain — gated by §2 terrain rarity). The processors consume Task 8
+  // raws and the existing chemistry/exotic chains to produce T3-T5
+  // intermediates and finals (lithium_brine, salt, bromine,
+  // rare_earth_concentrate, refined_cobalt, exotic_alloy_seed, tritium_seed,
+  // heavy_water). Geothermal Vent Generator has NO recipe — it's a passive
+  // 2 kW producer (cf. solar_panel / nuclear_reactor / fusion_core), wired
+  // into the §5.1 power balance through def.power.produces alone.
+  | 'brine_distillation_rig'
+  | 'nodule_concentrator'
+  | 'vent_mineral_refinery'
+  | 'heavy_water_distiller'
+  | 'geothermal_vent_generator';
 
 /**
  * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's
@@ -3986,6 +4001,93 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     oceanPlacement: true,
     terrainReqs: ['hydrothermal_vent'],
     glyph: '✦',
+  },
+  // ---------------------------------------------------------------------------
+  // Ocean-layer §3 — Task 9 processor catalog (4 chemistry processors + 1
+  // passive power source). 3×3 footprints for processors (matches reality
+  // _forge / antimatter_refinery T5 chemistry precedent); 2×2 for the
+  // Geothermal Vent Generator (mid-density power source on a rare terrain).
+  //
+  // Categories: 'chemistry' for the processors (the BuildingCategory enum
+  // has no 'processing' — these belong with chlor_alkali_plant /
+  // sulfuric_acid_plant); 'power' for the generator.
+  //
+  // No recipe wires through `placementCost` here — costs are §14
+  // placeholders; Geothermal Vent Generator's cost mirrors a T6
+  // power-source basket (exotic_alloy + ai_core + plasma_containment).
+  // ---------------------------------------------------------------------------
+  brine_distillation_rig: {
+    id: 'brine_distillation_rig',
+    displayName: 'Brine Distillation Rig',
+    category: 'chemistry',
+    tier: 3,
+    footprint: SHAPES.square3,
+    fill: 0x80b0c0, // pale brine teal
+    stroke: 0x204050,
+    power: { consumes: 800 },
+    placementCost: { carbon_steel: 120, glass: 30, microchip: 20 },
+    oceanPlacement: true,
+    terrainReqs: ['shallows', 'deep'],
+    glyph: '⌒',
+  },
+  nodule_concentrator: {
+    id: 'nodule_concentrator',
+    displayName: 'Nodule Concentrator',
+    category: 'chemistry',
+    tier: 4,
+    footprint: SHAPES.square3,
+    fill: 0x907858, // concentrator umber
+    stroke: 0x201810,
+    power: { consumes: 1200 },
+    placementCost: { exotic_alloy: 5, carbon_steel: 150, sulfuric_acid: 10 },
+    oceanPlacement: true,
+    terrainReqs: ['shallows', 'deep'],
+    glyph: '◇',
+  },
+  vent_mineral_refinery: {
+    id: 'vent_mineral_refinery',
+    displayName: 'Vent Mineral Refinery',
+    category: 'chemistry',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0xa040c0, // exotic violet
+    stroke: 0x300040,
+    power: { consumes: 1500 },
+    placementCost: { exotic_alloy: 10, ai_core: 2, casimir_energy: 1 },
+    oceanPlacement: true,
+    terrainReqs: ['shallows', 'deep'],
+    glyph: '◈',
+  },
+  heavy_water_distiller: {
+    id: 'heavy_water_distiller',
+    displayName: 'Heavy Water Distiller',
+    category: 'chemistry',
+    tier: 5,
+    footprint: SHAPES.square3,
+    fill: 0x6090c0, // distiller cobalt
+    stroke: 0x102040,
+    power: { consumes: 1200 },
+    placementCost: { exotic_alloy: 8, ai_core: 1, optical_glass: 20 },
+    oceanPlacement: true,
+    terrainReqs: ['shallows', 'deep'],
+    glyph: '≋',
+  },
+  geothermal_vent_generator: {
+    id: 'geothermal_vent_generator',
+    displayName: 'Geothermal Vent Generator',
+    category: 'power',
+    tier: 6,
+    footprint: SHAPES.square2,
+    fill: 0xe05030, // geothermal magma
+    stroke: 0x401008,
+    // §3 spec literal: ~2 kW passive producer; no consumes, no recipe.
+    // Wired into §5.1 power balance via def.power.produces alone, like
+    // solar_panel / nuclear_reactor — no per-tick fuel burn.
+    power: { produces: 2000 },
+    placementCost: { exotic_alloy: 6, ai_core: 1, plasma_containment_vessel: 1 },
+    oceanPlacement: true,
+    terrainReqs: ['hydrothermal_vent'],
+    glyph: '★',
   },
   // ---------------------------------------------------------------------------
   // T3 microchip intermediate chain (§7.7)

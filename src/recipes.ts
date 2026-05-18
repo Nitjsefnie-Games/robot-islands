@@ -330,7 +330,22 @@ export type ResourceId =
   | 'methane_hydrate'
   | 'heavy_isotope_slurry'
   | 'vent_sulfide'
-  | 'vent_exotic';
+  | 'vent_exotic'
+  // Ocean-layer §3 — Task 9 processor outputs (7 new).
+  //   T3 intermediates (Brine Distillation Rig rotateOutputs): lithium_brine,
+  //     bromine. (`salt` is reused from the existing chemistry chain — same
+  //     Evaporator-output salt the chlor-alkali pathway consumes.)
+  //   T4 intermediates (Nodule Concentrator rotateOutputs):
+  //     rare_earth_concentrate, refined_cobalt.
+  //   T5 finals (Vent Mineral Refinery + Heavy Water Distiller):
+  //     exotic_alloy_seed, tritium_seed, heavy_water.
+  | 'lithium_brine'
+  | 'bromine'
+  | 'rare_earth_concentrate'
+  | 'refined_cobalt'
+  | 'exotic_alloy_seed'
+  | 'tritium_seed'
+  | 'heavy_water';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -567,6 +582,14 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'heavy_isotope_slurry',
   'vent_sulfide',
   'vent_exotic',
+  // Ocean-layer §3 — Task 9 processor outputs.
+  'lithium_brine',
+  'bromine',
+  'rare_earth_concentrate',
+  'refined_cobalt',
+  'exotic_alloy_seed',
+  'tritium_seed',
+  'heavy_water',
 ];
 
 /**
@@ -834,6 +857,18 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   heavy_isotope_slurry: 100,
   vent_sulfide: 100,
   vent_exotic: 100,
+  // Ocean-layer §3 — Task 9 processor outputs.
+  //   T3 intermediates (Brine Distillation Rig): weight 30.
+  //   T4 intermediates (Nodule Concentrator): weight 100.
+  //   T5 finals (Vent Mineral Refinery + Heavy Water Distiller): weight 300
+  //     (same tier as casimir_energy / reality_anchor / plasma_charge).
+  lithium_brine: 30,
+  bromine: 30,
+  rare_earth_concentrate: 100,
+  refined_cobalt: 100,
+  exotic_alloy_seed: 300,
+  tritium_seed: 300,
+  heavy_water: 300,
 };
 
 /**
@@ -2451,6 +2486,88 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
       { vent_exotic: 1 },
     ],
     category: 'extraction',
+  },
+  // ---------------------------------------------------------------------------
+  // Ocean-layer §3 — Task 9 processor recipes (4 chemistry processors).
+  // ---------------------------------------------------------------------------
+  //
+  // One recipe per building, keyed by building id (mirrors Task 8). The
+  // multi-output processors use `rotateOutputs` to cycle through their
+  // catalog of outputs — same §8.10 deterministic rotation as the Task 8
+  // extractors. The Geothermal Vent Generator is a passive power source
+  // (no recipe; def.power.produces only — cf. solar_panel / nuclear_reactor).
+  //
+  // **Combined-inputs design** for the divergent-feedstock processors:
+  // `Recipe.inputs` is a single map per building (and `rotateOutputs` only
+  // rotates outputs, not inputs). The §3 chain examples list distinct
+  // feedstocks for `rare_earth_concentrate` vs `refined_cobalt`
+  // (re_nodule + sulfuric_acid vs co_nodule + sulfuric_acid) and for
+  // `exotic_alloy_seed` vs `tritium_seed` (vent_exotic + casimir vs
+  // heavy_isotope_slurry); ratherthan extending RecipeId + resolveRecipe
+  // to choose per-cycle (out-of-scope for Task 9), we combine the feedstocks
+  // into one inputs map per processor. Each cycle burns the union; outputs
+  // rotate per §8.10. This is the same "ship structure, balance later"
+  // posture as Task 8, and `cycleSec` is set generously to reflect the
+  // doubled feedstock cost.
+  //
+  // Cycle times match the post-÷3 rebalance scale per tier:
+  //   T3 chemistry intermediate (Brine Distillation): 120s.
+  //   T4 chemistry intermediate (Nodule Concentrator): 240s.
+  //   T5 chemistry final (Vent Mineral Refinery): 480s.
+  //   T5 chemistry final (Heavy Water Distiller): 360s.
+  brine_distillation_rig: {
+    // §3 chain example (Lithium): Seawater Intake → dilute_brine →
+    // Brine Distillation Rig → lithium_brine. We rotate three outputs
+    // (lithium_brine, salt, bromine) per the catalog "3 recipes" row.
+    cycleSec: 120,
+    inputs: { dilute_brine: 5 },
+    outputs: { lithium_brine: 1 },
+    rotateOutputs: [
+      { lithium_brine: 1 },
+      { salt: 2 }, // salt re-uses existing chemistry-chain salt id.
+      { bromine: 1 },
+    ],
+    category: 'chemistry',
+  },
+  nodule_concentrator: {
+    // §3 chain example (Rare-earth): Nodule Harvester → re_nodule →
+    // Nodule Concentrator → rare_earth_concentrate. We rotate two outputs
+    // (rare_earth_concentrate, refined_cobalt) per the catalog "2 recipes"
+    // row. Combined-inputs: both nodule types + sulfuric_acid every cycle.
+    cycleSec: 240,
+    inputs: { re_nodule: 2, co_nodule: 2, sulfuric_acid: 1 },
+    outputs: { rare_earth_concentrate: 1 },
+    rotateOutputs: [
+      { rare_earth_concentrate: 1 },
+      { refined_cobalt: 1 },
+    ],
+    category: 'chemistry',
+  },
+  vent_mineral_refinery: {
+    // §3 chain examples (Exotic alloy + Tritium): Vent Tap → vent_exotic +
+    // Trench Drill → heavy_isotope_slurry → Vent Mineral Refinery →
+    // exotic_alloy_seed / tritium_seed. Combined-inputs: vent_exotic +
+    // heavy_isotope_slurry + casimir_energy (T5 exotic gating per §8.10
+    // Casimir Tap) every cycle; outputs rotate.
+    cycleSec: 480,
+    inputs: { vent_exotic: 1, heavy_isotope_slurry: 1, casimir_energy: 1 },
+    outputs: { exotic_alloy_seed: 1 },
+    rotateOutputs: [
+      { exotic_alloy_seed: 1 },
+      { tritium_seed: 1 },
+    ],
+    category: 'chemistry',
+  },
+  heavy_water_distiller: {
+    // §3 chain example (Heavy water): Open-Water Extractor →
+    // concentrated_brine → Heavy Water Distiller → heavy_water. Single
+    // output, no rotation. The microchip co-input models the precision
+    // control electronics for isotope-selective distillation (mirrors
+    // existing T5 chemistry recipes that fold in a microchip for control).
+    cycleSec: 360,
+    inputs: { concentrated_brine: 4, microchip: 1 },
+    outputs: { heavy_water: 1 },
+    category: 'chemistry',
   },
 };
 

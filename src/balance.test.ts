@@ -129,6 +129,16 @@ describe('Balance — every consumed resource has at least one producer', () => 
     for (const recipe of Object.values(RECIPES)) {
       for (const r of Object.keys(recipe.inputs)) consumed.add(r as ResourceId);
       for (const r of Object.keys(recipe.outputs)) produced.add(r as ResourceId);
+      // §8.10 rotateOutputs: rotated variants are real producers — the
+      // per-cycle output picker (`pickRotatedOutput` in recipes.ts) emits
+      // one slot per cycle. Without this branch, the §3 Task-8 ocean
+      // extractors look like they don't produce re_nodule / co_nodule /
+      // vent_exotic / heavy_isotope_slurry (those land in rotateOutputs,
+      // not in the static `outputs` field) — causing false orphan flags
+      // the moment a Task-9 processor consumes them.
+      for (const rot of recipe.rotateOutputs ?? []) {
+        for (const r of Object.keys(rot)) produced.add(r as ResourceId);
+      }
     }
     const orphans: ResourceId[] = [];
     for (const c of consumed) {

@@ -29,6 +29,7 @@ import {
   type RecipeCategory,
   type ResourceId,
 } from './recipes.js';
+import { BUILDING_DEFS } from './building-defs.js';
 
 describe('Catalog additions (§6.4 T3 raws + §6.6 T5 memetic_core)', () => {
   it('includes gold_ore as a T3 dry_goods raw with xp_weight 30', () => {
@@ -1739,5 +1740,145 @@ describe('§12.3 Foundation Kit Enriched + Refined (Task 13.2)', () => {
     expect(RECIPES.kit_assembler_refined!.outputs).toEqual({ foundation_kit_refined: 1 });
     expect(RECIPES.kit_assembler_refined!.cycleSec).toBe(400);
     expect(RECIPES.kit_assembler_refined!.category).toBe('manufacturing');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ocean-layer §3 — Task 9 processor catalog (4 chemistry processors + 1 power
+// source). Mirrors Task 8's "one recipe per building, rotateOutputs for the
+// multi-output cases" pattern — recipe keys are the building ids, no synthetic
+// RecipeId entries. Geothermal Vent Generator is a passive power source like
+// Solar / Nuclear Reactor: NO recipe entry; def.power.produces only.
+// ---------------------------------------------------------------------------
+describe('§3 ocean processing recipes (Task 9)', () => {
+  it('lithium_brine, bromine, rare_earth_concentrate, refined_cobalt, exotic_alloy_seed, tritium_seed, heavy_water are in ALL_RESOURCES with the right XP_WEIGHT', () => {
+    // T3 intermediates from Brine Distillation Rig.
+    expect(ALL_RESOURCES).toContain('lithium_brine' as ResourceId);
+    expect(XP_WEIGHT.lithium_brine).toBe(30);
+    expect(ALL_RESOURCES).toContain('bromine' as ResourceId);
+    expect(XP_WEIGHT.bromine).toBe(30);
+    // T4 intermediates from Nodule Concentrator.
+    expect(ALL_RESOURCES).toContain('rare_earth_concentrate' as ResourceId);
+    expect(XP_WEIGHT.rare_earth_concentrate).toBe(100);
+    expect(ALL_RESOURCES).toContain('refined_cobalt' as ResourceId);
+    expect(XP_WEIGHT.refined_cobalt).toBe(100);
+    // T5 finals from Vent Mineral Refinery + Heavy Water Distiller.
+    expect(ALL_RESOURCES).toContain('exotic_alloy_seed' as ResourceId);
+    expect(XP_WEIGHT.exotic_alloy_seed).toBe(300);
+    expect(ALL_RESOURCES).toContain('tritium_seed' as ResourceId);
+    expect(XP_WEIGHT.tritium_seed).toBe(300);
+    expect(ALL_RESOURCES).toContain('heavy_water' as ResourceId);
+    expect(XP_WEIGHT.heavy_water).toBe(300);
+  });
+
+  it('brine_distillation_rig recipe consumes dilute_brine and rotates lithium_brine / salt / bromine outputs', () => {
+    const r = RECIPES.brine_distillation_rig;
+    expect(r).toBeDefined();
+    expect(r!.inputs).toEqual({ dilute_brine: 5 });
+    expect(r!.outputs).toEqual({ lithium_brine: 1 });
+    expect(r!.rotateOutputs).toBeDefined();
+    expect(r!.rotateOutputs!).toHaveLength(3);
+    expect(r!.rotateOutputs![0]).toEqual({ lithium_brine: 1 });
+    expect(r!.rotateOutputs![1]).toEqual({ salt: 2 });
+    expect(r!.rotateOutputs![2]).toEqual({ bromine: 1 });
+    expect(r!.cycleSec).toBe(120);
+    expect(r!.category).toBe('chemistry');
+  });
+
+  it('nodule_concentrator recipe consumes re_nodule + co_nodule + sulfuric_acid and rotates rare_earth_concentrate / refined_cobalt outputs', () => {
+    const r = RECIPES.nodule_concentrator;
+    expect(r).toBeDefined();
+    // §3 chain example specifies sulfuric_acid as a co-input. We bundle
+    // both nodule feedstocks into one recipe and rotate the outputs — see
+    // commit message for the combined-inputs rationale (one Recipe.inputs
+    // map per building, rotateOutputs only rotates outputs).
+    expect(r!.inputs).toEqual({ re_nodule: 2, co_nodule: 2, sulfuric_acid: 1 });
+    expect(r!.rotateOutputs).toBeDefined();
+    expect(r!.rotateOutputs!).toHaveLength(2);
+    expect(r!.rotateOutputs![0]).toEqual({ rare_earth_concentrate: 1 });
+    expect(r!.rotateOutputs![1]).toEqual({ refined_cobalt: 1 });
+    expect(r!.cycleSec).toBe(240);
+    expect(r!.category).toBe('chemistry');
+  });
+
+  it('vent_mineral_refinery recipe consumes vent_exotic + heavy_isotope_slurry + casimir_energy and rotates exotic_alloy_seed / tritium_seed outputs', () => {
+    const r = RECIPES.vent_mineral_refinery;
+    expect(r).toBeDefined();
+    // §3 chain examples (Exotic alloy + Tritium): combined-inputs per
+    // building, rotateOutputs picks the per-cycle product.
+    expect(r!.inputs).toEqual({ vent_exotic: 1, heavy_isotope_slurry: 1, casimir_energy: 1 });
+    expect(r!.rotateOutputs).toBeDefined();
+    expect(r!.rotateOutputs!).toHaveLength(2);
+    expect(r!.rotateOutputs![0]).toEqual({ exotic_alloy_seed: 1 });
+    expect(r!.rotateOutputs![1]).toEqual({ tritium_seed: 1 });
+    expect(r!.cycleSec).toBe(480);
+    expect(r!.category).toBe('chemistry');
+  });
+
+  it('heavy_water_distiller recipe consumes concentrated_brine and produces heavy_water (single-output, no rotation)', () => {
+    const r = RECIPES.heavy_water_distiller;
+    expect(r).toBeDefined();
+    expect(r!.inputs).toEqual({ concentrated_brine: 4, microchip: 1 });
+    expect(r!.outputs).toEqual({ heavy_water: 1 });
+    expect(r!.rotateOutputs).toBeUndefined();
+    expect(r!.cycleSec).toBe(360);
+    expect(r!.category).toBe('chemistry');
+  });
+
+  it('geothermal_vent_generator has NO recipe entry (passive power source)', () => {
+    expect(RECIPES.geothermal_vent_generator).toBeUndefined();
+  });
+});
+
+describe('§3 ocean processor + Geothermal Generator building defs (Task 9)', () => {
+  it('brine_distillation_rig: T3, 3x3, chemistry, 800W consumes, shallows OR deep', () => {
+    const def = BUILDING_DEFS.brine_distillation_rig;
+    expect(def.tier).toBe(3);
+    expect(def.footprint.tiles).toHaveLength(9);
+    expect(def.category).toBe('chemistry');
+    expect(def.power?.consumes).toBe(800);
+    expect(def.oceanPlacement).toBe(true);
+    expect(def.terrainReqs).toEqual(['shallows', 'deep']);
+  });
+
+  it('nodule_concentrator: T4, 3x3, chemistry, 1200W consumes, shallows OR deep', () => {
+    const def = BUILDING_DEFS.nodule_concentrator;
+    expect(def.tier).toBe(4);
+    expect(def.footprint.tiles).toHaveLength(9);
+    expect(def.category).toBe('chemistry');
+    expect(def.power?.consumes).toBe(1200);
+    expect(def.oceanPlacement).toBe(true);
+    expect(def.terrainReqs).toEqual(['shallows', 'deep']);
+  });
+
+  it('vent_mineral_refinery: T5, 3x3, chemistry, 1500W consumes, shallows OR deep', () => {
+    const def = BUILDING_DEFS.vent_mineral_refinery;
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles).toHaveLength(9);
+    expect(def.category).toBe('chemistry');
+    expect(def.power?.consumes).toBe(1500);
+    expect(def.oceanPlacement).toBe(true);
+    expect(def.terrainReqs).toEqual(['shallows', 'deep']);
+  });
+
+  it('heavy_water_distiller: T5, 3x3, chemistry, 1200W consumes, shallows OR deep', () => {
+    const def = BUILDING_DEFS.heavy_water_distiller;
+    expect(def.tier).toBe(5);
+    expect(def.footprint.tiles).toHaveLength(9);
+    expect(def.category).toBe('chemistry');
+    expect(def.power?.consumes).toBe(1200);
+    expect(def.oceanPlacement).toBe(true);
+    expect(def.terrainReqs).toEqual(['shallows', 'deep']);
+  });
+
+  it('geothermal_vent_generator: T6, 2x2, power, PRODUCES 2000W, hydrothermal_vent only', () => {
+    const def = BUILDING_DEFS.geothermal_vent_generator;
+    expect(def.tier).toBe(6);
+    expect(def.footprint.tiles).toHaveLength(4);
+    expect(def.category).toBe('power');
+    expect(def.power?.produces).toBe(2000);
+    expect(def.power?.consumes).toBeUndefined();
+    expect(def.oceanPlacement).toBe(true);
+    expect(def.terrainReqs).toEqual(['hydrothermal_vent']);
   });
 });
