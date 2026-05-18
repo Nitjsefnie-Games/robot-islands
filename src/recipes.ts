@@ -314,7 +314,23 @@ export type ResourceId =
   | 'optical_glass'
   // Phase 10c — T3 fiber spinners (Task 10.12)
   | 'glass_fiber'
-  | 'optical_fiber';
+  | 'optical_fiber'
+  // Ocean-layer §3 — Task 8 raw extractor outputs (10 new raws).
+  // Common (dry_goods / liquid_gas): dilute_brine, concentrated_brine,
+  // mn_nodule, methane_hydrate, vent_sulfide.
+  // Rare (Vault category): he3_dilute, re_nodule, co_nodule,
+  // heavy_isotope_slurry, vent_exotic.
+  // Task 9 will add the processor outputs that consume these.
+  | 'dilute_brine'
+  | 'concentrated_brine'
+  | 'he3_dilute'
+  | 'mn_nodule'
+  | 're_nodule'
+  | 'co_nodule'
+  | 'methane_hydrate'
+  | 'heavy_isotope_slurry'
+  | 'vent_sulfide'
+  | 'vent_exotic';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -540,6 +556,17 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   // Phase 10c — T3 fiber spinners (Task 10.12)
   'glass_fiber',
   'optical_fiber',
+  // Ocean-layer §3 — Task 8 raw extractor outputs.
+  'dilute_brine',
+  'concentrated_brine',
+  'he3_dilute',
+  'mn_nodule',
+  're_nodule',
+  'co_nodule',
+  'methane_hydrate',
+  'heavy_isotope_slurry',
+  'vent_sulfide',
+  'vent_exotic',
 ];
 
 /**
@@ -789,6 +816,24 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // Phase 10c — T3 fiber spinners (Task 10.12)
   glass_fiber: 30,
   optical_fiber: 30,
+  // Ocean-layer §3 — Task 8 raw extractor outputs (xp weight = source tier).
+  //   Seawater Intake T2 → dilute_brine (T2 weight 10).
+  //   Open-Water (T3) → concentrated_brine, he3_dilute (T3 weight 30).
+  //   Nodule Harvester (T3) → mn_nodule, re_nodule, co_nodule (T3 weight 30).
+  //   Trench Drill (T4) → methane_hydrate, heavy_isotope_slurry, vent_sulfide
+  //     (T4 weight 100; vent_sulfide is also produced by T4 Vent Tap so 100
+  //     holds either side).
+  //   Vent Tap (T4) → vent_sulfide, vent_exotic (T4 weight 100).
+  dilute_brine: 10,
+  concentrated_brine: 30,
+  he3_dilute: 30,
+  mn_nodule: 30,
+  re_nodule: 30,
+  co_nodule: 30,
+  methane_hydrate: 100,
+  heavy_isotope_slurry: 100,
+  vent_sulfide: 100,
+  vent_exotic: 100,
 };
 
 /**
@@ -2333,6 +2378,79 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { reality_anchor: 4, dimensional_fold: 1, causal_regulator: 2 },
     outputs: {},
     category: 'manufacturing',
+  },
+  // ---------------------------------------------------------------------------
+  // Ocean-layer §3 — Task 8 extractor recipes (5 buildings, 12 outputs).
+  // ---------------------------------------------------------------------------
+  //
+  // Each ocean extractor cycles through its outputs deterministically via
+  // `rotateOutputs` (§8.10) — one output per cycle, picked by world-tick
+  // index. Mirrors the existing T5 extractor pattern (aetheric_conduit,
+  // spacetime_resonator, eldritch_sieve). Cycle times match the post-÷3
+  // rebalance scale: extractors typically run 20-60s per cycle (cf. mine=17s,
+  // logger=13s) — ocean extractors run slower (60-120s) to reflect the
+  // logistic complexity of ocean platforms vs. a simple land mine.
+  //
+  // No inputs — all five are terrain-tapped raw extractors. Outputs are the
+  // 10 new ResourceIds from the resource summary in §3.
+  seawater_intake_rig: {
+    // §3 catalog: 2 recipes (dilute_brine, trace deuterium).
+    cycleSec: 60,
+    inputs: {},
+    outputs: { dilute_brine: 1 },
+    rotateOutputs: [
+      { dilute_brine: 1 },
+      { he3_dilute: 1 }, // trace deuterium — same cycle slot, rare alt.
+    ],
+    category: 'extraction',
+  },
+  open_water_extractor: {
+    // §3 catalog: 2 recipes (concentrated_brine, He-3 dilute).
+    cycleSec: 80,
+    inputs: {},
+    outputs: { concentrated_brine: 1 },
+    rotateOutputs: [
+      { concentrated_brine: 1 },
+      { he3_dilute: 1 },
+    ],
+    category: 'extraction',
+  },
+  nodule_harvester: {
+    // §3 catalog: 3 recipes (Mn / Re / Co nodules).
+    cycleSec: 100,
+    inputs: {},
+    outputs: { mn_nodule: 1 },
+    rotateOutputs: [
+      { mn_nodule: 1 },
+      { re_nodule: 1 },
+      { co_nodule: 1 },
+    ],
+    category: 'extraction',
+  },
+  trench_drill: {
+    // §3 catalog: 3 recipes (methane_hydrate, heavy_isotope_slurry,
+    // vent_sulfide). Slower cycle for T4 endgame extractor (cf. drilling_rig
+    // at 800s — trench drill is mid-T4, faster than helium_3).
+    cycleSec: 120,
+    inputs: {},
+    outputs: { methane_hydrate: 1 },
+    rotateOutputs: [
+      { methane_hydrate: 1 },
+      { heavy_isotope_slurry: 1 },
+      { vent_sulfide: 1 },
+    ],
+    category: 'extraction',
+  },
+  vent_tap: {
+    // §3 catalog: 2 recipes (vent_sulfide, vent_exotic).
+    cycleSec: 120,
+    inputs: {},
+    outputs: { vent_sulfide: 1 },
+    rotateOutputs: [
+      { vent_sulfide: 1 },
+      { vent_exotic: 1 },
+    ],
+    category: 'extraction',
   },
 };
 

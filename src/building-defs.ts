@@ -385,7 +385,18 @@ export type BuildingDefId =
   // every cell within SONAR_BUOY_RADIUS_TILES in both `revealedCells` and
   // `depthRevealedCells`. The `oceanPlacement` / `terrainReqs` flags on
   // this def are declared but NOT yet enforced — Task 8 wires placement.
-  | 'sonar_buoy';
+  | 'sonar_buoy'
+  // Ocean-layer §3 — Task 8 extractor catalog. Each is ocean-placed via
+  // `validateOceanPlacement` (placement.ts) against `world.oceanCells` —
+  // 2×2 cell footprints under a specific terrain rule per the §3 table.
+  // UI wiring of the anchor picker (placement-ui.ts → mountAnchorPicker)
+  // is deferred to a follow-up; the defs + recipes + data-layer validation
+  // ship here so chain producers exist for §3 processors (Task 9).
+  | 'seawater_intake_rig'
+  | 'open_water_extractor'
+  | 'nodule_harvester'
+  | 'trench_drill'
+  | 'vent_tap';
 
 /**
  * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's
@@ -3888,6 +3899,93 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     oceanPlacement: true,
     terrainReqs: ['shallows', 'deep', 'trench', 'hydrothermal_vent', 'nodule_field'],
     glyph: '◌',
+  },
+  // ---------------------------------------------------------------------------
+  // Ocean-layer §3 — Task 8 extractor catalog (5 buildings)
+  // ---------------------------------------------------------------------------
+  //
+  // Each is 2×2 (cell-units; see ocean-cell.ts footprintMatches — for ocean
+  // buildings the footprint dimensions index `oceanCells` directly, not the
+  // tile grid). Terrain rule per the §3 design-doc catalog table.
+  //
+  // `wire` is the codebase's name for copper wire (no separate `copper_wire`
+  // ResourceId); placement-cost baskets use that. Power consumption + costs
+  // are Appendix-A placeholders — tune in balance follow-ups.
+  //
+  // Anchor picker UI wiring (placement-ui.ts → mountAnchorPicker) is deferred
+  // to a follow-up. Until that lands, these defs validate ocean placement at
+  // the data layer (validateOceanPlacement in placement.ts) but the regular
+  // `validatePlacement` / `placeBuilding` path still routes them onto whatever
+  // land tile the user clicks — same forward-compat posture as `sonar_buoy`.
+  seawater_intake_rig: {
+    id: 'seawater_intake_rig',
+    displayName: 'Seawater Intake Rig',
+    category: 'extraction',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x60a0c0, // shallows blue-grey
+    stroke: 0x204060,
+    power: { consumes: 200 },
+    placementCost: { iron_ingot: 50, wire: 20, microchip: 10 },
+    oceanPlacement: true,
+    terrainReqs: ['shallows'],
+    glyph: '~',
+  },
+  open_water_extractor: {
+    id: 'open_water_extractor',
+    displayName: 'Open-Water Extractor',
+    category: 'extraction',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x4080a0,
+    stroke: 0x143048,
+    power: { consumes: 400 },
+    placementCost: { carbon_steel: 80, wire: 30, microchip: 15 },
+    oceanPlacement: true,
+    terrainReqs: ['shallows', 'deep'],
+    glyph: '≈',
+  },
+  nodule_harvester: {
+    id: 'nodule_harvester',
+    displayName: 'Nodule Harvester',
+    category: 'extraction',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x806040, // nodule brown
+    stroke: 0x201810,
+    power: { consumes: 600 },
+    placementCost: { carbon_steel: 100, gear: 25, microchip: 20 },
+    oceanPlacement: true,
+    terrainReqs: ['nodule_field'],
+    glyph: '⊙',
+  },
+  trench_drill: {
+    id: 'trench_drill',
+    displayName: 'Trench Drill',
+    category: 'extraction',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0x303048, // trench indigo
+    stroke: 0x080814,
+    power: { consumes: 1000 },
+    placementCost: { exotic_alloy: 5, carbon_steel: 150, ai_core: 1 },
+    oceanPlacement: true,
+    terrainReqs: ['trench'],
+    glyph: '▼',
+  },
+  vent_tap: {
+    id: 'vent_tap',
+    displayName: 'Vent Tap',
+    category: 'extraction',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0xc04030, // vent ember red
+    stroke: 0x401008,
+    power: { consumes: 800 },
+    placementCost: { exotic_alloy: 4, carbon_steel: 100, optical_glass: 10 },
+    oceanPlacement: true,
+    terrainReqs: ['hydrothermal_vent'],
+    glyph: '✦',
   },
   // ---------------------------------------------------------------------------
   // T3 microchip intermediate chain (§7.7)
