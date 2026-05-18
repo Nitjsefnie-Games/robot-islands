@@ -271,6 +271,29 @@ describe('dispatchDrone', () => {
     expect(world.drones).toHaveLength(1);
     expect(home.inventory.biofuel).toBe(40);
   });
+
+  it('§11.1 spawns at the Drone Pad footprint centre when a Drone Pad is placed off-centre', () => {
+    // Mirrors the §14.5 Spaceport spawn idiom: drone spawn = drone-pad
+    // footprint centre. Drone Pad is SHAPES.single (1×1), so a pad at
+    // island-local (5, 5) on a spec centred at (cx, cy) spawns at
+    // (cx + 5 + 0.5, cy + 5 + 0.5).
+    const world = freshWorld();
+    const spec = makeIslandSpec({ id: 'home', cx: 100, cy: 200, populated: true });
+    world.islands.push(spec);
+    const home = makeIslandState({
+      id: 'home',
+      buildings: [{ id: 'dp-1', defId: 'dronepad', x: 5, y: 5 }],
+    });
+    home.inventory.biofuel = 50;
+    // Caller passes the island centre as originX/originY (mirrors the
+    // drones-ui call site). The dispatch should override that with the
+    // pad footprint centre.
+    const r = dispatchDrone(world, home, 100, 200, 1, 0, 20, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.drone.originX).toBe(100 + 5 + 0.5);
+    expect(r.drone.originY).toBe(200 + 5 + 0.5);
+  });
 });
 
 // ---------------------------------------------------------------------------
