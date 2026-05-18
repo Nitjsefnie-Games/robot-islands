@@ -5,19 +5,31 @@
 // destruction, route capacity, and drone scan penalties — but the player
 // needed a visible signal to dispatch launches strategically.
 //
-// Visibility: this overlay piggybacks on the SAME vision predicate the
-// ocean layer uses. If a cell's AABB intersects ANY vision source
-// (`computeVisionSources` — baseline padded ellipses around populated
-// islands + per-Lighthouse circles), the whole cell renders. This unifies
-// "what can I see" across the ocean tier, the discovery cells, and weather
-// — building a Lighthouse extends weather visibility because it extends
-// vision. The earlier ad-hoc BASE_VISIBILITY_CELLS disc that ignored
-// Lighthouses and used a fixed-radius cell-grid disc is gone.
+// Visibility: this overlay uses a *weather-specific* vision-source set
+// (`computeWeatherVisionSources`), distinct from the ocean / Lighthouse
+// vision graph. The current-cycle layer reveals cells that intersect:
 //
-// The §2.6 Weather Station bonus is not yet wired through this path — the
-// spec defines Weather Stations as extenders of weather visibility
-// specifically; if we want to honour them they should appear as additional
-// vision sources for weather purposes only (a follow-up).
+//   (a) any populated island's ocean-padded ellipse (keeps the overlay
+//       aligned with the visible water around each coast), AND
+//   (b) a per-island weather circle of radius
+//       `BASE_WEATHER_VISIBILITY_TILES (=5) + Σ station bonuses`. §2.6
+//       station bonuses: T2 Weather Station +3 tiles, T3 Advanced Weather
+//       Station +6 tiles. Multiple stations on the same island STACK
+//       additively (matches the pinned `isWeatherVisible` test surface in
+//       `weather.test.ts`).
+//
+// In addition, every island carrying an Advanced Weather Station (T3) emits
+// a parallel *forecast* circle of the same radius. Cells in that forecast
+// set get a second, lower-opacity sprite drawn on top, tinted by the
+// weather state `WEATHER_FORECAST_LOOKAHEAD_MS` in the future — the
+// "+1-cycle ahead forecasting" §2.6 promise. The lookahead is the
+// arithmetic midpoint of the cell-dwell range (~2 h) since dwell is
+// variable per cell and the spec doesn't pin a fixed cycle length.
+//
+// Lighthouses do NOT extend weather visibility — only the ocean ellipse
+// (always present) and weather stations do. The earlier `computeVisionSources`
+// piggyback that *did* leak Lighthouse range into the weather overlay has
+// been replaced with the targeted source set above.
 //
 // Performance: visibleCellsFromVision is bounded by the source AABBs; the
 // throttled rebuild (WEATHER_OVERLAY_REBUILD_MS = 5s) keeps Graphics churn
@@ -26,8 +38,13 @@
 import { Container, Sprite, Texture } from 'pixi.js';
 
 import { TILE_PX } from './island.js';
-import { visibleCellsFromVision, type VisionSource } from './vision-source.js';
-import { weather, type WeatherState } from './weather.js';
+import { visibleCellsFromVision } from './vision-source.js';
+import {
+  WEATHER_FORECAST_LOOKAHEAD_MS,
+  weather,
+  type WeatherState,
+  type WeatherVisionSources,
+} from './weather.js';
 import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
 
 /** Cell-size in world pixels — matches the convention in ocean.ts. */
@@ -87,6 +104,13 @@ function biomeForCell(
   return undefined;
 }
 
+/** Alpha multiplier applied to forecast-layer sprites so the +1-cycle
+ *  ahead lookahead reads as a "preview" rather than the current state.
+ *  0.5 was tuned against the existing STATE_TINT alphas (0.18-0.6) so a
+ *  forecast storm draws at ~0.16 final alpha — clearly visible without
+ *  competing with the live cell tint underneath. */
+export const FORECAST_ALPHA_MULTIPLIER = 0.5;
+
 export interface WeatherOverlayHandle {
   /** Render layer to add to the world container, above islands so the tint
    *  reads over land and sea both. */
@@ -94,11 +118,11 @@ export interface WeatherOverlayHandle {
   /** Repaint the overlay if enough time has passed since the last rebuild.
    *  Cheap when within the throttle window — single timestamp compare.
    *  `getVisionSources` is invoked at each rebuild so a freshly-placed
-   *  Lighthouse / new populated island extends weather visibility on the
-   *  next refresh. */
-  refresh(nowMs: number, getVisionSources: () => ReadonlyArray<VisionSource>): void;
+   *  Weather Station / Advanced Weather Station / new populated island
+   *  extends weather visibility on the next refresh. */
+  refresh(nowMs: number, getVisionSources: () => WeatherVisionSources): void;
   /** Force a rebuild on the next frame — call after a populated island
-   *  flips, a Lighthouse is placed/demolished, etc. */
+   *  flips, a Weather Station is placed/demolished, etc. */
   invalidate(): void;
 }
 
@@ -108,24 +132,53 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
   let lastRebuildMs = -Infinity;
   let dirty = true;
 
-  const rebuild = (nowMs: number, sources: ReadonlyArray<VisionSource>): void => {
+  /** Draw one cell's tinted sprite at world-pixel position. Factored out so
+   *  the current-cycle and forecast passes share the geometry. */
+  const drawCell = (
+    cellX: number,
+    cellY: number,
+    state: WeatherState,
+    alphaScale: number,
+  ): void => {
+    const tint = STATE_TINT[state];
+    if (!tint) return;
+    const sprite = new Sprite(getCellTexture());
+    sprite.width = CELL_PX;
+    sprite.height = CELL_PX;
+    sprite.tint = tint.color;
+    sprite.alpha = tint.alpha * alphaScale;
+    sprite.position.set(cellX * CELL_PX, cellY * CELL_PX);
+    layer.addChild(sprite);
+  };
+
+  const rebuild = (nowMs: number, sources: WeatherVisionSources): void => {
     layer.removeChildren();
-    const cells = visibleCellsFromVision(sources);
-    for (const key of cells) {
+    // 1) Current-cycle layer — every cell intersecting ocean ellipses or
+    //    per-island weather circles.
+    const currentCells = visibleCellsFromVision(sources.current);
+    for (const key of currentCells) {
       const idx = key.indexOf(',');
       const cellX = Number(key.slice(0, idx));
       const cellY = Number(key.slice(idx + 1));
       const biome = biomeForCell(world, cellX, cellY);
       const w = weather(world.seed, cellX, cellY, nowMs, biome);
-      const tint = STATE_TINT[w.state];
-      if (!tint) continue;
-      const sprite = new Sprite(getCellTexture());
-      sprite.width = CELL_PX;
-      sprite.height = CELL_PX;
-      sprite.tint = tint.color;
-      sprite.alpha = tint.alpha;
-      sprite.position.set(cellX * CELL_PX, cellY * CELL_PX);
-      layer.addChild(sprite);
+      drawCell(cellX, cellY, w.state, 1);
+    }
+    // 2) Forecast layer — only islands carrying an Advanced Weather Station
+    //    emit sources here. Sample the weather model at `nowMs +
+    //    LOOKAHEAD` and stamp the cell at reduced alpha so the live tint
+    //    underneath stays the dominant read.
+    if (sources.forecast.length > 0) {
+      const forecastCells = visibleCellsFromVision(sources.forecast);
+      const forecastMs = nowMs + WEATHER_FORECAST_LOOKAHEAD_MS;
+      for (const key of forecastCells) {
+        const idx = key.indexOf(',');
+        const cellX = Number(key.slice(0, idx));
+        const cellY = Number(key.slice(idx + 1));
+        const biome = biomeForCell(world, cellX, cellY);
+        const w = weather(world.seed, cellX, cellY, forecastMs, biome);
+        drawCell(cellX, cellY, w.state, FORECAST_ALPHA_MULTIPLIER);
+      }
     }
     lastRebuildMs = nowMs;
     dirty = false;
@@ -133,7 +186,7 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
 
   return {
     layer,
-    refresh(nowMs: number, getVisionSources: () => ReadonlyArray<VisionSource>): void {
+    refresh(nowMs: number, getVisionSources: () => WeatherVisionSources): void {
       if (!dirty && nowMs - lastRebuildMs < WEATHER_OVERLAY_REBUILD_MS) return;
       rebuild(nowMs, getVisionSources());
     },

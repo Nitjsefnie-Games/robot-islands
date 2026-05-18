@@ -1,6 +1,13 @@
 import { dayPhaseName } from './daynight.js';
 import { makeSeededRng } from './rng.js';
-import type { Biome, WorldState } from './world.js';
+import type { VisionSource } from './vision-source.js';
+import {
+  VISION_PADDING_TILES,
+  islandConstituents,
+  type Biome,
+  type IslandSpec,
+  type WorldState,
+} from './world.js';
 
 export type WeatherState = 'clear' | 'light_fog' | 'storm' | 'severe_storm' | 'catastrophic';
 
@@ -162,7 +169,54 @@ export function weather(
   return { state: 'clear', sinceMs: nowMs, untilMs: nowMs + MIN_DWELL_MS };
 }
 
-const BASE_VISIBILITY_TILES = 5;
+/** Baseline weather visibility radius around any populated island, in tile
+ *  units. SPEC §2.6 calls this `R_weather` and quotes "5 cells" as a
+ *  placeholder; the implementation uses tile units throughout the vision
+ *  graph (matches `BASE_VISIBILITY_TILES` semantics and ocean-padding
+ *  conventions in `lighthouse.ts`). */
+export const BASE_WEATHER_VISIBILITY_TILES = 5;
+
+/** Per-defId weather visibility range bonus in tile units (§2.6). Mirrors
+ *  the `LIGHTHOUSE_VISION_RADII` table in `lighthouse.ts`. Bonuses STACK
+ *  additively (multiple stations on one island sum) per the pre-existing
+ *  pinned test surface — see `weather.test.ts` "stacks multiple weather
+ *  stations". */
+export const WEATHER_STATION_RANGE_BONUS_TILES: Readonly<Record<string, number>> = {
+  weather_station_t2: 3,
+  advanced_weather_station_t3: 6,
+};
+
+/** Defs whose presence on an island unlocks the §2.6 1-cycle-ahead
+ *  forecast overlay. Only Advanced Weather Station today; Scanner Sat
+ *  forecast is wired separately through `satellite-overlay.ts`. */
+const FORECAST_DEF_IDS: ReadonlySet<string> = new Set(['advanced_weather_station_t3']);
+
+/** Lookahead used by §2.6 "1-cycle ahead" Advanced Weather Station
+ *  forecasting. The weather model has no fixed cycle (dwell varies
+ *  30 min – 4 h, see `MIN_DWELL_MS` / `MAX_DWELL_MS`); we sample at the
+ *  arithmetic midpoint (~2 h) so the forecast lands one typical dwell
+ *  ahead of `nowMs`. */
+export const WEATHER_FORECAST_LOOKAHEAD_MS = 2 * 60 * 60 * 1000;
+
+/** Sum of station bonuses on an island, in tiles. Walks the spec's
+ *  building array and uses `WEATHER_STATION_RANGE_BONUS_TILES`. Pure. */
+export function weatherStationRangeBonusTiles(spec: IslandSpec): number {
+  let bonus = 0;
+  for (const b of spec.buildings) {
+    const add = WEATHER_STATION_RANGE_BONUS_TILES[b.defId];
+    if (add !== undefined) bonus += add;
+  }
+  return bonus;
+}
+
+/** True iff this island has at least one §2.6 forecast-capable station
+ *  (Advanced Weather Station). Pure. */
+export function hasForecastStation(spec: IslandSpec): boolean {
+  for (const b of spec.buildings) {
+    if (FORECAST_DEF_IDS.has(b.defId)) return true;
+  }
+  return false;
+}
 
 export function isWeatherVisible(world: WorldState, cx: number, cy: number): boolean {
   for (const island of world.islands) {
@@ -170,17 +224,82 @@ export function isWeatherVisible(world: WorldState, cx: number, cy: number): boo
     const dx = island.cx - cx;
     const dy = island.cy - cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    let range = BASE_VISIBILITY_TILES;
-    for (const b of island.buildings) {
-      if (b.defId === 'weather_station_t2') {
-        range += 3;
-      } else if (b.defId === 'advanced_weather_station_t3') {
-        range += 6;
-      }
-    }
+    const range = BASE_WEATHER_VISIBILITY_TILES + weatherStationRangeBonusTiles(island);
     if (dist <= range) return true;
   }
   return false;
+}
+
+/**
+ * §2.6 — build the vision-source set used by the weather overlay. Distinct
+ * from `computeVisionSources` (ocean + Lighthouse) because:
+ *
+ *   1. Weather has its own per-island baseline (R_weather = 5 tiles)
+ *      independent of the ocean's `VISION_PADDING_TILES = 10`.
+ *   2. Weather Stations (T2 +3, T3 +6) extend it; Lighthouses do NOT.
+ *   3. The Advanced Weather Station also unlocks a separate `forecast`
+ *      circle for the same radius, sampled at `nowMs + LOOKAHEAD`.
+ *
+ * The returned object has parallel arrays:
+ *
+ *   - `current` — sources used to determine which cells render at
+ *      `nowMs`. Includes the ocean ellipse for each constituent (so the
+ *      ocean-padded halo also reveals weather, matching the pre-existing
+ *      docstring intent) plus a per-island weather-station circle.
+ *   - `forecast` — sources used to determine which cells render the
+ *      lookahead layer. Only emitted for islands with a forecast-capable
+ *      station; ocean ellipses are NOT included here (the +1-cycle bonus
+ *      is exclusively the station's gift).
+ *
+ * Pure — no PixiJS, no DOM, no mutations.
+ */
+export interface WeatherVisionSources {
+  readonly current: ReadonlyArray<VisionSource>;
+  readonly forecast: ReadonlyArray<VisionSource>;
+}
+
+export function computeWeatherVisionSources(
+  populated: ReadonlyArray<IslandSpec>,
+): WeatherVisionSources {
+  const current: VisionSource[] = [];
+  const forecast: VisionSource[] = [];
+  for (const spec of populated) {
+    // 1) Ocean-equivalent ellipses — keeps the overlay aligned with the
+    //    visible water around the coast, matching the prior behaviour
+    //    where the overlay piggybacked on `computeVisionSources`.
+    for (const c of islandConstituents(spec)) {
+      current.push({
+        kind: 'ellipse',
+        cx: spec.cx,
+        cy: spec.cy,
+        major: c.major + VISION_PADDING_TILES,
+        minor: c.minor + VISION_PADDING_TILES,
+        offsetX: c.offsetX,
+        offsetY: c.offsetY,
+      });
+    }
+    // 2) Per-island weather circle: baseline + station stack.
+    const stationBonus = weatherStationRangeBonusTiles(spec);
+    const radius = BASE_WEATHER_VISIBILITY_TILES + stationBonus;
+    current.push({
+      kind: 'circle',
+      cx: spec.cx,
+      cy: spec.cy,
+      radius,
+    });
+    // 3) Forecast circle (Advanced Weather Station only). Same radius as
+    //    the current-cycle circle — the station unlocks a temporal lookup,
+    //    not a wider spatial range.
+    if (hasForecastStation(spec)) {
+      forecast.push({
+        kind: 'circle',
+        cx: spec.cx,
+        cy: spec.cy,
+        radius,
+      });
+    }
+  }
+  return { current, forecast };
 }
 
 /** DDA line rasterization for vehicle paths. Shares core DDA logic with

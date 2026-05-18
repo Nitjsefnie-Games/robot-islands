@@ -98,6 +98,7 @@ import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeSt
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
+import { computeWeatherVisionSources } from './weather.js';
 import { mountAntennaOverlay } from './antenna-overlay.js';
 import { mountTerrainTooltip } from './terrain-tooltip.js';
 import { mountToastSurface } from './toast.js';
@@ -1728,7 +1729,7 @@ async function main(): Promise<void> {
     settlementUi.refresh(now);
     orbitalUi.refresh();
     weatherOverlay.refresh(now, () =>
-      computeVisionSources(worldState.islands.filter((s) => s.populated)),
+      computeWeatherVisionSources(worldState.islands.filter((s) => s.populated)),
     );
     satelliteOverlay.refresh();
     antennaOverlay.refresh();
