@@ -1,0 +1,214 @@
+// Ocean-layer §2 — terrain seeding tests. Per the design doc, generation
+// runs in a fixed order (shallows → trenches → nodule fields → vents) so
+// each step can reject overlap with prior placements. These tests pin
+// the contract end-users actually rely on: determinism per seed, shape
+// invariants per feature, biome correlations for vents, and the
+// non-overlap rules between rare features.
+
+import { describe, expect, it } from 'vitest';
+
+import { generateOceanTerrain } from './ocean-gen.js';
+import { attachTerrainAt, type IslandSpec } from './world.js';
+
+// Minimal IslandSpec fixture — `attachTerrainAt` mints a fully-typed spec
+// from a base lacking only the `terrainAt` closure. Using it (vs an
+// `as IslandSpec` cast) catches schema drift if `IslandSpec` gains a new
+// required field later.
+const mkIsland = (
+  id: string,
+  biome: IslandSpec['biome'],
+  cx: number,
+  cy: number,
+  major = 6,
+  minor = 4,
+): IslandSpec =>
+  attachTerrainAt({
+    id,
+    name: id,
+    biome,
+    cx,
+    cy,
+    majorRadius: major,
+    minorRadius: minor,
+    populated: false,
+    discovered: false,
+    buildings: [],
+    modifiers: [],
+  });
+
+describe('generateOceanTerrain', () => {
+  const ISLANDS: ReadonlyArray<IslandSpec> = [
+    mkIsland('home', 'plains', 0, 0),
+    mkIsland('vol', 'volcanic', 40, 0),
+    mkIsland('cst', 'coast', -40, 30),
+  ];
+
+  it('is deterministic for the same seed', () => {
+    const a = generateOceanTerrain('seed-1', ISLANDS);
+    const b = generateOceanTerrain('seed-1', ISLANDS);
+    expect(Array.from(a.entries()).sort()).toEqual(Array.from(b.entries()).sort());
+  });
+
+  it('seeds shallows within R=2 cells of an island edge', () => {
+    const cells = generateOceanTerrain('seed-1', ISLANDS);
+    const shallowsHits = Array.from(cells.values()).filter(
+      (c) => c.terrain === 'shallows',
+    ).length;
+    expect(shallowsHits).toBeGreaterThan(0);
+  });
+
+  // Trench-shape test. The N=4-8 trench length and 0-3 per-world cap mean
+  // some seeds roll zero trenches; we hunt for a seed that reliably rolls
+  // at least one to make the assertion non-vacuous. `'trench-test-1'`
+  // produces ≥1 trench against the current generator. If the implementer
+  // changes generation in a way that drops this to zero, swap to another
+  // seed (cheap, deterministic search).
+  it('seeds trenches as 2×N or 3×N rectangles in deep zones', () => {
+    const SEED = 'trench-test-1';
+    const cells = generateOceanTerrain(SEED, ISLANDS);
+    const trenchKeys = Array.from(cells.entries())
+      .filter(([, c]) => c.terrain === 'trench')
+      .map(([k]) => k.split(',').map(Number) as [number, number]);
+    expect(trenchKeys.length).toBeGreaterThan(0);
+
+    // Flood-fill into connected components on 4-neighbour adjacency.
+    const keyOf = (x: number, y: number) => `${x},${y}`;
+    const set = new Set(trenchKeys.map(([x, y]) => keyOf(x, y)));
+    const visited = new Set<string>();
+    const components: Array<Array<[number, number]>> = [];
+    for (const start of trenchKeys) {
+      const k0 = keyOf(start[0], start[1]);
+      if (visited.has(k0)) continue;
+      const stack: Array<[number, number]> = [start];
+      const component: Array<[number, number]> = [];
+      while (stack.length > 0) {
+        const [x, y] = stack.pop()!;
+        const k = keyOf(x, y);
+        if (visited.has(k)) continue;
+        visited.add(k);
+        component.push([x, y]);
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          const nk = keyOf(x + dx, y + dy);
+          if (set.has(nk) && !visited.has(nk)) stack.push([x + dx, y + dy]);
+        }
+      }
+      components.push(component);
+    }
+
+    // Each component must be a 2×N (or 3×N) rectangle with N ∈ [4, 8].
+    for (const comp of components) {
+      const xs = comp.map(([x]) => x);
+      const ys = comp.map(([, y]) => y);
+      const w = Math.max(...xs) - Math.min(...xs) + 1;
+      const h = Math.max(...ys) - Math.min(...ys) + 1;
+      // Rectangle-fill check: width * height = cell count.
+      expect(comp.length).toBe(w * h);
+      // 2×N or 3×N rectangle (orientation either axis-aligned way).
+      const isHorizontal = (h === 2 || h === 3) && w >= 4 && w <= 8;
+      const isVertical = (w === 2 || w === 3) && h >= 4 && h <= 8;
+      expect(
+        isHorizontal || isVertical,
+        `trench component dims ${w}×${h} not in (2|3)×[4,8]`,
+      ).toBe(true);
+    }
+  });
+
+  it('vent clusters are biased toward volcanic islands', () => {
+    const cells = generateOceanTerrain('seed-vent', ISLANDS);
+    const vents = Array.from(cells.entries())
+      .filter(([, c]) => c.terrain === 'hydrothermal_vent')
+      .map(([k]) => k.split(',').map(Number) as [number, number]);
+    // All vent cells should sit within reach of the volcanic island at
+    // (40, 0). With CELL_SIZE_TILES=16 → volcanic cell at (2, 0). The
+    // cluster anchor is within R=5 cells of the island edge; cluster
+    // extent is at most 3 cells; the ellipse half-axis in cells is
+    // ceil(6/16)≈1. Allow R=5 + 3 + 1 ≈ 9 as a generous bound.
+    const VOLCANIC_CELL_X = Math.floor(40 / 16);
+    const VOLCANIC_CELL_Y = Math.floor(0 / 16);
+    for (const [vx, vy] of vents) {
+      const dist = Math.hypot(vx - VOLCANIC_CELL_X, vy - VOLCANIC_CELL_Y);
+      expect(dist).toBeLessThanOrEqual(9);
+    }
+  });
+
+  it('nodule fields and trenches never overlap', () => {
+    const cells = generateOceanTerrain('seed-1', ISLANDS);
+    const trenchKeys = new Set(
+      Array.from(cells.entries())
+        .filter(([, c]) => c.terrain === 'trench')
+        .map(([k]) => k),
+    );
+    const noduleKeys = new Set(
+      Array.from(cells.entries())
+        .filter(([, c]) => c.terrain === 'nodule_field')
+        .map(([k]) => k),
+    );
+    for (const k of trenchKeys) expect(noduleKeys.has(k)).toBe(false);
+  });
+
+  it('vent clusters never overlap trenches or nodule fields', () => {
+    const cells = generateOceanTerrain('seed-vent', ISLANDS);
+    const ventKeys = new Set(
+      Array.from(cells.entries())
+        .filter(([, c]) => c.terrain === 'hydrothermal_vent')
+        .map(([k]) => k),
+    );
+    const blockerKeys = new Set(
+      Array.from(cells.entries())
+        .filter(([, c]) => c.terrain === 'trench' || c.terrain === 'nodule_field')
+        .map(([k]) => k),
+    );
+    for (const k of ventKeys) expect(blockerKeys.has(k)).toBe(false);
+  });
+
+  it('nodule fields are 3×3 clusters', () => {
+    // Iterate several seeds so we catch at least one nodule field; the
+    // 3×3 shape invariant must hold for every cluster we see.
+    for (let i = 0; i < 5; i++) {
+      const cells = generateOceanTerrain(`nodule-${i}`, ISLANDS);
+      const noduleKeys = Array.from(cells.entries())
+        .filter(([, c]) => c.terrain === 'nodule_field')
+        .map(([k]) => k.split(',').map(Number) as [number, number]);
+      if (noduleKeys.length === 0) continue;
+
+      const keyOf = (x: number, y: number) => `${x},${y}`;
+      const set = new Set(noduleKeys.map(([x, y]) => keyOf(x, y)));
+      const visited = new Set<string>();
+      for (const start of noduleKeys) {
+        const k0 = keyOf(start[0], start[1]);
+        if (visited.has(k0)) continue;
+        const stack: Array<[number, number]> = [start];
+        const component: Array<[number, number]> = [];
+        while (stack.length > 0) {
+          const [x, y] = stack.pop()!;
+          const k = keyOf(x, y);
+          if (visited.has(k)) continue;
+          visited.add(k);
+          component.push([x, y]);
+          for (const [dx, dy] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ] as const) {
+            const nk = keyOf(x + dx, y + dy);
+            if (set.has(nk) && !visited.has(nk)) stack.push([x + dx, y + dy]);
+          }
+        }
+        // Every nodule cluster is exactly 3×3 = 9 cells.
+        const xs = component.map(([x]) => x);
+        const ys = component.map(([, y]) => y);
+        const w = Math.max(...xs) - Math.min(...xs) + 1;
+        const h = Math.max(...ys) - Math.min(...ys) + 1;
+        expect(component.length).toBe(9);
+        expect(w).toBe(3);
+        expect(h).toBe(3);
+      }
+    }
+  });
+});

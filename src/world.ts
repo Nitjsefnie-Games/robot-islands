@@ -39,6 +39,7 @@ import {
   TILE_PX,
 } from './island.js';
 import type { OceanCellSpec } from './ocean-cell.js';
+import { generateOceanTerrain } from './ocean-gen.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Route } from './routes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
@@ -848,10 +849,12 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   for (let cy = -N; cy <= N; cy++) {
     for (let cx = -N; cx <= N; cx++) generatedCells.add(`${cx},${cy}`);
   }
-  // Ocean-layer §2 — empty map at boot. World-gen will fill it in a later
-  // task (`generateOceanTerrain`); for now a fresh world implicitly reads
-  // every cell as `deep` via `terrainAt`'s fallback.
-  const oceanCells = new Map<string, OceanCellSpec>();
+  // Ocean-layer §2 — derive terrain from the seed + island layout.
+  // Pure + deterministic: same seed + same islands ⇒ same cells. The
+  // generator scans only a bounding rect around the placed islands;
+  // empty seas beyond that rect stay implicit `deep` via `terrainAt`'s
+  // fallback in `ocean-cell.ts`.
+  const oceanCells = generateOceanTerrain(WORLD_SEED, islands);
   // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
   // Sat upgrades populate it as the player builds those revealers.
   const depthRevealedCells = new Set<string>();
