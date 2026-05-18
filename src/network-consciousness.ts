@@ -12,8 +12,8 @@
 //   ≥5             → milestone 2 / +10%
 //   ≥10            → milestone 3 / +25%
 //   ≥20            → milestone 4 / Network Consciousness (still +25%; the
-//                    "Omniscient Lattice unlock" downstream effect arrives
-//                    with the T5 endgame artifact, not implemented yet).
+//                    "Omniscient Lattice unlock" downstream effect is live
+//                    via `lattice.ts` — see `latticeActive` in world state).
 //
 // The buff itself is a single number returned alongside the milestone — the
 // caller in `main.ts` decides whether to apply it to a given island (the

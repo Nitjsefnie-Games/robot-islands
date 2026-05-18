@@ -29,9 +29,9 @@ import type { ResourceId } from './recipes.js';
 import type { Tier } from './skilltree.js';
 
 /** Per-tier operating-time budget before maintenance is due, in ms. Placeholder
- *  values from §4.7 (T1=12h, T2=16h, T3=20h, T4=24h, T5=24h, T6=24h). T6 is
- *  forward-compat — Spaceport (§14) exists as a def but live mechanics are
- *  STILL-DEFERRED. */
+ *  values from §4.7 (T1=12h, T2=16h, T3=20h, T4=24h, T5=24h, T6=24h). T6
+ *  Spaceport (§14) mechanics are wired through `orbital.ts`; the maintenance
+ *  cadence here applies uniformly. */
 export const MAINTENANCE_THRESHOLD_MS_BY_TIER: Readonly<Record<Tier, number>> = {
   1: 12 * 60 * 60 * 1000,
   2: 16 * 60 * 60 * 1000,

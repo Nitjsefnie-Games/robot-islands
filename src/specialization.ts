@@ -7,9 +7,8 @@
 // in `economy.ts`.
 //
 // A null role (the default Generalist baseline per §9.4) maps to the identity
-// bundle — every multiplier is 1.0. Role declaration is one-way in step 10:
-// §9.7 Tier Reset is the only path back to the null state, and that system
-// is STILL-DEFERRED to a later step.
+// bundle — every multiplier is 1.0. Role declaration is one-way: §9.7 Tier
+// Reset is the only path back to the null state — see `tier-reset.ts`.
 //
 // Multiplier values are placeholders per §9.4. The pattern matches each
 // role's "buff category × buffMul, all other categories × penaltyMul",

@@ -1160,8 +1160,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T4 biome-locked electronics — Arctic-only Cryogenic Compute Center
   // produces AI Cores from Steel + Quantum Chip. Per §9.5, only producer of
-  // AI Cores in the world. Arctic ambient cold halves compute-recipe power
-  // draw (STILL-DEFERRED — modelled at static 1200W in step 12).
+  // AI Cores in the world. Arctic ambient cold should halve compute-recipe
+  // power draw; currently a tuning placeholder, modelled at static 1200W
+  // pending balance pass.
   cryogenic_compute_center: {
     cycleSec: 5400, // rebalanced for idle-game scale, step #19 (×60: was 90s)
     inputs: { steel: 3, quantum_chip: 1, argon: 1 },
@@ -1803,9 +1804,11 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { wire: 1 },
     category: 'manufacturing',
     // §7.1 spec lists multiple Steel Mill outputs (wire, sheet_metal,
-    // pipe, beam). Step-18 ships wire only — wire is the input to the
-    // step-18 Lithography Lab → microchip recipe. sheet_metal, pipe,
-    // and beam STILL-DEFERRED until they have an explicit consumer.
+    // pipe, beam); this Steel Mill ships wire only (input to the
+    // Lithography Lab → microchip recipe). sheet_metal, pipe, and beam
+    // are produced by dedicated `sheet_metal_mill`, `pipe_mill`, and
+    // `beam_mill` defs (see below). Consumers exist for pipe (assembly
+    // recipes); sheet_metal / steel_beam still await downstream demand.
   },
 
   // T3 chemistry / electronics — rebalanced for idle-game scale, step #19 (×20).
@@ -1815,8 +1818,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { silicon: 1 },
     category: 'smelting',
     // §7.4: spec uses `silicon_wafer` as the lithography input, refined
-    // from `silicon`. Step-18 simplification: silicon feeds Lithography
-    // Lab directly; the wafer intermediate is STILL-DEFERRED.
+    // from `silicon`. The `wafer_lab` + `silicon_wafer` def + resource
+    // ship below, but Lithography Lab still consumes silicon directly —
+    // the wafer-intermediate chain is unwired.
   },
   air_separator: {
     cycleSec: 600, // rebalanced for idle-game scale, step #19 (×20: was 30s)
@@ -1958,14 +1962,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // ---------------------------------------------------------------------------
   // T5→T6 transition + T6 Orbital (§13.4 / §14.10 / step 20)
   // ---------------------------------------------------------------------------
-  // Data-only ship. §14.2-14.8 / §14.12 launch + debris + lodge + repair
-  // mechanics are STILL-DEFERRED — these recipes give the catalog rows visible
-  // outputs in the inspector but the resulting payloads/fuel are inert
-  // until the live launch system lands. §14.10 spec recipe inputs that
-  // aren't yet in the catalog (Spacetime fragment, Aluminum, Magnet,
-  // Optical Fiber, Memetic Core, Brick, Carbon Fiber) are simplified to
-  // catalog-resident inputs of the same tier-weight — STILL-DEFERRED for proper
-  // §14.10 fidelity until the missing intermediates ship.
+  // §14.2-14.8 / §14.12 launch + debris + lodge + repair mechanics are
+  // live (`orbital.ts`); these recipes produce real consumable payloads
+  // and fuel. §14.10 spec recipe inputs that aren't yet in the catalog
+  // (Spacetime fragment, Aluminum, Magnet, Optical Fiber, Memetic Core,
+  // Brick, Carbon Fiber) are simplified to catalog-resident inputs of
+  // the same tier-weight — full §14.10 fidelity awaits the missing
+  // intermediates.
 
   // §13.4 / §14.1: Ascendant Assembly produces the Ascendant Core (T5→T6
   // bridge artifact). Cycle is 2 hours of real time — the artifact's

@@ -15,22 +15,24 @@
 // bottom of this file is the canonical gate.
 // Step-13 catalog: adds 7 T5 Transcendent defs (§13.2 / §8.4 / §8.5 / §8.9) —
 // Casimir Tap, Reality Forge, Singularity Battery, Time Lock, Genesis Chamber,
-// Universe Editor, Lattice Node. Data-only: §13.3 mechanics (time banking,
-// free creation, biome reassignment, network unity, etc.) are explicitly
-// STILL-DEFERRED to step 14+ with a comment at each def site. The T5 access gate
-// (§13.1) — level ≥ 50 AND `aiCoreCrafted` flag — is enforced in
-// `buildingUnlocked` below, not by the tier-only `tierForLevel`. The Casimir
-// Tap power figure is a placeholder; full §8.10 T5 raw extractors (Aetheric
-// Conduit, Spacetime Resonator, Eldritch Sieve) and their multi-hour cycle
-// times shipped in step 18 for Aetheric Conduit / Spacetime Resonator /
-// Eldritch Sieve; Casimir Tap cycle remains placeholder (1800s).
+// Universe Editor, Lattice Node. §13.3 mechanics are live: time banking
+// (`spendTimeLock` in economy.ts), free creation (`genesis_chamber` in
+// economy.ts:542-598 / 792-804), biome reassignment (`editIslandBiome` in
+// world.ts), network unity (`latticeActive`), and Probability Engine drone
+// scan bias. The T5 access gate (§13.1) — level ≥ 50 AND `aiCoreCrafted`
+// flag — is enforced in `buildingUnlocked` below, not by the tier-only
+// `tierForLevel`. The Casimir Tap power figure is a placeholder; full §8.10
+// T5 raw extractors (Aetheric Conduit, Spacetime Resonator, Eldritch Sieve)
+// and their multi-hour cycle times shipped in step 18 for Aetheric Conduit /
+// Spacetime Resonator / Eldritch Sieve; Casimir Tap cycle remains placeholder
+// (1800s).
 //
 // §13.2 deliberate substitution: spec §13.2 lists Probability Engine in the
-// T5 building set, but step 13 ships Time Lock instead. Time Lock has richer
-// §13.3 behavioural detail (banking + spending semantics) which makes its
-// placeholder more meaningful as documentation; Probability Engine's drone
-// rare-encounter bias is conceptually simpler and slots in cleanly later.
-// Probability Engine is reserved for step 14+.
+// T5 building set; step 13 shipped Time Lock instead because Time Lock has
+// richer §13.3 behavioural detail (banking + spending semantics) which made
+// its placeholder more meaningful as documentation. Probability Engine
+// (drone rare-encounter scan bias) shipped subsequently and is wired through
+// `drones.ts` for scan bias.
 //
 // Heat-source adjacency (§5.2) IS implemented. The economy passes consumer
 // recipes through `resolveHeatAssignments` (heat.ts) before rate computation:
@@ -38,8 +40,8 @@
 // rate forced to 0 and contributes 0 to P_consumed. Coal-burning sources
 // (Coal Furnace) burn `coalPerCycle × consumersServed` coal per cycle; free
 // sources (Geothermal Vent / Plasma Heater / Fusion Core) cost no fuel.
-// T4 omnidirectional pulse mechanic (§11.5) for the Launch Tower remains
-// STILL-DEFERRED — only the def is added in step 12.
+// T4 omnidirectional pulse mechanic (§11.5) for the Launch Tower is live
+// via `firePulse` (3-cell-radius single-disk reveal).
 //
 // No PixiJS imports, no DOM — `building-defs.ts` is pure data + the tier
 // gate + biome gate. `buildings.ts` consumes BUILDING_DEFS for rendering;
@@ -173,14 +175,11 @@ export type BuildingDefId =
   // + 1 memetic_core, 24h cycle → 1 genesis_cell. NOT a victory artifact
   // (spec is explicit: no win screen, game continues indefinitely).
   | 'genesis_forge'
-  // New T6 (§14 / step 20) — data-only. §14.2-14.8 / §14.12 live mechanics
-  // (satellite launches, debris fields, comm graph, repair drones,
-  // lodge events) are STILL-DEFERRED; these defs ship as visible catalog rows
-  // plus power-balance contributions. §14.2 Spaceport tier I/II/III
-  // upgrade lifecycle, §14.3 satellite variants, §14.4 comm graph,
-  // §14.5 dwell ramps, §14.6 maneuvering fuel, §14.7 launch success,
-  // §14.8 debris and Kessler cascades, §14.9 four new Orbital skill
-  // sub-paths, §14.12 Repair Drone operations — all STILL-DEFERRED.
+  // T6 (§14 / step 20) defs. The §14.2-14.8 / §14.12 live mechanics —
+  // Spaceport tier I/II/III upgrade lifecycle, satellite launches and
+  // variants, comm graph, dwell ramps, maneuvering fuel, launch success,
+  // debris and Kessler cascades, §14.9 Orbital skill sub-paths, and §14.12
+  // Repair Drone operations — are all wired through `orbital.ts`.
   | 'spaceport'
   | 'orbital_tracking_station'
   | 'antimatter_refinery'
@@ -1608,8 +1607,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §9.5: Cryogenic Compute Center — Arctic-unique. Only producer of AI
   // Cores. Arctic ambient cold should halve compute-recipe power draw (§9.5
-  // intrinsic bonus); STILL-DEFERRED to a later step, modelled at static 1200W
-  // here.
+  // intrinsic bonus); currently a tuning placeholder, modelled at static
+  // 1200W pending balance pass.
   cryogenic_compute_center: {
     id: 'cryogenic_compute_center',
     displayName: 'Cryogenic Compute Center',
@@ -1712,9 +1711,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '◈',
   },
   // §8.8 / §11.5: Launch Tower — T4 omnidirectional drone-pulse launch
-  // site. The pulse mechanic itself (3-cell-radius single-disk reveal) is
-  // STILL-DEFERRED; the def exists in step 12 so the catalog row + tier badge
-  // are visible.
+  // site. The pulse mechanic (3-cell-radius single-disk reveal) is wired
+  // via `firePulse`.
   launch_tower: {
     id: 'launch_tower',
     displayName: 'Launch Tower',
@@ -1909,9 +1907,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §8.9 / §13.3: Genesis Chamber — free-creation of T1-T4 resources from
   // electrical power alone (placeholder cycle 5 min, tier-scaling power
-  // draw). Free-creation mechanic per §13.3 STILL-DEFERRED to step 14; def ships
-  // as a visible catalog row + power-consuming placeholder. No recipe (the
-  // player-target-resource selection isn't a fixed inputs→outputs recipe).
+  // draw). Free-creation mechanic per §13.3 is live — see
+  // `src/economy.ts:542-598, 792-804`. No recipe (the player-target-resource
+  // selection isn't a fixed inputs→outputs recipe).
   genesis_chamber: {
     id: 'genesis_chamber',
     displayName: 'Genesis Chamber',
@@ -2036,13 +2034,13 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // T6 (Ascendant Core + Spaceport, §14) — Orbital per step 20
   // -------------------------------------------------------------------------
   //
-  // Data-only ship. The §14.2-14.8 / §14.12 live mechanics — Spaceport
-  // tier I/II/III upgrade lifecycle, satellite launches as a concurrent
-  // slot, scheduled launches with success rolls, orbital debris fields,
-  // Kessler-cascade chains, comm-graph data delivery, lodge events,
-  // Repair Drone operations, dwell-ramp discovery — are all STILL-DEFERRED.
-  // §14.9 four new Orbital skill sub-paths (Launch / Communication /
-  // Discovery / Resilience) — STILL-DEFERRED.
+  // The §14.2-14.8 / §14.12 live mechanics — Spaceport tier I/II/III
+  // upgrade lifecycle, satellite launches as a concurrent slot, scheduled
+  // launches with success rolls, orbital debris fields, Kessler-cascade
+  // chains, comm-graph data delivery, lodge events, Repair Drone
+  // operations, dwell-ramp discovery — and the §14.9 four Orbital skill
+  // sub-paths (Launch / Communication / Discovery / Resilience) are all
+  // wired through `orbital.ts`.
   //
   // The §14.1 access gate (level 50 + AI core + Ascendant Core crafted +
   // Spaceport placed) is composed in `buildingUnlocked` below. Spaceport
