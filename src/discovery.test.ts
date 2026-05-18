@@ -243,9 +243,22 @@ describe('islandCells', () => {
     expect(cells.has('3,0')).toBe(false);
   });
 
-  // Regression: every emitted cell must overlap at least one inscribed tile.
-  // Exhaustive check on a moderate-size island.
-  it('every emitted cell contains at least one inscribed tile (regression)', () => {
+  // Regression: every emitted cell must overlap the rendered footprint of at
+  // least one inscribed tile. Tiles render at centre-origin per
+  // `renderIslandTiles` — tile (X) covers world-pixel range
+  // `[(X-0.5)·TILE_PX, (X+0.5)·TILE_PX)`, i.e. tile-coord range
+  // `[X-0.5, X+0.5)`. The cell sprite is top-left aligned, so a rendered tile
+  // sitting at X = 16k crosses the cell-k-1 / cell-k boundary — `islandCells`
+  // must include BOTH cells, otherwise the cell-k-1 half of the rendered
+  // tile shows against the void.
+  //
+  // The original check ("every emitted cell contains at least one inscribed
+  // tile") was the prior over-inclusion regression. It's now slightly
+  // weakened: an emitted cell may carry only the half-tile sliver of a
+  // boundary-rendered tile in a neighbouring cell. Verify instead that every
+  // emitted cell is *touched* by the rendered footprint of some inscribed tile
+  // — the actual contract `renderOceanFogOverlay` relies on.
+  it('every emitted cell is touched by a rendered inscribed tile (regression)', () => {
     const spec = makeIslandSpec({
       cx: 0,
       cy: 0,
@@ -262,16 +275,98 @@ describe('islandCells', () => {
     }
     for (const key of cells) {
       const { cellX, cellY } = parseCellKey(key);
+      const xCellLo = cellX * CELL_SIZE_TILES;
+      const xCellHi = (cellX + 1) * CELL_SIZE_TILES;
+      const yCellLo = cellY * CELL_SIZE_TILES;
+      const yCellHi = (cellY + 1) * CELL_SIZE_TILES;
+      // Any inscribed tile whose rendered tile-coord footprint
+      // [x-0.5, x+0.5) × [y-0.5, y+0.5) overlaps the cell suffices. Search a
+      // generous window around the cell so boundary-straddling tiles count.
       let found = false;
-      const xStart = cellX * CELL_SIZE_TILES;
-      const yStart = cellY * CELL_SIZE_TILES;
-      for (let y = yStart; y < yStart + CELL_SIZE_TILES && !found; y++) {
-        for (let x = xStart; x < xStart + CELL_SIZE_TILES && !found; x++) {
-          if (tileInscribed(x, y)) found = true;
+      for (let y = yCellLo - 1; y < yCellHi + 1 && !found; y++) {
+        for (let x = xCellLo - 1; x < xCellHi + 1 && !found; x++) {
+          if (!tileInscribed(x, y)) continue;
+          // Rendered tile spans [x-0.5, x+0.5) × [y-0.5, y+0.5) in tile-coords.
+          const tx0 = x - 0.5;
+          const tx1 = x + 0.5;
+          const ty0 = y - 0.5;
+          const ty1 = y + 0.5;
+          if (tx1 > xCellLo && tx0 < xCellHi && ty1 > yCellLo && ty0 < yCellHi) {
+            found = true;
+          }
         }
       }
-      expect(found, `cell ${key} has no inscribed tile`).toBe(true);
+      expect(found, `cell ${key} has no rendered inscribed tile overlapping it`).toBe(true);
     }
+  });
+
+  // Regression: when an inscribed tile sits exactly on a cell boundary
+  // (X = 16k), its rendered footprint straddles cells k-1 and k. `islandCells`
+  // MUST include BOTH — otherwise the half-tile sliver on the k-1 side renders
+  // against the unknown-tier void (the user-reported symptom: island sticks
+  // past the cyan/discovered ocean into the dark void at its widest edge).
+  //
+  // Construction: r=8 island at (23, 23). Inscribed x-range is [16, 29]
+  // (corner (15, _) gives (15-23)²/64 = 1, not strict; corner (16, 22) gives
+  // (16-23)²+(22-23)² < 64 — fits). Leftmost inscribed X = 16 sits exactly
+  // on the cell-0 / cell-1 boundary. Without the fix, only cells with x ≥ 1
+  // appear; with the fix, cell (0, y) for any y the boundary tile renders
+  // into must also appear.
+  it('includes the previous cell when the leftmost inscribed tile sits on a cell boundary (regression)', () => {
+    const spec = makeIslandSpec({
+      cx: 23,
+      cy: 23,
+      majorRadius: 8,
+      minorRadius: 8,
+    });
+    const cells = new Set(islandCells(spec));
+    // Sanity: the inscribed body is in cell (1, 1).
+    expect(cells.has('1,1')).toBe(true);
+    // The bug: tile (16, 23) inscribed, rendered spans tile-x [15.5, 16.5) —
+    // its left half is in cell 0, not cell 1. Must be added too.
+    expect(cells.has('0,1')).toBe(true);
+  });
+
+  // Symmetric Y-side regression: same r=8 island at (23, 23) — topmost
+  // inscribed Y = 16 too, so the top half of the tile-(_, 16) row sits in
+  // cell (_, 0). Must be added.
+  it('includes the previous cell when the topmost inscribed tile sits on a cell boundary (regression)', () => {
+    const spec = makeIslandSpec({
+      cx: 23,
+      cy: 23,
+      majorRadius: 8,
+      minorRadius: 8,
+    });
+    const cells = new Set(islandCells(spec));
+    expect(cells.has('1,0')).toBe(true);
+    // Diagonal cell (0,0) would only be added by a tile at (16, 16) which
+    // is NOT inscribed for this geometry (((16-23)² + (16-23)² = 98 > 64)),
+    // so cell (0,0) correctly stays excluded. Confirms the fix doesn't
+    // over-add cells outside the rendered island's actual footprint.
+    expect(cells.has('0,0')).toBe(false);
+  });
+
+  // Corner-cell regression: an island geometry where an inscribed tile DOES
+  // land at (16, 16) — corner-cell case. Center (24, 24) with r=10 puts
+  // tile (16, 16) inscribed: (16-24)² + (16-24)² = 128 < 100? Actually need
+  // r large enough. r=12 gives 128 < 144 — inscribed. The tile straddles
+  // both x=16 and y=16 boundaries, so cells (0,0), (0,1), (1,0), (1,1)
+  // are ALL touched by this single rendered tile.
+  it('includes the diagonal corner cell when an inscribed tile sits on a cell-grid intersection (regression)', () => {
+    const spec = makeIslandSpec({
+      cx: 24,
+      cy: 24,
+      majorRadius: 12,
+      minorRadius: 12,
+    });
+    const cells = new Set(islandCells(spec));
+    // The inscribed body is centred in cell (1, 1).
+    expect(cells.has('1,1')).toBe(true);
+    // Tile (16, 16) rendered footprint spans [15.5, 16.5) × [15.5, 16.5):
+    // overlaps all four cells around the (16, 16) intersection.
+    expect(cells.has('0,0')).toBe(true);
+    expect(cells.has('0,1')).toBe(true);
+    expect(cells.has('1,0')).toBe(true);
   });
 });
 
