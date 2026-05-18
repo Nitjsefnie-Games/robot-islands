@@ -6,9 +6,9 @@
 // arrivals and dispatch the next batch.
 //
 // Scope notes:
-//   - All route tiers (T1 cargo, T2 drone cargo, T3 airship, T4 teleporter,
-//     T5 spacetime anchor) share this `Route` shape and have per-tier capacity
-//     and transit-time constants wired.
+//   - All route tiers (T1 cargo, T2 drone cargo, T3 airship, T4 mass driver,
+//     T4 teleporter, T5 spacetime anchor) share this `Route` shape and have
+//     per-tier capacity and transit-time constants wired.
 //   - Weather modulation of capacity and in-flight loss implemented per §2.6.
 //   - Multi-route contention on the same source resource is implemented per
 //     §15.4 (proportional distribution by capacity).
@@ -36,11 +36,15 @@ import {
 import { CELL_SIZE_TILES, type WorldState } from './world.js';
 
 /** Transport tier per §2.4. Step 7 only emits `cargo` routes; the field
- *  exists so future tiers can be added without reshaping the data model. */
+ *  exists so future tiers can be added without reshaping the data model.
+ *  `mass_driver` is the §9.5 Plains-unique T4 long-range launcher
+ *  (Route.type per §15.1) — runs through the standard cargo dispatch
+ *  path with a higher capacity constant + Diesel fuel debit. */
 export type RouteType =
   | 'cargo'
   | 'drone'
   | 'airship'
+  | 'mass_driver'
   | 'teleporter'
   | 'cable'
   | 'spacetime';
@@ -105,6 +109,24 @@ export const TELEPORTER_FUEL_PER_TILE = 0.005;
 /** T1 cargo throughput in units per second. Unchanged from step-7 — capacity
  *  is independent of speed; idle players accrue larger totals over time. */
 export const T1_CARGO_CAPACITY_UNITS_PER_SEC = 0.5;
+
+/** §9.5 Mass Driver capacity. Spec: "~5× airship capacity." Airship has no
+ *  separate base constant today (it inherits the per-route `capacityPerSec`
+ *  set by the creator); we anchor on cargo's 0.5/s and ship 5× = 2.5/s as
+ *  the Mass Driver placeholder. Tune in Appendix A once airship has its own
+ *  base. The constant is plumbed through standard `route.capacityPerSec`,
+ *  so weather / specialization / skill multipliers compose as for any other
+ *  route. */
+export const MASS_DRIVER_CAPACITY_UNITS_PER_SEC = 2.5;
+
+/** §9.5 Mass Driver fuel cost: units of Diesel consumed per unit of cargo
+ *  dispatched. Spec literal "Consumes Diesel (T2 fuel grade) per dispatch
+ *  volume." Placeholder — tune in Appendix A. Cost is computed AFTER the
+ *  source-contention scaling, against the final allocated `amount`. If
+ *  the source can't afford the full diesel bill, the entire dispatch is
+ *  skipped wholesale (mirror of the teleporter biofuel pattern at the
+ *  bottom of `dispatchPhase`). */
+export const MASS_DRIVER_DIESEL_PER_UNIT = 0.05;
 
 /** Funneling bonus per §10 / Appendix A placeholder (50%). */
 export const FUNNELING_BONUS_PERCENT = 0.5;
@@ -638,6 +660,21 @@ function dispatchPhase(
     const srcState = states.get(d.route.from);
     if (!srcState) continue;
     srcState.inventory[d.resourceId] = Math.max(0, inv(srcState, d.resourceId) - amount);
+    // §9.5 Mass Driver — Diesel debit gated on dispatch volume. Computed on
+    // the post-contention `amount` so two mass_driver routes sharing one
+    // source pay diesel proportionally. Insufficient diesel ⇒ refund the
+    // cargo and skip this dispatch (same shape as the teleporter biofuel
+    // check below). The route stays valid; it just doesn't move anything
+    // this tick. Applies to BOTH branches (in-flight and instant), so it
+    // sits ahead of the transit-time switch.
+    if (d.route.type === 'mass_driver') {
+      const diesel = MASS_DRIVER_DIESEL_PER_UNIT * amount;
+      if (inv(srcState, 'diesel') < diesel) {
+        srcState.inventory[d.resourceId] = inv(srcState, d.resourceId) + amount;
+        continue;
+      }
+      srcState.inventory.diesel = Math.max(0, inv(srcState, 'diesel') - diesel);
+    }
     if (d.route.transitTimeSec <= 0) {
       // T4+ instant: deposit directly to destination. We still clamp at the
       // current cap so we don't overshoot.
