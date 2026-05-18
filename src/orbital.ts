@@ -7,7 +7,7 @@
 
 import { ANTENNA_SIGNAL_RADII } from './antenna.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { cellKey, parseCellKey, tileToCell } from './discovery.js';
+import { CELL_SIZE_TILES, cellKey, parseCellKey, tileToCell } from './discovery.js';
 import { inv } from './economy.js';
 import { makeSeededRng } from './rng.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
@@ -902,19 +902,36 @@ export function scannerDiscoveryProbability(dwellMs: number): number {
 }
 
 /** Cells covered by a satellite given its current position + coverage radius.
- *  Iterates the bounding box of the coverage circle and admits each cell
- *  whose centre is within `coverageRadius` of the sat. */
+ *  Iterates every cell in the bounding box of the coverage disk and admits
+ *  cells whose rectangle overlaps the disk — i.e. the closest point of the
+ *  cell to the sat is within `coverageRadius` (circle-vs-AABB overlap).
+ *
+ *  Strictly a superset of the prior centre-in-radius test: cells whose
+ *  PERIMETER is reached by the disk are now admitted, fixing the §14.5
+ *  under-count at tight radii. */
 export function cellsCoveredBySat(sat: Satellite): Set<string> {
   const covered = new Set<string>();
   if (sat.coverageRadius <= 0) return covered;
   const r = sat.coverageRadius;
-  for (let x = sat.x - r; x <= sat.x + r; x += 16) {
-    for (let y = sat.y - r; y <= sat.y + r; y += 16) {
-      const dx = x - sat.x;
-      const dy = y - sat.y;
-      if (dx * dx + dy * dy <= r * r) {
-        const { cellX, cellY } = tileToCell(x, y);
-        covered.add(cellKey(cellX, cellY));
+  const r2 = r * r;
+  const cMinX = Math.floor((sat.x - r) / CELL_SIZE_TILES);
+  const cMaxX = Math.floor((sat.x + r) / CELL_SIZE_TILES);
+  const cMinY = Math.floor((sat.y - r) / CELL_SIZE_TILES);
+  const cMaxY = Math.floor((sat.y + r) / CELL_SIZE_TILES);
+  for (let cy = cMinY; cy <= cMaxY; cy++) {
+    const yMin = cy * CELL_SIZE_TILES;
+    const yMax = yMin + CELL_SIZE_TILES;
+    const closestY = sat.y < yMin ? yMin : sat.y > yMax ? yMax : sat.y;
+    const dy = sat.y - closestY;
+    const dy2 = dy * dy;
+    if (dy2 > r2) continue;
+    for (let cx = cMinX; cx <= cMaxX; cx++) {
+      const xMin = cx * CELL_SIZE_TILES;
+      const xMax = xMin + CELL_SIZE_TILES;
+      const closestX = sat.x < xMin ? xMin : sat.x > xMax ? xMax : sat.x;
+      const dx = sat.x - closestX;
+      if (dx * dx + dy2 <= r2) {
+        covered.add(cellKey(cx, cy));
       }
     }
   }
