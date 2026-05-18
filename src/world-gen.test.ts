@@ -95,6 +95,58 @@ describe('generateWorld', () => {
     }
   });
 
+  it('§3.4 Coast islands carry a seeded rotation; other biomes stay at 0', () => {
+    // Coast rotation must be a multiple of 22.5° in [0, 360). Other biomes
+    // (Plains/Forest/Volcanic/Desert/Arctic) must report rotation 0 (or
+    // undefined, which collapses to 0 via `?? 0` at consumer sites).
+    const generated = generateWorld({ ...BASE_OPTS, density: 1.0 });
+    expect(generated.length).toBeGreaterThan(0);
+    for (const s of generated) {
+      const rot = s.rotation ?? 0;
+      if (s.biome === 'coast') {
+        // 22.5° = 360 / 16; rotation * 16 / 360 should be an integer in [0, 16).
+        const steps = (rot * 16) / 360;
+        expect(steps).toBeCloseTo(Math.round(steps), 9);
+        expect(Math.round(steps)).toBeGreaterThanOrEqual(0);
+        expect(Math.round(steps)).toBeLessThan(16);
+      } else {
+        expect(rot).toBe(0);
+      }
+    }
+  });
+
+  it('§3.4 Coast rotation is deterministic — same seed yields same rotation per island', () => {
+    const a = generateWorld(BASE_OPTS);
+    const b = generateWorld(BASE_OPTS);
+    expect(a.length).toBe(b.length);
+    for (let i = 0; i < a.length; i++) {
+      const sa = a[i]!;
+      const sb = b[i]!;
+      expect(sa.id).toBe(sb.id);
+      expect(sa.biome).toBe(sb.biome);
+      expect(sa.rotation ?? 0).toBe(sb.rotation ?? 0);
+    }
+  });
+
+  it('§3.4 Coast rotation distribution is not stuck on a single value across seeds', () => {
+    // Sanity check: across many generated worlds, Coast rotation should
+    // explore more than one of the 16 possible orientations.
+    const seen = new Set<number>();
+    for (let s = 0; s < 50; s++) {
+      const generated = generateWorld({
+        ...BASE_OPTS,
+        seed: `rotation-${s}`,
+        density: 1.0,
+      });
+      for (const isl of generated) {
+        if (isl.biome === 'coast') seen.add(isl.rotation ?? 0);
+      }
+    }
+    // At least 4 distinct rotations across 50 dense seeds — a uniform
+    // 16-way roll would put the expected count well above 15 here.
+    expect(seen.size).toBeGreaterThanOrEqual(4);
+  });
+
   it('frozen_core modifier only appears on arctic islands', () => {
     // Run many seeds; gather every generated island carrying frozen_core
     // and assert the biome is arctic.
