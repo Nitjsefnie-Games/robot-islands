@@ -91,8 +91,22 @@ export interface PlacementUiHandle {
    *  re-entering the canvas reactivates the preview on the next mousemove. */
   hidePreview(): void;
   /** Attempt to commit at the current cursor position. Returns the result
-   *  so the caller can chain a "rebuild world layers" call on success. */
-  attemptCommit(): { ok: boolean; reason?: PlacementReason };
+   *  so the caller can chain a "rebuild world layers" call on success.
+   *
+   *  Two reason channels because §4 ocean placement reasons are intentionally
+   *  disjoint from land `PlacementReason` (per the `OceanPlacementReason`
+   *  type comment in placement.ts — "callers don't confuse a land-placement
+   *  land-mine with an ocean one"). When the ocean validator rejects, the
+   *  specific reason surfaces via `oceanReason` instead of collapsing to the
+   *  generic `'def-is-ocean'` land-reason placeholder. `reason` is only set
+   *  for land-placement failures (or the headless / mis-wired-deps ocean
+   *  fallback, which IS the literal `'def-is-ocean'` semantic — an ocean def
+   *  reached a context with no ocean routing infrastructure). */
+  attemptCommit(): {
+    ok: boolean;
+    reason?: PlacementReason;
+    oceanReason?: OceanPlacementReason;
+  };
 }
 
 export interface PlacementUiDeps {
@@ -540,7 +554,11 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // bring it back. Toggling `active = false` on every mouseleave would be
     // a poor UX (the player loses their armed state mid-aim).
   }
-  function attemptCommit(): { ok: boolean; reason?: PlacementReason } {
+  function attemptCommit(): {
+    ok: boolean;
+    reason?: PlacementReason;
+    oceanReason?: OceanPlacementReason;
+  } {
     if (!active || activeDefId === null) return { ok: false };
     const def = BUILDING_DEFS[activeDefId];
     const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
@@ -558,21 +576,29 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       if (!world || !deps.pickAnchor || !deps.getStateById) {
         // Headless / mis-wired deps: surface a generic "ocean def can't be
         // routed" signal. The land-side `def-is-ocean` label is the
-        // closest existing reason; reuse it so the UI / tests stay
-        // consistent. (No data-corrupting fallthrough; nothing gets placed.)
+        // closest existing reason and IS semantically right HERE — the
+        // def is ocean and the routing infrastructure is absent. (Distinct
+        // from a validator rejection, which surfaces via `oceanReason`.)
         return { ok: false, reason: 'def-is-ocean' };
       }
       const ov = validateOceanPlacement(world, activeDefId, cellX, cellY);
       if (!ov.ok) {
-        // Surface ocean-validator reasons via the status painter — outside
-        // the PlacementReason union, but the caller (main.ts) only reads
-        // `.ok`; logging is the placement-ui's own responsibility.
-        return { ok: false, reason: 'def-is-ocean' };
+        // Surface the specific ocean-validator reason via `oceanReason`
+        // (parallel field, not collapsed into the land `PlacementReason`
+        // union — see the union's "disjoint" type comment in placement.ts).
+        // Callers (HUD / status painter) can then differentiate
+        // terrain-mismatch / no-anchor-in-range / land-overlap.
+        return {
+          ok: false,
+          oceanReason: ov.reason ?? 'terrain-mismatch',
+        };
       }
       const cands = candidateAnchors(world, cellX, cellY);
       // Validator guarantees cands.length > 0 (else `no-anchor-in-range`),
       // but defense-in-depth: bail if it's empty here too.
-      if (cands.length === 0) return { ok: false, reason: 'def-is-ocean' };
+      if (cands.length === 0) {
+        return { ok: false, oceanReason: 'no-anchor-in-range' };
+      }
       // Kick off the anchor picker. The commit completes asynchronously
       // when the picker resolves — mirrors the cargo-label `pickCargoLabel`
       // → `begin()` async pattern. attemptCommit returns {ok:false} here
@@ -581,9 +607,13 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       const defId = activeDefId; // capture for the async closure
       const cellAnchorCoordX = cellX * CELL_SIZE_TILES;
       const cellAnchorCoordY = cellY * CELL_SIZE_TILES;
-      // Capture the epoch so a stale picker resolution (player cancelled
-      // and started a new placement before this resolved) gets dropped.
-      const epoch = beginEpoch;
+      // Bump the epoch so a stale picker resolution gets dropped — same
+      // pre-increment pattern `begin()` uses. Without the bump, a player
+      // double-clicking commit while the first picker is open would have
+      // BOTH `.then` callbacks share the same captured epoch, and neither
+      // stale-check would fire. The cargo-label `begin()` path already
+      // uses `++beginEpoch`; this mirrors it.
+      const epoch = ++beginEpoch;
       deps.pickAnchor(cands).then((picked) => {
         if (epoch !== beginEpoch) return; // stale
         if (picked === null) {
