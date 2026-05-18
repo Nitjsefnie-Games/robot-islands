@@ -744,14 +744,9 @@ async function main(): Promise<void> {
     : new Map<string, IslandState>();
   const homeSpec = worldState.islands.find((s) => s.id === 'home');
   if (!homeSpec) throw new Error('main: home island missing from worldState');
-  // Fresh-game path: build per-island state from each populated spec. The
-  // forest-ne T5 demo seed below is now a no-op in production (forest-ne
-  // is no longer auto-populated per §3.7) but kept guarded by
-  // `if (forestNe)` so it can still apply if a test or dev path manually
-  // populates forest-ne via DEMO_ISLANDS_TEST_FIXTURE. Restored saves
-  // skip this entirely — whatever the player had at last save is the
-  // source of truth, and the demo seed must NOT re-fire on every load
-  // (would erase progress).
+  // Fresh-game path: build per-island state from each populated spec.
+  // Restored saves skip this entirely — whatever the player had at last
+  // save is the source of truth.
   if (!restored) {
     const homeState = makeInitialIslandState(homeSpec, performance.now());
     islandStates.set('home', homeState);
@@ -765,51 +760,6 @@ async function main(): Promise<void> {
       if (spec.id === 'home') continue;
       if (!spec.populated) continue;
       islandStates.set(spec.id, makeInitialIslandState(spec, performance.now()));
-    }
-    // Step-11/12/13 demo seed: bump forest-ne to level 50 (T5) and pre-load
-    // enough construction materials so the player can fire off a 4×4
-    // artificial island construction without first grinding the smelting
-    // chain. The values exceed the 4×4 Plains cost (~252 steel / 151
-    // iron_ingot / 503 wood) with comfortable headroom for one construct +
-    // a second attempt.
-    // Step 13 bumps the level 30 → 50 and sets aiCoreCrafted = true so the
-    // §13.1 T5 access gate (level ≥ 50 AND AI core crafted) is satisfied —
-    // the catalog UI then displays the T5 band unlocked. Seeds T4/T5
-    // resources so the Reality Forge demo recipe could run if placed.
-    // Forest-ne stays Forest biome, so Volcanic/Arctic biome-locked uniques
-    // (Pyroforge, Cryogenic Compute Center) remain locked from the catalog —
-    // that's the intended §9.5 demo behaviour. T5 defs are biome-agnostic
-    // (no requiredBiomes), so the full T5 band shows up.
-    // Once a save exists this seed never re-runs — the saved IslandState
-    // for forest-ne carries level/aiCoreCrafted/inventory forward.
-    const forestNe = islandStates.get('forest-ne');
-    if (forestNe) {
-      forestNe.level = 50;
-      forestNe.aiCoreCrafted = true; // §13.1 T5 access — manual demo seed
-      // §14.1 T6 access (first half) — manual demo seed. Auto-flip on
-      // first ascendant_core production STILL-DEFERRED. With this flag plus a
-      // placed Spaceport, forest-ne crosses the §14.1 T6 gate and the
-      // Catalog UI surfaces the T6 band as available.
-      forestNe.ascendantCoreCrafted = true;
-      // Rebalanced for idle-game scale, step #19: bumped proportionally to
-      // new BASELINE_STORAGE_CAP (2000) so the demo island has meaningful
-      // pre-seeded stock relative to the larger caps.
-      forestNe.inventory.steel = 1000; // rebalanced step #19 (was 300)
-      forestNe.inventory.iron_ingot = 600; // rebalanced step #19 (was 200)
-      forestNe.inventory.wood = 2000; // rebalanced step #19 (was 600)
-      forestNe.inventory.helium_3 = 100; // rebalanced step #19 (was 50)
-      // T4 / T5 seeds. Reality Forge inputs per §7.12 (4 ai_core + 1
-      // antimatter_capsule + 1 time_crystal + 1 exotic_alloy / 24h cycle)
-      // are all stocked so the demo island can fire a Reality Forge run
-      // end-to-end. casimir_energy and quantum_chip are general T4/T5
-      // plant stock — not Reality Forge inputs, retained for other T4/T5
-      // recipes.
-      forestNe.inventory.exotic_alloy = 50; // rebalanced step #19 (was 20)
-      forestNe.inventory.ai_core = 30; // rebalanced step #19 (was 10)
-      forestNe.inventory.antimatter_capsule = 5; // Reality Forge §7.12
-      forestNe.inventory.time_crystal = 5; // Reality Forge §7.12
-      forestNe.inventory.casimir_energy = 30; // rebalanced step #19 (was 10)
-      forestNe.inventory.quantum_chip = 30; // rebalanced step #19 (added)
     }
   }
   // Sanity gate: home state must exist after init. The `homeState`/`homeSpec`
