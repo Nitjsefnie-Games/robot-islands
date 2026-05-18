@@ -79,8 +79,10 @@ export interface Route {
   readonly capacityPerSec: number;
   /** Specific resource OR null for 'any' (with priorityList). */
   readonly filter: ResourceId | null;
-  /** Ordered priority list when filter === null. Empty array if filter set. */
-  readonly priorityList: ReadonlyArray<ResourceId>;
+  /** Ordered priority list when filter === null. Empty array if filter set.
+   *  Mutable: the routes-UI mutates this in place when the player adds,
+   *  removes, or reorders entries (see `routes-ui.ts`). */
+  priorityList: ReadonlyArray<ResourceId>;
   /** Real-time-of-flight seconds. T1 cargo = distance / speed. T4 teleporter = 0. */
   readonly transitTimeSec: number;
   /** In-flight batches. Mutable (push on dispatch, splice on arrival). */

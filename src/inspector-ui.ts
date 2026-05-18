@@ -100,14 +100,6 @@ function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
 }
 
-/** Strip `readonly` from every field. The §4.6 relabel path mutates
- *  `PlacedBuilding.cargoLabel`; the readonly modifier on PlacedBuilding is
- *  a documentation convention (the economy and persistence layers already
- *  mutate `populated` / `discovered` on IslandSpec), but TypeScript still
- *  rejects writes through the readonly type. `Mutable<T>` is the standard
- *  cast we use at the relabel site to avoid `as any`. */
-type Mutable<T> = { -readonly [K in keyof T]: T[K] };
-
 // ---------------------------------------------------------------------------
 // Demolition-credit formula (mirrors `demolishBuilding` in placement.ts)
 // ---------------------------------------------------------------------------
@@ -744,11 +736,7 @@ export function mountInspectorUi(
     }
     target.state.storageCaps[newLabel] =
       (target.state.storageCaps[newLabel] ?? 0) + cap;
-    // PlacedBuilding fields are `readonly` at the type level, but the
-    // economy loop already mutates `populated` / `discovered` on IslandSpec;
-    // the readonly modifier is a doc convention, not a runtime guard. Cast
-    // through `Mutable<>` so we don't sprinkle `as any` at the call site.
-    (b as Mutable<PlacedBuilding>).cargoLabel = newLabel;
+    b.cargoLabel = newLabel;
     pendingRelabel = null;
   }
 

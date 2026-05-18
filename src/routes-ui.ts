@@ -680,7 +680,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       del.addEventListener('click', (e) => {
         e.stopPropagation();
         const next = route.priorityList.filter((_, i) => i !== index);
-        (route as unknown as { priorityList: ResourceId[] }).priorityList = next;
+        route.priorityList = next;
         rerender();
       });
       li.appendChild(del);
@@ -741,7 +741,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       const chosen = addSel.value as ResourceId;
       if (!chosen || route.priorityList.includes(chosen)) return;
       const next = [...route.priorityList, chosen];
-      (route as unknown as { priorityList: ResourceId[] }).priorityList = next;
+      route.priorityList = next;
       rerender();
     });
     addRow.appendChild(addSel);
@@ -774,7 +774,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     if (src === dst || Number.isNaN(src) || Number.isNaN(dst)) return;
 
     const list = reorderPriorityList(route.priorityList, src, dst);
-    (route as unknown as { priorityList: ResourceId[] }).priorityList = list;
+    route.priorityList = list;
 
     rerender();
   }
