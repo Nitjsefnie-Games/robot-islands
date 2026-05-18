@@ -276,7 +276,15 @@ export type PlaceBuildingResult =
       readonly reason: 'queue-full';
       readonly inProgress: number;
       readonly slots: number;
-    };
+    }
+  /** Defense-in-depth (Task 10 review): the id-generator returned an id
+   *  already present in `spec.buildings`. Currently unreachable because
+   *  `validatePlacement`'s overlap gate and `validateOceanPlacement`'s
+   *  `land-overlap` gate together ensure no two buildings can share an
+   *  anchor (so the coords-derived `placed-${x},${y}` id is unique). If a
+   *  future change loosens either gate this surfaces the collision instead
+   *  of letting two buildings share an id silently. */
+  | { readonly ok: false; readonly reason: 'overlap' };
 
 /** §9.3 Robotics: how many concurrent under-construction slots this island
  *  has right now. Base 1 + Robotics `parallelBuildBonus` (additive). */
@@ -405,8 +413,26 @@ export function placeBuilding(
   // skipping accrual; computeRates honours it by zeroing production).
   const skillMul = effectiveSkillMultipliers(state);
   const construction = constructionTimeFor(def, skillMul.constructionTime);
+  const id = idGenerator();
+  // Task 10 review defense-in-depth: id collisions are currently impossible
+  // because `validatePlacement`'s `overlap` gate + `validateOceanPlacement`'s
+  // `land-overlap` gate jointly ensure no two buildings share an anchor, and
+  // the placement-UI mints ids from anchor coords. If a future change loosens
+  // either gate this catches the collision instead of letting two buildings
+  // share an id silently (which would break selection / inspect / persistence).
+  // Cost has been deducted above — refund it before returning so the rejection
+  // doesn't leave a "paid but no building" hole. (Unreachable today, but
+  // future-proofs the path so it's a true error return rather than silent
+  // inventory loss if the underlying invariant ever shifts.)
+  if (spec.buildings.some((existing) => existing.id === id)) {
+    for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+      if (n <= 0) continue;
+      state.inventory[r] = (state.inventory[r] ?? 0) + n;
+    }
+    return { ok: false, reason: 'overlap' };
+  }
   const placed: PlacedBuilding = {
-    id: idGenerator(),
+    id,
     defId,
     x: anchorX,
     y: anchorY,

@@ -53,7 +53,7 @@ export interface PlacedBuilding {
    *  building with `paused === 'anchor-depopulated'` instead of producing.
    *  Undefined for non-ocean defs (forward-compat: legacy saves and land
    *  buildings simply omit the field). */
-  anchorIslandId?: string;
+  readonly anchorIslandId?: string;
   /** §4 ocean-layer paused state (Task 10). Mutated by the economy tick when
    *  an ocean platform's preconditions fail (anchor unpopulated, terrain
    *  no longer ocean). When set, the building skips production / consumption
