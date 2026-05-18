@@ -42,32 +42,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
 
 ## 1. Spec divergence — real bugs a player would notice
 
-- **§7.12 `reality_forge` recipe diverges from spec by ~50% of inputs
-  and 1/18 of cycle time.** `src/recipes.ts:1337-1342` ships `2
-  exotic_alloy + 1 ai_core + 1 casimir_energy` / 4800s; spec literal is
-  `4 ai_core + 1 antimatter_capsule + 1 time_crystal + 1 exotic_alloy` /
-  24h. The 1260-line comment cites "missing T4 raws" but both
-  `antimatter_capsule` and `time_crystal` now exist in the catalog (recipes
-  at `:745-747`). Either bring recipe in line with spec or update SPEC.md
-  to acknowledge the simplification.
-  *(Flagged by Agents B, C — same finding.)*
-
-- **§7.12 `antimatter_refinery` recipe wrong inputs + 4× spec cycle.**
-  `src/recipes.ts:1996-2001` uses `1 exotic_alloy + 1 reality_anchor + 2
-  casimir_energy` / 7200s. Spec §7.12 says `1 antimatter_capsule + 1
-  plasma_containment_vessel + 5 cryogenic_hydrogen` / 30 min. Both spec
-  inputs exist in catalog. Off-spec on inputs, scale, and conceptual chain
-  (ties T6 fuel back to T4 antimatter chain per spec; current ties to T5
-  reality_anchor).
-  *(Flagged by Agent C.)*
-
-- **§14.10 `comm_sat_assembly` `optical_fiber` reduced 200 → 50 with no
-  spec authority.** `src/recipes.ts:2015` — the in-line comment
-  literally says `"Agent C: extreme ratio, suspected copy-paste from
-  spec"`, but spec §14.10 is the spec. Either restore 200 or document
-  the deviation in SPEC.md.
-  *(Flagged by Agents B, C.)*
-
 - **§15.1 / §9.5 `RouteType` is missing `'mass_driver'`.** `src/routes.ts:33-39`
   enumerates `cargo | drone | airship | teleporter | cable | spacetime`.
   Spec §15.1 says `Route.type = 'mass_driver'` for the §9.5 Plains
