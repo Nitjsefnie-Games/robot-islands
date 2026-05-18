@@ -114,6 +114,11 @@ const REASON_LABEL: Readonly<Record<PlacementReason, string>> = {
   'tile-requirement-not-met': 'TILE MISMATCH',
   'insufficient-resources': 'INSUFFICIENT RESOURCES',
   'queue-full': 'BUILD QUEUE FULL',
+  // `def-is-ocean` is a defense-in-depth reject for ocean defs routed
+  // through the LAND validator (buildings-ui.ts filters them out of the
+  // catalog, so the player path never reaches this label). Programmatic /
+  // test callers hit it; the user-facing string is here for symmetry.
+  'def-is-ocean': 'OCEAN DEF — USE OCEAN PLACEMENT',
 };
 
 /** Pretty-print a §14 shortfall record as "NEED 5 STONE, 3 WOOD" for the
