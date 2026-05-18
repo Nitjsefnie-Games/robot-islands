@@ -24,7 +24,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §3.1-3.4 Island spec / biomes / tile types / shape | L | All six biomes, ellipse geometry, Land Reclamation expansion, max-size table. |
 | §3.5 Modifiers | L | Roll distribution, biome-tagged sampling, Stable exclusivity. High Wind variance + +50% wind-power. Cursed Storms -10% global prod + 2× rare-find trickle (Mining helium_3 + Forestry exotic-species) via `rareFindMul`. |
 | §3.6 Joining | L | Geometric overlap detection, largest-absorbs, ellipse list, building global coords via offsets, route redirect/delete, modifier voiding. |
-| §3.7 Starting state | L | Empty home Plains island, no starter inventory, no Foundation Kit, Drone Pad gated at L5. |
+| §3.7 Starting state | L | Empty home Plains island, Drone Pad gated at L5. Starter inventory ships as `60 stone + 40 wood + 1 Foundation Kit` (bootstrap deviation from the §3.7 literal — see §3.7 Implementation note). |
 | §4.1-4.3 Building footprint / rotation / placement | L | All shape masks, 4 rotations, terrain-requirement gates. |
 | §4.4 Adjacency rules | L | 4-neighbor metadata computation. |
 | §4.5 Adjacency effects | L | Heat (§5.2), reactor toxicity, §8.7 Exhaust Scrubber (soft-gate on coke_oven / naphtha_cracker / lubricant_refinery / diesel_refinery), and §8.7 Wastewater Treatment (soft-gate on sulfuric_acid_plant / hcl_plant / chlor_alkali_plant). Crystal Lab building absent, so the Cooling Tower → Crystal Lab gate has no consumers. |
@@ -432,6 +432,8 @@ A new game begins with:
 Bootstrap loop: the player places a Solar Panel (Plains' default power source per §3.2 — works without fuel, day-cycle dependent per §2.7) on any buildable tile, then a Workshop / Logger / Mine on a suitable tile, accumulating XP through production. Solar produces nothing during night phase, so a fresh game's first night requires either patience or a Battery (T2, requires more progression). Once level 5 is reached, the Drone Pad becomes available; the player builds it and dispatches the first scouting drone into the dark map. The first drone return is the first multi-island moment.
 
 The starting world seed determines the home island's terrain (positions of ore veins, coal veins, water tiles within the ellipse) and the position and biome of every other island in the world (most of which are dark to the player at session 0).
+
+**Implementation note — bootstrap starter inventory.** The shipped game seeds the home island with `60 stone + 40 wood + 1 Foundation Kit` instead of the empty-inventory literal above. The §14 placement-cost basket (Mine `30 stone + 15 wood`, Coal Generator `50 + 25`, Antenna T1 `15 + 5`, plus the §12.3 Foundation Kit needed to dispatch the first settlement vehicle) makes the literal empty start unplayable — the player has no path to the first extraction building. The starter kit is tuned for first-build bootstrap only: enough for the first ~3-4 T1 buildings, not enough to skip the early-game extraction loop. Source of truth: `src/world.ts` `startingInventory()`.
 
 \---
 
@@ -926,12 +928,12 @@ The `production\_rate\[r]` figure already incorporates `power\_factor` (§5.1), 
 
 XP-to-level curve: superlinear, two-segment.
 
-* For levels 1 through 50, polynomial: `xp\_for\_level\_n = 100 \* n^2.2` (placeholder).
+* For levels 1 through 50, polynomial: `xp\_for\_level\_n = 25 \* n^2.2` (placeholder; rebalanced from the original `100 \* n^2.2` for ~4× faster early-game leveling — see `src/economy.ts` `xpForLevel`).
 * For levels past 50, exponential: `xp\_for\_level\_n (n > 50) = xp\_for\_level\_50 \* 1.2^(n - 50)` (placeholder multiplier 1.2).
 
 Levels are uncapped — 50 is the T5 access breakpoint (§13.1), not a hard ceiling. The exponential softcap past 50 means islands continue to accrue progression indefinitely but at a dramatically slowing pace: level 70 costs ~38× more XP per level than level 50, level 100 costs ~9100×. Practical effect: a fully-developed island never permanently stalls, but each new level past 50 represents a real long-haul commitment.
 
-Each level grants 1 skill point to spend. Because levels are uncapped, skill points eventually outpace the available skill-tree nodes (which are mutual-exclusively capped at ~25-30 accessible per island, see §9.3) — the post-cap excess accumulates and feeds late-game prestige-style spending (see §9.3).
+Each level grants skill points to spend, on a geometric ramp: `points\_granted(level) = max(1, floor(1.1^level))` (placeholder; rebalanced from a flat `1 point / level` so the deep nodes are reachable given the `round(1.5^(depth - 1))` cost ramp in §9.3 — flat-1 made full sub-paths require ~500k levels). L1-L7 still grant 1 point each; L50 grants ~117, L70 grants ~789, L100 grants ~13,780. Source of truth: `src/skilltree.ts` `skillPointsForLevelUp`. Because levels are uncapped, skill points eventually outpace the available skill-tree nodes (which are mutual-exclusively capped at ~25-30 accessible per island, see §9.3) — the post-cap excess accumulates and feeds late-game prestige-style spending (see §9.3).
 
 ### 9.2 Tier Breakpoints
 
@@ -1548,7 +1550,7 @@ Scanner Sat   = 4 Exotic Alloy + 2 AI core + 1 Spacetime fragment + 50 Aluminum 
 Sweeper Sat   = 4 Exotic Alloy + 1 AI core + 100 Carbon Steel + 20 Magnet + 1 Orbital Insertion Package
 Relay Sat     = 6 Exotic Alloy + 1 AI core + 200 Optical Fiber + 1 Orbital Insertion Package
 Mirror Sat    = 4 Exotic Alloy + 1 AI core + 150 Aluminum + 10 Optical Glass + 1 Orbital Insertion Package
-Repair Drone  = 2 Exotic Alloy + 50 Carbon Steel + 1 Foundation Kit
+Repair Drone  = 2 Exotic Alloy + 50 Carbon Steel + 1 Repair Pack
 Orbital Insertion Package = 100 Iron ingot + 30 Brick + 20 Glass + 10 Carbon Fiber + 5 AI core
 ```
 
@@ -1818,12 +1820,13 @@ Steps 1 to 5 yield a playable single-island sandbox. That is the first milestone
 
 The following numeric values are placeholders to be set during prototype play:
 
-* XP curve coefficient and exponent (polynomial 1-50: `100 \* n^2.2`; exponential past 50: × `1.2^(n - 50)` placeholder)
+* XP curve coefficient and exponent (polynomial 1-50: `25 \* n^2.2`; exponential past 50: × `1.2^(n - 50)` placeholder)
 * xp_weight per resource (tier scaling: placeholder T0 raw = 1, T1 = 3, T2 = 10, T3 = 30, T4 = 100, T5 = 300, T6 = 1000)
 * Funneling XP bonus percentage (placeholder 50%; applied to imported-and-consumed resources only, while destination is below Tier 3)
 * Skill tree node effect magnitudes (geometric to depth 5: depth 1 = +5%, doubles each step; mixed thereafter — geometric continuation OR unique unlocks per sub-path)
 * Skill tree node count per sub-path (placeholder 10-15)
 * Skill tree node cost scaling (placeholder `cost(depth) = round(1.5^(depth - 1))`)
+* Skill point grant per level-up (placeholder `points\_granted(level) = max(1, floor(1.1^level))`)
 * Sub-path commitment threshold (placeholder N = 3 points spent in the sub-path)
 * Recipe cycle times
 * Recipe input/output ratios
