@@ -1358,6 +1358,92 @@ describe('§14.5 scanner dwell-ramp discovery', () => {
     expect(covered.has('0,0')).toBe(true);
   });
 
+  it('cellsCoveredBySat: sat inside a cell with tiny radius admits at least its own cell (distance²=0)', () => {
+    // Sat at (8, 8) is inside cell (0,0) which spans [0,16]×[0,16].
+    // Even radius 1 must admit (0,0) — the closest point of the cell to the
+    // sat is the sat itself (clamps return sat coords), distance² = 0.
+    const sat = makeMinimalSat({ id: 'sat1', x: 8, y: 8, coverageRadius: 1 });
+    const covered = cellsCoveredBySat(sat);
+    expect(covered.has('0,0')).toBe(true);
+  });
+
+  it('cellsCoveredBySat: sat near a cell corner admits all 4 cells touching the corner (perimeter overlap)', () => {
+    // Sat at (15, 15) sits just inside cell (0,0). With radius 2, the disk
+    // overlaps the adjacent cells (1,0), (0,1), (1,1) via their shared
+    // perimeter points — closest point to sat is (16, 15), (15, 16), (16, 16)
+    // respectively, all at distance ≤ sqrt(2) < 2.
+    // Old centre-in-radius test rejected (1,0)/(0,1)/(1,1) because their
+    // centres ((24,8), (8,24), (24,24)) are ~sqrt(81+49) ≈ 11.4 from sat,
+    // well outside radius 2.
+    const sat = makeMinimalSat({ id: 'sat1', x: 15, y: 15, coverageRadius: 2 });
+    const covered = cellsCoveredBySat(sat);
+    expect(covered.has('0,0')).toBe(true);
+    expect(covered.has('1,0')).toBe(true);
+    expect(covered.has('0,1')).toBe(true);
+    expect(covered.has('1,1')).toBe(true);
+  });
+
+  it('cellsCoveredBySat: tangent case — sat exactly coverageRadius from cell admits it (inclusive ≤)', () => {
+    // Sat at (-2, 8), radius exactly 2. Cell (0,0) spans [0,16]×[0,16];
+    // closest point is (0, 8); distance from sat = 2 = radius. Inclusive
+    // bound (`<=`) admits.
+    const sat = makeMinimalSat({ id: 'sat1', x: -2, y: 8, coverageRadius: 2 });
+    const covered = cellsCoveredBySat(sat);
+    expect(covered.has('0,0')).toBe(true);
+  });
+
+  it('cellsCoveredBySat: far sat with non-overlapping disk admits no cells beyond its reach', () => {
+    // Sat at (8, 8), radius 4 — disk fits well inside cell (0,0), no adjacent
+    // cells touched. Cells (1,0), (0,1), (-1,0), (0,-1) must NOT be admitted
+    // (closest perimeter point is 8 away in one axis, > radius 4).
+    const sat = makeMinimalSat({ id: 'sat1', x: 8, y: 8, coverageRadius: 4 });
+    const covered = cellsCoveredBySat(sat);
+    expect(covered.has('0,0')).toBe(true);
+    expect(covered.has('1,0')).toBe(false);
+    expect(covered.has('0,1')).toBe(false);
+    expect(covered.has('-1,0')).toBe(false);
+    expect(covered.has('0,-1')).toBe(false);
+  });
+
+  it('cellsCoveredBySat: large radius admits all overlapping cells within bounding box', () => {
+    // Sat at cell-grid origin (0,0), radius spanning 2 cells (32 tiles).
+    // Cells whose closest point is within 32 are admitted. Cell (1,1) has
+    // closest point (16,16), distance sqrt(512) ≈ 22.6 ≤ 32 → admitted.
+    // Cell (2,2) has closest point (32,32), distance sqrt(2048) ≈ 45.3 > 32
+    // → not admitted.
+    const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0, coverageRadius: 32 });
+    const covered = cellsCoveredBySat(sat);
+    // Sat at corner (0,0) — cells in all 4 quadrants overlap the disk.
+    expect(covered.has('0,0')).toBe(true);
+    expect(covered.has('-1,0')).toBe(true);
+    expect(covered.has('0,-1')).toBe(true);
+    expect(covered.has('-1,-1')).toBe(true);
+    expect(covered.has('1,0')).toBe(true);
+    expect(covered.has('0,1')).toBe(true);
+    expect(covered.has('1,1')).toBe(true);
+    // Cell (2,2) closest point (32,32) sits at distance sqrt(2048) ≈ 45.3 > 32.
+    expect(covered.has('2,2')).toBe(false);
+    expect(covered.has('-3,-3')).toBe(false);
+  });
+
+  it('cellsCoveredBySat: sanity check — sat at cell corner with r = sqrt(2)*cellSize admits all 4 adjacent cells', () => {
+    // SPEC §14.5 sanity case. Sat at corner (16, 16) shared by cells
+    // (0,0), (1,0), (0,1), (1,1). r = sqrt(2)*16 ≈ 22.63. Each of the 4
+    // cells has the sat sitting on its corner — distance² = 0 — so all 4
+    // admit unconditionally.
+    const sat = makeMinimalSat({
+      id: 'sat1',
+      x: 16,
+      y: 16,
+      coverageRadius: Math.SQRT2 * 16,
+    });
+    const covered = cellsCoveredBySat(sat);
+    expect(covered.has('0,0')).toBe(true);
+    expect(covered.has('1,0')).toBe(true);
+    expect(covered.has('0,1')).toBe(true);
+    expect(covered.has('1,1')).toBe(true);
+  });
+
   it('tickScannerDiscovery no-ops on non-scanner sats', () => {
     const world = makeBfsWorld({
       islands: [],

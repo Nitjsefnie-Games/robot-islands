@@ -47,12 +47,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   path". Spec §2.6 promises Weather Station (T2) `+3 cells` and
   Advanced Weather Station (T3) `+6 cells, +1-cycle forecast`. *(D.)*
 
-- **§14.5 satellite coverage skips perimeter cells.**
-  `src/orbital.ts:791-806` `cellsCoveredBySat` admits only cells whose
-  CENTRE is within `coverageRadius`. Cells whose centre is outside but
-  whose area overlaps are skipped — under-counts perimeter coverage,
-  visible at tight radii. *(D.)*
-
 ---
 
 ## 4. Tuning placeholders (Appendix A backlog)
