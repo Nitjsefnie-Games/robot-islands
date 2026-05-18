@@ -1120,6 +1120,8 @@ Launched from Drone Pad (T2+) or Launch Tower (T4 only). Specify:
 * Direction vector (player-chosen)
 * Fuel loaded (player-chosen, gates range — fuel resource matches launching island's tier per §11.7; range = fuel × tier efficiency)
 
+Drone launches originate from the Drone Pad's footprint centre on the launching island (same idiom §14.5 specifies for Spaceport satellite launches). When multiple Drone Pads are placed on a single island, the first one in placement order is used.
+
 ### 11.2 Travel
 
 Drones travel in real time at speed determined by tier. They scan a **capsule-shaped corridor** along their flight path: the set of all points within scan radius `r` of any point on the path. In 2D this is a swept-disk shape (rectangle along the path with circular end-caps at launch and turnaround points). Islands whose centers fall inside the capsule are revealed on the drone's return.
