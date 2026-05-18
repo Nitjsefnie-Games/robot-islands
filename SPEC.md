@@ -32,7 +32,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §4.7 Maintenance | P | Operating-time accrual, threshold + 4h linear degrade, auto-maintain materials check, atomic recipe consumption, most-degraded targeting policy. Only buildings with productive recipe outputs accrue operating time — power producers / storage / antennas / drone pads / shipyards skip accrual since their maintenance factor has no effect on output. Eternal Servitor flag is honoured; Servitor Conversion Kit + Reality Forge mechanic that flips it is N. |
 | §5.1 Electrical grid | L | Per-island brownout factor, active-only summing, gating predicate. |
 | §5.2 Heat adjacency | L | N:1 source assignment, free-source priority, fuel-burn scaling with served count. |
-| §5.3 Inter-island power | L | Cable routes, capacity in W; T5 spacetime distance-independence N (covered by route gap above). |
+| §5.3 Inter-island power | L | Per-component binary-gated unified pool: gate passes iff Σ cable capacity ≥ min(Σ per-island surplus, Σ per-island deficit). Unified component shares one brownout `min(1, ΣP/ΣC)`; gate fail = cables inert that tick. T5 Spacetime Anchor route counts as infinite-capacity (always passes). |
 | §6 Resource catalog | P | T0-T5 raws/intermediates/components mostly complete. Cold-Storage temperature-sensitive resources (cryogenic compound, liquid nitrogen) absent so Cold Storage has no consumers. A handful of T2-T3 minor intermediates (e.g. Bearing) absent — substitutions noted at use sites. |
 | §6.7 Byproducts + demolition | P | Scrap recovery on demolish; Oxygen Converter consumes scrap. Spec's "2 Scrap = 1 Pig iron co-input at Steel Mill" N. |
 | §7 Recipe chains | P | Iron/steel, copper, aluminum, oil/petrochem, glass, electronics, construction, power components, mechanical, T4 endgame, T5 transcendent: all chains have producers. Chlor-alkali downstream present (chlorine→Lubricant Refinery, sodium_hydroxide→Bauxite Refinery, chemical_reactor co-outputs both); a few minor T2-T3 intermediates remain absent (e.g. Bearing — substitutions noted at use sites). |
@@ -576,9 +576,11 @@ Heat Sources include:
 
 ### 5.3 Inter-Island Power (T4+)
 
-T4 unlocks Power Cable routes that transmit electrical power between islands. These routes use the same network mechanics as cargo routes, with capacity in W instead of items/sec.
+T4 unlocks Power Cable routes that join islands into a shared electrical pool. Per tick, every connected-cable component of islands is evaluated against a single binary gate: the sum of cable capacity inside the component must be at least the required transmission, where required transmission is the smaller of the component's total per-island surplus and total per-island deficit (each island contributing `max(0, produced − consumed)` to one side and `max(0, consumed − produced)` to the other).
 
-T5 Spacetime Anchor makes power transmission distance-independent.
+When the gate passes, all islands in the component share one brownout factor `min(1, componentProduced / componentConsumed)` — every consumer on every member island sees the same throttle. When the gate fails, each island operates with its own local balance and cables go inert for that tick. The gate is strictly binary — no partial unification. Player progression is to stack enough cable capacity to keep the gate passing under expected peak demand.
+
+T5 Spacetime Anchor (`route.type === 'spacetime'`) links count as infinite-capacity for the gate, so any component containing one trivially passes — matching the spec's distance-independent framing.
 
 \---
 

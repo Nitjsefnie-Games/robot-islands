@@ -15,7 +15,14 @@
 //   - Tier-gating on route-class placement runs through `buildingUnlocked` at
 //     validate-placement time like every other tiered building.
 
-import { cap, inv, type IslandState } from './economy.js';
+import {
+  cap,
+  computeRates,
+  inv,
+  type CableComponentBalance,
+  type IslandState,
+  type RatesContext,
+} from './economy.js';
 import { makeSeededRng } from './rng.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
@@ -139,28 +146,189 @@ export function _seedRouteIdCounter(value: number): void {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-/** §5.3: sum the W capacity of every cable route delivering to `islandId`
- *  whose source AND destination both have at least one `power_substation`
- *  building placed. Source-side capacity is NOT deducted from the source's
- *  balance per current scope; this returns only what the destination
- *  receives. */
-export function cableInflowForIsland(
+// ---------------------------------------------------------------------------
+// §5.3 Cable network: binary-gated unified power pool.
+// ---------------------------------------------------------------------------
+
+/** Internal: a cable / spacetime route counts toward the connected component. */
+function isPowerLink(t: RouteType): boolean {
+  return t === 'cable' || t === 'spacetime';
+}
+
+/**
+ * §5.3 local power helper — returns the per-island raw produced/consumed
+ * wattage with no inter-island cable contribution. Mirrors `computeRates`
+ * Pass 3 power balance: we just call `computeRates` with
+ * `cableComponent: undefined` (cables inert) and read the raw values.
+ *
+ * Pure; safe to call from the network analysis pass before any
+ * `advanceIsland` has run this tick. Pre-battery values: the Singularity
+ * Battery's brownout-cover happens INSIDE `computeRates` on top of the raw
+ * values, and is local to the island — it does not contribute wattage to
+ * the cable network.
+ */
+export function computeIslandLocalPower(
+  state: IslandState,
+  ctx?: RatesContext,
+): { producedW: number; consumedW: number } {
+  // Explicitly clear cableComponent so we measure pure local power.
+  const localCtx: RatesContext = { ...ctx, cableComponent: undefined };
+  const { power } = computeRates(state, localCtx);
+  return { producedW: power.rawProduced, consumedW: power.rawConsumed };
+}
+
+/**
+ * §5.3: compute per-component cable-network balance for every island this
+ * tick. Returns a map from island id → its component's `CableComponentBalance`.
+ *
+ * Algorithm:
+ *   1. Build connected components over the graph whose nodes are island ids
+ *      and whose edges are routes with `isPowerLink(type)` true.
+ *   2. For every component, sum each island's local raw produced/consumed
+ *      (from `computeIslandLocalPower`), sum total cable capacity (spacetime
+ *      links count as Infinity, so any component containing one is auto-gated
+ *      open), compute `requiredTransmission = min(surplus, deficit)`, and
+ *      decide `unified = cableCapacityTotal >= requiredTransmission`.
+ *   3. Islands with NO power link get a synthetic trivial component
+ *      (`unified: false`, local-only).
+ *
+ * `localPowerCtxFor` lets the caller supply per-island `RatesContext`
+ * (terrainAt, modifierMul, specMul, etc.) so the local power numbers match
+ * what `advanceIsland` would compute for that island. When omitted, every
+ * island uses an empty ctx — fine for tests where ctx defaults are identity.
+ */
+export function computeCableNetworkBalance(
   world: WorldState,
-  states: Map<string, IslandState>,
-  islandId: string,
-): number {
-  let totalW = 0;
-  for (const route of world.routes) {
-    if (route.type !== 'cable') continue;
-    if (route.to !== islandId) continue;
-    const fromState = states.get(route.from);
-    const toState = states.get(islandId);
-    if (!fromState || !toState) continue;
-    if (!fromState.buildings.some((b) => b.defId === 'power_substation')) continue;
-    if (!toState.buildings.some((b) => b.defId === 'power_substation')) continue;
-    totalW += route.capacityPerSec;
+  islandStates: ReadonlyMap<string, IslandState>,
+  localPowerCtxFor?: (islandId: string) => RatesContext | undefined,
+): Map<string, CableComponentBalance> {
+  // 1) Build adjacency from power-link routes. Edges over island ids; both
+  //    endpoints must have a state in islandStates (otherwise the route is
+  //    dangling and we ignore it for the network).
+  const adj = new Map<string, Set<string>>();
+  const ensure = (id: string): Set<string> => {
+    let s = adj.get(id);
+    if (!s) {
+      s = new Set();
+      adj.set(id, s);
+    }
+    return s;
+  };
+  // Seed every known island id so isolated islands also appear in the map.
+  for (const id of islandStates.keys()) ensure(id);
+  // Edges from power-link routes.
+  const powerRoutes: Route[] = [];
+  for (const r of world.routes) {
+    if (!isPowerLink(r.type)) continue;
+    if (!islandStates.has(r.from) || !islandStates.has(r.to)) continue;
+    powerRoutes.push(r);
+    ensure(r.from).add(r.to);
+    ensure(r.to).add(r.from);
   }
-  return totalW;
+
+  // 2) BFS/DFS connected components.
+  const componentOf = new Map<string, string[]>(); // member id → array of member ids in component
+  const visited = new Set<string>();
+  for (const start of adj.keys()) {
+    if (visited.has(start)) continue;
+    const stack: string[] = [start];
+    const members: string[] = [];
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      members.push(cur);
+      const neighbors = adj.get(cur);
+      if (neighbors) for (const n of neighbors) if (!visited.has(n)) stack.push(n);
+    }
+    for (const m of members) componentOf.set(m, members);
+  }
+
+  // 3) Per-component aggregate, then balance object. Cache by stable key
+  //    (sorted member-id join) so islands in the same component share one
+  //    referent (and one cable-capacity sum).
+  const balanceFor = new Map<string, CableComponentBalance>();
+  const seenComponents = new Map<string, CableComponentBalance>();
+
+  for (const [islandId, members] of componentOf) {
+    const key = [...members].sort().join('|');
+    let bal = seenComponents.get(key);
+    if (!bal) {
+      // Sum local raw power across all members. surplus/deficit accumulate
+      // PER ISLAND (Σ max(0, prod_i − cons_i) and Σ max(0, cons_i − prod_i))
+      // per §5.3, NOT on the component totals — this is the binding
+      // constraint on how much wattage must traverse cables to balance the
+      // network. A self-sufficient island contributes neither, even if
+      // the component as a whole has surplus or deficit.
+      let produced = 0;
+      let consumed = 0;
+      let totalSurplus = 0;
+      let totalDeficit = 0;
+      for (const m of members) {
+        const st = islandStates.get(m);
+        if (!st) continue;
+        const ctx = localPowerCtxFor?.(m);
+        const local = computeIslandLocalPower(st, ctx);
+        produced += local.producedW;
+        consumed += local.consumedW;
+        const net = local.producedW - local.consumedW;
+        if (net > 0) totalSurplus += net;
+        else if (net < 0) totalDeficit += -net;
+      }
+      // Sum cable capacity for routes whose BOTH endpoints sit in this
+      // component. Spacetime links contribute Infinity (always passes gate).
+      let capacityTotal = 0;
+      let hasPowerLink = false;
+      const memberSet = new Set(members);
+      for (const r of powerRoutes) {
+        if (!memberSet.has(r.from) || !memberSet.has(r.to)) continue;
+        hasPowerLink = true;
+        if (r.type === 'spacetime') {
+          capacityTotal = Infinity;
+          break; // can't get higher than Infinity
+        }
+        capacityTotal += r.capacityPerSec;
+      }
+      // If we shortcut on spacetime, `cableCapacityTotal` stays Infinity to
+      // signal "spacetime present" rather than a misleading partial sum.
+      const required = Math.min(totalSurplus, totalDeficit);
+      // A component with NO power-link edges is the trivial "isolated island"
+      // case — explicitly unified=false per the spec contract so the local
+      // brownout path runs as if no cable existed. Otherwise `unified` is
+      // the gate result. Edge: a vacuous component (required=0) with a
+      // power link is still legitimately unified — the link exists, no
+      // transmission is needed, brownout = component balance = local balance.
+      const unified = hasPowerLink && capacityTotal >= required;
+      bal = {
+        unified,
+        producedTotal: produced,
+        consumedTotal: consumed,
+        cableCapacityTotal: capacityTotal,
+        requiredTransmission: required,
+      };
+      seenComponents.set(key, bal);
+    }
+    balanceFor.set(islandId, bal);
+  }
+
+  // 4) Synthetic trivial component for islands with NO power-link edge AND
+  //    that happened to be skipped above (shouldn't normally happen since we
+  //    seed every islandStates id, but be defensive). Per spec, "no cables"
+  //    operates locally so gate trivially fails (unified=false) and local
+  //    raw power is the only relevant balance.
+  for (const [id, st] of islandStates) {
+    if (balanceFor.has(id)) continue;
+    const local = computeIslandLocalPower(st, localPowerCtxFor?.(id));
+    balanceFor.set(id, {
+      unified: false,
+      producedTotal: local.producedW,
+      consumedTotal: local.consumedW,
+      cableCapacityTotal: 0,
+      requiredTransmission: 0,
+    });
+  }
+
+  return balanceFor;
 }
 
 /** Sum the amounts already in flight on `route` whose resourceId === `r`. */

@@ -97,11 +97,45 @@ export interface RatesContext {
    *  `cap()` reads from this map instead of the local island storageCaps,
    *  enabling summed caps across the Lattice network. */
   readonly caps?: Record<ResourceId, number>;
-  /** §5.3 Inter-island cable inflow in Watts. Pre-computed per-island in
-   *  main.ts from world.routes (cable routes whose dest === this island AND
-   *  both endpoints carry a power_substation). Added directly to
-   *  `powerProduced` in Pass 3, treated as a "virtual producer" per spec. */
-  readonly cableInflowW?: number;
+  /** §5.3 Inter-island cable network balance for THIS island's connected-
+   *  cable component this tick. When `cableComponent.unified === true`,
+   *  Pass 3 replaces this island's local `producedW / consumedW` brownout
+   *  with the component-wide `producedTotal / consumedTotal` brownout —
+   *  every island in the component shares one brownout factor. When `false`
+   *  (or undefined), Pass 3 falls back to local raw balance and cables are
+   *  inert for this tick. Pre-computed once per tick by
+   *  `computeCableNetworkBalance` (routes.ts) and threaded per-island into
+   *  the ctx by main.ts. */
+  readonly cableComponent?: CableComponentBalance;
+}
+
+/**
+ * §5.3 per-component cable-network balance for one tick. Produced by
+ * `computeCableNetworkBalance` (routes.ts); consumed in `computeRates` Pass 3.
+ *
+ * Per-tick, per connected-cable component:
+ *   - `producedTotal` / `consumedTotal` sum local raw W across every island
+ *     in the component (pre-Singularity-Battery — the battery is local-only).
+ *   - `requiredTransmission = min(surplus, deficit)` is the wattage that
+ *     must physically traverse cables to balance the component.
+ *   - The gate passes iff `cableCapacityTotal >= requiredTransmission`. T5
+ *     Spacetime Anchor links (`route.type === 'spacetime'`) count as
+ *     infinite-capacity for this gate, so any component containing one
+ *     trivially passes.
+ *   - When `unified === true`, every island in the component shares the
+ *     brownout factor `min(1, producedTotal / consumedTotal)`. When false,
+ *     each island falls back to its own local balance (cables inert for
+ *     this tick). Binary — no partial flow.
+ *
+ * Islands with no cable / spacetime route touching them get a synthetic
+ * trivial component (`unified: false`, capacity 0, equivalent to "no cables").
+ */
+export interface CableComponentBalance {
+  readonly unified: boolean;
+  readonly producedTotal: number;
+  readonly consumedTotal: number;
+  readonly cableCapacityTotal: number;
+  readonly requiredTransmission: number;
 }
 
 /**
@@ -823,13 +857,9 @@ export function computeRates(
     powerConsumed += (GENESIS_POWER_KW[targetTier]! * 1000) / skillMul.powerConsumption;
   }
 
-  // §5.3: cable inflow from inter-island Power Substation routes. Treated
-  // as a virtual producer on the destination side. Source-side deduction
-  // is intentionally OUT of scope (free wattage on dest) — re-evaluate if
-  // balance shifts during ship-balance review.
-  powerProduced += ctx?.cableInflowW ?? 0;
-
-  // §13.3 Singularity Battery — cover deficit from stored energy.
+  // §13.3 Singularity Battery — cover deficit from stored energy. Local
+  // only: the battery doesn't contribute wattage to the §5.3 cable network
+  // pool (the network was analysed pre-battery via `computeIslandLocalPower`).
   const batteryCount = validBuildings.filter((b) => b.defId === 'singularity_battery').length;
   const rawProduced = powerProduced;
   const rawConsumed = powerConsumed;
@@ -837,8 +867,24 @@ export function computeRates(
     powerProduced = powerConsumed; // cover full deficit
   }
 
-  const powerFactor =
-    powerConsumed === 0 ? 1 : Math.min(1, powerProduced / powerConsumed);
+  // §5.3 cable-network unification: when this island's connected-cable
+  // component passes the per-tick gate, every island in the component
+  // shares ONE brownout factor computed from component-wide produced /
+  // consumed. Otherwise, fall back to the local raw balance (above) —
+  // cables are inert for this tick. Binary: no partial flow. The Singularity
+  // Battery's local deficit-cover (just above) is bypassed when unified —
+  // a unified component balances at the network level, not per-island.
+  let powerFactor: number;
+  const cableComponent = ctx?.cableComponent;
+  if (cableComponent !== undefined && cableComponent.unified) {
+    powerFactor =
+      cableComponent.consumedTotal === 0
+        ? 1
+        : Math.min(1, cableComponent.producedTotal / cableComponent.consumedTotal);
+  } else {
+    powerFactor =
+      powerConsumed === 0 ? 1 : Math.min(1, powerProduced / powerConsumed);
+  }
 
   // Pass 4: final effective rate. Apply powerFactor only to consumers
   // (buildings declaring `power.consumes > 0`); producers and neutral
