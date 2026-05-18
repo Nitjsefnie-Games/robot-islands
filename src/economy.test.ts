@@ -2220,6 +2220,23 @@ describe('day-night solar modulation (§2.7)', () => {
     expect(power.produced).toBe(100);
   });
 
+  it('§2.7 Sunspire is solar-tagged — produces 0W at deep night (regression: missing `solar: true` flag)', () => {
+    // SPEC §2.7 line 277 explicitly lists Sunspire alongside Solar Panel as
+    // a "solar building" subject to the day-night curve. User-reported bug:
+    // the Sunspire def (60 MW) lacked `power.solar: true`, so the §5.1
+    // producer-summing path never gated its wattage by solarMultiplier and
+    // the network reported full power at night with no other producers.
+    const SUNSPIRE: PlacedBuilding = { id: 'b-sunspire', defId: 'sunspire', x: 0, y: 0 };
+    // §9.7 tier gate: Sunspire is T4, requires islandLevel >= 30 to be active.
+    const state = makeState({
+      buildings: [SUNSPIRE],
+      lastTick: 12 * HOUR, // Night quadrant — solarMultiplier = 0.
+      level: 30,
+    });
+    const { power } = computeRates(state, undefined, 12 * HOUR);
+    expect(power.produced).toBe(0);
+  });
+
   it('mixed island: at night only coal generator contributes; at noon both do', () => {
     // SOLAR (50W) + COAL_GEN (100W) into MINE (40W) + WORKSHOP (60W) = 100W demand.
     const buildings = [SOLAR, COAL_GEN, MINE_PWR, WORKSHOP_PWR];
