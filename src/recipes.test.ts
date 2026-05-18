@@ -315,12 +315,12 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.category).toBe('manufacturing');
   });
 
-  it('relay_sat_assembly has correct inputs, outputs, and cycleSec', () => {
+  it('relay_sat_assembly matches §14.10 spec literal', () => {
     const r = RECIPES.relay_sat_assembly!;
     expect(r.outputs.relay_sat).toBe(1);
     expect(r.inputs.exotic_alloy).toBe(6);
     expect(r.inputs.ai_core).toBe(1);
-    expect(r.inputs.optical_fiber).toBe(50); // rebalanced Task 16.7 (was 200)
+    expect(r.inputs.optical_fiber).toBe(200); // §14.10 spec literal
     expect(r.inputs.orbital_insertion_package).toBe(1);
     expect(r.cycleSec).toBe(1800);
     expect(r.category).toBe('manufacturing');
@@ -382,13 +382,28 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.category).toBe('manufacturing');
   });
 
-  it('antimatter_refinery recipe is unchanged', () => {
+  it('antimatter_refinery matches §7.12 spec literal', () => {
     const r = RECIPES.antimatter_refinery!;
     expect(r.outputs.antimatter_propellant).toBe(1);
-    expect(r.inputs.exotic_alloy).toBe(1);
-    expect(r.inputs.reality_anchor).toBe(1);
-    expect(r.inputs.casimir_energy).toBe(2);
-    expect(r.cycleSec).toBe(7200);
+    expect(r.inputs).toEqual({
+      antimatter_capsule: 1,
+      plasma_containment_vessel: 1,
+      cryogenic_hydrogen: 5,
+    });
+    expect(r.cycleSec).toBe(1800); // 30 min per §7.12
+    expect(r.category).toBe('manufacturing');
+  });
+
+  it('reality_forge matches §7.12 spec literal', () => {
+    const r = RECIPES.reality_forge!;
+    expect(r.outputs).toEqual({ reality_anchor: 1 });
+    expect(r.inputs).toEqual({
+      ai_core: 4,
+      antimatter_capsule: 1,
+      time_crystal: 1,
+      exotic_alloy: 1,
+    });
+    expect(r.cycleSec).toBe(86400); // 24h per §7.12
     expect(r.category).toBe('manufacturing');
   });
 
@@ -1630,17 +1645,6 @@ describe('§7.7 double output of memory_lab + processor_fab + compute_module_fab
   });
   it('compute_module_fab outputs computing_module: 2 (was 1, XP-net-negative fix)', () => {
     expect(RECIPES.compute_module_fab!.outputs).toEqual({ computing_module: 2 });
-  });
-});
-
-describe('§14.10 relay_sat optical_fiber input reduction (Task 16.7)', () => {
-  it('relay_sat_assembly inputs optical_fiber: 50 (was 200)', () => {
-    expect(RECIPES.relay_sat_assembly!.inputs).toEqual({
-      exotic_alloy: 6,
-      ai_core: 1,
-      optical_fiber: 50,
-      orbital_insertion_package: 1,
-    });
   });
 });
 

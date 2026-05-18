@@ -1258,16 +1258,11 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
 
   // ---------------------------------------------------------------------------
-  // T5 Transcendent chain (§6.6 / §7.12 / §8.10 / step 13)
+  // T5 Transcendent chain (§6.6 / §7.12 / §8.10)
   // ---------------------------------------------------------------------------
-  // Two recipes ship in step 13 to demonstrate the chain end-to-end:
   //   casimir_tap     → 1 casimir_energy / 1800s (no inputs; §8.10 "free vacuum energy")
-  //   reality_forge   → 1 reality_anchor / 600s from 2 exotic_alloy + 1 ai_core + 1 casimir_energy
-  // The §7.12 spec recipe ("4 ai_core + 1 antimatter_capsule + 1 time_crystal + 1 exotic_alloy
-  // + 24h cycle → Reality Anchor") is the full T5 chain; the step-13 placeholder skips
-  // antimatter_capsule + time_crystal (not yet in catalog) and condenses cycle time to 600s
-  // so the demo chain is exercisable without a 24-hour wait. Full §7.12 recipe
-  // STILL-DEFERRED to step 14 alongside the missing T4 raws.
+  //   reality_forge   → 1 reality_anchor / 24h cycle from §7.12 spec literal
+  //                     (4 ai_core + 1 antimatter_capsule + 1 time_crystal + 1 exotic_alloy)
 
   // T5 raw extraction — placeholder for the §8.10 Casimir Tap. Spec cycle
   // 30 min to 4 h; already at 1800s (30 min lower bound) — skip rebalance
@@ -1339,10 +1334,10 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // T5 manufacturing — Reality Forge. Rebalanced for idle-game scale, step #19 (×8: was 600s).
+  // T5 manufacturing — Reality Forge. §7.12 spec literal: 24h cycle.
   reality_forge: {
-    cycleSec: 4800, // rebalanced for idle-game scale, step #19 (×8: was 600s)
-    inputs: { exotic_alloy: 2, ai_core: 1, casimir_energy: 1 },
+    cycleSec: 86400, // 24h per §7.12
+    inputs: { ai_core: 4, antimatter_capsule: 1, time_crystal: 1, exotic_alloy: 1 },
     outputs: { reality_anchor: 1 },
     category: 'manufacturing',
   },
@@ -1997,11 +1992,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // §11.7 / §14.10: Antimatter Refinery produces Antimatter Propellant
-  // (T6 launch fuel). 2-hour cycle.
+  // §7.12 / §11.7 / §14.10: Antimatter Refinery produces Antimatter Propellant
+  // (T6 launch fuel). §7.12 spec literal: 30-min cycle ties T6 fuel back to
+  // the T4 antimatter chain (antimatter_capsule + plasma_containment_vessel
+  // + cryogenic_hydrogen).
   antimatter_refinery: {
-    cycleSec: 7200,
-    inputs: { exotic_alloy: 1, reality_anchor: 1, casimir_energy: 2 },
+    cycleSec: 1800, // 30 min per §7.12
+    inputs: { antimatter_capsule: 1, plasma_containment_vessel: 1, cryogenic_hydrogen: 5 },
     outputs: { antimatter_propellant: 1 },
     category: 'manufacturing',
   },
@@ -2017,8 +2014,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Relay Sat Assembly. 30-min cycle.
   relay_sat_assembly: {
     cycleSec: 1800,
-    // optical_fiber reduced 200→50 (Agent C: extreme ratio, suspected copy-paste from spec).
-    inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 50, orbital_insertion_package: 1 },
+    inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 200, orbital_insertion_package: 1 },
     outputs: { relay_sat: 1 },
     category: 'manufacturing',
   },
