@@ -56,16 +56,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   building exists with nothing to dispatch.
   *(Flagged by Agent A.)*
 
-- **§2.7 `solarMultiplier` is piecewise-constant, not linear ramp.**
-  `src/daynight.ts:60-71` returns dawn=0.5, day=1.0, dusk=0.5,
-  night=0.0. Spec §2.7: "Dawn: 50% output (linear ramp 0 → 100)";
-  "Dusk: 50% output (linear ramp 100 → 0)". The module head justifies
-  the simplification as a time-average — fine for offline integrals,
-  wrong for any UI readout or weather-phase-boundary code that samples
-  instantaneously. Worth either implementing the ramp or documenting
-  the deviation in SPEC.md.
-  *(Flagged by Agents A, B.)*
-
 - **§5.3 cable inflow doesn't deduct source W.** `src/routes.ts:147-164`
   `cableInflowForIsland` adds capacity to the destination without
   removing it from the source. Comment acknowledges. Spec §5.3 says

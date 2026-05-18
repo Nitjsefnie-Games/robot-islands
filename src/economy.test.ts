@@ -2141,22 +2141,46 @@ describe('day-night solar modulation (§2.7)', () => {
     expect(power.produced).toBe(50);
   });
 
-  it('Solar at dawn produces half nameplate (50W × 0.5 = 25W)', () => {
+  it('Solar at dawn midpoint produces half nameplate (50W × 0.5 = 25W)', () => {
+    // §2.7 ramp: dawn linearly interpolates 0 → 1 over the quadrant.
+    // At the dawn midpoint (t = -6h or equivalently 18h), mul = 0.5.
     const state = makeState({
       buildings: [SOLAR],
-      lastTick: 16 * HOUR, // Dawn quadrant
+      lastTick: 18 * HOUR, // Dawn quadrant midpoint
     });
-    const { power } = computeRates(state, undefined, 16 * HOUR);
+    const { power } = computeRates(state, undefined, 18 * HOUR);
     expect(power.produced).toBe(25);
   });
 
-  it('Solar at dusk produces half nameplate (50W × 0.5 = 25W)', () => {
+  it('Solar at dawn start produces zero (50W × 0.0)', () => {
+    // §2.7 ramp: at dawn start, mul = 0.
     const state = makeState({
       buildings: [SOLAR],
-      lastTick: 4 * HOUR, // Dusk quadrant
+      lastTick: 15 * HOUR, // Dawn start (Night→Dawn boundary)
     });
-    const { power } = computeRates(state, undefined, 4 * HOUR);
+    const { power } = computeRates(state, undefined, 15 * HOUR);
+    expect(power.produced).toBe(0);
+  });
+
+  it('Solar at dusk midpoint produces half nameplate (50W × 0.5 = 25W)', () => {
+    // §2.7 ramp: dusk linearly interpolates 1 → 0 over the quadrant.
+    // At the dusk midpoint (t = +6h), mul = 0.5.
+    const state = makeState({
+      buildings: [SOLAR],
+      lastTick: 6 * HOUR, // Dusk quadrant midpoint
+    });
+    const { power } = computeRates(state, undefined, 6 * HOUR);
     expect(power.produced).toBe(25);
+  });
+
+  it('Solar at dusk start produces full nameplate (50W × 1.0)', () => {
+    // §2.7 ramp: at dusk start, mul = 1.
+    const state = makeState({
+      buildings: [SOLAR],
+      lastTick: 3 * HOUR, // Dusk start (Day→Dusk boundary)
+    });
+    const { power } = computeRates(state, undefined, 3 * HOUR);
+    expect(power.produced).toBe(50);
   });
 
   it('Solar at midnight produces zero (50W × 0.0)', () => {
@@ -2166,6 +2190,23 @@ describe('day-night solar modulation (§2.7)', () => {
     });
     const { power } = computeRates(state, undefined, 12 * HOUR);
     expect(power.produced).toBe(0);
+  });
+
+  it('§2.7 deep night: solar producer + consumer → balance has zero solar contribution', () => {
+    // Regression guard for the "solar producing power during night" bug.
+    // Solar (50W) alone + a Mine (40W consumer). At deep night t=12h the
+    // multiplier is 0.0, so `power.produced` must be 0 — confirming
+    // `def.power.solar === true` IS being gated by solarMultiplier(t).
+    // Sample mid-night (12h), early-night (9h + 1ms), late-night (15h - 1ms).
+    for (const t of [9 * HOUR + 1, 12 * HOUR, 15 * HOUR - 1]) {
+      const state = makeState({
+        buildings: [SOLAR, MINE_PWR],
+        inventory: { ...blankInventory() },
+        lastTick: t,
+      });
+      const { power } = computeRates(state, undefined, t);
+      expect(power.produced).toBe(0);
+    }
   });
 
   it('non-solar producers ignore the multiplier (Coal Gen at night still produces 100W)', () => {
@@ -2193,14 +2234,14 @@ describe('day-night solar modulation (§2.7)', () => {
     expect(nightPower.produced).toBe(100);
   });
 
-  it('offline catchup over 24h integrates phase boundaries (matches per-quadrant ticking)', () => {
-    // Solar (50W, modulated) feeds a Mine (40W consumer, no input recipe — pure
-    // power-throttle producer). Across one full day starting at the Day→Dusk
-    // boundary (t = 3h):
-    //   [3h, 9h)  Dusk  mul 0.5 → 25W/40W → factor 0.625 → mine 0.02 × 0.625
-    //   [9h, 15h) Night mul 0   → 0W/40W  → factor 0     → mine 0
-    //   [15h, 21h) Dawn mul 0.5 → 25W/40W → factor 0.625 → mine 0.02 × 0.625
-    //   [21h, 27h) Day  mul 1.0 → 50W/40W → factor 1.0   → mine 0.02
+  it('offline catchup over 24h integrates ramp sub-segments (matches per-quadrant ticking)', () => {
+    // Solar (50W, modulated by §2.7 linear ramp) feeds a Mine (40W consumer,
+    // no input recipe — pure power-throttle producer). Across one full day
+    // starting at the Day→Dusk boundary (t = 3h), the §15.3 integrator clamps
+    // each segment to the next §2.7 sub-boundary (`SOLAR_RAMP_SEGMENTS=8`
+    // sub-segments per dawn/dusk quadrant, plus the day/night quadrant
+    // transitions). Within each sub-segment the integrator samples mul at
+    // segment start.
     //
     // Use `eternalServitor: true` to disable §4.7 maintenance — otherwise the
     // T1 Mine's 12h threshold + 4h ramp would entangle the day-night signal
@@ -2233,9 +2274,20 @@ describe('day-night solar modulation (§2.7)', () => {
     expect(offline.inventory.iron_ore).toBeCloseTo(stepwise.inventory.iron_ore, 6);
     expect(offline.lastTick).toBe(end);
 
-    // Sanity-check the magnitude: Dusk + Dawn each produce 0.0125/s × 21600s = 270,
-    // Night = 0, Day = 0.02 × 21600 = 432 → total 972.
-    expect(offline.inventory.iron_ore).toBeCloseTo(972, 3);
+    // Sanity-check the magnitude. Under SOLAR_RAMP_SEGMENTS=8 sub-segmenting:
+    //   Dusk (6h, mul 1→0): start-of-sub-seg muls = [1, 7/8, 6/8, ..., 1/8];
+    //     factor = min(1, 1.25 × mul); sum factors = 5.28125;
+    //     iron = 0.02/s × 5.28125 × 2700s = 285.1875
+    //   Night (6h, mul 0): iron = 0
+    //   Dawn (6h, mul 0→1): start-of-sub-seg muls = [0, 1/8, 2/8, ..., 7/8];
+    //     sum factors = 4.28125; iron = 0.02 × 4.28125 × 2700 = 231.1875
+    //   Day (6h, mul 1): iron = 0.02 × 21600 = 432
+    // Total = 285.1875 + 0 + 231.1875 + 432 = 948.375.
+    // (Dawn under-shoots and Dusk over-shoots by symmetric amounts; the
+    // FULL-window integral over dawn + dusk is preserved exactly because the
+    // mid-point Riemann sum on a linear ramp equals the analytic integral.
+    // The asymmetry here arises only because the throttle clips one side.)
+    expect(offline.inventory.iron_ore).toBeCloseTo(948.375, 3);
   });
 
   it('offline catchup with solar-only producer drops to zero at night', () => {
@@ -2253,13 +2305,47 @@ describe('day-night solar modulation (§2.7)', () => {
     });
     advanceIsland(state, 24 * HOUR);
     // Quadrants in this window:
-    //   [0, 3h)   Day  rate 0.02 → 0.02 × 10800 = 216
-    //   [3h, 9h)  Dusk rate 0.0125 → 270
+    //   [0, 3h)   Day   rate 0.02 → 216
+    //   [3h, 9h)  Dusk  ramp-sub-seg sum → 285.1875 (see prior test for derivation)
     //   [9h, 15h) Night rate 0 → 0
-    //   [15h, 21h) Dawn rate 0.0125 → 270
-    //   [21h, 24h) Day rate 0.02 → 0.02 × 10800 = 216
-    // Total 972.
-    expect(state.inventory.iron_ore).toBeCloseTo(972, 3);
+    //   [15h, 21h) Dawn ramp-sub-seg sum → 231.1875
+    //   [21h, 24h) Day  rate 0.02 → 216
+    // Total = 216 + 285.1875 + 0 + 231.1875 + 216 = 948.375.
+    expect(state.inventory.iron_ore).toBeCloseTo(948.375, 3);
+  });
+
+  it('§2.7 unmetered solar integral over a full dawn+dusk window matches analytic 0.5', () => {
+    // Producer-only assertion (no throttle, no consumer): the sum of
+    // start-of-sub-segment samples over a full dawn quadrant equals
+    // 0 + 1/8 + 2/8 + ... + 7/8 = 28/8 = 3.5, times sub-segment width (6h/8).
+    // Combined with dusk's 1 + 7/8 + ... + 1/8 = 36/8 = 4.5, the dawn+dusk
+    // integral equals (3.5 + 4.5) × QUADRANT_MS/8 = QUADRANT_MS — i.e. one
+    // full quadrant of "average mul = 0.5", matching the analytic integral
+    // of the linear ramp over both quadrants exactly. (Tested via
+    // `power.produced` snapshot since the unthrottled producer's wattage is
+    // the cleanest observable for the ramp value itself; we step through
+    // sub-boundaries and check the sub-segment-weighted sum.)
+    const HOUR_MS = HOUR;
+    // Sum of (mul at sub-segment start × sub-segment width) over dawn + dusk:
+    let weightedSum = 0;
+    const subWidthMs = (6 * HOUR_MS) / 8;
+    // Dawn samples at the start of each sub-segment.
+    for (let i = 0; i < 8; i++) {
+      const t = 15 * HOUR_MS + i * subWidthMs; // dawn quadrant t ∈ [15h, 21h)
+      const state = makeState({ buildings: [SOLAR], lastTick: t });
+      const { power } = computeRates(state, undefined, t);
+      weightedSum += (power.produced / 50) * subWidthMs;
+    }
+    // Dusk samples.
+    for (let i = 0; i < 8; i++) {
+      const t = 3 * HOUR_MS + i * subWidthMs; // dusk quadrant t ∈ [3h, 9h)
+      const state = makeState({ buildings: [SOLAR], lastTick: t });
+      const { power } = computeRates(state, undefined, t);
+      weightedSum += (power.produced / 50) * subWidthMs;
+    }
+    // Analytic integral of the ramp over dawn + dusk = 2 × (0.5 × QUADRANT)
+    // = one full quadrant (6h in ms).
+    expect(weightedSum).toBeCloseTo(6 * HOUR_MS, 3);
   });
 });
 
