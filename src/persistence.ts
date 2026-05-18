@@ -58,6 +58,8 @@ import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { VictoryCondition } from './endgame.js';
 import { cumulativeSkillPointsForLevel, type NodeId, type SubPathId } from './skilltree.js';
+import type { OceanCellSpec } from './ocean-cell.js';
+import { generateOceanTerrain } from './ocean-gen.js';
 import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
@@ -88,6 +90,16 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  visually jarring and impossible to migrate cleanly. Rejecting v3
  *  outright (the caller falls back to a fresh world) avoids the half-state.
  *
+ *  Ocean-layer §2 (v4 → v5): SCHEMA_VERSION was bumped 4 → 5 to add the
+ *  `oceanCells` + `depthRevealedCells` fields, but the STORAGE_KEY stays
+ *  at `:v4` because v4 saves are MIGRATED in-place (re-derive ocean
+ *  terrain from the world seed via `generateOceanTerrain`, default depth
+ *  reveals to empty). Bumping the key would silently orphan every v4 save
+ *  in the wild instead of migrating it. The "v4" in the key name is now
+ *  a misnomer — it persists for back-compat read access. Future bumps
+ *  that ARE breaking (no clean migration path) should reintroduce a key
+ *  suffix change so the loader doesn't even see the stale blob.
+ *
  *  See the comment on `SCHEMA_VERSION` for the reasoning. */
 export const STORAGE_KEY = 'robot-islands:save:v4';
 
@@ -113,8 +125,17 @@ export const STORAGE_KEY = 'robot-islands:save:v4';
  *  overlap 16 tiles, lazy per-cell via `ensureCellGenerated`) cannot be
  *  back-compatibly applied to v3 saves whose discovered-but-unpopulated
  *  specs were rolled by the old denser placeholder. See STORAGE_KEY for
- *  the full reasoning. */
-export const SCHEMA_VERSION = 4 as const;
+ *  the full reasoning.
+ *
+ *  Ocean-layer §2 (v4 → v5): bumped 4 → 5 to add the `oceanCells` and
+ *  `depthRevealedCells` fields. Unlike the v3 → v4 jump, this IS
+ *  cleanly migratable: `generateOceanTerrain(seed, islands)` is
+ *  deterministic, so a v4 save's ocean terrain is re-derived from its
+ *  stored `seed` + `islands` on load and `depthRevealedCells` defaults
+ *  to empty (legacy saves have surface visibility but no depth
+ *  knowledge yet). The migration lives in `migrateV4ToV5` and runs
+ *  unconditionally inside `deserializeWorld` before the version check. */
+export const SCHEMA_VERSION = 5 as const;
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -184,6 +205,17 @@ export interface SerializedWorld {
    *  generator has already considered. Serialized as a sorted array so
    *  the blob diffs cleanly between saves (mirrors `revealedCells`). */
   readonly generatedCells?: ReadonlyArray<string>;
+  /** Ocean-layer §2 — sparse ocean-terrain map as `[key, spec]` pairs
+   *  (Maps don't survive JSON; mirrors the `subPathProgress` idiom).
+   *  Sorted by key for deterministic blob output. Absent on v4 saves
+   *  before the v4 → v5 migration runs; backfilled by re-deriving from
+   *  the world seed via `generateOceanTerrain`. */
+  readonly oceanCells?: ReadonlyArray<readonly [string, OceanCellSpec]>;
+  /** Ocean-layer §5 — depth-revealed cell keys as a sorted array
+   *  (mirrors `revealedCells`). Absent on v4 saves; defaults to empty
+   *  via the v4 → v5 migration (legacy players have surface vision but
+   *  no depth knowledge until they build a sonar revealer). */
+  readonly depthRevealedCells?: ReadonlyArray<string>;
 }
 
 /** Top-level snapshot. The `v` field is the schema-version anchor: this
@@ -284,6 +316,17 @@ export function serializeWorld(
       // (mirror of `revealedCells`). Absent if the world predates the
       // field (`makeInitialWorld` always seeds it on a fresh game).
       generatedCells: world.generatedCells ? [...world.generatedCells].sort() : undefined,
+      // Ocean-layer §2 — Map → sorted array of [key, spec] pairs.
+      // Sorted by cell key for deterministic blob output (mirror of
+      // `revealedCells` / `generatedCells`). Maps don't survive
+      // `JSON.stringify`, so the array-of-pairs idiom is the
+      // round-trip-safe shape (matches `SerializedIslandState.subPathProgress`).
+      oceanCells: [...world.oceanCells.entries()].sort((a, b) =>
+        a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
+      ),
+      // Ocean-layer §5 — sorted array (Sets don't survive
+      // `JSON.stringify`). Sort for diff-friendly save blobs.
+      depthRevealedCells: [...world.depthRevealedCells].sort(),
     },
     islandStates: stateEntries,
   };
@@ -337,11 +380,60 @@ function rekeyCollidingBuildingIds(
   });
 }
 
+/** Ocean-layer §2 — migrate a v4 snapshot in-place to the v5 shape.
+ *  Idempotent: a snapshot already at v5 returns unchanged.
+ *
+ *  v4 saves predate the `oceanCells` + `depthRevealedCells` fields. The
+ *  migration re-derives terrain from the snapshot's stored `seed` +
+ *  `islands` via `generateOceanTerrain` (deterministic — same inputs
+ *  always produce the same map) and defaults the depth-revealed set to
+ *  empty (legacy players have surface visibility but have not built any
+ *  sonar revealer yet, so no cells are depth-known).
+ *
+ *  The `seed` field on a v4 save defaults to `WORLD_SEED` when absent
+ *  (a snapshot minted before the seed was persisted at all); the same
+ *  fallback that `deserializeWorld` already applies on the live shape. */
+function migrateV4ToV5(snapshot: SaveSnapshot): SaveSnapshot {
+  // Pre-migration, the snapshot's `v` field may be 4 (pre-bump) instead
+  // of the SCHEMA_VERSION literal (5) baked into the SaveSnapshot type.
+  // Widen via `unknown` so the literal-type comparison check below isn't
+  // rejected by TS (which knows `v: typeof SCHEMA_VERSION === 5` has no
+  // overlap with `4`). After the migration completes, `v` is set to
+  // SCHEMA_VERSION and the structural type is honest again.
+  if ((snapshot.v as unknown as number) !== 4) return snapshot;
+  const seed =
+    'seed' in snapshot.world && typeof (snapshot.world as { seed?: unknown }).seed === 'string'
+      ? (snapshot.world as { seed: string }).seed
+      : WORLD_SEED;
+  // Re-derive the ocean terrain. `generateOceanTerrain` is pure and only
+  // reads each spec's static placement fields (cx, cy, radii, biome) —
+  // the missing `terrainAt` closure on serialized specs is irrelevant.
+  const oceanCellsMap = generateOceanTerrain(seed, snapshot.world.islands as IslandSpec[]);
+  const oceanCells: ReadonlyArray<readonly [string, OceanCellSpec]> = [...oceanCellsMap.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return {
+    ...snapshot,
+    v: SCHEMA_VERSION,
+    world: {
+      ...snapshot.world,
+      oceanCells,
+      depthRevealedCells: [],
+    },
+  };
+}
+
 export function deserializeWorld(
   snapshot: SaveSnapshot,
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
+  // Ocean-layer §2 — migrate v4 snapshots in-place before the version
+  // check. v4 is the only previously-supported version still in the
+  // wild; older shapes (v1-v3) are rejected by the check below.
+  // `v` is typed as `typeof SCHEMA_VERSION` on a current SaveSnapshot,
+  // so the v=4 check has to widen via unknown — same idiom as inside
+  // `migrateV4ToV5`. After the migration runs, the literal type matches.
+  if ((snapshot.v as unknown as number) === 4) snapshot = migrateV4ToV5(snapshot);
   if (snapshot.v !== SCHEMA_VERSION) {
     throw new Error(`persistence: unknown schema version ${String(snapshot.v)}`);
   }
@@ -541,14 +633,18 @@ export function deserializeWorld(
     // populated spec's centre as a safety net for hand-edited saves where
     // `generatedCells` was trimmed below the populated set.
     generatedCells: deserializeGeneratedCells(islands, snapshot.world.generatedCells),
-    // Ocean-layer §2 forward-compat backfill: pre-§ocean saves predate
-    // both fields. Default each to empty — Task 1 only introduces the
-    // data primitives; the v4→v5 schema bump and `generateOceanTerrain`
-    // re-derivation land in the dedicated ocean-gen + persistence tasks.
-    // Until then a loaded world reads every cell as the implicit `deep`
-    // via `terrainAt`'s fallback, and no ocean cells are depth-revealed.
-    oceanCells: new Map(),
-    depthRevealedCells: new Set(),
+    // Ocean-layer §2 — rebuild the live Map from the serialized array of
+    // [key, spec] pairs. After the v4 → v5 migration runs above, every
+    // snapshot carries an `oceanCells` array (re-derived from the seed
+    // for v4 inputs; round-tripped verbatim for v5 inputs). Defensive
+    // `?? []` for a partially-migrated hand-crafted snapshot — `new
+    // Map(undefined)` would throw.
+    oceanCells: new Map(snapshot.world.oceanCells ?? []),
+    // Ocean-layer §5 — rebuild the live Set from the serialized array.
+    // v4 → v5 migration defaults this to []; v5 saves round-trip
+    // verbatim. Pure forward-compat: a v5 snapshot missing the field is
+    // treated as "no depth reveals yet".
+    depthRevealedCells: new Set(snapshot.world.depthRevealedCells ?? []),
   };
 
   const islandStates = new Map<string, IslandState>();
@@ -842,7 +938,10 @@ export async function clearSave(): Promise<void> {
 export function isValidSaveSnapshot(value: unknown): value is SaveSnapshot {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  if (v['v'] !== SCHEMA_VERSION) return false;
+  // Accept v4 (auto-migrated to v5 on load) and the current SCHEMA_VERSION.
+  // Mirrors `loadWorld`'s version gate so an imported v4 blob hits the
+  // same migration path as one loaded from IDB.
+  if (v['v'] !== 4 && v['v'] !== SCHEMA_VERSION) return false;
   if (typeof v['savedAt'] !== 'number') return false;
   if (typeof v['savedAtPerf'] !== 'number') return false;
   if (typeof v['world'] !== 'object' || v['world'] === null) return false;
@@ -873,7 +972,16 @@ export async function loadWorld(): Promise<
   try {
     const stored = (await get(STORAGE_KEY)) as SaveSnapshot | undefined;
     if (stored === undefined) return null;
-    if (stored.v !== SCHEMA_VERSION) {
+    // Ocean-layer §2 migration: v4 saves are READABLE — `deserializeWorld`
+    // migrates them to v5 in-place. Only versions outside the migratable
+    // range get bounced (the caller falls back to a fresh world). When a
+    // future bump (v5 → v6) adds another migration path, expand this
+    // check rather than reading every accumulated version.
+    // Cast via unknown to compare against the legacy literal `4` — `v` is
+    // typed as the SCHEMA_VERSION literal (`5`) on the SaveSnapshot
+    // interface, so a direct `=== 4` check is rejected for non-overlap.
+    const ver = stored.v as unknown as number;
+    if (ver !== 4 && ver !== SCHEMA_VERSION) {
       console.warn(
         `[robot-islands] loadWorld: ignoring snapshot with unknown v=${String(stored.v)}`,
       );
