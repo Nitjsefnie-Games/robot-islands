@@ -437,8 +437,24 @@ export function computeRates(
    *  to `state.lastTick` so test callers with `lastTick = 0` see full solar
    *  output (the §2.7 epoch offset places `nowMs = 0` mid-Day). The
    *  piecewise integrator passes the segment-start `t` here so each segment
-   *  uses a constant solar multiplier matching the segment's quadrant. */
+   *  uses a constant solar multiplier matching the segment's quadrant.
+   *
+   *  NOTE: this parameter is in `performance.now()` domain (matches
+   *  `state.lastTick`). It is NOT the right domain for `solarMultiplier`,
+   *  which per SPEC §2.7 ("purely time-driven and does not depend on the
+   *  player's session") must be evaluated in wall-clock domain so the
+   *  day-night cycle survives page refreshes. Pass `solarClockMs` to override
+   *  the time the solar multiplier samples; if omitted it falls back to
+   *  `nowMs` for back-compat with tests that pass synthetic wall-clock-like
+   *  values via `nowMs` (e.g. `12 * HOUR` for midnight). */
   nowMs?: number,
+  /** §2.7 wall-clock time used SPECIFICALLY for the solar multiplier sample.
+   *  Wall-clock domain (Date.now()) so the day-night cycle is independent of
+   *  per-page `performance.now()` and survives refreshes. Production callers
+   *  pass `Date.now()` (HUD path) or `t_perf + (Date.now() - performance.now())`
+   *  (offline-catchup integrator). Tests typically omit it — the fallback to
+   *  `nowMs` preserves the existing `lastTick = 12*HOUR ⇒ Night` convention. */
+  solarClockMs?: number,
 ): {
   byBuilding: ReadonlyArray<BuildingRate>;
   production: Record<ResourceId, number>;
@@ -472,7 +488,11 @@ export function computeRates(
   // segment-start time `t` so each segment is integrated at the quadrant's
   // constant multiplier.
   const t = nowMs ?? state.lastTick;
-  const solarMul = solarMultiplier(t);
+  // §2.7 wall-clock cycle: prefer the wall-clock sample if the caller passed
+  // one (production code does — see param doc). Tests typically omit it, so
+  // fall back to `t` and keep the long-standing `lastTick = 12*HOUR ⇒ Night`
+  // fixture convention working unchanged.
+  const solarMul = solarMultiplier(solarClockMs ?? t);
   const varianceFactor = computeVarianceFactor(state, modifierMul, t);
   // The §5.1 active flag depends on inputAvail, and inputAvail must be
   // computed at NOMINAL rate (independent of powerFactor) to avoid a circular
@@ -1201,8 +1221,27 @@ export function advanceIsland(
   state: IslandState,
   nowMs: number,
   ctx?: RatesContext,
+  /** §2.7 wall-clock anchor (Date.now()) corresponding to `nowMs`. Production
+   *  callers MUST pass this so the day-night cycle is independent of
+   *  per-page `performance.now()` and survives refreshes (spec: "purely
+   *  time-driven and does not depend on the player's session"). The
+   *  integrator computes a `wallOffset = wallClockNowMs - nowMs` once and
+   *  threads `t + wallOffset` to both `solarMultiplier` (via
+   *  `computeRates(.., solarClockMs)`) AND the segment-boundary helpers
+   *  (`nextPhaseBoundaryMs`, `nextSolarBoundaryMs`) so phase transitions
+   *  inside a multi-hour offline catchup fall on the wall-clock quadrant
+   *  edges, not on the page-local perf-clock quadrant edges.
+   *
+   *  When omitted, falls back to using `nowMs` directly as the wall-clock —
+   *  the long-standing test convention (`nowMs = 12*HOUR ⇒ Night`). */
+  wallClockNowMs?: number,
 ): void {
   const { specMul = IDENTITY_SPECIALIZATION, defs = BUILDING_DEFS } = ctx ?? {};
+  // §2.7 perf→wall offset. `wallClockNowMs - nowMs` is constant across this
+  // advance call, so each segment's wall-clock time is `t + wallOffset`.
+  // Tests that omit `wallClockNowMs` fall back to `wallOffset = 0` — the
+  // existing "lastTick is the wall clock" convention.
+  const wallOffset = (wallClockNowMs ?? nowMs) - nowMs;
   if (nowMs <= state.lastTick) {
     state.lastTick = nowMs;
     return;
@@ -1253,7 +1292,14 @@ export function advanceIsland(
     // §2.7: pass `t` so the solar multiplier reflects this segment's
     // quadrant, not start-of-tick. Without this, a 24h offline gap would
     // integrate one constant solar multiplier across all four phases.
-    const { production, consumption, net, power } = computeRates(state, effectiveCtx, t);
+    // Wall-clock conversion: `t + wallOffset` lifts the perf-domain segment
+    // time into the Date.now() domain `solarMultiplier` expects per spec.
+    const { production, consumption, net, power } = computeRates(
+      state,
+      effectiveCtx,
+      t,
+      t + wallOffset,
+    );
     // §13 auto-flip: first local production of ai_core / ascendant_core
     if (!state.aiCoreCrafted && (production.ai_core ?? 0) > 0) {
       state.aiCoreCrafted = true;
@@ -1282,14 +1328,21 @@ export function advanceIsland(
     // rate invariant of §15.3 still holds across day-night transitions. A
     // quadrant lasts 6h; offline catchup of N days produces ≤ 4N + extras
     // segments instead of an under-integrated single segment.
-    const nextPhaseMs = nextPhaseBoundaryMs(t);
+    //
+    // The boundary helpers expect wall-clock domain (the cycle is wall-clock
+    // anchored per spec §2.7). Lift `t` by `wallOffset`, compute the next
+    // wall-clock boundary, then drop back to perf-domain by subtracting
+    // `wallOffset` so the segment-end clamp at `Math.min(...)` below stays
+    // in the same domain as `nowMs` / `nextEventMs` / etc.
+    const nextPhaseMs = nextPhaseBoundaryMs(t + wallOffset) - wallOffset;
     // §2.7 ramp sub-segment boundary: inside Dawn / Dusk, solarMultiplier
     // varies linearly. The §15.3 piecewise-constant-rate invariant requires
     // each segment to integrate a constant rate, so we sub-divide the ramp
     // into `SOLAR_RAMP_SEGMENTS` evenly-spaced sub-segments and clamp the
     // segment end to the next ramp tick. Inside the flat Day / Night
     // quadrants this collapses to `nextPhaseBoundaryMs(t)`.
-    const nextSolarMs = nextSolarBoundaryMs(t) ?? Infinity;
+    const nextSolarBoundaryWall = nextSolarBoundaryMs(t + wallOffset);
+    const nextSolarMs = nextSolarBoundaryWall === null ? Infinity : nextSolarBoundaryWall - wallOffset;
     // §13.3 bound segment to the end of active acceleration so the multiplier
     // stays constant within the segment.
     let nextAccelMs = Infinity;
