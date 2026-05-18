@@ -12,10 +12,9 @@
 //        island ellipse (§3.4), no tile may overlap any existing footprint,
 //        and the def must be tier-unlocked (§9.2 / §13.1).
 //   §4.4 adjacency — metadata flagged on each PlacedBuilding; the heat-source
-//        side (§5.2) and reactor toxicity are wired. The broader §4.5
-//        catalog of buff/gating adjacencies (Cooling Tower → Crystal Lab
-//        unlocks, Wastewater Treatment → Refinery efficiency, etc.) is
-//        STILL-DEFERRED.
+//        side (§5.2) and reactor toxicity are wired. §4.5 Wastewater
+//        Treatment and Exhaust Scrubber soft-gates are live. The Cooling
+//        Tower → Crystal Lab unlock remains STILL-DEFERRED.
 //
 // Other deferrals documented at the call sites:
 //   - Terrain-tile requirements per §4.3 / §8.1 are implemented.

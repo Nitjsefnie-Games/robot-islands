@@ -192,11 +192,10 @@ export interface IslandState {
    *  so the deductions in `accrueXp` never see undefined. */
   funnelPending: Record<ResourceId, number>;
   /** §9.4 declared specialization role, or `null` for the Generalist
-   *  baseline. Step-10 mutates this exactly once per island (declaration is
-   *  one-way; the §9.7 Tier Reset path that clears it back to null is
-   *  STILL-DEFERRED). The economy reads this each frame via
-   *  `effectiveSpecializationMultipliers` to fold the role's buff/penalty
-   *  into the rate, storage, and XP multipliers. */
+   *  baseline. Declaration is one-way except via §9.7 Tier Reset, which
+   *  clears it back to null — see `tier-reset.ts`. The economy reads this
+   *  each frame via `effectiveSpecializationMultipliers` to fold the role's
+   *  buff/penalty into the rate, storage, and XP multipliers. */
   specializationRole: RoleId | null;
   /** Wall-clock timestamp (ms) at which the player declared the current role.
    *  Null until the first declaration. Carries no economic semantics in

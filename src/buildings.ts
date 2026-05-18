@@ -67,10 +67,8 @@ export interface PlacedBuilding {
   readonly maintainedAt?: number;
   /** §13.3 Eternal Servitor flag. When `true`, the building skips all
    *  maintenance accrual and degradation (and, when wired, fuel-consumption
-   *  checks). The Servitor Conversion Kit recipe and the Reality-Forge
-   *  conversion mechanic that flips this flag are STILL-DEFERRED — the flag is
-   *  honoured wherever `maintenanceFactor` / `tryAutoMaintain` read it, but
-   *  nothing in the catalog turns it on yet. */
+   *  checks). Flipped by `convertToServitor` (below in this file), invoked
+   *  from the inspector "Convert" button at `inspector-ui.ts:1372`. */
   readonly eternalServitor?: true;
   /** §14.2 Spaceport tier for launch-success-rate scaling. Optional so legacy
    *  saves and non-upgradable buildings load cleanly (undefined ≡ tier 1). */

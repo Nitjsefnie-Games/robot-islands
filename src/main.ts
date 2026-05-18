@@ -735,10 +735,10 @@ async function main(): Promise<void> {
   // -----------------------------------------------------------------------
   //
   // Step 7 promoted the single home state to a Map keyed by island id, so
-  // routes can dispatch between any two populated islands. The HUD still
-  // tracks the home island only — multi-island HUD is a STILL-DEFERRED step-14
-  // polish concern. `forest-ne` is hardcoded populated for the step-7 demo
-  // (see `world.ts`); settlement vehicles per §12 shipped in step 12.
+  // routes can dispatch between any two populated islands. Multi-island HUD
+  // is live — `hud.ts` paints every populated island. `forest-ne` is
+  // hardcoded populated for the step-7 demo (see `world.ts`); settlement
+  // vehicles per §12 shipped in step 12.
   const islandStates: Map<string, IslandState> = restored
     ? restored.islandStates
     : new Map<string, IslandState>();
