@@ -24,7 +24,8 @@ import {
   tickSatMovement,
   SAT_FUEL_PER_TILE,
   SAT_MOVE_SPEED_TILES_PER_SEC,
-  SAT_MOVE_FAILURE_DEBRIS,
+  SAT_MOVE_MISDROP_FRAC_MIN,
+  SAT_MOVE_MISDROP_FRAC_MAX,
   SCANNER_INITIAL_P_PER_TICK,
   SCANNER_ASYMPTOTE_P_PER_TICK,
   SCANNER_DWELL_TIME_CONSTANT_MS,
@@ -1264,22 +1265,62 @@ describe('§14.6 requestSatMove + tickSatMovement', () => {
     expect(sat.movingTo).toBeUndefined();
   });
 
-  it('tickSatMovement failure destroys satellite and seeds debris at loss cell', () => {
+  it('tickSatMovement failure misdrops the satellite without destroying it', () => {
     const world = makeSatMoveWorld();
     const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0, fuel: 100, locked: true });
     world.satellites.push(sat);
+    const debrisFieldsBefore = world.debrisFields.length;
     // nowMs=3 yields deterministic RNG ≈0.0013 < 0.02 → failure.
     requestSatMove(world, 'sat1', 100, 0, 3);
     const arrivalMs = sat.movingTo!.arrivalMs;
+    const fuelBeforeArrival = sat.fuel;
     tickSatMovement(world, arrivalMs);
 
-    expect(world.satellites).toHaveLength(0);
-    expect(world.debrisFields).toHaveLength(1);
-    const field = world.debrisFields[0]!;
-    // Target cell for (100,0): cellX = Math.floor(100/16) = 6, cellY = 0.
-    expect(field.cellX).toBe(6);
-    expect(field.cellY).toBe(0);
-    expect(field.fragments).toBe(SAT_MOVE_FAILURE_DEBRIS);
+    // Sat survives — empty orbital space has nothing to destroy it.
+    expect(world.satellites).toHaveLength(1);
+    expect(world.satellites[0]).toBe(sat);
+    // Locked at the misdrop tile, no longer in transit.
+    expect(sat.locked).toBe(true);
+    expect(sat.movingTo).toBeUndefined();
+    // Offset from intended target (100, 0) lies in
+    // [MISDROP_FRAC_MIN, MISDROP_FRAC_MAX] * tripDist (= 100).
+    const offsetDist = Math.hypot(sat.x - 100, sat.y - 0);
+    const tripDist = 100;
+    const epsilon = 1e-9;
+    expect(offsetDist).toBeGreaterThanOrEqual(SAT_MOVE_MISDROP_FRAC_MIN * tripDist - epsilon);
+    expect(offsetDist).toBeLessThanOrEqual(SAT_MOVE_MISDROP_FRAC_MAX * tripDist + epsilon);
+    // Extra fuel burned for the misdrop, but never below zero.
+    expect(sat.fuel).toBeGreaterThanOrEqual(0);
+    expect(sat.fuel).toBeLessThan(fuelBeforeArrival);
+    // No new debris field on move failure.
+    expect(world.debrisFields).toHaveLength(debrisFieldsBefore);
+  });
+
+  it('tickSatMovement failure clamps fuel to 0 when misdrop burn exceeds reserve', () => {
+    const world = makeSatMoveWorld();
+    // Fuel = exactly the planned-trip cost; after requestSatMove deducts the
+    // base burn, sat.fuel === 0. The misdrop's extra burn then clamps to 0.
+    const tripDist = 100;
+    const exactTripFuel = tripDist * SAT_FUEL_PER_TILE;
+    const sat = makeMinimalSat({
+      id: 'sat1',
+      x: 0,
+      y: 0,
+      fuel: exactTripFuel,
+      locked: true,
+    });
+    world.satellites.push(sat);
+    // nowMs=3 forces the failure roll (same seeded RNG as the test above).
+    requestSatMove(world, 'sat1', tripDist, 0, 3);
+    expect(sat.fuel).toBe(0);
+    const arrivalMs = sat.movingTo!.arrivalMs;
+    tickSatMovement(world, arrivalMs);
+
+    // Sat is stranded at the misdrop tile with zero fuel.
+    expect(world.satellites).toHaveLength(1);
+    expect(sat.fuel).toBe(0);
+    expect(sat.locked).toBe(true);
+    expect(sat.movingTo).toBeUndefined();
   });
 });
 

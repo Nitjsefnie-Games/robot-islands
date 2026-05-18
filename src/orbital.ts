@@ -125,7 +125,11 @@ export const SAT_CROSS_SECTION: Record<SatelliteVariant, number> = {
 export const SAT_FUEL_PER_TILE = 0.05; // fuel units per tile of relocation
 export const SAT_MOVE_SPEED_TILES_PER_SEC = 5; // travel speed
 export const SAT_MOVE_FAILURE_PROBABILITY = 0.02; // §14.6 "low probability"
-export const SAT_MOVE_FAILURE_DEBRIS = 10; // fragments seeded on in-transit loss
+/** §14.6 misdrop bounds — on a failed move the sat lands at an offset
+ *  of `[MISDROP_FRAC_MIN, MISDROP_FRAC_MAX] * plannedTripDist` from the
+ *  intended target, in a random direction. */
+export const SAT_MOVE_MISDROP_FRAC_MIN = 0.05;
+export const SAT_MOVE_MISDROP_FRAC_MAX = 0.20;
 
 /** §14.8 / Appendix A: fragments cleared per real-time second per locked Sweeper Sat
  *  inside a debris field. Stacks linearly (multiple Sweepers in same cell add). */
@@ -698,10 +702,31 @@ export function tickSatMovement(world: WorldState, nowMs: number): void {
     // Arrival window — roll mechanical-failure.
     const rng = makeSeededRng(`${world.seed}_satmove_${sat.id}_${sat.movingTo.arrivalMs}`);
     if (rng() < SAT_MOVE_FAILURE_PROBABILITY) {
-      // Lost in transit — seed debris at the loss cell.
-      const { cellX, cellY } = tileToCell(sat.movingTo.x, sat.movingTo.y);
-      addDebrisFragments(world, cellX, cellY, SAT_MOVE_FAILURE_DEBRIS);
-      // sat is omitted from survivors → destroyed.
+      // Navigational miscalculation — sat lands off-target and burns extra
+      // fuel for the misdrop. Empty orbital space has nothing to destroy
+      // it; no debris field is generated on move failure. (Pad- and orbit-
+      // explosion at launch in §14.7 retain destructive semantics.)
+      const tripDist = Math.hypot(
+        sat.movingTo.x - sat.x,
+        sat.movingTo.y - sat.y,
+      );
+      const fracRange = SAT_MOVE_MISDROP_FRAC_MAX - SAT_MOVE_MISDROP_FRAC_MIN;
+      const misdropFrac = SAT_MOVE_MISDROP_FRAC_MIN + rng() * fracRange;
+      const angle = rng() * Math.PI * 2;
+      const misdropDist = misdropFrac * tripDist;
+      const offsetX = Math.cos(angle) * misdropDist;
+      const offsetY = Math.sin(angle) * misdropDist;
+      sat.x = sat.movingTo.x + offsetX;
+      sat.y = sat.movingTo.y + offsetY;
+      // Extra burn for the misdrop; clamp to 0 (stranded — recoverable via
+      // Repair Drone).
+      const extraFuel = misdropDist * SAT_FUEL_PER_TILE;
+      sat.fuel = Math.max(0, sat.fuel - extraFuel);
+      sat.locked = true;
+      sat.movingTo = undefined;
+      const { cellX, cellY } = tileToCell(sat.x, sat.y);
+      ensureCellGenerated(world, cellX, cellY);
+      survivors.push(sat);
       continue;
     }
     // Success: update position, re-lock, clear movingTo.

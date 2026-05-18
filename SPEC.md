@@ -56,7 +56,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §14.3 Satellite variants | L | Scanner / Sweeper / Comm / Relay variants buildable from a Spaceport. Stat ceilings scale with Spaceport tier. |
 | §14.4 Communication network | L | Asymmetric comm radius, store-and-forward buffers per sat (cap configurable via Communication skill), packet hand-off through connected graph. |
 | §14.5 Coverage / discovery / weather | L | Scanner Sat weather visibility + per-cell dwell-ramp discovery (rate configurable via Discovery skill). |
-| §14.6 Movement | L | Onboard fuel reserve (Resilience-skill multiplied), move-command spends fuel proportional to distance, low-probability failure with in-transit loss. |
+| §14.6 Movement | L | Onboard fuel reserve (Resilience-skill multiplied), move-command spends fuel proportional to distance, low-probability failure manifests as a 5–20% misdrop in a random direction with extra fuel burned for the offset (clamped to 0 — sat stranded, recoverable via Repair Drone). |
 | §14.7 Launch + failure | L | Success rate = base + Launch-skill bonuses, clamped 0-0.99. Pad-explosion / orbit-explosion split (~30/70, divisible by Launch-skill mitigation). Pad explosion reverts the Spaceport to tier I (upgrade investment lost; building persists). |
 | §14.8 Debris | L | Per-cell field with discrete fragment count, hit-probability formula, lodge vs destruction split, Kessler cascade, Orbital Tracking Station detection range, Sweeper cleanup over real time. |
 | §14.9 Orbital skill sub-path | L | Four sub-paths (Launch / Communication / Discovery / Resilience) drive live mechanics. |
@@ -1462,9 +1462,9 @@ A locked satellite can be relocated by the player. Each satellite has an onboard
 
 * Issuing a move command spends fuel proportional to relocation distance
 * Move takes real time proportional to distance and thrust
-* Movement can fail with low probability — the satellite is lost in transit and may produce a debris field
+* Movement can fail with low probability. Failure does NOT destroy the satellite — empty orbital space has nothing to destroy it. Instead the failure is a navigational miscalculation: the satellite arrives at an offset of 5–20% of its planned trip distance in a random direction, burning additional fuel proportional to the misdrop. If the burn would exceed onboard reserves, fuel clamps to zero and the satellite is stranded at the misdrop tile (recoverable via Repair Drone). No debris field is produced on move failure.
 
-The initial launch is itself a move from the Spaceport to the player-chosen target; subsequent relocations use the same fuel/speed math.
+The initial launch is itself a move from the Spaceport to the player-chosen target; subsequent relocations use the same fuel/speed math. (Launch-time failures — pad explosion and orbit explosion in §14.7 — are distinct from in-transit move failure and retain destructive semantics, including debris generation.)
 
 When the reserve depletes, the satellite cannot move further until a Repair Drone tops it up (Repair Drones serve double duty as repair and refuel).
 
