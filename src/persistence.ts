@@ -42,6 +42,7 @@
 
 import { del, get, set } from 'idb-keyval';
 
+import { BASELINE_STORAGE_CAP } from './constants.js';
 import { islandCells, tileToCell } from './discovery.js';
 import type { IslandState } from './economy.js';
 import type { Drone } from './drones.js';
@@ -560,9 +561,9 @@ export function deserializeWorld(
     // `demolishBuilding` and the `applyRates` path expect a real cap
     // number — `cap=0` would silently zero the demolition credit. Seed
     // the baseline cap for missing keys; inventory stays at 0 by default.
-    // Matches `world.ts` BASELINE_STORAGE_CAP — kept in sync so reload
-    // produces the same per-resource baseline as a fresh state.
-    const BASELINE_STORAGE_CAP = 2000;
+    // BASELINE_STORAGE_CAP is sourced from `constants.ts` (shared with
+    // `world.ts`) so reload produces the same per-resource baseline as a
+    // fresh state with zero drift risk.
     for (const r of ALL_RESOURCES) {
       if (!(r in inventoryClone)) inventoryClone[r] = 0;
       if (!(r in storageCapsClone)) storageCapsClone[r] = BASELINE_STORAGE_CAP;

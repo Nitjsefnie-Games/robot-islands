@@ -99,15 +99,6 @@ them explicit values + rationale.
   - `FUNNELING_BONUS_PERCENT` in `src/routes.ts:103` and
     `FUNNELING_BONUS_PERCENT_FOR_DRAIN` in `src/economy.ts:1113`.
     Documented in both comments; drift caught by economy test.
-  - `BASELINE_STORAGE_CAP = 2000` in `src/world.ts:953` AND
-    `src/persistence.ts:568` (same constant, copied "to keep in sync").
-  - `CELL_SIZE_TILES = 16` declared in `src/world.ts`, re-exported from
-    `src/discovery.ts:19`, AND inlined as a literal in
-    `src/vision-source.ts:69` and `src/satellite-overlay.ts:51-52`
-    (`d.cellX * 16 * TILE_PX`). Three sources of truth.
-  - `LATTICE_ACTIVATION_THRESHOLD = 20` in `src/lattice.ts:12` is
-    independent of `NC_THRESHOLDS` in `network-consciousness.ts` despite
-    spec saying "N = 20 = Network Consciousness threshold".
   - `src/orbital-ui.ts:170-173` duplicates the Spaceport upgrade cost
     table from `src/orbital.ts:877-879`. UI shows numbers, backend
     charges them — drift = mis-display.

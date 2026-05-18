@@ -20,6 +20,7 @@
 // design memo restricts application to T3+ islands, computed per-frame using
 // `tierForLevel(state.level) >= 3`).
 
+import { LATTICE_ACTIVATION_THRESHOLD } from './constants.js';
 import { tierForLevel } from './skilltree.js';
 import type { WorldState } from './world.js';
 
@@ -44,8 +45,11 @@ interface MilestoneRow {
 
 // Ordered HIGH-to-LOW so the first match in `computeNcState` resolves to
 // the active milestone without needing to keep state across iterations.
+// The milestone-4 threshold is sourced from `LATTICE_ACTIVATION_THRESHOLD`
+// so the §9.6 NC milestone and the §13.3 Omniscient Lattice gate cannot
+// drift apart.
 const MILESTONE_TABLE: ReadonlyArray<MilestoneRow> = [
-  { threshold: 20, milestone: 4, buff: 1.25 },
+  { threshold: LATTICE_ACTIVATION_THRESHOLD, milestone: 4, buff: 1.25 },
   { threshold: 10, milestone: 3, buff: 1.25 },
   { threshold: 5,  milestone: 2, buff: 1.10 },
   { threshold: 3,  milestone: 1, buff: 1.05 },

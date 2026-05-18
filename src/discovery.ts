@@ -11,8 +11,8 @@
 // for the tile→cell mapping so negative coordinates land on the correct cell
 // — `(-1, -1)` floors to `(-1, -1)`, not `(0, 0)`.
 
+import { CELL_SIZE_TILES } from './constants.js';
 import { tileInscribedInOffsetEllipse } from './island.js';
-import { CELL_SIZE_TILES } from './world.js';
 import type { IslandSpec } from './world.js';
 import { islandConstituents } from './world.js';
 
