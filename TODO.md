@@ -77,6 +77,17 @@ them explicit values + rationale.
 
 ---
 
+## 5. Deferred UI surfaces
+
+- **Route-type picker in routes-ui.ts.** `src/routes-ui.ts:516` hardcodes
+  `type: 'cargo'` for all UI-created routes. `mass_driver` and
+  `submarine_cable` exist at the data layer but cannot be created through
+  the UI. Implementing a route-type picker would unblock both. Existing
+  `cargo` / `drone` / `airship` / `teleporter` types are also all reachable
+  only via this single path today.
+
+---
+
 ## 6. Brittle patterns / type-discipline notes
 
 - **Two-place constants that must stay in sync.**

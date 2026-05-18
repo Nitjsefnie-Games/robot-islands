@@ -1317,11 +1317,13 @@ describe('§4 submarine_cable does not dispatch cargo (mirrors §5.3 cable)', ()
     expect(r.inFlight.length).toBe(0);
   });
 
-  it('deliverArrivals skips submarine_cable routes (no in-flight delivery path)', () => {
-    // Manually seed an in-flight batch on a submarine_cable route to prove
-    // deliverArrivals takes the same `continue` early-exit as for `cable`.
-    // (Such a batch could only appear via direct mutation — the dispatch
-    // path can't produce one — but the invariant must hold either way.)
+  it('deliverArrivals skips submarine_cable routes (regression sentinel)', () => {
+    // Regression sentinel — the dispatch path can't actually produce an
+    // in-flight batch on a power-link route (dispatch skips them). This
+    // test hand-seeds one to prove the delivery-side `continue` exists,
+    // so if a future code path ever produces such a batch (data import,
+    // save migration, hotfix gone wrong), this invariant prevents silent
+    // delivery of cargo across a power-transmission route.
     const src = makeState('a');
     const dst = makeState('b');
     const r: Route = {
@@ -1342,8 +1344,75 @@ describe('§4 submarine_cable does not dispatch cargo (mirrors §5.3 cable)', ()
     const arrivals = deliverArrivals(world, states, 1000);
     expect(arrivals.length).toBe(0);
     expect(dst.inventory.iron_ore).toBe(0);
-    // The route's inFlight is intentionally left alone — cable routes
+    // The route's inFlight is intentionally left alone — power-link routes
     // never have a deliveries pipeline that touches inFlight.
+    expect(r.inFlight.length).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §5.3 spacetime routes do not dispatch cargo — regression coverage for the
+// `isPowerLink` refactor of dispatchPhase + deliverArrivals. Pre-refactor,
+// both sites checked literal `'cable' || 'submarine_cable'` and silently
+// excluded spacetime, even though `isPowerLink('spacetime') === true` and
+// `computeCableNetworkBalance` already treats it as a power-link route.
+// These tests lock in that the refactor closed that gap.
+// ---------------------------------------------------------------------------
+
+describe('§5.3 spacetime routes do not dispatch cargo (post-isPowerLink refactor)', () => {
+  it('skips spacetime routes in dispatch even with non-empty priorityList and capacity', () => {
+    // Mirrors the §5.3 cable dispatch-skip test. Pre-refactor, the literal
+    // `'cable' || 'submarine_cable'` check would NOT skip spacetime, so
+    // dispatch would have moved iron_ore from src to dst. With isPowerLink,
+    // spacetime is correctly recognized as a power-link route.
+    const src = makeState('a', {
+      inventory: { ...blankInventory(), iron_ore: 10 },
+    });
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(),
+      from: 'a',
+      to: 'b',
+      type: 'spacetime',
+      capacityPerSec: 1,
+      filter: null,
+      priorityList: ['iron_ore'],
+      transitTimeSec: 1,
+      inFlight: [],
+    };
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2);
+    expect(out.length).toBe(0);
+    expect(src.inventory.iron_ore).toBe(10);
+    expect(r.inFlight.length).toBe(0);
+  });
+
+  it('deliverArrivals skips spacetime routes (regression sentinel — same as cable/submarine_cable)', () => {
+    // Defensive sibling to the submarine_cable deliverArrivals test. A
+    // spacetime route's inFlight can't actually be populated via dispatch
+    // (dispatch skips power-link routes), but if a future code path ever
+    // seeds one, the delivery side must also skip — same invariant.
+    const src = makeState('a');
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(),
+      from: 'a',
+      to: 'b',
+      type: 'spacetime',
+      capacityPerSec: 1,
+      filter: null,
+      priorityList: [],
+      transitTimeSec: 0,
+      inFlight: [
+        { resourceId: 'iron_ore', amount: 5, arrivalTime: 0, dispatchTime: 0 },
+      ],
+    };
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    const arrivals = deliverArrivals(world, states, 1000);
+    expect(arrivals.length).toBe(0);
+    expect(dst.inventory.iron_ore).toBe(0);
     expect(r.inFlight.length).toBe(1);
   });
 });

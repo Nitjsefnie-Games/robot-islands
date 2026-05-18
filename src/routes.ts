@@ -455,7 +455,7 @@ export function deliverArrivals(
   const delivered: Array<{ destIslandId: string; resourceId: ResourceId; amount: number }> = [];
 
   for (const route of world.routes) {
-    if (route.type === 'cable' || route.type === 'submarine_cable') continue; // §5.3 / §4: power-link routes transmit power, not items.
+    if (isPowerLink(route.type)) continue; // §5.3 / §4: power-link routes transmit power, not items.
     const destState = states.get(route.to);
     if (!destState) {
       // Destination state missing (e.g., island despawned mid-flight). Drop
@@ -581,7 +581,7 @@ function dispatchPhase(
   // source side, so dest-cap clamping has to happen per-route.
   const demands: RouteDemand[] = [];
   for (const route of world.routes) {
-    if (route.type === 'cable' || route.type === 'submarine_cable') continue; // §5.3 / §4: power-link routes transmit power, not items.
+    if (isPowerLink(route.type)) continue; // §5.3 / §4: power-link routes transmit power, not items.
     const srcState = states.get(route.from);
     if (!srcState) continue;
     const r = selectResource(world, states, route);
