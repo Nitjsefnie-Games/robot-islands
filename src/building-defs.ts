@@ -2087,11 +2087,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel: 200, microchip: 80, glass: 30 },
     glyph: '◉',
   },
-  // §11.7 / §14.10: Antimatter Refinery — produces Antimatter Propellant
-  // (T6 launch fuel). Recipe placeholder per the task brief:
-  // `1 exotic_alloy + 1 reality_anchor + 2 casimir_energy → 1 antimatter_propellant`
-  // on a 2-hour cycle. §14.10 actual recipe ("Antimatter Capsule" chain
-  // through Particle Accelerator) — STILL-DEFERRED.
+  // §7.12 / §11.7 / §14.10: Antimatter Refinery — produces Antimatter
+  // Propellant (T6 launch fuel). §7.12 spec literal: 1 antimatter_capsule
+  // + 1 plasma_containment_vessel + 5 cryogenic_hydrogen / 30 min cycle.
+  // See `recipes.ts antimatter_refinery` for the canonical definition.
   antimatter_refinery: {
     id: 'antimatter_refinery',
     displayName: 'Antimatter Refinery',

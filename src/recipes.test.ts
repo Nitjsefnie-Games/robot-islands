@@ -317,11 +317,13 @@ describe('T6 orbital recipes (§14.10)', () => {
 
   it('relay_sat_assembly matches §14.10 spec literal', () => {
     const r = RECIPES.relay_sat_assembly!;
-    expect(r.outputs.relay_sat).toBe(1);
-    expect(r.inputs.exotic_alloy).toBe(6);
-    expect(r.inputs.ai_core).toBe(1);
-    expect(r.inputs.optical_fiber).toBe(200); // §14.10 spec literal
-    expect(r.inputs.orbital_insertion_package).toBe(1);
+    expect(r.outputs).toEqual({ relay_sat: 1 });
+    expect(r.inputs).toEqual({
+      exotic_alloy: 6,
+      ai_core: 1,
+      optical_fiber: 200, // §14.10 spec literal
+      orbital_insertion_package: 1,
+    });
     expect(r.cycleSec).toBe(1800);
     expect(r.category).toBe('manufacturing');
   });
