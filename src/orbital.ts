@@ -1036,7 +1036,7 @@ export function mirrorBoost(
   const dy = sat.y - target.y;
   const d = Math.hypot(dx, dy);
   const raw = peakBoost / (1 + (d / rHalf) ** 2);
-  return raw < MIRROR_SAT_CUTOFF ? 0 : raw;
+  return Number.isFinite(raw) && raw >= MIRROR_SAT_CUTOFF ? raw : 0;
 }
 
 /**

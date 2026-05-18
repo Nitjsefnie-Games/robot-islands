@@ -5,9 +5,11 @@
 //   scanner  → cyan      (vision)
 //   relay    → green     (network)
 //   sweeper  → amber     (debris cleanup)
+//   mirror   → pale gold (solar reflector)
 //
 // Each sat also gets a faint coverage ring (scanner) / comm-range ring
-// (relay) to make the §14.5 effective area legible at a glance.
+// (relay) / rHalf range ring (mirror) to make the §14.5 effective area
+// legible at a glance.
 //
 // Debris fields render as small magenta crosses sized by fragment count so
 // Kessler hotspots stand out. Pure PixiJS Graphics — no DOM.
