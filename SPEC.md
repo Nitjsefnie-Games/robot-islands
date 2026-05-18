@@ -1782,7 +1782,7 @@ Identical code path. When player returns, every island runs `advanceIsland(islan
 * **Renderer:** PixiJS 8 (canvas-based, sprite-batched)
 * **UI:** React (or Solid) overlaid as DOM on top of the Pixi canvas
 * **State:** Zustand store wrapping the World object
-* **Persistence:** IndexedDB via idb-keyval. World state (key `robot-islands:save:v4`) serialized to JSON, saved every 30s and on `visibilitychange`. UI prefs (camera transform, active-island id, open-panel id) live in a separate `robot-islands:prefs:v1` key with a 500 ms-debounced write cadence so pan/zoom feels persistent on a quick refresh without churning the main save blob.
+* **Persistence:** IndexedDB via idb-keyval. World state (key `robot-islands:save:v4`) serialized to JSON, saved every 30s and on `visibilitychange`. UI prefs (camera transform only) live in a separate `robot-islands:prefs:v1` key with a 500 ms-debounced write cadence so pan/zoom feels persistent on a quick refresh without churning the main save blob.
 * **No backend:** pure client-side
 
 ### 15.7 Build Order
