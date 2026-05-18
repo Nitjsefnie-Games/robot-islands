@@ -58,13 +58,6 @@ export const CELL_SIZE_TILES = 16;
  *  Distant scouting now requires Lighthouse infrastructure
  *  (`lighthouse.ts → computeVisionSources`). */
 export const VISION_PADDING_TILES = 10;
-/** Discovery aura radius around any discovered island, in tiles.
- *  DEPRECATED: §11 telemetry redesign moved the medium-blue ocean tier
- *  from per-island halos to per-stratification-cell squares (see
- *  `WorldState.revealedCells`). The constant is retained as exported data
- *  for any external (debug/dev-tools) consumer that might query it; no
- *  in-tree code reads it. */
-export const DISCOVERY_RADIUS_TILES = 24;
 
 // ---------------------------------------------------------------------------
 // Ocean-tier palette

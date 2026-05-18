@@ -324,17 +324,6 @@ export function mountIslandBar(
 }
 
 // ---------------------------------------------------------------------------
-// renderMultiIslandBar — deprecated, kept as no-op stub
-// ---------------------------------------------------------------------------
-
-export function renderMultiIslandBar(
-  _world: WorldState,
-  _onSelect: (id: string) => void,
-): HTMLElement {
-  return document.createElement('div');
-}
-
-// ---------------------------------------------------------------------------
 // Mount HUD
 // ---------------------------------------------------------------------------
 

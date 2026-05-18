@@ -105,21 +105,6 @@ them explicit values + rationale.
 
 ---
 
-## 5. Dead code / dead exports
-
-- **`src/hud.ts:327-335`** `renderMultiIslandBar` — no-op stub
-  documented "deprecated, kept as no-op stub", zero non-test consumers.
-- **`src/world.ts:62-68`** `DISCOVERY_RADIUS_TILES = 24` exported as
-  DEPRECATED with no in-tree consumer; kept "for external debug
-  tools". Pure dead export.
-- **`src/main.ts:700-737`** `forest-ne` demo-seed block (bumps level
-  50, sets `aiCoreCrafted = true`, seeds T4/T5 inventory). Comment at
-  `:679-685` notes the block is now a no-op in production because
-  forest-ne is no longer auto-populated per §3.7. Either re-purpose
-  for a dev/test fixture path or excise.
-
----
-
 ## 6. Brittle patterns / type-discipline notes
 
 - **Two-place constants that must stay in sync.**
