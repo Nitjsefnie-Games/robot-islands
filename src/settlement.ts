@@ -181,22 +181,71 @@ export function hasLaunchBuildingFor(origin: IslandSpec, kind: VehicleKind): boo
 // Starter state helpers (§12.6 per-tier loadouts)
 // ---------------------------------------------------------------------------
 
+/** Per-tier starter loadout per §12.6. The defIds + ORDER are the contract;
+ *  positions are computed dynamically by `computeStarterBuildings` so they
+ *  always land inscribed regardless of island geometry. */
+function starterDefIdsFor(kind: VehicleKind, tier: VehicleTier): BuildingDefId[] {
+  if (tier <= 2) return [];
+  const list: BuildingDefId[] = ['solar', 'workshop'];
+  if (kind === 'ship' && tier >= 3) list.push('mine');
+  if (tier >= 4) list.push('coal_gen', 'crate');
+  return list;
+}
+
+/**
+ * Compute placements for §12.6 starter buildings, guaranteeing every starter
+ * lands on an inscribed tile of the target island and does not collide with
+ * any already-placed building (e.g. the auto-placed dock/helipad).
+ *
+ * Deterministic — same (kind, tier, target geometry, occupied set) inputs
+ * always produce the same output. Saves/replays depend on this. Enumeration
+ * walks the bounding box in scan order (ascending y, then x), same shape as
+ * `findCoastalTile`, and assigns inscribed-and-unoccupied tiles to starters
+ * in the fixed defId order from `starterDefIdsFor`.
+ *
+ * If the island is too small to host every starter (theoretical edge case —
+ * even an r=7 disk has ~140 inscribed tiles), the overflow is silently
+ * dropped rather than emitting invalid placements. The dropped count is
+ * logged via console.warn.
+ */
 function computeStarterBuildings(
   kind: VehicleKind,
   tier: VehicleTier,
+  target: IslandSpec,
 ): Array<{ defId: BuildingDefId; x: number; y: number }> {
-  if (tier <= 2) return [];
-  const base: Array<{ defId: BuildingDefId; x: number; y: number }> = [
-    { defId: 'solar', x: 2, y: 0 },
-    { defId: 'workshop', x: 4, y: 0 },
-  ];
-  if (kind === 'ship' && tier >= 3) {
-    base.push({ defId: 'mine', x: 6, y: 0 });
+  const defs = starterDefIdsFor(kind, tier);
+  if (defs.length === 0) return [];
+
+  // Build occupied set from already-placed buildings on the target so the
+  // dock/helipad (pushed onto target.buildings before this call) is excluded.
+  const occupied = new Set<string>();
+  for (const b of target.buildings) occupied.add(`${b.x},${b.y}`);
+
+  // Enumerate inscribed candidate tiles in deterministic scan order.
+  const xMin = -Math.ceil(target.majorRadius);
+  const xMax = Math.ceil(target.majorRadius);
+  const yMin = -Math.ceil(target.minorRadius);
+  const yMax = Math.ceil(target.minorRadius);
+  const placements: Array<{ defId: BuildingDefId; x: number; y: number }> = [];
+  let i = 0;
+  outer: for (let y = yMin; y <= yMax; y++) {
+    for (let x = xMin; x <= xMax; x++) {
+      if (i >= defs.length) break outer;
+      if (!islandInscribedAny(target, x, y)) continue;
+      const key = `${x},${y}`;
+      if (occupied.has(key)) continue;
+      placements.push({ defId: defs[i]!, x, y });
+      occupied.add(key);
+      i += 1;
+    }
   }
-  if (tier >= 4) {
-    base.push({ defId: 'coal_gen', x: 8, y: 0 }, { defId: 'crate', x: 10, y: 0 });
+  if (placements.length < defs.length) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[settlement] computeStarterBuildings: target ${target.id} too small for ${defs.length} starters; placed ${placements.length}, dropped ${defs.length - placements.length}`,
+    );
   }
-  return base;
+  return placements;
 }
 
 function computeFreeSkillPoints(tier: VehicleTier): number {
@@ -576,8 +625,10 @@ export function tickVehicles(
       y: dropTile.y,
     });
 
-    // §12.6 starter buildings for T3+ vehicles.
-    const starters = computeStarterBuildings(v.kind, v.tier);
+    // §12.6 starter buildings for T3+ vehicles. Positions are computed
+    // from the target's geometry so every starter lands inscribed and
+    // doesn't collide with the auto-placed dock/helipad pushed above.
+    const starters = computeStarterBuildings(v.kind, v.tier, target);
     for (const b of starters) {
       target.buildings.push({ id: `${target.id}-starter-${b.defId}`, defId: b.defId, x: b.x, y: b.y });
     }

@@ -82,15 +82,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   Brick and copper_ore both exist in the catalog.
   *(Flagged by Agent D.)*
 
-- **§12.4 T3 Heavy Lift starter buildings land in a straight east row
-  with no inscription check.** `src/settlement.ts:184-200`
-  `computeStarterBuildings` hardcodes `(2,0), (4,0), (6,0), (8,0),
-  (10,0)`. A small Volcanic colony (r=7) inscribed disk doesn't reach
-  tile (8,0), so the rightmost starter buildings can land outside the
-  ellipse and start invalid. Spec says "deterministic default positions"
-  — fine — but should validate inscription.
-  *(Flagged by Agent D.)*
-
 - **§13.3 `useRealityForge` is dead production code AND a misnomer.**
   `src/world.ts:327-367` — only callers are its own test file. Function
   name is wrong (Reality Forge crafts T5 components per §8.3 / §7.12;
