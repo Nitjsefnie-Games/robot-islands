@@ -881,64 +881,39 @@ export async function loadWorld(): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// UI Prefs (camera + active-island + open-panel) — separate IDB key
+// UI Prefs (camera transform) — separate IDB key
 // ---------------------------------------------------------------------------
 //
-// Camera position + active-island id + last open panel are restored across
-// page reloads. Kept in a separate `robot-islands:prefs:v<n>` key from the
-// main save snapshot so cam-jiggle during pan/zoom doesn't churn the
-// world-state blob (or vice-versa: a malformed prefs blob can't corrupt the
-// save).
+// Camera position is restored across page reloads. Kept in a separate
+// `robot-islands:prefs:v<n>` key from the main save snapshot so cam-jiggle
+// during pan/zoom doesn't churn the world-state blob (or vice-versa: a
+// malformed prefs blob can't corrupt the save).
 //
 // The shape is intentionally flat and permissive: every field is optional
 // at parse time, and the loader returns `null` on anything it can't trust.
-// Callers then fall back to defaults (camera centred on home, activeIsland
-// = 'home', no open panel).
+// Callers then fall back to defaults (camera centred on home).
+//
+// Historical note: an earlier revision of this blob also persisted the
+// active-island id and the open-panel id. Both were removed because
+// restoring transient UI state across reload was undesirable — e.g. the
+// Construct window would silently re-open on every refresh. Old v1 blobs
+// that still carry those extra fields parse fine: the loader just doesn't
+// read them, so no schema bump was needed.
 
 export const PREFS_KEY = 'robot-islands:prefs:v1';
 export const PREFS_VERSION = 1 as const;
 
-/** Panels the player can have open. `null` = no modal panel open at save
- *  time. Strings match the panel `toggle-*` action names so a future
- *  multi-panel restore stays trivial. */
-export type OpenPanelId =
-  | 'skill-tree'
-  | 'buildings'
-  | 'drones'
-  | 'graph'
-  | 'routes'
-  | 'settlement'
-  | 'orbital'
-  | 'construction'
-  | 'inventory'
-  | 'settings';
-
 export interface UiPrefs {
   readonly v: typeof PREFS_VERSION;
   readonly cam: { readonly tx: number; readonly ty: number; readonly zoom: number };
-  readonly activeIslandId: string;
-  readonly openPanel: OpenPanelId | null;
 }
-
-const KNOWN_OPEN_PANELS: ReadonlySet<OpenPanelId> = new Set([
-  'skill-tree',
-  'buildings',
-  'drones',
-  'graph',
-  'routes',
-  'settlement',
-  'orbital',
-  'construction',
-  'inventory',
-  'settings',
-]);
 
 function isFiniteNumber(x: unknown): x is number {
   return typeof x === 'number' && Number.isFinite(x);
 }
 
 /**
- * Persist UI prefs (camera transform + active-island id + open-panel id).
+ * Persist UI prefs (camera transform).
  * Swallows errors — pref-save failure must not interrupt the game loop.
  */
 export async function savePrefs(prefs: Omit<UiPrefs, 'v'>): Promise<void> {
@@ -952,8 +927,9 @@ export async function savePrefs(prefs: Omit<UiPrefs, 'v'>): Promise<void> {
 
 /**
  * Load UI prefs, returning null if absent / malformed / wrong version.
- * Caller falls back to defaults (centre-on-home camera, activeIsland=home,
- * no open panel).
+ * Caller falls back to defaults (centre-on-home camera). Legacy v1 blobs
+ * with extra `activeIslandId` / `openPanel` fields parse cleanly — the
+ * validator just ignores them.
  */
 export async function loadPrefs(): Promise<UiPrefs | null> {
   try {
@@ -967,18 +943,9 @@ export async function loadPrefs(): Promise<UiPrefs | null> {
     if (!isFiniteNumber(c['tx']) || !isFiniteNumber(c['ty']) || !isFiniteNumber(c['zoom'])) {
       return null;
     }
-    const activeIslandId = o['activeIslandId'];
-    if (typeof activeIslandId !== 'string' || activeIslandId.length === 0) return null;
-    let openPanel: OpenPanelId | null = null;
-    const op = o['openPanel'];
-    if (typeof op === 'string' && KNOWN_OPEN_PANELS.has(op as OpenPanelId)) {
-      openPanel = op as OpenPanelId;
-    }
     return {
       v: PREFS_VERSION,
       cam: { tx: c['tx'], ty: c['ty'], zoom: c['zoom'] },
-      activeIslandId,
-      openPanel,
     };
   } catch (err) {
     console.warn('[robot-islands] loadPrefs failed:', err);
