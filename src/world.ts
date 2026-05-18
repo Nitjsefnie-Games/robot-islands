@@ -810,7 +810,7 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   for (let cy = -N; cy <= N; cy++) {
     for (let cx = -N; cx <= N; cx++) generatedCells.add(`${cx},${cy}`);
   }
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null, victoryBannerShown: false }, latticeActive: false, latticeNodeIslands: [], commPackets: [], generatedCells };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], commPackets: [], generatedCells };
 }
 
 /**

@@ -172,7 +172,6 @@ export interface SerializedWorld {
   readonly endgameState?: {
     readonly achieved: ReadonlyArray<VictoryCondition>;
     readonly firstAchievedMs: number | null;
-    readonly victoryBannerShown: boolean;
   };
   /** §13.3 Omniscient Lattice activation. Backfilled on legacy saves. */
   readonly latticeActive?: boolean;
@@ -276,7 +275,6 @@ export function serializeWorld(
       endgameState: {
         achieved: [...(world.endgameState?.achieved ?? [])],
         firstAchievedMs: world.endgameState?.firstAchievedMs ?? null,
-        victoryBannerShown: world.endgameState?.victoryBannerShown ?? false,
       },
       latticeActive: world.latticeActive,
       latticeNodeIslands: [...world.latticeNodeIslands],
@@ -529,9 +527,8 @@ export function deserializeWorld(
       ? {
           achieved: new Set<VictoryCondition>(snapshot.world.endgameState.achieved),
           firstAchievedMs: snapshot.world.endgameState.firstAchievedMs,
-          victoryBannerShown: snapshot.world.endgameState.victoryBannerShown,
         }
-      : { achieved: new Set<VictoryCondition>(), firstAchievedMs: null, victoryBannerShown: false },
+      : { achieved: new Set<VictoryCondition>(), firstAchievedMs: null },
     // §13.3 Omniscient Lattice backfill: legacy saves predate these fields.
     latticeActive: snapshot.world.latticeActive ?? false,
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
