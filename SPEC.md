@@ -235,6 +235,8 @@ Visibility is extended by:
 * Weather Station (T2): +3 cells from this island
 * Advanced Weather Station (T3): +6 cells, plus 1-cycle ahead forecasting
 
+When multiple weather stations are placed on the same island their visibility bonuses **stack additively** (e.g. one Weather Station + one Advanced Weather Station = baseline + 9 cells). The Advanced Weather Station's forecast layer covers the same radius as its current-cycle reveal — the T3 station's gift is the temporal lookahead, not extra spatial range beyond what its `+6` already provides. Because cell dwell varies (30 min – 4 h, no fixed cycle length), "1-cycle ahead" is sampled at the dwell midpoint (~2 real-time hours) so the forecast lands one typical dwell into the future.
+
 **Vehicle vulnerability multipliers:**
 
 |Vehicle|Multiplier on base destruction chance|

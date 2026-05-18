@@ -41,12 +41,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   Relabel-after-placement is the workaround. Every Crate / Warehouse
   starts holding iron_ore regardless of player intent. *(A, B, C.)*
 
-- **§2.6 Weather Station visibility extension not wired through the
-  weather overlay.** `src/weather-overlay.ts:17-20` self-documents the
-  gap — "The §2.6 Weather Station bonus is not yet wired through this
-  path". Spec §2.6 promises Weather Station (T2) `+3 cells` and
-  Advanced Weather Station (T3) `+6 cells, +1-cycle forecast`. *(D.)*
-
 ---
 
 ## 4. Tuning placeholders (Appendix A backlog)
