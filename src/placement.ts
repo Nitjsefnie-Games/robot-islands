@@ -29,6 +29,8 @@
 import { BUILDING_DEFS, buildingUnlocked, canPlaceOnIsland, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import {
   rotateShape,
+  shapeWidth,
+  shapeHeight,
   type ShapeMask,
   type Rotation,
   footprintTiles,
@@ -38,10 +40,12 @@ import type { PlacedBuilding } from './buildings.js';
 import { constructionTimeFor } from './construction.js';
 import type { IslandState } from './economy.js';
 import { tileInscribedInEllipse } from './island.js';
+import { footprintMatches } from './ocean-cell.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
-import type { IslandSpec } from './world.js';
+import { candidateAnchors } from './anchor-picker.js';
+import type { IslandSpec, WorldState } from './world.js';
 
 /** Fallback cargo label for a freshly-placed generic-storage building (Crate,
  *  Warehouse) when the caller of `placeBuilding` does NOT supply an explicit
@@ -581,4 +585,104 @@ export function demolishBuilding(
     }
   }
   return { ok: true, scrapReturned, refunded };
+}
+
+// ---------------------------------------------------------------------------
+// Ocean-layer §3 / §4 — sibling validator for ocean-placed buildings.
+// ---------------------------------------------------------------------------
+//
+// Ocean buildings are a SIBLING placement universe from the land
+// `validatePlacement` flow: they're indexed by cell coords (not island-local
+// tile coords), they validate against `world.oceanCells` (not an island's
+// ellipse / terrain closure), and they anchor to a PICKED island (not the
+// island whose footprint they sit on). Mixing the two flows into one
+// validator would force every land caller to thread a `world` reference; a
+// sibling function keeps the existing land path untouched.
+//
+// What this function gates (per §3 / §4 design doc):
+//   1. defNotOcean   — defensive: caller routed a non-ocean def here.
+//   2. terrainMismatch — at least one footprint cell's terrain isn't in
+//                        `def.terrainReqs`. Uses `footprintMatches` from
+//                        ocean-cell.ts so the rule is shared with sonar /
+//                        future ocean-placement consumers.
+//   3. noAnchorInRange — no populated island sits within
+//                        ANCHOR_MAX_RANGE_CELLS of the placement cell. The
+//                        anchor PICKER UI (mountAnchorPicker) consumes the
+//                        same candidate list returned by `candidateAnchors`;
+//                        rejecting up-front spares the player an empty
+//                        modal.
+//
+// NOT gated here (and why):
+//   - Cell overlap with other ocean buildings: ocean placements all flow
+//     through the same `PlacedBuilding` array on whichever island they
+//     anchor to; overlap detection lives downstream once the anchor is
+//     picked. This stays out of the pure pre-anchor validator.
+//   - Tier / unlock gates: caller has the island context (anchor candidate
+//     list); the per-island level gate fires after the anchor is picked
+//     via the existing `buildingUnlocked` path the UI already runs.
+//   - Placement cost: same reason — costs come out of the anchor island's
+//     inventory; checked at placeBuilding time.
+//
+// Footprint dims: `shapeWidth` / `shapeHeight` from shape-mask. Ocean
+// buildings ignore rotation in the initial scope (every shipped def is a
+// 2×2 square; rotation is a no-op for squares anyway). If a non-square
+// ocean def ships later, thread a Rotation parameter through and call
+// `rotatedDims` instead.
+
+/** Reasons ocean placement can fail. Disjoint from `PlacementReason` so
+ *  callers don't confuse a land-placement land-mine with an ocean one. */
+export type OceanPlacementReason =
+  | 'def-not-ocean'
+  | 'terrain-mismatch'
+  | 'no-anchor-in-range';
+
+export interface OceanPlacementValidation {
+  readonly ok: boolean;
+  readonly reason?: OceanPlacementReason;
+}
+
+/** Validate an ocean placement at cell coords (`cellX`, `cellY`).
+ *
+ *  Pure: reads `world.oceanCells` and `world.islands`; mutates nothing.
+ *  Caller is responsible for routing only `def.oceanPlacement === true`
+ *  buildings here — passing a land def returns `def-not-ocean` defensively
+ *  so test mistakes surface fast.
+ *
+ *  Cell coords convention: matches `ocean-cell.ts:terrainAt` — the
+ *  footprint covers the AABB `(cellX..cellX+w-1, cellY..cellY+h-1)`. A 2×2
+ *  building covers a 2×2 block of cells (= 32×32 tiles), consistent with
+ *  the §3 design-doc catalog table where vent / nodule / trench feature
+ *  sizes are expressed in cells.
+ */
+export function validateOceanPlacement(
+  world: WorldState,
+  defId: BuildingDefId,
+  cellX: number,
+  cellY: number,
+): OceanPlacementValidation {
+  const def = BUILDING_DEFS[defId];
+  if (def.oceanPlacement !== true) {
+    return { ok: false, reason: 'def-not-ocean' };
+  }
+  // Footprint dims in cell-units. Squares (current scope) are
+  // rotation-invariant — pass the unrotated mask.
+  const w = shapeWidth(def.footprint);
+  const h = shapeHeight(def.footprint);
+  // Terrain match. If `terrainReqs` is undefined / empty, the def accepts
+  // any ocean terrain (matches the sonar_buoy "any discovered ocean" rule
+  // in the §3 table). `footprintMatches` short-circuits on the first
+  // non-matching cell.
+  if (def.terrainReqs && def.terrainReqs.length > 0) {
+    if (!footprintMatches(world, cellX, cellY, w, h, def.terrainReqs)) {
+      return { ok: false, reason: 'terrain-mismatch' };
+    }
+  }
+  // Anchor candidates. Reuses the same helper the picker UI consumes —
+  // a placement is only valid when at least one populated island sits
+  // within ANCHOR_MAX_RANGE_CELLS (§4 Anchor island rule).
+  const anchors = candidateAnchors(world, cellX, cellY);
+  if (anchors.length === 0) {
+    return { ok: false, reason: 'no-anchor-in-range' };
+  }
+  return { ok: true };
 }

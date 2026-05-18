@@ -260,6 +260,22 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   cryo_containment_unit: 'rare',
   particle_accelerator_core: 'rare',
   self_replication_module: 'rare',
+  // Ocean-layer §3 — Task 8 extractor outputs. Filter-chip categorisation
+  // mirrors storage-categories with the inventory-ui's "fuel/liquid take
+  // precedence" rule applied — the brines + methane_hydrate land in
+  // 'liquid' (matching their storage liquid_gas category); the nodules +
+  // vent_sulfide land in 'raw' (ore-family naturals); the rare isotope
+  // concentrates + vent_exotic land in 'rare'.
+  dilute_brine: 'liquid',
+  concentrated_brine: 'liquid',
+  he3_dilute: 'rare',
+  mn_nodule: 'raw',
+  re_nodule: 'raw',
+  co_nodule: 'raw',
+  methane_hydrate: 'liquid',
+  heavy_isotope_slurry: 'rare',
+  vent_sulfide: 'raw',
+  vent_exotic: 'rare',
 };
 
 /** Filter chips shown above the resource list. `'all'` is the default. */

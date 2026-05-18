@@ -869,3 +869,161 @@ describe('§6.7 scrap recovery', () => {
     expect(result.scrapReturned).toBe(18);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §3 / §4 ocean building footprint + anchor validation
+// ---------------------------------------------------------------------------
+// The ocean placement pipeline is a sibling validator (`validateOceanPlacement`)
+// from the land flow above. Cells (NOT tile coords) are the unit; terrain
+// gating reads `world.oceanCells`; anchor-in-range gating reads
+// `world.islands`. UI wiring of the anchor picker is deferred — these tests
+// pin the pure data-layer validator only.
+
+import { validateOceanPlacement } from './placement.js';
+import { CELL_SIZE_TILES } from './constants.js';
+import { ANCHOR_MAX_RANGE_CELLS } from './anchor-picker.js';
+import type { WorldState } from './world.js';
+import type { OceanCellSpec, OceanTerrain } from './ocean-cell.js';
+
+/** Minimal `WorldState` stub for ocean validation tests — only `oceanCells`
+ *  and `islands` are read. Same `unknown` cast pattern used by
+ *  `anchor-picker.test.ts:worldWith`. */
+function makeOceanWorld(
+  oceanCells: Map<string, OceanCellSpec>,
+  islands: IslandSpec[],
+): WorldState {
+  return { oceanCells, islands } as unknown as WorldState;
+}
+
+/** Build a `Map<cellKey, OceanCellSpec>` from a list of (cellX, cellY,
+ *  terrain) triples. Cells NOT listed default to `deep` via the
+ *  `terrainAt` implicit fallback — same convention as world-gen. */
+function oceanCells(
+  entries: ReadonlyArray<readonly [number, number, OceanTerrain]>,
+): Map<string, OceanCellSpec> {
+  const m = new Map<string, OceanCellSpec>();
+  for (const [x, y, t] of entries) m.set(`${x},${y}`, { terrain: t });
+  return m;
+}
+
+/** A populated island at cell-equivalent tile coords near (0,0) — within
+ *  ANCHOR_MAX_RANGE_CELLS of any cell at (0..10, 0..10). The placement
+ *  validator only consults `populated` + `cx` + `cy` via `candidateAnchors`,
+ *  so the other fields can stay default. */
+function nearbyPopulatedIsland(): IslandSpec {
+  return makeSpec({
+    id: 'home',
+    name: 'Home',
+    populated: true,
+    cx: 0,
+    cy: 0,
+  });
+}
+
+describe('§3 ocean building footprint validation', () => {
+  it('rejects Vent Tap placement when footprint extends beyond a vent cluster', () => {
+    // Vent Tap is 2×2 cells (`SHAPES.square2`), terrainReqs: ['hydrothermal_vent'].
+    // Stage a 2×2 vent cluster at cells (5,5)-(6,6) but only mark 3 of the 4
+    // cells — the (6,6) corner stays implicit `deep`. The footprint
+    // (cellX=5, cellY=5) covers all 4 cells; one is deep → terrain-mismatch.
+    const cells = oceanCells([
+      [5, 5, 'hydrothermal_vent'],
+      [6, 5, 'hydrothermal_vent'],
+      [5, 6, 'hydrothermal_vent'],
+      // (6, 6) intentionally NOT listed → implicit deep.
+    ]);
+    const world = makeOceanWorld(cells, [nearbyPopulatedIsland()]);
+    const v = validateOceanPlacement(world, 'vent_tap', 5, 5);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('terrain-mismatch');
+  });
+
+  it('accepts Vent Tap on a contiguous 2x2 vent cluster', () => {
+    const cells = oceanCells([
+      [5, 5, 'hydrothermal_vent'],
+      [6, 5, 'hydrothermal_vent'],
+      [5, 6, 'hydrothermal_vent'],
+      [6, 6, 'hydrothermal_vent'],
+    ]);
+    const world = makeOceanWorld(cells, [nearbyPopulatedIsland()]);
+    const v = validateOceanPlacement(world, 'vent_tap', 5, 5);
+    expect(v.ok).toBe(true);
+  });
+
+  it('accepts Open-Water Extractor on a shallows OR deep mixed footprint', () => {
+    // Open-Water Extractor's terrainReqs = ['shallows', 'deep']. A footprint
+    // mixing the two terrains is valid because every cell still lies in the
+    // allowed set. (2 shallows + 2 deep — deep cells stay implicit.)
+    const cells = oceanCells([
+      [5, 5, 'shallows'],
+      [6, 5, 'shallows'],
+      // (5, 6) + (6, 6) implicit `deep` — still in the allowed set.
+    ]);
+    const world = makeOceanWorld(cells, [nearbyPopulatedIsland()]);
+    const v = validateOceanPlacement(world, 'open_water_extractor', 5, 5);
+    expect(v.ok).toBe(true);
+  });
+
+  it('rejects Seawater Intake Rig on a footprint that includes any non-shallows cell', () => {
+    // Seawater Intake's terrainReqs = ['shallows'] (single terrain). The
+    // sibling cell at (6, 5) being a hydrothermal_vent (or anything other
+    // than shallows) rejects.
+    const cells = oceanCells([
+      [5, 5, 'shallows'],
+      [6, 5, 'hydrothermal_vent'],
+      [5, 6, 'shallows'],
+      [6, 6, 'shallows'],
+    ]);
+    const world = makeOceanWorld(cells, [nearbyPopulatedIsland()]);
+    const v = validateOceanPlacement(world, 'seawater_intake_rig', 5, 5);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('terrain-mismatch');
+  });
+
+  it('rejects placement when no populated island sits within ANCHOR_MAX_RANGE_CELLS', () => {
+    // Stage a valid 2×2 vent cluster; the only populated island is very far
+    // away — outside the anchor range. `candidateAnchors` returns empty →
+    // `no-anchor-in-range`.
+    const cells = oceanCells([
+      [5, 5, 'hydrothermal_vent'],
+      [6, 5, 'hydrothermal_vent'],
+      [5, 6, 'hydrothermal_vent'],
+      [6, 6, 'hydrothermal_vent'],
+    ]);
+    const farIsland = makeSpec({
+      id: 'far',
+      name: 'Far',
+      populated: true,
+      cx: (ANCHOR_MAX_RANGE_CELLS + 50) * CELL_SIZE_TILES,
+      cy: 0,
+    });
+    const world = makeOceanWorld(cells, [farIsland]);
+    const v = validateOceanPlacement(world, 'vent_tap', 5, 5);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('no-anchor-in-range');
+  });
+
+  it('rejects a non-ocean def as def-not-ocean (defensive routing guard)', () => {
+    // Mine is a land building (no `oceanPlacement` flag). Calling the
+    // ocean validator with it returns `def-not-ocean` rather than silently
+    // accepting — surfaces test-side routing bugs fast.
+    const world = makeOceanWorld(new Map(), [nearbyPopulatedIsland()]);
+    const v = validateOceanPlacement(world, 'mine', 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('def-not-ocean');
+  });
+
+  it('accepts Nodule Harvester on a contiguous 2x2 nodule cluster', () => {
+    // Nodule Harvester's terrainReqs = ['nodule_field']. The §3 design notes
+    // nodule fields are 3×3 cell clusters; a 2×2 footprint comfortably fits.
+    const cells = oceanCells([
+      [10, 10, 'nodule_field'],
+      [11, 10, 'nodule_field'],
+      [10, 11, 'nodule_field'],
+      [11, 11, 'nodule_field'],
+    ]);
+    const world = makeOceanWorld(cells, [nearbyPopulatedIsland()]);
+    const v = validateOceanPlacement(world, 'nodule_harvester', 10, 10);
+    expect(v.ok).toBe(true);
+  });
+});

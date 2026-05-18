@@ -304,4 +304,27 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   cryo_containment_unit: 'rare',
   particle_accelerator_core: 'rare',
   self_replication_module: 'rare',
+  // Ocean-layer §3 — Task 8 extractor outputs.
+  //   Brines are aqueous solutions → liquid_gas (mirrors saltwater /
+  //     fresh_water / sulfuric_acid). methane_hydrate is a frozen gas/water
+  //     compound but stored as a solid clathrate → liquid_gas keeps it with
+  //     the other hydrocarbon stocks (crude_oil / natural_gas).
+  //   Nodules are solid mineral concretions → dry_goods (mirrors ores).
+  //     re_nodule / co_nodule contain rare-earth / cobalt content that gates
+  //     T4 processors, but the raw nodule itself sits with the rest of the
+  //     ore family until concentrated by §3 Task-9 processors.
+  //   Vent products are mineral / exotic ores → dry_goods for vent_sulfide,
+  //     rare for vent_exotic (T4 exotic feeder for the alloy chain).
+  //   he3_dilute / heavy_isotope_slurry are valuable isotope concentrates →
+  //     rare (mirrors helium_3 / uranium_ore handling — Vault-gated).
+  dilute_brine: 'liquid_gas',
+  concentrated_brine: 'liquid_gas',
+  he3_dilute: 'rare',
+  mn_nodule: 'dry_goods',
+  re_nodule: 'dry_goods',
+  co_nodule: 'dry_goods',
+  methane_hydrate: 'liquid_gas',
+  heavy_isotope_slurry: 'rare',
+  vent_sulfide: 'dry_goods',
+  vent_exotic: 'rare',
 };
