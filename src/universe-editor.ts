@@ -25,7 +25,6 @@
 
 import { BUILDING_DEFS } from './building-defs.js';
 import { rerollModifiers } from './biomes.js';
-import type { ModifierId } from './biomes.js';
 import type { ResourceId } from './recipes.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { Biome, WorldState } from './world.js';
@@ -86,7 +85,7 @@ export function editIslandBiome(
   // the new biome's tile distribution without re-attaching.
   (spec as { biome: Biome }).biome = newBiome;
   // Re-roll modifiers, excluding natural-only entries per §13.3.
-  (spec as { modifiers: ReadonlyArray<ModifierId> }).modifiers = rerollModifiers(world.seed, newBiome);
+  spec.modifiers = rerollModifiers(world.seed, newBiome);
   // Walk every placed building: if its `requiredTile` set no longer matches
   // every footprint tile under the regenerated terrain, mark invalid.
   let invalidated = 0;

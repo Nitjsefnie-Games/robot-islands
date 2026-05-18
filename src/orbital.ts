@@ -288,7 +288,7 @@ export function launchSatellite(
       // upgrade investment is lost, but the building itself stays). Prior
       // behaviour filtered the spaceport out of `buildings` entirely; that
       // overshot the spec and was a functional regression.
-      (spaceport as { tier?: number }).tier = 1;
+      spaceport.tier = 1;
     } else {
       // Orbit explosion: §14.8 — debris field forms at the failed lock cell.
       // The sat broke up partway along the trajectory; the trajectory

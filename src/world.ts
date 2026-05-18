@@ -154,8 +154,10 @@ export interface IslandSpec {
   readonly terrainAt?: (x: number, y: number) => TerrainKind;
   /** Active modifiers on this island per §3.5. Step 8 hard-codes the demo
    *  set on `DEMO_ISLANDS`; future steps roll from `rollModifiers` at
-   *  generation. Empty array means no modifiers active. */
-  readonly modifiers: ReadonlyArray<ModifierId>;
+   *  generation. Empty array means no modifiers active. Mutable: the §13.3
+   *  Universe Editor reassigns this to the re-rolled set after a biome change
+   *  (see `changeBiome` in `universe-editor.ts`). */
+  modifiers: ReadonlyArray<ModifierId>;
   /** §2.5: islands built via Platform Constructor are flagged so future
    *  systems can deny natural-only content (rare-biome modifiers per §3.5,
    *  biome-locked uniques per §9.5). For step 11 the flag is metadata only —
