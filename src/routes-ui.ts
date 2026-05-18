@@ -451,9 +451,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     else if (islands.length >= 2) toSel.value = islands[1]!.id;
 
     cargoSel.replaceChildren();
-    // "any" — default priority list = ALL_RESOURCES in catalog order. The
-    // per-route priority list is editable in the ledger via the
-    // drag-to-reorder UL (`renderPriorityEditor` below).
+    // "any" — priority list defaults to [] per §2.4. The player adds
+    // entries via the ledger's editor (`renderPriorityEditor` below);
+    // drag-to-reorder once populated.
     const oAny = document.createElement('option');
     oAny.value = '__any__';
     oAny.textContent = 'any (priority)';
@@ -504,9 +504,10 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const dx = spec1.cx - spec2.cx;
     const dy = spec1.cy - spec2.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    // '__any__' → filter null + priority list. Default order is the
-    // catalog order in ALL_RESOURCES; players reorder per-route via
-    // the ledger's drag-to-reorder UL (`renderPriorityEditor` below).
+    // '__any__' → filter null + empty priority list per §2.4: "resources
+    // not on the priority list are not moved by this route." A fresh
+    // any-route moves nothing until the player adds entries via the
+    // ledger's editor (`renderPriorityEditor` below).
     const isAny = cargoChoice === '__any__';
     const route: Route = {
       id: nextRouteId(),
@@ -515,7 +516,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       type: 'cargo',
       capacityPerSec: T1_CARGO_CAPACITY_UNITS_PER_SEC,
       filter: isAny ? null : (cargoChoice as ResourceId),
-      priorityList: isAny ? [...ALL_RESOURCES] : [],
+      priorityList: [],
       transitTimeSec: transitTimeForDistance(dist),
       inFlight: [],
     };
@@ -644,7 +645,6 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       const li = document.createElement('li');
       li.draggable = true;
       li.dataset.index = String(index);
-      li.textContent = resId;
       li.style.cssText = [
         'cursor: grab',
         'padding: 2px 6px',
@@ -654,7 +654,36 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         'color: var(--ri-accent)',
         'font-size: 11px',
         'border-radius: 2px',
+        'display: flex',
+        'justify-content: space-between',
+        'align-items: center',
+        'gap: 6px',
       ].join(';');
+      const label = document.createElement('span');
+      label.textContent = resId;
+      li.appendChild(label);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.textContent = '×';
+      del.title = 'remove from priority list';
+      del.style.cssText = [
+        'cursor: pointer',
+        'background: transparent',
+        'color: var(--ri-warn)',
+        'border: 1px solid var(--ri-accent-dim)',
+        'border-radius: 2px',
+        'padding: 0 6px',
+        'font-size: 11px',
+        'line-height: 14px',
+      ].join(';');
+      del.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = route.priorityList.filter((_, i) => i !== index);
+        (route as unknown as { priorityList: ResourceId[] }).priorityList = next;
+        rerender();
+      });
+      li.appendChild(del);
       li.addEventListener('dragstart', (e) => handleDragStart(e));
       li.addEventListener('dragend', (e) => handleDragEnd(e));
       li.addEventListener('dragover', (e) => handleDragOver(e));
@@ -664,6 +693,60 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       ul.appendChild(li);
     });
     container.appendChild(ul);
+
+    // Add-resource control. Always rendered (even when the list is
+    // already populated) so the player can extend it. Lists only
+    // resources not yet on this route's priorityList.
+    const remaining = ALL_RESOURCES.filter((r) => !route.priorityList.includes(r));
+    const addRow = document.createElement('div');
+    addRow.style.cssText = 'display:flex;gap:4px;margin:4px 0 0 16px;align-items:center';
+    const addSel = document.createElement('select');
+    addSel.style.cssText = [
+      'flex: 1 1 auto',
+      'background: var(--ri-panel-solid)',
+      'color: var(--ri-accent)',
+      'border: 1px solid var(--ri-accent-dim)',
+      'font-size: 11px',
+      'padding: 2px 4px',
+    ].join(';');
+    if (remaining.length === 0) {
+      const o = document.createElement('option');
+      o.textContent = '(all resources added)';
+      addSel.appendChild(o);
+      addSel.disabled = true;
+    } else {
+      for (const r of remaining) {
+        const o = document.createElement('option');
+        o.value = r;
+        o.textContent = r;
+        addSel.appendChild(o);
+      }
+    }
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.textContent = '+ add';
+    addBtn.style.cssText = [
+      'cursor: pointer',
+      'background: var(--ri-panel-solid)',
+      'color: var(--ri-accent)',
+      'border: 1px solid var(--ri-accent-dim)',
+      'font-size: 11px',
+      'padding: 2px 8px',
+      'border-radius: 2px',
+    ].join(';');
+    addBtn.disabled = remaining.length === 0;
+    if (addBtn.disabled) addBtn.style.opacity = '0.5';
+    addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const chosen = addSel.value as ResourceId;
+      if (!chosen || route.priorityList.includes(chosen)) return;
+      const next = [...route.priorityList, chosen];
+      (route as unknown as { priorityList: ResourceId[] }).priorityList = next;
+      rerender();
+    });
+    addRow.appendChild(addSel);
+    addRow.appendChild(addBtn);
+    container.appendChild(addRow);
   }
 
   function handleDragStart(e: DragEvent) {

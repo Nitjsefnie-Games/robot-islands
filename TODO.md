@@ -40,15 +40,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   the deviation in SPEC.md.
   *(Flagged by Agents B, C.)*
 
-- **§2.4 `any` route seeds priority with EVERY resource (opposite of
-  spec).** `src/routes-ui.ts:518` `priorityList: isAny ? [...ALL_RESOURCES]
-  : []`. Spec §2.4: "Resources not on the priority list are not moved
-  by this route." A fresh `any` route therefore moves every resource in
-  alphabetic order until the player edits — the inverse of the spec
-  contract ("configurable bulk movers"). Should default to `[]` and let
-  the player add entries.
-  *(Flagged by Agent B.)*
-
 - **§15.1 / §9.5 `RouteType` is missing `'mass_driver'`.** `src/routes.ts:33-39`
   enumerates `cargo | drone | airship | teleporter | cable | spacetime`.
   Spec §15.1 says `Route.type = 'mass_driver'` for the §9.5 Plains
