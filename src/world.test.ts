@@ -12,13 +12,10 @@ import {
   makeInitialIslandState,
   makeInitialWorld,
   renameIsland,
-  useRealityForge,
   validateIslandName,
   VISION_PADDING_TILES,
   type IslandSpec,
-  type WorldState,
 } from './world.js';
-import { terrainAtForBiome } from './biomes.js';
 import { ALL_RESOURCES } from './recipes.js';
 
 function makeSpec(over: Partial<IslandSpec>): IslandSpec {
@@ -555,80 +552,3 @@ describe('validateIslandName', () => {
   });
 });
 
-describe('useRealityForge', () => {
-  function makeWorld(spec: IslandSpec): WorldState {
-    return { islands: [spec], drones: [], routes: [], vehicles: [], revealedCells: new Set(), satellites: [], repairDrones: [],
-    debrisFields: [], endgameState: { achieved: new Set(), firstAchievedMs: null, victoryBannerShown: false }, latticeActive: false, latticeNodeIslands: [],
-    commPackets: [], seed: 'test-seed' };
-  }
-
-  it('changes biome and regenerates terrain', () => {
-    const spec = makeSpec({
-      id: 'test-island',
-      biome: 'plains',
-      terrainAt: (x, y) => terrainAtForBiome('plains', 'test-island', x, y, () => true),
-      modifiers: ['stable'],
-    });
-    const world = makeWorld(spec);
-    useRealityForge(world, 'test-island', 'volcanic');
-    expect(spec.biome).toBe('volcanic');
-    // Volcanic default is stone; plains default is grass.
-    // Pick a coordinate we know is stone on this volcanic island.
-    let foundStone = false;
-    for (let y = -5; y <= 5 && !foundStone; y++) {
-      for (let x = -5; x <= 5 && !foundStone; x++) {
-        if (spec.terrainAt?.(x, y) === 'stone') foundStone = true;
-      }
-    }
-    expect(foundStone).toBe(true);
-  });
-
-  it('invalidates Mine on non-ore terrain after biome change', () => {
-    // Place a Mine on tiles that are ore in our custom terrain, then change
-    // to forest (which has no ore) so the Mine becomes invalid.
-    const spec = makeSpec({
-      id: 'test-island',
-      biome: 'plains',
-      buildings: [{ id: 'mine-1', defId: 'mine', x: 0, y: 0 }],
-      terrainAt: (x, y) => {
-        // Mine footprint at (0,0) covers (0,0), (1,0), (0,1), (1,1) — all ore.
-        if ((x === 0 || x === 1) && (y === 0 || y === 1)) return 'ore';
-        return 'grass';
-      },
-      modifiers: ['stable'],
-    });
-    const world = makeWorld(spec);
-    useRealityForge(world, 'test-island', 'forest');
-    expect(spec.biome).toBe('forest');
-    const mine = spec.buildings[0]!;
-    expect(mine.invalid).toBe(true);
-  });
-
-  it('does not invalidate buildings that still match terrain', () => {
-    const spec = makeSpec({
-      id: 'test-island',
-      biome: 'plains',
-      buildings: [{ id: 'solar-1', defId: 'solar', x: 0, y: 0 }],
-      terrainAt: (_x, _y) => 'grass',
-      modifiers: ['stable'],
-    });
-    const world = makeWorld(spec);
-    useRealityForge(world, 'test-island', 'forest');
-    const solar = spec.buildings[0]!;
-    expect(solar.invalid).toBeUndefined();
-  });
-
-  it('rerolls modifiers and excludes natural-only ones', () => {
-    const spec = makeSpec({
-      id: 'test-island',
-      biome: 'plains',
-      terrainAt: (_x, _y) => 'grass',
-      modifiers: ['aetheric_anomaly', 'mineral_rich'],
-    });
-    const world = makeWorld(spec);
-    useRealityForge(world, 'test-island', 'desert');
-    // Old modifiers should be replaced; new set must not contain natural-only.
-    expect(spec.modifiers.includes('aetheric_anomaly')).toBe(false);
-    expect(spec.modifiers.includes('frozen_core')).toBe(false);
-  });
-});

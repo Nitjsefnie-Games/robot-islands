@@ -82,15 +82,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   Brick and copper_ore both exist in the catalog.
   *(Flagged by Agent D.)*
 
-- **§13.3 `useRealityForge` is dead production code AND a misnomer.**
-  `src/world.ts:327-367` — only callers are its own test file. Function
-  name is wrong (Reality Forge crafts T5 components per §8.3 / §7.12;
-  this function does the Universe Editor mechanic from §13.3, which is
-  separately implemented in `src/universe-editor.ts → editIslandBiome`
-  and is what `inspector-ui.ts` actually calls). Delete (or rename and
-  consolidate with `editIslandBiome` to remove the parallel branch).
-  *(Flagged by Agents B, C.)*
-
 - **§13.4 `endgame.ts` ships a banner + checker the spec forbids.**
   `src/endgame.ts:18` `victoryBannerShown` field + `:29-60` `checkVictory`
   function. Spec §13.4 + impl-status row §13.4 are explicit: "No win
@@ -269,9 +260,6 @@ them explicit values + rationale.
 
 ## 5. Dead code / dead exports
 
-- **`src/world.ts:327-367`** `useRealityForge` — only callers in
-  `world.test.ts`. Replaced in production by `editIslandBiome`. Delete
-  or consolidate (see §1).
 - **`src/endgame.ts:29-60`** `checkVictory` + `:18` `victoryBannerShown`
   field — only test consumers, contradicts spec "no win screen".
   Persistence serializes the field, which is the only thing keeping it
