@@ -208,7 +208,7 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   ascendant_core: 'rare',
   antimatter_propellant: 'fuel',     // §11.7 T6 launch fuel
   scanner_sat: 'components',          // §14.3 satellite payload
-  comm_sat: 'components',             // §14.3 satellite payload
+  relay_sat: 'components',            // §14.3 satellite payload
   orbital_insertion_package: 'components', // §14.7 T6 Foundation-Kit equivalent
   sweeper_sat: 'components',          // §14.8 debris sweeper payload
   repair_drone: 'rare',               // §14.12 orbital repair unit

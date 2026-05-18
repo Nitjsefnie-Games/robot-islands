@@ -185,7 +185,7 @@ export type BuildingDefId =
   | 'orbital_tracking_station'
   | 'antimatter_refinery'
   | 'scanner_sat_assembly'
-  | 'comm_sat_assembly'
+  | 'relay_sat_assembly'
   | 'sweeper_sat_assembly'
   | 'oip_assembly'
   | 'repair_pack_assembly'
@@ -2114,11 +2114,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel: 250, microchip: 60, glass: 30 },
     glyph: '◇',
   },
-  // §14.3 / §14.10: Comm Sat Assembly — produces Comm Sat payloads for
+  // §14.3 / §14.10: Relay Sat Assembly — produces Relay Sat payloads for
   // §14.4 comm-graph extension.
-  comm_sat_assembly: {
-    id: 'comm_sat_assembly',
-    displayName: 'Comm Sat Assembly',
+  relay_sat_assembly: {
+    id: 'relay_sat_assembly',
+    displayName: 'Relay Sat Assembly',
     category: 'manufacturing',
     tier: 6,
     footprint: SHAPES.square3,

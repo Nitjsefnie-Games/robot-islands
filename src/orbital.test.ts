@@ -121,7 +121,7 @@ function stockLaunchResources(
 ): void {
   state.inventory.scanner_sat = variant === 'scanner' ? 1 : 0;
   state.inventory.sweeper_sat = variant === 'sweeper' ? 1 : 0;
-  state.inventory.comm_sat = variant === 'comm' ? 1 : 0;
+  state.inventory.relay_sat = variant === 'relay' ? 1 : 0;
   state.inventory.orbital_insertion_package = 1;
   state.inventory.antimatter_propellant = 1;
 }
@@ -199,9 +199,9 @@ describe('satellite launch success roll', () => {
     const world = makeWorld();
     const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state, 2);
-    stockLaunchResources(state, 'comm');
+    stockLaunchResources(state, 'relay');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'comm', 50, 50, 3);
+    const result = launchSatellite(world, 'home', 'relay', 50, 50, 3);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(world.satellites).toHaveLength(1);
@@ -367,18 +367,18 @@ describe('satellite stats per variant', () => {
     expect(result.sat.variant).toBe('scanner');
   });
 
-  it('comm has commRange 500 and coverageRadius 0', () => {
+  it('relay has commRange 500 and coverageRadius 0', () => {
     const world = makeWorld();
     const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
     addSpaceport(state, 3);
-    stockLaunchResources(state, 'comm');
+    stockLaunchResources(state, 'relay');
     world.islandStates = new Map([['home', state]]);
-    const result = launchSatellite(world, 'home', 'comm', 50, 50, 1);
+    const result = launchSatellite(world, 'home', 'relay', 50, 50, 1);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.sat.commRange).toBe(500);
     expect(result.sat.coverageRadius).toBe(0);
-    expect(result.sat.variant).toBe('comm');
+    expect(result.sat.variant).toBe('relay');
   });
 
   it('sweeper has commRange 200 and coverageRadius 0', () => {
@@ -1359,7 +1359,7 @@ describe('§14.5 scanner dwell-ramp discovery', () => {
     const world = makeBfsWorld({
       islands: [],
       islandStates: new Map(),
-      satellites: [makeMinimalSat({ id: 'sat1', x: 0, y: 0, variant: 'comm', coverageRadius: 0 })],
+      satellites: [makeMinimalSat({ id: 'sat1', x: 0, y: 0, variant: 'relay', coverageRadius: 0 })],
     });
     const result = tickScannerDiscovery(world, 1000, 0);
     expect(result).toEqual([]);

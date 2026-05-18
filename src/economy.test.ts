@@ -2089,7 +2089,7 @@ describe('step-20 T6 gate composition (§14.1)', () => {
     expect(list).toContain('spaceport');
     expect(list).toContain('antimatter_refinery');
     expect(list).toContain('scanner_sat_assembly');
-    expect(list).toContain('comm_sat_assembly');
+    expect(list).toContain('relay_sat_assembly');
     expect(list).toContain('sweeper_sat_assembly');
     expect(list).toContain('oip_assembly');
     expect(list).toContain('repair_pack_assembly');
@@ -2115,7 +2115,7 @@ describe('step-20 T6 gate composition (§14.1)', () => {
     expect(list).toContain('spaceport');
     expect(list).not.toContain('antimatter_refinery');
     expect(list).not.toContain('scanner_sat_assembly');
-    expect(list).not.toContain('comm_sat_assembly');
+    expect(list).not.toContain('relay_sat_assembly');
     expect(list).not.toContain('sweeper_sat_assembly');
     expect(list).not.toContain('oip_assembly');
     expect(list).not.toContain('repair_pack_assembly');

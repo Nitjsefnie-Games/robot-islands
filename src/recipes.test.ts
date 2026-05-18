@@ -315,9 +315,9 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.category).toBe('manufacturing');
   });
 
-  it('comm_sat_assembly has correct inputs, outputs, and cycleSec', () => {
-    const r = RECIPES.comm_sat_assembly!;
-    expect(r.outputs.comm_sat).toBe(1);
+  it('relay_sat_assembly has correct inputs, outputs, and cycleSec', () => {
+    const r = RECIPES.relay_sat_assembly!;
+    expect(r.outputs.relay_sat).toBe(1);
     expect(r.inputs.exotic_alloy).toBe(6);
     expect(r.inputs.ai_core).toBe(1);
     expect(r.inputs.optical_fiber).toBe(50); // rebalanced Task 16.7 (was 200)
@@ -1621,9 +1621,9 @@ describe('§7.7 double output of memory_lab + processor_fab + compute_module_fab
   });
 });
 
-describe('§14.10 comm_sat optical_fiber input reduction (Task 16.7)', () => {
-  it('comm_sat_assembly inputs optical_fiber: 50 (was 200)', () => {
-    expect(RECIPES.comm_sat_assembly!.inputs).toEqual({
+describe('§14.10 relay_sat optical_fiber input reduction (Task 16.7)', () => {
+  it('relay_sat_assembly inputs optical_fiber: 50 (was 200)', () => {
+    expect(RECIPES.relay_sat_assembly!.inputs).toEqual({
       exotic_alloy: 6,
       ai_core: 1,
       optical_fiber: 50,

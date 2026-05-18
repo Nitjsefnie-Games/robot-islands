@@ -29,7 +29,7 @@
 //
 //   T5→T6 artifact: ascendant_core      (§13.4 / §14.1 — flips the §14.1 gate)
 //   T6 fuel:        antimatter_propellant (§11.7 / §14.10)
-//   T6 payload:     scanner_sat, comm_sat, orbital_insertion_package (§14.3 / §14.10)
+//   T6 payload:     scanner_sat, relay_sat, orbital_insertion_package (§14.3 / §14.10)
 //
 // `xp_weight` per SPEC §9.1: T0 raws = 1, T1 = 3, T2 = 10, T4 = 100, T5 = 300, T6 = 1000.
 // Higher-tier outputs grant proportionally more XP per unit produced, so the
@@ -248,7 +248,7 @@ export type ResourceId =
   //   antimatter_propellant    — T6 launch fuel per §11.7 / §14.10. Crafted
   //                              at `antimatter_refinery` (T6).
   //   scanner_sat              — §14.3 discovery/weather satellite payload.
-  //   comm_sat                 — §14.3 comm-graph extension payload.
+  //   relay_sat                — §14.3 comm-graph extension payload.
   //   orbital_insertion_package — §14.7 "T6 Foundation-Kit equivalent" —
   //                              every launch requires one alongside fuel +
   //                              variant recipe. Crafted at
@@ -256,7 +256,7 @@ export type ResourceId =
   | 'ascendant_core'
   | 'antimatter_propellant'
   | 'scanner_sat'
-  | 'comm_sat'
+  | 'relay_sat'
   | 'orbital_insertion_package'
   | 'sweeper_sat'
   | 'repair_drone'
@@ -482,7 +482,7 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'ascendant_core',
   'antimatter_propellant',
   'scanner_sat',
-  'comm_sat',
+  'relay_sat',
   'orbital_insertion_package',
   'sweeper_sat',
   'repair_drone',
@@ -547,7 +547,7 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
  *   T5 transcendent = 300 (casimir_energy, reality_anchor, plasma_charge,
  *                          eldritch_processor, phase_converter)
  *   T6 orbital     = 1000 (ascendant_core (T5→T6 bridge), antimatter_propellant,
- *                          scanner_sat, comm_sat, orbital_insertion_package)
+ *                          scanner_sat, relay_sat, orbital_insertion_package)
  */
 export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // T0 raws
@@ -729,7 +729,7 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // T6 Orbital — §9.1 T6 weight 1000.
   antimatter_propellant: 1000,
   scanner_sat: 1000,
-  comm_sat: 1000,
+  relay_sat: 1000,
   orbital_insertion_package: 1000,
   sweeper_sat: 1000,
   repair_drone: 1000,
@@ -2008,12 +2008,12 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // §14.3 / §14.10: Comm Sat Assembly. 30-min cycle.
-  comm_sat_assembly: {
+  // §14.3 / §14.10: Relay Sat Assembly. 30-min cycle.
+  relay_sat_assembly: {
     cycleSec: 1800,
     // optical_fiber reduced 200→50 (Agent C: extreme ratio, suspected copy-paste from spec).
     inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 50, orbital_insertion_package: 1 },
-    outputs: { comm_sat: 1 },
+    outputs: { relay_sat: 1 },
     category: 'manufacturing',
   },
 
