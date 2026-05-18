@@ -8,9 +8,14 @@
 // directly, eliminating the byte-for-byte duplicate that used to live
 // inline in `world.ts` as `pointInVisionTest`.
 //
+// The single `./constants.js` import is to a no-dependency leaf module so
+// this file remains effectively at the bottom of the dep graph.
+//
 // `lighthouse.ts` re-exports both names so existing call sites
 // (`import { pointInVision, type VisionSource } from './lighthouse.js'`)
 // keep working unchanged.
+
+import { CELL_SIZE_TILES } from './constants.js';
 
 /** A vision-emitting source in world-tile coordinates.
  *
@@ -61,12 +66,6 @@ export function pointInVision(
   }
   return false;
 }
-
-/** Tiles-per-stratification-cell. Mirrored from `world.ts → CELL_SIZE_TILES`
- *  but kept as a constant here so this leaf module has no inbound deps. The
- *  one-line value-duplication is intentional — promoting this to a shared
- *  import would create a circular dep between vision-source and world. */
-const CELL_SIZE_TILES = 16;
 
 /** Does the AABB of stratification cell `(cellX, cellY)` intersect ANY of
  *  the supplied vision sources? "If any tile of the cell would be revealed,

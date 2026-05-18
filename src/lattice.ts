@@ -4,13 +4,17 @@
 // latticeActive + latticeNodeIslands) but does not touch economy state.
 
 import type { PlacedBuilding } from './buildings.js';
+import { LATTICE_ACTIVATION_THRESHOLD } from './constants.js';
 import { networkedIslandIds } from './network-consciousness.js';
 import type { ResourceId } from './recipes.js';
 import { tierForLevel } from './skilltree.js';
 import type { WorldState } from './world.js';
 
-/** §13.3 Network Consciousness threshold for Omniscient Lattice activation. */
-export const LATTICE_ACTIVATION_THRESHOLD = 20;
+/** §13.3 Network Consciousness threshold for Omniscient Lattice activation.
+ *  Re-exported from `constants.ts` (the canonical source of truth); the
+ *  same numeric value drives the milestone-4 row of `MILESTONE_TABLE` in
+ *  `network-consciousness.ts` so the two cannot drift. */
+export { LATTICE_ACTIVATION_THRESHOLD };
 
 /** §13.3 A T5-mastered island has reached level 50 AND crafted an AI core. */
 function isT5Mastered(world: WorldState, islandId: string): boolean {

@@ -16,6 +16,7 @@
 
 import { Container, Graphics } from 'pixi.js';
 
+import { CELL_SIZE_TILES } from './constants.js';
 import { TILE_PX } from './island.js';
 import type { SatelliteVariant } from './orbital.js';
 import type { WorldState } from './world.js';
@@ -53,8 +54,9 @@ export function mountSatelliteOverlay(world: WorldState): SatelliteOverlayHandle
 
     // Debris first (under everything else).
     for (const d of world.debrisFields) {
-      const px = d.cellX * 16 * TILE_PX + 8 * TILE_PX;
-      const py = d.cellY * 16 * TILE_PX + 8 * TILE_PX;
+      // 8 == CELL_SIZE_TILES / 2 (half-cell offset to center).
+      const px = d.cellX * CELL_SIZE_TILES * TILE_PX + 8 * TILE_PX;
+      const py = d.cellY * CELL_SIZE_TILES * TILE_PX + 8 * TILE_PX;
       const size = Math.max(3, Math.min(12, d.fragments / 2)) * TILE_PX;
       gfx
         .moveTo(px - size, py)

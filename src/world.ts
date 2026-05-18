@@ -27,6 +27,7 @@ import type { ModifierId } from './biomes.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { renderBuildings } from './buildings.js';
+import { BASELINE_STORAGE_CAP, CELL_SIZE_TILES } from './constants.js';
 import { islandCells } from './discovery.js';
 import type { IslandState } from './economy.js';
 import type { EndgameState, VictoryCondition } from './endgame.js';
@@ -43,8 +44,9 @@ import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { pointInVision, type VisionSource } from './vision-source.js';
 import { generateCellIslands, generateWorld } from './world-gen.js';
 
-/** Stratification cell side length, in tiles. SPEC §2.1 calls this R. */
-export const CELL_SIZE_TILES = 16;
+/** Stratification cell side length, in tiles. SPEC §2.1 calls this R.
+ *  Re-exported from `constants.ts` (the canonical source of truth). */
+export { CELL_SIZE_TILES };
 /** Padding (in tiles) extending past each island's ellipse edge to form the
  *  baseline vision area. A populated island's baseline vision footprint is an
  *  axis-aligned ellipse with semi-axes `(majorRadius + VISION_PADDING_TILES,
@@ -919,9 +921,10 @@ function startingInventory(): Record<ResourceId, number> {
 /** Baseline cap before any storage building is placed. Rebalanced for
  *  idle-game scale, step #19: bumped from 100 → 2000 so a few minutes of
  *  T1 production doesn't instantly fill storage. Storage buildings add on
- *  top of this baseline. Exported so `placement.ts` and persistence
- *  forward-compat can use the same constant. */
-export const BASELINE_STORAGE_CAP = 2000; // rebalanced for idle-game scale, step #19 (was 100)
+ *  top of this baseline. Re-exported from `constants.ts` (the canonical
+ *  source of truth) so `placement.ts` and persistence forward-compat can
+ *  use the same constant. */
+export { BASELINE_STORAGE_CAP };
 
 /**
  * Aggregate placement-time storage caps from a building list per §4.6
