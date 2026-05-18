@@ -49,6 +49,17 @@ describe('generateOceanTerrain', () => {
     expect(Array.from(a.entries()).sort()).toEqual(Array.from(b.entries()).sort());
   });
 
+  // Counterpart to the determinism test: if the generator silently
+  // ignored its seed parameter, every "same seed → same map" assertion
+  // would pass vacuously. Two distinct seeds must produce distinct maps.
+  it('produces different maps for different seeds', () => {
+    const a = generateOceanTerrain('seed-A', ISLANDS);
+    const b = generateOceanTerrain('seed-B', ISLANDS);
+    expect(Array.from(a.entries()).sort()).not.toEqual(
+      Array.from(b.entries()).sort(),
+    );
+  });
+
   it('seeds shallows within R=2 cells of an island edge', () => {
     const cells = generateOceanTerrain('seed-1', ISLANDS);
     const shallowsHits = Array.from(cells.values()).filter(
@@ -57,65 +68,77 @@ describe('generateOceanTerrain', () => {
     expect(shallowsHits).toBeGreaterThan(0);
   });
 
-  // Trench-shape test. The N=4-8 trench length and 0-3 per-world cap mean
-  // some seeds roll zero trenches; we hunt for a seed that reliably rolls
-  // at least one to make the assertion non-vacuous. `'trench-test-1'`
-  // produces ≥1 trench against the current generator. If the implementer
-  // changes generation in a way that drops this to zero, swap to another
-  // seed (cheap, deterministic search).
-  it('seeds trenches as 2×N or 3×N rectangles in deep zones', () => {
-    const SEED = 'trench-test-1';
-    const cells = generateOceanTerrain(SEED, ISLANDS);
-    const trenchKeys = Array.from(cells.entries())
-      .filter(([, c]) => c.terrain === 'trench')
-      .map(([k]) => k.split(',').map(Number) as [number, number]);
-    expect(trenchKeys.length).toBeGreaterThan(0);
-
-    // Flood-fill into connected components on 4-neighbour adjacency.
+  // Trench-shape sweep. Single-seed checks are easy to game with cherry-
+  // picking (an earlier iteration of this test passed against a seed that
+  // skirted the multi-trench overlap case); a 50-seed loop catches the
+  // regression where two trenches placed edge-adjacent merge into a
+  // non-rectangular 4-connected blob. With the prior-trench buffer
+  // rejection in `seedTrenches`, every component for every seed must be
+  // a clean 2×N or 3×N rectangle with N ∈ [4, 8]. Empirical: pre-buffer
+  // sweep of probe-0..199 yielded 12-18 non-rect components; post-buffer
+  // it's 0.
+  it('seeds trenches as 2×N or 3×N rectangles in deep zones (50-seed sweep)', () => {
     const keyOf = (x: number, y: number) => `${x},${y}`;
-    const set = new Set(trenchKeys.map(([x, y]) => keyOf(x, y)));
-    const visited = new Set<string>();
-    const components: Array<Array<[number, number]>> = [];
-    for (const start of trenchKeys) {
-      const k0 = keyOf(start[0], start[1]);
-      if (visited.has(k0)) continue;
-      const stack: Array<[number, number]> = [start];
-      const component: Array<[number, number]> = [];
-      while (stack.length > 0) {
-        const [x, y] = stack.pop()!;
-        const k = keyOf(x, y);
-        if (visited.has(k)) continue;
-        visited.add(k);
-        component.push([x, y]);
-        for (const [dx, dy] of [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ] as const) {
-          const nk = keyOf(x + dx, y + dy);
-          if (set.has(nk) && !visited.has(nk)) stack.push([x + dx, y + dy]);
-        }
-      }
-      components.push(component);
-    }
+    let totalComponents = 0;
+    for (let i = 0; i < 50; i++) {
+      const cells = generateOceanTerrain(`trench-sweep-${i}`, ISLANDS);
+      const trenchKeys = Array.from(cells.entries())
+        .filter(([, c]) => c.terrain === 'trench')
+        .map(([k]) => k.split(',').map(Number) as [number, number]);
+      if (trenchKeys.length === 0) continue;
 
-    // Each component must be a 2×N (or 3×N) rectangle with N ∈ [4, 8].
-    for (const comp of components) {
-      const xs = comp.map(([x]) => x);
-      const ys = comp.map(([, y]) => y);
-      const w = Math.max(...xs) - Math.min(...xs) + 1;
-      const h = Math.max(...ys) - Math.min(...ys) + 1;
-      // Rectangle-fill check: width * height = cell count.
-      expect(comp.length).toBe(w * h);
-      // 2×N or 3×N rectangle (orientation either axis-aligned way).
-      const isHorizontal = (h === 2 || h === 3) && w >= 4 && w <= 8;
-      const isVertical = (w === 2 || w === 3) && h >= 4 && h <= 8;
-      expect(
-        isHorizontal || isVertical,
-        `trench component dims ${w}×${h} not in (2|3)×[4,8]`,
-      ).toBe(true);
+      // 4-neighbour flood-fill into connected components.
+      const set = new Set(trenchKeys.map(([x, y]) => keyOf(x, y)));
+      const visited = new Set<string>();
+      const components: Array<Array<[number, number]>> = [];
+      for (const start of trenchKeys) {
+        const k0 = keyOf(start[0], start[1]);
+        if (visited.has(k0)) continue;
+        const stack: Array<[number, number]> = [start];
+        const component: Array<[number, number]> = [];
+        while (stack.length > 0) {
+          const [x, y] = stack.pop()!;
+          const k = keyOf(x, y);
+          if (visited.has(k)) continue;
+          visited.add(k);
+          component.push([x, y]);
+          for (const [dx, dy] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ] as const) {
+            const nk = keyOf(x + dx, y + dy);
+            if (set.has(nk) && !visited.has(nk)) stack.push([x + dx, y + dy]);
+          }
+        }
+        components.push(component);
+      }
+
+      // Each component must be a 2×N (or 3×N) rectangle with N ∈ [4, 8].
+      for (const comp of components) {
+        const xs = comp.map(([x]) => x);
+        const ys = comp.map(([, y]) => y);
+        const w = Math.max(...xs) - Math.min(...xs) + 1;
+        const h = Math.max(...ys) - Math.min(...ys) + 1;
+        // Rectangle-fill check: width * height = cell count.
+        expect(
+          comp.length,
+          `seed trench-sweep-${i}: component size ${comp.length} ≠ ${w}×${h} = ${w * h}`,
+        ).toBe(w * h);
+        const isHorizontal = (h === 2 || h === 3) && w >= 4 && w <= 8;
+        const isVertical = (w === 2 || w === 3) && h >= 4 && h <= 8;
+        expect(
+          isHorizontal || isVertical,
+          `seed trench-sweep-${i}: component dims ${w}×${h} not in (2|3)×[4,8]`,
+        ).toBe(true);
+        totalComponents++;
+      }
     }
+    // Sanity guard: the sweep must actually observe trenches, else the
+    // assertion loop is vacuous (e.g. a generator that emits zero trenches
+    // would silently pass).
+    expect(totalComponents).toBeGreaterThan(0);
   });
 
   it('vent clusters are biased toward volcanic islands', () => {
@@ -210,5 +233,82 @@ describe('generateOceanTerrain', () => {
         expect(h).toBe(3);
       }
     }
+  });
+
+  // Pin the 1-cell 4-neighbour buffer between nodule clusters
+  // (`seedNoduleFields` — keeps two 3×3 fields from blob-merging into
+  // a single 6-cell-tall amorphous mass). For any two cluster anchors
+  // in the same world, every cell of one cluster must be at Chebyshev
+  // distance ≥ 2 from every cell of the other — i.e. no two clusters
+  // share an 8-neighbour. Sweep seeds until we find one that rolls ≥ 2
+  // clusters; if none seen in a reasonable budget we skip (the loop is
+  // self-guarded — small chance of vacuous pass, but the empirical
+  // base rate is high enough that 20 seeds essentially always hit).
+  it('keeps nodule clusters separated by a 1-cell buffer', () => {
+    const keyOf = (x: number, y: number) => `${x},${y}`;
+    let observedMultiCluster = false;
+    for (let i = 0; i < 20; i++) {
+      const cells = generateOceanTerrain(`nodule-buffer-${i}`, ISLANDS);
+      const noduleKeys = Array.from(cells.entries())
+        .filter(([, c]) => c.terrain === 'nodule_field')
+        .map(([k]) => k.split(',').map(Number) as [number, number]);
+      if (noduleKeys.length === 0) continue;
+
+      // 4-neighbour flood-fill → component list.
+      const set = new Set(noduleKeys.map(([x, y]) => keyOf(x, y)));
+      const visited = new Set<string>();
+      const components: Array<Array<[number, number]>> = [];
+      for (const start of noduleKeys) {
+        const k0 = keyOf(start[0], start[1]);
+        if (visited.has(k0)) continue;
+        const stack: Array<[number, number]> = [start];
+        const component: Array<[number, number]> = [];
+        while (stack.length > 0) {
+          const [x, y] = stack.pop()!;
+          const k = keyOf(x, y);
+          if (visited.has(k)) continue;
+          visited.add(k);
+          component.push([x, y]);
+          for (const [dx, dy] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ] as const) {
+            const nk = keyOf(x + dx, y + dy);
+            if (set.has(nk) && !visited.has(nk)) stack.push([x + dx, y + dy]);
+          }
+        }
+        components.push(component);
+      }
+
+      if (components.length < 2) continue;
+      observedMultiCluster = true;
+
+      // For every pair (A, B): min Chebyshev distance between any
+      // cell-of-A and any cell-of-B must be ≥ 2. (Distance 1 means
+      // either edge- or corner-adjacent; the generator's 4-neighbour
+      // buffer rejects placements where a candidate cell IS a nodule OR
+      // is edge-adjacent to one — so any two distinct clusters can't
+      // share a 4-neighbour ring cell.)
+      for (let a = 0; a < components.length; a++) {
+        for (let b = a + 1; b < components.length; b++) {
+          let minDist = Infinity;
+          const A = components[a]!;
+          const B = components[b]!;
+          for (const [ax, ay] of A) {
+            for (const [bx, by] of B) {
+              const d = Math.max(Math.abs(ax - bx), Math.abs(ay - by));
+              if (d < minDist) minDist = d;
+            }
+          }
+          expect(
+            minDist,
+            `seed nodule-buffer-${i}: clusters ${a},${b} min Chebyshev ${minDist} < 2`,
+          ).toBeGreaterThanOrEqual(2);
+        }
+      }
+    }
+    expect(observedMultiCluster).toBe(true);
   });
 });

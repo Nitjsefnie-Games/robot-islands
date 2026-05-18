@@ -51,6 +51,13 @@ const TRENCH_MIN_LEN = 4;
 const TRENCH_MAX_LEN = 8;
 /** Probability of a rare 3-wide trench (vs the default 2-wide). */
 const TRENCH_WIDE_PROB = 0.1;
+/** Max rejection attempts per trench when the candidate rectangle
+ *  collides with land OR a prior-placed trench (the latter prevents
+ *  two trenches merging into a non-rectangular blob). */
+const TRENCH_PLACE_ATTEMPTS = 10;
+/** Minimum edge distance (in cells) the trench anchor must clear —
+ *  pushes trenches into the deep zone away from shallows. */
+const TRENCH_MIN_EDGE_DIST_CELLS = 2;
 
 /** Nodule-field placement: 2-5 fields per world. Per spec §2. */
 const NODULE_MIN_FIELDS = 2;
@@ -225,7 +232,8 @@ function rollDeepZoneCell(
   if (minCellDistanceToAnyIslandEdge(x, y, islands) < minEdgeDistCells) {
     return null;
   }
-  if (cells.get(keyOf(x, y))?.terrain !== undefined && cells.get(keyOf(x, y))?.terrain !== 'shallows') {
+  const existing = cells.get(keyOf(x, y))?.terrain;
+  if (existing !== undefined && existing !== 'shallows') {
     return null;
   }
   return [x, y];
@@ -282,21 +290,45 @@ function seedTrenches(
     // Roll an anchor — must be a deep-zone cell. Up to a few retries
     // for this trench; if every attempt fails we just skip it.
     let placed = false;
-    for (let attempt = 0; attempt < 10 && !placed; attempt++) {
-      const anchor = rollDeepZoneCell(cells, islands, rng, rect, /* minEdgeDist */ 2);
+    for (let attempt = 0; attempt < TRENCH_PLACE_ATTEMPTS && !placed; attempt++) {
+      const anchor = rollDeepZoneCell(
+        cells,
+        islands,
+        rng,
+        rect,
+        TRENCH_MIN_EDGE_DIST_CELLS,
+      );
       if (!anchor) continue;
       const [ax, ay] = anchor;
       const candidate = trenchCells(ax, ay, length, width, horizontal);
 
-      // Reject if any cell of the candidate sits on/inside an island.
-      // Shallows overwrite is allowed (spec only restricts trench /
-      // nodule / vent mutual overlap), but island land is off-limits.
+      // Reject if any cell of the candidate sits on/inside an island
+      // OR is within a 1-cell 4-neighbour buffer of a prior-placed
+      // trench. The buffer mirrors the nodule-field pass below — without
+      // it, two trenches placed edge-adjacent stay valid rectangles
+      // individually but merge into a non-rectangular blob under
+      // 4-connected flood fill (the shape invariant the trench-shape
+      // test pins). Shallows overwrite is still allowed (spec only
+      // restricts trench / nodule / vent mutual overlap).
       let valid = true;
       for (const [cx, cy] of candidate) {
         if (minCellDistanceToAnyIslandEdge(cx, cy, islands) === 0) {
           valid = false;
           break;
         }
+        for (const [ndx, ndy] of [
+          [0, 0],
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          if (cells.get(keyOf(cx + ndx, cy + ndy))?.terrain === 'trench') {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
       }
       if (!valid) continue;
 
