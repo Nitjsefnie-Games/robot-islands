@@ -112,6 +112,13 @@ export function generateCellIslands(
 
   const id = `gen-${cellX}-${cellY}`;
   const modifiers = rollModifiers(seed, biome, rng);
+  // §3.4 Coast-only rotation: roll a multiple of 22.5° (= 360 / 16) from a
+  // dedicated per-cell RNG stream. Decoupling from the main `rng` keeps
+  // future inserts above this point — extra modifier draws, alternate
+  // jitter shapes — from perturbing existing rotation values for any seed
+  // already in the wild. Non-Coast biomes leave the field unset; readers
+  // collapse undefined → 0 via `?? 0` (see IslandSpec docblock).
+  const rotation = biome === 'coast' ? rollCoastRotation(seed, cellX, cellY) : 0;
   const spec: IslandSpec = attachTerrainAt({
     id,
     name: id,
@@ -124,6 +131,7 @@ export function generateCellIslands(
     discovered: false,
     buildings: [],
     modifiers,
+    rotation,
   });
   return [spec];
 }
@@ -172,6 +180,26 @@ const BIOME_WEIGHTS: ReadonlyArray<readonly [Biome, number]> = [
 ];
 
 const BIOME_WEIGHT_TOTAL: number = BIOME_WEIGHTS.reduce((s, [, w]) => s + w, 0);
+
+/** §3.4 number of discrete rotation buckets for Coast islands. 16 buckets
+ *  × 22.5° = 360°. */
+const COAST_ROTATION_STEPS = 16;
+
+/** §3.4 Coast-island rotation roll. Deterministic from the world seed +
+ *  cell coordinates: a separate RNG stream keyed `${seed}_cell_${cx}_${cy}_rotation`
+ *  so the value depends only on the seed and the cell, not on the call
+ *  order of other rolls in `generateCellIslands` (biome, jitter, modifiers).
+ *  Returns one of `{0, 22.5, 45, …, 337.5}` — 16 evenly-spaced multiples
+ *  of 22.5° in `[0, 360)`. Pure. */
+function rollCoastRotation(seed: string, cellX: number, cellY: number): number {
+  const r = makeSeededRng(`${seed}_cell_${cellX}_${cellY}_rotation`);
+  const step = Math.floor(r() * COAST_ROTATION_STEPS);
+  // Clamp belt-and-braces in case r() somehow returns exactly 1.0; the
+  // contract is `[0, 1)` but the clamp costs nothing and keeps the
+  // returned bucket strictly in `[0, COAST_ROTATION_STEPS)`.
+  const clamped = Math.min(step, COAST_ROTATION_STEPS - 1);
+  return (clamped * 360) / COAST_ROTATION_STEPS;
+}
 
 /** Sample a biome from the weighted distribution. Consumes one rng call. */
 function rollBiome(rng: () => number): Biome {

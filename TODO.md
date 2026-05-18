@@ -47,12 +47,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   path". Spec §2.6 promises Weather Station (T2) `+3 cells` and
   Advanced Weather Station (T3) `+6 cells, +1-cycle forecast`. *(D.)*
 
-- **§3.4 Coast island rotation never randomized.** `src/world.ts:177`
-  carries `rotation` as forward-compat but always sets it to 0. Spec
-  §3.4: "Coast islands generate with a biome-randomized rotation
-  (multiples of 22.5 degrees from world seed)." SPEC.md status §3.1-3.4
-  marks shape as L. *(B.)*
-
 - **§14.5 satellite coverage skips perimeter cells.**
   `src/orbital.ts:791-806` `cellsCoveredBySat` admits only cells whose
   CENTRE is within `coverageRadius`. Cells whose centre is outside but

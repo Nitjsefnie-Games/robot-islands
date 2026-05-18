@@ -165,8 +165,12 @@ export interface IslandSpec {
    *  Single-ellipse islands have `undefined` or `[]` — every existing code
    *  path treats those identically. Per §3.6 a tile is part of the island
    *  iff it is inscribed inside ANY constituent (primary or extra). Merges
-   *  are permanent; the array only grows. `rotation` is carried for forward-
-   *  compat with §3.4 rotation (not yet wired) — always 0 for now. */
+   *  are permanent; the array only grows. The per-extra `rotation` field is
+   *  carried for forward-compat with rendering of rotated ellipses; merge
+   *  propagation of rotation is not wired, so absorbed primaries currently
+   *  enter the extras list with rotation 0 (see `island-merge.ts`). The
+   *  primary ellipse's own rotation lives on `IslandSpec.rotation` below
+   *  and IS set by world-gen for Coast islands per §3.4. */
   extraEllipses?: Array<{
     readonly major: number;
     readonly minor: number;
@@ -174,6 +178,20 @@ export interface IslandSpec {
     readonly offsetX: number;
     readonly offsetY: number;
   }>;
+  /** §3.4 primary-ellipse rotation in degrees, in `[0, 360)`. For all
+   *  biomes EXCEPT Coast this is 0 (or absent — readers must default via
+   *  `?? 0`). Coast islands roll a rotation from `{0, 22.5, 45, …, 337.5}`
+   *  (16 evenly-spaced 22.5° multiples) deterministically from the world
+   *  seed at generation time. Once set, rotation is immutable per §3.4
+   *  ("Rotation cannot be changed after generation"); Land Reclamation
+   *  expansions mutate radii but never this field.
+   *
+   *  Currently this field is metadata only — no consumer rotates the
+   *  ellipse when rendering, computing tile inscription, or testing
+   *  overlap. Persisting it now unblocks future render-layer work without
+   *  another schema bump. Optional so legacy saves (pre-rotation) hydrate
+   *  cleanly: a missing field reads as 0 at every consumer. */
+  rotation?: number;
 }
 
 /** §3.6 constituent ellipse view — the primary ellipse re-expressed as the
@@ -365,8 +383,12 @@ export function findPopulatedIslandAt(
  * where `(dx, dy)` is the offset between the two constituent world centres.
  * This is exact for axis-aligned ellipses (it tests whether the centre of
  * one lies inside the Minkowski-sum ellipse of the two) and a conservative
- * over-approximation for rotated ellipses — but island rotation is not yet
- * wired (§3.4 placeholder), so axis-aligned is the realistic shape.
+ * over-approximation for rotated ellipses. `IslandSpec.rotation` is set
+ * for Coast islands (§3.4) but no geometry consumer — including this
+ * overlap test, the tile-inscription, or the renderer — currently honours
+ * it, so the axis-aligned approximation matches the realised shape on
+ * screen. When rotation lands in the geometry layer, this test will need
+ * a rotated-ellipse SAT or similar replacement.
  *
  * Pure. Returns `true` on tangent contact (≤, not <).
  */
