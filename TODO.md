@@ -1,14 +1,146 @@
 # TODO
 
+## Working directive — read first
+
+All implementation work in this repo MUST go through subagents. Lead
+session writes briefs and dispatches; subagents do the source reads,
+edits, tests, and commits. Lead context is coordination only — every
+full-file read on the lead burns context that should be spent
+dispatching.
+
+Pattern: Lead → Agent (background) → wait for task-notification → read
+the agent's reported commit sha + test count → pick next item from
+this TODO. Foreground agents only for genuinely sub-15s work with
+prior runtime evidence; default to `run_in_background: true` and
+respond to the `<task-notification>` event.
+
+Per-dispatch checklist:
+- (a) make the fix
+- (b) check SPEC.md for any sentence/table the fix invalidates, update if so
+- (c) delete the matching TODO entry
+- (d) commit all together with the standard
+  `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer
+
+Subagent runtime: kimi usage was depleted at the time of last session
+(reset ~20h after 2026-05-18). Default to Claude-side Agent tool
+dispatches — that's what every subagent in the prior 30+ commits used.
+Check kimi quota before considering kimi delegation.
+
+---
+
 Consolidated punch list from the 4-agent sweep (200% file coverage,
 ~244 raw findings, deduped + verified against source + SPEC.md).
 
 > **Meta** — `SPEC.md` "Implementation Status" table is out of sync with
-> code in three load-bearing places. Future agents who trust the table
+> code in one load-bearing place. Future agents who trust the table
 > will mis-plan:
 > - §2.4 marked **P** listing route types `cargo / drone / airship /
 >   teleporter / cable` — `mass_driver` missing from `RouteType` despite
 >   §9.5 Mass Driver building and §15.1 `Route.type = 'mass_driver'`. (§1.)
+
+---
+
+## Next feature — Mirror Sat (§14.3 / §14.10 / §2.7)
+
+A fourth satellite variant that boosts an island's effective solar
+multiplier additively, with a Lorentzian distance falloff. Designed
++ approved in the prior session; ready to dispatch as a single
+implementation pass.
+
+### Design
+
+- New `SatelliteVariant` member: `'mirror'`
+- New `ResourceId`: `mirror_sat` (the payload)
+- New recipe id: `mirror_sat_assembly`
+
+### Recipe (§14.10 row)
+
+| Component | Quantity |
+|---|---|
+| Exotic Alloy | 4 |
+| AI core | 1 |
+| Aluminum | 150 |
+| Optical Glass | 10 |
+| Orbital Insertion Package | 1 |
+
+Mirror sits alongside Scanner (50 Aluminum + 1 Spacetime fragment),
+Sweeper (100 Carbon Steel + 20 Magnet), Relay (200 Optical Fiber).
+The 150 Aluminum is the bulk reflective surface; Optical Glass is the
+sun-tracking precision optics.
+
+### Per-sat fields (placeholders, tune in Appendix A)
+
+- `peakBoost: 0.7` — peak boost contribution at zero distance
+- `rHalf: 200` (tiles) — half-power distance for the Lorentzian
+
+### Boost formula
+
+```ts
+function mirrorBoost(sat: Satellite, island: IslandSpec): number {
+  const d = distance(sat, island.centre);
+  const raw = sat.peakBoost / (1 + (d / sat.rHalf) ** 2);
+  return raw < 0.05 ? 0 : raw;
+}
+```
+
+Lorentzian falloff (inverse-square family — physically derives from
+cos²(θ) = h² / (h² + d²) for an orbital reflector aimed at a
+laterally-offset ground target). Hard cutoff at raw < 0.05 since
+the contribution is marginal past that.
+
+At peakBoost = 0.7, rHalf = 200: boost is 0.70 at d=0, 0.56 at d=100,
+0.35 at d=200 (half-power), 0.14 at d=400, dead past d ≈ 720
+(when raw drops below 0.05).
+
+### Composition with §2.7 ramp
+
+```ts
+effectiveSolar(island, t) = min(1.0,
+  solarMultiplier(t)
+  + Σ mirrorBoost(sat, island)  // over all mirror sats whose contribution > 0.05
+)
+```
+
+Additive (not multiplicative) — multiplicative would be uselesss at
+night because `solarMultiplier(night) = 0`. Cap at 1.0 so stacking
+mirrors past full-day baseline doesn't over-produce; saturation visible
+to the player as "fourth mirror is wasted."
+
+### SPEC entries needed
+
+- §14.3 satellite-variants table: add `Mirror Sat` row
+- §14.10 recipes block: add the Mirror Sat recipe line
+- §2.7 day-night section: one sentence describing the mirror-boost
+  composition rule
+
+### Implementation files
+
+- `src/orbital.ts` — variant member, sat init with peakBoost/rHalf,
+  the `mirrorBoost` helper (or extract into a separate
+  `mirror-sat.ts` module if cleaner)
+- `src/orbital-ui.ts` — variant entry in VARIANTS array, launch
+  modal handling
+- `src/satellite-overlay.ts` — variant color, range-ring overlay
+  (rHalf circle in world space)
+- `src/recipes.ts` — ResourceId + recipe id + recipe entry
+- `src/building-defs.ts` — recipe def
+- `src/storage-categories.ts` — mirror_sat → 'rare' category
+- `src/daynight.ts` or `src/economy.ts` — effectiveSolar composition
+  hook (gates solar power producers by the new aggregate, not just
+  the bare `solarMultiplier`)
+- Tests across `orbital.test.ts`, `economy.test.ts`, `daynight.test.ts`
+
+### Out of scope for the initial implementation
+
+- Skill node for mirror_boost scaling (could add to Orbital sub-path later)
+- T6 antenna interactions
+- Multiple-sat positional optimization tooling
+
+### Reference
+
+Design rationale lives in the prior session's chat (session id
+ceb0d508-9616-494e-b813-e729ff30e4d4) — only the approved spec lives
+here. Ask the user before deviating from the locked parameters above.
 
 ---
 
@@ -330,6 +462,47 @@ them explicit values + rationale.
 - (Audit D LOW) **`src/orbital.ts:215` `padShare = 0.30 /
   skill.padExplosionReduce`.** Matches spec §14.7 "30/70 split,
   divisible by Launch-skill mitigation".
+
+---
+
+## Appendix — recurring lesson patterns
+
+Captured from prior sessions; check against new work to avoid
+re-discovering these.
+
+### Time-domain mismatches
+
+Code that reads time MUST be explicit about wall-clock vs
+performance.now() domain. `performance.now()` resets to ~0 on every
+page reload; `Date.now()` is wall-clock and survives. The §2.7 solar
+gate had to be refactored to thread wall-clock through every callsite
+(`computeRates` → `advanceIsland` → `main.ts` ticker) — see commit
+`847e010` for the pattern.
+
+Pre-flight check on any new "sample value at time t" code: which
+domain is `t` in? Will it survive a refresh?
+
+### Recipe / catalog drift
+
+Code comments self-flagging "spec-literal pending — using stand-in"
+tend to accumulate. Periodically grep `STILL-DEFERRED` and the
+patterns it indicates. When the spec ingredient lands in the catalog
+later, the original recipe doesn't automatically migrate; needs an
+explicit pass. Examples: §4.7 T2 maintenance bolt → bearing
+(`72ac25f`), Sunspire missing solar-flag (`a4f9f98`).
+
+### Audit-trust caveat
+
+Multi-agent audits find divergences but can't tell which side is
+wrong. Code-vs-spec mismatches always need a designer call:
+sometimes spec is the design truth (code is buggy → fix code),
+sometimes code is the design truth (spec is stale → update spec).
+The T1-drone case in this codebase was the latter — every auditor
+flagged code as wrong; the resolution was a SPEC update (see commit
+`8d69e92`).
+
+Before fixing each audit finding, ask: "is this code-bug or spec-
+drift?" Don't reflexively assume code is wrong.
 
 ---
 
