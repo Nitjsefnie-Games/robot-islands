@@ -67,6 +67,7 @@ import { buildingAtTile, demolishBuilding } from './placement.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import { mountPlacementUi } from './placement-ui.js';
 import { mountCargoLabelPicker } from './cargo-label-picker.js';
+import { mountAnchorPicker } from './anchor-picker.js';
 import { mountSkillTreeUi } from './skilltree-ui.js';
 import { mountGraphUi } from './graph-ui.js';
 import { mountUi } from './ui.js';
@@ -893,6 +894,12 @@ async function main(): Promise<void> {
   // (Crate today), bypassed entirely for specialized storage and non-
   // storage defs.
   const cargoLabelPicker = mountCargoLabelPicker(document.body);
+  // §4 ocean-layer (Task 10): anchor picker — same modal-shell pattern as
+  // the cargo-label picker. Mounted at body level so the modal floats
+  // above the PixiJS canvas; wired into placement-ui via the `pickAnchor`
+  // dep below. Only fires when the player commits an ocean-def placement
+  // (def.oceanPlacement === true); land defs route past it untouched.
+  const anchorPicker = mountAnchorPicker(document.body);
   const placementUi = mountPlacementUi({
     getTargetSpec: activeSpec,
     getTargetState: activeState,
@@ -901,6 +908,9 @@ async function main(): Promise<void> {
       rebuildWorldLayers();
     },
     pickCargoLabel: () => cargoLabelPicker.pick(),
+    getWorld: () => worldState,
+    getStateById: (id) => islandStates.get(id),
+    pickAnchor: (cands) => anchorPicker.pick(cands),
   });
   world.addChild(placementUi.previewLayer);
   app.stage.addChild(placementUi.statusLayer);
@@ -1520,6 +1530,7 @@ async function main(): Promise<void> {
         worldSeed: worldState.seed,
         geothermalActive,
         solarBoost: solarBoostByIsland.get(s.id),
+        world: worldState,
       }, nowWall);
       const { net, power } = computeRates(s, {
         modifierMul: modifierMulFor(s.id),
@@ -1532,6 +1543,7 @@ async function main(): Promise<void> {
         cableComponent,
         geothermalActive,
         solarBoost: solarBoostByIsland.get(s.id),
+        world: worldState,
       }, undefined, nowWall);
       islandNets.set(s.id, net);
       islandPower.set(s.id, power);

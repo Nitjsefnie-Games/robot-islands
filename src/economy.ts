@@ -35,6 +35,8 @@ import {
   type BuildingDefId,
 } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
+import type { WorldState } from './world.js';
+import { isOceanTile } from './world.js';
 import { nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
 import { resolveHeatAssignments, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
@@ -64,6 +66,28 @@ import {
  */
 /** §13.3 Singularity Battery capacity per unit: 50 MWh in W-seconds. */
 export const SINGULARITY_BATTERY_CAPACITY_WS = 50e6 * 3600;
+
+/**
+ * §4 ocean-layer paused-state reasons (Task 10). Set on `PlacedBuilding.paused`
+ * by `computeRates` when an ocean platform's preconditions fail; cleared
+ * (undefined) when they recover. Per the §4 design doc edge cases:
+ *
+ *   - `'anchor-depopulated'`: the platform's `anchorIslandId` names an
+ *     island that no longer exists OR whose `populated` flag is false.
+ *     The anchor was abandoned, tier-reset, or deleted — the platform has
+ *     no inventory to credit and no power pool to draw from, so it halts
+ *     entirely. Repopulating the anchor clears the state.
+ *   - `'terrain-lost'`: the cell the platform sits on is no longer ocean
+ *     (defensive — would require future land-reclamation to overlap the
+ *     cell; not expected in initial scope). Mirrors §4's "Terrain access
+ *     lost (hypothetical future event removing a vent)" edge case.
+ *
+ * `'anchor-disconnected'` (in the original spec draft) was dropped in the
+ * a92efa2 revision: `submarine_cable` is a `RouteType` rather than a
+ * tile-placed component, so there's no cable-graph to break. Anchoring is
+ * a declarative field, not a graph relationship.
+ */
+export type PausedReason = 'anchor-depopulated' | 'terrain-lost';
 
 export interface RatesContext {
   readonly modifierMul?: ModifierMultipliers;
@@ -115,6 +139,15 @@ export interface RatesContext {
    *  coverage (and for unit tests that omit it). Pre-computed once per
    *  island per tick in main.ts via `effectiveSolarBoostFor`. */
   readonly solarBoost?: number;
+  /** §4 ocean-layer (Task 10). Threaded into `computeRates` so an ocean
+   *  platform's anchor-populated / cell-still-ocean checks can resolve
+   *  against the live world. Optional for back-compat with the many tests
+   *  and legacy callers that pre-date the ocean layer — when omitted, any
+   *  building with `def.oceanPlacement === true` is treated as paused with
+   *  reason `'anchor-depopulated'` (defensive: with no world to resolve
+   *  the anchor, the platform cannot safely produce). Production callers
+   *  (main.ts) MUST pass `world` so platforms function. */
+  readonly world?: WorldState;
 }
 
 /**
@@ -443,6 +476,55 @@ function inputAvail(
   return factor;
 }
 
+/**
+ * §4 ocean-layer (Task 10) — check an ocean platform's preconditions and
+ * return the `PausedReason` if the building should halt this tick, or `null`
+ * if it should proceed. Mutates `b.paused` in place so the inspector and
+ * persistence layer see the same value the economy used.
+ *
+ * Two failure modes, mirroring the §4 design doc edge cases:
+ *
+ *   1. `'anchor-depopulated'`: `b.anchorIslandId` names a missing island OR
+ *      one whose `populated` flag is false. Set this also when the caller
+ *      didn't thread a `world` reference (defensive: with no world the
+ *      anchor lookup can't run, and an ocean platform whose anchor is
+ *      unresolvable must not silently produce — its output has no destination
+ *      and its power draw has no pool).
+ *   2. `'terrain-lost'`: the platform's geographic cell is no longer ocean
+ *      (an island's footprint now overlaps it). Defensive — not expected
+ *      in initial scope but cheap to detect.
+ *
+ * The platform's `b.x, b.y` are island-local tile coords on the anchor
+ * (matching the existing per-building convention — `b.x, b.y` is relative
+ * to `IslandSpec.cx, cy`). We convert to world-tile coords via
+ * `anchor.cx + b.x` (resp. y) and sample `isOceanTile` once at the
+ * platform's anchor tile. The placement validator already enforced full-
+ * cell ocean coverage at place time, so the per-tick sentinel here is
+ * "did anything change at the anchor tile?" A future biome / land-
+ * reclamation event could shrink the sampling rigour if needed.
+ *
+ * NOT a paused reason: power brownout. A platform whose anchor pool has
+ * insufficient W falls through the existing §5.1 brownout mechanic
+ * (`powerFactor < 1`) — the building stays "active" with degraded rate
+ * rather than fully halting. The §4 design doc explicitly calls this out
+ * ("Anchor pool has no power: platform halts via the existing brownout
+ * mechanic (no new paused reason)").
+ */
+function oceanPlatformPausedReason(
+  b: PlacedBuilding,
+  world: WorldState | undefined,
+): PausedReason | null {
+  if (!world) return 'anchor-depopulated';
+  const anchorId = b.anchorIslandId;
+  if (!anchorId) return 'anchor-depopulated';
+  const anchor = world.islands.find((i) => i.id === anchorId);
+  if (!anchor || !anchor.populated) return 'anchor-depopulated';
+  // b.x, b.y are island-local on the anchor; lift to world tiles via the
+  // anchor centre. isOceanTile rejects any tile inside any island ellipse.
+  if (!isOceanTile(world, anchor.cx + b.x, anchor.cy + b.y)) return 'terrain-lost';
+  return null;
+}
+
 /** Aggregated electrical balance for an island this tick (§5.1). */
 export interface PowerBalance {
   /** Total W produced by active producers. */
@@ -611,6 +693,32 @@ export function computeRates(
   /** Gross production by resource from all tentatively-running buildings. */
   const tentSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
   for (const b of validBuildings) {
+    // §4 ocean-layer (Task 10): check ocean-platform preconditions FIRST so
+    // a depopulated-anchor / terrain-lost platform contributes nothing to
+    // tentSupply (no flow-through), no power balance (pass 3 skips paused),
+    // and earns no XP (pass-4 zero rate emits no production entries).
+    // Mutates `b.paused` so the inspector and any save round-trip see the
+    // same value the tick used. Resolves to undefined on the happy path so
+    // a recovered-anchor platform clears its own pause indicator naturally.
+    const defForOcean = defs[b.defId];
+    if (defForOcean.oceanPlacement === true) {
+      const reason = oceanPlatformPausedReason(b, ctx?.world);
+      b.paused = reason ?? undefined;
+      if (reason !== null) {
+        // Push a stub recipe with baseRate=0 so pass-2 / pass-4 see this
+        // building as fully stalled (same shape as the heat-gate / output-
+        // stalled fallback below). Use an empty recipe so resolveRotatingOutput
+        // and inputAvail return harmless zeroes.
+        tentative.push({
+          building: b,
+          recipe: { inputs: {}, outputs: {}, cycleSec: 1, category: 'extraction' },
+          baseRate: 0,
+          buffStack: 1,
+          effectiveMul: 1,
+        });
+        continue;
+      }
+    }
     // §13.3 Genesis Chamber — free creation of a player-chosen T1-T4 resource.
     // Handled before the normal recipe path because genesis_chamber has no
     // static RECIPES entry.
@@ -838,6 +946,12 @@ export function computeRates(
     const def = defs[b.defId];
     // §13.3 Genesis Chamber power is handled below with tier-based draw.
     if (b.defId === 'genesis_chamber') continue;
+    // §4 ocean-layer (Task 10): a paused ocean platform draws no power
+    // (its anchor can't supply it) AND produces no power (its anchor can't
+    // consume it). Pass-1 already set `b.paused` from
+    // `oceanPlatformPausedReason`; we honour the same flag here to keep the
+    // power balance consistent with the pass-1 zero rate.
+    if (b.paused) continue;
     // §9.7 Tier Reset runtime gate: tier-gated buildings draw no power and
     // produce no power on a below-tier island (mirrors heat-gate exclusion
     // below). Without this, a post-reset T2 coal_gen would still push W

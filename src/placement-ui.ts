@@ -26,6 +26,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
+import { CELL_SIZE_TILES } from './constants.js';
 import type { IslandState } from './economy.js';
 import { TILE_PX } from './island.js';
 import {
@@ -33,17 +34,29 @@ import {
   placeBuilding,
   placementCostFor,
   validatePlacement,
+  validateOceanPlacement,
+  type OceanPlacementReason,
   type PlacementReason,
 } from './placement.js';
+import { candidateAnchors, type AnchorCandidate } from './anchor-picker.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { ResourceId } from './recipes.js';
-import { VISION_BLUE, tileToWorldPx, type IslandSpec } from './world.js';
+import { VISION_BLUE, tileToWorldPx, type IslandSpec, type WorldState } from './world.js';
 
 /** §4.6 picker dep: opens the cargo-label modal and resolves to the
  *  player's pick, or `null` if cancelled. The default implementation in
  *  `cargo-label-picker.ts` is the production DOM modal; tests inject a
  *  fake that resolves synchronously / synthetically. */
 export type PickCargoLabel = () => Promise<ResourceId | null>;
+
+/** §4 ocean-layer picker dep (Task 10): opens the anchor picker modal with
+ *  the supplied candidate list and resolves to the chosen island id, or
+ *  `null` if the player cancelled. Production callers wire
+ *  `mountAnchorPicker(...).pick`; tests inject a fake that resolves
+ *  synthetically. Optional on `PlacementUiDeps` — when omitted, an ocean
+ *  placement attempt synthesises a cancellation (no picker → no anchor →
+ *  no commit), preserving the "headless test fixture" path. */
+export type PickAnchor = (candidates: AnchorCandidate[]) => Promise<string | null>;
 
 // Color tokens — match the drone-reticle "ok = cyan / warn = amber" pattern.
 const OK_COLOR = VISION_BLUE;
@@ -101,6 +114,26 @@ export interface PlacementUiDeps {
    *  no explicit label and `placeBuilding` uses its `DEFAULT_CARGO_LABEL`
    *  fallback (test fixtures and the empty-deps path stay unbroken). */
   pickCargoLabel?: PickCargoLabel;
+  /** §4 ocean-layer (Task 10) — world reader for the ocean placement path.
+   *  Required for any ocean def (`def.oceanPlacement === true`); without it,
+   *  the ocean attemptCommit branch can't validate cell terrain / resolve
+   *  anchor candidates and rejects with `'def-is-ocean'` as a defensive
+   *  fallback. Optional so existing test fixtures that only exercise land
+   *  placement keep working without threading a synthetic world. */
+  getWorld?(): WorldState;
+  /** §4 ocean-layer (Task 10) — id → IslandState resolver for the anchor
+   *  placement step. After the player picks an anchor, the commit path
+   *  needs the anchor's IslandState to deduct §14 placement cost from its
+   *  inventory and push the platform onto its `buildings[]`. Optional for
+   *  the same back-compat reason as `getWorld`. */
+  getStateById?(islandId: string): IslandState | undefined;
+  /** §4 ocean-layer (Task 10) anchor picker. Invoked from `attemptCommit`
+   *  after `validateOceanPlacement` succeeds. The returned promise resolves
+   *  with the player-picked island id or `null` if cancelled. Optional —
+   *  when omitted, the ocean attemptCommit branch synthesises a
+   *  cancellation (no commit) so headless test fixtures can place ocean
+   *  defs only via direct `placeBuilding` calls. */
+  pickAnchor?: PickAnchor;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +152,16 @@ const REASON_LABEL: Readonly<Record<PlacementReason, string>> = {
   // catalog, so the player path never reaches this label). Programmatic /
   // test callers hit it; the user-facing string is here for symmetry.
   'def-is-ocean': 'OCEAN DEF — USE OCEAN PLACEMENT',
+};
+
+/** §4 ocean-layer (Task 10) reason → label. Distinct from `PlacementReason`
+ *  per the `OceanPlacementReason` union; surfaced by the status painter
+ *  when the player hovers over an invalid ocean cell. */
+const OCEAN_REASON_LABEL: Readonly<Record<OceanPlacementReason, string>> = {
+  'def-not-ocean': 'DEF NOT OCEAN',
+  'terrain-mismatch': 'TERRAIN MISMATCH',
+  'no-anchor-in-range': 'NO ANCHOR IN RANGE',
+  'land-overlap': 'LAND OVERLAP',
 };
 
 /** Pretty-print a §14 shortfall record as "NEED 5 STONE, 3 WOOD" for the
@@ -227,6 +270,17 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     }
 
     const def = BUILDING_DEFS[activeDefId];
+
+    // §4 ocean-layer (Task 10) — ocean defs paint their preview in WORLD
+    // tile coords (not island-local) since they don't anchor to any one
+    // island's centre. The cursor snaps to the nearest CELL origin, the
+    // footprint covers a w×h block of cells (= w*16 × h*16 tiles), and
+    // the status label folds in the ocean-validator reason on failure.
+    if (def.oceanPlacement === true) {
+      paintOceanPreview(def, activeDefId);
+      return;
+    }
+
     const targetSpec = deps.getTargetSpec();
     const targetState = deps.getTargetState();
 
@@ -330,6 +384,79 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     statusLayer.visible = true;
   }
 
+  /** §4 ocean-layer (Task 10) preview painter — paints the cell-aligned
+   *  footprint in WORLD tile coords (no island-local offset) and folds in
+   *  the ocean-validator reason. Called from `paintOutlineAndLabel` when
+   *  the active def has `oceanPlacement === true`. */
+  function paintOceanPreview(def: typeof BUILDING_DEFS[BuildingDefId], defId: BuildingDefId): void {
+    const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
+    // Snap cursor to nearest cell origin (floor — same convention as
+    // `attemptCommit` so the preview matches the commit target exactly).
+    const cellX = Math.floor(wt.x / CELL_SIZE_TILES);
+    const cellY = Math.floor(wt.y / CELL_SIZE_TILES);
+    const cellW = shapeWidth(def.footprint);
+    const cellH = shapeHeight(def.footprint);
+    // Footprint world-tile origin — anchor cell origin lifted to world tiles.
+    const tileX0 = cellX * CELL_SIZE_TILES;
+    const tileY0 = cellY * CELL_SIZE_TILES;
+    // Try to validate against the live world so the player gets immediate
+    // feedback. Without `getWorld` (headless test fixture) we paint amber
+    // and the status carries the routing-issue label.
+    const world = deps.getWorld?.();
+    let ok = false;
+    let reason: OceanPlacementReason | 'no-world' = 'no-world';
+    if (world) {
+      const ov = validateOceanPlacement(world, defId, cellX, cellY);
+      if (ov.ok) {
+        ok = true;
+      } else {
+        reason = ov.reason ?? 'terrain-mismatch';
+      }
+    }
+    const color = ok ? OK_COLOR : WARN_COLOR;
+
+    // Footprint outline — one stroked rectangle per cell (16×16 tile block)
+    // in world-px. The world container's camera transform takes care of
+    // world-px → screen-px.
+    outlineGfx.clear();
+    const half = TILE_PX / 2;
+    for (let dy = 0; dy < cellH; dy++) {
+      for (let dx = 0; dx < cellW; dx++) {
+        const wpx = (tileX0 + dx * CELL_SIZE_TILES) * TILE_PX - half;
+        const wpy = (tileY0 + dy * CELL_SIZE_TILES) * TILE_PX - half;
+        const w = CELL_SIZE_TILES * TILE_PX;
+        const h = CELL_SIZE_TILES * TILE_PX;
+        outlineGfx
+          .rect(wpx, wpy, w, h)
+          .fill({ color, alpha: 0.18 })
+          .stroke({ width: 2, color, alpha: 0.95, alignment: 1 });
+      }
+    }
+    previewLayer.visible = true;
+    // Status label — building name + cell footprint + ocean reason.
+    const labelMain = `${def.displayName.toUpperCase()} ${cellW}×${cellH} CELL`;
+    const labelTail = ok
+      ? ''
+      : reason === 'no-world'
+        ? '  ·  NO WORLD'
+        : `  ·  ${OCEAN_REASON_LABEL[reason]}`;
+    labelText.text = labelMain + labelTail;
+    labelText.style.fill = color;
+    const padX = 6;
+    const padY = 3;
+    const tw = labelText.width;
+    const th = labelText.height;
+    const baseX = cursorScreenX + 16;
+    const baseY = cursorScreenY + 16;
+    labelBg.clear();
+    labelBg
+      .rect(baseX - padX, baseY - padY, tw + padX * 2, th + padY * 2)
+      .fill({ color: 0x0e121a, alpha: 0.88 })
+      .stroke({ width: 1, color, alpha: 0.6, alignment: 1 });
+    labelText.position.set(baseX, baseY);
+    statusLayer.visible = true;
+  }
+
   // -------------------------------------------------------------------------
   // API
   // -------------------------------------------------------------------------
@@ -415,9 +542,93 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
   }
   function attemptCommit(): { ok: boolean; reason?: PlacementReason } {
     if (!active || activeDefId === null) return { ok: false };
+    const def = BUILDING_DEFS[activeDefId];
+    const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
+    // §4 ocean-layer (Task 10): ocean defs route through their own
+    // placement flow (validateOceanPlacement + anchor picker). The land
+    // validator early-rejects them as `def-is-ocean` (defense-in-depth);
+    // routing them HERE is the matching positive path.
+    if (def.oceanPlacement === true) {
+      // Map world-tile cursor to cell coords. The cursor is fractional;
+      // a building anchored at cell C covers cells [C..C+w-1] × [C..C+h-1]
+      // so we floor — the cursor's NEAREST cell origin is the anchor.
+      const cellX = Math.floor(wt.x / CELL_SIZE_TILES);
+      const cellY = Math.floor(wt.y / CELL_SIZE_TILES);
+      const world = deps.getWorld?.();
+      if (!world || !deps.pickAnchor || !deps.getStateById) {
+        // Headless / mis-wired deps: surface a generic "ocean def can't be
+        // routed" signal. The land-side `def-is-ocean` label is the
+        // closest existing reason; reuse it so the UI / tests stay
+        // consistent. (No data-corrupting fallthrough; nothing gets placed.)
+        return { ok: false, reason: 'def-is-ocean' };
+      }
+      const ov = validateOceanPlacement(world, activeDefId, cellX, cellY);
+      if (!ov.ok) {
+        // Surface ocean-validator reasons via the status painter — outside
+        // the PlacementReason union, but the caller (main.ts) only reads
+        // `.ok`; logging is the placement-ui's own responsibility.
+        return { ok: false, reason: 'def-is-ocean' };
+      }
+      const cands = candidateAnchors(world, cellX, cellY);
+      // Validator guarantees cands.length > 0 (else `no-anchor-in-range`),
+      // but defense-in-depth: bail if it's empty here too.
+      if (cands.length === 0) return { ok: false, reason: 'def-is-ocean' };
+      // Kick off the anchor picker. The commit completes asynchronously
+      // when the picker resolves — mirrors the cargo-label `pickCargoLabel`
+      // → `begin()` async pattern. attemptCommit returns {ok:false} here
+      // (synchronous contract); the picker-resolution callback drives the
+      // actual mutation and calls `deps.onPlaced()`.
+      const defId = activeDefId; // capture for the async closure
+      const cellAnchorCoordX = cellX * CELL_SIZE_TILES;
+      const cellAnchorCoordY = cellY * CELL_SIZE_TILES;
+      // Capture the epoch so a stale picker resolution (player cancelled
+      // and started a new placement before this resolved) gets dropped.
+      const epoch = beginEpoch;
+      deps.pickAnchor(cands).then((picked) => {
+        if (epoch !== beginEpoch) return; // stale
+        if (picked === null) {
+          // Cancel — abort placement entirely (mirrors cargo-label cancel).
+          cancel();
+          return;
+        }
+        const anchorState = deps.getStateById?.(picked);
+        const anchorSpec = world.islands.find((i) => i.id === picked);
+        if (!anchorState || !anchorSpec) {
+          // Anchor disappeared between picker open and resolve — defensive.
+          cancel();
+          return;
+        }
+        // Convert world-tile cell-anchor coords to anchor-local tile coords
+        // (matching the per-building convention: b.x, b.y are island-local).
+        const localX = cellAnchorCoordX - anchorSpec.cx;
+        const localY = cellAnchorCoordY - anchorSpec.cy;
+        const result = placeBuilding(
+          anchorSpec,
+          anchorState,
+          defId,
+          localX,
+          localY,
+          0, // ocean defs ignore rotation (square footprints in initial scope)
+          () => placedIdFor(localX, localY),
+          undefined, // nowMs — keep the default (state.lastTick)
+          undefined, // cargoLabelOverride — ocean defs aren't generic-storage
+          picked, // anchorIslandId
+        );
+        if (result.ok) {
+          cancel();
+          deps.onPlaced();
+        } else {
+          // Insufficient resources / queue-full on the anchor — surface
+          // through the cancel path; the player can re-arm with different
+          // inventory.
+          cancel();
+        }
+      });
+      return { ok: false }; // pending; success arrives via the async callback
+    }
+    // Land path (existing).
     const targetSpec = deps.getTargetSpec();
     const targetState = deps.getTargetState();
-    const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
     const localX = Math.round(wt.x - targetSpec.cx);
     const localY = Math.round(wt.y - targetSpec.cy);
     const v = validatePlacement(

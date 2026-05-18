@@ -550,6 +550,21 @@ export function mountInspectorUi(
   );
   constructionSection.body.appendChild(constructionStatus);
 
+  // §4 ocean-layer (Task 10): pause-reason chip — surfaced only when an
+  // ocean platform's anchor / terrain check has failed. Mirrors the
+  // construction section's display-by-state pattern (hidden when not
+  // applicable). Warn-colored to telegraph "this building isn't producing
+  // and needs attention" without requiring the player to read the (empty)
+  // rate row to deduce the same.
+  const pausedSection = makeSection('Status');
+  const pausedStatus = document.createElement('span');
+  pausedStatus.classList.add('ri-mono');
+  styled(
+    pausedStatus,
+    [`color: ${'var(--ri-warn)'}`, 'font-size: 11px', 'letter-spacing: 0.04em', 'font-weight: 600'].join(';'),
+  );
+  pausedSection.body.appendChild(pausedStatus);
+
   // Recipe section
   const recipeSection = makeSection('Recipe');
   const recipeStatus = document.createElement('span');
@@ -1012,6 +1027,7 @@ export function mountInspectorUi(
   body.appendChild(titleRow);
   body.appendChild(subtitleRow);
   body.appendChild(constructionSection.wrap);
+  body.appendChild(pausedSection.wrap);
   body.appendChild(recipeSection.wrap);
   // Effective rate row sits below the recipe lines but inside the recipe
   // section visually — append a thin spacer + row to the recipe section body.
@@ -1157,6 +1173,18 @@ export function mountInspectorUi(
       constructionSection.wrap.style.display = '';
     } else {
       constructionSection.wrap.style.display = 'none';
+    }
+    // §4 ocean-layer (Task 10): surface the paused reason on the chip.
+    // Mirrors the construction-section visible-by-state pattern; hidden
+    // for any building whose `paused` is undefined (the common case).
+    if (building.paused === 'anchor-depopulated') {
+      pausedStatus.textContent = 'PAUSED — anchor island unpopulated';
+      pausedSection.wrap.style.display = '';
+    } else if (building.paused === 'terrain-lost') {
+      pausedStatus.textContent = 'PAUSED — terrain lost (cell no longer ocean)';
+      pausedSection.wrap.style.display = '';
+    } else {
+      pausedSection.wrap.style.display = 'none';
     }
 
     // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1).
