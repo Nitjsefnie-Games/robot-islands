@@ -34,7 +34,10 @@ import { generateOceanTerrain } from './ocean-gen.js';
 import {
   SCHEMA_VERSION,
   STORAGE_KEY,
+  STORAGE_KEY_DISPLAY,
+  SUPPORTED_LOAD_VERSIONS,
   deserializeWorld,
+  isValidSaveSnapshot,
   serializeWorld,
   type SaveSnapshot,
 } from './persistence.js';
@@ -517,6 +520,32 @@ describe('schema version', () => {
 
   it('exports STORAGE_KEY containing v4 so it does not collide with stale v1/v2/v3 saves', () => {
     expect(STORAGE_KEY).toMatch(/v4$/);
+  });
+
+  it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key — UI label is misnomer-free', () => {
+    // STORAGE_KEY persists at `:v4` for IDB back-compat; STORAGE_KEY_DISPLAY
+    // is what the Settings panel renders so v5+ users don't see "v4". The
+    // two MUST stay distinct or the misnomer leaks back into the UI.
+    expect(STORAGE_KEY).not.toBe(STORAGE_KEY_DISPLAY);
+    expect(typeof STORAGE_KEY).toBe('string');
+    expect(typeof STORAGE_KEY_DISPLAY).toBe('string');
+    expect(STORAGE_KEY_DISPLAY).toBe('robot-islands:save');
+  });
+
+  it('rejects a synthetic future version (v=6) via the SUPPORTED_LOAD_VERSIONS gate', () => {
+    // Confirms the single gate — both `deserializeWorld` and
+    // `isValidSaveSnapshot` consult the SUPPORTED_LOAD_VERSIONS set. The
+    // set currently covers {4, SCHEMA_VERSION (=5)}; v6 is outside it so
+    // both load paths must reject without the per-call literal duplication
+    // we collapsed.
+    expect(SUPPORTED_LOAD_VERSIONS.has(6)).toBe(false);
+    expect(SUPPORTED_LOAD_VERSIONS.has(SCHEMA_VERSION)).toBe(true);
+    expect(SUPPORTED_LOAD_VERSIONS.has(4)).toBe(true);
+    const world = makeInitialWorld(0);
+    const snap = serializeWorld(world, new Map(), 0);
+    const v6Shaped = { ...snap, v: 6 } as unknown as SaveSnapshot;
+    expect(() => deserializeWorld(v6Shaped, 0, 0)).toThrow(/unknown schema version/);
+    expect(isValidSaveSnapshot(v6Shaped)).toBe(false);
   });
 
   it('rejects a v3-shaped snapshot (the §2.1 infinite-map bump is breaking)', () => {

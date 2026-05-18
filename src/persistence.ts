@@ -103,6 +103,12 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  See the comment on `SCHEMA_VERSION` for the reasoning. */
 export const STORAGE_KEY = 'robot-islands:save:v4';
 
+/** User-visible storage-key label, decoupled from the IDB key that
+ *  stays at `:v4` for backwards-compat (see STORAGE_KEY comment). The
+ *  Settings panel renders THIS string so v5+ users don't see "v4" in
+ *  the storage-key footer line. */
+export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
+
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this.
  *
@@ -136,6 +142,14 @@ export const STORAGE_KEY = 'robot-islands:save:v4';
  *  knowledge yet). The migration lives in `migrateV4ToV5` and runs
  *  unconditionally inside `deserializeWorld` before the version check. */
 export const SCHEMA_VERSION = 5 as const;
+
+/** Versions that load paths accept. Includes the current SCHEMA_VERSION
+ *  AND any prior version a live migration handles (currently v4 via
+ *  `migrateV4ToV5`). Update this set when bumping SCHEMA_VERSION and
+ *  adding a new migrateVNtoVM function — collapses what used to be
+ *  three independent `=== 4 && === SCHEMA_VERSION` literals into one
+ *  source-of-truth so the next bump can't accidentally skip a gate. */
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([4, SCHEMA_VERSION]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -434,7 +448,7 @@ export function deserializeWorld(
   // so the v=4 check has to widen via unknown — same idiom as inside
   // `migrateV4ToV5`. After the migration runs, the literal type matches.
   if ((snapshot.v as unknown as number) === 4) snapshot = migrateV4ToV5(snapshot);
-  if (snapshot.v !== SCHEMA_VERSION) {
+  if (!SUPPORTED_LOAD_VERSIONS.has(snapshot.v as unknown as number)) {
     throw new Error(`persistence: unknown schema version ${String(snapshot.v)}`);
   }
 
@@ -938,10 +952,11 @@ export async function clearSave(): Promise<void> {
 export function isValidSaveSnapshot(value: unknown): value is SaveSnapshot {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  // Accept v4 (auto-migrated to v5 on load) and the current SCHEMA_VERSION.
-  // Mirrors `loadWorld`'s version gate so an imported v4 blob hits the
-  // same migration path as one loaded from IDB.
-  if (v['v'] !== 4 && v['v'] !== SCHEMA_VERSION) return false;
+  // Accept any version `SUPPORTED_LOAD_VERSIONS` covers — currently v4
+  // (auto-migrated to v5 on load) and the current SCHEMA_VERSION. Mirrors
+  // `loadWorld`'s gate so an imported v4 blob hits the same migration path
+  // as one loaded from IDB.
+  if (typeof v['v'] !== 'number' || !SUPPORTED_LOAD_VERSIONS.has(v['v'])) return false;
   if (typeof v['savedAt'] !== 'number') return false;
   if (typeof v['savedAtPerf'] !== 'number') return false;
   if (typeof v['world'] !== 'object' || v['world'] === null) return false;
@@ -981,7 +996,7 @@ export async function loadWorld(): Promise<
     // typed as the SCHEMA_VERSION literal (`5`) on the SaveSnapshot
     // interface, so a direct `=== 4` check is rejected for non-overlap.
     const ver = stored.v as unknown as number;
-    if (ver !== 4 && ver !== SCHEMA_VERSION) {
+    if (!SUPPORTED_LOAD_VERSIONS.has(ver)) {
       console.warn(
         `[robot-islands] loadWorld: ignoring snapshot with unknown v=${String(stored.v)}`,
       );
