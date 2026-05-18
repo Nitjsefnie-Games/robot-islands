@@ -359,11 +359,49 @@ async function main(): Promise<void> {
 
   // Keyboard event hookup. The handler is config-driven: it never inspects
   // `e.code` against hardcoded strings — it just hands off to the registry.
+  //
+  // Focus suppression: when a text-accepting element is focused (graph-panel
+  // search, future inventory rename, save-import textarea, etc.) we must NOT
+  // fire game keybinds — otherwise typing "W" pans the camera mid-query and
+  // pressing "O" opens the orbital modal. Escape is the universal "dismiss
+  // modal" key and players expect it to work even while typing, so it passes
+  // through unconditionally. The keyup release path needs the same gate or a
+  // held-pan flag set before focus moved into the input could get stuck when
+  // the corresponding keyup fires while focused.
+  const isTextInputFocused = (): boolean => {
+    const a = document.activeElement;
+    if (!a) return false;
+    if (a instanceof HTMLInputElement) {
+      // Allow non-text inputs (checkboxes, radios, buttons) to pass through —
+      // they don't consume printable keystrokes the way text fields do.
+      const t = a.type;
+      return (
+        t === 'text' ||
+        t === 'search' ||
+        t === 'number' ||
+        t === 'tel' ||
+        t === 'url' ||
+        t === 'email' ||
+        t === 'password' ||
+        t === ''
+      );
+    }
+    if (a instanceof HTMLTextAreaElement) return true;
+    if (a instanceof HTMLSelectElement) return true; // captures arrow keys
+    if (a instanceof HTMLElement && a.isContentEditable) return true;
+    return false;
+  };
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return; // pan flags are level-triggered; no need to spam.
+    if (e.code === 'Escape') {
+      if (dispatchKey(reg, e.code)) e.preventDefault();
+      return;
+    }
+    if (isTextInputFocused()) return;
     if (dispatchKey(reg, e.code)) e.preventDefault();
   });
   window.addEventListener('keyup', (e) => {
+    if (e.code !== 'Escape' && isTextInputFocused()) return;
     const action = reg.bindings.get(e.code);
     if (action && releaseHandlers[action]) {
       releaseHandlers[action]();
