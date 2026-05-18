@@ -597,8 +597,13 @@ async function main(): Promise<void> {
       // Terrain hover tooltip — show only on populated islands. If the
       // cursor is on a building we still surface the underlying terrain
       // for context.
-      const localTileX = Math.floor(localX);
-      const localTileY = Math.floor(localY);
+      // Tile (n) is rendered centred on world pixel (n * TILE_PX), so its
+      // visual extent spans [n - 0.5, n + 0.5) in fractional-tile space —
+      // island.cx is the CENTRE of tile (0, 0), not its top-left. Math.round
+      // maps the fractional local coord to the tile whose visual centre is
+      // nearest the cursor (same convention as buildingAtTile / placement-ui).
+      const localTileX = Math.round(localX);
+      const localTileY = Math.round(localY);
       const terrainFn = island.terrainAt;
       if (terrainFn) {
         const terrain = terrainFn(localTileX, localTileY);
