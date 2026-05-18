@@ -22,6 +22,9 @@ const VARIANT_COLOR: Record<SatelliteVariant, number> = {
   scanner: 0x7dd3e8,
   relay: 0x60d0a0,
   sweeper: 0xe6b800,
+  // Pale gold — distinct from sweeper's amber; reads as "reflective surface
+  // catching sunlight" on the dark ocean.
+  mirror: 0xffd24a,
 };
 
 /** Ring alpha — kept low; the rings span hundreds of world tiles and would
@@ -80,6 +83,17 @@ export function mountSatelliteOverlay(world: WorldState): SatelliteOverlayHandle
           color,
           width: 1,
           alpha: 0.35,
+        });
+      }
+      // §14.3 Mirror Sat: faint ring at rHalf (the half-power boundary —
+      // islands inside the ring receive >= peakBoost/2 contribution). A
+      // single ring is more legible than a gradient; outside ≈720 tiles the
+      // hard cutoff zeros the contribution entirely.
+      if (sat.variant === 'mirror' && sat.rHalf !== undefined && sat.rHalf > 0) {
+        gfx.circle(px, py, sat.rHalf * TILE_PX).stroke({
+          color,
+          width: 1,
+          alpha: 0.4,
         });
       }
     }

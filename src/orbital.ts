@@ -29,7 +29,20 @@ export const SCANNER_DWELL_TIME_CONSTANT_MS = 5 * 60 * 1000;
  *  while leaving room for multi-station networks to extend reach. */
 export const ORBITAL_TRACKING_DETECTION_RADIUS_TILES = 1500;
 
-export type SatelliteVariant = 'scanner' | 'sweeper' | 'relay';
+export type SatelliteVariant = 'scanner' | 'sweeper' | 'relay' | 'mirror';
+
+/** §14.3 Mirror Sat: peak boost contribution to ground island's effective
+ *  solar multiplier at zero lateral distance (the orbital reflector aimed
+ *  straight down at the island centre). LOCKED — do not tune. */
+export const MIRROR_SAT_PEAK_BOOST = 0.7;
+/** §14.3 Mirror Sat: half-power distance in tiles. The Lorentzian
+ *  `raw = peakBoost / (1 + (d/rHalf)²)` returns peakBoost/2 at d = rHalf.
+ *  LOCKED — do not tune. */
+export const MIRROR_SAT_R_HALF_TILES = 200;
+/** §14.3 Mirror Sat: hard cutoff. Per-sat raw contributions strictly less
+ *  than this are zeroed (avoids vanishingly-thin "everywhere benefits a
+ *  little" stacking — explicit threshold instead). LOCKED. */
+export const MIRROR_SAT_CUTOFF = 0.05;
 
 export interface SatBufferEntry {
   readonly type: 'discovery' | 'weather' | 'debris';
@@ -91,6 +104,13 @@ export interface Satellite {
    *  outside the new coverage"). Missing/undefined ≡ no dwell anywhere
    *  (forward-compat for legacy saves). */
   dwellByCellKey?: Record<string, number>;
+  /** §14.3 Mirror Sat: peak boost at zero distance. Baked at launch from
+   *  `MIRROR_SAT_PEAK_BOOST`. Optional for forward-compat with legacy saves
+   *  and for non-mirror variants which carry no boost contribution. */
+  peakBoost?: number;
+  /** §14.3 Mirror Sat: Lorentzian half-power distance in tiles. Baked at
+   *  launch from `MIRROR_SAT_R_HALF_TILES`. Optional, see `peakBoost`. */
+  rHalf?: number;
 }
 
 export interface RepairDrone {
@@ -119,6 +139,7 @@ export const SAT_CROSS_SECTION: Record<SatelliteVariant, number> = {
   scanner: 1.2, // larger optics
   sweeper: 1.0,
   relay: 0.8, // sleeker
+  mirror: 1.2, // large reflective surface — parity with scanner
 };
 
 /** §14.6 / Appendix A placeholders for satellite maneuvering. */
@@ -147,6 +168,7 @@ const PAYLOAD_RESOURCE: Record<SatelliteVariant, ResourceId> = {
   scanner: 'scanner_sat',
   sweeper: 'sweeper_sat',
   relay: 'relay_sat',
+  mirror: 'mirror_sat',
 };
 
 /**
@@ -157,7 +179,7 @@ const PAYLOAD_RESOURCE: Record<SatelliteVariant, ResourceId> = {
  *   - The island must have at least one `spaceport` building
  *
  * Consumables (deducted from the island's inventory on success):
- *   - 1 × variant-specific satellite payload (`scanner_sat`, `sweeper_sat`, or `relay_sat`)
+ *   - 1 × variant-specific satellite payload (`scanner_sat`, `sweeper_sat`, `relay_sat`, or `mirror_sat`)
  *   - 1 × `orbital_insertion_package`
  *   - 1 × `antimatter_propellant`
  *
@@ -317,6 +339,12 @@ export function launchSatellite(
     buffer: [],
     bufferCap: Math.floor(SAT_BUFFER_CAP * skill.satBufferCap),
     dwellRateMul: skill.scannerDwellRate,
+    // §14.3 Mirror Sat: bake locked per-sat reflector geometry at launch.
+    // Non-mirror variants leave these undefined (mirrorBoost short-circuits
+    // on missing fields → 0 contribution).
+    ...(variant === 'mirror'
+      ? { peakBoost: MIRROR_SAT_PEAK_BOOST, rHalf: MIRROR_SAT_R_HALF_TILES }
+      : {}),
   };
 
   world.satellites.push(sat);
@@ -976,4 +1004,65 @@ export function upgradeSpaceport(
   }
   sp.tier = currentTier + 1;
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// §14.3 Mirror Sat — Lorentzian boost contribution (additive to §2.7 solar)
+// ---------------------------------------------------------------------------
+
+/**
+ * §14.3 Mirror Sat per-sat boost contribution to one ground target.
+ *
+ * Lorentzian falloff: `raw = peakBoost / (1 + (d / rHalf)²)`. The shape
+ * derives physically from `cos²(θ) = h² / (h² + d²)` for an orbital
+ * reflector aimed at a laterally-offset ground target — peak at d=0,
+ * half-power at d=rHalf, then 1/(1+x²) tail.
+ *
+ * Hard cutoff at `raw < MIRROR_SAT_CUTOFF`: contributions below 0.05 zero
+ * out so distant mirrors don't accumulate vanishingly-thin "everywhere
+ * helps a little" stacking. Strict less-than — exactly 0.05 stays.
+ *
+ * Returns 0 when the sat lacks peakBoost/rHalf fields (non-mirror variants,
+ * legacy saves). Pure — no allocation, no side effects.
+ */
+export function mirrorBoost(
+  sat: Satellite,
+  target: { x: number; y: number },
+): number {
+  const peakBoost = sat.peakBoost;
+  const rHalf = sat.rHalf;
+  if (peakBoost === undefined || rHalf === undefined || rHalf <= 0) return 0;
+  const dx = sat.x - target.x;
+  const dy = sat.y - target.y;
+  const d = Math.hypot(dx, dy);
+  const raw = peakBoost / (1 + (d / rHalf) ** 2);
+  return raw < MIRROR_SAT_CUTOFF ? 0 : raw;
+}
+
+/**
+ * §14.3 + §2.7: sum of mirror boost contributions reaching `target` from
+ * every LOCKED mirror sat in the world. In-transit mirrors (locked === false)
+ * are excluded — a sat ferrying to its lock cell isn't reflecting sunlight
+ * at any fixed point. Non-mirror variants contribute 0 via mirrorBoost.
+ *
+ * Computed once per tick per island in main.ts and threaded into
+ * `RatesContext.solarBoost`. The §2.7 solar gate in `computeRates` composes
+ * it additively with `solarMultiplier(t)`, capping at 1.0 — see
+ * economy.ts for the composition site.
+ *
+ * Returns a raw sum (uncapped at this layer): cap-at-1 lives in the
+ * composition step so stacking past full-day reads as "wasted mirror" to
+ * the player rather than being silently truncated here.
+ */
+export function effectiveSolarBoostFor(
+  world: WorldState,
+  target: { x: number; y: number },
+): number {
+  let sum = 0;
+  for (const sat of world.satellites) {
+    if (sat.variant !== 'mirror') continue;
+    if (!sat.locked) continue;
+    sum += mirrorBoost(sat, target);
+  }
+  return sum;
 }

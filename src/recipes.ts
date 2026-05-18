@@ -249,6 +249,9 @@ export type ResourceId =
   //                              at `antimatter_refinery` (T6).
   //   scanner_sat              — §14.3 discovery/weather satellite payload.
   //   relay_sat                — §14.3 comm-graph extension payload.
+  //   mirror_sat               — §14.3 Mirror Sat payload: orbital reflector
+  //                              that boosts ground-station effective solar
+  //                              multiplier via a Lorentzian distance falloff.
   //   orbital_insertion_package — §14.7 "T6 Foundation-Kit equivalent" —
   //                              every launch requires one alongside fuel +
   //                              variant recipe. Crafted at
@@ -259,6 +262,7 @@ export type ResourceId =
   | 'relay_sat'
   | 'orbital_insertion_package'
   | 'sweeper_sat'
+  | 'mirror_sat'
   | 'repair_drone'
   | 'repair_pack'
   | 'pcb'
@@ -485,6 +489,7 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'relay_sat',
   'orbital_insertion_package',
   'sweeper_sat',
+  'mirror_sat',
   'repair_drone',
   'repair_pack',
   'pcb',
@@ -732,6 +737,7 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   relay_sat: 1000,
   orbital_insertion_package: 1000,
   sweeper_sat: 1000,
+  mirror_sat: 1000,
   repair_drone: 1000,
   // repair_pack is a T5-equivalent consumable per task brief.
   repair_pack: 300,
@@ -2022,6 +2028,16 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 1800,
     inputs: { exotic_alloy: 4, ai_core: 1, carbon_steel: 100, magnet: 20, orbital_insertion_package: 1 },
     outputs: { sweeper_sat: 1 },
+    category: 'manufacturing',
+  },
+
+  // §14.3 / §14.10: Mirror Sat Assembly. 30-min cycle. The 150 Aluminum is
+  // bulk reflective surface; the 10 Optical Glass is sun-tracking precision
+  // optics. Per-sat fields locked at peakBoost=0.7, rHalf=200 tiles.
+  mirror_sat_assembly: {
+    cycleSec: 1800,
+    inputs: { exotic_alloy: 4, ai_core: 1, aluminum: 150, optical_glass: 10, orbital_insertion_package: 1 },
+    outputs: { mirror_sat: 1 },
     category: 'manufacturing',
   },
 
