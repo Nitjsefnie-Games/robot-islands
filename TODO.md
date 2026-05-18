@@ -40,15 +40,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   the deviation in SPEC.md.
   *(Flagged by Agents B, C.)*
 
-- **§13.3 Omniscient Lattice activates without route-connectivity check.**
-  `src/lattice.ts:35-49` counts every T5-mastered island with a Lattice
-  Node toward the activation threshold (N=20) regardless of whether
-  those islands are networked. §13.3 ties N to "Network Consciousness
-  threshold (§9.6)" and §9.6 explicitly defines "networked" as
-  route-graph-reachable from home. Fix: filter `nodeIslands` against
-  `networkedIslandIds(world)` before length-check.
-  *(Flagged by Agent A.)*
-
 - **§2.4 `any` route seeds priority with EVERY resource (opposite of
   spec).** `src/routes-ui.ts:518` `priorityList: isAny ? [...ALL_RESOURCES]
   : []`. Spec §2.4: "Resources not on the priority list are not moved
