@@ -751,12 +751,12 @@ AI core + Drone parts + Manufacturing programming        -> Self-replication mod
 
 ### 7.12 T5 Transcendent
 
-T5 recipes consume T4 components and T5 raws in extreme quantities with hour-long cycle times.
+T5 recipes consume T4 components and T5 raws in extreme quantities with hour-long cycle times. (Cycle figures below reflect the 2026-05-18 ÷3 display-visibility rebalance — Reality Anchor / Genesis Cell were 24h, Lattice Node was 12h, Antimatter Propellant was 30 min.)
 
 ```
-4 AI core + 1 Antimatter capsule + 1 Time crystal + 1 Exotic alloy + 24h cycle               -> Reality Anchor
-4 Reality Anchor + 1 Zero-point flux + 2 Causal Regulator + 1 Memetic Core + 24h cycle       -> Genesis Cell
-2 Reality Anchor + 4 Causal Regulator + 1 Memetic Core + 12h cycle                           -> Lattice Node
+4 AI core + 1 Antimatter capsule + 1 Time crystal + 1 Exotic alloy + 8h cycle                -> Reality Anchor
+4 Reality Anchor + 1 Zero-point flux + 2 Causal Regulator + 1 Memetic Core + 8h cycle        -> Genesis Cell
+2 Reality Anchor + 4 Causal Regulator + 1 Memetic Core + 4h cycle                            -> Lattice Node
 N Lattice Nodes (one per networked T5 island, N = 20 = Network Consciousness threshold) + Spacetime fragment + 6h cycle  -> Omniscient Lattice activation
 1 Ascendant Core requires: T5 mastery on at least 3 islands
 ```
@@ -766,7 +766,7 @@ N Lattice Nodes (one per networked T5 island, N = 20 = Network Consciousness thr
 **T6 fuel — Antimatter Propellant** is produced at a Particle Accelerator (T4) located on a T6-mastered island:
 
 ```
-1 Antimatter capsule + 1 Plasma containment vessel + 5 Cryogenic Hydrogen + 100 MW for 30 min cycle   ->  1 Antimatter Propellant
+1 Antimatter capsule + 1 Plasma containment vessel + 5 Cryogenic Hydrogen + 100 MW for 10 min cycle   ->  1 Antimatter Propellant
 ```
 
 The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who has not built out T4 antimatter production cannot fuel T6 launches at any meaningful rate.
@@ -895,7 +895,7 @@ The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who 
 
 ### 8.10 T5 Raw Extraction (T5 only)
 
-T5 raw resources (§6.6) are extracted by specialized T5 buildings. Each requires T5 access on the island (level 50 + AI core, see §13.1) and draws extreme power per cycle. Extraction is slow — placeholder cycle times of 30 minutes to 4 hours per unit. Aetheric Anomaly islands (§3.5) extract at bonus efficiency.
+T5 raw resources (§6.6) are extracted by specialized T5 buildings. Each requires T5 access on the island (level 50 + AI core, see §13.1) and draws extreme power per cycle. Extraction is slow — placeholder cycle times of ~10 minutes to ~80 minutes per unit (2026-05-18 ÷3 for display visibility; was 30 minutes to 4 hours). Aetheric Anomaly islands (§3.5) extract at bonus efficiency.
 
 |Building|Footprint|Outputs|Notes|
 |-|-|-|-|
