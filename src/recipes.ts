@@ -967,6 +967,33 @@ export interface Recipe {
  *                               runs one variant or the other per tick
  *                               and the piecewise integrator re-resolves
  *                               at each event (e.g. pig_iron depletion).
+ *   - `nodule_concentrator_re` / `nodule_concentrator_co` — Nodule
+ *                               Concentrator per-output variants. The §3
+ *                               chain examples list distinct feedstocks
+ *                               for rare_earth_concentrate (re_nodule +
+ *                               sulfuric_acid) vs refined_cobalt
+ *                               (co_nodule + sulfuric_acid). Each variant
+ *                               burns ONE nodule type per cycle, restoring
+ *                               the spec-aligned 1:1 feedstock cost
+ *                               (the original combined-inputs recipe burnt
+ *                               both nodule types each cycle for one output).
+ *                               Resolver routes by inventory presence:
+ *                               re_nodule on hand → _re variant; else
+ *                               co_nodule on hand → _co variant; else
+ *                               fall back to _re so the bottleneck surfaces
+ *                               in `inputAvail` (mirrors steel_mill).
+ *   - `vent_mineral_refinery_exotic` / `vent_mineral_refinery_tritium` —
+ *                               Vent Mineral Refinery per-output variants.
+ *                               _exotic: vent_exotic + casimir_energy →
+ *                               exotic_alloy_seed. _tritium:
+ *                               heavy_isotope_slurry + casimir_energy →
+ *                               tritium_seed. Same per-cycle isolation as
+ *                               the nodule_concentrator variants — fixes
+ *                               the original combined-inputs recipe that
+ *                               burnt vent_exotic + heavy_isotope_slurry
+ *                               + casimir_energy each cycle for one
+ *                               rotation output (3× the spec feedstock
+ *                               cost). Resolver routes by inventory.
  *
  * The legacy `mine` entry stays as a fallback recipe (= same as
  * `mine_on_ore`) so callers that don't pass a terrain closure into
@@ -976,7 +1003,11 @@ export type RecipeId =
   | BuildingDefId
   | 'mine_on_ore'
   | 'mine_on_coal'
-  | 'steel_mill_from_scrap';
+  | 'steel_mill_from_scrap'
+  | 'nodule_concentrator_re'
+  | 'nodule_concentrator_co'
+  | 'vent_mineral_refinery_exotic'
+  | 'vent_mineral_refinery_tritium';
 
 /**
  * Recipe binding by recipe id. Buildings without a recipe (Solar, Dock,
@@ -2497,28 +2528,36 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // extractors. The Geothermal Vent Generator is a passive power source
   // (no recipe; def.power.produces only — cf. solar_panel / nuclear_reactor).
   //
-  // **Combined-inputs design** for the divergent-feedstock processors:
-  // `Recipe.inputs` is a single map per building (and `rotateOutputs` only
-  // rotates outputs, not inputs). The §3 chain examples list distinct
-  // feedstocks for `rare_earth_concentrate` vs `refined_cobalt`
+  // **Per-output variant design** for the divergent-feedstock processors
+  // (`nodule_concentrator`, `vent_mineral_refinery`). The §3 chain examples
+  // list distinct feedstocks for `rare_earth_concentrate` vs `refined_cobalt`
   // (re_nodule + sulfuric_acid vs co_nodule + sulfuric_acid) and for
   // `exotic_alloy_seed` vs `tritium_seed` (vent_exotic + casimir vs
-  // heavy_isotope_slurry); ratherthan extending RecipeId + resolveRecipe
-  // to choose per-cycle (out-of-scope for Task 9), we combine the feedstocks
-  // into one inputs map per processor. Each cycle burns the union; outputs
-  // rotate per §8.10. This is the same "ship structure, balance later"
-  // posture as Task 8, and `cycleSec` is set generously to reflect the
-  // doubled feedstock cost.
+  // heavy_isotope_slurry + casimir). Each building gets ONE RecipeId per
+  // output, mirroring `steel_mill_from_scrap`; `resolveRecipe` routes by
+  // inventory presence so each cycle burns only the feedstock(s) the chosen
+  // output actually needs. The base `nodule_concentrator` /
+  // `vent_mineral_refinery` ids are NOT in the RECIPES map — callers go
+  // through `resolveRecipe` and receive the per-output variant.
+  //
+  // Restores spec-aligned 1:1 feedstock-to-output cost. (The original
+  // combined-inputs + rotateOutputs shape — superseded — burnt the union
+  // every cycle and produced only one rotation output, wasting half/two
+  // thirds of the feedstock per cycle.)
   //
   // Cycle times match the post-÷3 rebalance scale per tier:
   //   T3 chemistry intermediate (Brine Distillation): 120s.
-  //   T4 chemistry intermediate (Nodule Concentrator): 240s.
-  //   T5 chemistry final (Vent Mineral Refinery): 480s.
+  //   T4 chemistry intermediate (Nodule Concentrator variants): 240s.
+  //   T5 chemistry final (Vent Mineral Refinery variants): 480s.
   //   T5 chemistry final (Heavy Water Distiller): 360s.
   brine_distillation_rig: {
     // §3 chain example (Lithium): Seawater Intake → dilute_brine →
     // Brine Distillation Rig → lithium_brine. We rotate three outputs
     // (lithium_brine, salt, bromine) per the catalog "3 recipes" row.
+    // The three rotation outputs share a common feedstock (dilute_brine)
+    // so rotateOutputs remains the correct shape here — unlike the
+    // nodule_concentrator / vent_mineral_refinery cases where the §3
+    // chain examples specify distinct per-output feedstocks.
     cycleSec: 120,
     inputs: { dilute_brine: 5 },
     outputs: { lithium_brine: 1 },
@@ -2529,43 +2568,42 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     ],
     category: 'chemistry',
   },
-  nodule_concentrator: {
-    // §3 chain example (Rare-earth): Nodule Harvester → re_nodule →
-    // Nodule Concentrator → rare_earth_concentrate. We rotate two outputs
-    // (rare_earth_concentrate, refined_cobalt) per the catalog "2 recipes"
-    // row. Combined-inputs: both nodule types + sulfuric_acid every cycle.
+  // Nodule Concentrator per-output variants. See block comment above.
+  nodule_concentrator_re: {
     cycleSec: 240,
-    inputs: { re_nodule: 2, co_nodule: 2, sulfuric_acid: 1 },
+    inputs: { re_nodule: 2, sulfuric_acid: 1 },
     outputs: { rare_earth_concentrate: 1 },
-    rotateOutputs: [
-      { rare_earth_concentrate: 1 },
-      { refined_cobalt: 1 },
-    ],
     category: 'chemistry',
   },
-  vent_mineral_refinery: {
-    // §3 chain examples (Exotic alloy + Tritium): Vent Tap → vent_exotic +
-    // Trench Drill → heavy_isotope_slurry → Vent Mineral Refinery →
-    // exotic_alloy_seed / tritium_seed. Combined-inputs: vent_exotic +
-    // heavy_isotope_slurry + casimir_energy (T5 exotic gating per §8.10
-    // Casimir Tap) every cycle; outputs rotate.
+  nodule_concentrator_co: {
+    cycleSec: 240,
+    inputs: { co_nodule: 2, sulfuric_acid: 1 },
+    outputs: { refined_cobalt: 1 },
+    category: 'chemistry',
+  },
+  // Vent Mineral Refinery per-output variants. See block comment above.
+  // Casimir_energy gates both per §8.10 Casimir Tap T5 exotic gating.
+  vent_mineral_refinery_exotic: {
     cycleSec: 480,
-    inputs: { vent_exotic: 1, heavy_isotope_slurry: 1, casimir_energy: 1 },
+    inputs: { vent_exotic: 1, casimir_energy: 1 },
     outputs: { exotic_alloy_seed: 1 },
-    rotateOutputs: [
-      { exotic_alloy_seed: 1 },
-      { tritium_seed: 1 },
-    ],
+    category: 'chemistry',
+  },
+  vent_mineral_refinery_tritium: {
+    cycleSec: 480,
+    inputs: { heavy_isotope_slurry: 1, casimir_energy: 1 },
+    outputs: { tritium_seed: 1 },
     category: 'chemistry',
   },
   heavy_water_distiller: {
     // §3 chain example (Heavy water): Open-Water Extractor →
     // concentrated_brine → Heavy Water Distiller → heavy_water. Single
-    // output, no rotation. The microchip co-input models the precision
-    // control electronics for isotope-selective distillation (mirrors
-    // existing T5 chemistry recipes that fold in a microchip for control).
+    // output, no rotation. Per §3 design doc the only input is
+    // concentrated_brine — the earlier microchip co-input was an overreach
+    // (rationale referenced "precision control electronics", but the spec
+    // lists no such input).
     cycleSec: 360,
-    inputs: { concentrated_brine: 4, microchip: 1 },
+    inputs: { concentrated_brine: 4 },
     outputs: { heavy_water: 1 },
     category: 'chemistry',
   },
@@ -2642,6 +2680,39 @@ export function resolveRecipe(
     if (pigIron <= 0 && scrap > 0) {
       return RECIPES.steel_mill_from_scrap;
     }
+  }
+  // Nodule Concentrator per-output routing. The two feedstocks are peers
+  // (no "preferred" path like steel_mill's pig_iron over scrap), so the
+  // rule is just inventory presence: re_nodule on hand → run the _re
+  // variant; else co_nodule on hand → run _co. When both are empty, fall
+  // back to _re so `inputAvail` surfaces the re_nodule shortage in the
+  // usual way (returning undefined would silently no-op the building, and
+  // there is no terrain-validation invariant that guarantees feedstock
+  // presence the way `requiredTile` does for Mine). The piecewise
+  // integrator re-resolves at each cap event, so the choice flips
+  // automatically when one stockpile depletes.
+  if (def.id === 'nodule_concentrator') {
+    if (inventory) {
+      const re = inventory.re_nodule ?? 0;
+      const co = inventory.co_nodule ?? 0;
+      if (re <= 0 && co > 0) {
+        return RECIPES.nodule_concentrator_co;
+      }
+    }
+    return RECIPES.nodule_concentrator_re;
+  }
+  // Vent Mineral Refinery per-output routing. Same pattern: vent_exotic →
+  // _exotic variant; else heavy_isotope_slurry → _tritium variant; else
+  // _exotic as the bottleneck-surfacing default.
+  if (def.id === 'vent_mineral_refinery') {
+    if (inventory) {
+      const ex = inventory.vent_exotic ?? 0;
+      const tr = inventory.heavy_isotope_slurry ?? 0;
+      if (ex <= 0 && tr > 0) {
+        return RECIPES.vent_mineral_refinery_tritium;
+      }
+    }
+    return RECIPES.vent_mineral_refinery_exotic;
   }
   return RECIPES[def.id as RecipeId];
 }

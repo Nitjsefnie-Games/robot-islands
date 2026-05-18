@@ -26,6 +26,7 @@ import {
   XP_WEIGHT,
   fuelForTier,
   nextRotateOutputBoundaryMs,
+  resolveRotatingOutput,
   type RecipeCategory,
   type ResourceId,
 } from './recipes.js';
@@ -1785,44 +1786,85 @@ describe('§3 ocean processing recipes (Task 9)', () => {
     expect(r!.category).toBe('chemistry');
   });
 
-  it('nodule_concentrator recipe consumes re_nodule + co_nodule + sulfuric_acid and rotates rare_earth_concentrate / refined_cobalt outputs', () => {
-    const r = RECIPES.nodule_concentrator;
-    expect(r).toBeDefined();
-    // §3 chain example specifies sulfuric_acid as a co-input. We bundle
-    // both nodule feedstocks into one recipe and rotate the outputs — see
-    // commit message for the combined-inputs rationale (one Recipe.inputs
-    // map per building, rotateOutputs only rotates outputs).
-    expect(r!.inputs).toEqual({ re_nodule: 2, co_nodule: 2, sulfuric_acid: 1 });
-    expect(r!.rotateOutputs).toBeDefined();
-    expect(r!.rotateOutputs!).toHaveLength(2);
-    expect(r!.rotateOutputs![0]).toEqual({ rare_earth_concentrate: 1 });
-    expect(r!.rotateOutputs![1]).toEqual({ refined_cobalt: 1 });
-    expect(r!.cycleSec).toBe(240);
-    expect(r!.category).toBe('chemistry');
+  it('nodule_concentrator per-output variants (_re, _co) each consume ONE nodule type + sulfuric_acid for the matching output', () => {
+    // §3 chain examples list distinct feedstocks per output
+    // (re_nodule + sulfuric_acid → rare_earth_concentrate;
+    //  co_nodule + sulfuric_acid → refined_cobalt). Each cycle burns one
+    // nodule type only, restoring spec-aligned 1:1 feedstock cost.
+    const re = RECIPES.nodule_concentrator_re;
+    expect(re).toBeDefined();
+    expect(re!.inputs).toEqual({ re_nodule: 2, sulfuric_acid: 1 });
+    expect(re!.outputs).toEqual({ rare_earth_concentrate: 1 });
+    expect(re!.rotateOutputs).toBeUndefined();
+    expect(re!.cycleSec).toBe(240);
+    expect(re!.category).toBe('chemistry');
+
+    const co = RECIPES.nodule_concentrator_co;
+    expect(co).toBeDefined();
+    expect(co!.inputs).toEqual({ co_nodule: 2, sulfuric_acid: 1 });
+    expect(co!.outputs).toEqual({ refined_cobalt: 1 });
+    expect(co!.rotateOutputs).toBeUndefined();
+    expect(co!.cycleSec).toBe(240);
+    expect(co!.category).toBe('chemistry');
+
+    // Base id is NOT a recipe entry — callers go through resolveRecipe.
+    expect(RECIPES.nodule_concentrator).toBeUndefined();
   });
 
-  it('vent_mineral_refinery recipe consumes vent_exotic + heavy_isotope_slurry + casimir_energy and rotates exotic_alloy_seed / tritium_seed outputs', () => {
-    const r = RECIPES.vent_mineral_refinery;
-    expect(r).toBeDefined();
-    // §3 chain examples (Exotic alloy + Tritium): combined-inputs per
-    // building, rotateOutputs picks the per-cycle product.
-    expect(r!.inputs).toEqual({ vent_exotic: 1, heavy_isotope_slurry: 1, casimir_energy: 1 });
-    expect(r!.rotateOutputs).toBeDefined();
-    expect(r!.rotateOutputs!).toHaveLength(2);
-    expect(r!.rotateOutputs![0]).toEqual({ exotic_alloy_seed: 1 });
-    expect(r!.rotateOutputs![1]).toEqual({ tritium_seed: 1 });
-    expect(r!.cycleSec).toBe(480);
-    expect(r!.category).toBe('chemistry');
+  it('vent_mineral_refinery per-output variants (_exotic, _tritium) each consume the matching feedstock + casimir_energy', () => {
+    // §3 chain examples list distinct feedstocks per output
+    // (vent_exotic + casimir_energy → exotic_alloy_seed;
+    //  heavy_isotope_slurry + casimir_energy → tritium_seed).
+    const ex = RECIPES.vent_mineral_refinery_exotic;
+    expect(ex).toBeDefined();
+    expect(ex!.inputs).toEqual({ vent_exotic: 1, casimir_energy: 1 });
+    expect(ex!.outputs).toEqual({ exotic_alloy_seed: 1 });
+    expect(ex!.rotateOutputs).toBeUndefined();
+    expect(ex!.cycleSec).toBe(480);
+    expect(ex!.category).toBe('chemistry');
+
+    const tr = RECIPES.vent_mineral_refinery_tritium;
+    expect(tr).toBeDefined();
+    expect(tr!.inputs).toEqual({ heavy_isotope_slurry: 1, casimir_energy: 1 });
+    expect(tr!.outputs).toEqual({ tritium_seed: 1 });
+    expect(tr!.rotateOutputs).toBeUndefined();
+    expect(tr!.cycleSec).toBe(480);
+    expect(tr!.category).toBe('chemistry');
+
+    // Base id is NOT a recipe entry — callers go through resolveRecipe.
+    expect(RECIPES.vent_mineral_refinery).toBeUndefined();
   });
 
-  it('heavy_water_distiller recipe consumes concentrated_brine and produces heavy_water (single-output, no rotation)', () => {
+  it('heavy_water_distiller recipe consumes concentrated_brine ONLY and produces heavy_water (no microchip co-input; single-output, no rotation)', () => {
     const r = RECIPES.heavy_water_distiller;
     expect(r).toBeDefined();
-    expect(r!.inputs).toEqual({ concentrated_brine: 4, microchip: 1 });
+    // Spec §3 lists concentrated_brine as the sole input — the earlier
+    // microchip co-input was a "precision control electronics" overreach.
+    expect(r!.inputs).toEqual({ concentrated_brine: 4 });
     expect(r!.outputs).toEqual({ heavy_water: 1 });
     expect(r!.rotateOutputs).toBeUndefined();
     expect(r!.cycleSec).toBe(360);
     expect(r!.category).toBe('chemistry');
+  });
+
+  it('brine_distillation_rig rotates outputs deterministically across cycles', () => {
+    // brine_distillation_rig is the only remaining multi-output recipe in
+    // the Task 9 catalog (nodule_concentrator / vent_mineral_refinery were
+    // split into per-output RecipeId variants). All three rotation outputs
+    // (lithium_brine, salt, bromine) share the same dilute_brine feedstock,
+    // so rotateOutputs is the right shape here — observe all three appear
+    // in three consecutive cycle slots.
+    const r = RECIPES.brine_distillation_rig!;
+    const cycleMs = r.cycleSec * 1000;
+    const out0 = resolveRotatingOutput(r, 0);
+    const out1 = resolveRotatingOutput(r, cycleMs);
+    const out2 = resolveRotatingOutput(r, cycleMs * 2);
+    const observed = new Set([
+      Object.keys(out0)[0],
+      Object.keys(out1)[0],
+      Object.keys(out2)[0],
+    ]);
+    expect(observed).toEqual(new Set(['lithium_brine', 'salt', 'bromine']));
   });
 
   it('geothermal_vent_generator has NO recipe entry (passive power source)', () => {
