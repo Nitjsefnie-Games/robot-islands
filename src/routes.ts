@@ -124,8 +124,9 @@ export const MASS_DRIVER_CAPACITY_UNITS_PER_SEC = 2.5;
  *  volume." Placeholder — tune in Appendix A. Cost is computed AFTER the
  *  source-contention scaling, against the final allocated `amount`. If
  *  the source can't afford the full diesel bill, the entire dispatch is
- *  skipped wholesale (mirror of the teleporter biofuel pattern at the
- *  bottom of `dispatchPhase`). */
+ *  skipped wholesale (same shape as the teleporter biofuel check below in
+ *  this file — same Phase-2-relative timing and refund pattern, but
+ *  applied to BOTH transit branches rather than only the instant one). */
 export const MASS_DRIVER_DIESEL_PER_UNIT = 0.05;
 
 /** Funneling bonus per §10 / Appendix A placeholder (50%). */

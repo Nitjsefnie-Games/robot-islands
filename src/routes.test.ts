@@ -1004,6 +1004,7 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     // base today (no separate constant). Mass Driver placeholder is 2.5
     // u/s = 5× cargo, anchoring on the only existing constant. Adjust
     // when airship gets its own capacity constant.
+    // see routes.ts:113-119 for the anchor decision — revisit if airship gains a base constant
     expect(MASS_DRIVER_CAPACITY_UNITS_PER_SEC).toBeCloseTo(2.5, 9);
   });
 
@@ -1072,7 +1073,56 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     expect(src.inventory.diesel).toBeCloseTo(0.001, 9);
   });
 
-  it('still creates in-flight batches (transit > 0; weather-affected per §2.6)', () => {
+  it('shipping diesel itself — cargo + fuel come from the same pool', () => {
+    // Pins the interaction between the cargo deduction at routes.ts:662 and
+    // the fuel check at routes.ts:672. When the route ships diesel, the
+    // cargo is deducted from the diesel pool BEFORE the fuel check looks at
+    // remaining diesel. Two boundary cases lock the behavior so a future
+    // refactor (e.g. reordering the fuel debit) cannot silently flip it.
+    //
+    // Capacity 2.5 u/s × 1s = 2.5 units cargo; fuel = 2.5 × 0.05 = 0.125.
+
+    // Case A: source has exactly `amount` diesel (2.5).
+    // After cargo deduct → 0; fuel check fails (0 < 0.125); cargo refunded.
+    // Outcome: dispatch SKIPPED, source diesel restored to 2.5.
+    {
+      const src = makeState('a', {
+        inventory: { ...blankInventory(), diesel: 2.5 },
+      });
+      const dst = makeState('b');
+      const r = massDriverRoute('a', 'b', 'diesel');
+      const world = makeWorld([r]);
+      const states = new Map([['a', src], ['b', dst]]);
+      const out = dispatchAttempt(world, states, 0, 1);
+      expect(out.length).toBe(0);
+      expect(src.inventory.diesel).toBeCloseTo(2.5, 9);
+      expect(dst.inventory.diesel).toBe(0);
+      expect(r.inFlight.length).toBe(0);
+    }
+
+    // Case B: source has exactly `amount + fuelCost` diesel (2.625).
+    // After cargo deduct → 0.125; fuel check passes (0.125 ≥ 0.125);
+    // fuel debited → 0. Outcome: dispatch SUCCEEDS, source diesel drained
+    // to 0, in-flight batch carries the 2.5-unit cargo.
+    {
+      const src = makeState('a', {
+        inventory: { ...blankInventory(), diesel: 2.625 },
+      });
+      const dst = makeState('b');
+      const r = massDriverRoute('a', 'b', 'diesel');
+      const world = makeWorld([r]);
+      const states = new Map([['a', src], ['b', dst]]);
+      const out = dispatchAttempt(world, states, 0, 1);
+      expect(out.length).toBe(1);
+      expect(out[0]?.resourceId).toBe('diesel');
+      expect(out[0]?.amount).toBeCloseTo(2.5, 9);
+      expect(src.inventory.diesel).toBeCloseTo(0, 9);
+      expect(r.inFlight.length).toBe(1);
+      expect(r.inFlight[0]?.amount).toBeCloseTo(2.5, 9);
+    }
+  });
+
+  it('still creates in-flight batches (transit > 0)', () => {
     const src = makeState('a', {
       inventory: { ...blankInventory(), iron_ore: 100, diesel: 100 },
     });
@@ -1089,7 +1139,7 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     expect(dst.inventory.iron_ore).toBeGreaterThan(0);
   });
 
-  it('mass_driver routes count toward connectedness (not power-link)', () => {
+  it('mass_driver routes are NOT power links (cable analysis ignores them)', () => {
     // Cable balance treats mass_driver as a non-power link — same as cargo.
     // The component graph for cable analysis must NOT pick it up.
     const a = makeState('a');
