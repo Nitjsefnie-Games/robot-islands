@@ -10,6 +10,7 @@ import {
   corridorCells,
   islandCells,
   parseCellKey,
+  revealOceanCells,
   tileToCell,
 } from './discovery.js';
 import type { IslandSpec } from './world.js';
@@ -367,6 +368,73 @@ describe('islandCells', () => {
     expect(cells.has('0,0')).toBe(true);
     expect(cells.has('0,1')).toBe(true);
     expect(cells.has('1,0')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// revealOceanCells — pinned for Task 7 (Scanner Sat ocean extension) reuse.
+// ---------------------------------------------------------------------------
+
+describe('revealOceanCells', () => {
+  function makeSets() {
+    return {
+      revealedCells: new Set<string>(),
+      depthRevealedCells: new Set<string>(),
+    };
+  }
+
+  it('closed-disk boundary — cell at exactly dx² + dy² == r² IS included', () => {
+    // center (0,0), radius=2: cell (2,0) is at exactly 4 = r² and must be IN;
+    // cell (3,0) at 9 > 4 must be OUT — this pins the `<=` semantics.
+    const state = makeSets();
+    revealOceanCells(state, 0, 0, 2, { surface: true, depth: true });
+    expect(state.revealedCells.has(cellKey(2, 0))).toBe(true);
+    expect(state.revealedCells.has(cellKey(-2, 0))).toBe(true);
+    expect(state.revealedCells.has(cellKey(0, 2))).toBe(true);
+    expect(state.revealedCells.has(cellKey(0, -2))).toBe(true);
+    expect(state.revealedCells.has(cellKey(3, 0))).toBe(false);
+    // depth set mirrors surface set under {surface:true, depth:true}.
+    expect(state.depthRevealedCells.has(cellKey(2, 0))).toBe(true);
+    expect(state.depthRevealedCells.has(cellKey(3, 0))).toBe(false);
+  });
+
+  it('{surface: true, depth: false} writes only revealedCells', () => {
+    const state = makeSets();
+    revealOceanCells(state, 5, 5, 2, { surface: true, depth: false });
+    expect(state.revealedCells.size).toBeGreaterThan(0);
+    expect(state.depthRevealedCells.size).toBe(0);
+    // Spot-check the center cell ends up in revealedCells.
+    expect(state.revealedCells.has(cellKey(5, 5))).toBe(true);
+  });
+
+  it('{surface: false, depth: true} writes only depthRevealedCells', () => {
+    const state = makeSets();
+    revealOceanCells(state, 5, 5, 2, { surface: false, depth: true });
+    expect(state.depthRevealedCells.size).toBeGreaterThan(0);
+    expect(state.revealedCells.size).toBe(0);
+    expect(state.depthRevealedCells.has(cellKey(5, 5))).toBe(true);
+  });
+
+  it('{surface: false, depth: false} is a no-op (early return)', () => {
+    const state = makeSets();
+    revealOceanCells(state, 5, 5, 4, { surface: false, depth: false });
+    expect(state.revealedCells.size).toBe(0);
+    expect(state.depthRevealedCells.size).toBe(0);
+  });
+
+  it('is idempotent — calling twice with same args does not duplicate or corrupt the Sets', () => {
+    const state = makeSets();
+    revealOceanCells(state, 0, 0, 3, { surface: true, depth: true });
+    const surfaceAfterFirst = new Set(state.revealedCells);
+    const depthAfterFirst = new Set(state.depthRevealedCells);
+    const sizeAfterFirst = state.revealedCells.size;
+    expect(sizeAfterFirst).toBeGreaterThan(0);
+
+    revealOceanCells(state, 0, 0, 3, { surface: true, depth: true });
+    expect(state.revealedCells.size).toBe(sizeAfterFirst);
+    expect(state.depthRevealedCells.size).toBe(sizeAfterFirst);
+    expect(state.revealedCells).toEqual(surfaceAfterFirst);
+    expect(state.depthRevealedCells).toEqual(depthAfterFirst);
   });
 });
 
