@@ -22,7 +22,7 @@
 
 import { Container } from 'pixi.js';
 
-import { rerollModifiers, terrainAtForBiome } from './biomes.js';
+import { terrainAtForBiome } from './biomes.js';
 import type { ModifierId } from './biomes.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -30,14 +30,13 @@ import { renderBuildings } from './buildings.js';
 import { islandCells } from './discovery.js';
 import type { IslandState } from './economy.js';
 import type { EndgameState, VictoryCondition } from './endgame.js';
-import { regenerateTerrain, type TerrainKind, type Tile } from './island.js';
+import { type TerrainKind, type Tile } from './island.js';
 import {
   computeIslandTiles,
   islandInscribedAny,
   renderIslandTiles,
   TILE_PX,
 } from './island.js';
-import { footprintTiles } from './shape-mask.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Route } from './routes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
@@ -317,53 +316,6 @@ export function renameIsland(spec: IslandSpec, name: string): RenameIslandResult
   if (!v.ok) return { ok: false, reason: v.reason };
   spec.name = v.name;
   return { ok: true };
-}
-
-/**
- * §13.3 Reality Forge — reassign an island's biome, regenerate terrain,
- * reroll modifiers (excluding natural-only ones), and invalidate buildings
- * whose footprint no longer matches the new terrain.
- */
-export function useRealityForge(
-  world: WorldState,
-  islandId: string,
-  targetBiome: Biome,
-): void {
-  const spec = world.islands.find((i) => i.id === islandId);
-  if (!spec) return;
-
-  // Regenerate terrain. The inscription predicate references `spec` by
-  // identity so a future §3.6 merge that mutates `extraEllipses` is
-  // observed by the next terrainAt call (no closure-capture of radii).
-  // Doesn't go through `attachTerrainAt` because `regenerateTerrain` already
-  // takes a narrowed `{ biome; terrainAt? }` parameter — no readonly-widening
-  // cast is needed at this site, so the shared helper would be pure
-  // ceremony here.
-  regenerateTerrain(spec, targetBiome, (x, y) =>
-    terrainAtForBiome(targetBiome, spec.id, x, y, (px, py) =>
-      islandInscribedAny(spec, px, py),
-    ),
-  );
-
-  // Reroll modifiers — natural-only ones are excluded.
-  (spec as unknown as { modifiers: ModifierId[] }).modifiers = rerollModifiers(WORLD_SEED, targetBiome);
-
-  // Invalidate buildings that no longer match terrain.
-  for (const b of spec.buildings) {
-    const def = BUILDING_DEFS[b.defId];
-    const tiles = footprintTiles(def.footprint, b.x, b.y, (b.rotation ?? 0) as 0 | 1 | 2 | 3);
-    const stillValid = tiles.every((t) => {
-      const terrain = spec.terrainAt?.(t.x, t.y);
-      if (!terrain) return false;
-      if (def.requiredTile && def.requiredTile.length > 0 && !def.requiredTile.includes(terrain)) {
-        return false;
-      }
-      return true;
-    });
-    if (!stillValid) {
-      b.invalid = true;
-    }
-  }
 }
 
 /**
