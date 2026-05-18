@@ -1684,7 +1684,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square3,
     fill: 0xf0c050, // solar gold
     stroke: 0x402810,
-    power: { produces: 60000 },  // 60 MW placeholder
+    // §2.7: SPEC line 277 lists Sunspire alongside Solar Panel as a "solar
+    // building" — its 60 MW output modulates by the day-night curve
+    // (Day 1.0×, Dawn/Dusk linear ramp, Night 0.0×). The §5.1 producer-
+    // summing loop in economy.ts gates wattage when `power.solar === true`.
+    power: { produces: 60000, solar: true },  // 60 MW placeholder
     requiredBiomes: ['desert'],
     placementCost: { steel: 250, glass: 100, microchip: 25 },
     glyph: '☀',
