@@ -30,6 +30,7 @@ import {
 import type { VictoryCondition } from './endgame.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { ObjectiveId } from './tutorial.js';
+import { generateOceanTerrain } from './ocean-gen.js';
 import {
   SCHEMA_VERSION,
   STORAGE_KEY,
@@ -112,12 +113,15 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('serializeWorld', () => {
-  it('produces a snapshot with v: 4 and a savedAt timestamp', () => {
+  it('produces a snapshot with the current schema version and a savedAt timestamp', () => {
     const world = makeInitialWorld(0);
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(4);
+    // Pin the literal so a future bump forces a deliberate test update
+    // alongside the new migration test (the only way to keep persistence
+    // version drift honest).
+    expect(snap.v).toBe(5);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1636,5 +1640,102 @@ describe('§14.4 commPackets persistence', () => {
     const r = restored.get('home')!;
     expect(r.declaredAt).toBeNull();
     expect(Number.isNaN(r.declaredAt as unknown as number)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ocean-layer §2 — v4 → v5 migration
+// ---------------------------------------------------------------------------
+
+describe('v4 → v5 ocean migration', () => {
+  // Build a v4-shape snapshot by serializing a fresh world, downgrading the
+  // version field, and stripping the two ocean fields the v4 schema did not
+  // carry. Mirrors how a real v4 save would look post-IDB read.
+  function makeV4Snapshot(seed: string): SaveSnapshot {
+    const world = makeInitialWorld(0);
+    // Force a known seed on the world before serializing so the migration's
+    // re-derivation has a deterministic comparison target.
+    (world as { seed: string }).seed = seed;
+    const snap = serializeWorld(world, new Map(), 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    // Downgrade and strip the v5-only fields.
+    const v4 = {
+      ...json,
+      v: 4,
+      world: { ...json.world },
+    } as unknown as { v: number; world: Record<string, unknown> };
+    delete v4.world['oceanCells'];
+    delete v4.world['depthRevealedCells'];
+    return v4 as unknown as SaveSnapshot;
+  }
+
+  it('populates oceanCells by re-deriving from world seed on load', () => {
+    const v4 = makeV4Snapshot('migration-seed-1');
+    const { world: restored } = deserializeWorld(v4, 0, 0);
+    expect(restored.oceanCells).toBeInstanceOf(Map);
+    // The migrated map should match a fresh `generateOceanTerrain` call
+    // against the same seed and post-load islands list (the islands round-
+    // trip verbatim, so this is a deterministic equality check).
+    const expected = generateOceanTerrain('migration-seed-1', restored.islands);
+    expect([...restored.oceanCells.entries()].sort()).toEqual(
+      [...expected.entries()].sort(),
+    );
+    expect(restored.depthRevealedCells).toEqual(new Set());
+  });
+
+  it('does NOT touch already-revealed surface cells (revealedCells stays as saved)', () => {
+    const v4 = makeV4Snapshot('migration-seed-2');
+    // Carry an explicit revealedCells array on the v4 blob and ensure it
+    // survives the migration unscathed (the migration only fabricates
+    // ocean-layer fields).
+    (v4.world as unknown as { revealedCells: string[] }).revealedCells = ['0,0', '1,0'];
+    const { world: restored } = deserializeWorld(v4, 0, 0);
+    expect(restored.revealedCells.has('0,0')).toBe(true);
+    expect(restored.revealedCells.has('1,0')).toBe(true);
+  });
+
+  it('bumps the in-memory schema version to 5 (re-serialize round-trip)', () => {
+    const v4 = makeV4Snapshot('migration-seed-3');
+    const { world: restored, islandStates } = deserializeWorld(v4, 0, 0);
+    // After load, a re-serialize should emit the current SCHEMA_VERSION (5).
+    const reSerialized = serializeWorld(restored, islandStates, 0);
+    expect(reSerialized.v).toBe(5);
+    expect(reSerialized.v).toBe(SCHEMA_VERSION);
+  });
+
+  it('rejects pre-v4 saves with unknown schema', () => {
+    // Build a v3-shaped blob: a serialized v5 snapshot with v rewritten to
+    // 3. The migration path skips it (v !== 4), then the version gate
+    // throws.
+    const world = makeInitialWorld(0);
+    const snap = serializeWorld(world, new Map(), 0);
+    const v3 = { ...snap, v: 3 } as unknown as SaveSnapshot;
+    expect(() => deserializeWorld(v3, 0, 0)).toThrow(/unknown schema version/i);
+  });
+
+  it('v5 saves roundtrip cleanly (oceanCells + depthRevealedCells preserved)', () => {
+    const world = makeInitialWorld(0);
+    // Add a couple of explicit depth reveals so the round-trip exercises
+    // a non-empty Set (the fresh world starts with an empty depth set).
+    world.depthRevealedCells.add('5,-3');
+    world.depthRevealedCells.add('0,0');
+    const snap = serializeWorld(world, new Map(), 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    // oceanCells survive verbatim.
+    expect(restored.oceanCells.size).toBe(world.oceanCells.size);
+    for (const [k, v] of world.oceanCells) {
+      expect(restored.oceanCells.get(k)).toEqual(v);
+    }
+    // depthRevealedCells survives verbatim.
+    expect(restored.depthRevealedCells).toEqual(new Set(['5,-3', '0,0']));
+  });
+
+  it('serialized oceanCells is sorted by key (deterministic save blob)', () => {
+    const world = makeInitialWorld(0);
+    const snap = serializeWorld(world, new Map(), 0);
+    const keys = (snap.world.oceanCells ?? []).map(([k]) => k);
+    const sorted = [...keys].sort();
+    expect(keys).toEqual(sorted);
   });
 });
