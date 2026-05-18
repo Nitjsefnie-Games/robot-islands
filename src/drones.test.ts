@@ -131,6 +131,8 @@ function makeTinyWorld(): WorldState & { islandStates: Map<string, IslandState> 
     latticeActive: false,
     latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
     seed: 'test-seed',
   };
   const islandStates = new Map<string, IslandState>([['home', homeState]]);
@@ -192,6 +194,8 @@ describe('dispatchDrone', () => {
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed: 'test-seed',
     };
   }
@@ -340,6 +344,8 @@ describe('dronePadCentre — §11.1 UI / dispatch origin alignment', () => {
       latticeActive: false,
       latticeNodeIslands: [],
       commPackets: [],
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
       seed: 'test-seed',
     };
     const spec = makeIslandSpec({ id: 'home', cx: 100, cy: 100, populated: true });
@@ -420,6 +426,8 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed: 'test-seed',
     };
   }
@@ -454,6 +462,8 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed: 'test-seed',
     };
   }
@@ -653,6 +663,8 @@ describe('dispatchDrone — §11.7 tier-matched fuel', () => {
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed: 'test-seed',
     };
   }
@@ -792,6 +804,8 @@ describe('drone weather destruction §2.6', () => {
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed,
     };
     const home = makeIslandState();
@@ -819,6 +833,8 @@ describe('drone weather destruction §2.6', () => {
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed,
     };
     const home = makeIslandState();
@@ -850,6 +866,8 @@ describe('T5 path-drawn drone', () => {
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed: 'test-seed',
     };
   }
@@ -961,6 +979,8 @@ describe('dark-mode telemetry', () => {
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed: 'test-seed',
     };
   }
@@ -1038,6 +1058,8 @@ describe('dark-mode telemetry', () => {
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
       seed: 'destroy-0',
     };
     // Add home island with no antenna.

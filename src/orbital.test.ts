@@ -620,6 +620,8 @@ function makeBfsWorld(opts: {
       latticeNodeIslands: [],
     islandStates: opts.islandStates,
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
   } as WorldState;
 }
 

@@ -20,6 +20,8 @@ function makeWorld(over: Partial<WorldState> = {}): WorldState {
     latticeActive: false,
     latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
     ...over,
   };
 }

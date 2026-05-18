@@ -107,6 +107,8 @@ function makeWorld(opts: {
       latticeActive: false,
       latticeNodeIslands: [],
     commPackets: [],
+    oceanCells: new Map(),
+    depthRevealedCells: new Set(),
     islandStates,
   };
 }
