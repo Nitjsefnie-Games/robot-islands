@@ -24,6 +24,14 @@ import { BIOME_DEFS, rollModifiers } from './biomes.js';
 import { makeSeededRng } from './rng.js';
 import { attachTerrainAt, type Biome, type IslandSpec } from './world.js';
 
+// Ocean-layer §2: re-export so callers wiring "the procedural world
+// pipeline" find both island placement (`generateWorld`) and ocean
+// terrain seeding (`generateOceanTerrain`) at one import path. The
+// actual call site lives in `makeInitialWorld` (world.ts) — that's
+// where the `WorldState` is assembled — but discoverability for
+// future maintainers belongs next to the rest of the world-gen API.
+export { generateOceanTerrain } from './ocean-gen.js';
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
