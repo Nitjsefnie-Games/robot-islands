@@ -43,13 +43,16 @@ import { effectiveSkillMultipliers } from './skilltree.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import type { IslandSpec } from './world.js';
 
-/** Default cargo label for a freshly-placed generic-storage building (Crate,
- *  Warehouse). The §4.6 spec says the player labels at placement time, but
- *  the placement modal hasn't been extended for the label picker yet — so we
- *  seed a sensible default and let the inspector's relabel path take it
- *  from there. `iron_ore` is the cheapest, earliest-game resource the player
- *  is reliably producing, so labeling defaults to it. */
-const DEFAULT_CARGO_LABEL: ResourceId = 'iron_ore';
+/** Fallback cargo label for a freshly-placed generic-storage building (Crate,
+ *  Warehouse) when the caller of `placeBuilding` does NOT supply an explicit
+ *  `cargoLabel` argument. The §4.6-mandated placement-time picker lives in
+ *  `placement-ui.ts` (mounted via `mountCargoLabelPicker`) and always passes
+ *  the player's choice through to `placeBuilding`, so this fallback only
+ *  applies on programmatic paths — synthetic test fixtures and any future
+ *  scripted placement that doesn't run the picker. `iron_ore` is the
+ *  earliest-game resource the player is reliably producing, mirroring the
+ *  picker's own default selection so behaviour is consistent across paths. */
+export const DEFAULT_CARGO_LABEL: ResourceId = 'iron_ore';
 
 /** Reasons placement can fail. Mirrors the §4.3 rule set plus the §9.5
  *  biome-locked-unique gate. `out-of-bounds` covers any tile of the
@@ -318,6 +321,15 @@ export function placeBuilding(
    *  forward. Tests can inject a specific value when they want to assert
    *  maintenance-cycle math. */
   nowMs: number = state.lastTick,
+  /** §4.6: explicit cargo label for generic-storage defs (Crate, Warehouse).
+   *  Production callers route through the placement-UI picker
+   *  (`mountCargoLabelPicker`) and pass the player's selection here. When
+   *  omitted on a generic-storage def, falls back to `DEFAULT_CARGO_LABEL`
+   *  (iron_ore) — preserves backward-compat for programmatic / test
+   *  placement paths that bypass the picker. Ignored entirely for non-
+   *  generic-storage defs (specialized storage uses category-routing; non-
+   *  storage defs carry no cargo label at all). */
+  cargoLabelOverride?: ResourceId,
 ): PlaceBuildingResult {
   const def = BUILDING_DEFS[defId];
   // §14 placement-cost gate. Re-checked here even though validatePlacement
@@ -348,11 +360,15 @@ export function placeBuilding(
     state.inventory[r] = (state.inventory[r] ?? 0) - n;
   }
   // §4.6: generic-storage instances (Crate, Warehouse) carry a per-instance
-  // cargoLabel naming which resource they hold. The placement modal label
-  // picker isn't built yet, so we seed a sensible default; the inspector
-  // exposes a relabel control afterward.
+  // cargoLabel naming which resource they hold. The placement-UI picker
+  // (`mountCargoLabelPicker`) feeds the player's choice via the
+  // `cargoLabelOverride` argument; programmatic callers that omit it land
+  // on the `DEFAULT_CARGO_LABEL` fallback. The inspector exposes a relabel
+  // control if the player wants to change it after placement.
   const cargoLabel =
-    def.storage?.category === 'generic' ? DEFAULT_CARGO_LABEL : undefined;
+    def.storage?.category === 'generic'
+      ? (cargoLabelOverride ?? DEFAULT_CARGO_LABEL)
+      : undefined;
   // §9.3 Robotics: construction time at placement, scaled by skill mul.
   // Operating time only begins accruing after construction completes
   // (the maintenance-tick loop honours constructionRemainingMs > 0 by

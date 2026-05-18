@@ -39,6 +39,12 @@ import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { ResourceId } from './recipes.js';
 import { VISION_BLUE, tileToWorldPx, type IslandSpec } from './world.js';
 
+/** §4.6 picker dep: opens the cargo-label modal and resolves to the
+ *  player's pick, or `null` if cancelled. The default implementation in
+ *  `cargo-label-picker.ts` is the production DOM modal; tests inject a
+ *  fake that resolves synchronously / synthetically. */
+export type PickCargoLabel = () => Promise<ResourceId | null>;
+
 // Color tokens — match the drone-reticle "ok = cyan / warn = amber" pattern.
 const OK_COLOR = VISION_BLUE;
 const WARN_COLOR = 0xf5a742;
@@ -87,6 +93,14 @@ export interface PlacementUiDeps {
   screenToWorldTile(screenX: number, screenY: number): { x: number; y: number };
   /** Called after a successful place so main.ts can rebuild render layers. */
   onPlaced(): void;
+  /** §4.6 placement-time cargo-label picker. Invoked by `begin()` when the
+   *  selected def is generic-storage (`def.storage?.category === 'generic'`);
+   *  the returned promise resolves with the player's chosen ResourceId or
+   *  `null` if they cancelled the picker (placement aborts in that path).
+   *  Optional — when omitted, generic-storage placements fall through with
+   *  no explicit label and `placeBuilding` uses its `DEFAULT_CARGO_LABEL`
+   *  fallback (test fixtures and the empty-deps path stay unbroken). */
+  pickCargoLabel?: PickCargoLabel;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +169,19 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
    *  preview paint so the outline doesn't appear at the default (0, 0)
    *  before the user has actually moved the cursor over the canvas. */
   let cursorSeen = false;
+  /** §4.6: cargo label chosen at picker time for a generic-storage def.
+   *  Undefined for non-generic defs (specialized storage routes by category,
+   *  non-storage carries no label) or while the picker is still pending
+   *  (during the pending window `active` stays false so no commit can fire).
+   *  Passed verbatim to `placeBuilding` on commit; the override is silently
+   *  ignored by `placeBuilding` for non-generic defs. */
+  let activeCargoLabel: ResourceId | undefined = undefined;
+  /** Monotonic begin counter — used to detect a stale picker resolution
+   *  when the player started a new placement before the previous picker
+   *  promise resolved. Bumped on every `begin()`. The picker callback
+   *  captures the counter at dispatch; on resolution it compares against
+   *  the current counter and bails if they differ. */
+  let beginEpoch = 0;
 
   // -------------------------------------------------------------------------
   // World-space outline layer (scales with zoom)
@@ -302,16 +329,62 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
   // API
   // -------------------------------------------------------------------------
   function begin(defId: BuildingDefId): void {
-    active = true;
-    activeDefId = defId;
+    const def = BUILDING_DEFS[defId];
+    const isGeneric = def.storage?.category === 'generic';
+    const epoch = ++beginEpoch;
+    // Reset transient state regardless of picker path so a re-arm during
+    // a pending picker doesn't carry over the previous cursor state.
     rotation = 0;
     cursorSeen = false;
+    activeCargoLabel = undefined;
+    // §4.6: generic-storage defs ask the picker BEFORE entering placement
+    // mode. While the picker is open `active` stays false so canvas
+    // mousedown / commit handlers no-op (the picker modal also intercepts
+    // input as a DOM modal). On resolve:
+    //   - null → cancelled, do not arm placement.
+    //   - ResourceId → arm placement with that label.
+    // The picker dep is optional — when unset (test fixtures, headless
+    // contexts) we arm immediately with no override, and `placeBuilding`
+    // applies its `DEFAULT_CARGO_LABEL` fallback.
+    if (isGeneric && deps.pickCargoLabel) {
+      // Hide any previously-visible layers while the picker is open.
+      active = false;
+      activeDefId = null;
+      previewLayer.visible = false;
+      statusLayer.visible = false;
+      deps.pickCargoLabel().then((picked) => {
+        // Stale resolution guard: a fresh begin() / cancel() bumped the
+        // epoch, so this resolution belongs to a superseded session.
+        if (epoch !== beginEpoch) return;
+        if (picked === null) {
+          // Player cancelled the picker — placement aborts entirely. No
+          // building was created; no state was mutated. Mirrors the
+          // existing cancel() exit so subsequent inputs find a clean slate.
+          return;
+        }
+        active = true;
+        activeDefId = defId;
+        activeCargoLabel = picked;
+        paintOutlineAndLabel();
+      });
+      return;
+    }
+    // Non-generic def (or generic def with no picker dep) — arm immediately.
+    active = true;
+    activeDefId = defId;
     paintOutlineAndLabel();
   }
   function cancel(): void {
+    // Bump the epoch so any in-flight picker promise becomes stale on
+    // resolve — covers the case where the player hits Escape, fires a
+    // different action, or starts a new placement while the picker hasn't
+    // resolved yet. The early-return is preserved for the common case
+    // where placement was already armed (no picker in flight).
+    beginEpoch++;
     if (!active) return;
     active = false;
     activeDefId = null;
+    activeCargoLabel = undefined;
     rotation = 0;
     previewLayer.visible = false;
     statusLayer.visible = false;
@@ -363,6 +436,8 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       localY,
       rotation,
       () => placedIdFor(localX, localY),
+      undefined, // nowMs — keep the default (state.lastTick)
+      activeCargoLabel, // §4.6 picker pick — undefined for non-generic defs
     );
     if (!result.ok) return { ok: false, reason: result.reason };
     cancel();

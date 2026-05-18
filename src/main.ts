@@ -66,6 +66,7 @@ import { mountInventoryUi } from './inventory-ui.js';
 import { buildingAtTile, demolishBuilding } from './placement.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import { mountPlacementUi } from './placement-ui.js';
+import { mountCargoLabelPicker } from './cargo-label-picker.js';
 import { mountSkillTreeUi } from './skilltree-ui.js';
 import { mountGraphUi } from './graph-ui.js';
 import { mountUi } from './ui.js';
@@ -884,6 +885,13 @@ async function main(): Promise<void> {
   // footprint outline scales with zoom and overlays the target tiles;
   // `statusLayer` lives in screen space so the small label stays a fixed
   // pixel size. Target follows the active island via the getters.
+  // §4.6 placement-time cargo-label picker — mounted as a sibling to the
+  // placement UI so the modal sits on document.body and floats above the
+  // PixiJS canvas like every other ri-modal. Wired into placement-ui via
+  // the `pickCargoLabel` dep below; only fires for generic-storage defs
+  // (Crate today), bypassed entirely for specialized storage and non-
+  // storage defs.
+  const cargoLabelPicker = mountCargoLabelPicker(document.body);
   const placementUi = mountPlacementUi({
     getTargetSpec: activeSpec,
     getTargetState: activeState,
@@ -891,6 +899,7 @@ async function main(): Promise<void> {
     onPlaced: () => {
       rebuildWorldLayers();
     },
+    pickCargoLabel: () => cargoLabelPicker.pick(),
   });
   world.addChild(placementUi.previewLayer);
   app.stage.addChild(placementUi.statusLayer);
