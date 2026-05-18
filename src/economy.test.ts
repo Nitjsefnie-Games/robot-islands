@@ -531,39 +531,82 @@ function mineHeavyCatalog(): DefCatalog {
 }
 const MINE_HEAVY: DefCatalog = mineHeavyCatalog();
 
-describe('§5.3 cable inflow', () => {
-  it('powerFactor = 0 when consumer has no native producers and cableInflowW = 0', () => {
-    // Mine consumes 40W and has no inputs, so it is always active.
-    const state = makeState({
-      buildings: [MINE_PWR],
-      inventory: blankInventory(),
-    });
-    const { power } = computeRates(state, { cableInflowW: 0 });
-    expect(power.produced).toBe(0);
-    expect(power.consumed).toBe(40);
-    expect(power.factor).toBe(0);
-  });
+describe('§5.3 cable network — computeRates honours cableComponent.unified', () => {
+  // Under the new binary-gated unified-pool model (replaces the prior
+  // cableInflowW "virtual producer" plumbing): when ctx.cableComponent
+  // is provided AND .unified === true, computeRates overrides the local
+  // brownout factor with min(1, componentProduced / componentConsumed).
+  // When .unified === false (gate failed for this tick), Pass 3 falls
+  // back to local produced/consumed exactly as if no cable existed.
+  // Aggregate produced/consumed in `power` remain LOCAL — only `factor`
+  // reflects the component-level override.
 
-  it('powerFactor = 1 when cableInflowW covers the consumer draw', () => {
+  it('factor reflects unified component balance when unified=true (covered)', () => {
+    // Mine consumes 40W and has no inputs, so it's always active. With
+    // unified true and componentProduced/componentConsumed = 100/40 → factor=1.
     const state = makeState({
       buildings: [MINE_PWR],
       inventory: blankInventory(),
     });
-    const { power } = computeRates(state, { cableInflowW: 40 });
-    expect(power.produced).toBe(40);
+    const { power } = computeRates(state, {
+      cableComponent: {
+        unified: true,
+        producedTotal: 100,
+        consumedTotal: 40,
+        cableCapacityTotal: 100,
+        requiredTransmission: 40,
+      },
+    });
     expect(power.consumed).toBe(40);
     expect(power.factor).toBe(1);
   });
 
-  it('powerFactor = 0.5 when cableInflowW partially covers demand', () => {
+  it('factor reflects unified component balance when unified=true (partial)', () => {
+    // Component is 20/40 = 0.5 → factor=0.5 even though this island has
+    // zero local production.
     const state = makeState({
       buildings: [MINE_PWR],
       inventory: blankInventory(),
     });
-    const { power } = computeRates(state, { cableInflowW: 20 });
-    expect(power.produced).toBe(20);
-    expect(power.consumed).toBe(40);
+    const { power } = computeRates(state, {
+      cableComponent: {
+        unified: true,
+        producedTotal: 20,
+        consumedTotal: 40,
+        cableCapacityTotal: 50,
+        requiredTransmission: 20,
+      },
+    });
     expect(power.factor).toBe(0.5);
+  });
+
+  it('falls back to LOCAL brownout when unified=false (cables inert)', () => {
+    // Component would have been 100/40 if unified, but the gate FAILED
+    // (e.g., insufficient cable capacity), so the island operates locally.
+    // Local: 0 produced / 40 consumed → factor=0.
+    const state = makeState({
+      buildings: [MINE_PWR],
+      inventory: blankInventory(),
+    });
+    const { power } = computeRates(state, {
+      cableComponent: {
+        unified: false,
+        producedTotal: 100,
+        consumedTotal: 40,
+        cableCapacityTotal: 5,
+        requiredTransmission: 40,
+      },
+    });
+    expect(power.factor).toBe(0);
+  });
+
+  it('omitting cableComponent === unified=false fallback (no cables)', () => {
+    const state = makeState({
+      buildings: [MINE_PWR],
+      inventory: blankInventory(),
+    });
+    const { power } = computeRates(state); // no cableComponent
+    expect(power.factor).toBe(0);
   });
 });
 

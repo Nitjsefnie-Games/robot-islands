@@ -33,7 +33,7 @@ import {
   type Camera,
 } from './camera.js';
 import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes.js';
-import { advanceIsland, computeRates, type IslandState, type PowerBalance } from './economy.js';
+import { advanceIsland, computeRates, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
 import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
 import {
@@ -92,7 +92,7 @@ import {
 } from './orbital.js';
 import { findNextMerge, performMerge } from './island-merge.js';
 import { makeIslandScreenPosResolver, mountRoutesUi } from './routes-ui.js';
-import { cableInflowForIsland, tickRoutes } from './routes.js';
+import { computeCableNetworkBalance, tickRoutes } from './routes.js';
 import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
@@ -1489,6 +1489,30 @@ async function main(): Promise<void> {
       }
     }
 
+    // §5.3 cable network: compute the per-component binary-gated balance
+    // ONCE per tick, then thread the matching CableComponentBalance into
+    // every per-island `computeRates` / `advanceIsland` call. The local
+    // power helper inside `computeCableNetworkBalance` re-uses the same
+    // per-island ctx the advance loop will use, so the gate decision is
+    // taken against the same modifiers / specMul / NC buff the integrator
+    // will see this frame.
+    const cableLocalCtxFor = (id: string): RatesContext => {
+      const spec = islandSpecsById.get(id);
+      const isLatticeIsland = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(id);
+      const stForCtx = islandStates.get(id);
+      return {
+        modifierMul: modifierMulFor(id),
+        specMul: stForCtx ? specMulFor(stForCtx) : undefined,
+        ncBuff: stForCtx ? ncBuffFor(stForCtx) : undefined,
+        terrainAt: spec?.terrainAt,
+        inventory: isLatticeIsland ? unifiedInv : undefined,
+        crossIsland: crossIslandById.get(id),
+        caps: isLatticeIsland ? unifiedCaps : undefined,
+        geothermalActive: spec?.modifiers.includes('geothermal_active') === true,
+      };
+    };
+    const cableBalances = computeCableNetworkBalance(worldState, islandStates, cableLocalCtxFor);
+
     const islandPower = new Map<string, PowerBalance>();
     const islandNets = new Map<string, Record<ResourceId, number>>();
     for (const s of islandStates.values()) {
@@ -1499,7 +1523,7 @@ async function main(): Promise<void> {
       const spec = islandSpecsById.get(s.id);
       const isLatticeIsland = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(s.id);
       const crossIsland = crossIslandById.get(s.id);
-      const cableInflowW = cableInflowForIsland(worldState, islandStates, s.id);
+      const cableComponent = cableBalances.get(s.id);
       const geothermalActive = spec?.modifiers.includes('geothermal_active') === true;
       advanceIsland(s, now, {
         modifierMul: modifierMulFor(s.id),
@@ -1509,7 +1533,7 @@ async function main(): Promise<void> {
         inventory: isLatticeIsland ? unifiedInv : undefined,
         crossIsland,
         caps: isLatticeIsland ? unifiedCaps : undefined,
-        cableInflowW,
+        cableComponent,
         worldSeed: worldState.seed,
         geothermalActive,
       }, nowWall);
@@ -1521,7 +1545,7 @@ async function main(): Promise<void> {
         inventory: isLatticeIsland ? unifiedInv : undefined,
         crossIsland,
         caps: isLatticeIsland ? unifiedCaps : undefined,
-        cableInflowW,
+        cableComponent,
         geothermalActive,
       }, undefined, nowWall);
       islandNets.set(s.id, net);
@@ -1642,11 +1666,13 @@ async function main(): Promise<void> {
     }
 
     // Recompute active island rates post-routes/vehicles so both the main HUD
-    // and the multi-island bar show current data.
+    // and the multi-island bar show current data. Cable network balance is
+    // re-used from the per-tick computation above — the route/vehicle ticks
+    // don't add or remove power routes, so the connectivity is unchanged.
     const postTickActiveS = activeState();
     const postTickActiveP = activeSpec();
     const postTickLattice = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(postTickActiveS.id);
-    const postTickCableInflowW = cableInflowForIsland(worldState, islandStates, postTickActiveS.id);
+    const postTickCableComponent = cableBalances.get(postTickActiveS.id);
     const postTickGeothermal = postTickActiveP?.modifiers.includes('geothermal_active') === true;
     const { net: postNet, power: postPower } = computeRates(postTickActiveS, {
       modifierMul: modifierMulFor(postTickActiveS.id),
@@ -1656,7 +1682,7 @@ async function main(): Promise<void> {
       inventory: postTickLattice ? unifiedInv : undefined,
       crossIsland: crossIslandById.get(postTickActiveS.id),
       caps: postTickLattice ? unifiedCaps : undefined,
-      cableInflowW: postTickCableInflowW,
+      cableComponent: postTickCableComponent,
       geothermalActive: postTickGeothermal,
       accelerationMul: postTickActiveS.accelerationRemainingMin > 0 ? 3 : 1,
     }, undefined, nowWall);
@@ -1675,7 +1701,7 @@ async function main(): Promise<void> {
     if (activeLattice) {
       // Refresh the active island's net/power with unified inventory so the HUD
       // reads the same cross-island state that advanceIsland used.
-      const activeCableInflowW = cableInflowForIsland(worldState, islandStates, activeS.id);
+      const activeCableComponent = cableBalances.get(activeS.id);
       const { net: activeNet, power: activePower } = computeRates(activeS, {
         modifierMul: modifierMulFor(activeS.id),
         specMul: specMulFor(activeS),
@@ -1684,7 +1710,7 @@ async function main(): Promise<void> {
         inventory: unifiedInv,
         crossIsland: crossIslandById.get(activeS.id),
         caps: unifiedCaps,
-        cableInflowW: activeCableInflowW,
+        cableComponent: activeCableComponent,
         geothermalActive: activeGeothermal,
         accelerationMul: activeS.accelerationRemainingMin > 0 ? 3 : 1,
       }, undefined, nowWall);

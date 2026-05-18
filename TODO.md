@@ -47,14 +47,6 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
   building exists with nothing to dispatch.
   *(Flagged by Agent A.)*
 
-- **§5.3 cable inflow doesn't deduct source W.** `src/routes.ts:147-164`
-  `cableInflowForIsland` adds capacity to the destination without
-  removing it from the source. Comment acknowledges. Spec §5.3 says
-  cables "transmit electrical power between islands" — power should
-  conserve, not multiply. Probably intentional placeholder; flag as a
-  real economy bug rather than a polish item.
-  *(Flagged by Agent D.)*
-
 ---
 
 ## 2. Missing mechanics (spec calls for it, code doesn't ship it)
