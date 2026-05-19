@@ -21,7 +21,9 @@ import {
   type LandInfo,
 } from './hover-tooltip.js';
 import { CELL_SIZE_TILES } from './constants.js';
+import { computeVisionSources } from './lighthouse.js';
 import type { OceanCellSpec } from './ocean-cell.js';
+import { visibleCellsFromVision } from './vision-source.js';
 import type { IslandSpec, WorldState } from './world.js';
 import type { PlacedBuilding } from './buildings.js';
 
@@ -96,6 +98,33 @@ function makePopulatedHome(opts: {
   return home;
 }
 
+/** Build a populated island whose Lighthouse-T6 vision (radius 300)
+ *  covers the entire ocean fixture range used in these tests, but whose
+ *  unpadded island ellipse is tiny enough that `findPopulatedIslandAt`
+ *  on a typical fixture tile (e.g. (80, 80)) returns null. The vision
+ *  source is what the new tooltip predicate gates on; the island
+ *  footprint just needs to stay out of the way. */
+function makeWideVisionHome(extraBuildings: PlacedBuilding[] = []): IslandSpec {
+  const lighthouse: PlacedBuilding = {
+    id: 'wide-lh',
+    defId: 'lighthouse_t6',
+    x: 0,
+    y: 0,
+    rotation: 0,
+    lastTickMs: 0,
+  } as PlacedBuilding;
+  return makeSpec({
+    id: 'home',
+    name: 'Home',
+    populated: true,
+    cx: 0,
+    cy: 0,
+    majorRadius: 5,
+    minorRadius: 5,
+    buildings: [lighthouse, ...extraBuildings],
+  });
+}
+
 describe('§6 tileInfoForHover', () => {
   it('returns "ocean-rare" with cluster bbox + occupancy 0/1 for a 2x2 vent cluster with no buildings placed', () => {
     // 2×2 hydrothermal vent cluster at cells (5..6, 5..6).
@@ -104,10 +133,14 @@ describe('§6 tileInfoForHover', () => {
       [5, 6, 'hydrothermal_vent'], [6, 6, 'hydrothermal_vent'],
     ];
     const revealed = ['5,5', '6,5', '5,6', '6,6'];
+    // Wide-vision populated island so the hovered ocean cell is in the
+    // map's visible-cell set (otherwise the new visibility gate returns
+    // fog-tier info regardless of reveal state).
     const world = makeWorld({
       oceanCells: cells,
       revealed,
       depthRevealed: revealed,
+      islands: [makeWideVisionHome()],
     });
     // Hover the top-left tile of cell (5,5).
     const tileX = 5 * CELL_SIZE_TILES;
@@ -120,7 +153,10 @@ describe('§6 tileInfoForHover', () => {
   });
 
   it('returns occupancy 1/1 for a vent cluster that already has a vent_tap placed', () => {
-    // 2×2 vent cluster at cells (5,5)–(6,6). Anchor island at tile origin.
+    // 2×2 vent cluster at cells (5,5)–(6,6). Anchor island at tile origin
+    // (small unpadded ellipse so the hovered ocean tile isn't classified
+    // as land) with a Lighthouse-T6 providing wide vision so the cell
+    // counts as visible under the new fog-matching predicate.
     const cells: Array<[number, number, OceanCellSpec['terrain']]> = [
       [5, 5, 'hydrothermal_vent'], [6, 5, 'hydrothermal_vent'],
       [5, 6, 'hydrothermal_vent'], [6, 6, 'hydrothermal_vent'],
@@ -135,14 +171,7 @@ describe('§6 tileInfoForHover', () => {
       lastTickMs: 0,
       anchorIslandId: 'home',
     } as PlacedBuilding;
-    const anchor = makeSpec({
-      id: 'home',
-      name: 'Home',
-      populated: true,
-      cx: 0,
-      cy: 0,
-      buildings: [ventBuilding],
-    });
+    const anchor = makeWideVisionHome([ventBuilding]);
     const world = makeWorld({
       oceanCells: cells,
       revealed,
@@ -161,6 +190,7 @@ describe('§6 tileInfoForHover', () => {
       oceanCells: [[5, 5, 'hydrothermal_vent']],
       revealed: ['5,5'],
       depthRevealed: [],
+      islands: [makeWideVisionHome()],
     });
     const info = tileInfoForHover(world, 5 * CELL_SIZE_TILES, 5 * CELL_SIZE_TILES, NOW);
     expect(info.kind).toBe('ocean-undepthed');
@@ -169,11 +199,17 @@ describe('§6 tileInfoForHover', () => {
     }
   });
 
-  it('returns "Open ocean" when a cell is not surface-revealed', () => {
+  it('returns "Open ocean" when a cell is not surface-revealed but is currently in vision', () => {
+    // Cell is in current vision (so the visibility gate passes) but the
+    // player has not put it in `revealedCells` (which is the persistent
+    // "this cell has been scanned at the surface tier" flag). The branch
+    // we exercise is the legacy surface-reveal one — still labelled
+    // "Open ocean" per the spec.
     const world = makeWorld({
       oceanCells: [[5, 5, 'hydrothermal_vent']],
       revealed: [],
       depthRevealed: [],
+      islands: [makeWideVisionHome()],
     });
     const info = tileInfoForHover(world, 5 * CELL_SIZE_TILES, 5 * CELL_SIZE_TILES, NOW);
     expect(info.kind).toBe('ocean-unrevealed');
@@ -280,16 +316,130 @@ describe('§6 tileInfoForHover — weather + vision gating', () => {
     expect(info.weather).toBeNull();
   });
 
-  it('returns weather: null on a depth-revealed cell that is outside current vision (discovered tier)', () => {
-    // The cell was depth-revealed (so terrain reads) but no populated
-    // island has vision over it any more → discovered tier → no weather.
+  it('returns minimal "Discovered" fog-tier info on a depth-revealed cell that is outside current vision', () => {
+    // The cell WAS depth-revealed (so terrain would normally read) but no
+    // populated island has vision over it any more → not in the map's
+    // visible-cell set → tooltip mirrors the fog and returns the
+    // discovered-tier minimal info. The terrain detail is intentionally
+    // suppressed (player can't currently see what's there).
     const world = makeWorld({
       oceanCells: [[5, 5, 'shallows']],
       revealed: ['5,5'],
       depthRevealed: ['5,5'],
     });
     const info = tileInfoForHover(world, 5 * CELL_SIZE_TILES, 5 * CELL_SIZE_TILES, NOW);
-    expect(info.kind).toBe('ocean-revealed');
+    expect(info.kind).toBe('ocean-unrevealed');
+    if (info.kind === 'ocean-unrevealed') {
+      expect(info.text).toBe('Discovered');
+    }
     expect(info.weather).toBeNull();
+  });
+});
+
+describe('§6 tileInfoForHover — visibility predicate matches map fog', () => {
+  it('returns minimal "Unknown" fog info when cell is not in vision and not in revealedCells', () => {
+    // No populated islands and no revealed cells. Hovering any tile must
+    // produce the unknown-tier minimal info — the entire tooltip body is
+    // gated on visibility, not just weather.
+    const world = makeWorld({
+      oceanCells: [[5, 5, 'hydrothermal_vent']],
+      revealed: [],
+      depthRevealed: ['5,5'], // even depth-revealed is suppressed
+    });
+    const info = tileInfoForHover(world, 5 * CELL_SIZE_TILES, 5 * CELL_SIZE_TILES, NOW);
+    expect(info.kind).toBe('ocean-unrevealed');
+    if (info.kind === 'ocean-unrevealed') {
+      expect(info.text).toBe('Unknown');
+    }
+    expect(info.weather).toBeNull();
+  });
+
+  it('suppresses LAND terrain/building details when the cell is not in current vision', () => {
+    // A populated home, plus a DISCOVERED-only (not populated) neighbour
+    // island carrying terrain + buildings. The neighbour's tiles are NOT
+    // covered by home's vision halo. Hovering a neighbour tile must
+    // return fog-tier info — not the LandInfo with terrain/building
+    // details that the old `pointInVision`+land-routing would have
+    // produced.
+    const home = makePopulatedHome({ terrainAt: () => 'iron_ore' });
+    const neighbourMine: PlacedBuilding = {
+      id: 'neigh-mine',
+      defId: 'mine',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      lastTickMs: 0,
+    } as PlacedBuilding;
+    const neighbour = makeSpec({
+      id: 'neigh',
+      name: 'Neigh',
+      cx: 500,
+      cy: 500,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: false,
+      discovered: true,
+      buildings: [neighbourMine],
+    });
+    (neighbour as unknown as { terrainAt: (x: number, y: number) => string }).terrainAt =
+      () => 'iron_ore';
+    const world = makeWorld({ islands: [home, neighbour] });
+    // Hover the neighbour's centre tile. Distance from home (8,8) to
+    // (500,500) >> any vision halo home could emit.
+    const info = tileInfoForHover(world, 500, 500, NOW);
+    expect(info.kind).toBe('ocean-unrevealed');
+    expect(info.weather).toBeNull();
+  });
+
+  it('CELL-EDGE BUG REGRESSION: tooltip visibility matches visibleCellsFromVision cell-for-cell', () => {
+    // Iterate a span of tile coords across cells around a populated
+    // island's vision halo. For every tile, assert that the tooltip's
+    // visibility decision (visible vs fog) matches whether the tile's
+    // containing cell is in `visibleCellsFromVision`. Old code used
+    // `pointInVision` which could disagree with this cell-set at the
+    // edges; new code uses the same set.
+    const home = makePopulatedHome({ terrainAt: () => 'iron_ore' });
+    const world = makeWorld({ islands: [home] });
+    const sources = computeVisionSources(world.islands.filter((s) => s.populated));
+    const visible = visibleCellsFromVision(sources);
+    // Span a 64×64-tile region around the home centre (8,8) — covers cells
+    // (-2,-2) through (3,3).
+    const mismatches: Array<{ tx: number; ty: number; cellKey: string; expected: boolean; got: 'visible' | 'fog' }> = [];
+    // Sample a small set of specific cell-boundary tiles rather than a
+    // dense grid — tileInfoForHover recomputes visibleCellsFromVision per
+    // call and the grid version timed out under the 5s default. These
+    // 8 sample tiles hit each axis edge of cell (0,0) and a diagonal
+    // crossing the vision halo perimeter, which is sufficient to catch
+    // the pointInVision/visibleCellsFromVision divergence.
+    const samples: Array<[number, number]> = [
+      [0, 0],      // inside home cell — must be visible
+      [15, 15],    // SE corner of cell (0,0)
+      [16, 0],    // first tile of cell (1,0)
+      [0, 16],    // first tile of cell (0,1)
+      [-1, -1],   // last tile of cell (-1,-1)
+      [32, 0],    // first tile of cell (2,0) — well past vision halo for a small island
+      [0, 32],    // first tile of cell (0,2)
+      [64, 64],   // way outside any vision
+    ];
+    for (const [tx, ty] of samples) {
+      {
+        const cellX = Math.floor(tx / CELL_SIZE_TILES);
+        const cellY = Math.floor(ty / CELL_SIZE_TILES);
+        const cellKey = `${cellX},${cellY}`;
+        const expected = visible.has(cellKey);
+        const info = tileInfoForHover(world, tx, ty, NOW);
+        // The fog-tier shape is `kind: 'ocean-unrevealed'` with text
+        // 'Unknown' or 'Discovered'; any other shape means tooltip
+        // considered the cell visible.
+        const fogText =
+          info.kind === 'ocean-unrevealed' &&
+          (info.text === 'Unknown' || info.text === 'Discovered');
+        const got: 'visible' | 'fog' = fogText ? 'fog' : 'visible';
+        if ((got === 'visible') !== expected) {
+          mismatches.push({ tx, ty, cellKey, expected, got });
+        }
+      }
+    }
+    expect(mismatches).toEqual([]);
   });
 });

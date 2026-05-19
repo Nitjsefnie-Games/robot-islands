@@ -38,7 +38,7 @@ import { computeVisionSources } from './lighthouse.js';
 import { RARE_TERRAINS, terrainAt, type OceanTerrain } from './ocean-cell.js';
 import { buildingAtTile, findOceanBuildingAt } from './placement.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { pointInVision } from './vision-source.js';
+import { visibleCellsFromVision } from './vision-source.js';
 import { findPopulatedIslandAt, type WorldState } from './world.js';
 import { biomeForCell, weather, type WeatherState, WEATHER_FORECAST_LOOKAHEAD_MS } from './weather.js';
 
@@ -353,15 +353,30 @@ export function tileInfoForHover(
   const cellY = Math.floor(tileY / CELL_SIZE_TILES);
   const cellKey = `${cellX},${cellY}`;
 
-  // Weather is gated by the `visible` vision tier (populated island tiles
-  // + tiles within any populated island's vision ellipse / Lighthouse
-  // radius per §11). Discovered-but-not-currently-visible tiles and
-  // unknown tiles return weather: null — the player can't read the sky
-  // through cells they can't currently see. Computed once per call.
+  // Visibility uses the EXACT same predicate as the fog overlay (see
+  // `ocean.ts → renderOcean` line ~139 and `computeFogCells` line ~175):
+  // `visibleCellsFromVision(visionSources)` — the cell-grid-snapped set
+  // of cell keys that paint as the VISION_BLUE tier. The earlier
+  // `pointInVision` check disagreed at cell edges, so the tooltip could
+  // surface detail for a tile the map painted as fog. One predicate, one
+  // source of truth. Weather is also gated on this same predicate.
+  //
+  // Design choice: when a cell is not in the visible set we DO NOT
+  // route through `findPopulatedIslandAt` / ocean-tier logic at all —
+  // the entire tooltip body is fog-tier minimal info (the player can't
+  // currently see what's there). Two text strings differentiate the
+  // two sub-tiers ("Discovered" when `revealedCells.has(cellKey)`,
+  // "Unknown" otherwise) — no new HoverInfo kind needed; the existing
+  // `ocean-unrevealed` shape carries both.
   const populated = world.islands.filter((s) => s.populated);
   const visionSources = computeVisionSources(populated);
-  const inVision = pointInVision(visionSources, tileX, tileY);
-  const weatherInfo = inVision ? weatherInfoForCell(world, cellX, cellY, nowMs) : null;
+  const visibleCells = visibleCellsFromVision(visionSources);
+  const cellVisible = visibleCells.has(cellKey);
+  if (!cellVisible) {
+    const fogText = world.revealedCells.has(cellKey) ? 'Discovered' : 'Unknown';
+    return { kind: 'ocean-unrevealed', text: fogText, weather: null };
+  }
+  const weatherInfo = weatherInfoForCell(world, cellX, cellY, nowMs);
 
   // ---- Land path: a populated island covers the exact hovered tile.
   // Use tile-granular `findPopulatedIslandAt` rather than cell centre so
