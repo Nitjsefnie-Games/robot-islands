@@ -105,6 +105,7 @@ import { mountWeatherOverlay } from './weather-overlay.js';
 import { computeWeatherVisionSources } from './weather.js';
 import { mountAntennaOverlay } from './antenna-overlay.js';
 import { mountTerrainTooltip } from './terrain-tooltip.js';
+import { mountHoverTooltip } from './hover-tooltip.js';
 import { mountToastSurface } from './toast.js';
 import { mountSatelliteOverlay } from './satellite-overlay.js';
 import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
@@ -273,6 +274,12 @@ async function main(): Promise<void> {
   // Terrain hover tooltip — surfaces the terrain id and consumer-building
   // list when the cursor hovers a non-default tile.
   const terrainTooltip = mountTerrainTooltip(document.body);
+  // §6 universal hover tooltip — cell-level info (land + ocean) + weather.
+  // Load-bearing because weather overlay obscures feature glyphs during
+  // storms. Coexists with `terrainTooltip` (consumer hints): the universal
+  // tooltip sits below modals (z-index 900) so anchor / cargo pickers
+  // overlay it without occluding the hover.
+  const hoverTooltip = mountHoverTooltip(document.body);
   // Toast surface (top-center transient banners) — singleton, used by the
   // §14 launch flow and any future "global event" notifier.
   mountToastSurface(document.body);
@@ -710,10 +717,54 @@ async function main(): Promise<void> {
   // updates its screen position; mouseleave hides it.
   // Step-2.5: same mousemove also feeds the placement preview when placement
   // is armed. Both consumers no-op silently if their mode is off.
+
+  // §6 hover tooltip — throttled to one paint per animation frame so
+  // mousemove (~60Hz) doesn't repaint twice per frame. The latest cursor
+  // intent is stashed in `pendingHover`; a rAF loop drains it. When the
+  // cursor leaves the canvas the pending payload is null and the tooltip
+  // hides. Coexists with the existing `terrainTooltip` (consumer hints).
+  let pendingHover: { sx: number; sy: number; clientX: number; clientY: number } | null = null;
+  let hoverRafScheduled = false;
+  const drainHover = (): void => {
+    hoverRafScheduled = false;
+    const p = pendingHover;
+    pendingHover = null;
+    if (!p) {
+      hoverTooltip.hide();
+      return;
+    }
+    // Suppress while any mode is armed — the placement preview / launch
+    // reticle owns the cursor in those modes, and the universal tooltip
+    // would clash with the placement-cell preview ring.
+    if (anyModeArmed()) {
+      hoverTooltip.hide();
+      return;
+    }
+    const wt = screenToWorldTile(p.sx, p.sy);
+    const cellX = Math.floor(wt.x / CELL_SIZE_TILES);
+    const cellY = Math.floor(wt.y / CELL_SIZE_TILES);
+    hoverTooltip.setHover(
+      worldState,
+      `${cellX},${cellY}`,
+      p.clientX,
+      p.clientY,
+      performance.now(),
+    );
+  };
+  const scheduleHoverDrain = (): void => {
+    if (hoverRafScheduled) return;
+    hoverRafScheduled = true;
+    requestAnimationFrame(drainHover);
+  };
+
   app.canvas.addEventListener('mousemove', (e) => {
     const rect = app.canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+    // Stash latest cursor intent for the hover-tooltip rAF drain. The
+    // drain handler reads `anyModeArmed()` so we don't have to gate here.
+    pendingHover = { sx, sy, clientX: e.clientX, clientY: e.clientY };
+    scheduleHoverDrain();
     if (dronesUi.isLaunchMode()) {
       dronesUi.setReticleScreenPos(sx, sy);
     }
@@ -779,6 +830,8 @@ async function main(): Promise<void> {
     orbitalUi.hideReticle();
     placementUi.hidePreview();
     terrainTooltip.hide();
+    pendingHover = null;
+    scheduleHoverDrain();
     // Clear hover outline so it doesn't ghost at the last cursor position
     // when the user leaves the canvas.
     if (hoveredBuilding) {
