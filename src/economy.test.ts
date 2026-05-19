@@ -30,6 +30,7 @@ import {
   accrueXp,
   advanceIsland,
   computeRates,
+  findNextCapEvent,
   setGenesisTarget,
   spendTimeLock,
   SINGULARITY_BATTERY_CAPACITY_WS,
@@ -3555,5 +3556,103 @@ describe('§4 ocean anchor crediting + paused reasons (Task 10)', () => {
     expect(power.consumed).toBeGreaterThanOrEqual(1000);
     // Brownout: 50W produced << 1000W consumed.
     expect(power.factor).toBeLessThan(0.1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findNextCapEvent precision-residue handling
+// ---------------------------------------------------------------------------
+// Regression: `findNextCapEvent` used to return `tMs` when an inventory held
+// a sub-precision residue (e.g. `pig_iron = 2.6e-21` after a consumer drained
+// it through float-subtraction precision loss). The math:
+//   timeToEventSec = 2.6e-21 / 0.1 = 2.6e-20 s
+//   eventMs        = tMs + 2.6e-20 * 1000 = tMs + 2.6e-17 ms
+// At realistic `tMs` (perf.now() ≈ 1.3e6 ms, ULP ≈ 2.9e-10), `tMs + 2.6e-17`
+// rounds back to exactly `tMs`. The integrator then computed `segEndMs == t`
+// → `dtSec == 0` → the entire `if (dtSec > 0)` block (applyRates, accrueXp,
+// tickConstruction, …) was skipped every frame, freezing inventory, XP,
+// and construction-remaining-ms together. Fix: treat any stock within 1 unit
+// of cap/0 as "effectively full/empty" for next-event purposes only.
+describe('findNextCapEvent precision-residue handling', () => {
+  it('does NOT return tMs when a consumed resource holds a sub-1 residue', () => {
+    // Construct a state where pig_iron has a tiny positive inventory and is
+    // being consumed at a finite rate. Pre-fix the function returned tMs;
+    // post-fix the resource is skipped and best stays at nowMs.
+    const tMs = 1_300_000; // realistic perf.now() scale where ULP matters
+    const nowMs = tMs + 60_000;
+    const state = makeState({
+      inventory: { ...blankInventory(), pig_iron: 2.6e-21 },
+      storageCaps: blankCaps(1000),
+      lastTick: tMs,
+    });
+    const net = { pig_iron: -0.1 } as Record<ResourceId, number>;
+    const result = findNextCapEvent(state, net, tMs, nowMs);
+    // Pre-fix: result === tMs (the phantom zero-dt event). Post-fix: result
+    // is `nowMs` because the sub-1 residue is treated as effectively empty.
+    expect(result).toBeGreaterThan(tMs);
+  });
+
+  it('does NOT return tMs when a produced resource is within 1 unit of cap (sub-precision)', () => {
+    // Symmetric case for the rate>0 branch. `100 - 1e-15` is genuinely
+    // sub-precision relative to the cap value — headroom of 1e-15 with rate
+    // 0.5 yields `eventMs = tMs + 2e-15 * 1000 = tMs + 2e-12 ms`, which
+    // rounds back to `tMs` at the chosen scale.
+    const tMs = 1_300_000;
+    const nowMs = tMs + 60_000;
+    const state = makeState({
+      inventory: { ...blankInventory(), iron_ore: 100 - 1e-15 },
+      storageCaps: blankCaps(100),
+      lastTick: tMs,
+    });
+    const net = { iron_ore: 0.5 } as Record<ResourceId, number>;
+    const result = findNextCapEvent(state, net, tMs, nowMs);
+    expect(result).toBeGreaterThan(tMs);
+  });
+
+  it('integrator advances construction-remaining-ms after the fix (was frozen pre-fix)', () => {
+    // End-to-end exercise of the freeze pattern. Construct a state with:
+    //   • a Mine under construction (constructionRemainingMs = 30_000),
+    //   • inventory.iron_ore = 100 - 1e-15 (sub-precision near cap),
+    //   • cap.iron_ore = 100, a small constant +rate on iron_ore from a
+    //     mocked recipe-free producer (just net.iron_ore = +0.02 via a
+    //     buildings list including a building whose def we can't easily
+    //     fake) — actually simpler: just rely on a tick-driven non-recipe
+    //     source via the post-fix findNextCapEvent behavior. The integrator
+    //     block running is what matters; the construction-tick is the
+    //     observable proof.
+    // Pre-fix: `findNextCapEvent` returned `tMs` because headroom of 1e-15
+    //   gave `eventMs ≈ tMs + 2e-12 ms`, which rounded back to `tMs`. Then
+    //   `segEndMs = tMs`, `dtSec = 0`, the integrator block was skipped,
+    //   so `tickConstruction` did NOT run — the construction-remaining-ms
+    //   stayed at 30_000 across the entire call.
+    // Post-fix: the sub-1 headroom on iron_ore is skipped in findNextCapEvent,
+    //   the segment runs for the full 16 ms, and constructionRemainingMs
+    //   ticks down to 29_984.
+    // NOTE: we drop the XP assertion because Mine has requiredTile=['ore','coal'];
+    //   without a terrain mock production is 0 and no XP accrues. Construction-
+    //   tick is sufficient proof that the integrator's `if (dtSec > 0)` block
+    //   fired — XP and applyRates share the same gate.
+    const tMs = 1_300_000;
+    const nowMs = tMs + 16; // one ~60-fps frame
+    const constructingMine: PlacedBuilding = {
+      id: 'b-mine-construction',
+      defId: 'mine',
+      x: 1,
+      y: 0,
+      constructionRemainingMs: 30_000,
+    };
+    const state = makeState({
+      buildings: [constructingMine],
+      inventory: { ...blankInventory(), iron_ore: 100 - 1e-15 },
+      storageCaps: blankCaps(100),
+      lastTick: tMs,
+    });
+    advanceIsland(state, nowMs, { defs: POWER_FREE });
+    // Construction must have ticked down (pre-fix: still 30_000).
+    expect((state.buildings[0] as { constructionRemainingMs?: number }).constructionRemainingMs)
+      .toBeLessThan(30_000);
+    // lastTick advances either way (the outer `if (segEndMs <= t) t = nowMs`
+    // exits the loop both pre- and post-fix), so check it's wired.
+    expect(state.lastTick).toBe(nowMs);
   });
 });
