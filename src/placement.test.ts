@@ -22,6 +22,7 @@ import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
   buildingAtTile,
   demolishBuilding,
+  findOceanBuildingAt,
   placeBuilding,
   placementCostFor,
   validatePlacement,
@@ -1057,5 +1058,155 @@ describe('§3 land validator defense-in-depth', () => {
     const result = validatePlacement(spec, state, 'vent_tap', 5, 5, 0);
     expect(result.ok).toBe(false);
     expect(result.reason).toBe('def-is-ocean');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §6 findOceanBuildingAt — ocean platform click-to-inspect helper
+// ---------------------------------------------------------------------------
+// Ocean platforms sit OUTSIDE any island ellipse — `buildingAtTile` won't
+// reach them because the main.ts click handler gates buildingAtTile on
+// `findPopulatedIslandAt`. This helper walks every populated island's
+// `buildings[]` (ocean platforms are stored on their *anchor's* array per
+// Task 10 architectural call) and bbox-tests each ocean def's world-tile
+// footprint against the clicked tile.
+//
+// Critical: ocean def footprint dims are in *cell* units (e.g.
+// SHAPES.single = 1×1 cells, SHAPES.square2 = 2×2 cells). The world-tile
+// bbox extent is `shapeWidth * CELL_SIZE_TILES` × `shapeHeight * CELL_SIZE_TILES`.
+
+describe('§6 findOceanBuildingAt', () => {
+  /** Construct a populated island with a single ocean platform anchored on
+   *  it. Mirrors the placement-ui.ts ocean attemptCommit path:
+   *  `localX = cellX * CELL_SIZE_TILES - anchor.cx`, `localY = ..` — so the
+   *  building's world-tile origin lines up with the cell-aligned coord. */
+  function makeAnchorWithOceanBuilding(
+    anchorCx: number,
+    anchorCy: number,
+    cellX: number,
+    cellY: number,
+    defId: 'sonar_buoy' | 'vent_tap',
+  ): IslandSpec {
+    const localX = cellX * CELL_SIZE_TILES - anchorCx;
+    const localY = cellY * CELL_SIZE_TILES - anchorCy;
+    const placed: PlacedBuilding = {
+      id: `${defId}@${cellX},${cellY}`,
+      defId,
+      x: localX,
+      y: localY,
+      rotation: 0,
+      placedAt: 0,
+      operatingMs: 0,
+      maintainedAt: 0,
+      anchorIslandId: 'home',
+    };
+    return makeSpec({
+      id: 'home',
+      cx: anchorCx,
+      cy: anchorCy,
+      populated: true,
+      buildings: [placed],
+    });
+  }
+
+  it('returns the ocean platform whose footprint contains the world tile (1×1 cell sonar_buoy spans 16×16 tiles)', () => {
+    // Sonar Buoy at cell (10, 5) — anchor at island centre (0, 0).
+    // World-tile origin: (160, 80). 1×1 cells → 16×16 tile bbox.
+    const spec = makeAnchorWithOceanBuilding(0, 0, 10, 5, 'sonar_buoy');
+    // Click at the bbox top-left tile → hits the buoy.
+    const hit1 = findOceanBuildingAt([spec], 160, 80);
+    expect(hit1).not.toBe(null);
+    expect(hit1?.building.defId).toBe('sonar_buoy');
+    // Click in the middle of the 16×16 bbox → still hits.
+    const hit2 = findOceanBuildingAt([spec], 168, 88);
+    expect(hit2?.building.defId).toBe('sonar_buoy');
+    // Click at the inclusive far corner (175, 95) → still inside the
+    // [160, 176) × [80, 96) bbox.
+    const hit3 = findOceanBuildingAt([spec], 175, 95);
+    expect(hit3?.building.defId).toBe('sonar_buoy');
+  });
+
+  it('returns null when no ocean platform contains the tile', () => {
+    const spec = makeAnchorWithOceanBuilding(0, 0, 10, 5, 'sonar_buoy');
+    // World tile (0, 0) is far from the buoy's bbox at (160..176, 80..96).
+    expect(findOceanBuildingAt([spec], 0, 0)).toBe(null);
+    // Just outside the bbox on the +x side.
+    expect(findOceanBuildingAt([spec], 176, 88)).toBe(null);
+    // Just outside on the -y side.
+    expect(findOceanBuildingAt([spec], 168, 79)).toBe(null);
+  });
+
+  it('respects ocean footprint dims in CELL units (2×2 cell vent_tap spans 32×32 tiles)', () => {
+    const spec = makeAnchorWithOceanBuilding(0, 0, 4, 4, 'vent_tap');
+    // World-tile origin: (64, 64). 2×2 cells → 32×32 tile bbox = [64, 96).
+    expect(findOceanBuildingAt([spec], 64, 64)?.building.defId).toBe('vent_tap');
+    expect(findOceanBuildingAt([spec], 80, 80)?.building.defId).toBe('vent_tap');
+    expect(findOceanBuildingAt([spec], 95, 95)?.building.defId).toBe('vent_tap');
+    // One tile past the bbox on +x.
+    expect(findOceanBuildingAt([spec], 96, 80)).toBe(null);
+  });
+
+  it('iterates across multiple anchor islands when checking', () => {
+    const spec1 = makeAnchorWithOceanBuilding(0, 0, 10, 5, 'sonar_buoy');
+    const spec2: IslandSpec = (() => {
+      // Second anchor far away at (1000, 1000) with a buoy at cell (62, 62)
+      // → world-tile origin (992, 992).
+      const localX = 62 * CELL_SIZE_TILES - 1000;
+      const localY = 62 * CELL_SIZE_TILES - 1000;
+      const placed: PlacedBuilding = {
+        id: 'sonar2',
+        defId: 'sonar_buoy',
+        x: localX,
+        y: localY,
+        rotation: 0,
+        placedAt: 0,
+        operatingMs: 0,
+        maintainedAt: 0,
+        anchorIslandId: 'island2',
+      };
+      return makeSpec({
+        id: 'island2',
+        cx: 1000,
+        cy: 1000,
+        populated: true,
+        buildings: [placed],
+      });
+    })();
+    // Clicking at the second island's buoy bbox finds it (despite spec1
+    // being first in the array).
+    const hit = findOceanBuildingAt([spec1, spec2], 1000, 1000);
+    expect(hit?.spec.id).toBe('island2');
+    expect(hit?.building.id).toBe('sonar2');
+  });
+
+  it('ignores unpopulated islands (their buildings are not interactable)', () => {
+    const spec = makeAnchorWithOceanBuilding(0, 0, 10, 5, 'sonar_buoy');
+    // Mutate spec.populated to false — the click helper should skip it
+    // (mirrors `findPopulatedIslandAt`'s populated-only gate).
+    (spec as { populated: boolean }).populated = false;
+    expect(findOceanBuildingAt([spec], 168, 88)).toBe(null);
+  });
+
+  it('ignores land buildings (oceanPlacement !== true)', () => {
+    // A solar panel placed on the island shouldn't match the ocean click
+    // path — even if its world-tile bbox happened to contain the click.
+    const placed: PlacedBuilding = {
+      id: 'solar1',
+      defId: 'solar',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      placedAt: 0,
+      operatingMs: 0,
+      maintainedAt: 0,
+    };
+    const spec = makeSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      buildings: [placed],
+    });
+    expect(findOceanBuildingAt([spec], 0, 0)).toBe(null);
   });
 });

@@ -33,6 +33,12 @@ import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import { CELL_SIZE_TILES, islandCells } from './discovery.js';
 import { TILE_PX } from './island.js';
+import {
+  clusterAnchorOf,
+  shouldRenderFeatureGlyph,
+  type OceanCellSpec,
+  type OceanTerrain,
+} from './ocean-cell.js';
 import { visibleCellsFromVision, type VisionSource } from './vision-source.js';
 import {
   DISCOVERED_BLUE,
@@ -222,4 +228,153 @@ export function renderOceanFogOverlay(
     layer.addChild(makeCellSquare(cx, cy, UNKNOWN_BLUE));
   }
   return layer;
+}
+
+// ---------------------------------------------------------------------------
+// §6 Feature glyph render pass
+// ---------------------------------------------------------------------------
+//
+// Renders one ∿ / ⋮ / ▭ glyph per rare-feature cluster (vent / nodule /
+// trench) whose anchor cell satisfies `shouldRenderFeatureGlyph` — both the
+// surface reveal AND the depth scout flags are set. Sits between the fog
+// overlay and the weather overlay in the world container so storms visually
+// occlude glyphs (per §6: "a storm visually hides what's underneath").
+//
+// Pixel-size invariance: glyph sprites are sized in world pixels and the
+// outer container counter-scales to `1 / cam.zoom` each frame, keeping the
+// rendered glyphs the same pixel size regardless of camera zoom. (See main.ts
+// ticker — `featureGlyphs.setZoom(cam.zoom)`.)
+//
+// Pre-baked textures: one Texture per (terrain × tint × pixel size) combo,
+// memoised in a module-level cache so dozens of clusters share three
+// textures total.
+
+/** §6 glyph dictionary — pale-cyan, fixed pixel size, scale-invariant. */
+const GLYPH_CHARS: Readonly<Record<OceanTerrain, string | null>> = {
+  hydrothermal_vent: '∿', // ∿
+  nodule_field: '⋮', // ⋮
+  trench: '▭', // ▭
+  shallows: null,
+  deep: null,
+};
+
+/** Pale-cyan tint that contrasts with both fog tiers (VISION_BLUE 0x7dd3e8
+ *  on the bright side, UNKNOWN_BLUE 0x0a0e14 on the dark side). */
+const GLYPH_COLOR_CSS = '#cfeef5';
+
+/** Sprite pixel size — middle of the 12-16 px target range per §6. */
+const GLYPH_PX = 14;
+
+/** Memoised glyph textures keyed by char + size. Glyph chars are short
+ *  string literals; sharing across clusters keeps GPU upload count to ≤3. */
+const glyphTextureCache = new Map<string, Texture>();
+
+function getGlyphTexture(char: string, pxSize: number): Texture {
+  const key = `${char}@${pxSize}`;
+  const cached = glyphTextureCache.get(key);
+  if (cached !== undefined) return cached;
+  const canvas = document.createElement('canvas');
+  // Square canvas; sprite scales naturally without distortion.
+  canvas.width = pxSize;
+  canvas.height = pxSize;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('getGlyphTexture: 2D context unavailable');
+  ctx.fillStyle = GLYPH_COLOR_CSS;
+  ctx.font = `bold ${pxSize}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(char, pxSize / 2, pxSize / 2);
+  const tex = Texture.from(canvas);
+  glyphTextureCache.set(key, tex);
+  return tex;
+}
+
+/** Handle for the §6 feature-glyph layer. The main ticker drives `refresh`
+ *  on world rebuild + `setZoom` per frame so the glyphs stay scale-invariant. */
+export interface FeatureGlyphsHandle {
+  readonly layer: Container;
+  /** Rebuild the glyph sprites from current world state. Cheap — a handful
+   *  of clusters per world, each one Sprite. */
+  refresh(
+    oceanCells: ReadonlyMap<string, OceanCellSpec>,
+    revealedCells: ReadonlySet<string>,
+    depthRevealedCells: ReadonlySet<string>,
+  ): void;
+  /** Counter-scale the inner sprite container to keep glyphs at a fixed
+   *  pixel size as the camera zooms. Called per frame from the main ticker
+   *  alongside the existing camera sync. */
+  setZoom(zoom: number): void;
+}
+
+/** Mount the §6 feature-glyph layer. Returns a handle whose `layer` should
+ *  be added to the world container between fog (slot 2) and weather.
+ *
+ *  Pixel-size invariance is achieved by setting `sprite.width =
+ *  sprite.height = GLYPH_PX / zoom` each frame. The container itself
+ *  inherits world-scale (= cam.zoom), and the resulting on-screen size is
+ *  `zoom * (GLYPH_PX / zoom) = GLYPH_PX` regardless of zoom. Positions are
+ *  in world-pixel coords (cell centre) — those scale naturally with the
+ *  world. This is simpler than fighting two nested scales and matches the
+ *  pattern used by other inspector-active overlays. */
+export function mountFeatureGlyphs(): FeatureGlyphsHandle {
+  const layer = new Container();
+  layer.label = 'ocean-feature-glyphs';
+  // Currently-applied counter-scale. Stored so `refresh` can size newly-
+  // minted sprites with the latest zoom without waiting for the next
+  // `setZoom` call.
+  let currentZoom = 1;
+
+  function applyCounterScaleTo(sprite: Sprite): void {
+    sprite.width = GLYPH_PX / currentZoom;
+    sprite.height = GLYPH_PX / currentZoom;
+  }
+
+  function rebuild(
+    oceanCells: ReadonlyMap<string, OceanCellSpec>,
+    revealedCells: ReadonlySet<string>,
+    depthRevealedCells: ReadonlySet<string>,
+  ): void {
+    layer.removeChildren();
+    // Track each cluster anchor we've already emitted so we don't draw N
+    // glyphs for an N-cell cluster (one per cluster anchor per §6).
+    const emittedAnchors = new Set<string>();
+    for (const [cellKey, cell] of oceanCells) {
+      if (!shouldRenderFeatureGlyph(cellKey, revealedCells, depthRevealedCells, oceanCells)) {
+        continue;
+      }
+      const anchor = clusterAnchorOf({ oceanCells }, cellKey);
+      if (anchor === null) continue;
+      if (emittedAnchors.has(anchor)) continue;
+      emittedAnchors.add(anchor);
+      const char = GLYPH_CHARS[cell.terrain];
+      if (char === null) continue;
+      const ac = parseKey(anchor);
+      const tex = getGlyphTexture(char, GLYPH_PX);
+      const sprite = new Sprite(tex);
+      sprite.anchor.set(0.5);
+      // Centre the glyph on the anchor cell — half-cell offset.
+      const wx = (ac.cx + 0.5) * CELL_PX;
+      const wy = (ac.cy + 0.5) * CELL_PX;
+      sprite.position.set(wx, wy);
+      applyCounterScaleTo(sprite);
+      layer.addChild(sprite);
+    }
+  }
+
+  function setZoom(zoom: number): void {
+    if (zoom <= 0 || !Number.isFinite(zoom)) return;
+    if (currentZoom === zoom) return;
+    currentZoom = zoom;
+    for (const child of layer.children) {
+      if (child instanceof Sprite) {
+        applyCounterScaleTo(child);
+      }
+    }
+  }
+
+  return {
+    layer,
+    refresh: rebuild,
+    setZoom,
+  };
 }

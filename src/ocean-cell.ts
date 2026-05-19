@@ -64,3 +64,100 @@ export function footprintMatches(
   }
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// §6 Feature glyph render rule + cluster anchor
+// ---------------------------------------------------------------------------
+
+/** §6 rare-feature terrains: the three terrain kinds that get a feature
+ *  glyph rendered on the map once revealed. Bulk terrains (shallows / deep)
+ *  never carry a glyph — the ocean colour itself is the indicator. */
+export const RARE_TERRAINS: ReadonlySet<OceanTerrain> = new Set<OceanTerrain>([
+ 'hydrothermal_vent',
+ 'nodule_field',
+ 'trench',
+]);
+
+/** §6 render rule for a single ocean cell. Returns true iff:
+ *   1. the cell sits in `oceanCells` (i.e. terrain explicitly stored — the
+ *      implicit 'deep' default never qualifies), AND
+ *   2. its terrain is one of the rare-feature terrains, AND
+ *   3. both `revealedCells` (surface discovery) AND `depthRevealedCells`
+ *      (depth scout) cover the cell.
+ *
+ *  Pure: reads three sets/maps; no PixiJS, no DOM. The render code in
+ *  `ocean.ts` iterates `oceanCells` and asks this predicate per cell, then
+ *  emits one glyph per *cluster* (via `clusterAnchorOf` — see below). */
+export function shouldRenderFeatureGlyph(
+  cellKey: string,
+  revealedCells: ReadonlySet<string>,
+  depthRevealedCells: ReadonlySet<string>,
+  oceanCells: ReadonlyMap<string, OceanCellSpec>,
+): boolean {
+  if (!revealedCells.has(cellKey)) return false;
+  if (!depthRevealedCells.has(cellKey)) return false;
+  const cell = oceanCells.get(cellKey);
+  if (cell === undefined) return false;
+  return RARE_TERRAINS.has(cell.terrain);
+}
+
+/** §6 cluster anchor: walks the 4-connected component of cells matching
+ *  `cellKey`'s terrain (starting from that cell) and returns the top-left
+ *  representative — minimum Y, then minimum X. Returns the cell key string
+ *  in `"x,y"` form. Pure flood-fill, bounded by the cluster size (vents +
+ *  nodule fields are ≤9 cells; trenches are ≤24 cells per §3).
+ *
+ *  Returns null when:
+ *   - the cell isn't in `oceanCells` (implicit-default 'deep' cells have no
+ *     persisted cluster identity — they'd flood-fill the entire ocean), OR
+ *   - the cell's terrain isn't a rare feature (bulk terrains aren't
+ *     clustered for glyph rendering).
+ *
+ *  Singleton clusters return their own cell — a 1×1 isolated trench cell
+ *  flood-fills to itself and returns that one cell. */
+export function clusterAnchorOf(
+  world: OceanWorld,
+  cellKey: string,
+): string | null {
+  const idx = cellKey.indexOf(',');
+  if (idx < 0) return null;
+  const startX = Number.parseInt(cellKey.slice(0, idx), 10);
+  const startY = Number.parseInt(cellKey.slice(idx + 1), 10);
+  if (!Number.isFinite(startX) || !Number.isFinite(startY)) return null;
+  const cell = world.oceanCells.get(cellKey);
+  if (cell === undefined) return null;
+  if (!RARE_TERRAINS.has(cell.terrain)) return null;
+  const wanted = cell.terrain;
+  // Flood-fill (4-connected) over cells whose stored terrain matches.
+  const visited = new Set<string>([cellKey]);
+  const stack: Array<readonly [number, number]> = [[startX, startY]];
+  let minY = startY;
+  let minX = startX;
+  let bestKey = cellKey;
+  while (stack.length > 0) {
+    const next = stack.pop();
+    if (next === undefined) break;
+    const [cx, cy] = next;
+    if (cy < minY || (cy === minY && cx < minX)) {
+      minY = cy;
+      minX = cx;
+      bestKey = key(cx, cy);
+    }
+    const neighbours: ReadonlyArray<readonly [number, number]> = [
+      [cx + 1, cy],
+      [cx - 1, cy],
+      [cx, cy + 1],
+      [cx, cy - 1],
+    ];
+    for (const n of neighbours) {
+      const nk = key(n[0], n[1]);
+      if (visited.has(nk)) continue;
+      const nCell = world.oceanCells.get(nk);
+      if (nCell === undefined) continue;
+      if (nCell.terrain !== wanted) continue;
+      visited.add(nk);
+      stack.push(n);
+    }
+  }
+  return bestKey;
+}

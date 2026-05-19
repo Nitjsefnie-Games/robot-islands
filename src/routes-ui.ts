@@ -37,6 +37,21 @@ function styled(el: HTMLElement, css: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// §6 cable-tint discriminator
+// ---------------------------------------------------------------------------
+// Power-link routes (no cargo) get distinct tints from cargo routes so the
+// player can see at a glance which routes are power-only — and within the
+// power-link family, the §4 ocean-layer `submarine_cable` variant is
+// darker than the land `cable` so undersea power links read at a glance.
+
+/** Land cable — neutral cool grey, brighter than submarine to read as
+ *  "above the waterline." */
+const LAND_CABLE_TINT = 0x9caab8;
+/** §4 ocean-layer submarine cable — steel-blue, darker than the land cable
+ *  so the contrast reads even at small zooms. */
+const SUBMARINE_CABLE_TINT = 0x4a6680;
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 export interface RouteUiHandle {
@@ -840,7 +855,18 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       const p1 = resolveScreenPos(route.from);
       const p2 = resolveScreenPos(route.to);
       if (!p1 || !p2) continue;
-      drawDashedSegment(routeGfx, p1, p2, phasePx, VISION_BLUE, 0.55);
+      // §6 cable tint discrimination — land `cable` and §4 ocean-layer
+      // `submarine_cable` are power-link routes (no cargo) and read
+      // distinctly from cargo routes. The submarine variant uses a
+      // darker steel-blue so the player can see at a glance which power
+      // routes are undersea.
+      const tint =
+        route.type === 'submarine_cable'
+          ? SUBMARINE_CABLE_TINT
+          : route.type === 'cable'
+            ? LAND_CABLE_TINT
+            : VISION_BLUE;
+      drawDashedSegment(routeGfx, p1, p2, phasePx, tint, 0.55);
 
       // Pulse the destination endpoint amber when a batch arrives within 2s.
       let nextEta = Infinity;

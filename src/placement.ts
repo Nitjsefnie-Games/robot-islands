@@ -513,6 +513,63 @@ export function buildingAtTile(
   return null;
 }
 
+/**
+ * §6 click-to-inspect at ocean cells. Mirrors `buildingAtTile` / the
+ * `findPopulatedIslandAt → buildingAtTile` flow in main.ts but for
+ * `oceanPlacement === true` defs whose footprints sit OUTSIDE any island
+ * ellipse and therefore can't be reached by the land click path.
+ *
+ * Ocean-building coordinate convention (see placement-ui.ts attemptCommit
+ * + placeBuilding):
+ *  - `b.x, b.y` are anchor-local *tile* coords: `b.x = cellX * CELL_SIZE_TILES
+ *    - anchor.cx`. World-tile origin of the footprint is therefore
+ *    `(anchor.cx + b.x, anchor.cy + b.y)`.
+ *  - `def.footprint` dims are in *cell* units for ocean defs (e.g. SHAPES.single
+ *    = 1×1 cells, SHAPES.square2 = 2×2 cells). The world-tile bbox extent is
+ *    `shapeWidth(def.footprint) * CELL_SIZE_TILES` × `shapeHeight(..) * ..`.
+ *    (This is the subtle bit that previously caught the sonar_buoy click —
+ *    a 1×1-cell buoy hit-target spans a 16×16-tile bbox, not 1×1 tile.)
+ *
+ * Walks every populated island's `buildings[]` (ocean platforms are stored
+ * on their anchor's array per Task 10). First-match wins; ocean footprints
+ * can't overlap by construction (the validator's `land-overlap` +
+ * anchor-range gate joint-prevents overlap across multiple anchors too).
+ *
+ * Returns `{ spec, building }` to mirror what main.ts needs (the anchor
+ * spec, so the inspector can resolve the anchor's `IslandState`). Returns
+ * null when no ocean platform covers the tile.
+ *
+ * Pure — no PixiJS, no DOM.
+ */
+export function findOceanBuildingAt(
+  islands: ReadonlyArray<IslandSpec>,
+  worldTileX: number,
+  worldTileY: number,
+): { readonly spec: IslandSpec; readonly building: PlacedBuilding } | null {
+  // Snap to integer tile (same convention as `buildingAtTile`). Ocean
+  // footprints are 16-tile-aligned cell blocks, but the click can land
+  // anywhere inside — round-to-nearest matches the half-tile visual rule.
+  const tx = Math.round(worldTileX);
+  const ty = Math.round(worldTileY);
+  for (const spec of islands) {
+    if (!spec.populated) continue;
+    for (const b of spec.buildings) {
+      const def = BUILDING_DEFS[b.defId];
+      if (def.oceanPlacement !== true) continue;
+      const widthTiles = shapeWidth(def.footprint) * CELL_SIZE_TILES;
+      const heightTiles = shapeHeight(def.footprint) * CELL_SIZE_TILES;
+      const x0 = spec.cx + b.x;
+      const y0 = spec.cy + b.y;
+      const x1 = x0 + widthTiles;
+      const y1 = y0 + heightTiles;
+      if (tx >= x0 && tx < x1 && ty >= y0 && ty < y1) {
+        return { spec, building: b };
+      }
+    }
+  }
+  return null;
+}
+
 /** Result of a demolition attempt. `scrapReturned` is the §6.7 build-cost scrap credit
  *  (`floor(sum(placementCost) * 0.3)`) applied to `state.inventory.scrap` after clamping to
  *  the resource's cap. `refunded` is the §14 50%-of-placement-cost return
