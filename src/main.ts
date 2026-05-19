@@ -104,7 +104,6 @@ import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
 import { computeWeatherVisionSources } from './weather.js';
 import { mountAntennaOverlay } from './antenna-overlay.js';
-import { mountTerrainTooltip } from './terrain-tooltip.js';
 import { mountHoverTooltip } from './hover-tooltip.js';
 import { mountToastSurface } from './toast.js';
 import { mountSatelliteOverlay } from './satellite-overlay.js';
@@ -271,14 +270,12 @@ async function main(): Promise<void> {
   // §2.7 day/night tint — full-viewport DOM overlay above the canvas,
   // pointer-events: none. Cheap diff-and-skip refresh per tick.
   const dayNightTint = mountDayNightTint(document.body);
-  // Terrain hover tooltip — surfaces the terrain id and consumer-building
-  // list when the cursor hovers a non-default tile.
-  const terrainTooltip = mountTerrainTooltip(document.body);
-  // §6 universal hover tooltip — cell-level info (land + ocean) + weather.
-  // Load-bearing because weather overlay obscures feature glyphs during
-  // storms. Coexists with `terrainTooltip` (consumer hints): the universal
-  // tooltip sits below modals (z-index 900) so anchor / cargo pickers
-  // overlay it without occluding the hover.
+  // §6 universal hover tooltip — tile-level info on land (terrain +
+  // building + consumers + weather) and cell-level info on ocean (rare
+  // cluster / unscouted depths / open ocean + weather). Load-bearing
+  // because the weather overlay obscures feature glyphs during storms.
+  // Sits below the modal scrim (z-index 50 < 60) so anchor / cargo
+  // pickers overlay it without occluding the hover.
   const hoverTooltip = mountHoverTooltip(document.body);
   // Toast surface (top-center transient banners) — singleton, used by the
   // §14 launch flow and any future "global event" notifier.
@@ -722,7 +719,8 @@ async function main(): Promise<void> {
   // mousemove (~60Hz) doesn't repaint twice per frame. The latest cursor
   // intent is stashed in `pendingHover`; a rAF loop drains it. When the
   // cursor leaves the canvas the pending payload is null and the tooltip
-  // hides. Coexists with the existing `terrainTooltip` (consumer hints).
+  // hides. Operates at tile granularity — `hoverTooltip` internally
+  // dispatches per-tile for land and per-cell for ocean.
   let pendingHover: { sx: number; sy: number; clientX: number; clientY: number } | null = null;
   let hoverRafScheduled = false;
   const drainHover = (): void => {
@@ -741,11 +739,15 @@ async function main(): Promise<void> {
       return;
     }
     const wt = screenToWorldTile(p.sx, p.sy);
-    const cellX = Math.floor(wt.x / CELL_SIZE_TILES);
-    const cellY = Math.floor(wt.y / CELL_SIZE_TILES);
+    // Snap to the tile whose visual centre is nearest — same convention
+    // as `buildingAtTile` / `placement-ui`. Tile (n) is rendered centred
+    // on world pixel (n * TILE_PX).
+    const tileX = Math.round(wt.x);
+    const tileY = Math.round(wt.y);
     hoverTooltip.setHover(
       worldState,
-      `${cellX},${cellY}`,
+      tileX,
+      tileY,
       p.clientX,
       p.clientY,
       performance.now(),
@@ -786,7 +788,6 @@ async function main(): Promise<void> {
         hoveredBuilding = null;
         repaintHover();
       }
-      terrainTooltip.hide();
       return;
     }
     const wt = screenToWorldTile(sx, sy);
@@ -797,25 +798,6 @@ async function main(): Promise<void> {
       const localY = wt.y - island.cy;
       const b = buildingAtTile(island, localX, localY);
       if (b) next = { spec: island, building: b };
-      // Terrain hover tooltip — show only on populated islands. If the
-      // cursor is on a building we still surface the underlying terrain
-      // for context.
-      // Tile (n) is rendered centred on world pixel (n * TILE_PX), so its
-      // visual extent spans [n - 0.5, n + 0.5) in fractional-tile space —
-      // island.cx is the CENTRE of tile (0, 0), not its top-left. Math.round
-      // maps the fractional local coord to the tile whose visual centre is
-      // nearest the cursor (same convention as buildingAtTile / placement-ui).
-      const localTileX = Math.round(localX);
-      const localTileY = Math.round(localY);
-      const terrainFn = island.terrainAt;
-      if (terrainFn) {
-        const terrain = terrainFn(localTileX, localTileY);
-        terrainTooltip.setHover(e.clientX, e.clientY, terrain);
-      } else {
-        terrainTooltip.hide();
-      }
-    } else {
-      terrainTooltip.hide();
     }
     const prevId = hoveredBuilding?.building.id ?? null;
     const nextId = next?.building.id ?? null;
@@ -829,7 +811,6 @@ async function main(): Promise<void> {
     settlementUi.hideReticle();
     orbitalUi.hideReticle();
     placementUi.hidePreview();
-    terrainTooltip.hide();
     pendingHover = null;
     scheduleHoverDrain();
     // Clear hover outline so it doesn't ghost at the last cursor position

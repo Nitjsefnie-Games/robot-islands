@@ -1,38 +1,45 @@
-// §6 hover-tooltip — universal cell-info readout.
+// §6 hover-tooltip — universal cell/tile-info readout.
 //
-// Mouse-over on any cell (land OR ocean) opens a small DOM tooltip near
+// Mouse-over on any tile (land OR ocean) opens a small DOM tooltip near
 // the cursor showing structured info. The tooltip is the player's
 // always-works channel for cell state because the weather overlay paints
 // opaque tint over cells during storms — feature glyphs alone are not a
 // reliable read.
 //
-// This module has two surfaces:
-//   1. Pure `cellInfoForHover(world, cellKey, nowMs)` → `HoverInfo` — unit
-//      tested, no DOM, no PixiJS. Routes by cell state per the design doc:
-//        - revealed + depth-revealed + rare terrain → cluster bbox +
-//          occupancy
-//        - revealed + depth-revealed + bulk terrain → terrain name
-//        - revealed, NOT depth-revealed              → "Unscouted depths"
-//        - NOT revealed                              → "Open ocean"
-//        - tile lies inside a populated island       → land tile + building
-//      Weather (current cycle + forecast) is appended to every result.
-//   2. `mountHoverTooltip(parentEl)` → DOM handle with
-//      `setHover(world, cellKey | null, screenX, screenY, nowMs)`. The
-//      caller drives positioning from a mousemove handler; this module
-//      owns the DOM element + its content. `pointer-events: none` so
-//      it never intercepts canvas clicks.
+// Granularity is per-surface:
+//   - LAND tiles: tile granularity. Terrain at the exact tile + building
+//     at that tile + consumers list (which buildings require this terrain
+//     in `requiredTile`) + weather.
+//   - OCEAN cells: cell granularity (16-tile cells). Routes by reveal:
+//        rare-terrain → cluster bbox + occupancy
+//        bulk terrain → terrain name
+//        revealed only → "Unscouted depths"
+//        not revealed → "Open ocean"
+//     Plus weather.
 //
-// The hover tooltip COEXISTS with the existing terrain-tooltip (consumer
-// hints for land tiles). When a populated land cell is hovered, the
-// hover tooltip surfaces the same terrain name plus the building one-
-// liner; main.ts decides whether the terrain-tooltip's consumer list
-// stays visible alongside or is suppressed.
+// This module has two surfaces:
+//   1. Pure `tileInfoForHover(world, tileX, tileY, nowMs)` → `HoverInfo` —
+//      unit tested, no DOM, no PixiJS. The cell key for ocean lookups is
+//      derived internally from the tile coords.
+//   2. `mountHoverTooltip(parentEl)` → DOM handle with
+//      `setHover(world, tileX | null, tileY | null, screenX, screenY,
+//      nowMs)`. The caller drives positioning from a mousemove handler;
+//      this module owns the DOM element + its content. `pointer-events:
+//      none` so it never intercepts canvas clicks.
 
-import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import {
+  BUILDING_DEFS,
+  type BuildingDef,
+  type BuildingDefId,
+} from './building-defs.js';
 import { CELL_SIZE_TILES } from './constants.js';
+import type { TerrainKind } from './island.js';
+import { computeVisionSources } from './lighthouse.js';
 import { RARE_TERRAINS, terrainAt, type OceanTerrain } from './ocean-cell.js';
 import { buildingAtTile, findOceanBuildingAt } from './placement.js';
-import { findPopulatedIslandAt, type IslandSpec, type WorldState } from './world.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
+import { pointInVision } from './vision-source.js';
+import { findPopulatedIslandAt, type WorldState } from './world.js';
 import { biomeForCell, weather, type WeatherState, WEATHER_FORECAST_LOOKAHEAD_MS } from './weather.js';
 
 // ---------------------------------------------------------------------------
@@ -59,6 +66,43 @@ const WEATHER_STATE_LABEL: Readonly<Record<WeatherState, string>> = {
   severe_storm: 'Severe storm',
   catastrophic: 'Catastrophic',
 };
+
+// ---------------------------------------------------------------------------
+// Consumers index — absorbed from the old terrain-tooltip module.
+// ---------------------------------------------------------------------------
+
+/** Public-facing consumer summary surfaced on a land hover so the tooltip
+ *  body can render `Mine (1×1), Drill (2×2)` etc. */
+export interface ConsumerSummary {
+  readonly defId: BuildingDefId;
+  readonly displayName: string;
+  readonly w: number;
+  readonly h: number;
+}
+
+/** Precomputed terrain → consumers index. Built once per module load by
+ *  walking `BUILDING_DEFS`. Terrains absent from this map have no consumer
+ *  (or only buildings that don't gate on `requiredTile`); the tooltip
+ *  still surfaces the terrain id but omits the consumer line. */
+const CONSUMERS_BY_TERRAIN: Map<TerrainKind, ConsumerSummary[]> = (() => {
+  const out = new Map<TerrainKind, ConsumerSummary[]>();
+  for (const [id, defRaw] of Object.entries(BUILDING_DEFS)) {
+    const def = defRaw as BuildingDef;
+    if (!def.requiredTile || def.requiredTile.length === 0) continue;
+    const summary: ConsumerSummary = {
+      defId: id as BuildingDefId,
+      displayName: def.displayName,
+      w: shapeWidth(def.footprint),
+      h: shapeHeight(def.footprint),
+    };
+    for (const t of def.requiredTile) {
+      const arr = out.get(t) ?? [];
+      arr.push(summary);
+      out.set(t, arr);
+    }
+  }
+  return out;
+})();
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,6 +152,9 @@ export interface LandInfo {
   /** One-line building description (`displayName T{tier}`), or null when
    *  no building covers the hovered tile. */
   readonly building: string | null;
+  /** Building defs that gate on this terrain in `requiredTile`. Empty
+   *  array when the terrain is "background" (grass) or has no consumers. */
+  readonly consumers: ReadonlyArray<ConsumerSummary>;
   readonly weather: WeatherInfo | null;
 }
 
@@ -256,19 +303,13 @@ function weatherInfoForCell(
 // Land helpers
 // ---------------------------------------------------------------------------
 
-/** Find the populated island whose union footprint covers the centre tile
- *  of `(cellX, cellY)`. Cell center tile is `(cellX * CELL_SIZE_TILES +
- *  CELL_SIZE_TILES/2, ...)` — close to the visual centre, so the hover
- *  reads the same island the cursor sits on. */
-function islandAtCell(
-  world: Pick<WorldState, 'islands'>,
-  cellX: number,
-  cellY: number,
-): IslandSpec | null {
-  const tx = cellX * CELL_SIZE_TILES + Math.floor(CELL_SIZE_TILES / 2);
-  const ty = cellY * CELL_SIZE_TILES + Math.floor(CELL_SIZE_TILES / 2);
-  return findPopulatedIslandAt(tx, ty, world.islands as IslandSpec[]);
-}
+/** Terrains that read as "background" — not worth a consumers line even if
+ *  some building consumes them (e.g. grass is the default for Plains, not
+ *  a meaningful spawn). Keeps the tooltip from listing consumers for every
+ *  grass tile of every island. */
+const BACKGROUND_TERRAINS: ReadonlySet<TerrainKind> = new Set<TerrainKind>([
+  'grass',
+]);
 
 function buildingOneLiner(b: { defId: string }): string {
   const def = BUILDING_DEFS[b.defId as BuildingDefId];
@@ -276,45 +317,72 @@ function buildingOneLiner(b: { defId: string }): string {
   return `${def.displayName} T${def.tier}`;
 }
 
+function consumersForTerrain(terrain: string): ReadonlyArray<ConsumerSummary> {
+  if (!terrain) return [];
+  if (BACKGROUND_TERRAINS.has(terrain as TerrainKind)) return [];
+  return CONSUMERS_BY_TERRAIN.get(terrain as TerrainKind) ?? [];
+}
+
 // ---------------------------------------------------------------------------
-// Pure helper — `cellInfoForHover`
+// Pure helper — `tileInfoForHover`
 // ---------------------------------------------------------------------------
 
-/** Structural slice of `WorldState` that `cellInfoForHover` reads. Kept
+/** Structural slice of `WorldState` that `tileInfoForHover` reads. Kept
  *  narrow so the helper is trivial to fixture in unit tests. */
 type HoverWorld = Pick<
   WorldState,
   'seed' | 'islands' | 'oceanCells' | 'revealedCells' | 'depthRevealedCells'
 >;
 
-export function cellInfoForHover(
+/** Tile (n) is rendered centred on world pixel (n * TILE_PX), so its
+ *  visual extent spans [n - 0.5, n + 0.5) in fractional-tile space.
+ *  Callers may pass fractional tile coords (mouse hit-test); snap to the
+ *  tile whose visual centre is nearest — matching `buildingAtTile`. */
+function snapToTile(t: number): number {
+  return Math.round(t);
+}
+
+export function tileInfoForHover(
   world: HoverWorld,
-  cellKey: string,
+  tileX: number,
+  tileY: number,
   nowMs: number,
 ): HoverInfo {
-  const parsed = parseCellKey(cellKey);
-  const weatherInfo = parsed ? weatherInfoForCell(world, parsed.x, parsed.y, nowMs) : null;
+  // Derive cell coords from tile coords. Cells are 16-tile squares.
+  const cellX = Math.floor(tileX / CELL_SIZE_TILES);
+  const cellY = Math.floor(tileY / CELL_SIZE_TILES);
+  const cellKey = `${cellX},${cellY}`;
 
-  // ---- Land path: a populated island covers the cell centre tile.
-  if (parsed) {
-    const isl = islandAtCell(world, parsed.x, parsed.y);
-    if (isl) {
-      // Pick the tile under the cursor's cell centre for the terrain readout.
-      // Pure code can't know the cursor's exact sub-cell position, so we use
-      // the cell centre as the canonical representative. The DOM caller may
-      // pass a sub-cell key in the future if needed.
-      const localTx = parsed.x * CELL_SIZE_TILES + Math.floor(CELL_SIZE_TILES / 2) - isl.cx;
-      const localTy = parsed.y * CELL_SIZE_TILES + Math.floor(CELL_SIZE_TILES / 2) - isl.cy;
-      const terrainFn = isl.terrainAt;
-      const terrainText = terrainFn ? terrainFn(Math.round(localTx), Math.round(localTy)) : '';
-      const b = buildingAtTile(isl, localTx, localTy);
-      return {
-        kind: 'land',
-        text: terrainText,
-        building: b ? buildingOneLiner(b) : null,
-        weather: weatherInfo,
-      };
-    }
+  // Weather is gated by the `visible` vision tier (populated island tiles
+  // + tiles within any populated island's vision ellipse / Lighthouse
+  // radius per §11). Discovered-but-not-currently-visible tiles and
+  // unknown tiles return weather: null — the player can't read the sky
+  // through cells they can't currently see. Computed once per call.
+  const populated = world.islands.filter((s) => s.populated);
+  const visionSources = computeVisionSources(populated);
+  const inVision = pointInVision(visionSources, tileX, tileY);
+  const weatherInfo = inVision ? weatherInfoForCell(world, cellX, cellY, nowMs) : null;
+
+  // ---- Land path: a populated island covers the exact hovered tile.
+  // Use tile-granular `findPopulatedIslandAt` rather than cell centre so
+  // hovering different tiles within one cell can yield different terrain /
+  // building results.
+  const isl = findPopulatedIslandAt(tileX, tileY, world.islands);
+  if (isl) {
+    // IslandSpec.cx/cy is the CENTRE of local tile (0, 0); convert
+    // world-tile coords to local-tile coords by subtracting.
+    const localTx = snapToTile(tileX - isl.cx);
+    const localTy = snapToTile(tileY - isl.cy);
+    const terrainFn = isl.terrainAt;
+    const terrainText = terrainFn ? terrainFn(localTx, localTy) : '';
+    const b = buildingAtTile(isl, tileX - isl.cx, tileY - isl.cy);
+    return {
+      kind: 'land',
+      text: terrainText,
+      building: b ? buildingOneLiner(b) : null,
+      consumers: consumersForTerrain(terrainText),
+      weather: weatherInfo,
+    };
   }
 
   // ---- Ocean path: route by reveal tiers.
@@ -328,7 +396,7 @@ export function cellInfoForHover(
   }
   // Depth-revealed: terrain readable. Bulk cells just show the label;
   // rare cells walk the cluster.
-  const terrain = terrainAt(world, parsed?.x ?? 0, parsed?.y ?? 0);
+  const terrain = terrainAt(world, cellX, cellY);
   if (!RARE_TERRAINS.has(terrain)) {
     return {
       kind: 'ocean-revealed',
@@ -369,11 +437,13 @@ export function cellInfoForHover(
 
 export interface HoverTooltipHandle {
   /** Show / update the tooltip at the cursor position with the cell info
-   *  derived from the current world state. Pass `cellKey === null` to
-   *  hide. The caller is responsible for cursor coords (CSS pixels). */
+   *  derived from the current world state. Pass `tileX === null` (or
+   *  `tileY === null`) to hide. The caller is responsible for cursor
+   *  coords (CSS pixels). */
   setHover(
     world: HoverWorld,
-    cellKey: string | null,
+    tileX: number | null,
+    tileY: number | null,
     screenX: number,
     screenY: number,
     nowMs: number,
@@ -409,6 +479,12 @@ function renderInfoHtml(info: HoverInfo): string {
     case 'land': {
       if (info.text) lines.push(`<div class="ri-hover-title">${escapeHtml(info.text)}</div>`);
       if (info.building) lines.push(`<div class="ri-hover-sub">${escapeHtml(info.building)}</div>`);
+      if (info.consumers.length > 0) {
+        const list = info.consumers
+          .map((c) => `${c.displayName} (${c.w}×${c.h})`)
+          .join(', ');
+        lines.push(`<div class="ri-hover-consumers">needs: ${escapeHtml(list)}</div>`);
+      }
       break;
     }
     default: {
@@ -460,11 +536,12 @@ export function mountHoverTooltip(parentEl: HTMLElement): HoverTooltipHandle {
     'display: none',
     'border-radius: 2px',
   ].join(';');
-  // Lightweight inline style hooks for the three line types.
+  // Lightweight inline style hooks for the line types.
   const style = document.createElement('style');
   style.textContent = `
     #ri-hover-tooltip .ri-hover-title { color: var(--ri-accent, #7dd3e8); font-weight: 600; margin-bottom: 2px; }
     #ri-hover-tooltip .ri-hover-sub { color: var(--ri-fg-2, #b6c8d8); font-size: 10.5px; margin-bottom: 2px; }
+    #ri-hover-tooltip .ri-hover-consumers { color: var(--ri-fg-3, #94aabc); font-size: 10.5px; margin-bottom: 2px; }
     #ri-hover-tooltip .ri-hover-weather { color: var(--ri-fg-3, #94aabc); font-size: 10.5px; margin-top: 4px; }
     #ri-hover-tooltip .ri-hover-forecast { color: var(--ri-fg-3, #7da0b8); font-size: 10px; }
   `;
@@ -473,60 +550,60 @@ export function mountHoverTooltip(parentEl: HTMLElement): HoverTooltipHandle {
 
   let lastKey: string | null = null;
   let lastHtml = '';
-  // Single-entry per-second cache. `cellInfoForHover` does a flood-fill plus
+  // Single-entry per-second cache. `tileInfoForHover` does a flood-fill plus
   // 2× `weather()` samples per call — on a held cursor at 60 fps that's ~72k
-  // ops/sec for the same cell. Keying on (cellKey, floor(nowMs/1000)) means
-  // cache misses on cell change AND on second boundary, so weather forecasts
-  // still tick. Single entry is fine — cursor sits over one cell at a time.
+  // ops/sec for the same tile. Keying on (tileKey, floor(nowMs/1000)) means
+  // cache misses on tile change AND on second boundary, so weather forecasts
+  // still tick. Single entry is fine — cursor sits over one tile at a time.
   let cachedKey: string | null = null;
   let cachedSecond = -1;
   let cachedInfo: HoverInfo | null = null;
 
   function setHover(
     world: HoverWorld,
-    cellKey: string | null,
+    tileX: number | null,
+    tileY: number | null,
     screenX: number,
     screenY: number,
     nowMs: number,
   ): void {
-    if (cellKey === null) {
+    if (tileX === null || tileY === null) {
       hide();
       return;
     }
+    const tileKey = `${tileX},${tileY}`;
     const second = Math.floor(nowMs / 1000);
     let info: HoverInfo;
-    if (cachedKey === cellKey && cachedSecond === second && cachedInfo !== null) {
+    if (cachedKey === tileKey && cachedSecond === second && cachedInfo !== null) {
       info = cachedInfo;
     } else {
-      info = cellInfoForHover(world, cellKey, nowMs);
-      cachedKey = cellKey;
+      info = tileInfoForHover(world, tileX, tileY, nowMs);
+      cachedKey = tileKey;
       cachedSecond = second;
       cachedInfo = info;
     }
-    // Re-render only on cell-change OR weather-change. The cell key is
+    // Re-render only on tile-change OR content-change. The tile key is
     // a cheap identity; weather state moves slowly. We rebuild HTML when
-    // the cell key changes or every call (HTML diff is cheap); position
+    // the tile key changes or every call (HTML diff is cheap); position
     // is updated on every call regardless.
-    if (cellKey !== lastKey) {
-      lastKey = cellKey;
+    if (tileKey !== lastKey) {
+      lastKey = tileKey;
       lastHtml = renderInfoHtml(info);
       tip.innerHTML = lastHtml;
     } else {
-      // Same cell — refresh content (weather + occupancy may shift). Cheap.
+      // Same tile — refresh content (weather + occupancy may shift). Cheap.
       const html = renderInfoHtml(info);
       if (html !== lastHtml) {
         lastHtml = html;
         tip.innerHTML = html;
       }
     }
-    // Offset so the cursor doesn't sit on top of the tooltip. The +60 on Y
-    // stacks this tooltip BELOW the existing terrain-tooltip (in
-    // `terrain-tooltip.ts`, which anchors at `(cursor+14, cursor+14)` with
-    // ~50 px of body height) so the two surfaces — terrain consumers vs.
-    // terrain + building + weather — don't overlap on land cells. A future
-    // pass should merge them into one panel.
+    // Offset so the cursor doesn't sit on top of the tooltip. Single
+    // tooltip, single offset — the previous 60px Y stack was a workaround
+    // for coexistence with a separate terrain-tooltip that has since been
+    // merged into this one.
     tip.style.left = `${screenX + 14}px`;
-    tip.style.top = `${screenY + 14 + 60}px`;
+    tip.style.top = `${screenY + 14}px`;
     tip.style.display = '';
   }
 
