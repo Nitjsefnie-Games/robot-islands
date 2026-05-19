@@ -53,7 +53,7 @@ import {
 } from './input.js';
 import { TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
-import { renderOcean, renderOceanFogOverlay } from './ocean.js';
+import { mountFeatureGlyphs, renderOcean, renderOceanFogOverlay } from './ocean.js';
 import { loadPrefs, loadWorld, savePrefs, saveWorld } from './persistence.js';
 import { mountSettingsUi } from './settings-ui.js';
 import { BUILDING_DEFS } from './building-defs.js';
@@ -63,8 +63,8 @@ import { mountConstructionUi } from './construction-ui.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
 import { expandIsland, type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
-import { buildingAtTile, demolishBuilding } from './placement.js';
-import { footprintTiles, type Rotation } from './shape-mask.js';
+import { buildingAtTile, demolishBuilding, findOceanBuildingAt } from './placement.js';
+import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
 import { mountPlacementUi } from './placement-ui.js';
 import { mountCargoLabelPicker } from './cargo-label-picker.js';
 import { mountAnchorPicker } from './anchor-picker.js';
@@ -84,7 +84,8 @@ import {
 } from './world.js';
 import { mountDronesUi } from './drones-ui.js';
 import { tickDrones } from './drones.js';
-import { tickSonarBuoys } from './sonar-buoy.js';
+import { CELL_SIZE_TILES } from './constants.js';
+import { SONAR_BUOY_DEF_ID, SONAR_BUOY_RADIUS_TILES, tickSonarBuoys } from './sonar-buoy.js';
 import {
   effectiveSolarBoostFor,
   tickCommPackets,
@@ -176,9 +177,22 @@ async function main(): Promise<void> {
   world.addChild(islandLayer);
   let fogOverlayLayer = renderFogOverlayFromState(worldState);
   world.addChild(fogOverlayLayer);
+  // §6 feature glyph pass — ∿ (vent) / ⋮ (nodule) / ▭ (trench) at each
+  // discovered + depth-revealed rare-feature cluster. Sits ABOVE the fog
+  // overlay (so glyphs aren't masked by the player's unrevealed sweep) and
+  // BELOW the weather overlay (so storms visually obscure glyphs per §6).
+  // The glyphs are pixel-size invariant — `setZoom` is called per frame
+  // from the ticker so they don't grow with camera zoom.
+  const featureGlyphs = mountFeatureGlyphs();
+  featureGlyphs.refresh(
+    worldState.oceanCells,
+    worldState.revealedCells,
+    worldState.depthRevealedCells,
+  );
+  world.addChild(featureGlyphs.layer);
   // §2.6 weather overlay — translucent tint per cell within any populated
   // island's weather visibility range. Built once; refreshed via its own
-  // throttle inside the ticker. Slot 3 — entity layers (drones/vehicles)
+  // throttle inside the ticker. Slot 4 — entity layers (drones/vehicles)
   // ride above so they remain visible through storms.
   const weatherOverlay = mountWeatherOverlay(worldState);
   world.addChild(weatherOverlay.layer);
@@ -193,6 +207,66 @@ async function main(): Promise<void> {
   // read cleanly without occluding sats.
   const antennaOverlay = mountAntennaOverlay(worldState);
   world.addChild(antennaOverlay.layer);
+  // §6 sonar-buoy range ring — inspector-active overlay. Shown only when
+  // the inspector is open on a Sonar Buoy, drawn at the buoy's per-tick
+  // reveal radius so the player can see "this buoy covers THIS area" at a
+  // glance. Drawn in world coords (camera-scaled) so the ring grows /
+  // shrinks with the map — same as the drone / orbital launch reticles.
+  // Distinct cyan-teal tint from the antenna overlay (cyan signal) and
+  // satellite scanner (also cyan); see SONAR_RING_COLOR comment below.
+  const sonarRingLayer = new Container();
+  sonarRingLayer.label = 'sonar-buoy-range-ring';
+  sonarRingLayer.visible = false;
+  const sonarRingGfx = new Graphics();
+  sonarRingLayer.addChild(sonarRingGfx);
+  world.addChild(sonarRingLayer);
+  // Sonar cyan-teal — close enough to VISION_BLUE that "this is a vision /
+  // discovery building" still reads, but distinctly more teal so it doesn't
+  // collide visually with the Antenna signal ring or Scanner Sat coverage
+  // disk when several overlays happen to overlap.
+  const SONAR_RING_COLOR = 0x40e0d0;
+  function repaintSonarRing(): void {
+    sonarRingGfx.clear();
+    const selectedId = inspector.getSelectedBuildingId();
+    if (!selectedId || !selectedSpec) {
+      sonarRingLayer.visible = false;
+      return;
+    }
+    const building = selectedSpec.buildings.find((b) => b.id === selectedId);
+    if (!building || building.defId !== SONAR_BUOY_DEF_ID) {
+      sonarRingLayer.visible = false;
+      return;
+    }
+    // Buoy footprint centre in world tiles. Ocean def coords: `building.x =
+    // cellX * CELL_SIZE_TILES - anchor.cx` (set by placement-ui), so
+    // `anchor.cx + building.x = cellX * CELL_SIZE_TILES` — the NW corner
+    // tile of the footprint. The 1×1-cell buoy footprint spans 16×16 tiles,
+    // so the centre is + CELL_SIZE_TILES / 2 (= 8 tiles, NOT + 0.5 — that
+    // would land 7.5 tiles off-axis and the ring would be visibly
+    // asymmetric around the buoy). `tickSonarBuoys` uses + 0.5 for a
+    // different reason: there it's disambiguating which CELL contains the
+    // buoy point, then operating in cell-space (a half-tile nudge resolves
+    // the boundary case). The display ring needs the actual visual centre.
+    const footprintHalfTiles = CELL_SIZE_TILES / 2;
+    const cxTile = selectedSpec.cx + building.x + footprintHalfTiles;
+    const cyTile = selectedSpec.cy + building.y + footprintHalfTiles;
+    const cxPx = cxTile * TILE_PX;
+    const cyPx = cyTile * TILE_PX;
+    // Reveal radius is in CELLS — translate to tiles via CELL_SIZE_TILES,
+    // then to world pixels via TILE_PX. (`SONAR_BUOY_RADIUS_TILES = 4`
+    // cells in current spec — the const name is historical.)
+    const radiusPx = SONAR_BUOY_RADIUS_TILES * CELL_SIZE_TILES * TILE_PX;
+    sonarRingGfx.circle(cxPx, cyPx, radiusPx).fill({
+      color: SONAR_RING_COLOR,
+      alpha: 0.05,
+    });
+    sonarRingGfx.circle(cxPx, cyPx, radiusPx).stroke({
+      color: SONAR_RING_COLOR,
+      width: 1.5,
+      alpha: 0.45,
+    });
+    sonarRingLayer.visible = true;
+  }
   // §2.7 day/night tint — full-viewport DOM overlay above the canvas,
   // pointer-events: none. Cheap diff-and-skip refresh per tick.
   const dayNightTint = mountDayNightTint(document.body);
@@ -253,13 +327,22 @@ async function main(): Promise<void> {
     oceanLayer = renderOceanFromState(worldState, WORLD_HALF_SIZE_TILES);
     islandLayer = renderIslandLayer(worldState);
     fogOverlayLayer = renderFogOverlayFromState(worldState);
-    // Insert at the same Z slots: ocean 0, islands 1, fog 2, weather 3.
+    // Insert at the same Z slots: ocean 0, islands 1, fog 2, glyphs 3
+    // (mounted once at startup; rebuilt below by refresh), weather 4+.
     world.removeChild(oldOcean);
     world.removeChild(oldIslands);
     world.removeChild(oldFog);
     world.addChildAt(oceanLayer, 0);
     world.addChildAt(islandLayer, 1);
     world.addChildAt(fogOverlayLayer, 2);
+    // §6 feature glyphs — rebuild contents (cells revealed by drones / sat
+    // / sonar buoy change with every discovery event). The layer instance
+    // is reused; refresh swaps the child sprites. No re-add to `world`.
+    featureGlyphs.refresh(
+      worldState.oceanCells,
+      worldState.revealedCells,
+      worldState.depthRevealedCells,
+    );
     // Visibility-radius depends on populated islands + weather stations;
     // both can change across a rebuild, so invalidate the throttle.
     weatherOverlay.invalidate();
@@ -562,6 +645,32 @@ async function main(): Promise<void> {
             // the HUD doesn't jump.
             return;
           }
+        }
+      }
+      // §6 ocean-platform click-to-inspect — `findPopulatedIslandAt` only
+      // reaches buildings inside an island's ellipse, so ocean platforms
+      // (which sit OUTSIDE any ellipse on their anchor's `buildings[]`
+      // array per Task 10) need a separate hit-test. Walks every populated
+      // island's `buildings[]` looking for an `oceanPlacement: true` def
+      // whose world-tile bbox contains the click — bbox extent uses
+      // `shape × CELL_SIZE_TILES` because ocean footprint dims are in
+      // cell units (a 1×1-cell sonar buoy spans a 16×16-tile target).
+      const oceanHit = findOceanBuildingAt(worldState.islands, wt.x, wt.y);
+      if (oceanHit) {
+        const targetState = islandStates.get(oceanHit.spec.id);
+        if (targetState) {
+          inspector.open({
+            spec: oceanHit.spec,
+            state: targetState,
+            building: oceanHit.building,
+          });
+          selectedSpec = oceanHit.spec;
+          hoveredBuilding = { spec: oceanHit.spec, building: oceanHit.building };
+          repaintSelection();
+          repaintHover();
+          // Same active-island discipline as the land-click branch — the
+          // ocean inspector is a non-focusing inspection, no jump.
+          return;
         }
       }
       // §3 active-island fallback. Only reached when the click misses every
@@ -967,13 +1076,37 @@ async function main(): Promise<void> {
     fillAlpha: number,
   ): void {
     const def = BUILDING_DEFS[building.defId];
+    const islandWorldPx = tileToWorldPx(spec.cx, spec.cy);
+    // §6 ocean-platform footprints are in CELL units, NOT tile units. A
+    // 1×1-cell sonar_buoy spans 16×16 tiles; a 2×2-cell rig spans 32×32.
+    // The shape-mask tiles[] holds cell-unit dx/dy (e.g. SHAPES.square2 =
+    // {(0,0),(1,0),(0,1),(1,1)} — those are 4 adjacent CELLS, not 4
+    // adjacent tiles). Treating each shape-mask entry as one tile (the
+    // land convention) draws four nearly-overlapping 16-tile boxes in the
+    // NW corner instead of the actual 32×32-tile footprint.
+    //
+    // Easiest correct behaviour: skip the shape-mask iteration for ocean
+    // defs and draw ONE rectangle that spans the full cell-unit bbox.
+    // (Ocean defs are always rectangular today; the SHAPES.single +
+    // SHAPES.square2 footprint catalog at building-defs.ts only mints
+    // rectangles, so the bbox = the visible footprint exactly.)
+    if (def.oceanPlacement === true) {
+      const widthTiles = shapeWidth(def.footprint) * CELL_SIZE_TILES;
+      const heightTiles = shapeHeight(def.footprint) * CELL_SIZE_TILES;
+      const wpx = building.x * TILE_PX + islandWorldPx.x;
+      const wpy = building.y * TILE_PX + islandWorldPx.y;
+      gfx
+        .rect(wpx, wpy, widthTiles * TILE_PX, heightTiles * TILE_PX)
+        .fill({ color, alpha: fillAlpha })
+        .stroke({ width: strokeWidth, color, alpha: 0.95, alignment: 1 });
+      return;
+    }
     const tiles = footprintTiles(
       def.footprint,
       building.x,
       building.y,
       (building.rotation ?? 0) as Rotation,
     );
-    const islandWorldPx = tileToWorldPx(spec.cx, spec.cy);
     const half = TILE_PX / 2;
     for (const t of tiles) {
       const wpx = t.x * TILE_PX + islandWorldPx.x - half;
@@ -1410,6 +1543,10 @@ async function main(): Promise<void> {
     if (dx !== 0 || dy !== 0) panCam(cam, dx, dy);
     world.position.set(cam.tx, cam.ty);
     world.scale.set(cam.zoom);
+    // §6 keep feature-glyph sprites at fixed pixel size as the camera zooms
+    // by counter-scaling each sprite's width/height by 1/zoom. Cheap when
+    // zoom is unchanged (early-returns inside `setZoom`).
+    featureGlyphs.setZoom(cam.zoom);
     // Per-frame dirty-check for camera / active-island / open-panel prefs.
     // Arms the 500ms debounce timer if anything changed; the timer batches
     // bursts of pan/zoom frames into a single IDB write.
@@ -1776,6 +1913,10 @@ async function main(): Promise<void> {
     // selected building was demolished externally (won't happen in step 2.5
     // but defensive for future tooling) the repaint clears the outline.
     repaintSelection();
+    // §6 sonar-buoy range ring tracks the same selection state. Cheap
+    // when nothing is selected (one early return) and even when a non-
+    // buoy building is selected (single defId compare).
+    repaintSonarRing();
     // Hover outline also re-evaluates each frame so the hover-suppression
     // check (hide hover when hover.id === selection.id) reconciles after a
     // click. Without this, the hover layer keeps the previously-drawn
