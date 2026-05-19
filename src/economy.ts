@@ -1212,14 +1212,29 @@ export function findNextCapEvent(
     if (rate > 0) {
       // Heading toward cap. If already at/over cap (shouldn't normally
       // happen because outputAvail would have zeroed the rate), skip.
+      // Treat headroom < 1 unit as "effectively full" — a sub-1 residue
+      // (e.g. cap - 1e-15 from float-subtraction precision loss) yields
+      // `timeToEventSec ≈ 0`, and `tMs + tiny*1000` rounds back to `tMs`
+      // at realistic perf.now() scales (~1e6 ms ULP ≈ 2e-10), which then
+      // makes segEndMs == t, dtSec == 0, and the entire integrator block
+      // (applyRates, accrueXp, tickConstruction) is skipped every frame —
+      // a production-freeze bug. The 1-unit threshold is for next-event
+      // purposes only; applyRates retains float storage so slow producers
+      // still accumulate fractional units across segments.
       const capVal = cap(state, r, ctx?.caps);
       const headroom = capVal - current;
-      if (headroom <= 0) continue;
+      if (headroom < 1) continue;
       timeToEventSec = headroom / rate;
     } else {
       // rate < 0, heading toward zero. If already at zero, skip — that
       // input would have set inputAvail=0 and we wouldn't be here.
-      if (current <= 0) continue;
+      // Treat sub-1 inventory as "effectively empty" for the same
+      // precision-residue reason as the cap branch above: a 2.6e-21 stock
+      // with a finite consumption rate computes `timeToEventSec ≈ 5e-19`,
+      // which after `tMs + that*1000` rounds back to `tMs` and freezes
+      // the integrator. The threshold matches the cap-side branch for
+      // symmetry; the same applyRates float-storage caveat applies.
+      if (current < 1) continue;
       timeToEventSec = current / -rate;
     }
     const eventMs = tMs + timeToEventSec * 1000;
