@@ -1090,11 +1090,12 @@ async function main(): Promise<void> {
     // (Ocean defs are always rectangular today; the SHAPES.single +
     // SHAPES.square2 footprint catalog at building-defs.ts only mints
     // rectangles, so the bbox = the visible footprint exactly.)
+    const half = TILE_PX / 2;
     if (def.oceanPlacement === true) {
       const widthTiles = shapeWidth(def.footprint) * CELL_SIZE_TILES;
       const heightTiles = shapeHeight(def.footprint) * CELL_SIZE_TILES;
-      const wpx = building.x * TILE_PX + islandWorldPx.x;
-      const wpy = building.y * TILE_PX + islandWorldPx.y;
+      const wpx = building.x * TILE_PX + islandWorldPx.x - half;
+      const wpy = building.y * TILE_PX + islandWorldPx.y - half;
       gfx
         .rect(wpx, wpy, widthTiles * TILE_PX, heightTiles * TILE_PX)
         .fill({ color, alpha: fillAlpha })
@@ -1107,7 +1108,6 @@ async function main(): Promise<void> {
       building.y,
       (building.rotation ?? 0) as Rotation,
     );
-    const half = TILE_PX / 2;
     for (const t of tiles) {
       const wpx = t.x * TILE_PX + islandWorldPx.x - half;
       const wpy = t.y * TILE_PX + islandWorldPx.y - half;
