@@ -33,7 +33,7 @@ import { CELL_SIZE_TILES } from './constants.js';
 import { RARE_TERRAINS, terrainAt, type OceanTerrain } from './ocean-cell.js';
 import { buildingAtTile, findOceanBuildingAt } from './placement.js';
 import { findPopulatedIslandAt, type IslandSpec, type WorldState } from './world.js';
-import { weather, type WeatherState, WEATHER_FORECAST_LOOKAHEAD_MS } from './weather.js';
+import { biomeForCell, weather, type WeatherState, WEATHER_FORECAST_LOOKAHEAD_MS } from './weather.js';
 
 // ---------------------------------------------------------------------------
 // Display strings
@@ -213,21 +213,6 @@ function rareClusterOccupancy(
 // ---------------------------------------------------------------------------
 // Weather summary
 // ---------------------------------------------------------------------------
-
-/** Look up the biome for a cell, if a populated island sits in/near it.
- *  Same logic as the (private) `biomeForCell` in `weather-overlay.ts`. */
-function biomeForCell(
-  world: Pick<WorldState, 'islands'>,
-  cellX: number,
-  cellY: number,
-): IslandSpec['biome'] | undefined {
-  for (const isl of world.islands) {
-    const icx = Math.floor(isl.cx / CELL_SIZE_TILES);
-    const icy = Math.floor(isl.cy / CELL_SIZE_TILES);
-    if (icx === cellX && icy === cellY) return isl.biome;
-  }
-  return undefined;
-}
 
 /** Format a millisecond duration as "~Nh" / "~NNm" / "~Ns". Used in the
  *  forecast line. Negative or zero falls through as "now". */
@@ -426,6 +411,14 @@ function renderInfoHtml(info: HoverInfo): string {
       if (info.building) lines.push(`<div class="ri-hover-sub">${escapeHtml(info.building)}</div>`);
       break;
     }
+    default: {
+      // Exhaustive: every `HoverInfo.kind` must be handled above. Adding a
+      // 6th kind without updating this switch will fail the `: never` cast
+      // at compile time.
+      const _exhaustive: never = info;
+      void _exhaustive;
+      return '';
+    }
   }
   if (info.weather) {
     lines.push(`<div class="ri-hover-weather">${escapeHtml(info.weather.state)}</div>`);
@@ -450,8 +443,10 @@ export function mountHoverTooltip(parentEl: HTMLElement): HoverTooltipHandle {
   tip.style.cssText = [
     'position: fixed',
     'pointer-events: none',
-    // z-index below modal pickers (cargo-label, anchor-picker live above).
-    'z-index: 900',
+    // z-index below the modal scrim (ui.css `.ri-modal-scrim` is z-index: 60),
+    // so opening inventory / construction / cargo-label / anchor-picker hides
+    // the hover tooltip naturally instead of letting it ghost over the modal.
+    'z-index: 50',
     'background: var(--ri-panel-solid, rgba(8, 14, 22, 0.96))',
     'border: 1px solid var(--ri-border-strong, rgba(125, 211, 232, 0.35))',
     'color: var(--ri-fg-1, #d8e6f0)',
@@ -478,6 +473,14 @@ export function mountHoverTooltip(parentEl: HTMLElement): HoverTooltipHandle {
 
   let lastKey: string | null = null;
   let lastHtml = '';
+  // Single-entry per-second cache. `cellInfoForHover` does a flood-fill plus
+  // 2× `weather()` samples per call — on a held cursor at 60 fps that's ~72k
+  // ops/sec for the same cell. Keying on (cellKey, floor(nowMs/1000)) means
+  // cache misses on cell change AND on second boundary, so weather forecasts
+  // still tick. Single entry is fine — cursor sits over one cell at a time.
+  let cachedKey: string | null = null;
+  let cachedSecond = -1;
+  let cachedInfo: HoverInfo | null = null;
 
   function setHover(
     world: HoverWorld,
@@ -490,7 +493,16 @@ export function mountHoverTooltip(parentEl: HTMLElement): HoverTooltipHandle {
       hide();
       return;
     }
-    const info = cellInfoForHover(world, cellKey, nowMs);
+    const second = Math.floor(nowMs / 1000);
+    let info: HoverInfo;
+    if (cachedKey === cellKey && cachedSecond === second && cachedInfo !== null) {
+      info = cachedInfo;
+    } else {
+      info = cellInfoForHover(world, cellKey, nowMs);
+      cachedKey = cellKey;
+      cachedSecond = second;
+      cachedInfo = info;
+    }
     // Re-render only on cell-change OR weather-change. The cell key is
     // a cheap identity; weather state moves slowly. We rebuild HTML when
     // the cell key changes or every call (HTML diff is cheap); position
@@ -507,9 +519,14 @@ export function mountHoverTooltip(parentEl: HTMLElement): HoverTooltipHandle {
         tip.innerHTML = html;
       }
     }
-    // Offset so the cursor doesn't sit on top of the tooltip.
+    // Offset so the cursor doesn't sit on top of the tooltip. The +60 on Y
+    // stacks this tooltip BELOW the existing terrain-tooltip (in
+    // `terrain-tooltip.ts`, which anchors at `(cursor+14, cursor+14)` with
+    // ~50 px of body height) so the two surfaces — terrain consumers vs.
+    // terrain + building + weather — don't overlap on land cells. A future
+    // pass should merge them into one panel.
     tip.style.left = `${screenX + 14}px`;
-    tip.style.top = `${screenY + 14}px`;
+    tip.style.top = `${screenY + 14 + 60}px`;
     tip.style.display = '';
   }
 
@@ -518,6 +535,9 @@ export function mountHoverTooltip(parentEl: HTMLElement): HoverTooltipHandle {
       tip.style.display = 'none';
       lastKey = null;
       lastHtml = '';
+      cachedKey = null;
+      cachedSecond = -1;
+      cachedInfo = null;
     }
   }
 
