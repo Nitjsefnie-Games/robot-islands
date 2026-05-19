@@ -41,11 +41,12 @@ import { TILE_PX } from './island.js';
 import { visibleCellsFromVision } from './vision-source.js';
 import {
   WEATHER_FORECAST_LOOKAHEAD_MS,
+  biomeForCell,
   weather,
   type WeatherState,
   type WeatherVisionSources,
 } from './weather.js';
-import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
+import { CELL_SIZE_TILES, type WorldState } from './world.js';
 
 /** Cell-size in world pixels — matches the convention in ocean.ts. */
 const CELL_PX = CELL_SIZE_TILES * TILE_PX;
@@ -79,29 +80,6 @@ function getCellTexture(): Texture {
   ctx.fillRect(0, 0, 1, 1);
   cellTexture = Texture.from(canvas);
   return cellTexture;
-}
-
-function tileToCellInt(t: number): number {
-  return Math.floor(t / CELL_SIZE_TILES);
-}
-
-/** Look up the biome for a cell, if a populated island sits in/near it.
- *  When no island matches, weather samples with the default Plains
- *  baseline (the `weather()` fn's `biome === undefined` branch). */
-function biomeForCell(
-  world: WorldState,
-  cellX: number,
-  cellY: number,
-): IslandSpec['biome'] | undefined {
-  // Match the island whose center cell IS this cell (exact projection).
-  // Adjacent cells share Plains baseline for simplicity — biome modulation
-  // is a soft hint, not a strict per-cell partition.
-  for (const isl of world.islands) {
-    if (tileToCellInt(isl.cx) === cellX && tileToCellInt(isl.cy) === cellY) {
-      return isl.biome;
-    }
-  }
-  return undefined;
 }
 
 /** Alpha multiplier applied to forecast-layer sprites so the +1-cycle

@@ -1,3 +1,4 @@
+import { CELL_SIZE_TILES } from './constants.js';
 import { dayPhaseName } from './daynight.js';
 import { makeSeededRng } from './rng.js';
 import type { VisionSource } from './vision-source.js';
@@ -197,6 +198,24 @@ const FORECAST_DEF_IDS: ReadonlySet<string> = new Set(['advanced_weather_station
  *  arithmetic midpoint (~2 h) so the forecast lands one typical dwell
  *  ahead of `nowMs`. */
 export const WEATHER_FORECAST_LOOKAHEAD_MS = 2 * 60 * 60 * 1000;
+
+/** Look up the biome for a cell, if a populated-or-not island's centre lies
+ *  exactly in that cell. When no island matches, `weather()` falls back to
+ *  the Plains baseline (the `biome === undefined` branch). Used by both the
+ *  visual overlay (`weather-overlay.ts`) and the hover-tooltip readout
+ *  (`hover-tooltip.ts`) — same logic, single source of truth. Pure. */
+export function biomeForCell(
+  world: Pick<WorldState, 'islands'>,
+  cellX: number,
+  cellY: number,
+): IslandSpec['biome'] | undefined {
+  for (const isl of world.islands) {
+    if (Math.floor(isl.cx / CELL_SIZE_TILES) === cellX && Math.floor(isl.cy / CELL_SIZE_TILES) === cellY) {
+      return isl.biome;
+    }
+  }
+  return undefined;
+}
 
 /** Sum of station bonuses on an island, in tiles. Walks the spec's
  *  building array and uses `WEATHER_STATION_RANGE_BONUS_TILES`. Pure. */
