@@ -47,6 +47,7 @@ import type { TerrainKind } from './island.js';
 
 const MINE: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
 const WORKSHOP: PlacedBuilding = { id: 'b-workshop', defId: 'workshop', x: 0, y: 0 };
+const LUBRICANT_REFINERY: PlacedBuilding = { id: 'b-lube', defId: 'lubricant_refinery', x: 0, y: 0 };
 
 /** Test catalog where Mine and Workshop have NO power fields so the
  *  power-free test paths exercise the "no consumers" branch in
@@ -62,6 +63,7 @@ function powerFreeCatalog(): DefCatalog {
   };
   strip('mine');
   strip('workshop');
+  strip('lubricant_refinery');
   return base;
 }
 const POWER_FREE: DefCatalog = powerFreeCatalog();
@@ -190,6 +192,43 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.inventory.coal).toBe(50); // not eaten
     expect(state.inventory.bolt).toBe(0); // none produced
+  });
+});
+
+describe('tutorial production flags (lubricantProduced / boltProduced)', () => {
+  it('flips boltProduced once a Workshop produces bolts', () => {
+    const state = makeState({
+      buildings: [MINE, WORKSHOP],
+      inventory: { ...blankInventory(), coal: 50 },
+    });
+    expect(state.boltProduced).toBeFalsy();
+    advanceIsland(state, 100_000, { defs: POWER_FREE });
+    expect(state.inventory.bolt).toBeGreaterThan(0);
+    expect(state.boltProduced).toBe(true);
+  });
+
+  it('flips lubricantProduced once a Lubricant Refinery produces lubricant', () => {
+    // Lubricant Refinery is tier 2 — the §9.7 runtime tier gate zeroes its
+    // rate below a T2 island, so the island must be level 5+ (T2).
+    const state = makeState({
+      level: 5,
+      buildings: [LUBRICANT_REFINERY],
+      inventory: { ...blankInventory(), crude_oil: 50, chlorine: 50 },
+    });
+    expect(state.lubricantProduced).toBeFalsy();
+    advanceIsland(state, 1_000_000, { defs: POWER_FREE });
+    expect(state.inventory.lubricant).toBeGreaterThan(0);
+    expect(state.lubricantProduced).toBe(true);
+  });
+
+  it('leaves boltProduced false when no bolt is produced', () => {
+    // Mine alone produces iron_ore, never bolt.
+    const state = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+    });
+    advanceIsland(state, 100_000, { defs: POWER_FREE });
+    expect(state.boltProduced).toBeFalsy();
   });
 });
 

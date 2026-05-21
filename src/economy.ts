@@ -253,6 +253,19 @@ export interface IslandState {
    *  the second half of the gate (chicken-and-egg per §14.1) — see
    *  `buildingUnlocked`. */
   ascendantCoreCrafted: boolean;
+  /** Tutorial progress flag — `true` once this island has ever produced
+   *  lubricant. Drives the `produce_lubricant` objective. The inventory
+   *  level can't be used: §4.7 maintenance auto-consumes lubricant the
+   *  moment a building needs it, so a stockpile check is unwinnable. The
+   *  flag auto-flips on first lubricant production in `advanceIsland`'s
+   *  integrator. Optional for forward-compat — a legacy save lacking it
+   *  reads as falsy and re-arms on the next production tick. */
+  lubricantProduced?: boolean;
+  /** Tutorial progress flag — `true` once this island has ever produced
+   *  bolts. Drives the `produce_bolts` objective. Same rationale as
+   *  `lubricantProduced`: T1 maintenance auto-consumes 5 bolts, so a
+   *  stockpile check is unwinnable. Auto-flips in the integrator. */
+  boltProduced?: boolean;
   /** Wall-clock timestamp (`performance.now()` domain, matching `lastTick`
    *  and `declaredAt`) of the last §9.7 Tier Reset on this island, or null
    *  if the island has never been reset. Drives the 24-hour cooldown gate
@@ -1527,6 +1540,15 @@ export function advanceIsland(
     }
     if (!state.ascendantCoreCrafted && (production.ascendant_core ?? 0) > 0) {
       state.ascendantCoreCrafted = true;
+    }
+    // Tutorial-objective flip: first local production of lubricant / bolts.
+    // Tracked as "ever produced" because §4.7 maintenance auto-consumes
+    // both, making an inventory-stockpile objective unwinnable.
+    if (!state.lubricantProduced && (production.lubricant ?? 0) > 0) {
+      state.lubricantProduced = true;
+    }
+    if (!state.boltProduced && (production.bolt ?? 0) > 0) {
+      state.boltProduced = true;
     }
     // §13.3 Singularity Battery — bound segment to battery depletion/fill so the
     // piecewise integrator stays exact (rates are constant within a segment).

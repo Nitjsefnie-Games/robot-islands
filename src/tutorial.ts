@@ -100,14 +100,19 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
     check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'lubricant_refinery')),
   },
   produce_lubricant: {
-    title: 'Stockpile Lubricant',
-    hint: 'Wait for your Lubricant Refinery to produce 3+ lubricant — enough for one T1 maintenance cycle (2 lubricant + 5 bolts).',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.lubricant ?? 0) >= 3),
+    title: 'Produce Lubricant',
+    // "Produce", not "stockpile": §4.7 maintenance auto-consumes lubricant
+    // the instant a building needs it, so an inventory threshold is
+    // unwinnable. `lubricantProduced` flips on first production instead.
+    hint: 'Wait for your Lubricant Refinery to start producing lubricant — the base ingredient at every maintenance tier (§4.7).',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.lubricantProduced === true),
   },
   produce_bolts: {
-    title: 'Stockpile Bolts',
-    hint: 'Your Workshop produces bolts (1 iron_ore + 1 coal → 1 bolt). Stockpile 5+ bolts — the second half of the T1 maintenance recipe.',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => (s.inventory.bolt ?? 0) >= 5),
+    title: 'Produce Bolts',
+    // Same auto-consumption reason as `produce_lubricant`: T1 maintenance
+    // eats 5 bolts, so track first production via `boltProduced`.
+    hint: 'Wait for your Workshop to start producing bolts (1 iron_ore + 1 coal → 1 bolt) — the second half of the T1 maintenance recipe.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.boltProduced === true),
   },
   maintain_first_building: {
     title: 'First Maintenance Cycle',
