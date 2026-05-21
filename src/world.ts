@@ -1061,6 +1061,10 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     // Auto-flips to true on first `ascendant_core` production via the §13
     // auto-flip block in `economy.ts:advanceIsland`.
     ascendantCoreCrafted: false,
+    // Tutorial-objective flags — a fresh island has produced neither
+    // lubricant nor bolts. Auto-flip on first production in `advanceIsland`.
+    lubricantProduced: false,
+    boltProduced: false,
     // §9.7 Tier Reset cooldown anchor. Null on a fresh island — the player
     // hasn't ever paid for a reset yet, so the 24h block doesn't apply.
     lastResetAt: null,

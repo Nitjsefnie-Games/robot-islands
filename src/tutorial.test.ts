@@ -176,6 +176,45 @@ describe('checkObjectives', () => {
     expect(state.completed.has('dispatch_first_drone')).toBe(true);
   });
 
+  it('produce_lubricant completes via lubricantProduced flag, not inventory', () => {
+    // The flag, not an inventory threshold: §4.7 maintenance auto-consumes
+    // lubricant, so a stockpile check would be unwinnable.
+    const base = new Set<ObjectiveId>([
+      'place_solar', 'place_logger', 'place_quarry', 'place_mine', 'place_workshop',
+      'reach_level_5', 'build_dronepad', 'build_biofuel_plant', 'produce_biofuel',
+      'dispatch_first_drone', 'build_lubricant_refinery',
+    ]);
+    const state: TutorialState = { completed: new Set(base), current: 'produce_lubricant' };
+    // Empty inventory — only the flag is set.
+    const world = makeWorld({
+      islandStates: new Map([['home', makeIslandState({ lubricantProduced: true })]]),
+    });
+    const newly = checkObjectives(state, world);
+    expect(newly).toContain('produce_lubricant');
+    expect(state.completed.has('produce_lubricant')).toBe(true);
+  });
+
+  it('produce_lubricant stays incomplete with lubricant in inventory but flag unset', () => {
+    const state: TutorialState = { completed: new Set(), current: 'produce_lubricant' };
+    const world = makeWorld({
+      islandStates: new Map([['home', makeIslandState({
+        inventory: { lubricant: 999 } as Record<string, number>,
+      })]]),
+    });
+    const newly = checkObjectives(state, world);
+    expect(newly).not.toContain('produce_lubricant');
+  });
+
+  it('produce_bolts completes via boltProduced flag', () => {
+    const state: TutorialState = { completed: new Set(), current: 'produce_bolts' };
+    const world = makeWorld({
+      islandStates: new Map([['home', makeIslandState({ boltProduced: true })]]),
+    });
+    const newly = checkObjectives(state, world);
+    expect(newly).toContain('produce_bolts');
+    expect(state.completed.has('produce_bolts')).toBe(true);
+  });
+
   it('does not re-report already-completed objectives', () => {
     const state: TutorialState = { completed: new Set(['place_solar']), current: 'place_mine' };
     const world = makeWorld({
