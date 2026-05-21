@@ -11,9 +11,12 @@ import {
   RESOURCE_CATEGORY,
   RESOURCE_FILTER_LABEL,
   RESOURCE_FILTER_ORDER,
+  averageRate,
   inventoryRowVisible,
+  pruneRateBuffer,
+  type RateSample,
 } from './inventory-ui.js';
-import { ALL_RESOURCES } from './recipes.js';
+import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 
 describe('RESOURCE_CATEGORY', () => {
   it('covers every ResourceId', () => {
@@ -112,5 +115,98 @@ describe('inventoryRowVisible — "show empty" toggle', () => {
     expect(inventoryRowVisible('wood', 5, 'all', 'iron', false)).toBe(false);
     // showEmpty doesn't override a search miss
     expect(inventoryRowVisible('wood', 0, 'all', 'iron', true)).toBe(false);
+  });
+});
+
+describe('averageRate', () => {
+  const mkInv = (
+    over: Partial<Record<ResourceId, number>>,
+  ): Record<ResourceId, number> => {
+    const base = {} as Record<ResourceId, number>;
+    for (const r of ALL_RESOURCES) base[r] = 0;
+    return { ...base, ...over };
+  };
+
+  it('returns an empty record for fewer than 2 samples', () => {
+    expect(averageRate([])).toEqual({});
+    expect(averageRate([{ t: 1000, inv: mkInv({ iron_ore: 5 }) }])).toEqual({});
+  });
+
+  it('returns an empty record when the span is under 250ms', () => {
+    const buffer: RateSample[] = [
+      { t: 1000, inv: mkInv({ iron_ore: 0 }) },
+      { t: 1100, inv: mkInv({ iron_ore: 10 }) },
+    ];
+    expect(averageRate(buffer)).toEqual({});
+  });
+
+  it('computes a partial-window average over 1s of history', () => {
+    const buffer: RateSample[] = [
+      { t: 1000, inv: mkInv({ iron_ore: 0 }) },
+      { t: 2000, inv: mkInv({ iron_ore: 10 }) },
+    ];
+    expect(averageRate(buffer).iron_ore).toBeCloseTo(10, 9);
+  });
+
+  it('uses only the oldest and newest samples across the window', () => {
+    const buffer: RateSample[] = [
+      { t: 0, inv: mkInv({ iron_ore: 0 }) },
+      { t: 2500, inv: mkInv({ iron_ore: 999 }) }, // midpoint must be ignored
+      { t: 5000, inv: mkInv({ iron_ore: 50 }) },
+    ];
+    expect(averageRate(buffer).iron_ore).toBeCloseTo(10, 9);
+  });
+
+  it('reads 0 for a cap-pinned resource (no stock movement)', () => {
+    const buffer: RateSample[] = [
+      { t: 0, inv: mkInv({ iron_ore: 100 }) },
+      { t: 5000, inv: mkInv({ iron_ore: 100 }) },
+    ];
+    expect(averageRate(buffer).iron_ore).toBe(0);
+  });
+
+  it('computes a negative rate for a draining resource', () => {
+    const buffer: RateSample[] = [
+      { t: 0, inv: mkInv({ coal: 50 }) },
+      { t: 2000, inv: mkInv({ coal: 10 }) },
+    ];
+    expect(averageRate(buffer).coal).toBeCloseTo(-20, 9);
+  });
+});
+
+describe('pruneRateBuffer', () => {
+  const inv = {} as Record<ResourceId, number>; // values irrelevant to pruning
+
+  it('keeps the whole buffer when it spans under 5s', () => {
+    const buffer: RateSample[] = [
+      { t: 1000, inv },
+      { t: 3000, inv },
+      { t: 5000, inv },
+    ];
+    pruneRateBuffer(buffer, 5000);
+    expect(buffer.map((s) => s.t)).toEqual([1000, 3000, 5000]);
+  });
+
+  it('drops samples older than 5s but keeps one past the window edge', () => {
+    // now = 9000 → cutoff = 4000. t=0 and t=1000 are both older than the
+    // cutoff; t=1000 is retained as the single sample past the edge so the
+    // window still spans a full 5s.
+    const buffer: RateSample[] = [
+      { t: 0, inv },
+      { t: 1000, inv },
+      { t: 4000, inv },
+      { t: 9000, inv },
+    ];
+    pruneRateBuffer(buffer, 9000);
+    expect(buffer.map((s) => s.t)).toEqual([1000, 4000, 9000]);
+  });
+
+  it('never prunes below 2 samples', () => {
+    const buffer: RateSample[] = [
+      { t: 0, inv },
+      { t: 100, inv },
+    ];
+    pruneRateBuffer(buffer, 1_000_000);
+    expect(buffer.length).toBe(2);
   });
 });
