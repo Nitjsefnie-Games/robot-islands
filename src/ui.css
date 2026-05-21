@@ -298,6 +298,10 @@ canvas { display: block; }
 
 .ri-table {
   width: 100%;
+  /* Fixed layout: column widths come from the rules below, NOT from cell
+     content. Without this the columns rebalance every frame as the live
+     numbers change width — the whole grid visibly shimmies. */
+  table-layout: fixed;
   border-collapse: collapse;
   font-family: var(--ri-font-mono);
   font-size: 11.5px;
@@ -307,7 +311,17 @@ canvas { display: block; }
   padding: 4px 8px;
   text-align: left;
   border-bottom: 1px solid var(--ri-rule);
+  /* Clip rather than wrap, so an over-long value can't change row height. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.ri-table th:nth-child(1) { width: 30%; }  /* Resource */
+.ri-table th:nth-child(2) { width: 10%; }  /* Stock */
+.ri-table th:nth-child(3) { width: 9%; }   /* Cap */
+.ri-table th:nth-child(4) { width: 11%; }  /* Fill */
+.ri-table th:nth-child(5) { width: 16%; }  /* Net /s */
+.ri-table th:nth-child(6) { width: 24%; }  /* Time to */
 .ri-table thead th {
   position: sticky; top: 0;
   background: var(--ri-panel-solid);
