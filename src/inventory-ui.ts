@@ -17,7 +17,7 @@ import { mountModal } from './ui-modal.js';
 // ---------------------------------------------------------------------------
 
 /** Rolling-average window for the inventory rate display, in milliseconds. */
-export const RATE_WINDOW_MS = 5000;
+export const RATE_WINDOW_MS = 60000;
 
 /** Minimum sample span before a rate is reported. Below this, `averageRate`
  *  returns an empty record (rendered as `·`) — avoids a divide-by-near-zero
@@ -538,7 +538,7 @@ export function mountInventoryUi(
 
       const thead = document.createElement('thead');
       const headerRow = document.createElement('tr');
-      const headers = ['Resource', 'Stock', 'Cap', 'Fill', 'Net /s (5s avg)', 'Time to ⤓/⤒'];
+      const headers = ['Resource', 'Stock', 'Cap', 'Fill', 'Net /s (60s avg)', 'Time to ⤓/⤒'];
       for (const h of headers) {
         const th = document.createElement('th');
         th.textContent = h;
@@ -647,7 +647,10 @@ export function mountInventoryUi(
       const have = inv(state, r);
       if (!rowVisible(r, have)) continue;
       const capVal = cap(state, r);
-      const rate = avgRate[r] ?? 0;
+      // Quantize to the 2-decimal display precision: rows showing the same
+      // text get the same sort key, so sub-precision jitter near zero can't
+      // flip a row's sign and teleport it across the sorted table.
+      const rate = Math.round((avgRate[r] ?? 0) * 100) / 100;
       const pct = capVal > 0 ? (have / capVal) * 100 : 0;
       rows.push({ r, have, capVal, rate, pct });
     }
