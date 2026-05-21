@@ -1922,8 +1922,9 @@ async function main(): Promise<void> {
     skillTree.refresh();
     buildingsUi.refresh();
     // Inventory panel — cheap when hidden (early-returns in refresh()).
-    // Reads the active state through deps + the live `net` snapshot.
-    inventoryUi.refresh(activeS, net);
+    // Samples the active island's inventory through deps for its rolling
+    // 5s-average rate display.
+    inventoryUi.refresh();
     dronesUi.refresh(now);
     routesUi.refresh(now);
     settlementUi.refresh(now);

@@ -75,6 +75,14 @@ export function pruneRateBuffer(buffer: RateSample[], now: number): void {
   }
 }
 
+/** Copy an island's inventory into a plain record — one snapshot for the
+ *  rate buffer. Not exported: trivial and only used by the panel. */
+function snapshotInventory(state: IslandState): Record<ResourceId, number> {
+  const snap = {} as Record<ResourceId, number>;
+  for (const r of ALL_RESOURCES) snap[r] = inv(state, r);
+  return snap;
+}
+
 /**
  * Resource filter categories surfaced in the panel. These are PRIMARILY for
  * UI grouping — they aren't strictly the §6.x catalog tiers (Raw=T0,
@@ -410,8 +418,9 @@ const toDisplayName = (id: string): string =>
 
 export interface InventoryUi {
   readonly el: HTMLDivElement;
-  /** Apply the current state to all visible rows. Cheap when hidden. */
-  refresh(state: IslandState, net: Record<ResourceId, number>): void;
+  /** Sample the active island's inventory and repaint visible rows.
+   *  Cheap when hidden (early-returns). */
+  refresh(): void;
   show(): void;
   hide(): void;
   toggle(): boolean;
@@ -442,7 +451,8 @@ export function mountInventoryUi(
   const filterChipRefs = new Map<ResourceFilter, HTMLButtonElement>();
   const sortChipRefs = new Map<SortMode, HTMLButtonElement>();
 
-  let lastNet: Record<ResourceId, number> = {} as Record<ResourceId, number>;
+  const rateBuffer: RateSample[] = [];
+  let lastIslandId: string | null = null;
   let tbody: HTMLTableSectionElement | null = null;
 
   const handle = mountModal(parentEl, {
@@ -528,7 +538,7 @@ export function mountInventoryUi(
 
       const thead = document.createElement('thead');
       const headerRow = document.createElement('tr');
-      const headers = ['Resource', 'Stock', 'Cap', 'Fill', 'Net /s', 'Time to ⤓/⤒'];
+      const headers = ['Resource', 'Stock', 'Cap', 'Fill', 'Net /s (5s avg)', 'Time to ⤓/⤒'];
       for (const h of headers) {
         const th = document.createElement('th');
         th.textContent = h;
@@ -622,7 +632,7 @@ export function mountInventoryUi(
 
   function paintRows(): void {
     const state = getState();
-    const net = lastNet;
+    const avgRate = averageRate(rateBuffer);
     if (!tbody) return;
 
     const rows: Array<{
@@ -637,7 +647,7 @@ export function mountInventoryUi(
       const have = inv(state, r);
       if (!rowVisible(r, have)) continue;
       const capVal = cap(state, r);
-      const rate = net[r] ?? 0;
+      const rate = avgRate[r] ?? 0;
       const pct = capVal > 0 ? (have / capVal) * 100 : 0;
       rows.push({ r, have, capVal, rate, pct });
     }
@@ -736,16 +746,23 @@ export function mountInventoryUi(
     }
   }
 
-  function refresh(state: IslandState, net: Record<ResourceId, number>): void {
+  function refresh(): void {
     if (!handle.isVisible()) return;
-    void state;
-    lastNet = net;
+    const state = getState();
+    if (state.id !== lastIslandId) {
+      rateBuffer.length = 0;
+      lastIslandId = state.id;
+    }
+    const now = performance.now();
+    rateBuffer.push({ t: now, inv: snapshotInventory(state) });
+    pruneRateBuffer(rateBuffer, now);
     updateSubtitle();
     paintRows();
   }
 
   function show(): void {
     if (handle.isVisible()) return;
+    rateBuffer.length = 0;
     handle.show();
     updateSubtitle();
     paintFilterChips();
