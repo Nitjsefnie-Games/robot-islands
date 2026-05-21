@@ -129,11 +129,6 @@ export const HELICOPTER_STATS: Record<VehicleTier, VehicleStats> = {
   4: { speed: 1.20, tilesPerFuel: 10, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
 };
 
-/** UI slider bounds for fuel selection. Min covers a short hop (12 tiles
- *  for a ship at min fuel); max covers any in-world target. */
-export const MIN_FUEL_PER_VEHICLE = 5;
-export const MAX_FUEL_PER_VEHICLE = 100;
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

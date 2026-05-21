@@ -9,9 +9,9 @@
 // Structure (bottom-up, mirroring drones-ui):
 //   - Palette + DOM helpers reused from drones-ui / routes-ui
 //   - Header stamp `SETTLE OPS / SCV-01`
-//   - Stat block (KIND / FUEL / KITS / ETA)
+//   - Stat block (TIER / DIST / FUEL / ETA) — FUEL is auto-computed
 //   - Origin/Target selectors + kind toggle (ship / heli)
-//   - Fuel + kit count sliders
+//   - Foundation-kit count slider (fuel needs no slider — auto-sized)
 //   - Arm-settle button (toggles canvas reticle)
 //   - Active vehicles ledger (in-flight ship/heli with countdown)
 //   - Renderable Container for in-flight vehicle dots
@@ -19,7 +19,8 @@
 //
 // Dispatch flow:
 //   1. Player selects origin (must have Shipyard/Helipad), target
-//      (discovered, unpopulated), kind, fuel, kit count.
+//      (discovered, unpopulated), kind, kit count. Fuel is auto-sized to
+//      the exact one-way trip cost — no player input.
 //   2. Player clicks ARM SETTLE → reticle armed.
 //   3. Player clicks on the map within the target island's footprint.
 //   4. On click, the nearest discovered+unpopulated island within click
@@ -34,8 +35,6 @@ import { inv } from './economy.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
 import {
-  MAX_FUEL_PER_VEHICLE,
-  MIN_FUEL_PER_VEHICLE,
   dispatchVehicle,
   tuningFor,
   vehicleCurrentPosition,
@@ -101,6 +100,21 @@ export interface SettlementUiDeps {
 // island. Generous: any click within ~one ellipse radius commits.
 const CLICK_TOLERANCE_TILES = 16;
 
+/** Exact one-way fuel cost to send a vehicle from `origin` to `target`.
+ *  Settlement fuel is auto-sized to the trip (mirroring the drone UI) — there
+ *  is no upside to over-loading, so the player never picks an amount. */
+function computeFuel(
+  origin: IslandSpec,
+  target: IslandSpec,
+  tilesPerFuel: number,
+): number {
+  if (tilesPerFuel <= 0) return 0;
+  const dx = origin.cx - target.cx;
+  const dy = origin.cy - target.cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  return Math.max(1, Math.ceil(dist / tilesPerFuel));
+}
+
 // ---------------------------------------------------------------------------
 // Mount
 // ---------------------------------------------------------------------------
@@ -108,7 +122,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   let visible = false;
   let launchMode = false;
   let kind: VehicleKind = 'ship';
-  let fuelLoaded = 20;
+  let fuelLoaded = 0; // auto-computed from origin→target distance in refresh()
   let kitCount = 1;
   let originId: string | null = null;
   let targetId: string | null = null;
@@ -346,53 +360,21 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   }
   const tierStat = statRow('TIER');
   const distStat = statRow('DIST');
-  const rangeStat = statRow('RANGE');
+  const fuelStat = statRow('FUEL');
   const etaStat = statRow('ETA');
   tierStat.valueEl.style.color = 'var(--ri-accent)';
+  fuelStat.valueEl.style.color = 'var(--ri-warn)';
   statBlock.appendChild(tierStat.row);
   statBlock.appendChild(distStat.row);
-  statBlock.appendChild(rangeStat.row);
+  statBlock.appendChild(fuelStat.row);
   statBlock.appendChild(etaStat.row);
   body.appendChild(statBlock);
 
-  // ---- Fuel slider --------------------------------------------------------
-  const fuelWrap = document.createElement('div');
-  styled(fuelWrap, 'display: flex; flex-direction: column; gap: 4px');
-  const fuelHead = document.createElement('div');
-  styled(fuelHead, 'display: flex; justify-content: space-between; align-items: baseline');
-  const fuelHeadL = document.createElement('span');
-  fuelHeadL.textContent = 'FUEL LOAD';
-  styled(
-    fuelHeadL,
-    [`color: ${'var(--ri-fg-3)'}`, 'font-size: 9.5px', 'letter-spacing: 0.12em'].join(';'),
-  );
-  const fuelHeadR = document.createElement('span');
-  styled(fuelHeadR, `color: ${'var(--ri-warn)'}; font-size: 11px; font-weight: 600`);
-  fuelHead.appendChild(fuelHeadL);
-  fuelHead.appendChild(fuelHeadR);
-  const fuelSlider = document.createElement('input');
-  fuelSlider.type = 'range';
-  fuelSlider.min = String(MIN_FUEL_PER_VEHICLE);
-  fuelSlider.max = String(MAX_FUEL_PER_VEHICLE);
-  fuelSlider.step = '5';
-  fuelSlider.value = String(fuelLoaded);
-  styled(
-    fuelSlider,
-    [
-      'width: 100%',
-      'height: 18px',
-      'background: transparent',
-      'cursor: pointer',
-      'accent-color: var(--ri-accent)',
-    ].join(';'),
-  );
-  fuelSlider.addEventListener('input', () => {
-    fuelLoaded = Number(fuelSlider.value);
-    refresh(performance.now());
-  });
-  fuelWrap.appendChild(fuelHead);
-  fuelWrap.appendChild(fuelSlider);
-  body.appendChild(fuelWrap);
+  // ---- Fuel — auto-computed, no slider ------------------------------------
+  // Fuel load is the exact one-way trip cost (see `computeFuel` / refresh),
+  // surfaced read-only in the FUEL stat above. This mirrors the drone UI,
+  // which likewise derives fuel from the chosen destination rather than
+  // asking the player to pick an amount.
 
   // ---- Kit count slider ---------------------------------------------------
   const kitWrap = document.createElement('div');
@@ -755,7 +737,6 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     // refresh — the option count is small.
     rebuildSelectors();
 
-    fuelHeadR.textContent = `${fuelLoaded} u`;
     kitHeadR.textContent = `${kitCount}`;
     const uiTier: 1 | 2 = kind === 'ship' ? 1 : 2;
     const t = tuningFor(kind, uiTier);
@@ -768,10 +749,11 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       const dy = originSpec.cy - targetSpec.cy;
       dist = Math.sqrt(dx * dx + dy * dy);
     }
-    const range = fuelLoaded * t.tilesPerFuel;
+    // Auto-compute fuel: the exact one-way cost to reach the selected target.
+    fuelLoaded = originSpec && targetSpec ? computeFuel(originSpec, targetSpec, t.tilesPerFuel) : 0;
     const eta = t.speed > 0 ? dist / t.speed : 0;
     distStat.valueEl.textContent = targetSpec ? `${dist.toFixed(0)} t` : '— t';
-    rangeStat.valueEl.textContent = `${range.toFixed(0)} t`;
+    fuelStat.valueEl.textContent = targetSpec ? `${fuelLoaded} u` : '— u';
     etaStat.valueEl.textContent = targetSpec ? `${eta.toFixed(0)}s` : '—';
 
     // Validation feedback for the status row + arm button.
@@ -817,13 +799,9 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     if (onhandFuel < fuelLoaded) return `low ${fuelLabel}: ${onhandFuel.toFixed(0)} on hand`;
     const onhandKits = inv(originState, 'foundation_kit');
     if (onhandKits < kitCount) return `low kits: ${onhandKits.toFixed(0)} on hand`;
-    const uiTier: 1 | 2 = kind === 'ship' ? 1 : 2;
-    const t = tuningFor(kind, uiTier);
-    const range = fuelLoaded * t.tilesPerFuel;
-    const dx = originSpec.cx - targetSpec.cx;
-    const dy = originSpec.cy - targetSpec.cy;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > range) return `out of range: ${dist.toFixed(0)} > ${range.toFixed(0)} t`;
+    // Fuel is auto-sized to the exact one-way trip cost (see refresh), so an
+    // out-of-range failure is impossible — the affordability check above is
+    // the only fuel gate.
     // Already-in-flight cap.
     for (const v of deps.world.vehicles) {
       if (v.from === originSpec.id && v.target === targetSpec.id && (v.status === 'active' || v.status === undefined)) {
@@ -953,6 +931,10 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     if (!targetSpec) targetSpec = nearestDiscoveredUnpopulated(worldTileX, worldTileY);
     if (!targetSpec) return { ok: false, reason: 'no target near click' };
     const tier: 1 | 2 = kind === 'ship' ? 1 : 2;
+    // Fuel for the ACTUALLY-resolved target — the click may land on a
+    // different island than the dropdown selection, so compute it here at
+    // click time rather than trusting the refresh()-time preview.
+    const launchFuel = computeFuel(originSpec, targetSpec, tuningFor(kind, tier).tilesPerFuel);
     const r = dispatchVehicle(
       deps.world,
       originSpec,
@@ -960,7 +942,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       targetSpec,
       kind,
       tier,
-      fuelLoaded,
+      launchFuel,
       kitCount,
       nowMs,
     );
