@@ -11,11 +11,9 @@ import {
   RESOURCE_CATEGORY,
   RESOURCE_FILTER_LABEL,
   RESOURCE_FILTER_ORDER,
-  averageRate,
   inventoryRowVisible,
-  pruneRateBuffer,
-  type RateSample,
 } from './inventory-ui.js';
+import { RATE_WINDOW_MS, averageRate, pruneRateBuffer, type RateSample } from './rate-history.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 
 describe('RESOURCE_CATEGORY', () => {
@@ -177,7 +175,7 @@ describe('averageRate', () => {
 describe('pruneRateBuffer', () => {
   const inv = {} as Record<ResourceId, number>; // values irrelevant to pruning
 
-  it('keeps the whole buffer when it spans under 5s', () => {
+  it('keeps the whole buffer when it spans less than the window', () => {
     const buffer: RateSample[] = [
       { t: 1000, inv },
       { t: 3000, inv },
@@ -187,18 +185,19 @@ describe('pruneRateBuffer', () => {
     expect(buffer.map((s) => s.t)).toEqual([1000, 3000, 5000]);
   });
 
-  it('drops samples older than 5s but keeps one past the window edge', () => {
-    // now = 9000 → cutoff = 4000. t=0 and t=1000 are both older than the
-    // cutoff; t=1000 is retained as the single sample past the edge so the
-    // window still spans a full 5s.
+  it('drops samples older than the window but keeps one past the edge', () => {
+    // cutoff = now - RATE_WINDOW_MS = 4000. t=0 and t=1000 are both older
+    // than the cutoff; t=1000 is retained as the single sample past the edge
+    // so the window still spans a full RATE_WINDOW_MS.
+    const now = RATE_WINDOW_MS + 4000;
     const buffer: RateSample[] = [
       { t: 0, inv },
       { t: 1000, inv },
       { t: 4000, inv },
-      { t: 9000, inv },
+      { t: now, inv },
     ];
-    pruneRateBuffer(buffer, 9000);
-    expect(buffer.map((s) => s.t)).toEqual([1000, 4000, 9000]);
+    pruneRateBuffer(buffer, now);
+    expect(buffer.map((s) => s.t)).toEqual([1000, 4000, now]);
   });
 
   it('never prunes below 2 samples', () => {

@@ -12,6 +12,13 @@ import { dayPhase, dayPhaseName, solarMultiplier, type DayPhase } from './daynig
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import { dispatchAction, type InputRegistry } from './input.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
+import {
+  RATE_WINDOW_MS,
+  averageRate,
+  pruneRateBuffer,
+  snapshotInventory,
+  type RateSample,
+} from './rate-history.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';
 import { canTierReset } from './tier-reset.js';
@@ -336,6 +343,10 @@ export function mountIslandBar(
 const SPARK_HISTORY_LEN = 60;
 const sparkHistory: Map<string, number[]> = new Map();
 
+/** Per-island inventory-snapshot buffers feeding the shared 60s rolling
+ *  average — the same figure the inventory panel shows. Keyed by island id. */
+const rateBuffers: Map<string, RateSample[]> = new Map();
+
 function sparkKey(islandId: string, resourceId: ResourceId): string {
   return `${islandId}:${resourceId}`;
 }
@@ -576,8 +587,25 @@ export function mountHud(
       pushSparkSample(state.id, r, net[r] ?? 0);
     }
 
+    // Output-rate values use the shared 60s realized-delta average — the same
+    // figure the inventory panel shows — not the jumpy instantaneous `net`.
+    // Sampled at most every 250ms; a stale buffer (island revisited after a
+    // long gap) is dropped so the average warms up fresh.
+    let rateBuf = rateBuffers.get(state.id);
+    if (!rateBuf) { rateBuf = []; rateBuffers.set(state.id, rateBuf); }
+    const rateNow = performance.now();
+    const lastSample = rateBuf[rateBuf.length - 1];
+    if (lastSample && rateNow - lastSample.t > RATE_WINDOW_MS) rateBuf.length = 0;
+    if (!lastSample || rateNow - lastSample.t >= 250) {
+      rateBuf.push({ t: rateNow, inv: snapshotInventory(state) });
+      pruneRateBuffer(rateBuf, rateNow);
+    }
+    const avgRate = averageRate(rateBuf);
+
     const topRates = ALL_RESOURCES
-      .map((r) => ({ r, rate: net[r] ?? 0 }))
+      // Quantize to 2-decimal display precision so visually-identical rows
+      // share a sort key and don't churn the top-5 on sub-precision jitter.
+      .map((r) => ({ r, rate: Math.round((avgRate[r] ?? 0) * 100) / 100 }))
       .filter((e) => e.rate !== 0)
       .sort((a, b) => Math.abs(b.rate) - Math.abs(a.rate))
       .slice(0, 5);
@@ -603,7 +631,7 @@ export function mountHud(
         v.dataset.tone = rate > 0 ? 'success' : 'danger';
         const sign = rate > 0 ? '+' : '−';
         const absRate = Math.abs(rate);
-        let vText = `${sign}${fmt(absRate)}/s`;
+        let vText = `${sign}${absRate.toFixed(2)}/s`;
         if (rate < 0) {
           const have = inv(state, r);
           if (have > 0) {
