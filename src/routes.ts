@@ -860,6 +860,20 @@ export function createRouteFromBuilding(
   };
 }
 
+/** Soft-delete every route owned by `buildingId` (set on demolish). The
+ *  routes finish their in-flight cargo, then `tickRoutes` prunes them.
+ *  Returns the number of routes newly set to draining. */
+export function drainRoutesForBuilding(world: WorldState, buildingId: string): number {
+  let n = 0;
+  for (const r of world.routes) {
+    if (r.sourceBuildingId === buildingId && r.draining !== true) {
+      r.draining = true;
+      n += 1;
+    }
+  }
+  return n;
+}
+
 /** Pure helper: reorder a priority list by moving the element at `srcIndex`
  *  to `dstIndex`. Returns a new array; the input is not modified. */
 export function reorderPriorityList(list: ReadonlyArray<ResourceId>, srcIndex: number, dstIndex: number): ResourceId[] {
