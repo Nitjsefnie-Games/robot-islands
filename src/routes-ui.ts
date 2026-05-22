@@ -24,13 +24,16 @@ import { mountPanel, Zone } from './ui-zones.js';
 import { TILE_PX } from './island.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
-  nextRouteId,
   reorderPriorityList,
   transitTimeForDistance,
-  T1_CARGO_CAPACITY_UNITS_PER_SEC,
+  routeProfileForBuilding,
+  createRouteFromBuilding,
+  eligibleTransportBuildings,
+  islandHasTeleporterPad,
   type Route,
 } from './routes.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
+import { BUILDING_DEFS } from './building-defs.js';
 
 function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
@@ -292,6 +295,12 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   fromRow.appendChild(labelEl('FROM'));
   fromRow.appendChild(fromSel);
 
+  const buildingRow = document.createElement('div');
+  styled(buildingRow, 'display: flex; flex-direction: column; gap: 2px');
+  const buildingSel = selectStyled();
+  buildingRow.appendChild(labelEl('VIA BUILDING'));
+  buildingRow.appendChild(buildingSel);
+
   const toRow = document.createElement('div');
   styled(toRow, 'display: flex; flex-direction: column; gap: 2px');
   const toSel = selectStyled();
@@ -305,6 +314,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   cargoRow.appendChild(cargoSel);
 
   formWrap.appendChild(fromRow);
+  formWrap.appendChild(buildingRow);
   formWrap.appendChild(toRow);
   formWrap.appendChild(cargoRow);
 
@@ -480,9 +490,42 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       cargoSel.appendChild(o);
     }
     if (prevCargo) cargoSel.value = prevCargo;
+    buildBuildingOptions();
   }
+
+  /** Rebuild the VIA BUILDING select for the currently-selected FROM
+   *  island — transport buildings that don't already own a route. */
+  function buildBuildingOptions(): void {
+    const island = deps.islandSpecs.get(fromSel.value);
+    buildingSel.replaceChildren();
+    const eligible = island
+      ? eligibleTransportBuildings(island, deps.world.routes)
+      : [];
+    if (eligible.length === 0) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = '(no transport building free)';
+      buildingSel.appendChild(o);
+      buildingSel.disabled = true;
+      return;
+    }
+    buildingSel.disabled = false;
+    for (const b of eligible) {
+      const profile = routeProfileForBuilding(b.defId)!;
+      const o = document.createElement('option');
+      o.value = b.id;
+      o.textContent =
+        `${BUILDING_DEFS[b.defId].displayName} · ${profile.type} · ${profile.capacityPerSec} u/s`;
+      buildingSel.appendChild(o);
+    }
+  }
+
   buildOptions();
-  fromSel.addEventListener('change', () => refreshFormReadout());
+  fromSel.addEventListener('change', () => {
+    buildBuildingOptions();
+    refreshFormReadout();
+  });
+  buildingSel.addEventListener('change', () => refreshFormReadout());
   toSel.addEventListener('change', () => refreshFormReadout());
   cargoSel.addEventListener('change', () => refreshFormReadout());
 
@@ -491,18 +534,26 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const toId = toSel.value;
     const spec1 = deps.islandSpecs.get(fromId);
     const spec2 = deps.islandSpecs.get(toId);
-    if (!spec1 || !spec2 || fromId === toId) {
-      formReadout.textContent = fromId === toId ? 'pick distinct endpoints' : '';
+    const building = spec1?.buildings.find((b) => b.id === buildingSel.value) ?? null;
+    const profile = building ? routeProfileForBuilding(building.defId) : null;
+    const reject = (msg: string): void => {
+      formReadout.textContent = msg;
       commitBtn.disabled = true;
       commitBtn.style.opacity = '0.5';
       commitBtn.style.cursor = 'not-allowed';
-      return;
+    };
+    if (!spec1 || !spec2) return reject('');
+    if (fromId === toId) return reject('pick distinct endpoints');
+    if (!building || !profile) return reject('no transport building available');
+    if (profile.type === 'teleporter' && !islandHasTeleporterPad(spec2)) {
+      return reject('teleporter needs a pad on the destination');
     }
     const dx = spec1.cx - spec2.cx;
     const dy = spec1.cy - spec2.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const transit = transitTimeForDistance(dist);
-    formReadout.textContent = `${dist.toFixed(0)} t · ETA ${transit.toFixed(1)}s · ${T1_CARGO_CAPACITY_UNITS_PER_SEC} u/s`;
+    const transit = transitTimeForDistance(dist, profile.speedTilesPerSec);
+    formReadout.textContent =
+      `${dist.toFixed(0)} t · ETA ${transit.toFixed(1)}s · ${profile.capacityPerSec} u/s`;
     commitBtn.disabled = false;
     commitBtn.style.opacity = '1';
     commitBtn.style.cursor = 'pointer';
@@ -516,25 +567,19 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const spec1 = deps.islandSpecs.get(fromId);
     const spec2 = deps.islandSpecs.get(toId);
     if (!spec1 || !spec2 || fromId === toId) return;
+    const building = spec1.buildings.find((b) => b.id === buildingSel.value);
+    if (!building) return;
+    const profile = routeProfileForBuilding(building.defId);
+    if (!profile) return;
+    if (profile.type === 'teleporter' && !islandHasTeleporterPad(spec2)) return;
     const dx = spec1.cx - spec2.cx;
     const dy = spec1.cy - spec2.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    // '__any__' → filter null + empty priority list per §2.4: "resources
-    // not on the priority list are not moved by this route." A fresh
-    // any-route moves nothing until the player adds entries via the
-    // ledger's editor (`renderPriorityEditor` below).
     const isAny = cargoChoice === '__any__';
-    const route: Route = {
-      id: nextRouteId(),
-      from: fromId,
-      to: toId,
-      type: 'cargo',
-      capacityPerSec: T1_CARGO_CAPACITY_UNITS_PER_SEC,
-      filter: isAny ? null : (cargoChoice as ResourceId),
-      priorityList: [],
-      transitTimeSec: transitTimeForDistance(dist),
-      inFlight: [],
-    };
+    const route = createRouteFromBuilding(
+      building, fromId, toId, isAny ? null : (cargoChoice as ResourceId), dist,
+    );
+    if (!route) return;
     deps.world.routes.push(route);
     refresh(performance.now());
   }
