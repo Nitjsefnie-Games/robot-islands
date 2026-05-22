@@ -806,6 +806,11 @@ export function dispatchAttempt(
 /** Compute a T1 cargo route's transit time from straight-line tile distance
  *  between the two island centres. Pure helper; UI uses this when creating
  *  a new route so player sees the ETA before committing. */
+export function transitTimeForDistance(distanceTiles: number, speedTilesPerSec = T1_CARGO_SPEED_TILES_PER_SEC): number {
+  if (speedTilesPerSec <= 0) return 0;
+  return distanceTiles / speedTilesPerSec;
+}
+
 /** Construct a route hosted by `building`. The building's def fixes the
  *  route tier (type, capacity, transit speed); `transitTimeSec` is derived
  *  from `distanceTiles`. Returns null if `building` is not a transport
@@ -832,11 +837,6 @@ export function createRouteFromBuilding(
     inFlight: [],
     sourceBuildingId: building.id,
   };
-}
-
-export function transitTimeForDistance(distanceTiles: number, speedTilesPerSec = T1_CARGO_SPEED_TILES_PER_SEC): number {
-  if (speedTilesPerSec <= 0) return 0;
-  return distanceTiles / speedTilesPerSec;
 }
 
 /** Pure helper: reorder a priority list by moving the element at `srcIndex`
