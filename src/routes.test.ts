@@ -1615,3 +1615,55 @@ describe('dispatch — cargo modes', () => {
     expect(out[0]?.resourceId).toBe('stone');
   });
 });
+
+
+describe('dispatch — all wildcard', () => {
+  it('split mode with wood weight 5 + all weight 1 floor 90% — 5:1:1:1:1:1 when 5 others are above floor', () => {
+    // capacity 1.5 u/s × 2s = 3.0 budget. Source has wood + 5 other resources
+    // each at >= 90% of cap (cap=100, set each to 95). Expected split:
+    // wood 5/10 of 3.0 = 1.5; each of 5 others 1/10 = 0.3.
+    const inv = { ...blankInventory(), wood: 95, stone: 95, coal: 95, iron_ore: 95, copper_ore: 95, sand: 95 };
+    const src = makeState('a', { inventory: inv });
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(), from: 'a', to: 'b', type: 'cargo', capacityPerSec: 1.5,
+      mode: 'split',
+      cargo: [
+        { resourceId: 'wood', weight: 5 },
+        { resourceId: 'all', weight: 1, sourceFloorPct: 90 },
+      ],
+      transitTimeSec: 10, inFlight: [],
+    };
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2);
+    const byRes = Object.fromEntries(out.map((d) => [d.resourceId, d.amount]));
+    expect(byRes.wood).toBeCloseTo(1.5, 6);
+    expect(byRes.stone).toBeCloseTo(0.3, 6);
+    expect(byRes.coal).toBeCloseTo(0.3, 6);
+    expect(byRes.iron_ore).toBeCloseTo(0.3, 6);
+    expect(byRes.copper_ore).toBeCloseTo(0.3, 6);
+    expect(byRes.sand).toBeCloseTo(0.3, 6);
+  });
+
+  it('wildcard skips resources already named explicitly', () => {
+    // wood is explicit AND would be matched by 'all'; it must not appear twice.
+    const src = makeState('a', { inventory: { ...blankInventory(), wood: 100, stone: 100 } });
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(), from: 'a', to: 'b', type: 'cargo', capacityPerSec: 1.0,
+      mode: 'split',
+      cargo: [
+        { resourceId: 'wood', weight: 1 },
+        { resourceId: 'all', weight: 1 },
+      ],
+      transitTimeSec: 10, inFlight: [],
+    };
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2);
+    // wood appears exactly once in the demands (not duplicated by 'all').
+    const woodCount = out.filter((d) => d.resourceId === 'wood').length;
+    expect(woodCount).toBe(1);
+  });
+});
