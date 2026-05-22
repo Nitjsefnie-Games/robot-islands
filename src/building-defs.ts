@@ -1911,7 +1911,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x100040,
     power: { consumes: 3000 },
     // §14 placeholder — tune in Appendix A. 4×4 footprint bumps T5 base.
-    placementCost: { reality_anchor: 100, steel: 200, microchip: 100 },
+    placementCost: { steel: 200, microchip: 100 },
     glyph: '✺',
   },
   // §8.4: Singularity Battery — "effectively infinite electrical power
@@ -2146,7 +2146,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x300040,
     power: { consumes: 5000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { antimatter_propellant: 75, steel: 150, reality_anchor: 75 },
+    placementCost: { steel: 150, reality_anchor: 75 },
     glyph: '✦',
   },
   // §14.3 / §14.10: Scanner Sat Assembly — produces Scanner Sat payloads
@@ -3094,7 +3094,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x202028,
     power: { consumes: 250 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 100, microchip: 50, stone: 20 },
+    placementCost: { steel: 100, stone: 20 },
     glyph: '◈',
   },
   air_separator: {
@@ -3174,7 +3174,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x103040,
     power: { consumes: 600 },
     // §14 placeholder — tune in Appendix A. 4×4 footprint bumps T3 base.
-    placementCost: { steel: 200, microchip: 100, stone: 40 },
+    placementCost: { steel: 200, stone: 40 },
     glyph: '◈',
   },
   // Phase 9 — Task 9.1: Wafer Lab (§7.7). High-purity silicon → wafer.
