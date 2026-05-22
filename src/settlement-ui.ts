@@ -34,6 +34,8 @@ import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
+import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import {
   dispatchVehicle,
   HELICOPTER_STATS,
@@ -77,6 +79,10 @@ export interface SettlementUiHandle {
   /** Container for the arm-settle reticle. Add directly to the stage,
    *  not the world container — screen-space, fixed pixel size. */
   readonly reticleLayer: Container;
+  /** Container for the max-range ring drawn around the active origin when
+   *  launch mode is armed. Add to world (world-tile space so the ring's
+   *  distance reading is correct at any zoom). */
+  readonly rangeRingLayer: Container;
 }
 
 export interface SettlementUiDeps {
@@ -322,16 +328,20 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   });
   body.appendChild(fromRow);
 
-  const toRow = document.createElement('div');
-  styled(toRow, 'display: flex; flex-direction: column; gap: 2px');
-  const toSel = selectStyled();
-  toRow.appendChild(labelEl('TARGET'));
-  toRow.appendChild(toSel);
-  toSel.addEventListener('change', () => {
-    targetId = toSel.value || null;
-    refresh(performance.now());
-  });
-  body.appendChild(toRow);
+  // Prompt shown when no target has been picked via reticle click yet.
+  const targetPrompt = document.createElement('div');
+  styled(
+    targetPrompt,
+    [
+      `color: ${'var(--ri-fg-3)'}`,
+      'font-size: 10px',
+      'letter-spacing: 0.06em',
+      'font-style: italic',
+      'padding: 4px 2px',
+    ].join(';'),
+  );
+  targetPrompt.textContent = 'Arm settle, then click a target island';
+  body.appendChild(targetPrompt);
 
   // ---- Stat block (TIER / RANGE / FUEL / ETA) -----------------------------
   const statBlock = document.createElement('div');
@@ -495,12 +505,15 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       armBtn.style.borderColor = 'var(--ri-warn)';
       armBtn.style.background = 'rgba(245, 167, 66, 0.08)';
       reticleLayer.visible = true;
+      repaintRangeRing();
+      rangeRingLayer.visible = true;
     } else {
       armBtn.textContent = '◇ ARM SETTLE';
       armBtn.style.color = 'var(--ri-fg-1)';
       armBtn.style.borderColor = 'var(--ri-border-strong)';
       armBtn.style.background = 'var(--ri-elev)';
       reticleLayer.visible = false;
+      rangeRingLayer.visible = false;
     }
     deps.onLaunchModeChanged?.(on);
   }
@@ -574,6 +587,52 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     order: 2,
   });
   panelHandle.setVisible(false);
+
+  // ---- Range ring (world space, around launch origin) ---------------------
+  const rangeRingLayer = new Container();
+  rangeRingLayer.label = 'settle-range-ring';
+  rangeRingLayer.visible = false;
+  const rangeRingGfx = new Graphics();
+  rangeRingLayer.addChild(rangeRingGfx);
+
+  function launchBuildingCentre(
+    spec: IslandSpec,
+    kind: VehicleKind,
+  ): { x: number; y: number } | null {
+    const defId = kind === 'ship' ? 'shipyard' : 'helipad';
+    const b = spec.buildings.find((bld) => bld.defId === defId);
+    if (!b) return null;
+    const def = BUILDING_DEFS[defId as BuildingDefId];
+    return {
+      x: spec.cx + b.x + shapeWidth(def.footprint) / 2,
+      y: spec.cy + b.y + shapeHeight(def.footprint) / 2,
+    };
+  }
+
+  function repaintRangeRing(): void {
+    rangeRingGfx.clear();
+    const originSpec = originId ? deps.islandSpecs.get(originId) ?? null : null;
+    if (!originSpec) return;
+    const originState = deps.islandStates.get(originSpec.id);
+    if (!originState) return;
+    const t = tuningFor(kind, selectedTier);
+    const fuelResource = fuelForTier(selectedTier);
+    const onhand = inv(originState, fuelResource);
+    if (onhand <= 0) return;
+    const maxRangeTiles = onhand * t.tilesPerFuel;
+    if (maxRangeTiles <= 0) return;
+    const radiusPx = maxRangeTiles * TILE_PX;
+    const centre = launchBuildingCentre(originSpec, kind);
+    const cx = (centre?.x ?? originSpec.cx) * TILE_PX;
+    const cy = (centre?.y ?? originSpec.cy) * TILE_PX;
+    rangeRingGfx.circle(cx, cy, radiusPx).fill({ color: VISION_BLUE, alpha: 0.05 });
+    rangeRingGfx.circle(cx, cy, radiusPx).stroke({ width: 2, color: VISION_BLUE, alpha: 0.55 });
+    const cross = TILE_PX;
+    rangeRingGfx.moveTo(cx - cross, cy).lineTo(cx + cross, cy)
+      .stroke({ width: 1, color: VISION_BLUE, alpha: 0.5 });
+    rangeRingGfx.moveTo(cx, cy - cross).lineTo(cx, cy + cross)
+      .stroke({ width: 1, color: VISION_BLUE, alpha: 0.5 });
+  }
 
   // ---- In-flight vehicle dots (world space) -------------------------------
   const vehicleLayer = new Container();
@@ -708,16 +767,14 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     return best;
   }
 
-  // ---- Origin/target option building --------------------------------------
+  // ---- Origin selector option building ------------------------------------
   function rebuildSelectors(): void {
     const populated: IslandSpec[] = [];
-    const targets: IslandSpec[] = [];
     for (const s of deps.world.islands) {
       if (s.populated) populated.push(s);
-      else if (s.discovered) targets.push(s);
     }
     // Origin: only populated islands (which have IslandState + can hold
-    // foundation_kit + biofuel inventory).
+    // foundation_kit + fuel inventory).
     const prevFrom = fromSel.value;
     fromSel.replaceChildren();
     for (const isl of populated) {
@@ -737,28 +794,6 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       fromSel.value = populated[0]!.id;
     }
     originId = fromSel.value || null;
-    // Target: discovered + unpopulated.
-    const prevTo = toSel.value;
-    toSel.replaceChildren();
-    if (targets.length === 0) {
-      const o = document.createElement('option');
-      o.value = '';
-      o.textContent = '— no discovered targets —';
-      toSel.appendChild(o);
-    } else {
-      for (const isl of targets) {
-        const o = document.createElement('option');
-        o.value = isl.id;
-        o.textContent = isl.name;
-        toSel.appendChild(o);
-      }
-      if (prevTo && targets.some((s) => s.id === prevTo)) {
-        toSel.value = prevTo;
-      } else {
-        toSel.value = targets[0]!.id;
-      }
-    }
-    targetId = toSel.value || null;
   }
   rebuildSelectors();
 
@@ -807,6 +842,10 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     distStat.valueEl.textContent = targetSpec ? `${dist.toFixed(0)} t` : '— t';
     fuelStat.valueEl.textContent = targetSpec ? `${fuelLoaded} u` : '— u';
     etaStat.valueEl.textContent = targetSpec ? `${eta.toFixed(0)}s` : '—';
+
+    // Show/hide the target prompt and the stat block detail rows.
+    targetPrompt.style.display = targetSpec ? 'none' : 'block';
+    statBlock.style.opacity = targetSpec ? '1' : '0.5';
 
     // Cap kit count to the selected tier's maxKits and update slider.
     const maxKits = kind === 'ship'
@@ -995,6 +1034,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     }
     if (!targetSpec) targetSpec = nearestDiscoveredUnpopulated(worldTileX, worldTileY);
     if (!targetSpec) return { ok: false, reason: 'no target near click' };
+    targetId = targetSpec.id;
     // Fuel for the ACTUALLY-resolved target — the click may land on a
     // different island than the dropdown selection, so compute it here at
     // click time rather than trusting the refresh()-time preview.
@@ -1033,5 +1073,6 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     attemptLaunch,
     vehicleLayer,
     reticleLayer,
+    rangeRingLayer,
   };
 }
