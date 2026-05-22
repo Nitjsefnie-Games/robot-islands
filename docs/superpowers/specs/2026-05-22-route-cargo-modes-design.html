@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Route cargo modes</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --rust:#E08B7F; --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82;
+      --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700);
+      line-height:1.58; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1080px; margin:0 auto; }
+    header.page-head { margin-bottom:40px; max-width:860px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em;
+      text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:37px; line-height:1.14;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .context-box { background:var(--gray-150); border:var(--border); border-radius:var(--radius);
+      padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .context-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:var(--border); border-radius:var(--radius); padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .summary .v.ok { color:var(--olive); }
+    .decision { background:var(--white); border:var(--border); border-left:4px solid var(--clay);
+      border-radius:var(--radius); padding:22px 26px; margin-bottom:56px; }
+    .decision .d-tag { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.07em; color:var(--clay); margin-bottom:8px; }
+    .decision .d-head { font-family:var(--serif); font-size:22px; font-weight:500;
+      color:var(--slate); margin-bottom:10px; letter-spacing:-0.01em; }
+    .decision .d-body { font-size:14.5px; color:var(--gray-700); max-width:790px; }
+    .decision .d-body + .d-body { margin-top:8px; }
+    section { margin-bottom:60px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:760px; margin-bottom:24px; }
+    p.body { font-size:14.5px; max-width:790px; margin-bottom:14px; }
+    p.body strong { color:var(--slate); }
+    code { font-family:var(--mono); font-size:0.88em; background:var(--gray-150);
+      border:1px solid var(--gray-300); border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    .tbl { width:100%; border:var(--border); border-radius:var(--radius);
+      border-collapse:separate; border-spacing:0; overflow:hidden; font-size:13.5px; }
+    .tbl th,.tbl td { text-align:left; padding:11px 16px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.05em; color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl td.slate { color:var(--slate); font-weight:600; }
+    .tbl td code { background:none; border:none; padding:0; }
+    .tbl tbody tr:hover { background:var(--gray-150); }
+    .compare { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @media (max-width:820px){ .compare{grid-template-columns:1fr;} }
+    .compare .col { background:var(--white); border:var(--border); border-radius:var(--radius); overflow:hidden; }
+    .compare .col-head { padding:12px 18px; font-family:var(--mono); font-size:11.5px;
+      text-transform:uppercase; letter-spacing:0.06em; border-bottom:var(--border); }
+    .compare .col.bad .col-head { background:#2E211C; color:var(--rust); }
+    .compare .col.good .col-head { background:#232A1C; color:var(--olive); }
+    .compare .col-body { padding:16px 18px; font-size:13.5px; }
+    .compare .col-body ul { list-style:none; }
+    .compare .col-body li { margin:8px 0; padding-left:20px; position:relative; }
+    .compare .col.bad li:before { content:'\2715'; position:absolute; left:0; color:var(--rust); }
+    .compare .col.good li:before { content:'\2713'; position:absolute; left:0; color:var(--olive); }
+    .compare .col-body code { background:none; border:none; padding:0; }
+    .mode { background:var(--white); border:var(--border); border-radius:var(--radius);
+      padding:16px 20px; margin-bottom:14px; }
+    .mode h4 { font-family:var(--serif); font-size:18px; color:var(--slate); margin-bottom:4px; }
+    .mode h4 code { font-size:13px; }
+    .mode .desc { font-size:13.8px; color:var(--gray-700); margin-bottom:8px; }
+    .mode .ex { font-size:12.8px; color:var(--gray-500); font-family:var(--mono);
+      background:var(--gray-150); border-left:2px solid var(--clay); padding:8px 12px; border-radius:5px; }
+    .checklist { display:flex; flex-direction:column; gap:10px; max-width:790px; }
+    .check { display:flex; gap:12px; align-items:flex-start; background:var(--white);
+      border:var(--border); border-radius:10px; padding:12px 16px; }
+    .check .box { width:18px; height:18px; border-radius:5px; border:2px solid var(--gray-500);
+      flex-shrink:0; margin-top:2px; }
+    .check .ck-text { font-size:14px; color:var(--gray-700); }
+    .check .ck-text strong { color:var(--slate); }
+    .risks { border:var(--border); border-radius:var(--radius); overflow:hidden; background:var(--white); }
+    .risks .row { display:grid; grid-template-columns:1.6fr 90px 1.6fr; }
+    @media (max-width:780px){ .risks .row{grid-template-columns:1fr;} }
+    .risks .row + .row { border-top:var(--border); }
+    .risks .cell { padding:14px 18px; font-size:13.5px; }
+    .risks .cell + .cell { border-left:var(--border); }
+    @media (max-width:780px){ .risks .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .risks .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .sev { display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 8px;
+      border-radius:6px; font-weight:600; }
+    .sev.low { background:#2D3A24; color:#B6CC96; }
+    .sev.med { background:var(--oat); color:var(--slate); }
+    .deferred { display:flex; flex-direction:column; gap:14px; max-width:860px; }
+    .defer { background:var(--white); border:var(--border); border-left:4px solid var(--gray-500);
+      border-radius:10px; padding:16px 20px; }
+    .defer .dt { font-weight:600; font-size:15px; color:var(--slate); margin-bottom:4px; }
+    .defer .dd { font-size:13.5px; color:var(--gray-500); }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; margin:8px 0 14px; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .kw { color:var(--clay); } .code .cm { color:var(--gray-500); } .code .ad { color:var(--olive); }
+    .viz { background:var(--white); border:var(--border); border-radius:var(--radius);
+      padding:22px 24px; margin:20px 0; }
+    .viz-title { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:18px; }
+    .viz-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+    @media (max-width:720px){ .viz-grid{grid-template-columns:1fr;} }
+    .viz-cell .vc-name { font-family:var(--mono); font-size:12px; color:var(--gray-700); margin-bottom:7px; }
+    .viz-cell .vc-name b { color:var(--clay); }
+    .viz svg { display:block; }
+    .viz-cap { font-size:12px; color:var(--gray-500); margin-top:7px; line-height:1.5; }
+    .viz-cap.center { margin-top:16px; max-width:none; }
+    .viz-cap b { color:var(--slate); }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:64px; padding-top:22px;
+      border-top:1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands</div>
+      <h1>Route cargo modes — composable selection + source-floor gates</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Today an inter-island route carries cargo one of two ways: a fixed <code>filter</code>
+        (one resource) or <code>filter = any</code> with an ordered <code>priorityList</code> that
+        ships the first available resource — one resource per tick. This spec replaces that two-concept
+        model with a single unified cargo list plus a <strong>mode</strong>: four selection modes
+        (priority, waterfall, split, balanced) and an optional per-resource source-floor gate. It also
+        retires the misleading "priority" framing — priority becomes one mode of four, not the whole concept.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Selection modes</div><div class="v accent">4</div></div>
+      <div class="cell"><div class="k">Gate types</div><div class="v">1 (source floor)</div></div>
+      <div class="cell"><div class="k">Migration</div><div class="v ok">behaviour-preserving</div></div>
+      <div class="cell"><div class="k">Tick phases changed</div><div class="v">1 of 3</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Unify to one <code>cargo</code> list + a <code>mode</code> enum; four modes; an optional per-entry source-floor gate.</div>
+      <div class="d-body"><strong>Composable, not a flat enum.</strong> A route picks exactly one of four
+        selection modes — how it divides a tick's capacity across resources — and may layer an optional
+        source-floor gate on each cargo entry. Mode and gate are independent axes.</div>
+      <div class="d-body"><strong>One data model, behaviour-preserving migration.</strong> <code>Route.filter</code>
+        and <code>Route.priorityList</code> are removed; a route carries one <code>cargo: CargoEntry[]</code>
+        and a <code>mode</code>. Every existing route migrates to <code>mode: 'priority'</code> with its
+        current resource(s) as the cargo list — strict priority <em>is</em> today's behaviour, so migrated
+        routes run identically.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Background</h2></div>
+      <p class="sec-intro">What the routing tick does today, and the two limitations this spec addresses.</p>
+      <p class="body">A route's per-tick cargo is chosen by <code>selectResource</code> (<code>routes.ts:451</code>):
+        it walks the candidate list — <code>[filter]</code> or <code>priorityList</code> — and returns the
+        <strong>first</strong> resource with stock at the source and headroom at the destination. The dispatch
+        runs in three phases: Phase 1 builds one <code>(route, resource, desired)</code> demand per route;
+        Phase 2 groups demands by <code>(source, resource)</code> and scales for route-vs-route contention
+        proportionally to capacity; Phase 3 executes.</p>
+      <p class="body">Two limitations motivate this work. <strong>(1)</strong> A route can only ever move one
+        resource per tick — there is no way to say "carry wood and stone 2:1", or "fill wood, then top up
+        with stone". <strong>(2)</strong> <code>SPEC §2.4</code> already describes a within-tick waterfall
+        ("move as much of priority-1 as capacity allows, then continue to priority-2 with remaining
+        capacity") that the code never implemented — so the spec and the build disagree. The
+        <code>waterfall</code> mode below closes that gap.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Unified data model</h2></div>
+      <p class="sec-intro">One cargo list and one mode replace the <code>filter</code> / <code>priorityList</code> split.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Today — two concepts</div>
+          <div class="col-body"><ul>
+            <li><code>filter: ResourceId | null</code></li>
+            <li><code>priorityList: ResourceId[]</code> (used only when <code>filter === null</code>)</li>
+            <li>Behaviour is implicit: filtered = fixed; any = strict single-pick</li>
+            <li>No weights, no gates, no waterfall</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">New — one concept</div>
+          <div class="col-body"><ul>
+            <li><code>mode: CargoMode</code> — explicit behaviour</li>
+            <li><code>cargo: CargoEntry[]</code> — one list, all routes</li>
+            <li>A single-resource route is just a one-entry list</li>
+            <li>Per-entry <code>weight</code> and <code>sourceFloorPct</code></li>
+          </ul></div>
+        </div>
+      </div>
+      <div class="code"><pre><span class="kw">type</span> CargoMode = <span class="ad">'priority'</span> | <span class="ad">'waterfall'</span> | <span class="ad">'split'</span> | <span class="ad">'balanced'</span>;
+
+<span class="kw">interface</span> CargoEntry {
+  resourceId: ResourceId;
+  weight?: number;          <span class="cm">// split only; positive; default 1</span>
+  sourceFloorPct?: number;  <span class="cm">// optional gate; 0–100; absent = no gate</span>
+}
+
+<span class="cm">// Route loses `filter` and `priorityList`, gains:</span>
+mode: CargoMode;
+cargo: CargoEntry[];</pre></div>
+      <p class="body"><strong>Migration.</strong> Both <code>persistence.ts</code> (save load) and any in-memory
+        route construction convert old-shape routes: a route with <code>filter !== null</code> becomes
+        <code>{ mode: 'priority', cargo: [{ resourceId: filter }] }</code>; a route with
+        <code>filter === null</code> becomes <code>{ mode: 'priority', cargo: priorityList.map(r =&gt; ({ resourceId: r })) }</code>.
+        Because <code>priority</code> mode reproduces <code>selectResource</code>'s first-viable-wins logic
+        exactly, every migrated route behaves identically to before. New routes default to
+        <code>mode: 'priority'</code>, <code>cargo: []</code>.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>The four selection modes</h2></div>
+      <p class="sec-intro">Every mode first computes the tick's <strong>viable entries</strong>: a cargo entry is viable when the source has stock (<code>inv &gt; 0</code>), the destination has headroom (<code>destinationHeadroom &gt; 0</code>), and its source-floor gate passes (§04). Modes differ only in how they divide the per-tick capacity budget across viable entries.</p>
+
+      <div class="mode">
+        <h4><code>priority</code> — strict, single-pick <span style="color:var(--gray-500);font-size:13px;font-weight:400;">(today's behaviour)</span></h4>
+        <div class="desc">The first viable entry in list order takes the whole tick's capacity. Everything below it is ignored this tick. Identical to today's <code>selectResource</code>.</div>
+        <div class="ex">cargo [wood, stone, coal] · wood viable → ship wood, full capacity. stone/coal untouched.</div>
+      </div>
+
+      <div class="mode">
+        <h4><code>waterfall</code> — fill, then spill</h4>
+        <div class="desc">Walk viable entries in list order with a capacity budget. Each entry takes <code>min(remaining budget, its source stock, its destination headroom)</code>; the budget decrements and the remainder spills to the next entry. Stops when the budget is exhausted or the list ends. This is the behaviour <code>SPEC §2.4</code> already specifies.</div>
+        <div class="ex">budget 10 · wood: only 3 in stock → ship 3, budget 7 · stone: ship 7 → budget 0. coal untouched.</div>
+      </div>
+
+      <div class="mode">
+        <h4><code>split</code> — weighted ratio</h4>
+        <div class="desc">Each viable entry has a <code>weight</code> (default 1). The tick's capacity is divided across viable entries proportionally to normalised weight. A non-viable entry simply drops out of the set, and its share rescales across the rest — so a missing resource never wastes capacity.</div>
+        <div class="ex">cargo wood×2, stone×1 · both viable → wood 2/3 capacity, stone 1/3. stone missing → wood 3/3.</div>
+      </div>
+
+      <div class="mode">
+        <h4><code>balanced</code> — ship what the destination needs most</h4>
+        <div class="desc">Single-pick, like priority, but the pick is the viable entry whose destination has the <strong>lowest fill ratio</strong> (<code>destInv / destCap</code>) — the resource the destination is most short of. Ties break by list order. No fixed list order or weights needed; the route self-tunes to keep a colony stocked.</div>
+        <div class="ex">dest has wood 90/100, stone 10/100 → ship stone (0.10 &lt; 0.90), full capacity.</div>
+      </div>
+
+      <div class="viz">
+        <div class="viz-title">One tick of capacity — how each mode fills it</div>
+        <div class="viz-grid">
+
+          <div class="viz-cell">
+            <div class="vc-name"><b>priority</b> · strict single-pick</div>
+            <svg viewBox="0 0 420 34" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="capacity bar entirely one resource">
+              <rect x="0.75" y="0.75" width="418.5" height="32.5" rx="6" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+              <rect x="4" y="4" width="412" height="26" rx="3" fill="#D97757"/>
+              <text x="210" y="21" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" fill="#1B1A17">wood · whole tick</text>
+            </svg>
+            <div class="viz-cap">First viable entry takes the entire tick. Lower entries wait.</div>
+          </div>
+
+          <div class="viz-cell">
+            <div class="vc-name"><b>waterfall</b> · fill, then spill</div>
+            <svg viewBox="0 0 420 34" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="capacity bar, small first segment then large second">
+              <rect x="0.75" y="0.75" width="418.5" height="32.5" rx="6" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+              <rect x="4" y="4" width="86" height="26" rx="3" fill="#D97757"/>
+              <rect x="94" y="4" width="322" height="26" rx="3" fill="#8FA56E"/>
+              <text x="47" y="21" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" fill="#1B1A17">wood</text>
+              <text x="255" y="21" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" fill="#1B1A17">stone · spill</text>
+            </svg>
+            <div class="viz-cap">Entry 1 (wood) is stock-limited; leftover capacity spills to entry 2.</div>
+          </div>
+
+          <div class="viz-cell">
+            <div class="vc-name"><b>split</b> · weighted ratio</div>
+            <svg viewBox="0 0 420 34" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="capacity bar divided two thirds to one third">
+              <rect x="0.75" y="0.75" width="418.5" height="32.5" rx="6" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+              <rect x="4" y="4" width="273" height="26" rx="3" fill="#D97757"/>
+              <rect x="281" y="4" width="135" height="26" rx="3" fill="#8FA56E"/>
+              <text x="140" y="21" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" fill="#1B1A17">wood ×2</text>
+              <text x="348" y="21" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" fill="#1B1A17">stone ×1</text>
+            </svg>
+            <div class="viz-cap">Capacity divided by weight — 2 : 1. A missing entry rescales the rest.</div>
+          </div>
+
+          <div class="viz-cell">
+            <div class="vc-name"><b>balanced</b> · ship what's most needed</div>
+            <svg viewBox="0 0 420 34" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="capacity bar entirely one resource">
+              <rect x="0.75" y="0.75" width="418.5" height="32.5" rx="6" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+              <rect x="4" y="4" width="412" height="26" rx="3" fill="#8FA56E"/>
+              <text x="210" y="21" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" fill="#1B1A17">stone · most-needed</text>
+            </svg>
+            <div class="viz-cap">Single-pick the entry the destination is most short of (lowest inv ÷ cap).</div>
+          </div>
+
+        </div>
+        <div class="viz-cap center">All four operate on the same per-tick capacity budget — clay and olive are just two example resources. The modes differ only in <b>how that budget is divided</b> across the route's viable cargo entries.</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Source-floor gate</h2></div>
+      <p class="sec-intro">An optional per-entry modifier, independent of mode.</p>
+      <p class="body">A <code>CargoEntry</code> may set <code>sourceFloorPct</code> (0–100). When set, the entry is
+        viable only while the <strong>source</strong> island holds at least that percentage of its storage
+        cap of that resource — <code>inv / cap ≥ sourceFloorPct / 100</code>. Below the floor, the entry is
+        treated exactly like a missing resource: skipped by priority/waterfall/balanced, dropped from the
+        split set. This lets a route export only a colony's <em>surplus</em> without draining the stock its
+        own production chain depends on. Absent <code>sourceFloorPct</code> = no gate (always passes the
+        stock check). The gate composes with every mode — it only changes the viable-entry set, never the
+        allocation maths.</p>
+
+      <div class="viz">
+        <div class="viz-title">Source-floor gate — a binary on / off per entry</div>
+        <svg viewBox="0 0 560 150" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="source floor gate shown in two states">
+          <text x="20" y="18" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#8F8D82">source storage of this resource — filled bar = current stock · dashed line = the floor %</text>
+          <rect x="20" y="36" width="340" height="26" rx="4" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+          <rect x="22" y="38" width="268" height="22" rx="3" fill="#8FA56E"/>
+          <line x1="217" y1="30" x2="217" y2="68" stroke="#F5F3EC" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <text x="376" y="53" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" fill="#8FA56E">GATE OPEN — entry ships</text>
+          <rect x="20" y="92" width="340" height="26" rx="4" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+          <rect x="22" y="94" width="110" height="22" rx="3" fill="#5A5650"/>
+          <line x1="217" y1="86" x2="217" y2="124" stroke="#F5F3EC" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <text x="217" y="138" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="#8F8D82">floor</text>
+          <text x="376" y="109" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" fill="#8F8D82">GATE CLOSED — entry skipped</text>
+        </svg>
+        <div class="viz-cap center">When the source holds <b>≥ the floor %</b> of its cap, the entry is viable and ships normally. Below the floor it is treated exactly like a missing resource — skipped by priority / waterfall / balanced, dropped from the split set. The gate only changes the <em>viable set</em>; it never skims a partial amount.</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Tick integration</h2></div>
+      <p class="sec-intro">Only Phase 1 of the dispatch changes.</p>
+      <p class="body">Today Phase 1 emits exactly one demand per route. New Phase 1 calls a pure
+        mode-dispatch function — <code>planRouteCargo(route, world, states, elapsedSec)</code> — that
+        returns an array of <code>(resourceId, desired)</code> demands: one element for priority and
+        balanced, one-or-more for waterfall and split. Phase 2 (capacity-proportional contention) and
+        Phase 3 (execute) are <strong>unchanged</strong> — they already group demands by
+        <code>(source, resource)</code>, and a single route never emits two demands for the same resource,
+        so the grouping stays correct.</p>
+      <p class="body"><strong>Known imprecision (accepted).</strong> Waterfall computes each entry's take
+        from source/destination state at tick start, then spills the remainder. If route-vs-route contention
+        in Phase 2 later scales a higher entry's demand <em>down</em>, the capacity that scaling freed is
+        not retroactively handed to lower entries that tick. The route under-ships slightly and self-corrects
+        on the next tick. This matches the approximation already present in today's Phase-1 design (which
+        also reads pre-contention state) and is not worth a multi-pass solver.</p>
+
+      <div class="viz">
+        <div class="viz-title">Dispatch pipeline — only Phase 1 changes</div>
+        <svg viewBox="0 0 960 196" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="route dispatch pipeline, Phase 1 highlighted">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#8F8D82"/>
+            </marker>
+          </defs>
+          <rect x="16" y="78" width="128" height="48" rx="8" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+          <text x="80" y="100" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" fill="#F5F3EC">Route</text>
+          <text x="80" y="116" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#8F8D82">mode + cargo</text>
+          <rect x="188" y="78" width="180" height="48" rx="8" fill="#2A2420" stroke="#D97757" stroke-width="2"/>
+          <text x="278" y="100" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" fill="#F5F3EC">Phase 1 · plan cargo</text>
+          <text x="278" y="116" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#D97757">runs the mode — CHANGED</text>
+          <g font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#CFCCC2">
+            <rect x="430" y="36" width="132" height="28" rx="6" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="496" y="54" text-anchor="middle">(wood, 6)</text>
+            <rect x="430" y="82" width="132" height="28" rx="6" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="496" y="100" text-anchor="middle">(stone, 4)</text>
+            <rect x="430" y="128" width="132" height="28" rx="6" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="496" y="146" text-anchor="middle">(coal, 2)</text>
+          </g>
+          <rect x="624" y="78" width="156" height="48" rx="8" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+          <text x="702" y="100" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" fill="#F5F3EC">Phase 2</text>
+          <text x="702" y="116" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#8F8D82">contention scale</text>
+          <rect x="824" y="78" width="120" height="48" rx="8" fill="#2E2C27" stroke="#3A3833" stroke-width="1.5"/>
+          <text x="884" y="100" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" fill="#F5F3EC">Phase 3</text>
+          <text x="884" y="116" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#8F8D82">execute</text>
+          <g stroke="#8F8D82" stroke-width="1.5" fill="none">
+            <path d="M144,102 L184,102" marker-end="url(#ah)"/>
+            <path d="M368,102 L426,50" marker-end="url(#ah)"/>
+            <path d="M368,102 L426,96" marker-end="url(#ah)"/>
+            <path d="M368,102 L426,142" marker-end="url(#ah)"/>
+            <path d="M562,50 L620,102" marker-end="url(#ah)"/>
+            <path d="M562,96 L620,102" marker-end="url(#ah)"/>
+            <path d="M562,142 L620,102" marker-end="url(#ah)"/>
+            <path d="M780,102 L820,102" marker-end="url(#ah)"/>
+          </g>
+        </svg>
+        <div class="viz-cap center"><b style="color:#D97757;">Phase 1</b> now emits <b>one or more</b> (resource, amount) demands per route — exactly one for priority &amp; balanced, several for waterfall &amp; split. <b>Phase 2</b> (capacity-proportional contention) and <b>Phase 3</b> (execute) are untouched; they already group demands by (source, resource).</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>UI</h2></div>
+      <p class="sec-intro">The route ledger editor in <code>routes-ui.ts</code> gains a mode selector and an adaptive cargo editor.</p>
+      <p class="body">Each route row gets a <strong>mode dropdown</strong> (priority / waterfall / split /
+        balanced). The cargo editor below it adapts to the mode: <code>priority</code> and
+        <code>waterfall</code> show a drag-orderable list (order is meaningful); <code>split</code> shows
+        the same list with a numeric <strong>weight field</strong> per row; <code>balanced</code> shows an
+        unordered set (order irrelevant). Every row, in every mode, has an optional <strong>source-floor %
+        field</strong>. Adding / removing resources works as today. Edits mutate the route in place and take
+        effect next tick. This replaces the current <code>renderPriorityEditor</code> (<code>routes-ui.ts:812</code>),
+        which only handled the <code>any</code>-route ordered list.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Naming</h2></div>
+      <p class="body">The field <code>priorityList</code> is removed, not renamed — it is superseded by
+        <code>cargo</code>. "Priority" survives only as the name of <em>one</em> of the four modes, which is
+        honest: it is genuinely a priority-ordered behaviour. This resolves the earlier observation that
+        "priority" was a misleading name for the whole concept — the whole concept is now "cargo mode", and
+        priority is one mode within it. Helper names follow: <code>reorderPriorityList</code> →
+        <code>reorderCargo</code>, and similar.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Verification</h2></div>
+      <p class="sec-intro">The mode-dispatch logic is pure and unit-testable; <code>routes.test.ts</code> already exercises the dispatch phases.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Per-mode allocation tests.</strong> One suite per mode: priority single-pick, waterfall fill-and-spill (incl. a higher entry short on stock), split weighted division + rescale-on-shortage, balanced lowest-fill-ratio pick + tie-break.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Source-floor gate tests.</strong> Entry above floor is viable; below floor is treated as missing; absent <code>sourceFloorPct</code> always passes — verified against each mode.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Migration test.</strong> An old-shape filtered route and an old-shape <code>any</code> route both convert to <code>priority</code> mode and dispatch byte-identically to the pre-change result.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Contention still works.</strong> Two routes (any mix of modes) demanding the same <code>(source, resource)</code> still split proportionally to capacity in Phase 2.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>npm run build</code> + <code>npm test</code> green.</strong> Strict TypeScript flags every stale <code>filter</code> / <code>priorityList</code> reference.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">09</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row">
+          <div class="cell">Removing <code>filter</code> / <code>priorityList</code> touches every reader — routes.ts, routes-ui.ts, persistence.ts, tests, possibly hover-tooltip / graph-ui.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Strict TypeScript makes every stale reference a compile error — the field removal cannot be silently incomplete. Implementation plan sweeps all readers.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Save-format change: persisted routes carry the old shape.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Load-time migration in <code>persistence.ts</code> converts old-shape routes to <code>priority</code> mode. Behaviour-preserving by construction; covered by a migration test.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Waterfall under-ships under route-vs-route contention (see §05).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Accepted. Self-corrects next tick; matches the approximation already in Phase 1. Documented, not solved.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">10</span><h2>Out of scope</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Destination-ceiling gate</div>
+          <div class="dd">A "stop shipping X once the destination is N% full" gate was considered; the chosen gate axis is source-floor only. A destination ceiling can be added later as a second gate type — the <code>CargoEntry</code> shape leaves room.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Even-split as a distinct mode</div>
+          <div class="dd">"Split capacity equally" is just <code>split</code> with all weights equal — no separate mode needed.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Balancing-split for demand mode</div>
+          <div class="dd"><code>balanced</code> is single-pick most-needed, not a capacity split weighted by shortfall. The split variant overlaps with <code>split</code> and was dropped.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands · 2026-05-22 · relates to explainer <code>robot-islands/2026-05-22-route-priority-explainer</code> · next: implementation plan via writing-plans</p>
+    </div>
+
+  </div>
+</body>
+</html>
