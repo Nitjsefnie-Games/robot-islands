@@ -38,6 +38,7 @@ import type { BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { planCargo, type ViableEntry, type CargoDemand } from './route-cargo.js';
 import type { CargoMode, CargoEntry } from './route-cargo.js';
+import { ALL_RESOURCES } from './recipes.js';
 
 /** Transport tier per §2.4. Step 7 only emits `cargo` routes; the field
  *  exists so future tiers can be added without reshaping the data model.
@@ -460,24 +461,42 @@ function planRouteCargo(
   const destState = states.get(route.to);
   if (!srcState || !destState) return [];
   const viable: ViableEntry[] = [];
-  for (const entry of route.cargo) {
-    const r = entry.resourceId;
-    const sourceAvail = inv(srcState, r);
-    if (sourceAvail <= 0) continue;
+
+  // Resources named explicitly anywhere in this cargo. Used so a wildcard
+  // entry doesn't double-cover an explicit one.
+  const explicit = new Set<ResourceId>();
+  for (const e of route.cargo) {
+    if (e.resourceId !== 'all') explicit.add(e.resourceId);
+  }
+
+  function tryPush(entry: CargoEntry, r: ResourceId): void {
+    const sourceAvail = inv(srcState!, r);
+    if (sourceAvail <= 0) return;
     const headroom = destinationHeadroom(world, states, route.to, r);
-    if (headroom <= 0) continue;
+    if (headroom <= 0) return;
     if (entry.sourceFloorPct !== undefined) {
-      const srcCap = cap(srcState, r);
-      if (srcCap <= 0 || sourceAvail / srcCap < entry.sourceFloorPct / 100) continue;
+      const srcCap = cap(srcState!, r);
+      if (srcCap <= 0 || sourceAvail / srcCap < entry.sourceFloorPct / 100) return;
     }
-    const destCap = cap(destState, r);
+    const destCap = cap(destState!, r);
     viable.push({
       resourceId: r,
       weight: entry.weight ?? 1,
       headroom,
       sourceAvail,
-      destFillRatio: destCap > 0 ? inv(destState, r) / destCap : 1,
+      destFillRatio: destCap > 0 ? inv(destState!, r) / destCap : 1,
     });
+  }
+
+  for (const entry of route.cargo) {
+    if (entry.resourceId === 'all') {
+      for (const r of ALL_RESOURCES) {
+        if (explicit.has(r)) continue;
+        tryPush(entry, r);
+      }
+    } else {
+      tryPush(entry, entry.resourceId);
+    }
   }
   return planCargo(route.mode, viable, budget);
 }

@@ -856,7 +856,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       ].join(';');
 
       const label = document.createElement('span');
-      label.textContent = entry.resourceId;
+      label.textContent = entry.resourceId === 'all' ? '(all other resources)' : entry.resourceId;
       label.style.cssText = 'flex:1 1 auto;';
       li.appendChild(label);
 
@@ -923,16 +923,26 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
 
     // --- add-resource control ---
     const have = new Set(route.cargo.map((e) => e.resourceId));
-    const remaining = ALL_RESOURCES.filter((r) => !have.has(r));
+    const haveAll = route.cargo.some((e) => e.resourceId === 'all');
     const addRow = document.createElement('div');
     addRow.style.cssText = 'display:flex;gap:4px;margin:4px 0 0 16px;align-items:center';
     const addSel = document.createElement('select');
     addSel.style.cssText = 'flex:1 1 auto;background:var(--ri-panel-solid);'
       + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;padding:2px 4px;';
-    if (remaining.length === 0) {
+    // Build the option list. 'all' first; then remaining real resources.
+    if (!haveAll) {
+      const o = document.createElement('option');
+      o.value = 'all';
+      o.textContent = '(all other resources)';
+      addSel.appendChild(o);
+    }
+    const remaining = ALL_RESOURCES.filter((r) => !have.has(r));
+    if (remaining.length === 0 && haveAll) {
+      // nothing left to add — keep the dropdown disabled in this case
       const o = document.createElement('option');
       o.textContent = '(all resources added)';
-      addSel.appendChild(o); addSel.disabled = true;
+      addSel.appendChild(o);
+      addSel.disabled = true;
     } else {
       for (const r of remaining) {
         const o = document.createElement('option');
@@ -945,12 +955,12 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     addBtn.style.cssText = 'cursor:pointer;background:var(--ri-panel-solid);'
       + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;'
       + 'padding:2px 8px;border-radius:2px;';
-    addBtn.disabled = remaining.length === 0;
+    addBtn.disabled = remaining.length === 0 && haveAll;
     if (addBtn.disabled) addBtn.style.opacity = '0.5';
     addBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const chosen = addSel.value as ResourceId;
-      if (!chosen || have.has(chosen)) return;
+      const chosen = addSel.value as ResourceId | 'all';
+      if (!chosen || (chosen !== 'all' && have.has(chosen))) return;
       route.cargo = [...route.cargo, { resourceId: chosen }];
       rerender();
     });

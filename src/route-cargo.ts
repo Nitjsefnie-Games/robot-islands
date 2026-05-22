@@ -4,12 +4,18 @@ import type { ResourceId } from './recipes.js';
 export type CargoMode = 'priority' | 'waterfall' | 'split' | 'balanced';
 
 export interface CargoEntry {
-  readonly resourceId: ResourceId;
+  readonly resourceId: ResourceId | 'all';
   /** split mode only; must be > 0; treated as 1 when absent. */
   readonly weight?: number;
   /** optional source-floor gate, 0–100 (% of source cap). Absent = no gate. */
   readonly sourceFloorPct?: number;
 }
+
+/** Sentinel value for a CargoEntry that matches every ResourceId not
+ *  otherwise listed explicitly in the same cargo. Only valid at
+ *  CargoEntry.resourceId; pure helpers expand it before the per-resource
+ *  viability check. */
+export const CARGO_WILDCARD = 'all' as const;
 
 /** A cargo entry that has already passed the viability gate, with the
  *  per-tick facts the allocator needs. Built by routes.ts's planRouteCargo. */
