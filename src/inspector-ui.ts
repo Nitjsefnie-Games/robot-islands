@@ -33,7 +33,7 @@ import {
 } from './building-defs.js';
 import { gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { placementCostFor } from './placement.js';
+import { affordabilityShortfall, placementCostFor } from './placement.js';
 import { convertToServitor, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { computeRates } from './economy.js';
@@ -47,6 +47,8 @@ import {
   MAINTENANCE_RECIPES,
   MAINTENANCE_THRESHOLD_MS_BY_TIER,
   maintenanceFactor,
+  refreshCostFor,
+  tryRefreshMaintenance,
 } from './maintenance.js';
 import { ALL_RESOURCES, resolveRecipe, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
@@ -980,6 +982,49 @@ export function mountInspectorUi(
       `background: ${'rgba(24, 29, 39, 0.6)'}`,
     ].join(';'),
   );
+  const refreshBtn = document.createElement('button');
+  styled(
+    refreshBtn,
+    [
+      'background: transparent',
+      `color: ${'var(--ri-accent)'}`,
+      `border: 1px solid ${'var(--ri-accent-dim)'}`,
+      'padding: 4px 8px',
+      'cursor: pointer',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+      'letter-spacing: 0.08em',
+      'text-transform: uppercase',
+      'border-radius: 2px',
+      'transition: background 80ms ease, border-color 80ms ease',
+      'text-align: left',
+      'margin-bottom: 4px',
+    ].join(';'),
+  );
+  refreshBtn.style.display = 'none';
+  refreshBtn.addEventListener('mouseenter', () => {
+    if (refreshBtn.disabled) return;
+    refreshBtn.style.background = 'rgba(125, 211, 232, 0.08)';
+    refreshBtn.style.borderColor = 'var(--ri-accent)';
+  });
+  refreshBtn.addEventListener('mouseleave', () => {
+    refreshBtn.style.background = 'transparent';
+    refreshBtn.style.borderColor = refreshBtn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-accent-dim)';
+  });
+  refreshBtn.addEventListener('click', () => {
+    if (!target) return;
+    const def = BUILDING_DEFS[target.building.defId];
+    const ok = tryRefreshMaintenance(
+      target.building,
+      def,
+      target.state.inventory,
+      Date.now(),
+      effectiveSkillMultipliers(target.state).maintenanceThreshold,
+    );
+    if (ok) paint();
+  });
+  footerSection.appendChild(refreshBtn);
+
   const demolishBtn = document.createElement('button');
   styled(
     demolishBtn,
@@ -1363,6 +1408,7 @@ export function mountInspectorUi(
       maintenanceStatus.style.color = 'var(--ri-accent)';
       maintenanceRecipeLine.textContent = '';
       maintenanceRecipeLine.style.display = 'none';
+      refreshBtn.style.display = 'none';
     } else {
       const operating = building.operatingMs ?? 0;
       const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier];
@@ -1384,6 +1430,33 @@ export function mountInspectorUi(
       maintenanceRecipeLine.textContent =
         recipeParts.length > 0 ? `needs: ${recipeParts.join(' + ')}` : '';
       maintenanceRecipeLine.style.display = '';
+
+      const refreshCost = refreshCostFor(def);
+      const refreshFactor = maintenanceFactor(building, def, effectiveSkillMultipliers(state).maintenanceThreshold);
+      if (Object.keys(refreshCost).length === 0 || refreshFactor >= 1.0) {
+        refreshBtn.style.display = 'none';
+      } else {
+        const missing = affordabilityShortfall(state.inventory, refreshCost);
+        const parts: string[] = [];
+        for (const [r, need] of Object.entries(refreshCost)) {
+          const have = state.inventory[r as ResourceId] ?? 0;
+          parts.push(`${need} ${r} (${have})`);
+        }
+        refreshBtn.textContent = `REFRESH · ${parts.join(', ')}`;
+        refreshBtn.disabled = Object.keys(missing).length > 0;
+        refreshBtn.style.display = '';
+        if (refreshBtn.disabled) {
+          refreshBtn.style.color = 'var(--ri-fg-4)';
+          refreshBtn.style.borderColor = 'var(--ri-fg-4)';
+          refreshBtn.style.cursor = 'not-allowed';
+          refreshBtn.style.opacity = '0.6';
+        } else {
+          refreshBtn.style.color = 'var(--ri-accent)';
+          refreshBtn.style.borderColor = 'var(--ri-accent-dim)';
+          refreshBtn.style.cursor = 'pointer';
+          refreshBtn.style.opacity = '1';
+        }
+      }
     }
     maintenanceSection.wrap.style.display = '';
 
