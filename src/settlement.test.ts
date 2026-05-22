@@ -18,6 +18,8 @@ import {
   _resetVehicleIdCounter,
   dispatchVehicle,
   hasLaunchBuildingFor,
+  originCanAnchorSettle,
+  settleViaSpacetimeAnchor,
   tickVehicles,
   tuningFor,
 } from './settlement.js';
@@ -1367,5 +1369,76 @@ describe('Auto-Patronage §9.6 / §12.7', () => {
     const result = _nearestPatronHub(world, 'target');
     expect(result).not.toBeNull();
     expect(result!.id).toBe('hub-a');
+  });
+});
+
+describe('originCanAnchorSettle', () => {
+  it('is true only when the spec has a spacetime_anchor building', () => {
+    const bare = makeIslandSpec({ id: 'o' });
+    expect(originCanAnchorSettle(bare)).toBe(false);
+    const withAnchor = makeIslandSpec({
+      id: 'o',
+      buildings: [{ id: 'a1', defId: 'spacetime_anchor', x: 0, y: 0 }],
+    });
+    expect(originCanAnchorSettle(withAnchor)).toBe(true);
+  });
+});
+
+describe('settleViaSpacetimeAnchor', () => {
+  function setup(opts: { anchor: boolean; kits: number; targetDiscovered: boolean; targetPopulated: boolean }) {
+    const origin = makeIslandSpec({
+      id: 'origin',
+      populated: true,
+      buildings: opts.anchor ? [{ id: 'a1', defId: 'spacetime_anchor', x: 0, y: 0 }] : [],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      discovered: opts.targetDiscovered,
+      populated: opts.targetPopulated,
+    });
+    const world = freshWorld([origin, target]);
+    const originState = makeIslandState({ id: 'origin' });
+    originState.inventory.foundation_kit_refined = opts.kits;
+    const islandStates = new Map<string, IslandState>([['origin', originState]]);
+    return { world, islandStates, origin, target, originState };
+  }
+
+  it('settles the target: consumes 1 Refined kit, populates, creates IslandState', () => {
+    const s = setup({ anchor: true, kits: 1, targetDiscovered: true, targetPopulated: false });
+    const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
+    expect(res.ok).toBe(true);
+    expect(s.originState.inventory.foundation_kit_refined).toBe(0);
+    expect(s.target.populated).toBe(true);
+    expect(s.islandStates.has('target')).toBe(true);
+    expect(s.world.vehicles.length).toBe(0);
+  });
+
+  it('refuses and mutates nothing when the origin has no Spacetime Anchor', () => {
+    const s = setup({ anchor: false, kits: 1, targetDiscovered: true, targetPopulated: false });
+    const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
+    expect(res.ok).toBe(false);
+    expect(s.originState.inventory.foundation_kit_refined).toBe(1);
+    expect(s.target.populated).toBe(false);
+    expect(s.islandStates.has('target')).toBe(false);
+  });
+
+  it('refuses when the origin has no Refined kit', () => {
+    const s = setup({ anchor: true, kits: 0, targetDiscovered: true, targetPopulated: false });
+    expect(settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000).ok).toBe(false);
+    expect(s.target.populated).toBe(false);
+  });
+
+  it('refuses when the target is already populated', () => {
+    const s = setup({ anchor: true, kits: 1, targetDiscovered: true, targetPopulated: true });
+    const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
+    expect(res.ok).toBe(false);
+    expect(s.originState.inventory.foundation_kit_refined).toBe(1);
+  });
+
+  it('refuses when the target is not discovered', () => {
+    const s = setup({ anchor: true, kits: 1, targetDiscovered: false, targetPopulated: false });
+    const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
+    expect(res.ok).toBe(false);
+    expect(s.originState.inventory.foundation_kit_refined).toBe(1);
   });
 });
