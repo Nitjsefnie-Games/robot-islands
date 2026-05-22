@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Remove redundant manufacturing stubs &amp; sync SPEC §8.3</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 860px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 37px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 56px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 18px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 780px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    section { margin-bottom: 60px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat);
+      color: var(--slate); padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 760px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 780px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13px; }
+    .tbl th, .tbl td { text-align: left; padding: 9px 14px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; color: #C9B98A; }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .tier-row td { background: var(--oat); color: var(--slate); font-weight: 600;
+      font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col { background: var(--white); border: var(--border); border-radius: var(--radius);
+      overflow: hidden; }
+    .compare .col-head { padding: 12px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em; border-bottom: var(--border); }
+    .compare .col.bad .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 9px 0; padding-left: 20px; position: relative; }
+    .compare .col.bad li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 240px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 780px; }
+    .check { display: flex; gap: 12px; align-items: flex-start; background: var(--white);
+      border: var(--border); border-radius: 10px; padding: 12px 16px; }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500);
+      flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+    .check .ck-text code { font-size: 12.5px; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px;
+      border-radius: 6px; font-weight: 600; }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px; }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px; padding-top: 22px;
+      border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands</div>
+      <h1>Remove redundant manufacturing stubs &amp; sync SPEC §8.3</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        A building-catalog audit flagged 8 buildings as broken. Six verification
+        agents re-traced every claim: the 4 storage buildings are fully functional
+        (audit error, corrected in audit v4), and <code>terrain_modifier</code> is a
+        genuine unbuilt mechanic (deferred). The remaining 3 — <code>fabricator</code>,
+        <code>precision_lab</code>, <code>singularity_forge</code> — are not "missing recipes":
+        they are coarse SPEC §8.3 catalog rows that the implementation already replaced
+        with a finer-grained taxonomy. This spec removes them and brings §8.3 in line
+        with the code.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Buildings removed</div><div class="v accent">3</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">5</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+      <div class="cell"><div class="k">Deferred</div><div class="v">terrain_modifier</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Delete the 3 stub defs; rewrite SPEC §8.3 to enumerate the implemented manufacturing taxonomy.</div>
+      <div class="d-body"><strong>Why remove rather than wire.</strong> Every output these
+        buildings could produce is already produced by a dedicated building — wiring a
+        recipe into <code>fabricator</code> would create a literal duplicate of
+        <code>motor_assembly</code>. The buildings are spec-vs-implementation drift artifacts,
+        not feature gaps. The cleanest, evidence-aligned outcome is deletion plus a SPEC
+        correction so the locked spec stops naming buildings the code doesn't have.</div>
+      <div class="d-body"><strong>What this deliberately does not do.</strong> It does not
+        touch <code>terrain_modifier</code> (a real unbuilt mechanic — its own design cycle),
+        does not alter the 4 storage buildings (already functional), and does not attempt to
+        fix the parallel drift in SPEC §8.1 / §8.2 (also stale — out of scope, noted in §07).</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Background</h2></div>
+      <p class="sec-intro">How three "unimplemented buildings" turned out to be three buildings the codebase already replaced.</p>
+      <p class="body">The recipe model is one building → one recipe: <code>resolveRecipe()</code>
+        returns <code>RECIPES[def.id]</code>, keyed by the building's own defId. A manufacturing
+        building with no matching <code>RECIPES</code> entry is skipped entirely by the economy
+        tick (<code>economy.ts:800</code>, <code>if (!recipe) continue;</code>) — it produces
+        nothing, draws no power, gates nothing.</p>
+      <p class="body">SPEC §8.3 lists <strong>Fabricator</strong> ("advanced components, motors,
+        actuators"), <strong>Precision Lab</strong> ("circuit boards, computing modules") and
+        <strong>Singularity Forge</strong> ("T4 endgame artifacts") as coarse, theme-named rows.
+        The implementation never used them. Instead it built a fine-grained taxonomy — one
+        building per output — and assigned the recipes there. The coarse rows were left in
+        <code>BUILDING_DEFS</code> as placeholders ("recipe assignment lands in a later balance
+        pass") and never reconciled. They are <strong>placeable</strong> (the catalog UI iterates
+        every <code>BUILDING_DEFS</code> entry) but the catalog card renders "— no recipe" and
+        the building does nothing once placed.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>The coarse rows are already covered</h2></div>
+      <p class="sec-intro">Each SPEC §8.3 coarse row maps onto buildings that already exist, already have recipes, and already produce the goods. There is no production gap.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">SPEC §8.3 coarse row (stub)</div>
+          <div class="col-body"><ul>
+            <li><strong>Fabricator</strong> — T3 "motors, actuators, advanced components"</li>
+            <li><strong>Precision Lab</strong> — T3 "circuit boards, computing modules"</li>
+            <li><strong>Singularity Forge</strong> — T4 "endgame artifacts"</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">What the implementation actually built</div>
+          <div class="col-body"><ul>
+            <li><code>motor_assembly</code>, <code>generator_lab</code>, <code>pump_assembly</code>, <code>hydraulic_assembly</code>, <code>pneumatic_assembly</code> — all T3, all with recipes</li>
+            <li><code>circuit_assembler</code>, <code>processor_fab</code>, <code>compute_module_fab</code> (displayName: "Computing Module Fabricator"), <code>memory_lab</code></li>
+            <li>SPEC §7.11's five artifacts — ai_core, antimatter_capsule, exotic_alloy, time_crystal, self_replication_module — each already has a producer</li>
+          </ul></div>
+        </div>
+      </div>
+      <p class="body" style="margin-top:20px;">The tell: one of the replacement buildings is literally
+        named <strong>"Computing Module Fabricator"</strong>. "Fabricator" survived as a word inside the
+        fine-grained taxonomy; only the coarse catalog row was orphaned.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Five source files, two SPEC sections. Strict-TS compilation makes any missed reference a build error — the union-type removal is the safety net.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/building-defs.ts</div>
+          <div class="what"><span class="lead">Remove 3 def objects + 3 union members.</span>
+            Delete the <code>fabricator</code> (1331–1342), <code>precision_lab</code> (1345–1356) and
+            <code>singularity_forge</code> (1360–1371) entries from <code>BUILDING_DEFS</code>, their
+            preceding comment blocks, and their 3 members of the <code>BuildingDefId</code> union
+            (lines 111–113). <code>ALL_BUILDING_DEF_IDS</code> is <code>Object.keys</code>-derived — updates itself.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.test.ts</div>
+          <div class="what"><span class="lead">Drop 3 ids + 3 structural tests.</span>
+            Remove the three ids from the expected-id list (46–48) and delete the three
+            <code>it(...)</code> blocks asserting their tier/footprint/category (1935–1953).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.test.ts:2260</div>
+          <div class="what"><span class="lead">Re-point the maintenance fixture.</span>
+            One test uses <code>defId: 'fabricator'</code> as a generic T3 building. Swap to
+            <code>motor_assembly</code> (real, T3, manufacturing) and update the stale recipe
+            comments on 2260 / 2272. The test asserts maintenance-threshold behaviour, not
+            anything fabricator-specific — the swap is behaviour-neutral.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/balance.test.ts:114</div>
+          <div class="what"><span class="lead">Fix a stale comment.</span>
+            The comment says "fabricator chain"; the chain it describes is
+            <code>pcb_etcher→circuit_assembler→…</code>, unrelated to the <code>fabricator</code>
+            defId. Reword so it stops referencing a removed building. Comment-only.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md §8.3</div>
+          <div class="what"><span class="lead">Full rewrite of the Manufacturing table.</span>
+            Replace the 6-row table with the complete roster of <code>category: 'manufacturing'</code>
+            buildings — see §04. Electronics/smelting-category buildings stay out (they belong to
+            §8.2 / a future section); §8.3 tracks the <code>manufacturing</code> category exactly.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md §1272</div>
+          <div class="what"><span class="lead">Fix the kit-crafting reference.</span>
+            The sentence "Enriched and Refined require an Assembler (T2+) and Fabricator (T3+)"
+            names a building that won't exist. Re-point "Fabricator (T3+)" to the actual kit
+            building, <code>kit_assembler_refined</code> (and verify the Enriched half against
+            <code>kit_assembler_enriched</code>).</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>SPEC §8.3 rewrite — manufacturing roster</h2></div>
+      <p class="sec-intro">The new §8.3 table enumerates every building with <code>category: 'manufacturing'</code> in <code>building-defs.ts</code>, grouped by tier. Columns: Building, Footprint, Tier, Notes. The Notes cell is the building's primary recipe output — one short phrase, taken from <code>RECIPES[defId].outputs</code> at implementation time. Roster below is the authoritative set (the 3 removed stubs are already excluded); 68 buildings.</p>
+      <table class="tbl">
+        <thead><tr><th>defId</th><th>Building</th><th>Footprint</th></tr></thead>
+        <tbody>
+          <tr class="tier-row"><td colspan="3">Tier 1 — 6 buildings</td></tr>
+          <tr><td class="mono">workshop</td><td class="slate">Workshop</td><td>2×2</td></tr>
+          <tr><td class="mono">kit_assembler</td><td class="slate">Kit Assembler</td><td>2×2</td></tr>
+          <tr><td class="mono">plank_mill</td><td class="slate">Plank Mill</td><td>2×2</td></tr>
+          <tr><td class="mono">lumber_mill</td><td class="slate">Lumber Mill</td><td>2×2</td></tr>
+          <tr><td class="mono">glassworks</td><td class="slate">Glassworks</td><td>2×2</td></tr>
+          <tr><td class="mono">evaporator</td><td class="slate">Evaporator</td><td>1×1</td></tr>
+          <tr class="tier-row"><td colspan="3">Tier 2 — 19 buildings</td></tr>
+          <tr><td class="mono">assembler</td><td class="slate">Assembler</td><td>2×2</td></tr>
+          <tr><td class="mono">sheet_metal_mill</td><td class="slate">Sheet Metal Mill</td><td>2×2</td></tr>
+          <tr><td class="mono">pipe_mill</td><td class="slate">Pipe Mill</td><td>2×2</td></tr>
+          <tr><td class="mono">beam_mill</td><td class="slate">Beam Mill</td><td>2×2</td></tr>
+          <tr><td class="mono">bearing_press</td><td class="slate">Bearing Press</td><td>2×2</td></tr>
+          <tr><td class="mono">spring_winder</td><td class="slate">Spring Winder</td><td>2×2</td></tr>
+          <tr><td class="mono">cable_drawer</td><td class="slate">Cable Drawer</td><td>2×2</td></tr>
+          <tr><td class="mono">glass_panel_press</td><td class="slate">Glass Panel Press</td><td>2×2</td></tr>
+          <tr><td class="mono">coolant_synthesizer</td><td class="slate">Coolant Synthesizer</td><td>2×2</td></tr>
+          <tr><td class="mono">ceramic_kiln</td><td class="slate">Ceramic Kiln</td><td>2×2</td></tr>
+          <tr><td class="mono">bronze_alloyer</td><td class="slate">Bronze Alloyer</td><td>2×2</td></tr>
+          <tr><td class="mono">brass_alloyer</td><td class="slate">Brass Alloyer</td><td>2×2</td></tr>
+          <tr><td class="mono">solder_alloyer</td><td class="slate">Solder Alloyer</td><td>2×2</td></tr>
+          <tr><td class="mono">carbon_steel_mill</td><td class="slate">Carbon Steel Mill</td><td>3×3</td></tr>
+          <tr><td class="mono">galvanizing_bath</td><td class="slate">Galvanizing Bath</td><td>3×3</td></tr>
+          <tr><td class="mono">rigid_plastic_press</td><td class="slate">Rigid Plastic Press</td><td>2×2</td></tr>
+          <tr><td class="mono">flexible_plastic_press</td><td class="slate">Flexible Plastic Press</td><td>2×2</td></tr>
+          <tr><td class="mono">rubber_synthesizer</td><td class="slate">Rubber Synthesizer</td><td>2×2</td></tr>
+          <tr><td class="mono">metal_rolling_mill</td><td class="slate">Metal Rolling Mill</td><td>2×2</td></tr>
+          <tr class="tier-row"><td colspan="3">Tier 3 — 15 buildings &nbsp;<span style="color:var(--rust);font-weight:400;">(fabricator, precision_lab removed)</span></td></tr>
+          <tr><td class="mono">kit_assembler_enriched</td><td class="slate">Kit Assembler Enriched</td><td>2×2</td></tr>
+          <tr><td class="mono">battery_factory</td><td class="slate">Battery Factory</td><td>3×3</td></tr>
+          <tr><td class="mono">stainless_steel_mill</td><td class="slate">Stainless Steel Mill</td><td>3×3</td></tr>
+          <tr><td class="mono">tool_steel_mill</td><td class="slate">Tool Steel Mill</td><td>3×3</td></tr>
+          <tr><td class="mono">mag_alloyer</td><td class="slate">Magnetic Alloyer</td><td>2×2</td></tr>
+          <tr><td class="mono">mag_forge</td><td class="slate">Mag Forge</td><td>2×2</td></tr>
+          <tr><td class="mono">motor_assembly</td><td class="slate">Motor Assembly</td><td>2×2</td></tr>
+          <tr><td class="mono">generator_lab</td><td class="slate">Generator Lab</td><td>2×2</td></tr>
+          <tr><td class="mono">pump_assembly</td><td class="slate">Pump Assembly</td><td>2×2</td></tr>
+          <tr><td class="mono">hydraulic_assembly</td><td class="slate">Hydraulic Assembly</td><td>2×2</td></tr>
+          <tr><td class="mono">pneumatic_assembly</td><td class="slate">Pneumatic Assembly</td><td>2×2</td></tr>
+          <tr><td class="mono">fuel_cell_lab</td><td class="slate">Fuel Cell Lab</td><td>2×2</td></tr>
+          <tr><td class="mono">optical_glass_kiln</td><td class="slate">Optical Glass Kiln</td><td>2×2</td></tr>
+          <tr><td class="mono">glass_fiber_spinner</td><td class="slate">Glass Fiber Spinner</td><td>2×2</td></tr>
+          <tr><td class="mono">optical_fiber_drawer</td><td class="slate">Optical Fiber Drawer</td><td>2×2</td></tr>
+          <tr class="tier-row"><td colspan="3">Tier 4 — 6 buildings &nbsp;<span style="color:var(--rust);font-weight:400;">(singularity_forge removed)</span></td></tr>
+          <tr><td class="mono">kit_assembler_refined</td><td class="slate">Kit Assembler Refined</td><td>3×3</td></tr>
+          <tr><td class="mono">quantum_manipulator</td><td class="slate">Quantum Manipulator</td><td>3×3</td></tr>
+          <tr><td class="mono">fuel_rod_assembler</td><td class="slate">Fuel Rod Assembler</td><td>2×2</td></tr>
+          <tr><td class="mono">plasma_containment_assembler</td><td class="slate">Plasma Containment Assembler</td><td>2×2</td></tr>
+          <tr><td class="mono">cryo_containment_assembler</td><td class="slate">Cryo Containment Assembler</td><td>2×2</td></tr>
+          <tr><td class="mono">self_replication_lab</td><td class="slate">Self-Replication Lab</td><td>3×3</td></tr>
+          <tr class="tier-row"><td colspan="3">Tier 5 — 14 buildings</td></tr>
+          <tr><td class="mono">reality_forge</td><td class="slate">Reality Forge</td><td>4×4</td></tr>
+          <tr><td class="mono">ascendant_assembly</td><td class="slate">Ascendant Assembly</td><td>4×4</td></tr>
+          <tr><td class="mono">genesis_forge</td><td class="slate">Genesis Forge</td><td>4×4</td></tr>
+          <tr><td class="mono">probability_calculator_lab</td><td class="slate">Probability Calculator Lab</td><td>3×3</td></tr>
+          <tr><td class="mono">dimensional_fold_lab</td><td class="slate">Dimensional Fold Lab</td><td>3×3</td></tr>
+          <tr><td class="mono">causal_regulator_lab</td><td class="slate">Causal Regulator Lab</td><td>3×3</td></tr>
+          <tr><td class="mono">tachyonic_transmitter_lab</td><td class="slate">Tachyonic Transmitter Lab</td><td>3×3</td></tr>
+          <tr><td class="mono">aether_beacon_lab</td><td class="slate">Aether Beacon Lab</td><td>3×3</td></tr>
+          <tr><td class="mono">reality_engine_lab</td><td class="slate">Reality Engine Lab</td><td>3×3</td></tr>
+          <tr><td class="mono">singularity_battery_factory</td><td class="slate">Singularity Battery Factory</td><td>3×3</td></tr>
+          <tr><td class="mono">plasma_forge</td><td class="slate">Plasma Forge</td><td>3×3</td></tr>
+          <tr><td class="mono">eldritch_refiner</td><td class="slate">Eldritch Refiner</td><td>3×3</td></tr>
+          <tr><td class="mono">phase_refiner</td><td class="slate">Phase Refiner</td><td>3×3</td></tr>
+          <tr><td class="mono">memetic_forge</td><td class="slate">Memetic Forge</td><td>3×3</td></tr>
+          <tr class="tier-row"><td colspan="3">Tier 6 — 8 buildings</td></tr>
+          <tr><td class="mono">antimatter_refinery</td><td class="slate">Antimatter Refinery</td><td>3×3</td></tr>
+          <tr><td class="mono">scanner_sat_assembly</td><td class="slate">Scanner Sat Assembly</td><td>3×3</td></tr>
+          <tr><td class="mono">relay_sat_assembly</td><td class="slate">Relay Sat Assembly</td><td>3×3</td></tr>
+          <tr><td class="mono">sweeper_sat_assembly</td><td class="slate">Sweeper Sat Assembly</td><td>3×3</td></tr>
+          <tr><td class="mono">mirror_sat_assembly</td><td class="slate">Mirror Sat Assembly</td><td>3×3</td></tr>
+          <tr><td class="mono">oip_assembly</td><td class="slate">OIP Assembly</td><td>3×3</td></tr>
+          <tr><td class="mono">repair_pack_assembly</td><td class="slate">Repair Pack Assembly</td><td>3×3</td></tr>
+          <tr><td class="mono">repair_drone_assembly</td><td class="slate">Repair Drone Assembly</td><td>3×3</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top:18px;"><strong>Implementer note.</strong> Treat
+        <code>building-defs.ts</code> as the source of truth at implementation time — regenerate the
+        roster by filtering <code>category === 'manufacturing'</code> rather than trusting this
+        snapshot, in case defs shifted. Each row's Notes phrase comes from that building's
+        <code>RECIPES</code> entry. Keep the existing §8.3 prose intro; only the table changes.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Verification</h2></div>
+      <p class="sec-intro">Strict TypeScript does most of the work — a dangling reference to a removed union member fails the build.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>npm run build</code></strong> — clean. <code>tsc -b</code> under strict / noUnusedLocals must pass; any missed reference to the 3 defIds surfaces here as a compile error.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>npm test</code></strong> — full suite green, with attention to <code>building-defs.test.ts</code>, <code>economy.test.ts</code>, <code>balance.test.ts</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>grep -rn 'fabricator\|precision_lab\|singularity_forge' src/</code></strong> — only legitimate substrings remain (e.g. <code>compute_module_fab</code>); zero references to the removed defIds.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>SPEC §8.3 cross-check</strong> — every defId in the new table resolves in <code>BUILDING_DEFS</code>; no removed stub reappears; §1272 names a building that exists.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">A persisted save with one of the 3 buildings placed would hold a <code>PlacedBuilding</code> whose <code>BUILDING_DEFS</code> lookup is now <code>undefined</code>, risking a crash in render/inspect code.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Accepted, not handled. These buildings were never functional, so a save containing one is implausible; the project is pre-release with no migration infrastructure. Noted here so the decision is explicit, not overlooked. Flag for a guard if real saves exist.</div>
+        </div>
+        <div class="row">
+          <div class="cell">SPEC.md is the "locked specification" (AGENTS.md). Editing it risks drift from its hypothesize-prove provenance.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The edit makes the spec match shipped reality — it removes drift rather than introducing it. Scoped to §8.3 + the §1272 sentence; §8.3 prose intro and all other sections untouched.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Considered and deliberately deferred — named so the reader knows they were not missed.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">terrain_modifier — its own design cycle</div>
+          <div class="dd">A genuine unbuilt mechanic (tile conversion + a UI action), not a duplicate. Far larger than this task; deferred per the scoping decision. The def stays in <code>building-defs.ts</code> as a placeholder until that cycle runs.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">SPEC §8.1 / §8.2 drift</div>
+          <div class="dd">The Extraction and Smelting/Refining catalog tables are stale against the code in the same way §8.3 was. Fixing them is a separate effort; this spec touches §8.3 only.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">The 4 storage buildings</div>
+          <div class="dd">silo, tank, cold_storage, component_warehouse — verified fully functional (audit v4 corrected the v3 "orphaned" error). No change needed.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands · 2026-05-22 · relates to audit <code>robot-islands/2026-05-22-building-catalog</code> (v4) · next: implementation plan via writing-plans</p>
+    </div>
+
+  </div>
+</body>
+</html>
