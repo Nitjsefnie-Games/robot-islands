@@ -27,6 +27,7 @@ import {
   type Route,
 } from './routes.js';
 import { ALL_RESOURCES, XP_WEIGHT, type ResourceId } from './recipes.js';
+import type { CargoMode } from './route-cargo.js';
 
 import type { IslandState } from './economy.js';
 import { CELL_SIZE_TILES, type WorldState } from './world.js';
@@ -128,20 +129,17 @@ function cargoRoute(
   from: string,
   to: string,
   filter: ResourceId | null,
-  priorityList: ResourceId[] = [],
+  cargoList: ResourceId[] = [],
   capacityPerSec = 0.5,
   transitTimeSec = 10,
+  mode: CargoMode = 'priority',
 ): Route {
+  const cargo = filter !== null
+    ? [{ resourceId: filter }]
+    : cargoList.map((resourceId) => ({ resourceId }));
   return {
-    id: nextRouteId(),
-    from,
-    to,
-    type: 'cargo',
-    capacityPerSec,
-    filter,
-    priorityList,
-    transitTimeSec,
-    inFlight: [],
+    id: nextRouteId(), from, to, type: 'cargo', capacityPerSec,
+    mode, cargo, transitTimeSec, inFlight: [],
   };
 }
 
@@ -156,8 +154,8 @@ function cableRoute(
     to,
     type: 'cable',
     capacityPerSec,
-    filter: null,
-    priorityList: [],
+    mode: 'priority',
+    cargo: [],
     transitTimeSec: 0,
     inFlight: [],
   };
@@ -688,8 +686,8 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     to,
     type: 'spacetime',
     capacityPerSec,
-    filter: null,
-    priorityList: [],
+    mode: 'priority',
+    cargo: [],
     transitTimeSec: 0,
     inFlight: [],
   });
@@ -882,7 +880,7 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
 });
 
 describe('§5.3 cable routes do not dispatch cargo', () => {
-  it('skips cable routes in dispatch even with non-empty priorityList and capacity', () => {
+  it('skips cable routes in dispatch even with non-empty cargo list and capacity', () => {
     const src = makeState('a', {
       inventory: { ...blankInventory(), iron_ore: 10 },
     });
@@ -893,8 +891,8 @@ describe('§5.3 cable routes do not dispatch cargo', () => {
       to: 'b',
       type: 'cable',
       capacityPerSec: 1,
-      filter: null,
-      priorityList: ['iron_ore'],
+      mode: 'priority',
+      cargo: [{ resourceId: 'iron_ore' }],
       transitTimeSec: 1,
       inFlight: [],
     };
@@ -982,18 +980,21 @@ function massDriverRoute(
   from: string,
   to: string,
   filter: ResourceId | null,
-  priorityList: ResourceId[] = [],
+  cargoList: ResourceId[] = [],
   capacityPerSec = MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
   transitTimeSec = 10,
 ): Route {
+  const cargo = filter !== null
+    ? [{ resourceId: filter }]
+    : cargoList.map((resourceId) => ({ resourceId }));
   return {
     id: nextRouteId(),
     from,
     to,
     type: 'mass_driver',
     capacityPerSec,
-    filter,
-    priorityList,
+    mode: 'priority',
+    cargo,
     transitTimeSec,
     inFlight: [],
   };
@@ -1179,8 +1180,8 @@ function submarineCableRoute(
     to,
     type: 'submarine_cable',
     capacityPerSec,
-    filter: null,
-    priorityList: [],
+    mode: 'priority',
+    cargo: [],
     transitTimeSec: 0,
     inFlight: [],
   };
@@ -1218,8 +1219,8 @@ describe('§4 submarine_cable RouteType', () => {
     expect(r.to).toBe('island-b');
     expect(r.capacityPerSec).toBe(50);
     expect(r.transitTimeSec).toBe(0);
-    expect(r.filter).toBeNull();
-    expect(r.priorityList).toEqual([]);
+    expect(r.mode).toBe('priority');
+    expect(r.cargo).toEqual([]);
     expect(r.inFlight).toEqual([]);
   });
 
@@ -1292,10 +1293,10 @@ describe('§4 submarine_cable RouteType', () => {
 });
 
 describe('§4 submarine_cable does not dispatch cargo (mirrors §5.3 cable)', () => {
-  it('skips submarine_cable routes in dispatch even with non-empty priorityList and capacity', () => {
+  it('skips submarine_cable routes in dispatch even with non-empty cargo list and capacity', () => {
     // Mirrors the §5.3 cable dispatch-skip test at routes.test.ts:878.
     // submarine_cable is a power-transmission route variant — it must
-    // never move resources, regardless of how its priorityList is filled.
+    // never move resources, regardless of how its cargo list is filled.
     const src = makeState('a', {
       inventory: { ...blankInventory(), iron_ore: 10 },
     });
@@ -1306,8 +1307,8 @@ describe('§4 submarine_cable does not dispatch cargo (mirrors §5.3 cable)', ()
       to: 'b',
       type: 'submarine_cable',
       capacityPerSec: 1,
-      filter: null,
-      priorityList: ['iron_ore'],
+      mode: 'priority',
+      cargo: [{ resourceId: 'iron_ore' }],
       transitTimeSec: 1,
       inFlight: [],
     };
@@ -1334,8 +1335,8 @@ describe('§4 submarine_cable does not dispatch cargo (mirrors §5.3 cable)', ()
       to: 'b',
       type: 'submarine_cable',
       capacityPerSec: 1,
-      filter: null,
-      priorityList: [],
+      mode: 'priority',
+      cargo: [],
       transitTimeSec: 0,
       inFlight: [
         { resourceId: 'iron_ore', amount: 5, arrivalTime: 0, dispatchTime: 0 },
@@ -1362,7 +1363,7 @@ describe('§4 submarine_cable does not dispatch cargo (mirrors §5.3 cable)', ()
 // ---------------------------------------------------------------------------
 
 describe('§5.3 spacetime routes do not dispatch cargo (post-isPowerLink refactor)', () => {
-  it('skips spacetime routes in dispatch even with non-empty priorityList and capacity', () => {
+  it('skips spacetime routes in dispatch even with non-empty cargo list and capacity', () => {
     // Mirrors the §5.3 cable dispatch-skip test. Pre-refactor, the literal
     // `'cable' || 'submarine_cable'` check would NOT skip spacetime, so
     // dispatch would have moved iron_ore from src to dst. With isPowerLink,
@@ -1377,8 +1378,8 @@ describe('§5.3 spacetime routes do not dispatch cargo (post-isPowerLink refacto
       to: 'b',
       type: 'spacetime',
       capacityPerSec: 1,
-      filter: null,
-      priorityList: ['iron_ore'],
+      mode: 'priority',
+      cargo: [{ resourceId: 'iron_ore' }],
       transitTimeSec: 1,
       inFlight: [],
     };
@@ -1403,8 +1404,8 @@ describe('§5.3 spacetime routes do not dispatch cargo (post-isPowerLink refacto
       to: 'b',
       type: 'spacetime',
       capacityPerSec: 1,
-      filter: null,
-      priorityList: [],
+      mode: 'priority',
+      cargo: [],
       transitTimeSec: 0,
       inFlight: [
         { resourceId: 'iron_ore', amount: 5, arrivalTime: 0, dispatchTime: 0 },
@@ -1514,8 +1515,8 @@ describe('createRouteFromBuilding', () => {
     expect(route!.sourceBuildingId).toBe('ad-1');
     expect(route!.from).toBe('a');
     expect(route!.to).toBe('b');
-    expect(route!.filter).toBe('iron_ore');
-    expect(route!.priorityList).toEqual([]);
+    expect(route!.mode).toBe('priority');
+    expect(route!.cargo).toEqual([{ resourceId: 'iron_ore' }]);
     expect(route!.inFlight).toEqual([]);
   });
   it('builds an instant teleporter route (transitTimeSec 0)', () => {
@@ -1523,7 +1524,8 @@ describe('createRouteFromBuilding', () => {
     const route = createRouteFromBuilding(b, 'a', 'b', null, 100);
     expect(route!.type).toBe('teleporter');
     expect(route!.transitTimeSec).toBe(0);
-    expect(route!.filter).toBeNull();
+    expect(route!.mode).toBe('priority');
+    expect(route!.cargo).toEqual([]);
   });
   it('returns null for a non-transport building', () => {
     const b = { id: 'lg-1', defId: 'logger' as const, x: 0, y: 0 };
@@ -1575,5 +1577,41 @@ describe('drainRoutesForBuilding', () => {
     const world = makeWorld([r1]);
     expect(drainRoutesForBuilding(world, 'nope')).toBe(0);
     expect(r1.draining).toBeUndefined();
+  });
+});
+
+
+describe('dispatch — cargo modes', () => {
+  it('split divides one tick across two resources by weight', () => {
+    const src = makeState('a', { inventory: { ...blankInventory(), wood: 100, stone: 100 } });
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(), from: 'a', to: 'b', type: 'cargo', capacityPerSec: 1.5,
+      mode: 'split',
+      cargo: [{ resourceId: 'wood', weight: 2 }, { resourceId: 'stone', weight: 1 }],
+      transitTimeSec: 10, inFlight: [],
+    };
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2);
+    const byRes = Object.fromEntries(out.map((d) => [d.resourceId, d.amount]));
+    expect(byRes.wood).toBeCloseTo(2.0, 6);
+    expect(byRes.stone).toBeCloseTo(1.0, 6);
+  });
+
+  it('source-floor gate skips an entry below the floor', () => {
+    const src = makeState('a', { inventory: { ...blankInventory(), wood: 30, stone: 80 } });
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(), from: 'a', to: 'b', type: 'cargo', capacityPerSec: 0.5,
+      mode: 'priority',
+      cargo: [{ resourceId: 'wood', sourceFloorPct: 50 }, { resourceId: 'stone' }],
+      transitTimeSec: 10, inFlight: [],
+    };
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2);
+    expect(out.length).toBe(1);
+    expect(out[0]?.resourceId).toBe('stone');
   });
 });

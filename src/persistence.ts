@@ -50,6 +50,7 @@ import { _seedConstructionCounter } from './construction-ui.js';
 import { _seedDroneIdCounter } from './drones.js';
 import type { Route } from './routes.js';
 import { _seedRouteIdCounter } from './routes.js';
+import { migrateLegacyCargo } from './route-cargo.js';
 import type { SettlementVehicle } from './settlement.js';
 import { SAT_BUFFER_CAP, type Satellite } from './orbital.js';
 import type { ObjectiveId } from './tutorial.js';
@@ -566,14 +567,19 @@ export function deserializeWorld(
           ? (d as { probabilityBias: number }).probabilityBias
           : 0,
     })),
-    routes: snapshot.world.routes.map((r) => ({
-      ...r,
-      inFlight: r.inFlight.map((b) => ({
-        ...b,
-        arrivalTime: b.arrivalTime + perfShift,
-        dispatchTime: b.dispatchTime + perfShift,
-      })),
-    })),
+    routes: snapshot.world.routes.map((r) => {
+      const { mode, cargo } = migrateLegacyCargo(r as unknown as Parameters<typeof migrateLegacyCargo>[0]);
+      return {
+        ...r,
+        mode,
+        cargo,
+        inFlight: r.inFlight.map((b) => ({
+          ...b,
+          arrivalTime: b.arrivalTime + perfShift,
+          dispatchTime: b.dispatchTime + perfShift,
+        })),
+      };
+    }),
     // Settlement vehicles share the same `performance.now()` domain as
     // drones/routes; apply the same shift so an in-flight vehicle's
     // arrival lands correctly in the new session's perf-domain.
