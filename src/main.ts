@@ -1480,6 +1480,7 @@ async function main(): Promise<void> {
         placementUi.cancel();
       }
     },
+    onInstantSettled: () => { rebuildWorldLayers(); },
   });
   world.addChildAt(settlementUi.vehicleLayer, 5);
   app.stage.addChild(settlementUi.reticleLayer);
