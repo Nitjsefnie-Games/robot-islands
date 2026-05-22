@@ -116,17 +116,17 @@ export interface VehicleStats {
 }
 
 export const SHIP_STATS: Record<VehicleTier, VehicleStats> = {
-  1: { speed: 0.25, tilesPerFuel: 12, maxKits: 1, failureRate: 0.02, weatherMultiplier: 1.0 },
-  2: { speed: 0.30, tilesPerFuel: 16, maxKits: 2, failureRate: 0.015, weatherMultiplier: 0.9 },
-  3: { speed: 0.40, tilesPerFuel: 20, maxKits: 2, failureRate: 0.01, weatherMultiplier: 0.8 },
-  4: { speed: 0.50, tilesPerFuel: 24, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
+  1: { speed: 0.25, tilesPerFuel: 0.5, maxKits: 1, failureRate: 0.02, weatherMultiplier: 1.0 },
+  2: { speed: 0.30, tilesPerFuel: 2, maxKits: 2, failureRate: 0.015, weatherMultiplier: 0.9 },
+  3: { speed: 0.40, tilesPerFuel: 3.5, maxKits: 2, failureRate: 0.01, weatherMultiplier: 0.8 },
+  4: { speed: 0.50, tilesPerFuel: 5, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
 };
 
 export const HELICOPTER_STATS: Record<VehicleTier, VehicleStats> = {
   1: { speed: 0, tilesPerFuel: 0, maxKits: 0, failureRate: 0, weatherMultiplier: 0 }, // no T1 heli
-  2: { speed: 0.75, tilesPerFuel: 6, maxKits: 1, failureRate: 0.01, weatherMultiplier: 1.2 },
-  3: { speed: 0.95, tilesPerFuel: 8, maxKits: 1, failureRate: 0.008, weatherMultiplier: 1.0 },
-  4: { speed: 1.20, tilesPerFuel: 10, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
+  2: { speed: 0.75, tilesPerFuel: 0.5, maxKits: 1, failureRate: 0.01, weatherMultiplier: 1.2 },
+  3: { speed: 0.95, tilesPerFuel: 1.5, maxKits: 1, failureRate: 0.008, weatherMultiplier: 1.0 },
+  4: { speed: 1.20, tilesPerFuel: 2.5, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
 };
 
 // ---------------------------------------------------------------------------

@@ -74,12 +74,13 @@ export interface Drone {
   readonly probabilityBias: number;
 }
 
-/** T2-equivalent constants for step 6. Tile units; seconds for time.
- *  10 biofuel → 40 tiles round-trip → 20 tiles outbound, ~40s flight.
- *  50 biofuel → 200 tiles round-trip → 100 tiles outbound, ~200s flight.
- *  Rebalanced for idle-game scale, step #19: speed 2 → 0.5 t/s so a
- *  50-tile drone trip takes 100s instead of 25s. */
-export const DRONE_TIER_EFFICIENCY = 4;
+/** Drone fuel efficiency — round-trip tiles per unit of fuel, per drone
+ *  tier. Tiered ramp (base 3, +3 per tier): a drone's reach scales with
+ *  its tier, and a light scout drone out-ranges ship/helicopter per fuel.
+ *  e.g. a T1 drone: 10 biofuel → 30 tiles round-trip → 15 tiles outbound. */
+export const DRONE_TIER_EFFICIENCY: Record<DroneTier, number> = {
+  1: 3, 2: 6, 3: 9, 4: 12, 5: 15, 6: 18,
+};
 export const DRONE_SPEED_TILES_PER_SEC = 0.5; // rebalanced for idle-game scale, step #19 (was 2)
 export const DRONE_SCAN_RADIUS_TILES = 8;
 
@@ -369,7 +370,7 @@ export function dispatchDrone(
   // footprint so each drone reveals more of the unknown map per round-trip.
   const originSkill = effectiveSkillMultipliers(origin);
   const fuelEffMul = originSkill.droneFuelEfficiency;
-  const efficiency = (isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY) * fuelEffMul;
+  const efficiency = (isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY[resolvedTier]) * fuelEffMul;
   const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
   const scanRadius = (isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES) * originSkill.droneScanRadius;
   const tier: DroneTier = resolvedTier;
