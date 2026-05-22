@@ -21,6 +21,7 @@ import {
   pickMostDegradedTarget,
   refreshCostFor,
   tryAutoMaintain,
+  tryRefreshMaintenance,
 } from './maintenance.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Tier } from './skilltree.js';
@@ -386,5 +387,78 @@ describe('refreshCostFor', () => {
   });
   it('returns {} for a def with no placementCost', () => {
     expect(refreshCostFor({} as BuildingDef)).toEqual({});
+  });
+});
+
+
+describe('tryRefreshMaintenance', () => {
+  const T2_THRESHOLD = MAINTENANCE_THRESHOLD_MS_BY_TIER[2];
+  const HEAVY = BUILDING_DEFS.heavy_logger;
+
+  function stockedInventory(): Record<ResourceId, number> {
+    const inv = blankInventory();
+    inv.stone = 100;
+    inv.wood = 100;
+    inv.iron_ingot = 100;
+    return inv;
+  }
+
+  it('refreshes a degraded building: deducts half cost, resets operatingMs', () => {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    const inv = stockedInventory();
+    const ok = tryRefreshMaintenance(b, HEAVY, inv, 5000);
+    expect(ok).toBe(true);
+    expect(inv.stone).toBe(70);
+    expect(inv.wood).toBe(85);
+    expect(inv.iron_ingot).toBe(90);
+    expect(b.operatingMs).toBe(0);
+    expect(b.maintainedAt).toBe(5000);
+    expect(b.placedAt).toBe(0);
+  });
+
+  it('refuses a pristine building (operatingMs below threshold), mutates nothing', () => {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD - HOUR);
+    const inv = stockedInventory();
+    expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
+    expect(inv.stone).toBe(100);
+    expect(b.operatingMs).toBe(T2_THRESHOLD - HOUR);
+  });
+
+  it('refuses an Eternal Servitor, mutates nothing', () => {
+    const b = { ...mkBuilding('heavy_logger', T2_THRESHOLD + HOUR), eternalServitor: true };
+    const inv = stockedInventory();
+    expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
+    expect(inv.stone).toBe(100);
+  });
+
+  it('refuses a def with no placementCost (free refresh disallowed)', () => {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    const def = { tier: 2 } as BuildingDef;
+    const inv = stockedInventory();
+    expect(tryRefreshMaintenance(b, def, inv, 5000)).toBe(false);
+    expect(inv.stone).toBe(100);
+  });
+
+  it('refuses and mutates nothing when inventory is short on any one resource', () => {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    const inv = stockedInventory();
+    inv.iron_ingot = 5; // need 10
+    expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
+    expect(inv.stone).toBe(100); // atomicity — nothing consumed
+    expect(inv.wood).toBe(100);
+    expect(b.operatingMs).toBe(T2_THRESHOLD + HOUR);
+  });
+
+  it('honours thresholdMul — a building past base but below scaled threshold is pristine', () => {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    const inv = stockedInventory();
+    expect(tryRefreshMaintenance(b, HEAVY, inv, 5000, 2)).toBe(false);
+    expect(inv.stone).toBe(100);
+  });
+
+  it('result matches tryAutoMaintain — both leave factor 1.0', () => {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    tryRefreshMaintenance(b, HEAVY, stockedInventory(), 5000);
+    expect(maintenanceFactor(b, HEAVY)).toBe(1.0);
   });
 });
