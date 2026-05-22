@@ -1410,9 +1410,10 @@ export function mountInspectorUi(
       maintenanceRecipeLine.style.display = 'none';
       refreshBtn.style.display = 'none';
     } else {
+      const thresholdMul = effectiveSkillMultipliers(state).maintenanceThreshold;
       const operating = building.operatingMs ?? 0;
-      const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier];
-      const factor = maintenanceFactor(building, def);
+      const threshold = MAINTENANCE_THRESHOLD_MS_BY_TIER[def.tier] * thresholdMul;
+      const factor = maintenanceFactor(building, def, thresholdMul);
       if (operating < threshold) {
         maintenanceStatus.textContent = `${formatHM(operating)} / ${formatHM(threshold)}`;
         maintenanceStatus.style.color = 'var(--ri-fg-1)';
@@ -1432,7 +1433,7 @@ export function mountInspectorUi(
       maintenanceRecipeLine.style.display = '';
 
       const refreshCost = refreshCostFor(def);
-      const refreshFactor = maintenanceFactor(building, def, effectiveSkillMultipliers(state).maintenanceThreshold);
+      const refreshFactor = maintenanceFactor(building, def, thresholdMul);
       if (Object.keys(refreshCost).length === 0 || refreshFactor >= 1.0) {
         refreshBtn.style.display = 'none';
       } else {
