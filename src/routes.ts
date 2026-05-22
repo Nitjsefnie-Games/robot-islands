@@ -33,7 +33,7 @@ import {
   weather,
   WEATHER_ROUTE_LOSS_RATE,
 } from './weather.js';
-import { CELL_SIZE_TILES, type WorldState } from './world.js';
+import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
 import type { BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 
@@ -809,6 +809,27 @@ export function dispatchAttempt(
 export function transitTimeForDistance(distanceTiles: number, speedTilesPerSec = T1_CARGO_SPEED_TILES_PER_SEC): number {
   if (speedTilesPerSec <= 0) return 0;
   return distanceTiles / speedTilesPerSec;
+}
+
+/** Transport buildings on `island` that can host a NEW route — they have a
+ *  route profile and don't already own a route in `routes`. */
+export function eligibleTransportBuildings(
+  island: IslandSpec,
+  routes: ReadonlyArray<Route>,
+): PlacedBuilding[] {
+  const taken = new Set<string>();
+  for (const r of routes) {
+    if (r.sourceBuildingId !== undefined) taken.add(r.sourceBuildingId);
+  }
+  return island.buildings.filter(
+    (b) => routeProfileForBuilding(b.defId) !== null && !taken.has(b.id),
+  );
+}
+
+/** Whether `island` has a Teleporter Pad — the destination-side gate for a
+ *  `teleporter` route. */
+export function islandHasTeleporterPad(island: IslandSpec): boolean {
+  return island.buildings.some((b) => b.defId === 'teleporter_pad');
 }
 
 /** Construct a route hosted by `building`. The building's def fixes the

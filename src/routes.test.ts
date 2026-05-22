@@ -12,8 +12,10 @@ import {
   createRouteFromBuilding,
   deliverArrivals,
   dispatchAttempt,
+  eligibleTransportBuildings,
   FUNNELING_BONUS_PERCENT,
   FUNNELING_TIER_CAP,
+  islandHasTeleporterPad,
   isPowerLink,
   MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
   MASS_DRIVER_DIESEL_PER_UNIT,
@@ -1525,5 +1527,34 @@ describe('createRouteFromBuilding', () => {
   it('returns null for a non-transport building', () => {
     const b = { id: 'lg-1', defId: 'logger' as const, x: 0, y: 0 };
     expect(createRouteFromBuilding(b, 'a', 'b', null, 100)).toBeNull();
+  });
+});
+
+describe('eligibleTransportBuildings', () => {
+  it('lists free transport buildings, excluding non-transport and taken', () => {
+    const island = makeIslandSpec('a', 0, 0);
+    island.buildings = [
+      { id: 'd1', defId: 'dock', x: 0, y: 0 },
+      { id: 'd2', defId: 'dock', x: 1, y: 0 },
+      { id: 'lg', defId: 'logger', x: 2, y: 0 },
+    ];
+    const taken = cargoRoute('a', 'b', 'iron_ore');
+    taken.sourceBuildingId = 'd1';
+    const eligible = eligibleTransportBuildings(island, [taken]);
+    expect(eligible.map((b) => b.id)).toEqual(['d2']);
+  });
+  it('returns all transport buildings when no routes exist', () => {
+    const island = makeIslandSpec('a', 0, 0);
+    island.buildings = [{ id: 'ad', defId: 'airship_dock', x: 0, y: 0 }];
+    expect(eligibleTransportBuildings(island, []).map((b) => b.id)).toEqual(['ad']);
+  });
+});
+
+describe('islandHasTeleporterPad', () => {
+  it('is true only when a teleporter_pad is present', () => {
+    const island = makeIslandSpec('a', 0, 0);
+    expect(islandHasTeleporterPad(island)).toBe(false);
+    island.buildings = [{ id: 't', defId: 'teleporter_pad', x: 0, y: 0 }];
+    expect(islandHasTeleporterPad(island)).toBe(true);
   });
 });
