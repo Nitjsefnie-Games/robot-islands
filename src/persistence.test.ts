@@ -614,8 +614,8 @@ describe('id counter seeding', () => {
       to: 'forest-ne',
       type: 'cargo',
       capacityPerSec: 0.5,
-      filter: null,
-      priorityList: [],
+      mode: 'priority',
+      cargo: [],
       transitTimeSec: 10,
       inFlight: [],
     });
@@ -843,8 +843,8 @@ describe('drone and route timestamp remapping', () => {
       to: 'forest-ne',
       type: 'cargo',
       capacityPerSec: 0.5,
-      filter: 'iron_ore',
-      priorityList: [],
+      mode: 'priority',
+      cargo: [{ resourceId: 'iron_ore' }],
       transitTimeSec: 10,
       inFlight: [
         {

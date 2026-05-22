@@ -87,8 +87,8 @@ function makeWorld(opts: {
     to: r.to,
     type: 'cargo',
     capacityPerSec: 1,
-    filter: null,
-    priorityList: [],
+    mode: 'priority',
+    cargo: [],
     transitTimeSec: 1,
     inFlight: [],
   }));

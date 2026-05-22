@@ -994,8 +994,8 @@ describe('§12.4 Foundation Kit starter-inventory grace cap', () => {
       to: 'dest',
       type: 'cargo' as const,
       capacityPerSec: 1,
-      filter: 'iron_ingot' as const,
-      priorityList: [],
+      mode: 'priority' as const,
+      cargo: [{ resourceId: 'iron_ingot' as const }],
       transitTimeSec: 0,
       inFlight: [
         {
@@ -1202,8 +1202,8 @@ function makeNetworkedWorldWithMilestone(
       to: id,
       type: 'cargo',
       capacityPerSec: 1,
-      filter: null,
-      priorityList: [],
+      mode: 'priority',
+      cargo: [],
       transitTimeSec: 1,
       inFlight: [],
     });
@@ -1222,8 +1222,8 @@ function makeNetworkedWorldWithMilestone(
         to: h.id,
         type: 'cargo',
         capacityPerSec: 1,
-        filter: null,
-        priorityList: [],
+        mode: 'priority',
+        cargo: [],
         transitTimeSec: 1,
         inFlight: [],
       });
@@ -1283,21 +1283,21 @@ describe('Auto-Patronage §9.6 / §12.7', () => {
     expect(newRoutes.every(rt => rt.from === 't3-0')).toBe(true);
     expect(newRoutes.every(rt => rt.to === 'target')).toBe(true);
 
-    const fuelRoute = newRoutes.find(rt => rt.filter !== null);
+    const fuelRoute = newRoutes.find(rt => rt.cargo.length === 1 && rt.cargo[0]!.resourceId === 'biofuel');
     expect(fuelRoute).toBeDefined();
-    expect(fuelRoute!.filter).toBe('biofuel');
+    expect(fuelRoute!.cargo).toEqual([{ resourceId: 'biofuel' }]);
 
     const kitRoute = newRoutes.find(
-      rt => rt.filter === null && rt.priorityList.includes('iron_ingot'),
+      rt => rt.cargo.some(c => c.resourceId === 'iron_ingot'),
     );
     expect(kitRoute).toBeDefined();
-    expect(kitRoute!.priorityList).toEqual(['iron_ingot', 'brick', 'lumber', 'glass', 'gear']);
+    expect(kitRoute!.cargo).toEqual([{ resourceId: 'iron_ingot' }, { resourceId: 'brick' }, { resourceId: 'lumber' }, { resourceId: 'glass' }, { resourceId: 'gear' }]);
 
     const rawRoute = newRoutes.find(
-      rt => rt.filter === null && rt.priorityList.includes('wood'),
+      rt => rt.cargo.some(c => c.resourceId === 'wood'),
     );
     expect(rawRoute).toBeDefined();
-    expect(rawRoute!.priorityList).toEqual(['wood', 'stone', 'coal', 'iron_ore', 'copper_ore']);
+    expect(rawRoute!.cargo).toEqual([{ resourceId: 'wood' }, { resourceId: 'stone' }, { resourceId: 'coal' }, { resourceId: 'iron_ore' }, { resourceId: 'copper_ore' }]);
   });
 
   it('no-ops when no Patron Hub exists', () => {

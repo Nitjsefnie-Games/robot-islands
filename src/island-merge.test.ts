@@ -338,8 +338,8 @@ describe('performMerge', () => {
       to,
       type: 'cargo',
       capacityPerSec: 0.5,
-      filter: 'iron_ore',
-      priorityList: [],
+      mode: 'priority',
+      cargo: [{ resourceId: 'iron_ore' }],
       transitTimeSec: 10,
       inFlight: [],
     });

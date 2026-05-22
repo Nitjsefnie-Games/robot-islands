@@ -36,6 +36,8 @@ import {
 import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
 import type { BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
+import { planCargo, type ViableEntry, type CargoDemand } from './route-cargo.js';
+import type { CargoMode, CargoEntry } from './route-cargo.js';
 
 /** Transport tier per §2.4. Step 7 only emits `cargo` routes; the field
  *  exists so future tiers can be added without reshaping the data model.
@@ -84,12 +86,11 @@ export interface Route {
   readonly type: RouteType;
   /** Capacity in units per second. For T1 cargo, placeholder 0.5 units/sec. */
   readonly capacityPerSec: number;
-  /** Specific resource OR null for 'any' (with priorityList). */
-  readonly filter: ResourceId | null;
-  /** Ordered priority list when filter === null. Empty array if filter set.
-   *  Mutable: the routes-UI mutates this in place when the player adds,
-   *  removes, or reorders entries (see `routes-ui.ts`). */
-  priorityList: ReadonlyArray<ResourceId>;
+  /** How this route divides its per-tick capacity across `cargo`. */
+  mode: CargoMode;
+  /** Resources this route may carry. Order matters for priority/waterfall;
+   *  weight matters for split. Mutated in place by routes-ui.ts. */
+  cargo: CargoEntry[];
   /** Real-time-of-flight seconds. T1 cargo = distance / speed. T4 teleporter = 0. */
   readonly transitTimeSec: number;
   /** In-flight batches. Mutable (push on dispatch, splice on arrival). */
@@ -445,25 +446,40 @@ function destinationHeadroom(
   return Math.max(0, room);
 }
 
-/** Pick the resource a route should ship this tick. Filter routes ship their
- *  fixed resource if both source has >0 and dest has headroom; otherwise
- *  return null. Any-routes walk `priorityList` in order. */
-function selectResource(
+/** Build this route's per-tick demands: filter cargo to viable entries
+ *  (source stock > 0, destination headroom > 0, source-floor gate passes),
+ *  then run the route's mode allocator over `budget`. Pure-ish: reads
+ *  world/states, mutates nothing. */
+function planRouteCargo(
   world: WorldState,
   states: Map<string, IslandState>,
   route: Route,
-): ResourceId | null {
+  budget: number,
+): CargoDemand[] {
   const srcState = states.get(route.from);
-  if (!srcState) return null;
-
-  const candidates: ReadonlyArray<ResourceId> =
-    route.filter !== null ? [route.filter] : route.priorityList;
-  for (const r of candidates) {
-    if (inv(srcState, r) <= 0) continue;
-    if (destinationHeadroom(world, states, route.to, r) <= 0) continue;
-    return r;
+  const destState = states.get(route.to);
+  if (!srcState || !destState) return [];
+  const viable: ViableEntry[] = [];
+  for (const entry of route.cargo) {
+    const r = entry.resourceId;
+    const sourceAvail = inv(srcState, r);
+    if (sourceAvail <= 0) continue;
+    const headroom = destinationHeadroom(world, states, route.to, r);
+    if (headroom <= 0) continue;
+    if (entry.sourceFloorPct !== undefined) {
+      const srcCap = cap(srcState, r);
+      if (srcCap <= 0 || sourceAvail / srcCap < entry.sourceFloorPct / 100) continue;
+    }
+    const destCap = cap(destState, r);
+    viable.push({
+      resourceId: r,
+      weight: entry.weight ?? 1,
+      headroom,
+      sourceAvail,
+      destFillRatio: destCap > 0 ? inv(destState, r) / destCap : 1,
+    });
   }
-  return null;
+  return planCargo(route.mode, viable, budget);
 }
 
 // ---------------------------------------------------------------------------
@@ -633,8 +649,6 @@ function dispatchPhase(
     if (route.draining) continue; // soft-deleted: stop new dispatch, let in-flight finish.
     const srcState = states.get(route.from);
     if (!srcState) continue;
-    const r = selectResource(world, states, route);
-    if (r === null) continue;
     const capacityMul = routeCapacityMultiplier(srcState.specializationRole);
     // Transport sub-path skill bonus — multiplicative with the spec role
     // multiplier. Read on the SOURCE island (where dispatch decisions get
@@ -663,9 +677,6 @@ function dispatchPhase(
       ? effectiveSkillMultipliers(srcState).airshipRange
       : 1;
     const capDemand = route.capacityPerSec * capacityMul * skillCapMul * airshipMul * weatherMul * elapsedSec;
-    const headroom = destinationHeadroom(world, states, route.to, r);
-    const desired = Math.min(capDemand, headroom);
-    if (desired <= 0) continue;
     const crossedCells =
       fromSpec && toSpec
         ? rasterizeRouteCells(
@@ -676,7 +687,10 @@ function dispatchPhase(
             CELL_SIZE_TILES,
           )
         : [];
-    demands.push({ route, resourceId: r, desired, weatherMul, crossedCells });
+    const planned = planRouteCargo(world, states, route, capDemand);
+    for (const d of planned) {
+      demands.push({ route, resourceId: d.resourceId, desired: d.amount, weatherMul, crossedCells });
+    }
   }
 
   // Phase 2: source contention. Group demands by (fromIslandId, resourceId).
@@ -685,7 +699,7 @@ function dispatchPhase(
   // each route, and the spec wording "distribute proportionally to capacity"
   // is equivalent to "scale every desired by the same factor" because each
   // route's desired share IS its capacity share of the partition.
-  const allocated = new Map<Route, number>();
+  const allocated = new Map<RouteDemand, number>();
   const groups = new Map<string, RouteDemand[]>();
   for (const d of demands) {
     const key = `${d.route.from}|${d.resourceId}`;
@@ -705,10 +719,10 @@ function dispatchPhase(
     let totalDesired = 0;
     for (const m of members) totalDesired += m.desired;
     if (totalDesired <= srcAvail || totalDesired === 0) {
-      for (const m of members) allocated.set(m.route, m.desired);
+      for (const m of members) allocated.set(m, m.desired);
     } else {
       const scale = srcAvail / totalDesired;
-      for (const m of members) allocated.set(m.route, m.desired * scale);
+      for (const m of members) allocated.set(m, m.desired * scale);
     }
   }
 
@@ -716,7 +730,7 @@ function dispatchPhase(
   // batch or deposit immediately for instant-transit routes.
   const dispatches: Array<{ routeId: string; resourceId: ResourceId; amount: number }> = [];
   for (const d of demands) {
-    const amount = allocated.get(d.route) ?? 0;
+    const amount = allocated.get(d) ?? 0;
     if (amount <= 0) continue;
     const srcState = states.get(d.route.from);
     if (!srcState) continue;
@@ -852,8 +866,8 @@ export function createRouteFromBuilding(
     to: toIslandId,
     type: profile.type,
     capacityPerSec: profile.capacityPerSec,
-    filter,
-    priorityList: [],
+    mode: 'priority',
+    cargo: filter !== null ? [{ resourceId: filter }] : [],
     transitTimeSec: transitTimeForDistance(distanceTiles, profile.speedTilesPerSec),
     inFlight: [],
     sourceBuildingId: building.id,
@@ -874,9 +888,9 @@ export function drainRoutesForBuilding(world: WorldState, buildingId: string): n
   return n;
 }
 
-/** Pure helper: reorder a priority list by moving the element at `srcIndex`
+/** Pure helper: reorder a list by moving the element at `srcIndex`
  *  to `dstIndex`. Returns a new array; the input is not modified. */
-export function reorderPriorityList(list: ReadonlyArray<ResourceId>, srcIndex: number, dstIndex: number): ResourceId[] {
+export function reorderPriorityList<T>(list: ReadonlyArray<T>, srcIndex: number, dstIndex: number): T[] {
   if (srcIndex === dstIndex) return [...list];
   const result = [...list];
   const [moved] = result.splice(srcIndex, 1);

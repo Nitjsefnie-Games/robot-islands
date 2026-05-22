@@ -28,8 +28,8 @@ function networkTo(world: ReturnType<typeof makeTestWorld>, toId: string): void 
     to: toId,
     type: 'cargo',
     capacityPerSec: 1,
-    filter: null,
-    priorityList: [],
+    mode: 'priority',
+    cargo: [],
     transitTimeSec: 1,
     inFlight: [],
   };

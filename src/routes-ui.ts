@@ -23,6 +23,7 @@ import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { TILE_PX } from './island.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import type { CargoEntry } from './route-cargo.js';
 import {
   reorderPriorityList,
   transitTimeForDistance,
@@ -645,9 +646,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       route.id,
       islandLabel(route.from),
       islandLabel(route.to),
-      route.filter ?? '__any__',
+      route.mode,
+      route.cargo.map((e) => `${e.resourceId}:${e.weight ?? 1}:${e.sourceFloorPct ?? ''}`).join(','),
       route.draining ? 'D' : '',
-      route.priorityList.join(','),
     ].join('\u001f');
   }
 
@@ -742,7 +743,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
 
     const mid = document.createElement('div');
     styled(mid, `color: ${'var(--ri-fg-1)'}; font-size: 10.5px; letter-spacing: 0.04em`);
-    const cargo = route.filter ?? 'any';
+    const cargo = route.cargo.length === 0
+      ? '(empty)'
+      : route.cargo.length === 1 && route.mode === 'priority'
+        ? route.cargo[0]!.resourceId
+        : `${route.mode} · ${route.cargo.length} resources`;
     mid.textContent = `${islandLabel(route.from)} → ${islandLabel(route.to)}  ${cargo}`;
 
     // Thin cyan rule (continuous flow indicator). Solid bar at the route's
@@ -780,9 +785,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     row.appendChild(mid);
     row.appendChild(ruleWrap);
     row.appendChild(meta);
-    if (route.filter === null) {
-      renderPriorityEditor(route, row, () => refresh(performance.now()));
-    }
+    renderCargoEditor(route, row, () => refresh(performance.now()));
 
     // Per-frame dynamic fields — recomputed in place so the row DOM (and its
     // click handlers) survives across repaints.
@@ -809,115 +812,161 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     return { structKey, row, update };
   }
 
-  function renderPriorityEditor(route: Route, container: HTMLElement, rerender: () => void): void {
+  function renderCargoEditor(route: Route, container: HTMLElement, rerender: () => void): void {
+    // --- mode selector ---
+    const modeRow = document.createElement('div');
+    modeRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:4px 0 0 16px;';
+    const modeLbl = document.createElement('span');
+    modeLbl.textContent = 'mode';
+    modeLbl.style.cssText = 'font-size:11px;color:var(--ri-accent-dim);';
+    const modeSel = document.createElement('select');
+    modeSel.style.cssText = 'background:var(--ri-panel-solid);color:var(--ri-accent);'
+      + 'border:1px solid var(--ri-accent-dim);font-size:11px;padding:2px 4px;';
+    for (const m of ['priority', 'waterfall', 'split', 'balanced'] as const) {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      if (route.mode === m) o.selected = true;
+      modeSel.appendChild(o);
+    }
+    modeSel.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+    modeSel.addEventListener('change', (e) => {
+      e.stopPropagation();
+      route.mode = modeSel.value as Route['mode'];
+      rerender();
+    });
+    modeRow.appendChild(modeLbl);
+    modeRow.appendChild(modeSel);
+    container.appendChild(modeRow);
+
+    const orderable = route.mode === 'priority' || route.mode === 'waterfall';
+
+    // --- cargo rows ---
     const ul = document.createElement('ul');
     ul.style.cssText = 'list-style:none;margin:4px 0 0 16px;padding:0;';
-    route.priorityList.forEach((resId, index) => {
+    route.cargo.forEach((entry, index) => {
       const li = document.createElement('li');
-      li.draggable = true;
+      li.draggable = orderable;
       li.dataset.index = String(index);
       li.style.cssText = [
-        'cursor: grab',
-        'padding: 2px 6px',
-        'border: 1px solid var(--ri-accent-dim)',
-        'margin-bottom: 2px',
-        'background: var(--ri-panel-solid)',
-        'color: var(--ri-accent)',
-        'font-size: 11px',
-        'border-radius: 2px',
-        'display: flex',
-        'justify-content: space-between',
-        'align-items: center',
-        'gap: 6px',
+        orderable ? 'cursor: grab' : 'cursor: default',
+        'padding: 2px 6px', 'border: 1px solid var(--ri-accent-dim)',
+        'margin-bottom: 2px', 'background: var(--ri-panel-solid)',
+        'color: var(--ri-accent)', 'font-size: 11px', 'border-radius: 2px',
+        'display: flex', 'align-items: center', 'gap: 6px',
       ].join(';');
+
       const label = document.createElement('span');
-      label.textContent = resId;
+      label.textContent = entry.resourceId;
+      label.style.cssText = 'flex:1 1 auto;';
       li.appendChild(label);
+
+      if (route.mode === 'split') {
+        const w = document.createElement('input');
+        w.type = 'number'; w.min = '1'; w.step = '1';
+        w.value = String(entry.weight ?? 1);
+        w.title = 'split weight';
+        w.style.cssText = 'width:42px;background:var(--ri-panel-solid);'
+          + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;';
+        w.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+        w.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const v = Math.max(1, Math.floor(Number(w.value) || 1));
+          route.cargo[index] = { ...entry, weight: v };
+          rerender();
+        });
+        li.appendChild(w);
+      }
+
+      const floor = document.createElement('input');
+      floor.type = 'number'; floor.min = '0'; floor.max = '100'; floor.step = '5';
+      floor.value = entry.sourceFloorPct === undefined ? '' : String(entry.sourceFloorPct);
+      floor.placeholder = 'floor%';
+      floor.title = 'source-floor gate — only ship while source ≥ this % full';
+      floor.style.cssText = 'width:54px;background:var(--ri-panel-solid);'
+        + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;';
+      floor.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+      floor.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const raw = floor.value.trim();
+        const next: typeof entry = { ...entry };
+        if (raw === '') delete (next as { sourceFloorPct?: number }).sourceFloorPct;
+        else (next as { sourceFloorPct?: number }).sourceFloorPct = Math.min(100, Math.max(0, Number(raw) || 0));
+        route.cargo[index] = next;
+        rerender();
+      });
+      li.appendChild(floor);
+
       const del = document.createElement('button');
-      del.type = 'button';
-      del.textContent = '×';
-      del.title = 'remove from priority list';
-      del.style.cssText = [
-        'cursor: pointer',
-        'background: transparent',
-        'color: var(--ri-warn)',
-        'border: 1px solid var(--ri-accent-dim)',
-        'border-radius: 2px',
-        'padding: 0 6px',
-        'font-size: 11px',
-        'line-height: 14px',
-      ].join(';');
+      del.type = 'button'; del.textContent = '×'; del.title = 'remove from cargo';
+      del.style.cssText = 'cursor:pointer;background:transparent;color:var(--ri-warn);'
+        + 'border:1px solid var(--ri-accent-dim);border-radius:2px;padding:0 6px;'
+        + 'font-size:11px;line-height:14px;';
       del.addEventListener('mousedown', (e) => { e.stopPropagation(); });
       del.addEventListener('click', (e) => {
         e.stopPropagation();
-        const next = route.priorityList.filter((_, i) => i !== index);
-        route.priorityList = next;
+        route.cargo = route.cargo.filter((_, i) => i !== index);
         rerender();
       });
       li.appendChild(del);
-      li.addEventListener('dragstart', (e) => handleDragStart(e));
-      li.addEventListener('dragend', (e) => handleDragEnd(e));
-      li.addEventListener('dragover', (e) => handleDragOver(e));
-      li.addEventListener('drop', (e) => handleDrop(e, route, rerender));
-      li.addEventListener('dragenter', (e) => { e.preventDefault(); li.style.borderColor = 'var(--ri-accent)'; });
-      li.addEventListener('dragleave', () => { li.style.borderColor = 'var(--ri-accent-dim)'; });
+
+      if (orderable) {
+        li.addEventListener('dragstart', (e) => handleDragStart(e));
+        li.addEventListener('dragend', (e) => handleDragEnd(e));
+        li.addEventListener('dragover', (e) => handleDragOver(e));
+        li.addEventListener('drop', (e) => handleCargoDrop(e, route, rerender));
+        li.addEventListener('dragenter', (e) => { e.preventDefault(); li.style.borderColor = 'var(--ri-accent)'; });
+        li.addEventListener('dragleave', () => { li.style.borderColor = 'var(--ri-accent-dim)'; });
+      }
       ul.appendChild(li);
     });
     container.appendChild(ul);
 
-    // Add-resource control. Always rendered (even when the list is
-    // already populated) so the player can extend it. Lists only
-    // resources not yet on this route's priorityList.
-    const remaining = ALL_RESOURCES.filter((r) => !route.priorityList.includes(r));
+    // --- add-resource control ---
+    const have = new Set(route.cargo.map((e) => e.resourceId));
+    const remaining = ALL_RESOURCES.filter((r) => !have.has(r));
     const addRow = document.createElement('div');
     addRow.style.cssText = 'display:flex;gap:4px;margin:4px 0 0 16px;align-items:center';
     const addSel = document.createElement('select');
-    addSel.style.cssText = [
-      'flex: 1 1 auto',
-      'background: var(--ri-panel-solid)',
-      'color: var(--ri-accent)',
-      'border: 1px solid var(--ri-accent-dim)',
-      'font-size: 11px',
-      'padding: 2px 4px',
-    ].join(';');
+    addSel.style.cssText = 'flex:1 1 auto;background:var(--ri-panel-solid);'
+      + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;padding:2px 4px;';
     if (remaining.length === 0) {
       const o = document.createElement('option');
       o.textContent = '(all resources added)';
-      addSel.appendChild(o);
-      addSel.disabled = true;
+      addSel.appendChild(o); addSel.disabled = true;
     } else {
       for (const r of remaining) {
         const o = document.createElement('option');
-        o.value = r;
-        o.textContent = r;
+        o.value = r; o.textContent = r;
         addSel.appendChild(o);
       }
     }
     const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.textContent = '+ add';
-    addBtn.style.cssText = [
-      'cursor: pointer',
-      'background: var(--ri-panel-solid)',
-      'color: var(--ri-accent)',
-      'border: 1px solid var(--ri-accent-dim)',
-      'font-size: 11px',
-      'padding: 2px 8px',
-      'border-radius: 2px',
-    ].join(';');
+    addBtn.type = 'button'; addBtn.textContent = '+ add';
+    addBtn.style.cssText = 'cursor:pointer;background:var(--ri-panel-solid);'
+      + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;'
+      + 'padding:2px 8px;border-radius:2px;';
     addBtn.disabled = remaining.length === 0;
     if (addBtn.disabled) addBtn.style.opacity = '0.5';
     addBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const chosen = addSel.value as ResourceId;
-      if (!chosen || route.priorityList.includes(chosen)) return;
-      const next = [...route.priorityList, chosen];
-      route.priorityList = next;
+      if (!chosen || have.has(chosen)) return;
+      route.cargo = [...route.cargo, { resourceId: chosen }];
       rerender();
     });
     addRow.appendChild(addSel);
     addRow.appendChild(addBtn);
     container.appendChild(addRow);
+  }
+
+  function handleCargoDrop(e: DragEvent, route: Route, rerender: () => void) {
+    e.preventDefault();
+    const src = Number(e.dataTransfer?.getData('text/plain'));
+    const dstLi = e.currentTarget as HTMLElement;
+    const dst = Number(dstLi.dataset.index);
+    if (src === dst || Number.isNaN(src) || Number.isNaN(dst)) return;
+    route.cargo = reorderPriorityList(route.cargo, src, dst) as CargoEntry[];
+    rerender();
   }
 
   function handleDragStart(e: DragEvent) {
@@ -935,19 +984,6 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
 
   function handleDragOver(e: DragEvent) {
     e.preventDefault();
-  }
-
-  function handleDrop(e: DragEvent, route: Route, rerender: () => void) {
-    e.preventDefault();
-    const src = Number(e.dataTransfer?.getData('text/plain'));
-    const dstLi = e.currentTarget as HTMLElement;
-    const dst = Number(dstLi.dataset.index);
-    if (src === dst || Number.isNaN(src) || Number.isNaN(dst)) return;
-
-    const list = reorderPriorityList(route.priorityList, src, dst);
-    route.priorityList = list;
-
-    rerender();
   }
 
   // ---- Stat refresh ----------------------------------------------------------
