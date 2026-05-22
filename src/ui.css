@@ -256,6 +256,72 @@ canvas { display: block; }
 .ri-dot[data-tone="danger"]{ background: var(--ri-danger); animation: ri-pulse 1.2s infinite; }
 @keyframes ri-pulse { 50% { opacity: 0.35; } }
 
+/* ─── island selector (HUD topbar dropdown) ──────────────────────────── */
+.ri-island-select { position: relative; display: inline-flex; }
+
+.ri-island-trigger {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--ri-border);
+  border-radius: 999px;
+  color: var(--ri-fg-1);
+  background: transparent;
+  font: 11px/1.4 var(--ri-font-sans);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 100ms, border-color 100ms, background 100ms;
+}
+.ri-island-trigger:hover { border-color: var(--ri-accent-dim); }
+.ri-island-trigger[data-open="true"] {
+  color: var(--ri-accent);
+  border-color: var(--ri-border-accent);
+  background: var(--ri-pressed);
+}
+.ri-island-trigger[data-tone="warn"]   { border-color: rgba(245,167,66,0.40); }
+.ri-island-trigger[data-tone="danger"] { border-color: rgba(232,93,74,0.40); }
+.ri-island-trigger__name { font-weight: 500; }
+.ri-island-caret {
+  color: var(--ri-fg-3); font-size: 8px; line-height: 1;
+  transition: transform 120ms ease, color 120ms ease;
+}
+.ri-island-trigger[data-open="true"] .ri-island-caret {
+  transform: rotate(180deg); color: var(--ri-accent);
+}
+
+.ri-island-pop {
+  position: absolute; top: calc(100% + 7px); left: 0;
+  min-width: 100%;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 4px;
+  background: var(--ri-panel-solid);
+  border: 1px solid var(--ri-border-strong);
+  border-radius: 8px;
+  box-shadow: var(--ri-shadow-pop);
+  z-index: 90;
+  animation: ri-island-pop-in 110ms ease;
+}
+/* `display: flex` above overrides the UA `[hidden] { display: none }`;
+   restore it so toggling the `hidden` attribute actually hides the popup. */
+.ri-island-pop[hidden] { display: none; }
+@keyframes ri-island-pop-in { from { opacity: 0; transform: translateY(-4px); } }
+
+.ri-island-opt {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 8px;
+  border: 0; border-radius: 5px;
+  background: transparent;
+  color: var(--ri-fg-2);
+  font: 11px/1.4 var(--ri-font-sans);
+  letter-spacing: 0.02em;
+  cursor: pointer; text-align: left; white-space: nowrap;
+  transition: background 90ms, color 90ms;
+}
+.ri-island-opt:hover { background: var(--ri-hover); color: var(--ri-fg-1); }
+.ri-island-opt[data-active="true"] {
+  color: var(--ri-accent); background: var(--ri-pressed);
+}
+.ri-island-opt__name { flex: 1; }
+
 .ri-kv {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: 8px;

@@ -243,7 +243,49 @@ export function mountIslandBar(
   mountPanel(bar, { id: 'island-bar', zone: Zone.TC, order: 0 });
 
   let lastIslandSig = '';
-  const chipMap = new Map<string, HTMLButtonElement>();
+  let popOpen = false;
+  const optMap = new Map<string, HTMLButtonElement>();
+
+  // Island selector — one dropdown rather than a chip per island. A chip
+  // row scales badly: 6+ islands overflow the topbar.
+  const selectWrap = document.createElement('div');
+  selectWrap.classList.add('ri-island-select');
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.classList.add('ri-island-trigger');
+  const trigDot = document.createElement('span');
+  trigDot.classList.add('ri-dot');
+  const trigName = document.createElement('span');
+  trigName.classList.add('ri-island-trigger__name');
+  const trigLevel = document.createElement('span');
+  trigLevel.classList.add('ri-mono', 'ri-muted');
+  const trigCaret = document.createElement('span');
+  trigCaret.classList.add('ri-island-caret');
+  trigCaret.textContent = '▾';
+  trigger.append(trigDot, trigName, trigLevel, trigCaret);
+
+  const pop = document.createElement('div');
+  pop.classList.add('ri-island-pop');
+  pop.hidden = true;
+
+  selectWrap.append(trigger, pop);
+
+  function setPopOpen(open: boolean): void {
+    popOpen = open;
+    pop.hidden = !open;
+    trigger.dataset.open = open ? 'true' : 'false';
+  }
+  trigger.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    setPopOpen(!popOpen);
+  });
+  document.addEventListener('click', (ev) => {
+    if (popOpen && !selectWrap.contains(ev.target as Node)) setPopOpen(false);
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && popOpen) setPopOpen(false);
+  });
 
   const phaseEl = document.createElement('div');
   phaseEl.classList.add('phase');
@@ -251,21 +293,31 @@ export function mountIslandBar(
   const savedEl = document.createElement('div');
   savedEl.classList.add('saved-indicator');
 
-  function buildChip(spec: IslandSpec, state: IslandState): HTMLButtonElement {
-    const chip = document.createElement('button');
-    chip.classList.add('ri-chip');
+  bar.append(selectWrap, phaseEl, savedEl);
+
+  function dotTone(factor: number): string {
+    return factor >= 1 ? 'ok' : factor >= 0.5 ? 'warn' : 'danger';
+  }
+
+  function buildOption(spec: IslandSpec, state: IslandState): HTMLButtonElement {
+    const opt = document.createElement('button');
+    opt.type = 'button';
+    opt.classList.add('ri-island-opt');
     const dot = document.createElement('span');
     dot.classList.add('ri-dot');
     const name = document.createElement('span');
+    name.classList.add('ri-island-opt__name');
     name.textContent = spec.name ?? spec.id;
     const level = document.createElement('span');
     level.classList.add('ri-mono', 'ri-muted');
     level.textContent = `L${state.level}`;
-    chip.appendChild(dot);
-    chip.appendChild(name);
-    chip.appendChild(level);
-    chip.addEventListener('click', () => onSelect(spec.id));
-    return chip;
+    opt.append(dot, name, level);
+    opt.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      onSelect(spec.id);
+      setPopOpen(false);
+    });
+    return opt;
   }
 
   function update(
@@ -277,38 +329,42 @@ export function mountIslandBar(
     const sig = populated.map((i) => i.id).join(',');
     if (sig !== lastIslandSig) {
       lastIslandSig = sig;
-      while (bar.firstChild) bar.removeChild(bar.firstChild);
-      chipMap.clear();
+      while (pop.firstChild) pop.removeChild(pop.firstChild);
+      optMap.clear();
       for (const spec of populated) {
         const state = world.islandStates?.get(spec.id);
         if (!state) continue;
-        const chip = buildChip(spec, state);
-        chipMap.set(spec.id, chip);
-        bar.appendChild(chip);
+        const opt = buildOption(spec, state);
+        optMap.set(spec.id, opt);
+        pop.appendChild(opt);
       }
-      bar.appendChild(phaseEl);
-      bar.appendChild(savedEl);
     }
 
-    // Update chip states
+    // Update each option's tone / level / active flag.
     for (const spec of populated) {
-      const chip = chipMap.get(spec.id);
-      if (!chip) continue;
-      const p = islandPower.get(spec.id);
-      const factor = p?.factor ?? 1;
-      const tone = powerTone(factor);
-      chip.dataset.active = spec.id === activeId ? 'true' : 'false';
-      chip.dataset.tone = tone;
-      const dot = chip.querySelector('.ri-dot') as HTMLElement;
-      if (dot) {
-        dot.dataset.tone = factor >= 1 ? 'ok' : factor >= 0.5 ? 'warn' : 'danger';
-      }
+      const opt = optMap.get(spec.id);
+      if (!opt) continue;
+      const factor = islandPower.get(spec.id)?.factor ?? 1;
+      opt.dataset.active = spec.id === activeId ? 'true' : 'false';
+      opt.dataset.tone = powerTone(factor);
+      const dot = opt.querySelector('.ri-dot') as HTMLElement | null;
+      if (dot) dot.dataset.tone = dotTone(factor);
       const state = world.islandStates?.get(spec.id);
-      if (state) {
-        const level = chip.querySelector('.ri-mono') as HTMLElement;
-        if (level) level.textContent = `L${state.level}`;
-      }
+      const level = opt.querySelector('.ri-mono') as HTMLElement | null;
+      if (state && level) level.textContent = `L${state.level}`;
     }
+
+    // Reflect the active island on the trigger.
+    const activeSpec = populated.find((i) => i.id === activeId) ?? populated[0];
+    if (activeSpec) {
+      const factor = islandPower.get(activeSpec.id)?.factor ?? 1;
+      const state = world.islandStates?.get(activeSpec.id);
+      trigName.textContent = activeSpec.name ?? activeSpec.id;
+      trigLevel.textContent = state ? `L${state.level}` : '';
+      trigDot.dataset.tone = dotTone(factor);
+      trigger.dataset.tone = powerTone(factor);
+    }
+    trigCaret.hidden = populated.length <= 1;
 
     // Phase
     const nowMs = Date.now();
