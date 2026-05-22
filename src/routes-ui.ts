@@ -554,7 +554,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   }
   const rowCache = new Map<string, LedgerRowEntry>();
   // Sentinel distinct from any real signature (which is '' for zero routes).
-  let lastLedgerSig = ' ';
+  let lastLedgerSig = 'init';
 
   /** Player-facing island name per §IslandSpec.name; falls back to the id. */
   function islandLabel(id: string): string {
@@ -571,7 +571,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       route.filter ?? '__any__',
       route.draining ? 'D' : '',
       route.priorityList.join(','),
-    ].join('');
+    ].join('\u001f');
   }
 
   function repaintLedger(nowMs: number): void {
@@ -582,7 +582,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     // Only touch the DOM tree when the route SET or any row's structure
     // changes. Steady-state (just ETA/in-flight ticking) skips straight to
     // the in-place `update` pass below.
-    const sig = routes.map(routeStructKey).join('');
+    const sig = routes.map(routeStructKey).join('\u001e');
     if (sig !== lastLedgerSig) {
       lastLedgerSig = sig;
       const seen = new Set<string>();
