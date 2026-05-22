@@ -1416,3 +1416,67 @@ describe('§5.3 spacetime routes do not dispatch cargo (post-isPowerLink refacto
     expect(r.inFlight.length).toBe(1);
   });
 });
+
+describe('route draining — soft delete (finish in-flight, stop dispatch)', () => {
+  it('a draining route dispatches nothing', () => {
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 } });
+    const dst = makeState('b');
+    const r = cargoRoute('a', 'b', 'iron_ore', [], 0.5, 10);
+    r.draining = true;
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2);
+    expect(out.length).toBe(0);
+    expect(src.inventory.iron_ore).toBe(100);
+    expect(r.inFlight.length).toBe(0);
+  });
+
+  it('a draining route still delivers cargo already in flight', () => {
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 } });
+    const dst = makeState('b');
+    const r = cargoRoute('a', 'b', 'iron_ore', [], 0.5, 10);
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    tickRoutes(world, states, 0, 2); // dispatch a batch while live
+    expect(r.inFlight.length).toBe(1);
+    r.draining = true; // player deletes the route
+    tickRoutes(world, states, 11_000, 5); // batch must still arrive
+    expect(dst.inventory.iron_ore).toBeGreaterThan(0);
+  });
+
+  it('prunes a draining route once its last in-flight batch is delivered', () => {
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 } });
+    const dst = makeState('b');
+    const r = cargoRoute('a', 'b', 'iron_ore', [], 0.5, 10);
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    tickRoutes(world, states, 0, 2);
+    r.draining = true;
+    tickRoutes(world, states, 5000, 5); // still in transit — route survives
+    expect(world.routes.length).toBe(1);
+    tickRoutes(world, states, 11_000, 1); // delivered — route pruned
+    expect(world.routes.length).toBe(0);
+  });
+
+  it('prunes a draining route with no in-flight cargo on the next tick', () => {
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 } });
+    const dst = makeState('b');
+    const r = cargoRoute('a', 'b', 'iron_ore', [], 0.5, 10);
+    r.draining = true;
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    tickRoutes(world, states, 0, 2);
+    expect(world.routes.length).toBe(0);
+  });
+
+  it('leaves non-draining routes untouched', () => {
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 } });
+    const dst = makeState('b');
+    const r = cargoRoute('a', 'b', 'iron_ore', [], 0.5, 10);
+    const world = makeWorld([r]);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    tickRoutes(world, states, 0, 2);
+    tickRoutes(world, states, 11_000, 5);
+    expect(world.routes.length).toBe(1);
+  });
+});

@@ -92,6 +92,12 @@ export interface Route {
   readonly transitTimeSec: number;
   /** In-flight batches. Mutable (push on dispatch, splice on arrival). */
   inFlight: InFlightBatch[];
+  /** Soft-delete flag. When set, the route stops dispatching new batches
+   *  (`dispatchPhase` skips it) but `deliverArrivals` keeps delivering the
+   *  batches already in transit. `tickRoutes` prunes the route from
+   *  `world.routes` once `inFlight` drains empty — so cargo en route at
+   *  delete time is never lost. Absent/false on a live route. */
+  draining?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -557,6 +563,14 @@ export function tickRoutes(
   arrivals: Array<{ destIslandId: string; resourceId: ResourceId; amount: number }>;
 } {
   const arrivals = deliverArrivals(world, states, nowMs);
+  // Prune draining routes whose in-flight cargo has fully landed (soft
+  // delete — see `Route.draining`). Done after `deliverArrivals` so a route
+  // is removed the same tick its last batch is delivered. Routes with no
+  // transit buffer (instant / power-link) are pruned on their first tick.
+  for (let i = world.routes.length - 1; i >= 0; i--) {
+    const r = world.routes[i];
+    if (r && r.draining && r.inFlight.length === 0) world.routes.splice(i, 1);
+  }
   const dispatches = dispatchPhase(world, states, nowMs, elapsedSec);
   return { dispatches, arrivals };
 }
@@ -582,6 +596,7 @@ function dispatchPhase(
   const demands: RouteDemand[] = [];
   for (const route of world.routes) {
     if (isPowerLink(route.type)) continue; // §5.3 / §4: power-link routes transmit power, not items.
+    if (route.draining) continue; // soft-deleted: stop new dispatch, let in-flight finish.
     const srcState = states.get(route.from);
     if (!srcState) continue;
     const r = selectResource(world, states, route);
