@@ -71,7 +71,33 @@ export function pointInSignalRange(
   for (const r of ranges) {
     const dx = x - r.cx;
     const dy = y - r.cy;
-    if (dx * dx + dy * dy <= r.radius * r.radius) return true;
+    if (dx * dx + dy * dy <= r.radius * r.radius + 1e-9) return true;
   }
   return false;
+}
+
+/** Default perimeter sample count for the redundancy check. 24 evenly
+ *  spaced perimeter points + the centre = 25 union tests per call.
+ *  Chord length 2·r·sin(π/24) ≈ 0.26·r — tighter than 16 at modest cost. */
+export const REDUNDANT_SAMPLES = 24;
+
+/** True iff the test antenna's coverage disc is fully covered by the
+ *  union of `others`' discs. Approximated by sampling N perimeter points
+ *  + the centre and checking each against the existing union helper.
+ *  Pure — no PixiJS, no world mutation. A visual hint, not a removal-
+ *  safety guarantee (see spec §02 for honest error accounting). */
+export function isAntennaRedundant(
+  test: SignalRange,
+  others: ReadonlyArray<SignalRange>,
+  samples: number = REDUNDANT_SAMPLES,
+): boolean {
+  if (others.length === 0) return false;
+  if (!pointInSignalRange(others, test.cx, test.cy)) return false;
+  for (let k = 0; k < samples; k++) {
+    const theta = (2 * Math.PI * k) / samples;
+    const x = test.cx + test.radius * Math.cos(theta);
+    const y = test.cy + test.radius * Math.sin(theta);
+    if (!pointInSignalRange(others, x, y)) return false;
+  }
+  return true;
 }
