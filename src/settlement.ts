@@ -123,7 +123,7 @@ export const SHIP_STATS: Record<VehicleTier, VehicleStats> = {
 };
 
 export const HELICOPTER_STATS: Record<VehicleTier, VehicleStats> = {
-  1: { speed: 0, tilesPerFuel: 0, maxKits: 0, failureRate: 0, weatherMultiplier: 0 }, // no T1 heli
+  1: { speed: 0.55, tilesPerFuel: 0.4, maxKits: 1, failureRate: 0.025, weatherMultiplier: 1.3 }, // fast but fuel-thirsty, fragile, weather-vulnerable
   2: { speed: 0.75, tilesPerFuel: 0.5, maxKits: 1, failureRate: 0.01, weatherMultiplier: 1.2 },
   3: { speed: 0.95, tilesPerFuel: 1.5, maxKits: 1, failureRate: 0.008, weatherMultiplier: 1.0 },
   4: { speed: 1.20, tilesPerFuel: 2.5, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
@@ -146,6 +146,7 @@ export interface VehicleTuning {
   readonly tier: VehicleTier;
   readonly speed: number;
   readonly tilesPerFuel: number;
+  readonly maxKits: number;
   readonly weatherMultiplier: number;
   readonly failureRate: number; // §12.5 mechanical failure probability [0,1]
 }
@@ -159,6 +160,7 @@ export function tuningFor(kind: VehicleKind, tier: VehicleTier): VehicleTuning {
     tier,
     speed: stats.speed,
     tilesPerFuel: stats.tilesPerFuel,
+    maxKits: stats.maxKits,
     weatherMultiplier: stats.weatherMultiplier,
     failureRate: stats.failureRate,
   };
@@ -481,13 +483,9 @@ export function dispatchVehicle(
     }
   }
 
-  // Tier validation: must be within the origin island's unlocked range, and
-  // helicopters require tier ≥ 2 (T1 heli is the null entry).
+  // Tier validation: must be within the origin island's unlocked range.
   const originTier = tierForLevel(originState.level);
   if (tier < 1 || tier > originTier) {
-    return { ok: false, reason: 'invalid-tier' };
-  }
-  if (kind === 'helicopter' && tier < 2) {
     return { ok: false, reason: 'invalid-tier' };
   }
 

@@ -158,6 +158,16 @@ describe('vehicle tuning', () => {
     // Heli is faster than ship per §12.6.
     expect(t.speed).toBeGreaterThan(SHIP_STATS[1].speed);
   });
+
+  it('helicopter tuning T1 is fast but fuel-thirsty, fragile, weather-vulnerable', () => {
+    const t = tuningFor('helicopter', 1);
+    expect(t.tier).toBe(1);
+    expect(t.speed).toBe(0.55);
+    expect(t.tilesPerFuel).toBe(0.4);
+    expect(t.maxKits).toBe(1);
+    expect(t.failureRate).toBe(0.025);
+    expect(t.weatherMultiplier).toBe(1.3);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -555,13 +565,12 @@ describe('dispatchVehicle', () => {
     expect(r.reason).toBe('invalid-tier');
   });
 
-  it('rejects helicopter tier 1 (T1 heli does not exist)', () => {
+  it('accepts helicopter tier 1 with sufficient fuel', () => {
     const { world, home, homeState, target } = setup();
     home.buildings.push({ id: 'hp', defId: 'helipad', x: 1, y: 1 });
-    const r = dispatchVehicle(world, home, homeState, target, 'helicopter', 1, 10, 1, 0);
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.reason).toBe('invalid-tier');
+    // T1 heli: speed 0.55, tilesPerFuel 0.4. 30-tile trip needs ceil(30/0.4)=75 fuel.
+    const r = dispatchVehicle(world, home, homeState, target, 'helicopter', 1, 75, 1, 0);
+    expect(r.ok).toBe(true);
   });
 
   it('rejects tier 0 as invalid-tier', () => {
