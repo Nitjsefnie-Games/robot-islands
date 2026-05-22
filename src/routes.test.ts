@@ -12,6 +12,7 @@ import {
   createRouteFromBuilding,
   deliverArrivals,
   dispatchAttempt,
+  drainRoutesForBuilding,
   eligibleTransportBuildings,
   FUNNELING_BONUS_PERCENT,
   FUNNELING_TIER_CAP,
@@ -1556,5 +1557,23 @@ describe('islandHasTeleporterPad', () => {
     expect(islandHasTeleporterPad(island)).toBe(false);
     island.buildings = [{ id: 't', defId: 'teleporter_pad', x: 0, y: 0 }];
     expect(islandHasTeleporterPad(island)).toBe(true);
+  });
+});
+
+describe('drainRoutesForBuilding', () => {
+  it('marks routes owned by the building as draining', () => {
+    const r1 = cargoRoute('a', 'b', 'iron_ore'); r1.sourceBuildingId = 'b1';
+    const r2 = cargoRoute('a', 'b', 'coal');     r2.sourceBuildingId = 'b2';
+    const world = makeWorld([r1, r2]);
+    const n = drainRoutesForBuilding(world, 'b1');
+    expect(n).toBe(1);
+    expect(r1.draining).toBe(true);
+    expect(r2.draining).toBeUndefined();
+  });
+  it('returns 0 when no route is owned by the building', () => {
+    const r1 = cargoRoute('a', 'b', 'iron_ore'); r1.sourceBuildingId = 'b1';
+    const world = makeWorld([r1]);
+    expect(drainRoutesForBuilding(world, 'nope')).toBe(0);
+    expect(r1.draining).toBeUndefined();
   });
 });
