@@ -1,0 +1,1259 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antenna redundancy red tint — design spec</title>
+<style>
+  :root {
+    --ivory:    #1B1A17;
+    --slate:    #F5F3EC;
+    --clay:     #D97757;
+    --oat:      #3A352B;
+    --olive:    #8FA56E;
+    --rust:     #E08B7F;
+    --gray-150: #2E2C27;
+    --gray-300: #3A3833;
+    --gray-500: #8F8D82;
+    --gray-700: #CFCCC2;
+    --white:    #252420;
+    --signal:   #7dd3e8;
+    --signal-soft: rgba(125,211,232,0.18);
+    --redundant: #E08B7F;
+    --redundant-soft: rgba(224,139,127,0.22);
+
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+    --radius: 12px;
+    --border: 1.5px solid var(--gray-300);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--sans);
+    background: var(--ivory);
+    color: var(--gray-700);
+    line-height: 1.58;
+    padding: 56px 32px 120px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1080px; margin: 0 auto; }
+
+  header.page-head { margin-bottom: 40px; max-width: 840px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 36px;
+    line-height: 1.16;
+    color: var(--slate);
+    margin-bottom: 18px;
+    letter-spacing: -0.01em;
+  }
+  .context-box {
+    background: var(--gray-150);
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-size: 14.5px;
+    color: var(--gray-700);
+  }
+  .context-box .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+  @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  .summary .cell {
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .summary .k {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+    margin-bottom: 6px;
+  }
+  .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+  .summary .v.accent  { color: var(--clay); }
+  .summary .v.ok      { color: var(--olive); }
+  .summary .v.warn    { color: var(--rust); }
+
+  .decision {
+    background: var(--white);
+    border: var(--border);
+    border-left: 4px solid var(--clay);
+    border-radius: var(--radius);
+    padding: 22px 26px;
+    margin-bottom: 56px;
+  }
+  .decision .d-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--clay);
+    margin-bottom: 8px;
+  }
+  .decision .d-head {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--slate);
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+  }
+  .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 760px; }
+  .decision .d-body + .d-body { margin-top: 8px; }
+
+  section { margin-bottom: 56px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 8px;
+  }
+  .sec-head .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--oat);
+    color: var(--slate);
+    padding: 3px 9px;
+    border-radius: 8px;
+  }
+  .sec-head h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 26px;
+    color: var(--slate);
+    letter-spacing: -0.01em;
+  }
+  .sec-intro {
+    font-size: 14.5px;
+    color: var(--gray-500);
+    max-width: 740px;
+    margin-bottom: 22px;
+  }
+  p.body { font-size: 14.5px; max-width: 780px; margin-bottom: 14px; }
+  p.body strong { color: var(--slate); }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--gray-150);
+    border: 1px solid var(--gray-300);
+    border-radius: 5px;
+    padding: 1px 5px;
+    color: #C9B98A;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--gray-150);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    color: var(--gray-700);
+    overflow-x: auto;
+    margin: 6px 0 16px;
+    max-width: 820px;
+  }
+  pre code { background: none; border: none; padding: 0; color: inherit; }
+
+  .tbl {
+    width: 100%;
+    border: var(--border);
+    border-radius: var(--radius);
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    font-size: 13.5px;
+  }
+  .tbl th, .tbl td {
+    text-align: left;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--gray-300);
+    vertical-align: top;
+  }
+  .tbl th {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+    background: var(--gray-150);
+    font-weight: 600;
+  }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl td { color: var(--gray-700); }
+  .tbl td.slate { color: var(--slate); font-weight: 600; }
+
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+  .compare .col {
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .compare .col-head {
+    padding: 12px 18px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: var(--border);
+  }
+  .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+  .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+  .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+  .compare .col-body ul { list-style: none; }
+  .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+  .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+  .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+  /* diagram cards */
+  .diagram-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 820px) { .diagram-row { grid-template-columns: 1fr; } }
+  .diagram {
+    background: #10131A;
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 18px 18px 14px;
+  }
+  .diagram .dtitle {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+    margin-bottom: 4px;
+  }
+  .diagram .dverdict { font-size: 14px; font-weight: 600; color: var(--slate); margin-bottom: 12px; }
+  .diagram svg { display: block; width: 100%; height: auto; }
+  .diagram .dcaption {
+    font-size: 12.5px;
+    color: var(--gray-500);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+  .diagram.wide { grid-column: 1 / -1; }
+
+  .changes { display: flex; flex-direction: column; gap: 12px; }
+  .change {
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 4px 24px;
+  }
+  @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+  .change .file {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--clay);
+    word-break: break-all;
+  }
+  .change .what { font-size: 14px; color: var(--gray-700); }
+  .change .what .lead { color: var(--slate); font-weight: 600; }
+
+  .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 800px; }
+  .check {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--white);
+    border: var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .check .box {
+    width: 18px; height: 18px;
+    border-radius: 5px;
+    border: 2px solid var(--gray-500);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .check .ck-text { font-size: 14px; color: var(--gray-700); }
+  .check .ck-text strong { color: var(--slate); }
+
+  .risks {
+    border: var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--white);
+  }
+  .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+  @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+  .risks .row + .row { border-top: var(--border); }
+  .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+  .risks .cell + .cell { border-left: var(--border); }
+  @media (max-width: 780px) {
+    .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+  }
+  .risks .head {
+    background: var(--gray-150);
+    font-weight: 600;
+    color: var(--slate);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .sev {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+  .sev.high { background: #4A2A1C; color: #F0B79C; }
+  .sev.med  { background: var(--oat);  color: var(--slate); }
+  .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+  .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+  .defer {
+    background: var(--white);
+    border: var(--border);
+    border-left: 4px solid var(--gray-500);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+  .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+  .footer {
+    color: var(--gray-500);
+    font-size: 13px;
+    margin-top: 64px;
+    padding-top: 22px;
+    border-top: 1px solid var(--gray-300);
+  }
+
+  /* swatches inside legends */
+  .swatch {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    vertical-align: -2px;
+    margin-right: 6px;
+    border: 1px solid rgba(255,255,255,0.18);
+  }
+
+  /* ---------- tint tuner (design-time widget, §05) ---------- */
+  .tuner {
+    background: #0f1318;
+    border: var(--border);
+    border-left: 4px solid var(--clay);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin: 18px 0;
+  }
+  .tuner-head { margin-bottom: 14px; }
+  .tuner-title {
+    font-family: var(--serif);
+    font-size: 18px;
+    color: var(--slate);
+    margin-bottom: 4px;
+  }
+  .tuner-hint { font-size: 12.5px; color: var(--gray-500); }
+  .tuner-hint code { background: none; border: none; padding: 0; color: #C9B98A; }
+  .tuner-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gray-500);
+    flex-wrap: wrap;
+  }
+  .tuner-controls label { color: var(--clay); }
+  .tuner-controls input[type=range] { flex: 1 1 auto; max-width: 340px; accent-color: var(--clay); }
+  .tuner-controls span#tt-blend-pct { color: var(--slate); min-width: 48px; }
+  .tuner-swatch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--gray-500);
+    flex-wrap: wrap;
+  }
+  .tuner-swatch-box {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    border: 1px solid var(--gray-300);
+    background: #a3b1ad;
+  }
+  .tuner-swatch code { color: var(--slate); background: none; border: none; padding: 0; }
+  .tuner-copy {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    background: var(--gray-150);
+    color: var(--slate);
+    border: 1px solid var(--gray-300);
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .tuner-copy:hover { background: var(--oat); }
+  .tuner-output { margin-top: 12px; }
+  .tuner-output pre {
+    background: #121110;
+    border: 1px solid var(--gray-300);
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 0;
+  }
+  .tuner-output code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: #F5F3EC;
+    background: none;
+    border: none;
+    padding: 0;
+    white-space: pre;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Design spec · robot-islands · §11 telemetry overlay</div>
+    <h1>Slight red tint on antennas whose coverage disc is fully covered by other antennas.</h1>
+    <div class="context-box">
+      <span class="label">Context</span>
+      The antenna overlay (<code>antenna-overlay.ts</code>) draws one cyan
+      ring per Antenna building so the player can see drone-telemetry
+      coverage. As the player accumulates antennas, some end up entirely
+      redundant — their disc sits inside the union of other antennas'
+      discs. There is currently no visual hint of this, so the player
+      cannot tell at a glance which antennas they could safely demolish
+      to reclaim power / footprint. This spec adds a slight red tint to
+      such fully-redundant antennas.
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="cell"><div class="k">Scope</div><div class="v accent">1 feature</div></div>
+    <div class="cell"><div class="k">Files touched</div><div class="v">2 src · 1 test</div></div>
+    <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+    <div class="cell"><div class="k">Layer</div><div class="v warn">overlay only</div></div>
+  </div>
+
+  <div class="decision">
+    <div class="d-tag">Decision</div>
+    <div class="d-head">Approximate the fully-covered-disc test by sampling 24 perimeter points plus the centre against the union of all OTHER antennas' discs, and blend a small amount of rust into the cyan overlay colour when the test passes — exact blend value tuned design-time in §05's slider and hardcoded as a single <code>REDUNDANT_COLOR</code> constant.</div>
+    <div class="d-body">
+      Sample-based — not an exact circle-cover proof. Both directions of
+      error (false positive, false negative) are bounded by sample count
+      and are tolerable because <strong>this is a visual hint, not a
+      removal-safety guarantee</strong>. The player still makes the
+      demolition decision.
+    </div>
+    <div class="d-body">
+      Scope of "other antennas" is <strong>global</strong> — every
+      antenna on every populated island. This matches how
+      <code>computeSignalRanges</code> already flattens islands into one
+      island-agnostic <code>SignalRange[]</code> for the drone-tick
+      consumer in <code>drones.ts</code>; any per-island scoping would
+      diverge from the actual game mechanic.
+    </div>
+  </div>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">01</span><h2>Background — what an antenna is</h2></div>
+    <p class="sec-intro">The minimum readers need to understand why the redundancy predicate is shaped the way it is.</p>
+
+    <p class="body"><strong>Game role.</strong> Antennas are §11 telemetry
+      relays. Drones outside any antenna's signal range silently drop
+      their scanned cells (<code>drones.ts:635, 666, 679</code>). Without
+      an on-map indication the player can't tell which corners of the
+      map have coverage. The cyan overlay is that indication.</p>
+
+    <p class="body"><strong>Data shape.</strong> A <code>SignalRange</code>
+      is just three numbers: <code>cx</code>, <code>cy</code>,
+      <code>radius</code> — no identity, no island binding
+      (<code>antenna.ts:32-36</code>). The flat
+      <code>SignalRange[]</code> is produced by
+      <code>computeSignalRanges(populatedIslands)</code>
+      (<code>antenna.ts:46-63</code>) and consumed island-agnostically.
+      The same shape feeds the overlay and the drone tick.</p>
+
+    <p class="body"><strong>Tier table</strong> (<code>antenna.ts:21-28</code>):</p>
+    <table class="tbl">
+      <thead><tr><th>defId</th><th>Radius (tiles)</th><th>Footprint</th><th>Power</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="slate">antenna_t1</td><td>80</td><td>1×1</td><td>0 W</td><td>Beacon, zero-power</td></tr>
+        <tr><td class="slate">antenna_t2</td><td>140</td><td>1×1</td><td>5 W</td><td></td></tr>
+        <tr><td class="slate">antenna_t3</td><td>220</td><td>1×1</td><td>25 W</td><td></td></tr>
+        <tr><td class="slate">antenna_t4</td><td>320</td><td>2×2</td><td>60 W</td><td>Comm Tower</td></tr>
+        <tr><td class="slate">antenna_t5</td><td>480</td><td>2×2</td><td>150 W</td><td>Exotic Antenna</td></tr>
+        <tr><td class="slate">antenna_t6</td><td>700</td><td>2×2</td><td>400 W</td><td>Doubles as satellite dish — adds to <code>groundStationCommRange</code> in <code>orbital.ts:367-368</code></td></tr>
+      </tbody>
+    </table>
+
+    <p class="body" style="margin-top:14px"><strong>Current overlay</strong>
+      (<code>antenna-overlay.ts:19-25</code>). One <code>Graphics</code>
+      per antenna: cyan <code>0x7dd3e8</code> fill at alpha 0.04 plus
+      cyan stroke at alpha 0.22, width 1. Rebuilt by
+      <code>refresh()</code> from <code>main.ts:1941</code> whenever the
+      world layers rebuild.</p>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">02</span><h2>The redundancy predicate</h2></div>
+    <p class="sec-intro">A clean geometric definition, the chosen approximation, and an honest accounting of its error modes.</p>
+
+    <p class="body"><strong>Exact definition.</strong> Antenna A is
+      <em>fully redundant</em> iff its entire closed coverage disc
+      <code>D(A)</code> is contained in the union of the closed coverage
+      discs of all OTHER antennas:</p>
+    <pre><code>D(A) ⊆ ⋃ { D(B) : B ≠ A, B ∈ allAntennas }</code></pre>
+
+    <p class="body"><strong>Approximation.</strong> Compute exact disc-in-union
+      cover is annoying (involves boundary-arc clipping). We instead
+      sample <strong>N = 24 evenly-spaced perimeter points plus the
+      centre</strong> (25 points total) and check each point against the
+      union via the existing <code>pointInSignalRange</code> helper. If
+      every sampled point lies inside at least one other disc, we call
+      A redundant.</p>
+
+    <p class="body"><strong>Why N = 24 + centre.</strong> The chord
+      length between adjacent perimeter samples at N = 24 is
+      <code>2 r sin(π / 24) ≈ 0.26 r</code> — for the smallest tier
+      (radius 80) that's a ~21-tile chord. Uncovered slivers smaller
+      than that may still evade detection (false positive), but the
+      threshold is tight enough that the visual hint matches what the
+      player would judge by eye. Cost is 1.5× N=16's per-frame point
+      tests on a path that fires on overlay rebuild, not every frame —
+      negligible. The centre sample catches the degenerate case where
+      every perimeter point happens to graze a different disc but the
+      interior is uncovered (rare with one other large disc, costless
+      to defend against).</p>
+
+    <p class="body"><strong>Honest error accounting.</strong> Both
+      directions are possible:</p>
+    <ul style="list-style:none; margin: 10px 0 14px 0; max-width: 780px;">
+      <li style="padding:6px 0; padding-left: 18px; position: relative;">
+        <span style="position:absolute; left:0; color: var(--rust);">·</span>
+        <strong style="color:var(--slate)">False positive</strong> (tint applied, antenna actually has an uncovered sliver):
+        a thin uncovered arc between two sample points. The player sees
+        red, demolishes — and discovers a small dead corridor in the
+        previously-covered region.
+      </li>
+      <li style="padding:6px 0; padding-left: 18px; position: relative;">
+        <span style="position:absolute; left:0; color: var(--olive);">·</span>
+        <strong style="color:var(--slate)">False negative</strong> (no tint, antenna is actually redundant):
+        sampling happens to find an uncovered point that's, in fact, the
+        only such point in a measure-zero set. Player misses a free
+        demolition.
+      </li>
+    </ul>
+    <p class="body">Both are tolerable. The player's mental model is
+      "ring inside other rings = probably safe to remove" — exact cover
+      is not what's promised. The brief's framing of "false positives
+      are not tolerable" is contradicted by any finite-sample method
+      and is rejected here in favour of "bounded error, visual hint
+      only."</p>
+
+    <p class="body"><strong>Signature.</strong> <code>SignalRange</code>
+      has no identity, so the caller filters self out before calling:</p>
+    <pre><code>export function isAntennaRedundant(
+  test: SignalRange,
+  others: ReadonlyArray&lt;SignalRange&gt;,
+  samples: number = 24,
+): boolean</code></pre>
+    <p class="body">Pure layer — no PixiJS import, no
+      <code>Graphics</code>, no DOM. Lives in
+      <code>src/antenna.ts</code> next to the existing pure helpers
+      (keeps the antenna math in one module; no new file needed).</p>
+
+    <p class="body"><strong>Algorithm.</strong></p>
+    <pre><code>function isAntennaRedundant(test, others, samples = 24) {
+  if (others.length === 0) return false;
+  // Centre point.
+  if (!pointInSignalRange(others, test.cx, test.cy)) return false;
+  // N evenly-spaced perimeter points.
+  for (let k = 0; k &lt; samples; k++) {
+    const theta = (2 * Math.PI * k) / samples;
+    const x = test.cx + test.radius * Math.cos(theta);
+    const y = test.cy + test.radius * Math.sin(theta);
+    if (!pointInSignalRange(others, x, y)) return false;
+  }
+  return true;
+}</code></pre>
+    <p class="body">Re-uses the union test <code>pointInSignalRange</code>
+      (<code>antenna.ts:66-77</code>) — the same predicate the drone
+      tick uses to decide if a cell is in range. Same semantic, no new
+      truth definition.</p>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">03</span><h2>Diagrams</h2></div>
+    <p class="sec-intro">Two scenes that make the predicate concrete, and a third illustrating the perimeter-sample mechanism.</p>
+
+    <div class="diagram-row">
+      <!-- Redundant scene -->
+      <div class="diagram">
+        <div class="dtitle">Scene A · Antenna T is redundant</div>
+        <div class="dverdict" style="color: var(--rust)">Tinted red — every sample point covered by another disc</div>
+        <svg viewBox="0 0 400 320" aria-label="Redundant antenna: T is fully inside two larger other discs.">
+          <!-- background -->
+          <rect x="0" y="0" width="400" height="320" fill="#0a0e14"/>
+          <!-- Other disc A -->
+          <circle cx="135" cy="160" r="110"
+                  fill="rgba(125,211,232,0.06)"
+                  stroke="rgba(125,211,232,0.55)" stroke-width="1.2"/>
+          <text x="56" y="100" font-family="ui-monospace,monospace"
+                font-size="11" fill="#7dd3e8">other A</text>
+          <!-- Other disc B -->
+          <circle cx="280" cy="160" r="115"
+                  fill="rgba(125,211,232,0.06)"
+                  stroke="rgba(125,211,232,0.55)" stroke-width="1.2"/>
+          <text x="320" y="100" font-family="ui-monospace,monospace"
+                font-size="11" fill="#7dd3e8">other B</text>
+          <!-- Test antenna T (redundant) -->
+          <circle cx="205" cy="170" r="58"
+                  fill="rgba(224,139,127,0.18)"
+                  stroke="rgba(224,139,127,0.95)" stroke-width="1.8"/>
+          <text x="186" y="174" font-family="ui-monospace,monospace"
+                font-size="11" fill="#E08B7F" font-weight="700">T</text>
+          <!-- sample dots, all green -->
+          <g fill="#8FA56E">
+            <!-- 16 perimeter points on T (radius 58, centre 205,170) -->
+            <!-- precomputed: angle 2π*k/16 -->
+            <circle cx="263.00" cy="170.00" r="2.5"/>
+            <circle cx="258.59" cy="192.20" r="2.5"/>
+            <circle cx="246.01" cy="211.01" r="2.5"/>
+            <circle cx="227.20" cy="223.59" r="2.5"/>
+            <circle cx="205.00" cy="228.00" r="2.5"/>
+            <circle cx="182.80" cy="223.59" r="2.5"/>
+            <circle cx="163.99" cy="211.01" r="2.5"/>
+            <circle cx="151.41" cy="192.20" r="2.5"/>
+            <circle cx="147.00" cy="170.00" r="2.5"/>
+            <circle cx="151.41" cy="147.80" r="2.5"/>
+            <circle cx="163.99" cy="128.99" r="2.5"/>
+            <circle cx="182.80" cy="116.41" r="2.5"/>
+            <circle cx="205.00" cy="112.00" r="2.5"/>
+            <circle cx="227.20" cy="116.41" r="2.5"/>
+            <circle cx="246.01" cy="128.99" r="2.5"/>
+            <circle cx="258.59" cy="147.80" r="2.5"/>
+            <!-- centre -->
+            <circle cx="205" cy="170" r="3" fill="#8FA56E"/>
+          </g>
+        </svg>
+        <div class="dcaption">Test antenna T (rust) sits between two larger
+          others (cyan). All 16 perimeter samples and the centre lie
+          inside at least one of the cyan discs → predicate returns
+          <code>true</code> → T receives the redundancy tint.</div>
+      </div>
+
+      <!-- NOT redundant scene -->
+      <div class="diagram">
+        <div class="dtitle">Scene B · Antenna T is NOT redundant</div>
+        <div class="dverdict" style="color: var(--signal)">Stays cyan — at least one sample falls outside every other disc</div>
+        <svg viewBox="0 0 400 320" aria-label="Non-redundant antenna: T has a sliver poking out where no other disc covers.">
+          <rect x="0" y="0" width="400" height="320" fill="#0a0e14"/>
+          <!-- Other disc A -->
+          <circle cx="125" cy="160" r="95"
+                  fill="rgba(125,211,232,0.06)"
+                  stroke="rgba(125,211,232,0.55)" stroke-width="1.2"/>
+          <text x="56" y="100" font-family="ui-monospace,monospace"
+                font-size="11" fill="#7dd3e8">other A</text>
+          <!-- Other disc B -->
+          <circle cx="300" cy="160" r="90"
+                  fill="rgba(125,211,232,0.06)"
+                  stroke="rgba(125,211,232,0.55)" stroke-width="1.2"/>
+          <text x="340" y="100" font-family="ui-monospace,monospace"
+                font-size="11" fill="#7dd3e8">other B</text>
+          <!-- Test antenna T (NOT redundant) -->
+          <circle cx="210" cy="170" r="78"
+                  fill="rgba(125,211,232,0.05)"
+                  stroke="rgba(125,211,232,0.95)" stroke-width="1.8"/>
+          <text x="194" y="174" font-family="ui-monospace,monospace"
+                font-size="11" fill="#7dd3e8" font-weight="700">T</text>
+          <!-- sample dots: mostly green, two red (bottom poking down out of both others) -->
+          <g>
+            <!-- 16 perimeter points on T (radius 78, centre 210,170) -->
+            <!-- bottom-most points fall outside both discs -->
+            <circle cx="288.00" cy="170.00" r="2.5" fill="#8FA56E"/>
+            <circle cx="282.07" cy="199.85" r="2.5" fill="#8FA56E"/>
+            <circle cx="265.15" cy="225.15" r="2.5" fill="#8FA56E"/>
+            <circle cx="239.85" cy="242.07" r="2.5" fill="#E08B7F" stroke="#E08B7F"/>
+            <circle cx="210.00" cy="248.00" r="2.5" fill="#E08B7F" stroke="#E08B7F"/>
+            <circle cx="180.15" cy="242.07" r="2.5" fill="#E08B7F" stroke="#E08B7F"/>
+            <circle cx="154.85" cy="225.15" r="2.5" fill="#8FA56E"/>
+            <circle cx="137.93" cy="199.85" r="2.5" fill="#8FA56E"/>
+            <circle cx="132.00" cy="170.00" r="2.5" fill="#8FA56E"/>
+            <circle cx="137.93" cy="140.15" r="2.5" fill="#8FA56E"/>
+            <circle cx="154.85" cy="114.85" r="2.5" fill="#8FA56E"/>
+            <circle cx="180.15" cy="97.93" r="2.5" fill="#8FA56E"/>
+            <circle cx="210.00" cy="92.00" r="2.5" fill="#8FA56E"/>
+            <circle cx="239.85" cy="97.93" r="2.5" fill="#8FA56E"/>
+            <circle cx="265.15" cy="114.85" r="2.5" fill="#8FA56E"/>
+            <circle cx="282.07" cy="140.15" r="2.5" fill="#8FA56E"/>
+            <!-- centre -->
+            <circle cx="210" cy="170" r="3" fill="#8FA56E"/>
+          </g>
+          <!-- callout for the uncovered points -->
+          <path d="M 210 270 L 210 290" stroke="#E08B7F" stroke-width="1"/>
+          <text x="143" y="304" font-family="ui-monospace,monospace"
+                font-size="10.5" fill="#E08B7F">3 samples outside any other disc</text>
+        </svg>
+        <div class="dcaption">T extends below both other discs. Three
+          perimeter samples (and a strip in between) fall outside the
+          union → predicate returns <code>false</code> → T keeps the
+          default cyan styling.</div>
+      </div>
+    </div>
+
+    <!-- Sample illustration -->
+    <div style="margin-top: 22px;">
+      <div class="diagram wide">
+        <div class="dtitle">Sample mechanism · 16 perimeter points + 1 centre</div>
+        <div class="dverdict">All 17 must be inside the union of others for the predicate to return true.</div>
+        <svg viewBox="0 0 720 280" aria-label="Antenna disc with 16 perimeter sample points and centre marker.">
+          <rect x="0" y="0" width="720" height="280" fill="#0a0e14"/>
+          <!-- the test disc, centred at 200,140 radius 110 -->
+          <circle cx="200" cy="140" r="110"
+                  fill="rgba(224,139,127,0.10)"
+                  stroke="rgba(224,139,127,0.85)" stroke-width="1.5"/>
+          <!-- radial guides + sample dots -->
+          <g stroke="rgba(224,139,127,0.25)" stroke-width="0.8" fill="none">
+            <line x1="200" y1="140" x2="310.00" y2="140.00"/>
+            <line x1="200" y1="140" x2="301.62" y2="182.10"/>
+            <line x1="200" y1="140" x2="277.78" y2="217.78"/>
+            <line x1="200" y1="140" x2="242.10" y2="241.62"/>
+            <line x1="200" y1="140" x2="200.00" y2="250.00"/>
+            <line x1="200" y1="140" x2="157.90" y2="241.62"/>
+            <line x1="200" y1="140" x2="122.22" y2="217.78"/>
+            <line x1="200" y1="140" x2="98.38" y2="182.10"/>
+            <line x1="200" y1="140" x2="90.00" y2="140.00"/>
+            <line x1="200" y1="140" x2="98.38" y2="97.90"/>
+            <line x1="200" y1="140" x2="122.22" y2="62.22"/>
+            <line x1="200" y1="140" x2="157.90" y2="38.38"/>
+            <line x1="200" y1="140" x2="200.00" y2="30.00"/>
+            <line x1="200" y1="140" x2="242.10" y2="38.38"/>
+            <line x1="200" y1="140" x2="277.78" y2="62.22"/>
+            <line x1="200" y1="140" x2="301.62" y2="97.90"/>
+          </g>
+          <g fill="#E08B7F">
+            <circle cx="310.00" cy="140.00" r="3.5"/>
+            <circle cx="301.62" cy="182.10" r="3.5"/>
+            <circle cx="277.78" cy="217.78" r="3.5"/>
+            <circle cx="242.10" cy="241.62" r="3.5"/>
+            <circle cx="200.00" cy="250.00" r="3.5"/>
+            <circle cx="157.90" cy="241.62" r="3.5"/>
+            <circle cx="122.22" cy="217.78" r="3.5"/>
+            <circle cx="98.38"  cy="182.10" r="3.5"/>
+            <circle cx="90.00"  cy="140.00" r="3.5"/>
+            <circle cx="98.38"  cy="97.90"  r="3.5"/>
+            <circle cx="122.22" cy="62.22"  r="3.5"/>
+            <circle cx="157.90" cy="38.38"  r="3.5"/>
+            <circle cx="200.00" cy="30.00"  r="3.5"/>
+            <circle cx="242.10" cy="38.38"  r="3.5"/>
+            <circle cx="277.78" cy="62.22"  r="3.5"/>
+            <circle cx="301.62" cy="97.90"  r="3.5"/>
+          </g>
+          <!-- centre marker -->
+          <circle cx="200" cy="140" r="4" fill="none" stroke="#E08B7F" stroke-width="1.5"/>
+          <circle cx="200" cy="140" r="1.5" fill="#E08B7F"/>
+          <!-- labels and chord length -->
+          <text x="200" y="266" text-anchor="middle"
+                font-family="ui-monospace,monospace" font-size="11.5" fill="#CFCCC2">test antenna disc (radius r)</text>
+          <!-- annotation panel -->
+          <g transform="translate(420,40)">
+            <text x="0" y="0"  font-family="ui-serif,Georgia,serif"
+                  font-size="16" fill="#F5F3EC">17 sample points</text>
+            <text x="0" y="22" font-family="system-ui,sans-serif"
+                  font-size="13" fill="#CFCCC2">16 evenly-spaced on the perimeter</text>
+            <text x="0" y="40" font-family="system-ui,sans-serif"
+                  font-size="13" fill="#CFCCC2">+ 1 centre</text>
+            <text x="0" y="70" font-family="ui-monospace,monospace"
+                  font-size="12" fill="#8F8D82">θₖ = 2πk / 16, k = 0..15</text>
+            <text x="0" y="88" font-family="ui-monospace,monospace"
+                  font-size="12" fill="#8F8D82">pₖ = (cx + r cos θₖ, cy + r sin θₖ)</text>
+            <text x="0" y="118" font-family="ui-serif,Georgia,serif"
+                  font-size="14" fill="#F5F3EC">Chord between adjacent samples</text>
+            <text x="0" y="138" font-family="ui-monospace,monospace"
+                  font-size="12" fill="#CFCCC2">2 r sin(π/16) ≈ 0.39 r</text>
+            <text x="0" y="156" font-family="system-ui,sans-serif"
+                  font-size="12" fill="#8F8D82">→ T1 (r=80): ~31-tile chord</text>
+            <text x="0" y="172" font-family="system-ui,sans-serif"
+                  font-size="12" fill="#8F8D82">→ T6 (r=700): ~273-tile chord</text>
+            <text x="0" y="202" font-family="ui-serif,Georgia,serif"
+                  font-size="14" fill="#F5F3EC">Predicate</text>
+            <text x="0" y="222" font-family="ui-monospace,monospace"
+                  font-size="11.5" fill="#CFCCC2">redundant ⇔ ∀ p ∈ samples,</text>
+            <text x="0" y="238" font-family="ui-monospace,monospace"
+                  font-size="11.5" fill="#CFCCC2">  pointInSignalRange(others, p) = true</text>
+          </g>
+        </svg>
+        <div class="dcaption">Each sample is evaluated against the union
+          of the other antennas' discs via the existing
+          <code>pointInSignalRange</code> helper. The chord length grows
+          with radius, so larger antennas have a coarser perimeter
+          resolution — acceptable because larger antennas are also
+          surrounded by larger others in the typical redundancy case.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">04</span><h2>Scope: which antennas count as "other"</h2></div>
+    <p class="sec-intro">Same island, same kind, or every antenna in the world? Pick a defensible answer.</p>
+
+    <div class="compare">
+      <div class="col bad">
+        <div class="col-head">Rejected — per-island scoping</div>
+        <div class="col-body"><ul>
+          <li>Would tint T as redundant only if an antenna on its own island covers it — even when an antenna on a neighbouring island covers it equally well.</li>
+          <li>Diverges from the actual game mechanic: <code>drones.ts:635</code> uses a single global union; per-island scoping would lie about coverage.</li>
+          <li>Requires re-shaping <code>SignalRange</code> to carry island id (currently doesn't — <code>antenna.ts:32-36</code>).</li>
+        </ul></div>
+      </div>
+      <div class="col good">
+        <div class="col-head">Chosen — global union of all antennas</div>
+        <div class="col-body"><ul>
+          <li>Mirrors the existing <code>computeSignalRanges(populated)</code> → flat list → <code>pointInSignalRange</code> pipeline already shipping in <code>drones.ts</code>.</li>
+          <li>"Other antennas" means every antenna in the result of <code>computeSignalRanges(world.islands.filter(populated))</code> with the test antenna sliced out by index.</li>
+          <li>No change to <code>SignalRange</code> shape.</li>
+        </ul></div>
+      </div>
+    </div>
+
+    <p class="body" style="margin-top:18px"><strong>Same kind?</strong> Also
+      rejected. Redundancy is a geometric property of discs, not of tier
+      labels. A T1 (radius 80) fully inside a T6 (radius 700) <em>is</em>
+      redundant for telemetry purposes — that's exactly the case the
+      player wants the hint for ("I have a tiny early-game beacon
+      sitting inside my late-game tower").</p>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">05</span><h2>Visual treatment — tune the blend, copy the value</h2></div>
+    <p class="sec-intro">A slight rust blend into the cyan overlay, tuned design-time in the slider below and hardcoded as a single constant.</p>
+
+    <p class="body">The overlay currently draws cyan
+      (<code>SIGNAL_COLOR = 0x7dd3e8</code>) at fill α 0.04, stroke α
+      0.22, stroke width 1
+      (<code>antenna-overlay.ts:19-25, 47-50</code>). When the antenna
+      is redundant we blend a small amount of rust
+      (<code>0xE08B7F</code>, the project palette's <code>--rust</code>)
+      into that colour and use the blended hex as the stroke + fill for
+      that one antenna — same alphas, same width, only the colour
+      changes. The blend amount is a <strong>design-time choice</strong>:
+      drag the slider below to find a value that reads as "different
+      without shouting", copy the resulting hex, and paste it as the
+      <code>REDUNDANT_COLOR</code> constant in
+      <code>antenna-overlay.ts</code>. Nothing in-game reads the slider;
+      the value is baked in.</p>
+
+    <div class="tuner" id="tintTuner">
+      <div class="tuner-head">
+        <div class="tuner-title">Tint tuner</div>
+        <div class="tuner-hint">Design-time tool. Drag the slider, watch the preview, copy the hex.</div>
+      </div>
+      <div class="tuner-controls">
+        <label for="tt-blend">blend toward rust</label>
+        <input type="range" id="tt-blend" min="0" max="100" value="35">
+        <span id="tt-blend-pct">35%</span>
+      </div>
+      <svg viewBox="0 0 480 180" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="antenna overlay preview, side-by-side untinted vs tinted">
+        <rect x="0" y="0" width="480" height="180" rx="8" fill="#0a1420"/>
+        <text x="120" y="22" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#8F8D82">SIGNAL_COLOR · cyan</text>
+        <circle cx="120" cy="100" r="68" fill="#7dd3e8" fill-opacity="0.04" stroke="#7dd3e8" stroke-opacity="0.22" stroke-width="1"/>
+        <text x="360" y="22" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#8F8D82">REDUNDANT_COLOR · tinted</text>
+        <circle id="tt-preview-tint" cx="360" cy="100" r="68" fill="#7dd3e8" fill-opacity="0.04" stroke="#7dd3e8" stroke-opacity="0.22" stroke-width="1"/>
+        <text x="240" y="170" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="#3A3833">game-accurate α (fill 0.04 · stroke 0.22) — only the colour blends</text>
+      </svg>
+      <div class="tuner-swatch">
+        <span class="tuner-label">solid swatch:</span>
+        <span id="tt-swatch" class="tuner-swatch-box"></span>
+        <code id="tt-hex">0xa3b1ad</code>
+        <button type="button" id="tt-copy" class="tuner-copy">copy hex</button>
+      </div>
+      <div class="tuner-output">
+        <pre id="tt-snippet"><code>// paste near SIGNAL_COLOR in src/antenna-overlay.ts
+const REDUNDANT_COLOR = 0xa3b1ad;</code></pre>
+      </div>
+    </div>
+
+    <table class="tbl" style="margin-top: 14px;">
+      <thead><tr><th>Property</th><th>Default antenna</th><th>Redundant antenna</th></tr></thead>
+      <tbody>
+        <tr><td class="slate">colour</td><td><span class="swatch" style="background:#7dd3e8"></span><code>0x7dd3e8</code> (signal cyan)</td><td><span class="swatch" style="background:#a3b1ad"></span><code>REDUNDANT_COLOR</code> (cyan blended toward rust — tuned above)</td></tr>
+        <tr><td class="slate">fill α</td><td>0.04</td><td>0.04 (unchanged)</td></tr>
+        <tr><td class="slate">stroke α</td><td>0.22</td><td>0.22 (unchanged)</td></tr>
+        <tr><td class="slate">stroke width</td><td>1</td><td>1 (unchanged)</td></tr>
+      </tbody>
+    </table>
+
+    <p class="body" style="margin-top: 14px"><strong>Why blend, not fully
+      swap?</strong> A redundant antenna is still an antenna — it should
+      read in the same visual register. A full swap to rust would read
+      as "alert"; a tuned blend reads as "different, but recognisable
+      as antenna coverage." The slider lets you find the threshold of
+      "noticeable but quiet."</p>
+
+    <p class="body"><strong>Why not red (<code>0xFF0000</code>)?</strong>
+      Project palette is dark + muted — see <code>ocean.ts</code>
+      blues, AGENTS.md vision-model section. A screaming red breaks the
+      visual register. Blending toward <code>0xE08B7F</code>
+      (template-21 <code>--rust</code>) at the existing low alphas reads
+      as warm-leaning cyan — different without shouting.</p>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">06</span><h2>Where the redundancy check lives</h2></div>
+    <p class="sec-intro">Pure / render separation, performance, and call-site shape.</p>
+
+    <p class="body"><strong>Pure layer.</strong>
+      <code>isAntennaRedundant</code> is added to
+      <code>src/antenna.ts</code> alongside <code>SignalRange</code>,
+      <code>computeSignalRanges</code>, and
+      <code>pointInSignalRange</code>. No PixiJS import. Testable from
+      <code>antenna.test.ts</code> without a renderer. This matches the
+      project's pure/render rule
+      (<code>AGENTS.md → Architecture → pure layer</code>).</p>
+
+    <p class="body"><strong>Call site in the overlay.</strong> Inside
+      the existing <code>rebuild()</code> in
+      <code>antenna-overlay.ts</code>, the inner loop becomes:</p>
+    <pre><code>const ranges = computeSignalRanges(populated);
+for (let i = 0; i &lt; ranges.length; i++) {
+  const r = ranges[i]!;
+  // others = ranges with self sliced out
+  const others = ranges.slice(0, i).concat(ranges.slice(i + 1));
+  const redundant = isAntennaRedundant(r, others);
+  const colour = redundant ? REDUNDANT_COLOR : SIGNAL_COLOR;
+  const px = r.cx * TILE_PX;
+  const py = r.cy * TILE_PX;
+  const radiusPx = r.radius * TILE_PX;
+  gfx
+    .circle(px, py, radiusPx)
+    .fill({ color: colour, alpha: RING_FILL_ALPHA })
+    .stroke({ color: colour, width: 1, alpha: RING_STROKE_ALPHA });
+}</code></pre>
+    <p class="body">One new module-level constant next to
+      <code>SIGNAL_COLOR</code>:
+      <code>REDUNDANT_COLOR = 0x...</code>, where the hex is the value
+      copied from §05's tuner. Starting point: <code>0xa3b1ad</code> at
+      35% blend; tune to taste before merging.</p>
+
+    <p class="body"><strong>Performance.</strong> The naïve nested loop
+      is O(N · (N · 17)) where N = number of antennas. For N = 50
+      antennas (well above typical mid-game), that's ~42 500
+      <code>pointInSignalRange</code> point tests per
+      <code>refresh()</code>. <code>refresh()</code> only fires on
+      world-layer rebuild (post-discovery, post-placement — see
+      <code>main.ts:1941</code>), not every frame. Acceptable; no
+      caching needed. If N ever exceeds ~500 (it won't) the spec defers
+      to bounding-box / spatial-hash optimisation.</p>
+
+    <p class="body"><strong>Allocation note.</strong> The
+      <code>ranges.slice().concat()</code> inside the loop allocates
+      O(N) per iteration. Acceptable on a rebuild path that fires
+      O(handful of times per minute). If profiling later shows it, swap
+      to an index-skipping wrapper around
+      <code>pointInSignalRange</code> that takes a "skip this index"
+      parameter — but don't pre-optimise.</p>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">07</span><h2>Change inventory</h2></div>
+    <p class="sec-intro">Every file the implementation touches, and the precise change.</p>
+    <div class="changes">
+      <div class="change">
+        <div class="file">src/antenna.ts</div>
+        <div class="what"><span class="lead">Add <code>isAntennaRedundant</code>.</span>
+          Pure helper next to the existing <code>pointInSignalRange</code>.
+          Signature
+          <code>(test: SignalRange, others: ReadonlyArray&lt;SignalRange&gt;, samples?: number) → boolean</code>.
+          16-perimeter + centre sampling; reuses
+          <code>pointInSignalRange</code>. No new types, no API
+          changes elsewhere.</div>
+      </div>
+      <div class="change">
+        <div class="file">src/antenna-overlay.ts</div>
+        <div class="what"><span class="lead">Branch colour on redundancy.</span>
+          Add <code>REDUNDANT_COLOR = 0xE08B7F</code> constant next to
+          <code>SIGNAL_COLOR</code>. Import
+          <code>isAntennaRedundant</code>. Change the
+          <code>for (const r of ranges)</code> loop to an index loop
+          that slices self out, calls the predicate, and selects the
+          colour. Alphas unchanged.</div>
+      </div>
+      <div class="change">
+        <div class="file">src/antenna.test.ts</div>
+        <div class="what"><span class="lead">Add <code>describe('isAntennaRedundant')</code> block.</span>
+          Cases: empty <code>others</code> → false; single other disc
+          exactly enclosing → true; partial overlap (sliver outside) →
+          false; centre uncovered with all perimeter covered → false
+          (degenerate; demonstrates centre sample's role); two
+          co-located identical discs → each redundant relative to the
+          other (both return true — documented behaviour); default N
+          parameter behaviour; explicit N override.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">08</span><h2>Edge cases and chosen behaviour</h2></div>
+    <p class="sec-intro">Each case the predicate needs to handle, and what it does.</p>
+
+    <table class="tbl">
+      <thead><tr><th>Case</th><th>Behaviour</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="slate">Single antenna in the world</td>
+          <td>Not redundant (no others)</td>
+          <td><code>others.length === 0</code> short-circuit returns <code>false</code> immediately. The lone antenna keeps the cyan tint.</td>
+        </tr>
+        <tr>
+          <td class="slate">Two co-located identical antennas</td>
+          <td>BOTH tinted red</td>
+          <td>Each is redundant relative to the other; "tinting both is honest" — they would each be safe to remove <em>if the other stayed</em>. No tie-break. The player resolves the ambiguity at demolish time.</td>
+        </tr>
+        <tr>
+          <td class="slate">Antenna whose disc extends off the world bounds</td>
+          <td>Geometric check is performed regardless</td>
+          <td>"World bounds" aren't a concept the predicate cares about — sampling and disc-cover are pure geometry. A disc whose perimeter pokes off-map is still subject to the same union test against other discs.</td>
+        </tr>
+        <tr>
+          <td class="slate">Antenna covered everywhere on its perimeter by exactly one other, but centre uncovered</td>
+          <td>Not redundant</td>
+          <td>The centre sample catches this. Pathological in practice (would require a doughnut-shaped union missing only the centre), but cheap to defend against.</td>
+        </tr>
+        <tr>
+          <td class="slate">Boundary equality (sample exactly on another disc's perimeter)</td>
+          <td>Counts as inside</td>
+          <td><code>pointInSignalRange</code> uses <code>≤ r²</code> (<code>antenna.ts:74</code>) — closed disc. Consistent with the drone-tick semantic.</td>
+        </tr>
+        <tr>
+          <td class="slate">Cluster of N tightly-packed identical antennas</td>
+          <td>All N tinted red</td>
+          <td>Each one's perimeter samples are covered by the union of the other N−1. Same "tinting all is honest" rationale. The player sees a red cluster, picks any subset to demolish, the remaining ones stop being redundant on the next <code>refresh()</code>.</td>
+        </tr>
+        <tr>
+          <td class="slate">Antenna on an unpopulated (player-built but uninhabited) island</td>
+          <td>Not included in either side of the test</td>
+          <td><code>computeSignalRanges</code> already filters to populated (<code>antenna.ts:46-50</code> — "Walks ALL <code>populated</code> islands"). Same filter applies to the redundancy check; the overlay never draws a ring for it in the first place.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">09</span><h2>Verification</h2></div>
+    <p class="sec-intro">Concrete TDD-shaped checks; reuse the existing test scaffold.</p>
+    <div class="checklist">
+      <div class="check"><div class="box"></div><div class="ck-text">
+        <strong><code>npx vitest run src/antenna.test.ts</code></strong>
+        passes — the new <code>describe('isAntennaRedundant')</code>
+        block covers empty-others, exact-enclosure, sliver-out,
+        centre-uncovered, co-located pair, default N, and override N.</div></div>
+      <div class="check"><div class="box"></div><div class="ck-text">
+        <strong><code>npm test</code></strong> runs clean — no
+        regression in <code>drones.test.ts</code> (which uses the same
+        <code>SignalRange</code> shape) or
+        <code>antenna.test.ts</code>'s existing blocks.</div></div>
+      <div class="check"><div class="box"></div><div class="ck-text">
+        <strong><code>npm run build</code></strong> succeeds under
+        <code>tsc -b</code> with the project's strict +
+        <code>noUncheckedIndexedAccess</code> +
+        <code>noUnusedLocals</code> +
+        <code>noUnusedParameters</code> flags. The new
+        <code>others</code> parameter is typed
+        <code>ReadonlyArray&lt;SignalRange&gt;</code>, default-N param
+        used.</div></div>
+      <div class="check"><div class="box"></div><div class="ck-text">
+        <strong>Visual smoke (<code>mcp__daedalus__screenshot</code> per AGENTS.md).</strong>
+        After <code>npm run build</code> + reload, place two
+        overlapping T6 antennas and confirm one is tinted rust. Move
+        the cursor far from the cluster, place a T1 with no others
+        covering — confirm it stays cyan.</div></div>
+      <div class="check"><div class="box"></div><div class="ck-text">
+        <strong>Test scaffolding.</strong> Two valid construction
+        paths: build <code>SignalRange[]</code> literals directly (cleaner
+        for geometric edges), or build <code>IslandSpec</code> objects
+        with <code>makeIslandSpec(...)</code>
+        (<code>antenna.test.ts:13-28</code>) and pipe through
+        <code>computeSignalRanges</code>. Prefer literals for pure
+        geometry, specs for end-to-end coverage.</div></div>
+    </div>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">10</span><h2>Risks</h2></div>
+    <div class="risks">
+      <div class="row">
+        <div class="cell head">Risk</div>
+        <div class="cell head">Sev</div>
+        <div class="cell head">Mitigation</div>
+      </div>
+      <div class="row">
+        <div class="cell">Player demolishes a red-tinted antenna and discovers a small uncovered sliver (false positive).</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">Bounded by N = 16 — max chord ~0.39 r. Accepted because the predicate is a visual hint, not a guarantee. Demolitions are reversible (rebuild).</div>
+      </div>
+      <div class="row">
+        <div class="cell">Player misses a free demolition because the predicate sampled an uncovered point that's the only one (false negative).</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">Same bound. Same accepted-cost framing. The "miss" leaves an extra antenna powered on — annoying but not game-breaking.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Co-located antennas case confuses the player — both tinted, neither is "the redundant one."</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">Documented behaviour. Removing either one un-tints the other on the next <code>refresh()</code>, which is the natural learning loop.</div>
+      </div>
+      <div class="row">
+        <div class="cell">O(N²·17) cost on rebuild becomes noticeable late-game.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">Rebuild fires only on world-layer rebuild, not per-frame. For N = 50 antennas (high estimate), ~42 500 point tests is sub-ms. If N grows to hundreds, defer to a spatial-hash optimisation.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Confusion with the rust hue used elsewhere (e.g. T6 antenna fill <code>0xd8b840</code> is gold, not rust — different colour, but rust appears in UI accents).</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">The overlay is a thin ring drawn over the world layer; the per-tile/per-building fill (<code>building-defs.ts:3829</code>) is separate. Visually they don't compete — overlay alpha 0.04 fill / 0.22 stroke is a wash, building fill is solid.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================== -->
+  <section>
+    <div class="sec-head"><span class="num">11</span><h2>Out of scope</h2></div>
+    <p class="sec-intro">Considered, deferred — named so the reader knows.</p>
+    <div class="deferred">
+      <div class="defer">
+        <div class="dt">Exact disc-cover proof</div>
+        <div class="dd">A true geometric proof of "this circle is contained in the union of those circles" reduces to arc-clipping on the boundary. Not built — the sampling approximation is fine for a visual hint and we don't promise removal safety.</div>
+      </div>
+      <div class="defer">
+        <div class="dt">"Partial redundancy" gradient</div>
+        <div class="dd">Could compute "fraction of perimeter covered" and tint progressively (cyan → rust). Rejected for v1 — binary tint reads more clearly at small overlay alphas.</div>
+      </div>
+      <div class="defer">
+        <div class="dt">Tooltip / inspector affordance</div>
+        <div class="dd">Click-to-inspect on a redundant antenna with a "covered by: T6 @ (cx,cy), T5 @ (cx,cy)" listing. Deferred; the tint alone meets the v1 goal of "at-a-glance".</div>
+      </div>
+      <div class="defer">
+        <div class="dt">Configurable sample count via dev console</div>
+        <div class="dd">The <code>samples</code> parameter exists but isn't exposed to the player. Could be a debug flag if tuning is needed later.</div>
+      </div>
+      <div class="defer">
+        <div class="dt">Per-island scoping toggle</div>
+        <div class="dd">Considered, rejected (see §04 — diverges from the global drone-tick semantic). If a future "comms graph per island" mechanic is introduced, revisit.</div>
+      </div>
+      <div class="defer">
+        <div class="dt">Integration with the §14.10 T6/Spaceport comm-range contribution</div>
+        <div class="dd">A T6 on a Spaceport island contributes to <code>groundStationCommRange</code> (<code>orbital.ts:367-368</code>). The redundancy check ignores this — a T6 might still be needed for the spaceport even if its disc is geometrically redundant for drone telemetry. Player education problem, not a predicate problem. Deferred to a possible later "do not demolish — required for orbital" badge.</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Design spec · 2026-05-22 · scope: §11 telemetry overlay · supersedes: none · relates to <code>src/antenna.ts</code>, <code>src/antenna-overlay.ts</code>, <code>src/antenna.test.ts</code></p>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  const CYAN = [0x7d, 0xd3, 0xe8];
+  const RUST = [0xe0, 0x8b, 0x7f];
+  const $ = (id) => document.getElementById(id);
+  const blend = $('tt-blend');
+  if (!blend) return;
+  const pct = $('tt-blend-pct');
+  const preview = $('tt-preview-tint');
+  const swatch = $('tt-swatch');
+  const hex = $('tt-hex');
+  const snippet = $('tt-snippet')?.querySelector('code');
+  const copyBtn = $('tt-copy');
+  function update() {
+    const t = Number(blend.value) / 100;
+    const r = Math.round(CYAN[0] + (RUST[0] - CYAN[0]) * t);
+    const g = Math.round(CYAN[1] + (RUST[1] - CYAN[1]) * t);
+    const b = Math.round(CYAN[2] + (RUST[2] - CYAN[2]) * t);
+    const n = (r << 16) | (g << 8) | b;
+    const hexStr = '0x' + n.toString(16).padStart(6, '0');
+    const cssStr = '#' + n.toString(16).padStart(6, '0');
+    if (pct) pct.textContent = Math.round(t * 100) + '%';
+    if (preview) {
+      preview.setAttribute('stroke', cssStr);
+      preview.setAttribute('fill', cssStr);
+    }
+    if (swatch) swatch.style.background = cssStr;
+    if (hex) hex.textContent = hexStr;
+    if (snippet) snippet.textContent = '// paste near SIGNAL_COLOR in src/antenna-overlay.ts\nconst REDUNDANT_COLOR = ' + hexStr + ';';
+  }
+  blend.addEventListener('input', update);
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const text = hex ? hex.textContent : '';
+      try {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = 'copied ✓';
+      } catch {
+        copyBtn.textContent = '(use Ctrl+C)';
+      }
+      setTimeout(() => { copyBtn.textContent = 'copy hex'; }, 1400);
+    });
+  }
+  update();
+})();
+</script>
+
+</body>
+</html>
