@@ -179,9 +179,18 @@ export function originCanAnchorSettle(origin: IslandSpec): boolean {
   return origin.buildings.some((b) => b.defId === 'spacetime_anchor');
 }
 
+export type SpacetimeSettleReason =
+  | 'invalid-target'
+  | 'origin-missing'
+  | 'no-spacetime-anchor'
+  | 'no-refined-kit'
+  | 'target-missing'
+  | 'target-not-discovered'
+  | 'target-populated';
+
 export type SpacetimeSettleResult =
   | { ok: true }
-  | { ok: false; reason: string };
+  | { ok: false; reason: SpacetimeSettleReason };
 
 /** §12.6 — instant T5 settlement via a Spacetime Anchor. Re-checks every
  *  gate, consumes one `foundation_kit_refined` from the origin island's
@@ -195,19 +204,20 @@ export function settleViaSpacetimeAnchor(
   targetId: string,
   nowMs: number,
 ): SpacetimeSettleResult {
+  if (originId === targetId) return { ok: false, reason: 'invalid-target' };
   const originSpec = world.islands.find((s) => s.id === originId);
   const originState = islandStates.get(originId);
-  if (!originSpec || !originState) return { ok: false, reason: 'origin missing' };
+  if (!originSpec || !originState) return { ok: false, reason: 'origin-missing' };
   if (!originCanAnchorSettle(originSpec)) {
-    return { ok: false, reason: 'no Spacetime Anchor on origin' };
+    return { ok: false, reason: 'no-spacetime-anchor' };
   }
   if ((originState.inventory.foundation_kit_refined ?? 0) < 1) {
-    return { ok: false, reason: 'need 1 Refined Foundation Kit' };
+    return { ok: false, reason: 'no-refined-kit' };
   }
   const targetSpec = world.islands.find((s) => s.id === targetId);
-  if (!targetSpec) return { ok: false, reason: 'target missing' };
-  if (!targetSpec.discovered) return { ok: false, reason: 'target not discovered' };
-  if (targetSpec.populated) return { ok: false, reason: 'target already populated' };
+  if (!targetSpec) return { ok: false, reason: 'target-missing' };
+  if (!targetSpec.discovered) return { ok: false, reason: 'target-not-discovered' };
+  if (targetSpec.populated) return { ok: false, reason: 'target-populated' };
 
   originState.inventory.foundation_kit_refined =
     (originState.inventory.foundation_kit_refined ?? 0) - 1;
