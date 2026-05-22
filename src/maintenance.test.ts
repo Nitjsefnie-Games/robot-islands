@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { BUILDING_DEFS } from './building-defs.js';
+import { BUILDING_DEFS, type BuildingDef } from './building-defs.js';
 import { convertToServitor, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import {
@@ -19,6 +19,7 @@ import {
   maintenanceFactor,
   nextMaintenanceBoundaryMs,
   pickMostDegradedTarget,
+  refreshCostFor,
   tryAutoMaintain,
 } from './maintenance.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -370,5 +371,20 @@ describe('pickMostDegradedTarget', () => {
     (servitor as { eternalServitor?: true }).eternalServitor = true;
     const normal = mkBuilding('mine', T1_THRESHOLD + 1);
     expect(pickMostDegradedTarget([servitor, normal], BUILDING_DEFS)).toBe(normal);
+  });
+});
+
+
+describe('refreshCostFor', () => {
+  it('halves each placement-cost resource, floored', () => {
+    const def = { placementCost: { stone: 60, wood: 30, iron_ingot: 20 } } as BuildingDef;
+    expect(refreshCostFor(def)).toEqual({ stone: 30, wood: 15, iron_ingot: 10 });
+  });
+  it('drops a resource whose half rounds to 0', () => {
+    const def = { placementCost: { stone: 7, wood: 1 } } as BuildingDef;
+    expect(refreshCostFor(def)).toEqual({ stone: 3 });
+  });
+  it('returns {} for a def with no placementCost', () => {
+    expect(refreshCostFor({} as BuildingDef)).toEqual({});
   });
 });

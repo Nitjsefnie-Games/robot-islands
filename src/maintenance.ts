@@ -109,6 +109,20 @@ export function maintenanceRecipeFor(
   return MAINTENANCE_RECIPES[def.tier];
 }
 
+/** The 50%-of-placement-cost basket for a manual maintenance refresh.
+ *  Math.floor per-resource (matching demolishBuilding's refund rounding);
+ *  entries whose half rounds to 0 are dropped. Empty record when the def
+ *  has no placementCost. */
+export function refreshCostFor(def: BuildingDef): Partial<Record<ResourceId, number>> {
+  const out: Partial<Record<ResourceId, number>> = {};
+  for (const [r, n] of Object.entries(def.placementCost ?? {}) as Array<[ResourceId, number]>) {
+    const half = Math.floor(n / 2);
+    if (half <= 0) continue;
+    out[r] = half;
+  }
+  return out;
+}
+
 /**
  * Attempt an auto-maintenance cycle. Returns true if the cycle fired
  * (materials consumed, operatingMs reset, maintainedAt updated); false
