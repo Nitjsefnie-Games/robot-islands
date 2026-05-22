@@ -856,8 +856,10 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     if (Number(kitSlider.value) !== kitCount) kitSlider.value = String(kitCount);
     kitHeadR.textContent = `${kitCount}`;
 
-    // Validation feedback for the status row + arm button.
-    const reason = validationReason(originSpec, targetSpec);
+    // ARM gating depends ONLY on origin validity — see `armBlockReason`.
+    // Dispatch-time checks (target, fuel, kits, in-flight) run when the
+    // player clicks a target and are surfaced by `attemptLaunch`.
+    const reason = armBlockReason(originSpec, originState);
     if (reason) {
       statusEl.textContent = reason;
       statusEl.style.color = 'var(--ri-danger)';
@@ -866,7 +868,9 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       armBtn.style.cursor = 'not-allowed';
       if (launchMode) setLaunchMode(false);
     } else {
-      statusEl.textContent = 'ready · click target on map';
+      statusEl.textContent = launchMode
+        ? 'click a target island on the map'
+        : 'ready · arm settle, then click a target';
       statusEl.style.color = 'var(--ri-fg-3)';
       armBtn.disabled = false;
       armBtn.style.opacity = '1';
@@ -876,41 +880,24 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     repaintVehicleLayer(performance.now());
   }
 
-  function validationReason(
+  /** Reason the ARM SETTLE button must stay disabled. Gates on ORIGIN
+   *  validity ONLY. The target is chosen by arming and then clicking the
+   *  map, so requiring a target here would deadlock the panel (can't arm
+   *  without a target, can't pick a target without arming). Target / fuel /
+   *  kit / in-flight validation runs at click time inside `dispatchVehicle`
+   *  and is surfaced through `attemptLaunch`. */
+  function armBlockReason(
     originSpec: IslandSpec | null,
-    targetSpec: IslandSpec | null,
+    originState: IslandState | null,
   ): string | null {
     if (!originSpec) return 'no populated origin';
-    if (!targetSpec) return 'no discovered target';
-    if (originSpec.id === targetSpec.id) return 'origin === target';
-    if (targetSpec.populated) return 'target already populated';
-    // Launch building check.
     const required = kind === 'ship' ? 'shipyard' : 'helipad';
     if (!originSpec.buildings.some((b) => b.defId === required)) {
       return `origin missing ${required}`;
     }
-    const originState = deps.islandStates.get(originSpec.id);
     if (!originState) return 'origin state missing';
-    const originTier = tierForLevel(originState.level);
-    if (kind === 'helicopter' && originTier < 2) {
+    if (kind === 'helicopter' && tierForLevel(originState.level) < 2) {
       return 'helicopter requires T2+ origin';
-    }
-    // §11.7 tier-matched fuel — look up the appropriate grade by the
-    // player-selected tier, surface its friendly name in the reason.
-    const fuelResource = fuelForTier(selectedTier);
-    const onhandFuel = inv(originState, fuelResource);
-    const fuelLabel = fuelResource.replace(/_/g, ' ');
-    if (onhandFuel < fuelLoaded) return `low ${fuelLabel}: ${onhandFuel.toFixed(0)} on hand`;
-    const onhandKits = inv(originState, 'foundation_kit');
-    if (onhandKits < kitCount) return `low kits: ${onhandKits.toFixed(0)} on hand`;
-    // Fuel is auto-sized to the exact one-way trip cost (see refresh), so an
-    // out-of-range failure is impossible — the affordability check above is
-    // the only fuel gate.
-    // Already-in-flight cap.
-    for (const v of deps.world.vehicles) {
-      if (v.from === originSpec.id && v.target === targetSpec.id && (v.status === 'active' || v.status === undefined)) {
-        return 'already en route to target';
-      }
     }
     return null;
   }
