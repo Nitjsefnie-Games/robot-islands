@@ -542,21 +542,73 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   // ---- Ledger renderer -------------------------------------------------------
   let isDraggingPriority = false;
 
+  /** A built ledger row + a closure that refreshes only its per-frame
+   *  dynamic fields (in-flight count, ETA, util bar). Rows are cached by
+   *  `route.id` and reused across repaints — rebuilding the DOM every frame
+   *  destroys the click target between mousedown and mouseup, so physical
+   *  clicks on the delete button never synthesize a `click` event. */
+  interface LedgerRowEntry {
+    structKey: string;
+    row: HTMLDivElement;
+    update: (nowMs: number) => void;
+  }
+  const rowCache = new Map<string, LedgerRowEntry>();
+  // Sentinel distinct from any real signature (which is '' for zero routes).
+  let lastLedgerSig = ' ';
+
+  /** Player-facing island name per §IslandSpec.name; falls back to the id. */
+  function islandLabel(id: string): string {
+    return deps.islandSpecs.get(id)?.name ?? id;
+  }
+
+  /** Everything about a route that, when changed, requires a DOM rebuild of
+   *  its row (vs. a cheap per-frame text update). */
+  function routeStructKey(route: Route): string {
+    return [
+      route.id,
+      islandLabel(route.from),
+      islandLabel(route.to),
+      route.filter ?? '__any__',
+      route.draining ? 'D' : '',
+      route.priorityList.join(','),
+    ].join('');
+  }
+
   function repaintLedger(nowMs: number): void {
     if (isDraggingPriority) return;
-    ledgerList.replaceChildren();
-    if (deps.world.routes.length === 0) {
-      ledgerList.appendChild(ledgerEmpty);
-      ledgerR.textContent = '0';
-      return;
+    const routes = deps.world.routes;
+    ledgerR.textContent = `${routes.length}`;
+
+    // Only touch the DOM tree when the route SET or any row's structure
+    // changes. Steady-state (just ETA/in-flight ticking) skips straight to
+    // the in-place `update` pass below.
+    const sig = routes.map(routeStructKey).join('');
+    if (sig !== lastLedgerSig) {
+      lastLedgerSig = sig;
+      const seen = new Set<string>();
+      const children: HTMLElement[] = [];
+      for (const route of routes) {
+        const structKey = routeStructKey(route);
+        let entry = rowCache.get(route.id);
+        if (!entry || entry.structKey !== structKey) {
+          entry = renderLedgerRow(route, structKey, nowMs);
+          rowCache.set(route.id, entry);
+        }
+        seen.add(route.id);
+        children.push(entry.row);
+      }
+      for (const id of [...rowCache.keys()]) {
+        if (!seen.has(id)) rowCache.delete(id);
+      }
+      ledgerList.replaceChildren(...(children.length === 0 ? [ledgerEmpty] : children));
     }
-    ledgerR.textContent = `${deps.world.routes.length}`;
-    for (const route of deps.world.routes) {
-      ledgerList.appendChild(renderLedgerRow(route, nowMs));
+
+    for (const route of routes) {
+      rowCache.get(route.id)?.update(nowMs);
     }
   }
 
-  function renderLedgerRow(route: Route, nowMs: number): HTMLDivElement {
+  function renderLedgerRow(route: Route, structKey: string, nowMs: number): LedgerRowEntry {
     const row = document.createElement('div');
     styled(
       row,
@@ -565,7 +617,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         'flex-direction: column',
         'gap: 2px',
         'padding: 4px 6px',
-        `border-left: 2px solid ${'var(--ri-accent-dim)'}`,
+        `border-left: 2px solid ${route.draining ? 'var(--ri-warn)' : 'var(--ri-accent-dim)'}`,
         `background: rgba(125, 211, 232, 0.04)`,
       ].join(';'),
     );
@@ -575,30 +627,43 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const idEl = document.createElement('span');
     idEl.textContent = route.id.toUpperCase();
     styled(idEl, `color: ${'var(--ri-accent)'}; font-size: 10px; letter-spacing: 0.08em; font-weight: 600`);
-    const delBtn = document.createElement('button');
-    delBtn.textContent = '✕';
-    delBtn.classList.add('ri-delbtn');
-    styled(
-      delBtn,
-      [
-        'width: 16px',
-        'height: 16px',
-        'line-height: 0',
-        'font-size: 10px',
-      ].join(';'),
-    );
-    delBtn.addEventListener('click', () => {
-      const idx = deps.world.routes.indexOf(route);
-      if (idx >= 0) deps.world.routes.splice(idx, 1);
-      refresh(performance.now());
-    });
     top.appendChild(idEl);
-    top.appendChild(delBtn);
+
+    if (route.draining) {
+      // Soft-delete in progress: no button. The route stops dispatching and
+      // is removed once its in-flight cargo lands (see `Route.draining`).
+      const drain = document.createElement('span');
+      drain.textContent = 'DRAINING';
+      styled(
+        drain,
+        `color: ${'var(--ri-warn)'}; font-size: 8.5px; letter-spacing: 0.1em; font-weight: 600`,
+      );
+      top.appendChild(drain);
+    } else {
+      const delBtn = document.createElement('button');
+      delBtn.textContent = '✕';
+      delBtn.title = 'delete route — finishes in-flight cargo, then removes';
+      delBtn.classList.add('ri-delbtn');
+      styled(delBtn, ['width: 16px', 'height: 16px', 'line-height: 0', 'font-size: 10px'].join(';'));
+      delBtn.addEventListener('click', () => {
+        if (route.inFlight.length === 0) {
+          // Nothing to drain — remove immediately (covers never-dispatched,
+          // instant-transit, and power-link routes).
+          const idx = deps.world.routes.indexOf(route);
+          if (idx >= 0) deps.world.routes.splice(idx, 1);
+        } else {
+          // Stop new dispatch; `tickRoutes` prunes once in-flight drains.
+          route.draining = true;
+        }
+        refresh(performance.now());
+      });
+      top.appendChild(delBtn);
+    }
 
     const mid = document.createElement('div');
     styled(mid, `color: ${'var(--ri-fg-1)'}; font-size: 10.5px; letter-spacing: 0.04em`);
     const cargo = route.filter ?? 'any';
-    mid.textContent = `${route.from} → ${route.to}  ${cargo}`;
+    mid.textContent = `${islandLabel(route.from)} → ${islandLabel(route.to)}  ${cargo}`;
 
     // Thin cyan rule (continuous flow indicator). Solid bar at the route's
     // utilization (in-flight count vs an arbitrary 10-batch ceiling for the
@@ -606,8 +671,6 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const ruleWrap = document.createElement('div');
     styled(ruleWrap, [`height: 2px`, `background: ${'var(--ri-border-strong)'}`, 'position: relative'].join(';'));
     const ruleFill = document.createElement('div');
-    const inFlightCount = route.inFlight.length;
-    const utilPct = Math.min(1, inFlightCount / 10);
     styled(
       ruleFill,
       [
@@ -616,7 +679,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         'left: 0',
         'height: 100%',
         `background: ${'var(--ri-accent)'}`,
-        `width: ${(utilPct * 100).toFixed(2)}%`,
+        'width: 0%',
       ].join(';'),
     );
     ruleWrap.appendChild(ruleFill);
@@ -629,17 +692,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     styled(left, `color: ${'var(--ri-fg-3)'}; font-size: 9.5px`);
     const right = document.createElement('span');
     right.classList.add('ri-mono');
-    if (inFlightCount === 0) {
-      right.textContent = 'idle';
-      styled(right, `color: ${'var(--ri-fg-4)'}; font-size: 9.5px`);
-    } else {
-      const nextArrival = route.inFlight
-        .map((b) => b.arrivalTime)
-        .reduce((a, b) => Math.min(a, b), Infinity);
-      const eta = Math.max(0, (nextArrival - nowMs) / 1000);
-      right.textContent = `${inFlightCount} pkg · ETA ${eta.toFixed(1)}s`;
-      styled(right, `color: ${'var(--ri-warn)'}; font-size: 9.5px; font-weight: 600`);
-    }
+    styled(right, `color: ${'var(--ri-fg-4)'}; font-size: 9.5px`);
     meta.appendChild(left);
     meta.appendChild(right);
 
@@ -650,7 +703,30 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     if (route.filter === null) {
       renderPriorityEditor(route, row, () => refresh(performance.now()));
     }
-    return row;
+
+    // Per-frame dynamic fields — recomputed in place so the row DOM (and its
+    // click handlers) survives across repaints.
+    function update(now: number): void {
+      const inFlightCount = route.inFlight.length;
+      const utilPct = Math.min(1, inFlightCount / 10);
+      ruleFill.style.width = `${(utilPct * 100).toFixed(2)}%`;
+      if (inFlightCount === 0) {
+        right.textContent = 'idle';
+        right.style.color = 'var(--ri-fg-4)';
+        right.style.fontWeight = '400';
+      } else {
+        const nextArrival = route.inFlight
+          .map((b) => b.arrivalTime)
+          .reduce((a, b) => Math.min(a, b), Infinity);
+        const eta = Math.max(0, (nextArrival - now) / 1000);
+        right.textContent = `${inFlightCount} pkg · ETA ${eta.toFixed(1)}s`;
+        right.style.color = 'var(--ri-warn)';
+        right.style.fontWeight = '600';
+      }
+    }
+    update(nowMs);
+
+    return { structKey, row, update };
   }
 
   function renderPriorityEditor(route: Route, container: HTMLElement, rerender: () => void): void {
@@ -918,7 +994,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const DASH = 8;
     const GAP = 4;
     const PERIOD = DASH + GAP;
-    let drawn = -phasePx;
+    // Offset must INCREASE with phasePx so dashes slide p1→p2 (from→to),
+    // matching cargo + chevron travel direction. `-phasePx` flowed backwards.
+    let drawn = phasePx - PERIOD;
     while (drawn < totalLen) {
       const startT = Math.max(0, drawn);
       const endT = Math.min(totalLen, drawn + DASH);
