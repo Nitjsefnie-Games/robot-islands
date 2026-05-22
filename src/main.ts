@@ -1480,6 +1480,7 @@ async function main(): Promise<void> {
   });
   world.addChildAt(settlementUi.vehicleLayer, 5);
   app.stage.addChild(settlementUi.reticleLayer);
+  world.addChild(settlementUi.rangeRingLayer);
   // Hook the forward-declared cross-panel disarm callback to the now-
   // constructed settlement panel. Called by drones-ui when it arms launch.
   disarmSettlementLaunch = () => settlementUi.setLaunchMode(false);
