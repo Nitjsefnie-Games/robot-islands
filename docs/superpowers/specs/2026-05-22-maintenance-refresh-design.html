@@ -1,0 +1,656 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual maintenance-refresh action — design</title>
+<style>
+  :root {
+    --ivory:   #252420;
+    --slate:   #F5F3EC;
+    --clay:    #D97757;
+    --oat:     #3A352B;
+    --olive:   #8FA56E;
+    --gray-150:#2E2C27;
+    --gray-300:#3A3833;
+    --gray-500:#8F8D82;
+    --gray-700:#CFCCC2;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1B1A17;
+    color: var(--gray-700);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 24px 120px;
+  }
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 48px;
+  }
+  @media (max-width: 920px) { .page { grid-template-columns: 1fr; } nav { display: none; } }
+
+  /* nav */
+  nav {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+    font-size: 13px;
+  }
+  nav .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-bottom: 12px;
+  }
+  nav a {
+    display: block;
+    padding: 5px 0 5px 12px;
+    border-left: 2px solid var(--gray-300);
+    color: var(--gray-700);
+    text-decoration: none;
+  }
+  nav a:hover { color: var(--slate); border-color: var(--slate); }
+  nav a.l2 { padding-left: 24px; font-size: 12.5px; color: var(--gray-500); }
+  nav .files {
+    margin-top: 28px;
+    border-top: 1px solid var(--gray-300);
+    padding-top: 16px;
+  }
+  nav .files code {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+    padding: 3px 0;
+  }
+
+  /* header */
+  header { margin-bottom: 12px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 32px;
+    color: var(--slate);
+    letter-spacing: -0.01em;
+    margin-bottom: 14px;
+  }
+  .status-line {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--gray-500);
+    margin-bottom: 14px;
+  }
+  .status-line .pill {
+    display: inline-block;
+    border: 1px solid var(--olive);
+    color: var(--olive);
+    border-radius: 999px;
+    padding: 1px 9px;
+    margin-right: 8px;
+  }
+  .tldr {
+    border: 1.5px solid var(--gray-300);
+    border-left: 3px solid var(--clay);
+    border-radius: 10px;
+    background: var(--ivory);
+    padding: 16px 18px;
+    margin-bottom: 8px;
+  }
+  .tldr b { color: var(--slate); }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 22px;
+    color: var(--slate);
+    margin: 40px 0 14px;
+    scroll-margin-top: 24px;
+  }
+  p { margin-bottom: 12px; max-width: 720px; }
+  code { font-family: var(--mono); font-size: 13px; }
+  main code { color: var(--gray-700); }
+  h2 + p, .lead { color: var(--gray-700); }
+
+  /* collapsible */
+  details {
+    border: 1.5px solid var(--gray-300);
+    border-radius: 10px;
+    background: var(--ivory);
+    margin: 14px 0;
+    overflow: hidden;
+  }
+  summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 14px 16px;
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--slate);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: "\25B8";
+    color: var(--clay);
+    font-family: var(--sans);
+    font-size: 12px;
+    transition: transform 120ms;
+  }
+  details[open] summary::before { transform: rotate(90deg); }
+  summary .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--clay);
+  }
+  summary .where {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+    margin-left: auto;
+    text-align: right;
+  }
+  details .body { padding: 0 16px 16px; }
+  details .body p { font-size: 14px; max-width: 660px; }
+  details .body ul { padding-left: 20px; max-width: 660px; }
+  details .body li { font-size: 14px; margin-bottom: 8px; }
+
+  /* code blocks */
+  pre.code {
+    margin: 14px 0;
+    padding: 16px 18px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--slate);
+    background: #121110;
+    border: 1px solid var(--gray-300);
+    border-radius: 10px;
+    overflow-x: auto;
+  }
+  pre.code .hl { color: var(--clay); }
+  pre.code .cm { color: var(--gray-500); }
+  pre.flow {
+    margin: 16px 0;
+    padding: 18px 20px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--slate);
+    background: #121110;
+    border: 1.5px solid var(--gray-300);
+    border-left: 3px solid var(--olive);
+    border-radius: 10px;
+    overflow-x: auto;
+  }
+  pre.flow .ar { color: var(--clay); }
+  pre.flow .cm { color: var(--gray-500); }
+
+  /* callout */
+  .callout {
+    display: flex;
+    gap: 12px;
+    border: 1.5px solid var(--oat);
+    background: rgba(58,53,43,0.55);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 18px 0;
+    font-size: 14px;
+  }
+  .callout .ico { color: var(--clay); font-weight: 600; }
+
+  /* lists */
+  ul.spec {
+    padding-left: 20px;
+    max-width: 720px;
+  }
+  ul.spec li { margin-bottom: 9px; }
+  ul.spec li b { color: var(--slate); }
+
+  dl.faq { margin-top: 8px; }
+  dl.faq dt {
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--slate);
+    margin-top: 18px;
+  }
+  dl.faq dd { font-size: 14px; margin: 4px 0 0; max-width: 680px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- side nav -->
+  <nav>
+    <div class="label">On this page</div>
+    <a href="#problem">Problem</a>
+    <a href="#goal">Goal</a>
+    <a href="#decisions">Decisions</a>
+    <a href="#components">Components</a>
+    <a href="#components" class="l2">maintenance.ts</a>
+    <a href="#components" class="l2">inspector-ui.ts</a>
+    <a href="#components" class="l2">Untouched modules</a>
+    <a href="#flow">Data flow</a>
+    <a href="#edge">Edge cases</a>
+    <a href="#testing">Testing</a>
+    <a href="#scope">Out of scope</a>
+    <a href="#open">Open questions</a>
+    <div class="files">
+      <div class="label">Files cited</div>
+      <code>maintenance.ts</code>
+      <code>inspector-ui.ts</code>
+      <code>placement.ts</code>
+      <code>buildings.ts</code>
+      <code>economy.ts</code>
+      <code>persistence.ts</code>
+      <code>maintenance.test.ts</code>
+    </div>
+  </nav>
+
+  <!-- main -->
+  <main>
+    <header>
+      <div class="eyebrow">Robot Islands · design spec</div>
+      <h1>Manual maintenance-refresh action</h1>
+      <div class="status-line">
+        <span class="pill">approved (brainstorming)</span> pending implementation plan &middot; 2026-05-22
+      </div>
+    </header>
+
+    <h2 id="problem">Problem</h2>
+    <p>Building maintenance (SPEC &sect;4.7) is a fully automatic, ongoing loop. Every productive building
+      accrues wall-clock operating time (<code>PlacedBuilding.operatingMs</code>, <code>buildings.ts:84</code>).
+      Once <code>operatingMs</code> crosses the tier threshold (<code>MAINTENANCE_THRESHOLD_MS_BY_TIER</code>,
+      <code>maintenance.ts:35</code>) the building's output factor degrades linearly 1.0 &rarr; 0.5 over 4h
+      (<code>maintenanceFactor</code>, <code>maintenance.ts:84</code>). It is restored only when the engine's
+      auto-maintenance cycle (<code>tryAutoMaintain</code>, <code>maintenance.ts:129</code>) finds the tier's
+      maintenance recipe (<code>MAINTENANCE_RECIPES</code>, <code>maintenance.ts:56</code>) present in the island
+      inventory at a segment boundary; that cycle consumes the materials and resets <code>operatingMs = 0</code> /
+      <code>maintainedAt = nowMs</code> (<code>maintenance.ts:156-157</code>).</p>
+    <p>This means a player whose island can't keep a steady trickle of Lubricant + tier parts flowing has no
+      recourse: the building sits degraded at 50% until the supply chain catches up. There is no player-driven
+      way to pay a lump sum to restore a building immediately. The inspector's &sect;4.7 maintenance section
+      (<code>inspector-ui.ts:1357-1388</code>) is read-only &mdash; it shows <code>operatingMs / threshold</code>
+      or <code>OVERDUE &mdash; degraded to NN%</code>, but offers no action.</p>
+    <p>The player <em>can</em> effectively reset a building today by demolishing it (<code>demolishBuilding</code>,
+      <code>placement.ts:630</code>) and re-placing it &mdash; a fresh placement seeds <code>operatingMs = 0</code>
+      (<code>placement.ts:449</code>). But that round-trip is clumsy: it costs the full placement cost again
+      (minus the 50% refund + 30% scrap), loses the building's position/rotation/recipe binding, and re-incurs
+      construction time. There is no in-place equivalent.</p>
+
+    <h2 id="goal">Goal</h2>
+    <div class="tldr">
+      <b>Goal</b> &mdash; Give the player a one-click <b>maintenance refresh</b> on a building: pay half the
+      building's placement-cost materials, and the building's maintenance state snaps back to pristine just-built
+      condition &mdash; <code>operatingMs = 0</code>, output factor 1.0. Conceptually "demolish and rebuild in one
+      click" but the building, its tile position, rotation, and recipe binding all stay in place; no construction
+      time is re-incurred. It is a convenience alternative to feeding the building a steady trickle of maintenance
+      supplies &mdash; a lump-sum buyout of the maintenance loop.
+    </div>
+
+    <h2 id="decisions">Decisions</h2>
+    <p class="lead">Seven decisions locked in brainstorming. Expand each for the rationale; the file:line tags
+      point at the existing code each decision anchors to.</p>
+
+    <details open>
+      <summary><span class="num">1</span> State reset = exactly the two <code>tryAutoMaintain</code> fields
+        <span class="where">maintenance.ts:156-157</span></summary>
+      <div class="body">
+        <p>A refresh sets <code>operatingMs = 0</code> and <code>maintainedAt = nowMs</code> &mdash; the same two
+          fields, to the same values, that a successful auto-maintenance cycle writes. <code>placedAt</code> is
+          <b>not</b> touched (it is the immutable placement timestamp, not a maintenance field). <code>paused</code>
+          and <code>toxicityExpiryMs</code> are unrelated subsystems (&sect;4 ocean-anchor / &sect;4.5 toxicity) and
+          are <b>not</b> touched &mdash; "pristine just-built state" is scoped to the &sect;4.7 maintenance counter
+          only, consistent with what a real demolish+rebuild would and would not clear.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="num">2</span> Cost = 50% of <code>placementCost</code>, floored per-resource
+        <span class="where">placement.ts:690-691</span></summary>
+      <div class="body">
+        <p>The bill is <code>Math.floor(n / 2)</code> for each resource <code>n</code> in
+          <code>def.placementCost</code> &mdash; the exact per-resource rounding <code>demolishBuilding</code>'s 50%
+          refund uses. Computed per-resource, <b>not</b> sum-then-half, so the rounding is consistent with the
+          existing demolish-refund math. A resource whose half rounds to 0 (placement cost of 1) contributes
+          nothing to the bill &mdash; same <code>if (half &lt;= 0) continue</code> guard as the refund path.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="num">3</span> Affordability gate &mdash; disabled button, like CONVERT
+        <span class="where">inspector-ui.ts:1402-1426</span></summary>
+      <div class="body">
+        <p>If the island inventory can't cover the halved cost, the refresh button is <b>disabled</b> and labelled
+          with the shortfall, mirroring the &sect;13.3 CONVERT button's disabled-with-cost-readout pattern. The
+          check reuses the existing <code>affordabilityShortfall(inventory, halvedCost)</code> helper
+          (<code>placement.ts:115</code>) &mdash; no new affordability helper is introduced.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="num">4</span> Button lives in the inspector footer, above DEMOLISH
+        <span class="where">inspector-ui.ts:983-1024</span></summary>
+      <div class="body">
+        <p>REFRESH is created in <code>footerSection</code> and inserted immediately before <code>demolishBtn</code>
+          so it renders directly above it. REFRESH and DEMOLISH read as a natural pair of whole-building lifecycle
+          actions &mdash; renew vs. remove &mdash; and footer placement keeps the building-level actions grouped at
+          the bottom of the inspector.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="num">5</span> No confirmation dialog
+        <span class="where">inspector-ui.ts:1012, 883-889</span></summary>
+      <div class="body">
+        <p>DEMOLISH uses <code>window.confirm</code> because it is irreversible destruction; CONVERT &mdash; the
+          closer analog and also a material-spending action &mdash; does <b>not</b>. REFRESH does <b>not</b> inherit
+          DEMOLISH's confirm despite sitting directly above it: it is not destructive (the building stays; the worst
+          outcome of a mis-click is spending materials a little early, and the building simply re-degrades over the
+          next threshold window). The disabled-when-pristine gate (Decision 6) already prevents the most wasteful
+          mis-click.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="num">6</span> Allowed only when there is maintenance debt to clear
+        <span class="where">maintenance.ts:84</span></summary>
+      <div class="body">
+        <p>The task brief asked us to recommend "anytime, but say so." We instead recommend <b>disabling the button
+          when <code>maintenanceFactor === 1.0</code></b> (i.e. the building is at or below threshold with no
+          degradation, <code>operatingMs &lt; threshold</code>). Refreshing a building that is already pristine
+          would drain 50% of its placement cost for literally zero gain &mdash; an obvious player trap. The button
+          is enabled exactly when <code>operatingMs &gt;= threshold</code> (the building has entered the "needs
+          maintenance" state and its factor is below 1.0). Note: this is "factor &lt; 1.0", not
+          "operatingMs &gt; 0" &mdash; a building below threshold has accrued time but no output penalty, so a
+          refresh there still buys nothing.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="num">7</span> Ineligible building classes are hidden, not just disabled
+        <span class="where">maintenance.ts:89 &middot; placement.ts:101</span></summary>
+      <div class="body">
+        <p>Three classes of building can never benefit from a refresh; for them the REFRESH control is not rendered
+          at all (same display-by-state idiom the inspector uses for CONVERT, the construction section, the paused
+          chip):</p>
+        <ul>
+          <li><b>Eternal Servitors</b> (<code>eternalServitor === true</code>) &mdash; <code>maintenanceFactor</code>
+            hard-returns 1.0 for them (<code>maintenance.ts:89</code>); they have no maintenance state to refresh.
+            The maintenance section already renders the "ETERNAL SERVITOR &mdash; exempt" stamp for these
+            (<code>inspector-ui.ts:1361-1365</code>); REFRESH stays hidden alongside.</li>
+          <li><b>Buildings with no productive recipe</b> &mdash; per SPEC &sect;4.7 scope (lines 515-520) and the
+            <code>accrueOperatingTime</code> doc comment (<code>maintenance.ts:166-177</code>), power producers,
+            storage, antennas, lighthouses, drone pads, shipyards etc. never accrue operating time. Their
+            <code>operatingMs</code> is permanently 0, <code>maintenanceFactor</code> permanently 1.0 &mdash; a
+            refresh would only drain inventory. The eligibility test in Decision 6
+            (<code>maintenanceFactor &lt; 1.0</code>) already excludes them, so "hidden for non-maintained" falls
+            out of the same gate; the spec calls it out so the implementer doesn't add a redundant separate
+            branch.</li>
+          <li><b>Buildings with no <code>placementCost</code></b> &mdash; <code>placementCostFor</code> returns
+            <code>{}</code> (<code>placement.ts:101</code>), so the halved bill is empty and the refresh would be
+            <b>free</b>. A free maintenance reset is exploitable (it would make the &sect;4.7 supply loop irrelevant
+            for that building). Hide REFRESH when <code>placementCostFor(def)</code> is empty. Every shipped def
+            post-&sect;14 carries a <code>placementCost</code>, so this is defensive forward-compat (mirrors the
+            "Buildings without a placementCost (defensively&hellip;)" language already in
+            <code>demolishBuilding</code>, <code>placement.ts:684-686</code>).</li>
+        </ul>
+        <p>Additionally, <b>buildings still under construction</b> (<code>constructionRemainingMs &gt; 0</code>) get
+          no REFRESH control: an under-construction building hasn't started accruing operating time
+          (<code>buildings.ts:71-78</code>), so its factor is 1.0 and Decision 6's gate hides the button anyway. No
+          separate branch needed &mdash; noted so the implementer doesn't add one.</p>
+      </div>
+    </details>
+
+    <h2 id="components">Components</h2>
+    <p class="lead">Two modules change; four are explicitly untouched.</p>
+
+    <details open>
+      <summary><span class="num">1</span> <code>maintenance.ts</code> &mdash; pure refresh helper
+        <span class="where">new</span></summary>
+      <div class="body">
+        <p>A single new pure helper, structured as the player-triggered sibling of <code>tryAutoMaintain</code>. It
+          does the affordability check, the half-cost deduction, and the state reset atomically &mdash; so
+          <code>inspector-ui.ts</code> stays pure UI wiring.</p>
+<pre class="code"><span class="cm">/** Player-triggered maintenance refresh (manual lump-sum alternative to the
+ *  automatic &sect;4.7 supply loop). Consumes 50% of the building's placement
+ *  cost (Math.floor per-resource, matching demolishBuilding's refund math)
+ *  from `inventory`, then resets the building to pristine maintenance state
+ *  &mdash; operatingMs = 0, maintainedAt = nowMs &mdash; exactly as tryAutoMaintain does.
+ *
+ *  Atomic: ALL halved-cost inputs are checked present before ANY is
+ *  consumed (same pattern as tryAutoMaintain, maintenance.ts:144-151).
+ *
+ *  Returns false WITHOUT mutating anything when the refresh is not allowed:
+ *    - Eternal Servitor (no maintenance state).
+ *    - building already pristine: maintenanceFactor(b, def) &gt;= 1.0.
+ *    - empty placement cost (free refresh &mdash; disallowed).
+ *    - inventory short on any halved-cost resource.
+ *  Returns true after a successful consume + reset.
+ *
+ *  `thresholdMul` is the island's &sect;9.x maintenance-threshold skill
+ *  multiplier &mdash; threaded through so the pristine-check agrees with the
+ *  economy loop's own maintenanceFactor calls (economy.ts:1084). */</span>
+<span class="hl">export function tryRefreshMaintenance</span>(
+  b: PlacedBuilding,
+  def: BuildingDef,
+  inventory: Record&lt;ResourceId, number&gt;,
+  nowMs: number,
+  thresholdMul = 1,
+): boolean;</pre>
+        <p>Plus a tiny pure cost helper so the UI label and the consume path can't drift on what "half cost"
+          means:</p>
+<pre class="code"><span class="cm">/** The 50%-of-placement-cost basket for a manual maintenance refresh.
+ *  Math.floor per-resource; entries whose half rounds to 0 are dropped.
+ *  Empty record when the def has no placementCost. */</span>
+<span class="hl">export function refreshCostFor</span>(def: BuildingDef): Partial&lt;Record&lt;ResourceId, number&gt;&gt;;</pre>
+        <p><code>tryRefreshMaintenance</code> computes its bill via <code>refreshCostFor</code>, checks it with
+          <code>affordabilityShortfall</code> (imported from <code>placement.ts</code>), deducts each entry from
+          <code>inventory</code>, then writes <code>operatingMs = 0</code> / <code>maintainedAt = nowMs</code>
+          through the same <code>(b as { operatingMs: number; maintainedAt: number })</code> cast
+          <code>tryAutoMaintain</code> uses (<code>maintenance.ts:156-157</code>) &mdash; <code>PlacedBuilding</code>'s
+          fields are <code>readonly</code> at the type level and the maintenance module already documents this
+          mutation convention.</p>
+        <div class="callout">
+          <span class="ico">&#9733;</span>
+          <div><b>Import-direction note.</b> <code>placement.ts</code> currently imports nothing from
+            <code>maintenance.ts</code>, and vice versa. Adding <code>maintenance.ts &rarr; placement.ts</code> (for
+            <code>affordabilityShortfall</code>) must not create a cycle &mdash; <code>circular-deps.test.ts</code>
+            guards this. If the import would cycle, the fallback is to inline the trivial shortfall loop in
+            <code>tryRefreshMaintenance</code> (it is six lines) rather than restructure modules.</div>
+        </div>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="num">2</span> <code>inspector-ui.ts</code> &mdash; REFRESH button in the footer
+        <span class="where">inspector-ui.ts:1024, 856-882</span></summary>
+      <div class="body">
+        <p>A new button element, created in <code>footerSection</code> and inserted immediately before
+          <code>demolishBtn</code> so it renders directly above DEMOLISH. Styling copies <code>convertBtn</code>'s
+          industrial-readout button style &mdash; transparent background, <code>var(--ri-accent)</code> border,
+          hover lift, disabled state in <code>var(--ri-fg-4)</code>.</p>
+        <p>Click handler:</p>
+<pre class="code"><span class="hl">refreshBtn</span>.addEventListener('click', () =&gt; {
+  if (!target) return;
+  const def = BUILDING_DEFS[target.building.defId];
+  const ok = tryRefreshMaintenance(
+    target.building,
+    def,
+    target.state.inventory,
+    Date.now(),
+    effectiveSkillMultipliers(target.state).maintenanceThreshold,
+  );
+  if (ok) paint();
+});</pre>
+        <p><code>Date.now()</code> is the <code>nowMs</code> source &mdash; the inspector already uses
+          <code>Date.now()</code> as its perf-clock anchor for <code>computeRates</code>
+          (<code>inspector-ui.ts:1208</code>), so the <code>maintainedAt</code> stamp lands in the same clock domain
+          the economy integrates from. No state-rebuild or layer-rebuild is needed (the building's geometry is
+          unchanged); a local <code>paint()</code> is the only follow-up &mdash; same as the CONVERT handler
+          (<code>inspector-ui.ts:884-889</code>).</p>
+        <p>Paint logic for <code>refreshBtn</code> runs from the maintenance-section paint pass
+          (<code>inspector-ui.ts:1357-1388</code>), which already computes <code>maintenanceFactor</code>; the
+          button DOM lives in the footer but its show/hide/label/disabled state derives from maintenance, so it is
+          updated here in the <code>else</code> branch (non-Servitor):</p>
+        <ul>
+          <li>Compute <code>cost = refreshCostFor(def)</code>.</li>
+          <li><b>Hide</b> <code>refreshBtn</code> (<code>style.display = 'none'</code>) when any of: building is an
+            Eternal Servitor (already in the <code>if</code> branch &mdash; button stays hidden there),
+            <code>Object.keys(cost).length === 0</code> (no placement cost), or
+            <code>maintenanceFactor(building, def, thresholdMul) &gt;= 1.0</code> (pristine &mdash; no debt).</li>
+          <li>Otherwise <b>show</b> it. Label format mirrors CONVERT (<code>inspector-ui.ts:1413</code>):
+            <code>REFRESH &middot; &lt;n RESOURCE (have)&gt;, &hellip;</code>, e.g.
+            <code>REFRESH &middot; 15 STONE (40), 7 WOOD (3)</code>.</li>
+          <li>Affordability: <code>missing = affordabilityShortfall(state.inventory, cost)</code>.
+            <code>refreshBtn.disabled = Object.keys(missing).length &gt; 0</code>. When disabled, apply the
+            <code>var(--ri-fg-4)</code> / <code>not-allowed</code> / <code>opacity 0.6</code> treatment exactly as
+            the CONVERT button does (<code>inspector-ui.ts:1416-1426</code>); the per-resource <code>(have)</code>
+            annotation in the label already shows the player the shortfall.</li>
+        </ul>
+        <p>The maintenance-section paint already runs every <code>refresh()</code> from the main ticker, so the
+          button's enabled/label state stays live as inventory and <code>operatingMs</code> move.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="num">3</span> Untouched: <code>placement.ts</code>, <code>economy.ts</code>,
+        <code>persistence.ts</code>, <code>main.ts</code> <span class="where">no change</span></summary>
+      <div class="body">
+        <ul>
+          <li><b><code>placement.ts</code></b> &mdash; <code>affordabilityShortfall</code> is reused as-is (exported
+            already, <code>placement.ts:115</code>). <code>demolishBuilding</code> is untouched.</li>
+          <li><b><code>economy.ts</code></b> &mdash; the auto-maintenance loop is unaffected. A manual refresh just
+            zeroes <code>operatingMs</code>; the next economy segment sees a pristine building and
+            <code>findNextCapEvent</code> / <code>nextMaintenanceBoundaryMs</code> recompute the next threshold
+            crossing naturally. No new tick wiring.</li>
+          <li><b><code>persistence.ts</code></b> &mdash; <code>operatingMs</code> / <code>maintainedAt</code> are
+            already persisted fields (<code>persistence.ts:75-79, 462-497</code>). A refresh only mutates existing
+            fields to in-range values; the snapshot/restore paths need no change.</li>
+          <li><b><code>main.ts</code></b> &mdash; the refresh is fully self-contained in the inspector (pure helper
+            + local <code>paint()</code>), so no new inspector dep callback is needed, unlike <code>onDemolish</code>
+            which requires a world-layer rebuild. <code>InspectorDeps</code> is unchanged.</li>
+        </ul>
+      </div>
+    </details>
+
+    <h2 id="flow">Data flow</h2>
+    <p class="lead">From degrade to the next pristine economy segment.</p>
+<pre class="flow">building degrades: operatingMs crosses threshold <span class="ar">&rarr;</span> maintenanceFactor &lt; 1.0
+        <span class="cm">|</span>
+        <span class="ar">v</span>
+inspector maintenance section paints REFRESH button
+   cost = refreshCostFor(def)          <span class="cm">(50% placementCost, floor per-resource)</span>
+   enabled iff affordable AND factor &lt; 1.0 AND has placementCost AND not Servitor
+        <span class="cm">|  player clicks</span>
+        <span class="ar">v</span>
+tryRefreshMaintenance(building, def, state.inventory, Date.now(), thresholdMul)
+   <span class="cm">|-</span> re-gate (Servitor / pristine / empty cost / affordability) <span class="ar">&rarr;</span> false on fail
+   <span class="cm">|-</span> atomic: check all halved-cost inputs present
+   <span class="cm">|-</span> deduct each halved-cost resource from inventory
+   <span class="cm">`-</span> operatingMs = 0 ; maintainedAt = nowMs        <span class="cm">(== tryAutoMaintain reset)</span>
+        <span class="cm">|  returns true</span>
+        <span class="ar">v</span>
+inspector paint() &mdash; maintenance readout flips to "0h 00m / Th 00m",
+                     REFRESH button hides (factor now 1.0)
+        <span class="cm">|</span>
+        <span class="ar">v</span>
+next economy segment integrates the pristine building at factor 1.0</pre>
+
+    <h2 id="edge">Error handling / edge cases</h2>
+    <ul class="spec">
+      <li><b>Insufficient materials</b> &mdash; button disabled; the per-resource <code>(have)</code> annotation
+        shows the shortfall. <code>tryRefreshMaintenance</code> also re-checks affordability and returns
+        <code>false</code> without mutating, guarding the race between the paint-time gate and the click (a sibling
+        production tick could consume inventory in between &mdash; same race <code>placeBuilding</code> re-guards,
+        <code>placement.ts:373-382</code>).</li>
+      <li><b>Building already pristine (<code>factor &gt;= 1.0</code>)</b> &mdash; button hidden by the paint gate;
+        <code>tryRefreshMaintenance</code> also returns <code>false</code> for this case so a programmatic / test
+        caller can't waste materials on a no-op.</li>
+      <li><b>Eternal Servitor</b> &mdash; button never rendered (paint stays in the Servitor <code>if</code>
+        branch); helper returns <code>false</code> defensively.</li>
+      <li><b>No <code>placementCost</code></b> &mdash; button hidden (empty cost basket); helper returns
+        <code>false</code>. Prevents a free refresh.</li>
+      <li><b>Building under construction</b> &mdash; <code>constructionRemainingMs &gt; 0</code> means
+        <code>operatingMs === 0</code> and <code>factor === 1.0</code>, so the pristine gate hides the button. No
+        separate branch.</li>
+      <li><b>Refresh deep in the degrade ramp vs. on the 0.5 plateau</b> &mdash; irrelevant to the helper: it always
+        resets <code>operatingMs</code> to 0 regardless of how degraded the building was. The 50% cost is flat (it
+        is a function of the def's placement cost, not of how degraded the building is). This is intentional
+        &mdash; a flat lump sum, like demolish+rebuild, which also costs the same whenever you do it.</li>
+      <li><b>Two buildings of the same def, different degradation</b> &mdash; each has its own
+        <code>operatingMs</code>; refreshing one does not touch the other. The helper takes a single
+        <code>PlacedBuilding</code>.</li>
+    </ul>
+
+    <h2 id="testing">Testing</h2>
+    <p class="lead">Pure-layer unit tests in <code>maintenance.test.ts</code> (the render/UI wiring is verified
+      live in the browser via daedalus, per the repo's pure-layer-only test discipline).</p>
+    <ul class="spec">
+      <li><code>refreshCostFor</code> returns <code>Math.floor(n / 2)</code> per resource for a def with a
+        multi-resource <code>placementCost</code>; drops a resource whose cost is 1 (half &rarr; 0); returns
+        <code>{}</code> for a def with no <code>placementCost</code>.</li>
+      <li><code>tryRefreshMaintenance</code> on a degraded building (operatingMs past threshold) with sufficient
+        inventory: returns <code>true</code>, deducts exactly the halved cost per resource, sets
+        <code>operatingMs = 0</code> and <code>maintainedAt</code> to the passed <code>nowMs</code>, leaves
+        <code>placedAt</code> unchanged.</li>
+      <li><code>tryRefreshMaintenance</code> returns <code>false</code> and mutates <b>nothing</b> (inventory and
+        building untouched) when: the building is pristine (<code>operatingMs &lt; threshold</code>), the building
+        is an Eternal Servitor, the def has no <code>placementCost</code>, or inventory is short on any one
+        halved-cost resource (atomicity &mdash; partial baskets must not be consumed).</li>
+      <li><code>tryRefreshMaintenance</code> honours <code>thresholdMul</code>: a building that is past the base
+        threshold but below <code>threshold * thresholdMul</code> is still pristine and the refresh is refused.</li>
+      <li>Round-trip: a building refreshed via <code>tryRefreshMaintenance</code> has the same
+        <code>maintenanceFactor</code> (1.0) as one just maintained via <code>tryAutoMaintain</code>.</li>
+    </ul>
+
+    <h2 id="scope">Out of scope</h2>
+    <ul class="spec">
+      <li>Tuning the 50% rate &mdash; the figure is locked to mirror <code>demolishBuilding</code>'s refund
+        percentage; re-tuning is Appendix A balance work.</li>
+      <li>A "refresh all degraded buildings on this island" bulk action &mdash; per-building only, consistent with
+        the inspector being a single-building panel.</li>
+      <li>Any change to the automatic &sect;4.7 auto-maintenance loop, its targeting policy
+        (<code>pickMostDegradedTarget</code>), or its recipes.</li>
+      <li>Partial refreshes (e.g. pay 25% for a half-restore) &mdash; refresh is all-or-nothing to pristine,
+        matching the demolish+rebuild mental model.</li>
+      <li>A keybinding / <code>input.ts</code> action for refresh &mdash; it is an inspector-panel button only; no
+        map-level shortcut.</li>
+      <li>Refreshing non-&sect;4.7 subsystems (ocean-anchor <code>paused</code>, &sect;4.5
+        <code>toxicityExpiryMs</code>) &mdash; the action is scoped to the maintenance counter.</li>
+    </ul>
+
+    <h2 id="open">Open questions</h2>
+    <div class="callout">
+      <span class="ico">?</span>
+      <div>None load-bearing. One minor implementation choice is flagged inline &mdash; the
+        <code>maintenance.ts &rarr; placement.ts</code> import for <code>affordabilityShortfall</code>: use the
+        import if <code>circular-deps.test.ts</code> stays green, otherwise inline the six-line shortfall loop. The
+        spec's intent holds either way.</div>
+    </div>
+  </main>
+
+</div>
+</body>
+</html>

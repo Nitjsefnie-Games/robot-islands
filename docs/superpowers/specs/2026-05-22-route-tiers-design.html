@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building-gated tiered routes — design</title>
+<style>
+  :root {
+    --bg:#0f1319; --panel:#161c26; --panel2:#1b2230; --fg:#d6dde6;
+    --fg-dim:#93a0b0; --accent:#7dd3e8; --warn:#f5a742; --border:#28323f;
+    --cargo:#3a7bd5; --drone:#5a93a6; --airship:#7dd3e8;
+    --massd:#f5a742; --tele:#a274e6;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--fg);
+    font:15px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  main { max-width:960px; margin:0 auto; padding:44px 26px 110px; }
+  h1 { font-size:29px; margin:0 0 4px; color:#fff; letter-spacing:-.01em; }
+  h2 {
+    font-size:13px; margin:54px 0 18px; color:var(--accent);
+    text-transform:uppercase; letter-spacing:.16em; font-weight:700;
+    border-bottom:1px solid var(--border); padding-bottom:8px;
+  }
+  h3 { font-size:15px; margin:22px 0 8px; color:#fff; }
+  code {
+    background:var(--panel2); padding:1px 5px; border-radius:3px;
+    font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#cbe7ee;
+  }
+  pre {
+    background:var(--panel2); border:1px solid var(--border); border-radius:6px;
+    padding:13px 15px; overflow-x:auto;
+  }
+  pre code { background:none; padding:0; }
+  a { color:var(--accent); }
+  .meta {
+    color:var(--fg-dim); font-size:12.5px; margin:0 0 6px;
+    font-family:ui-monospace,monospace;
+  }
+  .pill {
+    display:inline-block; background:rgba(125,211,232,.12); color:var(--accent);
+    border:1px solid var(--accent); border-radius:999px; padding:2px 11px;
+    font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700;
+  }
+  .lede { color:var(--fg-dim); font-size:15px; max-width:680px; }
+
+  /* ---- tier ladder ---- */
+  .ladder {
+    display:flex; gap:12px; align-items:flex-end; padding-top:96px;
+    flex-wrap:wrap;
+  }
+  .tier {
+    flex:1 1 150px; min-width:150px; background:var(--panel);
+    border:1px solid var(--border); border-top:3px solid var(--tc);
+    border-radius:7px; padding:14px 14px 16px; position:relative;
+  }
+  .tier:nth-child(1){ --tc:var(--cargo);  transform:translateY(0); }
+  .tier:nth-child(2){ --tc:var(--drone);  transform:translateY(-22px); }
+  .tier:nth-child(3){ --tc:var(--airship);transform:translateY(-44px); }
+  .tier:nth-child(4){ --tc:var(--massd);  transform:translateY(-66px); }
+  .tier:nth-child(5){ --tc:var(--tele);   transform:translateY(-88px); }
+  .tier .glyph {
+    font-size:26px; line-height:1; color:var(--tc);
+  }
+  .tier .badge {
+    position:absolute; top:12px; right:12px; font:700 10px/1 ui-monospace,monospace;
+    color:var(--tc); border:1px solid var(--tc); border-radius:4px; padding:3px 6px;
+    letter-spacing:.05em;
+  }
+  .tier .bname { font-size:14.5px; font-weight:700; color:#fff; margin:9px 0 1px; }
+  .tier .bdef { font:11px/1 ui-monospace,monospace; color:var(--fg-dim); }
+  .tier .rtype {
+    display:inline-block; margin:9px 0 11px; font:11px/1 ui-monospace,monospace;
+    color:var(--tc); background:color-mix(in srgb,var(--tc) 14%,transparent);
+    border-radius:4px; padding:3px 7px;
+  }
+  .tier .stat { display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0; }
+  .tier .stat span:first-child { color:var(--fg-dim); }
+  .tier .stat span:last-child { color:#fff; font-weight:600; font-variant-numeric:tabular-nums; }
+  .tier .stat.div { border-top:1px solid var(--border); margin-top:2px; padding-top:5px; }
+
+  /* ---- bar charts ---- */
+  .chart { display:flex; flex-direction:column; gap:9px; margin:6px 0 4px; }
+  .bar-row { display:grid; grid-template-columns:120px 1fr 64px; align-items:center; gap:12px; }
+  .bar-row .lbl { font-size:12.5px; color:var(--fg-dim); text-align:right; }
+  .bar-track { background:var(--panel2); border-radius:4px; height:22px; overflow:hidden; }
+  .bar-fill {
+    height:100%; border-radius:4px; min-width:3px;
+    display:flex; align-items:center;
+  }
+  .bar-row .val { font:600 13px/1 ui-monospace,monospace; color:#fff; }
+  .cap-note { color:var(--fg-dim); font-size:12.5px; margin-top:10px; }
+
+  /* ---- transit race ---- */
+  .race { display:flex; flex-direction:column; gap:0; margin-top:4px; }
+  .lane {
+    display:grid; grid-template-columns:120px 1fr 78px; align-items:center;
+    gap:12px; padding:9px 0; border-bottom:1px solid var(--border);
+  }
+  .lane:last-child { border-bottom:none; }
+  .lane .lbl { font-size:12.5px; color:var(--fg-dim); text-align:right; }
+  .track {
+    position:relative; height:14px; background:var(--panel2);
+    border-radius:7px; border:1px solid var(--border);
+  }
+  .track .src, .track .dst {
+    position:absolute; top:50%; width:9px; height:9px; border-radius:50%;
+    transform:translateY(-50%); border:1.5px solid var(--fg-dim);
+  }
+  .track .src { left:-1px; }
+  .track .dst { right:-1px; }
+  .dot {
+    position:absolute; top:50%; width:11px; height:11px; border-radius:50%;
+    transform:translate(-50%,-50%); background:var(--lc);
+    box-shadow:0 0 9px var(--lc);
+  }
+  @keyframes travel { 0%{left:0} 78%{left:100%} 100%{left:100%} }
+  @keyframes blink  { 0%,42%{left:100%;opacity:0} 50%{opacity:1} 58%,100%{left:100%;opacity:1} }
+  .lane.l1 .dot{ --lc:var(--cargo);  animation:travel 5s linear infinite; }
+  .lane.l2 .dot{ --lc:var(--drone);  animation:travel 2.5s linear infinite; }
+  .lane.l3 .dot{ --lc:var(--airship);animation:travel 1.25s linear infinite; }
+  .lane.l4 .dot{ --lc:var(--massd);  animation:travel .625s linear infinite; }
+  .lane.l5 .dot{ --lc:var(--tele);   animation:blink 1s steps(1) infinite; }
+  .lane .eta { font:600 13px/1 ui-monospace,monospace; color:#fff; text-align:right; }
+  .race-note { color:var(--fg-dim); font-size:12px; margin-top:9px; }
+
+  /* ---- flow ---- */
+  .flow { display:flex; flex-direction:column; align-items:center; gap:0; }
+  .node {
+    width:100%; max-width:560px; background:var(--panel);
+    border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:6px; padding:11px 15px;
+  }
+  .node .nt { font-weight:700; color:#fff; font-size:13.5px; }
+  .node .nd { color:var(--fg-dim); font-size:12px; margin-top:2px; }
+  .node.drain { border-left-color:var(--warn); }
+  .node.drain .nt { color:var(--warn); }
+  .arrow { color:var(--fg-dim); font-size:18px; line-height:1; padding:6px 0; }
+  .arrow.branch { color:var(--warn); }
+
+  /* ---- card grids ---- */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(232px,1fr)); gap:11px; }
+  .card {
+    background:var(--panel); border:1px solid var(--border); border-radius:6px;
+    padding:12px 14px;
+  }
+  .card .ct { font-weight:700; color:#fff; font-size:13px; margin-bottom:3px; }
+  .card .cd { color:var(--fg-dim); font-size:12.5px; }
+  .card.warn { border-left:3px solid var(--warn); }
+  ul { padding-left:20px; } li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin:4px 0; }
+  th,td { border:1px solid var(--border); padding:7px 10px; text-align:left; }
+  th { background:var(--panel); color:var(--accent); }
+  hr { border:none; border-top:1px solid var(--border); margin:34px 0; }
+</style>
+</head>
+<body>
+<main>
+
+<p class="meta">robot-islands &nbsp;·&nbsp; 2026-05-22 &nbsp;·&nbsp; design spec</p>
+<h1>Building-gated tiered routes</h1>
+<p><span class="pill">Approved — brainstorming</span></p>
+<p class="lede">Higher-throughput inter-island routes are currently unreachable —
+every route is hardcoded T1 <code>cargo</code>. This makes route tier a property of
+the <strong>transport building</strong> that hosts it: place a better dock, route
+from it, get a faster route.</p>
+
+<h2>The five tiers</h2>
+<div class="ladder">
+  <div class="tier">
+    <div class="glyph">⚓</div><div class="badge">T1</div>
+    <div class="bname">Cargo Dock</div><div class="bdef">dock</div>
+    <div class="rtype">cargo</div>
+    <div class="stat"><span>capacity</span><span>0.5 u/s</span></div>
+    <div class="stat"><span>speed</span><span>1 t/s</span></div>
+    <div class="stat div"><span>50-tile ETA</span><span>50.0 s</span></div>
+  </div>
+  <div class="tier">
+    <div class="glyph">⤴</div><div class="badge">T2</div>
+    <div class="bname">Drone Pad</div><div class="bdef">dronepad</div>
+    <div class="rtype">drone</div>
+    <div class="stat"><span>capacity</span><span>1.0 u/s</span></div>
+    <div class="stat"><span>speed</span><span>2 t/s</span></div>
+    <div class="stat div"><span>50-tile ETA</span><span>25.0 s</span></div>
+  </div>
+  <div class="tier">
+    <div class="glyph">▲</div><div class="badge">T3</div>
+    <div class="bname">Airship Dock</div><div class="bdef">airship_dock</div>
+    <div class="rtype">airship</div>
+    <div class="stat"><span>capacity</span><span>2.0 u/s</span></div>
+    <div class="stat"><span>speed</span><span>4 t/s</span></div>
+    <div class="stat div"><span>50-tile ETA</span><span>12.5 s</span></div>
+  </div>
+  <div class="tier">
+    <div class="glyph">⏏</div><div class="badge">T4</div>
+    <div class="bname">Mass Driver</div><div class="bdef">mass_driver</div>
+    <div class="rtype">mass_driver</div>
+    <div class="stat"><span>capacity</span><span>10.0 u/s</span></div>
+    <div class="stat"><span>speed</span><span>8 t/s</span></div>
+    <div class="stat div"><span>50-tile ETA</span><span>6.25 s</span></div>
+  </div>
+  <div class="tier">
+    <div class="glyph">✦</div><div class="badge">T4</div>
+    <div class="bname">Teleporter Pad</div><div class="bdef">teleporter_pad</div>
+    <div class="rtype">teleporter</div>
+    <div class="stat"><span>capacity</span><span>5.0 u/s</span></div>
+    <div class="stat"><span>speed</span><span>instant</span></div>
+    <div class="stat div"><span>50-tile ETA</span><span>0 s</span></div>
+  </div>
+</div>
+
+<h2>Throughput — capacity per tier</h2>
+<div class="chart">
+  <div class="bar-row"><div class="lbl">Cargo Dock</div>
+    <div class="bar-track"><div class="bar-fill" style="width:5%;background:var(--cargo)"></div></div>
+    <div class="val">0.5</div></div>
+  <div class="bar-row"><div class="lbl">Drone Pad</div>
+    <div class="bar-track"><div class="bar-fill" style="width:10%;background:var(--drone)"></div></div>
+    <div class="val">1.0</div></div>
+  <div class="bar-row"><div class="lbl">Airship Dock</div>
+    <div class="bar-track"><div class="bar-fill" style="width:20%;background:var(--airship)"></div></div>
+    <div class="val">2.0</div></div>
+  <div class="bar-row"><div class="lbl">Mass Driver</div>
+    <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--massd)"></div></div>
+    <div class="val">10.0</div></div>
+  <div class="bar-row"><div class="lbl">Teleporter Pad</div>
+    <div class="bar-track"><div class="bar-fill" style="width:50%;background:var(--tele)"></div></div>
+    <div class="val">5.0</div></div>
+</div>
+<p class="cap-note">Units per second. Mass Driver is the throughput king
+(Plains-unique, 5× airship per SPEC §9.5); Teleporter trades raw throughput for
+zero latency.</p>
+
+<h2>Latency — a batch crossing a 50-tile route</h2>
+<div class="race">
+  <div class="lane l1"><div class="lbl">Cargo Dock</div>
+    <div class="track"><span class="src"></span><span class="dst"></span><span class="dot"></span></div>
+    <div class="eta">50.0 s</div></div>
+  <div class="lane l2"><div class="lbl">Drone Pad</div>
+    <div class="track"><span class="src"></span><span class="dst"></span><span class="dot"></span></div>
+    <div class="eta">25.0 s</div></div>
+  <div class="lane l3"><div class="lbl">Airship Dock</div>
+    <div class="track"><span class="src"></span><span class="dst"></span><span class="dot"></span></div>
+    <div class="eta">12.5 s</div></div>
+  <div class="lane l4"><div class="lbl">Mass Driver</div>
+    <div class="track"><span class="src"></span><span class="dst"></span><span class="dot"></span></div>
+    <div class="eta">6.25 s</div></div>
+  <div class="lane l5"><div class="lbl">Teleporter Pad</div>
+    <div class="track"><span class="src"></span><span class="dst"></span><span class="dot"></span></div>
+    <div class="eta">instant</div></div>
+</div>
+<p class="race-note">Animation is time-compressed 10×. Speed doubles each tier
+(1 → 2 → 4 → 8 t/s); Teleporter has no in-flight buffer at all.</p>
+
+<h2>How a route is created</h2>
+<div class="flow">
+  <div class="node"><div class="nt">1 · Place a transport building</div>
+    <div class="nd">Cost = the building's existing <code>placementCost</code>. The
+      route itself is free — you pay by placing the building.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node"><div class="nt">2 · FREIGHT GRID form</div>
+    <div class="nd">Pick island → pick a transport building with no route yet →
+      pick destination → commit. The building's def sets the tier.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node"><div class="nt">3 · Route created</div>
+    <div class="nd"><code>{ sourceBuildingId, type, capacityPerSec, transitTimeSec }</code>
+      — type &amp; rate from <code>routeProfileForBuilding(defId)</code>.</div></div>
+  <div class="arrow">↓</div>
+  <div class="node"><div class="nt">4 · tickRoutes dispatch</div>
+    <div class="nd">Unchanged — drone/airship/teleporter dispatch &amp; fuel debits
+      already exist; capacity/transit read from the per-route fields.</div></div>
+  <div class="arrow branch">↓  demolish the source building</div>
+  <div class="node drain"><div class="nt">↳ Route drains</div>
+    <div class="nd"><code>route.draining = true</code> — in-flight cargo finishes,
+      then <code>tickRoutes</code> prunes the route. No cargo lost.</div></div>
+</div>
+
+<h2>Core rules</h2>
+<div class="grid">
+  <div class="card"><div class="ct">Building-gated</div><div class="cd">Every route
+    needs its tier's building on the source island — closes the "T1 routes are
+    free" gap too.</div></div>
+  <div class="card"><div class="ct">One route per building</div><div class="cd">A
+    building hosts at most one route. Want a second route? Place a second
+    building. Matches SPEC §9.5's Mass Driver rule.</div></div>
+  <div class="card"><div class="ct">Building owns the route</div><div class="cd">Route
+    carries <code>sourceBuildingId</code>; <code>type</code> &amp; rate are derived
+    from that building's def at creation.</div></div>
+  <div class="card"><div class="ct">Teleporter = paired</div><div class="cd">A
+    <code>teleporter</code> route also needs a Teleporter Pad on the destination
+    island — gate only; the dest pad is not consumed.</div></div>
+  <div class="card warn"><div class="ct">Demolish drains</div><div class="cd">Removing
+    the source building drains its route via the mechanism shipped in
+    <code>34594a6</code>.</div></div>
+  <div class="card"><div class="ct">Legacy routes</div><div class="cd">Saved routes
+    with no <code>sourceBuildingId</code> keep running as plain <code>cargo</code> —
+    grandfathered, just not building-linked.</div></div>
+</div>
+
+<h2>UI — FREIGHT GRID panel</h2>
+<p><strong>Creation form (Approach A).</strong> <code>FROM</code> becomes two
+selects: island → transport building (only buildings with no route yet; each
+option shows tier + rate, e.g. <code>Airship Dock · airship · 2.0 u/s</code>).
+<code>TO</code> stays an island select; for a teleporter source, commit requires a
+pad on the destination island.</p>
+<p><strong>Active ledger gets an island filter.</strong> A dropdown above the
+ACTIVE list — "All islands" + each populated island by name — filters rows to
+routes whose source is the selected island. The filter value joins the ledger's
+structural signature, so changing it rebuilds rows through the existing reconcile
+path (<code>34594a6</code>).</p>
+
+<h2>Edge cases</h2>
+<ul>
+  <li><strong>No eligible building / all buildings already host a route</strong> —
+    commit disabled, readout explains.</li>
+  <li><strong>Teleporter source, no pad on the destination</strong> — commit
+    disabled, readout explains.</li>
+  <li><strong>Building demolished mid-flight</strong> — route drains, cargo lands,
+    route is pruned. Nothing lost.</li>
+  <li><strong>Legacy route</strong> — runs as before; shown in the ledger; simply
+    not demolish-coupled.</li>
+</ul>
+
+<h2>Scope</h2>
+<table>
+  <tr><th>In scope</th><th>Out of scope</th></tr>
+  <tr>
+    <td>5 cargo-type tiers gated by existing buildings; <code>sourceBuildingId</code>
+      on <code>Route</code>; the creation form; ledger island filter; demolish
+      coupling; pure tests for the tier-profile helper.</td>
+    <td>In-place re-tiering of an existing route; <code>cable</code> /
+      <code>submarine_cable</code> power links; final balance tuning of the
+      placeholder constants (Appendix A); Auto-Patronage default routes (§9.6).</td>
+  </tr>
+</table>
+
+<hr>
+<p class="meta">Source spec: <code>docs/superpowers/specs/2026-05-22-route-tiers-design.md</code>
+&nbsp;·&nbsp; non-<code>cargo</code> capacity/speed values are placeholders; the
+progression shape (monotonic capacity, ×2 speed/tier) is the intended contract.</p>
+
+</main>
+</body>
+</html>

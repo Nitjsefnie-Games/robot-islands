@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spacetime Anchor instant settlement — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #252420;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: #1B1A17;
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    /* ---------- header ---------- */
+
+    header.page-head { margin-bottom: 48px; max-width: 860px; }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.15;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .prompt-box {
+      background: var(--gray-150);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+    .prompt-box .meta-line { margin-top: 8px; }
+    .prompt-box code { font-family: var(--mono); font-size: 13px; color: var(--slate); }
+
+    /* ---------- callout ---------- */
+
+    .callout {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--clay);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 48px;
+      max-width: 860px;
+    }
+    .callout code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    /* ---------- section chrome ---------- */
+
+    section { margin-bottom: 56px; }
+
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 760px;
+      margin-bottom: 28px;
+    }
+    .sec-intro code { font-family: var(--mono); font-size: 13px; color: var(--slate); }
+
+    /* ---------- summary strip ---------- */
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v {
+      font-size: 17px;
+      color: var(--slate);
+      font-weight: 600;
+    }
+    .summary .v.accent { color: var(--clay); }
+
+    /* ---------- file-structure table ---------- */
+
+    .filetable {
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--white);
+    }
+    .filetable .row {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 0;
+    }
+    @media (max-width: 780px) { .filetable .row { grid-template-columns: 1fr; } }
+    .filetable .row + .row { border-top: 1.5px solid var(--gray-300); }
+    .filetable .cell { padding: 13px 18px; font-size: 13.5px; }
+    .filetable .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+    @media (max-width: 780px) {
+      .filetable .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .filetable .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .filetable .cell code { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .filetable .cell.desc code { color: var(--slate); }
+
+    /* ---------- task card ---------- */
+
+    .task-card {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 24px 26px;
+    }
+    .task-blurb {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 16px;
+      max-width: 760px;
+    }
+    .task-blurb code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    .files-block {
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 22px;
+    }
+    .files-block .ft {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .files-block ul { list-style: none; }
+    .files-block li {
+      font-size: 13px;
+      color: var(--gray-700);
+      padding: 2px 0;
+    }
+    .files-block li code { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .files-block li .tag {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--gray-500);
+    }
+
+    /* ---------- steps ---------- */
+
+    .steps { display: flex; flex-direction: column; gap: 18px; }
+    .step {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 0 12px;
+    }
+    .step .box {
+      width: 16px; height: 16px;
+      border: 1.5px solid var(--clay);
+      border-radius: 4px;
+      margin-top: 3px;
+    }
+    .step .step-body { min-width: 0; }
+    .step .step-title {
+      font-weight: 600;
+      font-size: 14.5px;
+      color: var(--slate);
+      margin-bottom: 6px;
+    }
+    .step .step-text {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    .step .step-text:last-child { margin-bottom: 0; }
+    .step .step-text code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .step .step-text.cmd code { color: var(--olive); }
+
+    .step ul.bullets { list-style: none; margin: 0 0 10px; }
+    .step ul.bullets li {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      padding: 2px 0 2px 16px;
+      position: relative;
+    }
+    .step ul.bullets li::before {
+      content: '–';
+      position: absolute;
+      left: 0;
+      color: var(--clay);
+    }
+    .step ul.bullets li code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    /* ---------- code panel ---------- */
+
+    .code-block { margin: 4px 0 12px; }
+    .code-block .file-label {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .code {
+      background: #121110;
+      border: 1px solid var(--gray-300);
+      border-radius: 10px;
+      padding: 16px 18px;
+      overflow-x: auto;
+    }
+    .code pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #F5F3EC;
+      white-space: pre;
+    }
+
+    /* ---------- notes ---------- */
+
+    .notes { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+    .note {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--olive);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      color: var(--gray-500);
+    }
+    .note code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .note strong { color: var(--slate); font-weight: 600; }
+
+    footer.page-foot {
+      margin-top: 64px;
+      padding-top: 20px;
+      border-top: 1.5px solid var(--gray-300);
+      font-size: 12px;
+      color: var(--gray-500);
+      font-family: var(--mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Spacetime Anchor instant settlement — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> A T5 island with a Spacetime Anchor can instantly populate any discovered island for one <code>foundation_kit_refined</code> — no vehicle, no fuel, no transit (SPEC §12.6).</div>
+        <div class="meta-line"><strong>Architecture:</strong> Extract the island-populate block from <code>tickVehicles</code> into a shared pure helper <code>populateSettledIsland</code>. Add a pure <code>settleViaSpacetimeAnchor</code> (gates + kit consume + populate) and an <code>originCanAnchorSettle</code> predicate. <code>settlement-ui.ts</code> gains an <code>anchor</code> dispatch kind; the kind-button row becomes building-gated (each kind shown only when the origin has its launch building).</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict), Vite 5, PixiJS 8, vitest. Pure layer unit-tested; UI verified by clean build + daedalus.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-22-spacetime-settlement-design.md</code></div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">3</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">4</div></div>
+      <div class="cell"><div class="k">New test suites</div><div class="v">2</div></div>
+      <div class="cell"><div class="k">Layer</div><div class="v">pure + render</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">Every file the plan touches, and the nature of the change. Read this before starting any task.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/settlement.ts</code></div><div class="cell desc">Extract <code>populateSettledIsland</code> from <code>tickVehicles</code>; add <code>originCanAnchorSettle</code> + <code>settleViaSpacetimeAnchor</code> + the <code>SpacetimeSettleResult</code> type.</div></div>
+        <div class="row"><div class="cell"><code>src/settlement.test.ts</code></div><div class="cell desc">New tests for <code>settleViaSpacetimeAnchor</code> / <code>originCanAnchorSettle</code>; existing <code>tickVehicles</code> tests must still pass (behavior-preserving extraction).</div></div>
+        <div class="row"><div class="cell"><code>src/settlement-ui.ts</code></div><div class="cell desc"><code>anchor</code> dispatch kind; dynamic building-gated kind row; commit routes to <code>settleViaSpacetimeAnchor</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/main.ts</code></div><div class="cell desc">Wire a post-settle world-layer rebuild for the instant-settle path.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: Extract <code>populateSettledIsland</code> from <code>tickVehicles</code></h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Behavior-preserving refactor — no new behavior. Verified by the existing settlement test suite staying green.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/settlement.ts</code> (<code>tickVehicles</code> arrival block, ~line 616-674)</li>
+            <li>Test: <code>src/settlement.test.ts</code> (existing tests only)</li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add the helper</div>
+          <p class="step-text">In <code>src/settlement.ts</code>, add this function immediately <strong>before</strong> <code>tickVehicles</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>/** Populate a freshly-settled island: flip `populated`, auto-place the dock,
+ *  push the tier's starter buildings, build + register the IslandState, run
+ *  §9.6 Auto-Patronage, decompose the Foundation Kit(s) into colony
+ *  inventory, and grant §12.6 free skill points. Shared by vehicle arrival
+ *  (`tickVehicles`) and Spacetime Anchor instant-settle
+ *  (`settleViaSpacetimeAnchor`).
+ *
+ *  `kind` / `tier` drive the dock def + starter loadout exactly as a vehicle
+ *  arrival would; `foundationKitCount` drives the §12.4 kit decomposition.
+ *  The caller must have already confirmed `target` is unpopulated. */
+function populateSettledIsland(
+  world: WorldState,
+  islandStates: Map&lt;string, IslandState&gt;,
+  target: IslandSpec,
+  kind: VehicleKind,
+  tier: VehicleTier,
+  foundationKitCount: number,
+  nowMs: number,
+): void {
+  target.populated = true;
+  const autoBuildingDefId = kind === 'ship' ? 'dock' : 'helipad';
+  const dropTile = kind === 'ship' ? findCoastalTile(target) : { x: 0, y: 0 };
+  target.buildings.push({
+    id: `${target.id}-auto-${autoBuildingDefId}-1`,
+    defId: autoBuildingDefId,
+    x: dropTile.x,
+    y: dropTile.y,
+  });
+
+  const starters = computeStarterBuildings(kind, tier, target);
+  for (const b of starters) {
+    target.buildings.push({ id: `${target.id}-starter-${b.defId}`, defId: b.defId, x: b.x, y: b.y });
+  }
+
+  const newState = makeInitialIslandState(target, nowMs);
+  islandStates.set(target.id, newState);
+
+  // §9.6 / §12.7 Auto-Patronage.
+  world.islandStates = islandStates;
+  const ncState = computeNcState(world);
+  if (ncState.milestone &gt;= 3) {
+    spawnAutoPatronageRoutes(world, target.id);
+  }
+
+  // §12.4 Foundation Kit decomposition: credit recipe inputs to the colony.
+  const kitRecipe = RECIPES['kit_assembler'];
+  if (kitRecipe) {
+    for (const [r, amount] of Object.entries(kitRecipe.inputs)) {
+      const id = r as ResourceId;
+      const total = (amount ?? 0) * foundationKitCount;
+      if (total &gt; 0) {
+        newState.inventory[id] = (newState.inventory[id] ?? 0) + total;
+        newState.starterInventoryGrace[id] =
+          (newState.starterInventoryGrace[id] ?? 0) + total;
+      }
+    }
+  }
+
+  // §12.6 free skill points for T3+ arrivals.
+  const freePoints = computeFreeSkillPoints(tier);
+  if (freePoints &gt; 0) {
+    newState.unspentSkillPoints += freePoints;
+  }
+}</pre></div>
+        </div>
+          <p class="step-text">This is the verbatim arrival block (<code>settlement.ts</code> ~616-674) lifted into a function, with <code>v.kind</code>/<code>v.tier</code>/<code>v.foundationKitCount</code> replaced by the parameters <code>kind</code>/<code>tier</code>/<code>foundationKitCount</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Call it from <code>tickVehicles</code></div>
+          <p class="step-text">In <code>tickVehicles</code>, replace the inline arrival block — everything from <code>// Mutate spec: populated + auto-placed building.</code> / <code>target.populated = true;</code> down through the <code>§12.6 free skill points</code> block (<code>newState.unspentSkillPoints += freePoints;</code>) — with a single call:</p>
+        <div class="code-block">
+          <div class="code"><pre>    // Populate the target (shared with the Spacetime Anchor instant path).
+    populateSettledIsland(world, islandStates, target, v.kind, v.tier, v.foundationKitCount, nowMs);</pre></div>
+        </div>
+          <p class="step-text">Leave the lines that follow unchanged:</p>
+        <div class="code-block">
+          <div class="code"><pre>    v.status = 'arrived';
+    arrivals.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
+    remaining.push(v);</pre></div>
+        </div>
+          <p class="step-text">(The <code>if (target.populated) { ... continue; }</code> race-guard above the block also stays unchanged.)</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Run the settlement suite to verify nothing changed</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/settlement.test.ts</code> Expected: PASS — all existing tests green. The extraction is behavior-preserving; any failure means the lift was not verbatim.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run the full suite</div>
+          <p class="step-text cmd">Run: <code>npx vitest run</code> Expected: PASS — all test files.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/settlement.ts
+git commit -m "refactor(settlement): extract populateSettledIsland from tickVehicles
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: <code>originCanAnchorSettle</code> + <code>settleViaSpacetimeAnchor</code></h2></div>
+      <div class="task-card">
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/settlement.ts</code> (add after <code>populateSettledIsland</code> / near <code>hasLaunchBuildingFor</code>)</li>
+            <li>Test: <code>src/settlement.test.ts</code></li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing tests</div>
+          <p class="step-text">Append to <code>src/settlement.test.ts</code>. These use the file's existing <code>makeIslandSpec</code>, <code>makeIslandState</code>, <code>freshWorld</code> helpers:</p>
+        <div class="code-block">
+          <div class="code"><pre>describe('originCanAnchorSettle', () =&gt; {
+  it('is true only when the spec has a spacetime_anchor building', () =&gt; {
+    const bare = makeIslandSpec({ id: 'o' });
+    expect(originCanAnchorSettle(bare)).toBe(false);
+    const withAnchor = makeIslandSpec({
+      id: 'o',
+      buildings: [{ id: 'a1', defId: 'spacetime_anchor', x: 0, y: 0 }],
+    });
+    expect(originCanAnchorSettle(withAnchor)).toBe(true);
+  });
+});
+
+describe('settleViaSpacetimeAnchor', () =&gt; {
+  function setup(opts: { anchor: boolean; kits: number; targetDiscovered: boolean; targetPopulated: boolean }) {
+    const origin = makeIslandSpec({
+      id: 'origin',
+      populated: true,
+      buildings: opts.anchor ? [{ id: 'a1', defId: 'spacetime_anchor', x: 0, y: 0 }] : [],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      discovered: opts.targetDiscovered,
+      populated: opts.targetPopulated,
+    });
+    const world = freshWorld([origin, target]);
+    const originState = makeIslandState({ id: 'origin' });
+    originState.inventory.foundation_kit_refined = opts.kits;
+    const islandStates = new Map&lt;string, IslandState&gt;([['origin', originState]]);
+    return { world, islandStates, origin, target, originState };
+  }
+
+  it('settles the target: consumes 1 Refined kit, populates, creates IslandState', () =&gt; {
+    const s = setup({ anchor: true, kits: 1, targetDiscovered: true, targetPopulated: false });
+    const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
+    expect(res.ok).toBe(true);
+    expect(s.originState.inventory.foundation_kit_refined).toBe(0);
+    expect(s.target.populated).toBe(true);
+    expect(s.islandStates.has('target')).toBe(true);
+    expect(s.world.vehicles.length).toBe(0); // no vehicle created
+  });
+
+  it('refuses and mutates nothing when the origin has no Spacetime Anchor', () =&gt; {
+    const s = setup({ anchor: false, kits: 1, targetDiscovered: true, targetPopulated: false });
+    const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
+    expect(res.ok).toBe(false);
+    expect(s.originState.inventory.foundation_kit_refined).toBe(1);
+    expect(s.target.populated).toBe(false);
+    expect(s.islandStates.has('target')).toBe(false);
+  });
+
+  it('refuses when the origin has no Refined kit', () =&gt; {
+    const s = setup({ anchor: true, kits: 0, targetDiscovered: true, targetPopulated: false });
+    expect(settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000).ok).toBe(false);
+    expect(s.target.populated).toBe(false);
+  });
+
+  it('refuses when the target is already populated', () =&gt; {
+    const s = setup({ anchor: true, kits: 1, targetDiscovered: true, targetPopulated: true });
+    const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
+    expect(res.ok).toBe(false);
+    expect(s.originState.inventory.foundation_kit_refined).toBe(1);
+  });
+
+  it('refuses when the target is not discovered', () =&gt; {
+    const s = setup({ anchor: true, kits: 1, targetDiscovered: false, targetPopulated: false });
+    const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
+    expect(res.ok).toBe(false);
+    expect(s.originState.inventory.foundation_kit_refined).toBe(1);
+  });
+});</pre></div>
+        </div>
+          <p class="step-text">Add <code>originCanAnchorSettle</code> and <code>settleViaSpacetimeAnchor</code> to the test file's <code>import { ... } from './settlement.js'</code> block.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run tests to verify they fail</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/settlement.test.ts -t "originCanAnchorSettle|settleViaSpacetimeAnchor"</code> Expected: FAIL — <code>originCanAnchorSettle is not a function</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Implement</div>
+          <p class="step-text">In <code>src/settlement.ts</code>, add:</p>
+        <div class="code-block">
+          <div class="code"><pre>/** Whether `origin` can launch a Spacetime Anchor instant-settle — i.e. it
+ *  has a `spacetime_anchor` building. The `anchor`-kind sibling of
+ *  `hasLaunchBuildingFor`. */
+export function originCanAnchorSettle(origin: IslandSpec): boolean {
+  return origin.buildings.some((b) =&gt; b.defId === 'spacetime_anchor');
+}
+
+export type SpacetimeSettleResult =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+/** §12.6 — instant T5 settlement via a Spacetime Anchor. Re-checks every
+ *  gate, consumes one `foundation_kit_refined` from the origin island's
+ *  inventory, and populates the target via `populateSettledIsland` with the
+ *  richest (T4-ship-equivalent) loadout. No vehicle, no fuel, no transit.
+ *  Returns `{ ok: false }` WITHOUT mutating anything on any gate failure. */
+export function settleViaSpacetimeAnchor(
+  world: WorldState,
+  islandStates: Map&lt;string, IslandState&gt;,
+  originId: string,
+  targetId: string,
+  nowMs: number,
+): SpacetimeSettleResult {
+  const originSpec = world.islands.find((s) =&gt; s.id === originId);
+  const originState = islandStates.get(originId);
+  if (!originSpec || !originState) return { ok: false, reason: 'origin missing' };
+  if (!originCanAnchorSettle(originSpec)) {
+    return { ok: false, reason: 'no Spacetime Anchor on origin' };
+  }
+  if ((originState.inventory.foundation_kit_refined ?? 0) &lt; 1) {
+    return { ok: false, reason: 'need 1 Refined Foundation Kit' };
+  }
+  const targetSpec = world.islands.find((s) =&gt; s.id === targetId);
+  if (!targetSpec) return { ok: false, reason: 'target missing' };
+  if (!targetSpec.discovered) return { ok: false, reason: 'target not discovered' };
+  if (targetSpec.populated) return { ok: false, reason: 'target already populated' };
+
+  originState.inventory.foundation_kit_refined =
+    (originState.inventory.foundation_kit_refined ?? 0) - 1;
+  // Richest loadout per §12.3: T4 ship-equivalent dock + starters, one kit.
+  populateSettledIsland(world, islandStates, targetSpec, 'ship', 4, 1, nowMs);
+  return { ok: true };
+}</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run tests to verify they pass</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/settlement.test.ts</code> Expected: PASS — all settlement tests, including the new blocks.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/settlement.ts src/settlement.test.ts
+git commit -m "feat(settlement): settleViaSpacetimeAnchor — §12.6 instant settlement
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Task 3: <code>anchor</code> dispatch kind in the settlement UI</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Render/integration task — no unit test; verified by clean build + a daedalus live check.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/settlement-ui.ts</code> (kind type, <code>kindBtn</code>/<code>kindRow</code>, the per-origin refresh, the fuel/range rows, the commit path <code>attemptLaunch</code>, <code>SettlementUiDeps</code>)</li>
+            <li>Modify: <code>src/main.ts</code> (wire the post-instant-settle layer rebuild)</li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: UI-local kind type</div>
+          <p class="step-text">In <code>src/settlement-ui.ts</code>, the panel's <code>kind</code> state is typed <code>VehicleKind</code> (<code>'ship' | 'helicopter'</code>). Introduce a UI-local widening — do NOT change the exported <code>VehicleKind</code> in <code>settlement.ts</code> (a persisted <code>SettlementVehicle.kind</code> must stay <code>ship | helicopter</code>; <code>anchor</code> never creates a vehicle):</p>
+        <div class="code-block">
+          <div class="code"><pre>type DispatchKind = VehicleKind | 'anchor';</pre></div>
+        </div>
+          <p class="step-text">Change the panel's <code>let kind: VehicleKind = 'ship';</code> to <code>let kind: DispatchKind = 'ship';</code>. <code>kindBtn</code> and the kind-change handler take <code>DispatchKind</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Add the ANCHOR kind button</div>
+          <p class="step-text">Alongside the existing <code>shipBtn</code> / <code>heliBtn</code> (created via <code>kindBtn('◗ SHIP', 'ship')</code> / <code>kindBtn('✈ HELI', 'helicopter')</code>), add:</p>
+        <div class="code-block">
+          <div class="code"><pre>  const anchorBtn = kindBtn('⧗ ANCHOR', 'anchor');</pre></div>
+        </div>
+          <p class="step-text">and append it to <code>kindRow</code> after <code>heliBtn</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>  kindRow.appendChild(shipBtn);
+  kindRow.appendChild(heliBtn);
+  kindRow.appendChild(anchorBtn);</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Building-gate the kind buttons (dynamic, per origin)</div>
+          <p class="step-text">The kind row currently shows SHIP + HELI unconditionally. Make each kind button's visibility depend on the selected origin's launch buildings. Add a function next to the panel's other refresh helpers:</p>
+        <div class="code-block">
+          <div class="code"><pre>  /** Show only the dispatch kinds the current origin can launch:
+   *  SHIP needs a Shipyard, HELI a Helipad, ANCHOR a Spacetime Anchor.
+   *  If the current `kind` is no longer available, fall back to the first
+   *  available kind. */
+  function refreshKindButtons(): void {
+    const originSpec = originId ? deps.islandSpecs.get(originId) ?? null : null;
+    const canShip = originSpec ? hasLaunchBuildingFor(originSpec, 'ship') : false;
+    const canHeli = originSpec ? hasLaunchBuildingFor(originSpec, 'helicopter') : false;
+    const canAnchor = originSpec ? originCanAnchorSettle(originSpec) : false;
+    shipBtn.style.display = canShip ? '' : 'none';
+    heliBtn.style.display = canHeli ? '' : 'none';
+    anchorBtn.style.display = canAnchor ? '' : 'none';
+    const available: DispatchKind[] = [
+      ...(canShip ? ['ship' as const] : []),
+      ...(canHeli ? ['helicopter' as const] : []),
+      ...(canAnchor ? ['anchor' as const] : []),
+    ];
+    if (!available.includes(kind)) {
+      kind = available[0] ?? 'ship';
+    }
+  }</pre></div>
+        </div>
+          <p class="step-text">Import <code>hasLaunchBuildingFor</code> and <code>originCanAnchorSettle</code> from <code>./settlement.js</code> (extend the existing import block).</p>
+          <p class="step-text">Call <code>refreshKindButtons()</code> wherever the origin changes — in the panel's existing <code>refresh()</code> / origin-selector change handler (the place that already reacts to <code>originId</code> changes). It must also run once at mount after the origin defaults are set.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Hide fuel + range when <code>kind === 'anchor'</code></div>
+          <p class="step-text">The panel has a fuel row and draws a max-range ring around the origin. When <code>kind === 'anchor'</code>, both are meaningless (no fuel, ignores distance). In the panel's <code>refresh()</code>, after <code>refreshKindButtons()</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>    const isAnchor = kind === 'anchor';
+    fuelRow.style.display = isAnchor ? 'none' : '';
+    rangeRing.visible = !isAnchor;</pre></div>
+        </div>
+          <p class="step-text">(Use the actual identifiers in the file for the fuel row element and the range-ring graphic — locate them by the existing fuel/range code. If the range ring is drawn imperatively each frame rather than toggled, gate that draw call on <code>!isAnchor</code>.)</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Route the commit to <code>settleViaSpacetimeAnchor</code></div>
+          <p class="step-text">The commit path is <code>attemptLaunch(x, y, nowMs)</code> — it resolves the clicked target and currently runs <code>dispatchVehicle</code>. Branch on the kind: when <code>kind === 'anchor'</code>, call the instant-settle helper instead.</p>
+          <p class="step-text">In <code>attemptLaunch</code>, after the target island is resolved (the discovered/unpopulated island nearest the click) and <code>originId</code> is known, before the <code>dispatchVehicle</code> call:</p>
+        <div class="code-block">
+          <div class="code"><pre>    if (kind === 'anchor') {
+      const res = settleViaSpacetimeAnchor(deps.world, deps.islandStates, originId, targetId, nowMs);
+      if (res.ok) {
+        deps.onInstantSettled?.();
+        // status row: success
+      } else {
+        // status row: res.reason
+      }
+      return;
+    }</pre></div>
+        </div>
+          <p class="step-text">(Use the panel's existing status-row update mechanism for the success / <code>res.reason</code> messages — match how <code>dispatchVehicle</code> reject reasons are surfaced. <code>targetId</code> is the resolved target island's id.)</p>
+          <p class="step-text">Import <code>settleViaSpacetimeAnchor</code> from <code>./settlement.js</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Add the <code>onInstantSettled</code> dep + wire it in main.ts</div>
+          <p class="step-text">In <code>src/settlement-ui.ts</code>, add to the <code>SettlementUiDeps</code> interface:</p>
+        <div class="code-block">
+          <div class="code"><pre>  /** Called after a successful Spacetime Anchor instant-settle so the host
+   *  can rebuild world render layers (a vehicle arrival rebuilds via the
+   *  ticker; an instant-settle happens on a click and has no ticker hook). */
+  onInstantSettled?: () =&gt; void;</pre></div>
+        </div>
+          <p class="step-text">In <code>src/main.ts</code>, at the <code>mountSettlementUi({ ... })</code> call site, add to the deps object:</p>
+        <div class="code-block">
+          <div class="code"><pre>    onInstantSettled: () =&gt; { rebuildWorldLayers(); },</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Build</div>
+          <p class="step-text cmd">Run: <code>npm run build</code> Expected: <code>tsc -b</code> clean, <code>vite build</code> succeeds. Fix any error and rebuild until clean.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Live verification</div>
+          <p class="step-text">Reload <code>https://islands.nitjsefni.eu/</code>. Open SETTLE OPS. Confirm:</p>
+          <ul class="bullets">
+            <li>The kind row shows only kinds the selected origin can launch (e.g. an island with just a Shipyard shows only SHIP). An origin with a Spacetime Anchor shows ANCHOR.</li>
+            <li>Selecting ANCHOR hides the fuel row and the max-range ring.</li>
+            <li>ARM SETTLE → clicking a discovered unpopulated island instant-settles it (it becomes populated immediately, no vehicle appears in the ledger); the status row confirms.</li>
+            <li>With no Refined kit on the origin, the commit is refused with a clear reason.</li>
+          </ul>
+          <p class="step-text">Screenshot via <code>mcp__daedalus__screenshot</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 9: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/settlement-ui.ts src/main.ts
+git commit -m "feat(settlement): anchor dispatch kind — instant-settle in SETTLE OPS
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Notes for the implementer</h2></div>
+      <div class="notes">
+        <div class="note">The <code>Co-Authored-By</code> trailer must name the model that authored the commit (<code>Kimi K2.6 &lt;noreply@kimi.com&gt;</code> for a kimi subagent).</div>
+        <div class="note">Task 1 is a behavior-preserving extraction — its bar is the existing settlement suite staying green, not a new test.</div>
+        <div class="note">Tasks 1-2 are pure layer (unit-tested). Task 3 is render/integration: clean build + a daedalus screenshot, per the repo's pure-layer-only test discipline.</div>
+        <div class="note"><code>persistence.ts</code> needs no change — instant-settle mutates only already-persisted state (<code>IslandSpec.populated</code>/<code>.buildings</code>, the new <code>IslandState</code>, inventory). No vehicle record is created, so the <code>SettlementVehicle</code> persistence path is untouched.</div>
+        <div class="note">The <code>dispatchVehicle</code> path for ship/helicopter is unchanged — only the kind-row visibility and the <code>anchor</code> branch are added.</div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands implementation plan &middot; rendered 2026-05-22 &middot; source: 2026-05-22-spacetime-settlement.md
+    </footer>
+
+  </div>
+</body>
+</html>
