@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Route cargo modes — implementation plan</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+      line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1120px; margin:0 auto; }
+    header.page-head { margin-bottom:48px; max-width:860px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box .meta-line { margin-top:8px; }
+    .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .callout { background:var(--white); border:1.5px solid var(--gray-300);
+      border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+      font-size:13.5px; color:var(--gray-500); margin-bottom:48px; max-width:860px; }
+    .callout code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-head h2 code { font-family:var(--mono); font-size:21px; color:var(--clay); }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:780px; margin-bottom:28px; }
+    .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .filetable { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .filetable .row { display:grid; grid-template-columns:280px 1fr; gap:0; }
+    @media (max-width:780px){ .filetable .row{grid-template-columns:1fr;} }
+    .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+    .filetable .cell { padding:13px 18px; font-size:13.5px; }
+    .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .filetable .cell code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .filetable .cell.desc code { color:var(--slate); }
+    .task-card { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:24px 26px; }
+    .task-blurb { font-size:13.5px; color:var(--gray-500); margin-bottom:16px; max-width:780px; }
+    .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .files-block { background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:8px; padding:12px 16px; margin-bottom:22px; }
+    .files-block .ft { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .files-block ul { list-style:none; }
+    .files-block li { font-size:13px; color:var(--gray-700); padding:2px 0; }
+    .files-block li code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .files-block li .tag { font-family:var(--mono); font-size:10.5px; color:var(--gray-500); }
+    .steps { display:flex; flex-direction:column; gap:18px; }
+    .step { display:grid; grid-template-columns:22px 1fr; gap:0 12px; }
+    .step .box { width:16px; height:16px; border:1.5px solid var(--clay); border-radius:4px; margin-top:3px; }
+    .step .step-body { min-width:0; }
+    .step .step-title { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:6px; }
+    .step .step-text { font-size:13.5px; color:var(--gray-500); margin-bottom:10px; }
+    .step .step-text:last-child { margin-bottom:0; }
+    .step .step-text code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .step .step-text.cmd code { color:var(--olive); }
+    .step ul.bullets { list-style:none; margin:0 0 10px; }
+    .step ul.bullets li { font-size:13.5px; color:var(--gray-500); padding:2px 0 2px 16px; position:relative; }
+    .step ul.bullets li::before { content:'–'; position:absolute; left:0; color:var(--clay); }
+    .step ul.bullets li code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .code-block { margin:4px 0 12px; }
+    .code-block .file-label { font-family:var(--mono); font-size:11.5px; color:var(--gray-500); margin-bottom:6px; }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .cm { color:var(--gray-500); } .code .del { color:#E08B7F; } .code .add { color:#8FA56E; }
+    .notes { display:flex; flex-direction:column; gap:14px; max-width:860px; }
+    .note { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive);
+      border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-500); }
+    .note code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .note strong { color:var(--slate); font-weight:600; }
+    footer.page-foot { margin-top:64px; padding-top:20px; border-top:1.5px solid var(--gray-300);
+      font-size:12px; color:var(--gray-500); font-family:var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Route cargo modes — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Replace a route's <code>filter</code>/<code>priorityList</code> pair with one <code>cargo</code> list + a <code>mode</code> enum, giving routes four selection modes (priority, waterfall, split, balanced) and an optional per-entry source-floor gate.</div>
+        <div class="meta-line"><strong>Architecture:</strong> A new pure module <code>route-cargo.ts</code> owns the mode types and the allocation maths (<code>planCargo</code>) plus the legacy migration — fully unit-tested with no PixiJS or world dependency. <code>routes.ts</code> keeps a thin glue function that builds the per-tick inputs and calls <code>planCargo</code>; only dispatch Phase 1 changes. <code>routes-ui.ts</code> gets a mode selector and an adaptive cargo editor.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, noUncheckedIndexedAccess, noUnusedLocals), Vite 5, PixiJS 8, vitest.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-22-route-cargo-modes-design.html</code></div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">3</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v">2</div></div>
+      <div class="cell"><div class="k">Files modified</div><div class="v">5</div></div>
+      <div class="cell"><div class="k">Migration</div><div class="v">behaviour-preserving</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">Task 1 is purely additive (new files only) — it compiles green on its own. Task 2 is the breaking change: removing <code>Route.filter</code>/<code>priorityList</code> forces every reader to change in one commit, and strict TypeScript turns any missed site into a build error. Task 3 is UI-only.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Responsibility / change</div></div>
+        <div class="row"><div class="cell"><code>src/route-cargo.ts</code> <span style="color:#8FA56E">(new)</span></div><div class="cell desc">Pure module: <code>CargoMode</code> / <code>CargoEntry</code> / <code>ViableEntry</code> / <code>CargoDemand</code> types, the <code>planCargo</code> allocator, and <code>migrateLegacyCargo</code>. No PixiJS, no world mutation.</div></div>
+        <div class="row"><div class="cell"><code>src/route-cargo.test.ts</code> <span style="color:#8FA56E">(new)</span></div><div class="cell desc">Unit tests for all four modes, the gate-less allocation maths, and the migration.</div></div>
+        <div class="row"><div class="cell"><code>src/routes.ts</code></div><div class="cell desc"><code>Route</code> interface (drop <code>filter</code>/<code>priorityList</code>, add <code>mode</code>/<code>cargo</code>); replace <code>selectResource</code> with a <code>planRouteCargo</code> glue fn; Phase 1 emits 1+ demands; Phase 2/3 key allocation by demand, not route; fix <code>createRouteFromBuilding</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/settlement.ts</code></div><div class="cell desc">The three route literals in <code>spawnAutoPatronageRoutes</code> switch to <code>mode</code>/<code>cargo</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/persistence.ts</code></div><div class="cell desc">Route deserialization runs <code>migrateLegacyCargo</code> for old-shape saved routes.</div></div>
+        <div class="row"><div class="cell"><code>src/routes-ui.ts</code></div><div class="cell desc">Mode selector + adaptive cargo editor replacing <code>renderPriorityEditor</code>; fix <code>routeStructKey</code>, the cargo-display line, and the render conditional.</div></div>
+        <div class="row"><div class="cell"><code>src/routes.test.ts</code></div><div class="cell desc">The <code>cargoRoute</code> helper and its call sites move to <code>mode</code>/<code>cargo</code>.</div></div>
+      </div>
+      <p class="sec-intro" style="margin-top:18px;margin-bottom:0"><code>ResourceId</code> is imported in <code>routes.ts</code> already — <code>route-cargo.ts</code> must import it from the same module (check the existing <code>routes.ts</code> import line and match it; it is the recipes/resource types module).</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: The pure <code>route-cargo</code> module</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Additive — two new files, nothing else touched. The allocation maths is pure and fully testable without a world or renderer. TDD: tests first.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Create: <code>src/route-cargo.ts</code></li>
+            <li>Create: <code>src/route-cargo.test.ts</code></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing tests</div>
+            <p class="step-text">Create <code>src/route-cargo.test.ts</code>. These cover all four modes and the migration. <code>ViableEntry</code> fields: <code>resourceId</code>, <code>weight</code>, <code>headroom</code> (destination headroom, &gt; 0), <code>sourceAvail</code> (source stock), <code>destFillRatio</code> (dest inv ÷ cap). Entries passed to <code>planCargo</code> are already viability-filtered and in cargo-list order.</p>
+            <div class="code-block"><div class="code"><pre>import { describe, it, expect } from 'vitest';
+import { planCargo, migrateLegacyCargo } from './route-cargo.js';
+import type { ViableEntry } from './route-cargo.js';
+
+<span class="cm">// helper: a viable entry with sensible defaults</span>
+function ve(over: Partial&lt;ViableEntry&gt; &amp; { resourceId: ViableEntry['resourceId'] }): ViableEntry {
+  return { weight: 1, headroom: 1000, sourceAvail: 1000, destFillRatio: 0, ...over };
+}
+
+describe('planCargo — priority', () =&gt; {
+  it('gives the whole budget to the first entry, clamped to headroom', () =&gt; {
+    const out = planCargo('priority', [ve({ resourceId: 'wood' }), ve({ resourceId: 'stone' })], 10);
+    expect(out).toEqual([{ resourceId: 'wood', amount: 10 }]);
+  });
+  it('clamps to the first entry headroom', () =&gt; {
+    const out = planCargo('priority', [ve({ resourceId: 'wood', headroom: 4 })], 10);
+    expect(out).toEqual([{ resourceId: 'wood', amount: 4 }]);
+  });
+  it('returns [] for no entries', () =&gt; {
+    expect(planCargo('priority', [], 10)).toEqual([]);
+  });
+});
+
+describe('planCargo — waterfall', () =&gt; {
+  it('fills entry 1 to its source limit, spills the rest to entry 2', () =&gt; {
+    const out = planCargo('waterfall', [
+      ve({ resourceId: 'wood', sourceAvail: 3 }),
+      ve({ resourceId: 'stone' }),
+    ], 10);
+    expect(out).toEqual([
+      { resourceId: 'wood', amount: 3 },
+      { resourceId: 'stone', amount: 7 },
+    ]);
+  });
+  it('stops once the budget is exhausted', () =&gt; {
+    const out = planCargo('waterfall', [
+      ve({ resourceId: 'wood' }),
+      ve({ resourceId: 'stone' }),
+    ], 10);
+    expect(out).toEqual([{ resourceId: 'wood', amount: 10 }]);
+  });
+  it('clamps each entry to headroom too', () =&gt; {
+    const out = planCargo('waterfall', [
+      ve({ resourceId: 'wood', headroom: 2, sourceAvail: 99 }),
+      ve({ resourceId: 'stone' }),
+    ], 10);
+    expect(out).toEqual([
+      { resourceId: 'wood', amount: 2 },
+      { resourceId: 'stone', amount: 8 },
+    ]);
+  });
+});
+
+describe('planCargo — split', () =&gt; {
+  it('divides the budget by normalised weight', () =&gt; {
+    const out = planCargo('split', [
+      ve({ resourceId: 'wood', weight: 2 }),
+      ve({ resourceId: 'stone', weight: 1 }),
+    ], 9);
+    expect(out).toEqual([
+      { resourceId: 'wood', amount: 6 },
+      { resourceId: 'stone', amount: 3 },
+    ]);
+  });
+  it('a single viable entry takes the whole budget (weights rescale)', () =&gt; {
+    const out = planCargo('split', [ve({ resourceId: 'wood', weight: 2 })], 9);
+    expect(out).toEqual([{ resourceId: 'wood', amount: 9 }]);
+  });
+});
+
+describe('planCargo — balanced', () =&gt; {
+  it('picks the entry with the lowest destination fill ratio', () =&gt; {
+    const out = planCargo('balanced', [
+      ve({ resourceId: 'wood', destFillRatio: 0.9 }),
+      ve({ resourceId: 'stone', destFillRatio: 0.1 }),
+    ], 10);
+    expect(out).toEqual([{ resourceId: 'stone', amount: 10 }]);
+  });
+  it('breaks ties by list order', () =&gt; {
+    const out = planCargo('balanced', [
+      ve({ resourceId: 'wood', destFillRatio: 0.5 }),
+      ve({ resourceId: 'stone', destFillRatio: 0.5 }),
+    ], 10);
+    expect(out).toEqual([{ resourceId: 'wood', amount: 10 }]);
+  });
+});
+
+describe('migrateLegacyCargo', () =&gt; {
+  it('a filtered route becomes priority mode with a one-entry list', () =&gt; {
+    expect(migrateLegacyCargo({ filter: 'iron_ore', priorityList: [] }))
+      .toEqual({ mode: 'priority', cargo: [{ resourceId: 'iron_ore' }] });
+  });
+  it('an any route keeps its list, in priority mode', () =&gt; {
+    expect(migrateLegacyCargo({ filter: null, priorityList: ['wood', 'coal'] }))
+      .toEqual({ mode: 'priority', cargo: [{ resourceId: 'wood' }, { resourceId: 'coal' }] });
+  });
+  it('an already-migrated route (has mode/cargo) is returned unchanged', () =&gt; {
+    const r = { mode: 'split' as const, cargo: [{ resourceId: 'wood' as const, weight: 2 }] };
+    expect(migrateLegacyCargo(r)).toEqual(r);
+  });
+});</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run the tests to verify they fail</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/route-cargo.test.ts</code></p>
+            <p class="step-text">Expected: FAIL — <code>route-cargo.js</code> does not exist / <code>planCargo is not a function</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Write src/route-cargo.ts</div>
+            <p class="step-text">Create the module. Import <code>ResourceId</code> from the same module <code>routes.ts</code> imports it from (match that import line exactly).</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// src/route-cargo.ts — pure: no PixiJS, no world mutation.</span>
+import type { ResourceId } from './recipes.js'; <span class="cm">// match routes.ts's import</span>
+
+export type CargoMode = 'priority' | 'waterfall' | 'split' | 'balanced';
+
+export interface CargoEntry {
+  readonly resourceId: ResourceId;
+  <span class="cm">/** split mode only; must be &gt; 0; treated as 1 when absent. */</span>
+  readonly weight?: number;
+  <span class="cm">/** optional source-floor gate, 0–100 (% of source cap). Absent = no gate. */</span>
+  readonly sourceFloorPct?: number;
+}
+
+<span class="cm">/** A cargo entry that has already passed the viability gate, with the
+ *  per-tick facts the allocator needs. Built by routes.ts's planRouteCargo. */</span>
+export interface ViableEntry {
+  readonly resourceId: ResourceId;
+  readonly weight: number;         <span class="cm">// resolved (default 1 applied)</span>
+  readonly headroom: number;       <span class="cm">// destination headroom, &gt; 0</span>
+  readonly sourceAvail: number;    <span class="cm">// source stock of this resource</span>
+  readonly destFillRatio: number;  <span class="cm">// dest inv / dest cap (balanced only)</span>
+}
+
+export interface CargoDemand {
+  readonly resourceId: ResourceId;
+  readonly amount: number;
+}
+
+<span class="cm">/** Divide one tick's capacity budget across viable cargo entries per mode.
+ *  `entries` are pre-filtered to viable and ordered as in the cargo list.
+ *  Pure. */</span>
+export function planCargo(
+  mode: CargoMode,
+  entries: ReadonlyArray&lt;ViableEntry&gt;,
+  budget: number,
+): CargoDemand[] {
+  if (entries.length === 0 || budget &lt;= 0) return [];
+
+  if (mode === 'priority') {
+    const e = entries[0]!;
+    const amount = Math.min(budget, e.headroom);
+    return amount &gt; 0 ? [{ resourceId: e.resourceId, amount }] : [];
+  }
+
+  if (mode === 'balanced') {
+    let best = entries[0]!;
+    for (const e of entries) {
+      if (e.destFillRatio &lt; best.destFillRatio) best = e; <span class="cm">// strict &lt; → ties keep list order</span>
+    }
+    const amount = Math.min(budget, best.headroom);
+    return amount &gt; 0 ? [{ resourceId: best.resourceId, amount }] : [];
+  }
+
+  if (mode === 'split') {
+    let sumW = 0;
+    for (const e of entries) sumW += e.weight;
+    if (sumW &lt;= 0) return [];
+    const out: CargoDemand[] = [];
+    for (const e of entries) {
+      const amount = Math.min(budget * (e.weight / sumW), e.headroom);
+      if (amount &gt; 0) out.push({ resourceId: e.resourceId, amount });
+    }
+    return out;
+  }
+
+  <span class="cm">// waterfall: fill each entry to its source/headroom limit, spill the rest.</span>
+  let remaining = budget;
+  const out: CargoDemand[] = [];
+  for (const e of entries) {
+    if (remaining &lt;= 0) break;
+    const amount = Math.min(remaining, e.headroom, e.sourceAvail);
+    if (amount &gt; 0) {
+      out.push({ resourceId: e.resourceId, amount });
+      remaining -= amount;
+    }
+  }
+  return out;
+}
+
+<span class="cm">/** Convert a route that may carry the legacy {filter, priorityList} shape
+ *  to the {mode, cargo} shape. Idempotent: a route that already has `mode`
+ *  is returned unchanged. Used by persistence load and any legacy path. */</span>
+export function migrateLegacyCargo(
+  r: { mode?: CargoMode; cargo?: CargoEntry[]; filter?: ResourceId | null;
+       priorityList?: ReadonlyArray&lt;ResourceId&gt; },
+): { mode: CargoMode; cargo: CargoEntry[] } {
+  if (r.mode !== undefined &amp;&amp; r.cargo !== undefined) {
+    return { mode: r.mode, cargo: r.cargo };
+  }
+  if (r.filter !== undefined &amp;&amp; r.filter !== null) {
+    return { mode: 'priority', cargo: [{ resourceId: r.filter }] };
+  }
+  const list = r.priorityList ?? [];
+  return { mode: 'priority', cargo: list.map((resourceId) =&gt; ({ resourceId })) };
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run the tests to verify they pass</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/route-cargo.test.ts</code></p>
+            <p class="step-text">Expected: PASS — all suites green.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/route-cargo.ts src/route-cargo.test.ts
+git commit -m "$(cat &lt;&lt;'EOF'
+feat(routes): pure route-cargo module — modes + allocator + migration
+
+New pure module: CargoMode/CargoEntry/ViableEntry/CargoDemand types, the
+planCargo allocator (priority, waterfall, split, balanced), and
+migrateLegacyCargo. Additive — not yet wired into Route.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;
+EOF
+)"</pre></div></div>
+            <p class="step-text">A subagent implementer commits with its own trailer instead — e.g. <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: Swap the Route data model &amp; wire the dispatch</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">The breaking change. Removing <code>Route.filter</code> and <code>Route.priorityList</code> makes every reader a compile error until fixed — so this is one commit. Strict TypeScript is the safety net: <code>npm run build</code> will not pass until every site is migrated.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/routes.ts</code> <span class="tag">— interface, dispatch, glue, createRouteFromBuilding</span></li>
+            <li>Modify: <code>src/settlement.ts</code> <span class="tag">— spawnAutoPatronageRoutes literals</span></li>
+            <li>Modify: <code>src/persistence.ts</code> <span class="tag">— load-time migration</span></li>
+            <li>Modify: <code>src/routes.test.ts</code> <span class="tag">— cargoRoute helper + call sites</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Update the Route interface (routes.ts ~80–106)</div>
+            <p class="step-text">Remove the <code>filter</code> and <code>priorityList</code> fields; add <code>mode</code> and <code>cargo</code>. Add the import.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// add to routes.ts imports:</span>
+<span class="add">import type { CargoMode, CargoEntry } from './route-cargo.js';</span>
+
+<span class="cm">// in interface Route, replace the filter + priorityList block:</span>
+<span class="del">  readonly filter: ResourceId | null;</span>
+<span class="del">  priorityList: ReadonlyArray&lt;ResourceId&gt;;</span>
+<span class="add">  /** How this route divides its per-tick capacity across `cargo`. */</span>
+<span class="add">  mode: CargoMode;</span>
+<span class="add">  /** Resources this route may carry. Order matters for priority/waterfall;</span>
+<span class="add">   *  weight matters for split. Mutated in place by routes-ui.ts. */</span>
+<span class="add">  cargo: CargoEntry[];</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Replace selectResource with planRouteCargo (routes.ts ~451–467)</div>
+            <p class="step-text">Delete <code>selectResource</code> entirely and add <code>planRouteCargo</code> — the glue that builds <code>ViableEntry[]</code> from world/state, applying the source-floor gate, and returns the route's demands via <code>planCargo</code>. <code>destinationHeadroom</code>, <code>inv</code>, <code>cap</code> are already imported/defined in routes.ts.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// add to routes.ts imports:</span>
+<span class="add">import { planCargo, type ViableEntry, type CargoDemand } from './route-cargo.js';</span>
+
+<span class="cm">// replace function selectResource(...) entirely with:</span>
+<span class="cm">/** Build this route's per-tick demands: filter cargo to viable entries</span>
+<span class="cm"> *  (source stock &gt; 0, destination headroom &gt; 0, source-floor gate passes),</span>
+<span class="cm"> *  then run the route's mode allocator over `budget`. */</span>
+function planRouteCargo(
+  world: WorldState,
+  states: Map&lt;string, IslandState&gt;,
+  route: Route,
+  budget: number,
+): CargoDemand[] {
+  const srcState = states.get(route.from);
+  const destState = states.get(route.to);
+  if (!srcState || !destState) return [];
+  const viable: ViableEntry[] = [];
+  for (const entry of route.cargo) {
+    const r = entry.resourceId;
+    const sourceAvail = inv(srcState, r);
+    if (sourceAvail &lt;= 0) continue;
+    const headroom = destinationHeadroom(world, states, route.to, r);
+    if (headroom &lt;= 0) continue;
+    if (entry.sourceFloorPct !== undefined) {
+      const srcCap = cap(srcState, r);
+      if (srcCap &lt;= 0 || sourceAvail / srcCap &lt; entry.sourceFloorPct / 100) continue;
+    }
+    const destCap = cap(destState, r);
+    viable.push({
+      resourceId: r,
+      weight: entry.weight ?? 1,
+      headroom,
+      sourceAvail,
+      destFillRatio: destCap &gt; 0 ? inv(destState, r) / destCap : 1,
+    });
+  }
+  return planCargo(route.mode, viable, budget);
+}</pre></div></div>
+            <p class="step-text">Note <code>budget</code> replaces the old <code>desired</code> clamp: the caller passes the fully-multiplied capacity figure, and <code>planCargo</code> clamps to headroom internally.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Rework dispatch Phase 1 to emit 1+ demands per route</div>
+            <p class="step-text">In <code>dispatchPhase</code> (routes.ts ~622–680), the per-route loop currently calls <code>selectResource</code>, computes one <code>desired</code>, and pushes one <code>RouteDemand</code>. Replace the tail of that loop: keep all the capacity-multiplier maths (it produces the budget), then call <code>planRouteCargo</code> and push one <code>RouteDemand</code> per returned demand.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// inside the `for (const route of world.routes)` loop, REPLACE</span>
+<span class="cm">// from `const r = selectResource(...)` through the `demands.push(...)`:</span>
+
+<span class="del">    const r = selectResource(world, states, route);</span>
+<span class="del">    if (r === null) continue;</span>
+    <span class="cm">// ... KEEP the capacityMul / skillCapMul / weatherMul / airshipMul block ...</span>
+    const capDemand = route.capacityPerSec * capacityMul * skillCapMul
+                      * airshipMul * weatherMul * elapsedSec;
+<span class="del">    const headroom = destinationHeadroom(world, states, route.to, r);</span>
+<span class="del">    const desired = Math.min(capDemand, headroom);</span>
+<span class="del">    if (desired &lt;= 0) continue;</span>
+    const crossedCells =
+      fromSpec &amp;&amp; toSpec
+        ? rasterizeRouteCells(fromSpec.cx, fromSpec.cy, toSpec.cx, toSpec.cy, CELL_SIZE_TILES)
+        : [];
+<span class="add">    const planned = planRouteCargo(world, states, route, capDemand);</span>
+<span class="add">    for (const d of planned) {</span>
+<span class="add">      demands.push({ route, resourceId: d.resourceId, desired: d.amount, weatherMul, crossedCells });</span>
+<span class="add">    }</span></pre></div></div>
+            <p class="step-text">The <code>RouteDemand</code> interface (routes.ts ~557–571) is unchanged — it still holds one resource per entry; a route just contributes several entries now.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Key Phase 2 &amp; Phase 3 allocation by demand, not route</div>
+            <p class="step-text"><strong>Critical.</strong> Phase 2 builds <code>allocated: Map&lt;Route, number&gt;</code> and Phase 3 reads <code>allocated.get(d.route)</code>. With multiple demands per route this collides — two demands for one route overwrite each other. Re-key the map by the <code>RouteDemand</code> object (each demand is unique).</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// Phase 2 — the map declaration:</span>
+<span class="del">  const allocated = new Map&lt;Route, number&gt;();</span>
+<span class="add">  const allocated = new Map&lt;RouteDemand, number&gt;();</span>
+
+<span class="cm">// Phase 2 — inside the `for (const [key, members] of groups)` loop,</span>
+<span class="cm">// both branches: key by the demand `m`, not `m.route`:</span>
+<span class="del">      for (const m of members) allocated.set(m.route, m.desired);</span>
+<span class="add">      for (const m of members) allocated.set(m, m.desired);</span>
+<span class="cm">// ...and in the else branch:</span>
+<span class="del">      for (const m of members) allocated.set(m.route, m.desired * scale);</span>
+<span class="add">      for (const m of members) allocated.set(m, m.desired * scale);</span>
+
+<span class="cm">// Phase 3 — the per-demand loop reads by demand:</span>
+<span class="del">    const amount = allocated.get(d.route) ?? 0;</span>
+<span class="add">    const amount = allocated.get(d) ?? 0;</span></pre></div></div>
+            <p class="step-text">Everything else in Phase 2 (grouping by <code>${d.route.from}|${d.resourceId}</code>) and Phase 3 (deduct, in-flight batch, funnel credit) is unchanged.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Fix createRouteFromBuilding (routes.ts ~840–861)</div>
+            <p class="step-text">The function takes a <code>filter: ResourceId | null</code> parameter and writes <code>filter</code>/<code>priorityList</code>. Change it to build <code>mode</code>/<code>cargo</code>. Keep the parameter (callers pass a chosen resource or null) and translate it.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// in the returned route object literal:</span>
+<span class="del">    filter,</span>
+<span class="del">    priorityList: [],</span>
+<span class="add">    mode: 'priority',</span>
+<span class="add">    cargo: filter !== null ? [{ resourceId: filter }] : [],</span></pre></div></div>
+            <p class="step-text">A null <code>filter</code> (an "any" route) becomes an empty <code>cargo</code> list in priority mode — identical to the old empty <code>priorityList</code>. Check the call sites of <code>createRouteFromBuilding</code>: they pass a <code>filter</code> argument and need no change.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Fix the three spawnAutoPatronageRoutes literals (settlement.ts ~360–416)</div>
+            <p class="step-text">Each of the three <code>world.routes.push({...})</code> literals has <code>filter</code> + <code>priorityList</code>. Convert each to <code>mode: 'priority'</code> + <code>cargo</code>.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// Route 1 — fuel (was: filter: fuel, priorityList: [])</span>
+<span class="del">    filter: fuel,</span>
+<span class="del">    priorityList: [],</span>
+<span class="add">    mode: 'priority',</span>
+<span class="add">    cargo: [{ resourceId: fuel }],</span>
+
+<span class="cm">// Route 2 — kit components (was: filter: null, priorityList: [...])</span>
+<span class="del">    filter: null,</span>
+<span class="del">    priorityList: ['iron_ingot', 'brick', 'lumber', 'glass', 'gear'],</span>
+<span class="add">    mode: 'priority',</span>
+<span class="add">    cargo: [{ resourceId: 'iron_ingot' }, { resourceId: 'brick' }, { resourceId: 'lumber' },</span>
+<span class="add">            { resourceId: 'glass' }, { resourceId: 'gear' }],</span>
+
+<span class="cm">// Route 3 — raw materials (was: filter: null, priorityList: [...])</span>
+<span class="del">    filter: null,</span>
+<span class="del">    priorityList: ['wood', 'stone', 'coal', 'iron_ore', 'copper_ore'],</span>
+<span class="add">    mode: 'priority',</span>
+<span class="add">    cargo: [{ resourceId: 'wood' }, { resourceId: 'stone' }, { resourceId: 'coal' },</span>
+<span class="add">            { resourceId: 'iron_ore' }, { resourceId: 'copper_ore' }],</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Add the persistence migration (persistence.ts ~569)</div>
+            <p class="step-text">Route deserialization is a transparent <code>...r</code> spread. A save written before this change carries <code>filter</code>/<code>priorityList</code> and no <code>mode</code>/<code>cargo</code>. Run <code>migrateLegacyCargo</code> on each route during load so old saves open correctly.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// add to persistence.ts imports:</span>
+<span class="add">import { migrateLegacyCargo } from './route-cargo.js';</span>
+
+<span class="cm">// in deserializeWorld, the routes map (~line 569):</span>
+    routes: snapshot.world.routes.map((r) =&gt; {
+<span class="add">      const { mode, cargo } = migrateLegacyCargo(r as never);</span>
+      return {
+        ...r,
+<span class="add">        mode,</span>
+<span class="add">        cargo,</span>
+        inFlight: r.inFlight.map((b) =&gt; ({
+          ...b,
+          arrivalTime: b.arrivalTime + perfShift,
+          dispatchTime: b.dispatchTime + perfShift,
+        })),
+      };
+    }),</pre></div></div>
+            <p class="step-text">The <code>...r</code> spread still copies the stale <code>filter</code>/<code>priorityList</code> keys onto the object, but they are not in the <code>Route</code> type and nothing reads them — harmless. If the serialized type is strict and rejects extra keys, delete them explicitly after the spread (<code>delete (out as never).filter</code>). Confirm against how <code>persistence.ts</code> types the snapshot.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Update the test helper and its call sites (routes.test.ts)</div>
+            <p class="step-text">Rewrite <code>cargoRoute</code> (~127–146) to build <code>mode</code>/<code>cargo</code>, keeping a back-compatible signature so existing call sites need minimal change.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// routes.test.ts — replace cargoRoute. A `filter` arg → one-entry cargo;</span>
+<span class="cm">// a `priorityList` arg → multi-entry cargo. Both default to priority mode.</span>
+import type { CargoMode } from './route-cargo.js';
+
+function cargoRoute(
+  from: string,
+  to: string,
+  filter: ResourceId | null,
+  priorityList: ResourceId[] = [],
+  capacityPerSec = 0.5,
+  transitTimeSec = 10,
+  mode: CargoMode = 'priority',
+): Route {
+  const cargo = filter !== null
+    ? [{ resourceId: filter }]
+    : priorityList.map((resourceId) =&gt; ({ resourceId }));
+  return {
+    id: nextRouteId(), from, to, type: 'cargo', capacityPerSec,
+    mode, cargo, transitTimeSec, inFlight: [],
+  };
+}</pre></div></div>
+            <p class="step-text">Keeping the <code>filter</code>/<code>priorityList</code> parameters means every existing <code>cargoRoute(...)</code> call still compiles unchanged. Then run the suite (next step) and fix any test that directly asserted on <code>route.filter</code> / <code>route.priorityList</code> — re-point those assertions to <code>route.mode</code> / <code>route.cargo</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 9: Build, then run the full suite</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS. Any remaining reference to <code>filter</code>/<code>priorityList</code>/<code>selectResource</code> is a compile error here — fix each. <code>routes-ui.ts</code> WILL still error at this point; that is expected — its fixes are Task 3, but the build must be made to pass, so apply the Task 3 routes-ui.ts changes now if doing this inline, or treat Task 2 + Task 3 as landing together. (Recommended: do Task 3's edits before this build step so the commit is coherent.)</p>
+            <p class="step-text cmd">Then run: <code>npm test</code></p>
+            <p class="step-text">Expected: PASS — full suite green, including <code>routes.test.ts</code> and <code>route-cargo.test.ts</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 10: Add dispatch-level mode tests to routes.test.ts</div>
+            <p class="step-text">Append tests that drive the real <code>dispatchAttempt</code> through each mode, proving the glue (gate, viability, multi-demand) works end to end. Use the existing <code>makeState</code> / <code>makeWorld</code> / <code>cargoRoute</code> helpers; <code>cargoRoute</code>'s 7th arg sets the mode.</p>
+            <div class="code-block"><div class="code"><pre>describe('dispatch — cargo modes', () =&gt; {
+  it('split divides one tick across two resources by weight', () =&gt; {
+    const src = makeState('a', { inventory: { ...blankInventory(), wood: 100, stone: 100 } });
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(), from: 'a', to: 'b', type: 'cargo', capacityPerSec: 1.5,
+      mode: 'split',
+      cargo: [{ resourceId: 'wood', weight: 2 }, { resourceId: 'stone', weight: 1 }],
+      transitTimeSec: 10, inFlight: [],
+    };
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2); <span class="cm">// budget = 1.5×2 = 3.0</span>
+    const byRes = Object.fromEntries(out.map((d) =&gt; [d.resourceId, d.amount]));
+    expect(byRes.wood).toBeCloseTo(2.0, 6);
+    expect(byRes.stone).toBeCloseTo(1.0, 6);
+  });
+
+  it('source-floor gate skips an entry below the floor', () =&gt; {
+    <span class="cm">// cap 100, wood at 30 = 30%; floor 50% → wood gated out, stone ships.</span>
+    const src = makeState('a', { inventory: { ...blankInventory(), wood: 30, stone: 80 } });
+    const dst = makeState('b');
+    const r: Route = {
+      id: nextRouteId(), from: 'a', to: 'b', type: 'cargo', capacityPerSec: 0.5,
+      mode: 'priority',
+      cargo: [{ resourceId: 'wood', sourceFloorPct: 50 }, { resourceId: 'stone' }],
+      transitTimeSec: 10, inFlight: [],
+    };
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const out = dispatchAttempt(world, states, 0, 2);
+    expect(out.length).toBe(1);
+    expect(out[0]?.resourceId).toBe('stone');
+  });
+});</pre></div></div>
+            <p class="step-text">Run <code>npx vitest run src/routes.test.ts</code> — expect PASS.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 11: Commit (together with Task 3)</div>
+            <p class="step-text">Because <code>routes-ui.ts</code> must compile, Task 2 and Task 3 land in one commit. Do Task 3 first, then commit both:</p>
+            <div class="code-block"><div class="code"><pre>git add src/routes.ts src/settlement.ts src/persistence.ts \
+        src/routes.test.ts src/routes-ui.ts
+git commit -m "$(cat &lt;&lt;'EOF'
+feat(routes): cargo modes — replace filter/priorityList with mode/cargo
+
+Route now carries `mode` (priority/waterfall/split/balanced) + a `cargo`
+list of entries (resource, optional weight, optional source-floor gate),
+replacing filter/priorityList. Dispatch Phase 1 runs planRouteCargo and
+emits 1+ demands per route; Phase 2/3 key allocation by demand. Old
+saves migrate to priority mode (behaviour-preserving). UI gets a mode
+selector + adaptive cargo editor.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;
+EOF
+)"</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Task 3: The mode selector &amp; adaptive cargo editor</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Rewrites the route ledger's cargo editing in <code>routes-ui.ts</code>. Lands in the same commit as Task 2 (Step 11) because the file must compile. Do these edits, then run Task 2 Step 9's build.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/routes-ui.ts</code> <span class="tag">— routeStructKey, cargo display, render conditional, the editor</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Fix routeStructKey (routes-ui.ts ~643–652)</div>
+            <p class="step-text">It reads <code>route.filter</code> and <code>route.priorityList</code> to detect when a row needs a DOM rebuild. Re-base it on <code>mode</code> and <code>cargo</code>.</p>
+            <div class="code-block"><div class="code"><pre>  function routeStructKey(route: Route): string {
+    return [
+      route.id,
+      islandLabel(route.from),
+      islandLabel(route.to),
+<span class="del">      route.filter ?? '__any__',</span>
+<span class="del">      route.priorityList.join(','),</span>
+<span class="add">      route.mode,</span>
+<span class="add">      route.cargo.map((e) =&gt; `${e.resourceId}:${e.weight ?? 1}:${e.sourceFloorPct ?? ''}`).join(','),</span>
+      route.draining ? 'D' : '',
+    ].join('');
+  }</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Fix the cargo-display line (routes-ui.ts ~745)</div>
+            <p class="step-text">Replace the <code>route.filter ?? 'any'</code> display with a mode-aware summary.</p>
+            <div class="code-block"><div class="code"><pre><span class="del">    const cargo = route.filter ?? 'any';</span>
+<span class="add">    const cargo = route.cargo.length === 0</span>
+<span class="add">      ? '(empty)'</span>
+<span class="add">      : route.cargo.length === 1 &amp;&amp; route.mode === 'priority'</span>
+<span class="add">        ? route.cargo[0]!.resourceId</span>
+<span class="add">        : `${route.mode} · ${route.cargo.length} resources`;</span>
+    mid.textContent = `${islandLabel(route.from)} → ${islandLabel(route.to)}  ${cargo}`;</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Always render the editor (routes-ui.ts ~783–785)</div>
+            <p class="step-text">The editor was gated on <code>route.filter === null</code> (any-routes only). Every route now has a <code>cargo</code> list and a <code>mode</code>, so the editor always renders. Replace the conditional with an unconditional call.</p>
+            <div class="code-block"><div class="code"><pre><span class="del">    if (route.filter === null) {</span>
+<span class="del">      renderPriorityEditor(route, row, () =&gt; refresh(performance.now()));</span>
+<span class="del">    }</span>
+<span class="add">    renderCargoEditor(route, row, () =&gt; refresh(performance.now()));</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Replace renderPriorityEditor with renderCargoEditor</div>
+            <p class="step-text">Rewrite the editor (routes-ui.ts ~812–921). It now renders: a <strong>mode <code>&lt;select&gt;</code></strong>; the cargo rows (drag-orderable for priority/waterfall, plain for balanced) — each row showing the resource name, a <strong>weight input</strong> (only when <code>mode === 'split'</code>), a <strong>source-floor % input</strong>, and the delete button; and the add-resource control. Keep the existing drag handlers (<code>handleDragStart</code>/<code>End</code>/<code>Over</code>) and the <code>reorderPriorityList</code> helper — rename references to operate on <code>route.cargo</code>. Full editor:</p>
+            <div class="code-block"><div class="code"><pre>  function renderCargoEditor(route: Route, container: HTMLElement, rerender: () =&gt; void): void {
+    <span class="cm">// --- mode selector ---</span>
+    const modeRow = document.createElement('div');
+    modeRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:4px 0 0 16px;';
+    const modeLbl = document.createElement('span');
+    modeLbl.textContent = 'mode';
+    modeLbl.style.cssText = 'font-size:11px;color:var(--ri-accent-dim);';
+    const modeSel = document.createElement('select');
+    modeSel.style.cssText = 'background:var(--ri-panel-solid);color:var(--ri-accent);'
+      + 'border:1px solid var(--ri-accent-dim);font-size:11px;padding:2px 4px;';
+    for (const m of ['priority', 'waterfall', 'split', 'balanced'] as const) {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      if (route.mode === m) o.selected = true;
+      modeSel.appendChild(o);
+    }
+    modeSel.addEventListener('mousedown', (e) =&gt; { e.stopPropagation(); });
+    modeSel.addEventListener('change', (e) =&gt; {
+      e.stopPropagation();
+      route.mode = modeSel.value as Route['mode'];
+      rerender();
+    });
+    modeRow.appendChild(modeLbl);
+    modeRow.appendChild(modeSel);
+    container.appendChild(modeRow);
+
+    const orderable = route.mode === 'priority' || route.mode === 'waterfall';
+
+    <span class="cm">// --- cargo rows ---</span>
+    const ul = document.createElement('ul');
+    ul.style.cssText = 'list-style:none;margin:4px 0 0 16px;padding:0;';
+    route.cargo.forEach((entry, index) =&gt; {
+      const li = document.createElement('li');
+      li.draggable = orderable;
+      li.dataset.index = String(index);
+      li.style.cssText = [
+        orderable ? 'cursor: grab' : 'cursor: default',
+        'padding: 2px 6px', 'border: 1px solid var(--ri-accent-dim)',
+        'margin-bottom: 2px', 'background: var(--ri-panel-solid)',
+        'color: var(--ri-accent)', 'font-size: 11px', 'border-radius: 2px',
+        'display: flex', 'align-items: center', 'gap: 6px',
+      ].join(';');
+
+      const label = document.createElement('span');
+      label.textContent = entry.resourceId;
+      label.style.cssText = 'flex:1 1 auto;';
+      li.appendChild(label);
+
+      <span class="cm">// weight input — split mode only</span>
+      if (route.mode === 'split') {
+        const w = document.createElement('input');
+        w.type = 'number'; w.min = '1'; w.step = '1';
+        w.value = String(entry.weight ?? 1);
+        w.title = 'split weight';
+        w.style.cssText = 'width:42px;background:var(--ri-panel-solid);'
+          + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;';
+        w.addEventListener('mousedown', (e) =&gt; { e.stopPropagation(); });
+        w.addEventListener('change', (e) =&gt; {
+          e.stopPropagation();
+          const v = Math.max(1, Math.floor(Number(w.value) || 1));
+          route.cargo[index] = { ...entry, weight: v };
+          rerender();
+        });
+        li.appendChild(w);
+      }
+
+      <span class="cm">// source-floor % input — all modes</span>
+      const floor = document.createElement('input');
+      floor.type = 'number'; floor.min = '0'; floor.max = '100'; floor.step = '5';
+      floor.value = entry.sourceFloorPct === undefined ? '' : String(entry.sourceFloorPct);
+      floor.placeholder = 'floor%';
+      floor.title = 'source-floor gate — only ship while source ≥ this % full';
+      floor.style.cssText = 'width:54px;background:var(--ri-panel-solid);'
+        + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;';
+      floor.addEventListener('mousedown', (e) =&gt; { e.stopPropagation(); });
+      floor.addEventListener('change', (e) =&gt; {
+        e.stopPropagation();
+        const raw = floor.value.trim();
+        const next = { ...entry };
+        if (raw === '') delete next.sourceFloorPct;
+        else next.sourceFloorPct = Math.min(100, Math.max(0, Number(raw) || 0));
+        route.cargo[index] = next;
+        rerender();
+      });
+      li.appendChild(floor);
+
+      <span class="cm">// delete</span>
+      const del = document.createElement('button');
+      del.type = 'button'; del.textContent = '×'; del.title = 'remove from cargo';
+      del.style.cssText = 'cursor:pointer;background:transparent;color:var(--ri-warn);'
+        + 'border:1px solid var(--ri-accent-dim);border-radius:2px;padding:0 6px;'
+        + 'font-size:11px;line-height:14px;';
+      del.addEventListener('mousedown', (e) =&gt; { e.stopPropagation(); });
+      del.addEventListener('click', (e) =&gt; {
+        e.stopPropagation();
+        route.cargo = route.cargo.filter((_, i) =&gt; i !== index);
+        rerender();
+      });
+      li.appendChild(del);
+
+      if (orderable) {
+        li.addEventListener('dragstart', (e) =&gt; handleDragStart(e));
+        li.addEventListener('dragend', (e) =&gt; handleDragEnd(e));
+        li.addEventListener('dragover', (e) =&gt; handleDragOver(e));
+        li.addEventListener('drop', (e) =&gt; handleCargoDrop(e, route, rerender));
+        li.addEventListener('dragenter', (e) =&gt; { e.preventDefault(); li.style.borderColor = 'var(--ri-accent)'; });
+        li.addEventListener('dragleave', () =&gt; { li.style.borderColor = 'var(--ri-accent-dim)'; });
+      }
+      ul.appendChild(li);
+    });
+    container.appendChild(ul);
+
+    <span class="cm">// --- add-resource control ---</span>
+    const have = new Set(route.cargo.map((e) =&gt; e.resourceId));
+    const remaining = ALL_RESOURCES.filter((r) =&gt; !have.has(r));
+    const addRow = document.createElement('div');
+    addRow.style.cssText = 'display:flex;gap:4px;margin:4px 0 0 16px;align-items:center';
+    const addSel = document.createElement('select');
+    addSel.style.cssText = 'flex:1 1 auto;background:var(--ri-panel-solid);'
+      + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;padding:2px 4px;';
+    if (remaining.length === 0) {
+      const o = document.createElement('option');
+      o.textContent = '(all resources added)';
+      addSel.appendChild(o); addSel.disabled = true;
+    } else {
+      for (const r of remaining) {
+        const o = document.createElement('option');
+        o.value = r; o.textContent = r;
+        addSel.appendChild(o);
+      }
+    }
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button'; addBtn.textContent = '+ add';
+    addBtn.style.cssText = 'cursor:pointer;background:var(--ri-panel-solid);'
+      + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;'
+      + 'padding:2px 8px;border-radius:2px;';
+    addBtn.disabled = remaining.length === 0;
+    if (addBtn.disabled) addBtn.style.opacity = '0.5';
+    addBtn.addEventListener('click', (e) =&gt; {
+      e.stopPropagation();
+      const chosen = addSel.value as ResourceId;
+      if (!chosen || have.has(chosen)) return;
+      route.cargo = [...route.cargo, { resourceId: chosen }];
+      rerender();
+    });
+    addRow.appendChild(addSel);
+    addRow.appendChild(addBtn);
+    container.appendChild(addRow);
+  }
+
+  function handleCargoDrop(e: DragEvent, route: Route, rerender: () =&gt; void) {
+    e.preventDefault();
+    const src = Number(e.dataTransfer?.getData('text/plain'));
+    const dstLi = e.currentTarget as HTMLElement;
+    const dst = Number(dstLi.dataset.index);
+    if (src === dst || Number.isNaN(src) || Number.isNaN(dst)) return;
+    route.cargo = reorderPriorityList(route.cargo, src, dst);
+    rerender();
+  }</pre></div></div>
+            <p class="step-text"><code>reorderPriorityList</code> is a generic array-move helper — it works on <code>CargoEntry[]</code> unchanged. If its signature is typed to <code>ResourceId[]</code>, widen it to a generic <code>&lt;T&gt;(list: readonly T[], from: number, to: number): T[]</code>. Delete the old <code>renderPriorityEditor</code> and <code>handleDrop</code> once <code>renderCargoEditor</code>/<code>handleCargoDrop</code> replace them; keep <code>handleDragStart</code>/<code>End</code>/<code>Over</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Build, then smoke-test in the browser</div>
+            <p class="step-text cmd">Run: <code>npm run build</code> — expected PASS (this is the build referenced in Task 2 Step 9).</p>
+            <p class="step-text">Then <code>npm run build</code> is already done; reload <code>https://islands.nitjsefni.eu/</code> in the browser (the dev service serves <code>dist/</code> — no restart needed) and verify on a route row: the mode dropdown switches modes; split mode shows weight inputs; the floor % input accepts a value and persists; drag-reorder works in priority/waterfall and is absent in balanced; add/remove resources works. Screenshot via <code>mcp__daedalus__screenshot</code> if available.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Notes &amp; verification</h2></div>
+      <div class="notes">
+        <div class="note"><strong>Why Task 2 + Task 3 share a commit.</strong> Removing <code>Route.filter</code>/<code>priorityList</code> breaks <code>routes-ui.ts</code> immediately. Strict TypeScript will not let <code>npm run build</code> pass until <code>routes-ui.ts</code> is migrated too. Task 1 is genuinely independent and commits on its own; Tasks 2 and 3 are one atomic change.</div>
+        <div class="note"><strong>Behaviour-preserving migration.</strong> Every existing route — in code and in saves — becomes <code>mode: 'priority'</code>. <code>planCargo</code>'s priority branch reproduces the old <code>selectResource</code> first-viable-wins logic, so migrated routes dispatch identically. The dispatch mode tests (Task 2 Step 10) plus the existing <code>routes.test.ts</code> suite guard this.</div>
+        <div class="note"><strong>Waterfall + contention imprecision (accepted, per spec §05).</strong> <code>planRouteCargo</code> computes waterfall spill from pre-contention source state. If Phase 2 scales a higher entry down, freed capacity is not reclaimed for lower entries that tick — it self-corrects next tick. Do not add a multi-pass solver.</div>
+        <div class="note"><strong>Final check.</strong> <code>npm run build</code> clean + <code>npm test</code> green (53 files). A repo-wide <code>grep -rn 'filter\b' src/routes.ts src/routes-ui.ts</code> and a grep for <code>priorityList</code> / <code>selectResource</code> across <code>src/</code> should return nothing but unrelated matches.</div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands · implementation plan · 2026-05-22 · spec: docs/superpowers/specs/2026-05-22-route-cargo-modes-design.html
+    </footer>
+
+  </div>
+</body>
+</html>
