@@ -894,40 +894,34 @@
       <code>antenna-overlay.ts</code>. Nothing in-game reads the slider;
       the value is baked in.</p>
 
-    <div class="tuner" id="tintTuner">
+    <div class="tuner">
       <div class="tuner-head">
-        <div class="tuner-title">Tint tuner</div>
-        <div class="tuner-hint">Design-time tool. Drag the slider, watch the preview, copy the hex.</div>
+        <div class="tuner-title">Chosen tint — <code>0xd6928a</code></div>
+        <div class="tuner-hint">~90% blend toward <code>0xE08B7F</code>. Tuned out-of-band (docs-hub iframes block inline scripts, so an in-doc slider can't drive a live preview here). The value below is hardcoded.</div>
       </div>
-      <div class="tuner-controls">
-        <label for="tt-blend">blend toward rust</label>
-        <input type="range" id="tt-blend" min="0" max="100" value="35">
-        <span id="tt-blend-pct">35%</span>
-      </div>
-      <svg viewBox="0 0 480 180" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="antenna overlay preview, side-by-side untinted vs tinted">
+      <svg viewBox="0 0 480 180" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="antenna overlay preview, side-by-side untinted vs chosen tint">
         <rect x="0" y="0" width="480" height="180" rx="8" fill="#0a1420"/>
         <text x="120" y="22" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#8F8D82">SIGNAL_COLOR · cyan</text>
         <circle cx="120" cy="100" r="68" fill="#7dd3e8" fill-opacity="0.04" stroke="#7dd3e8" stroke-opacity="0.22" stroke-width="1"/>
         <text x="360" y="22" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#8F8D82">REDUNDANT_COLOR · tinted</text>
-        <circle id="tt-preview-tint" cx="360" cy="100" r="68" fill="#7dd3e8" fill-opacity="0.04" stroke="#7dd3e8" stroke-opacity="0.22" stroke-width="1"/>
-        <text x="240" y="170" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="#3A3833">game-accurate α (fill 0.04 · stroke 0.22) — only the colour blends</text>
+        <circle cx="360" cy="100" r="68" fill="#d6928a" fill-opacity="0.04" stroke="#d6928a" stroke-opacity="0.22" stroke-width="1"/>
+        <text x="240" y="170" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="#3A3833">game-accurate α (fill 0.04 · stroke 0.22) — only the colour differs</text>
       </svg>
       <div class="tuner-swatch">
         <span class="tuner-label">solid swatch:</span>
-        <span id="tt-swatch" class="tuner-swatch-box"></span>
-        <code id="tt-hex">0xa3b1ad</code>
-        <button type="button" id="tt-copy" class="tuner-copy">copy hex</button>
+        <span class="tuner-swatch-box" style="background:#d6928a"></span>
+        <code>0xd6928a</code>
       </div>
       <div class="tuner-output">
-        <pre id="tt-snippet"><code>// paste near SIGNAL_COLOR in src/antenna-overlay.ts
-const REDUNDANT_COLOR = 0xa3b1ad;</code></pre>
+        <pre><code>// near SIGNAL_COLOR in src/antenna-overlay.ts
+const REDUNDANT_COLOR = 0xd6928a;</code></pre>
       </div>
     </div>
 
     <table class="tbl" style="margin-top: 14px;">
       <thead><tr><th>Property</th><th>Default antenna</th><th>Redundant antenna</th></tr></thead>
       <tbody>
-        <tr><td class="slate">colour</td><td><span class="swatch" style="background:#7dd3e8"></span><code>0x7dd3e8</code> (signal cyan)</td><td><span class="swatch" style="background:#a3b1ad"></span><code>REDUNDANT_COLOR</code> (cyan blended toward rust — tuned above)</td></tr>
+        <tr><td class="slate">colour</td><td><span class="swatch" style="background:#7dd3e8"></span><code>0x7dd3e8</code> (signal cyan)</td><td><span class="swatch" style="background:#d6928a"></span><code>0xd6928a</code> (cyan blended ~90% toward rust)</td></tr>
         <tr><td class="slate">fill α</td><td>0.04</td><td>0.04 (unchanged)</td></tr>
         <tr><td class="slate">stroke α</td><td>0.22</td><td>0.22 (unchanged)</td></tr>
         <tr><td class="slate">stroke width</td><td>1</td><td>1 (unchanged)</td></tr>
@@ -983,9 +977,7 @@ for (let i = 0; i &lt; ranges.length; i++) {
 }</code></pre>
     <p class="body">One new module-level constant next to
       <code>SIGNAL_COLOR</code>:
-      <code>REDUNDANT_COLOR = 0x...</code>, where the hex is the value
-      copied from §05's tuner. Starting point: <code>0xa3b1ad</code> at
-      35% blend; tune to taste before merging.</p>
+      <code>REDUNDANT_COLOR = 0xd6928a</code> (the value chosen in §05).</p>
 
     <p class="body"><strong>Performance.</strong> The naïve nested loop
       is O(N · (N · 17)) where N = number of antennas. For N = 50
@@ -1207,53 +1199,6 @@ for (let i = 0; i &lt; ranges.length; i++) {
   </div>
 
 </div>
-
-<script>
-(() => {
-  const CYAN = [0x7d, 0xd3, 0xe8];
-  const RUST = [0xe0, 0x8b, 0x7f];
-  const $ = (id) => document.getElementById(id);
-  const blend = $('tt-blend');
-  if (!blend) return;
-  const pct = $('tt-blend-pct');
-  const preview = $('tt-preview-tint');
-  const swatch = $('tt-swatch');
-  const hex = $('tt-hex');
-  const snippet = $('tt-snippet')?.querySelector('code');
-  const copyBtn = $('tt-copy');
-  function update() {
-    const t = Number(blend.value) / 100;
-    const r = Math.round(CYAN[0] + (RUST[0] - CYAN[0]) * t);
-    const g = Math.round(CYAN[1] + (RUST[1] - CYAN[1]) * t);
-    const b = Math.round(CYAN[2] + (RUST[2] - CYAN[2]) * t);
-    const n = (r << 16) | (g << 8) | b;
-    const hexStr = '0x' + n.toString(16).padStart(6, '0');
-    const cssStr = '#' + n.toString(16).padStart(6, '0');
-    if (pct) pct.textContent = Math.round(t * 100) + '%';
-    if (preview) {
-      preview.setAttribute('stroke', cssStr);
-      preview.setAttribute('fill', cssStr);
-    }
-    if (swatch) swatch.style.background = cssStr;
-    if (hex) hex.textContent = hexStr;
-    if (snippet) snippet.textContent = '// paste near SIGNAL_COLOR in src/antenna-overlay.ts\nconst REDUNDANT_COLOR = ' + hexStr + ';';
-  }
-  blend.addEventListener('input', update);
-  if (copyBtn) {
-    copyBtn.addEventListener('click', async () => {
-      const text = hex ? hex.textContent : '';
-      try {
-        await navigator.clipboard.writeText(text);
-        copyBtn.textContent = 'copied ✓';
-      } catch {
-        copyBtn.textContent = '(use Ctrl+C)';
-      }
-      setTimeout(() => { copyBtn.textContent = 'copy hex'; }, 1400);
-    });
-  }
-  update();
-})();
-</script>
 
 </body>
 </html>
