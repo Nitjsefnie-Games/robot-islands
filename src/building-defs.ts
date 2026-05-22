@@ -108,9 +108,6 @@ export type BuildingDefId =
   | 'oxygen_converter'
   | 'slag_reprocessor'
   | 'assembler'
-  | 'fabricator'
-  | 'precision_lab'
-  | 'singularity_forge'
   | 'tank'
   | 'cold_storage'
   | 'component_warehouse'
@@ -1323,51 +1320,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 500 },
     placementCost: { steel: 80, microchip: 5 },
     glyph: '△',
-  },
-  // §8.3 T3 manufacturing: Fabricator (3x3). Advanced components — motors,
-  // actuators, hydraulic / pneumatic systems. Recipe assignment lands in
-  // a later balance pass; the def itself ships now so the catalog row +
-  // tier badge are visible at T3.
-  fabricator: {
-    id: 'fabricator',
-    displayName: 'Fabricator',
-    category: 'manufacturing',
-    tier: 3,
-    footprint: SHAPES.square3,
-    fill: 0x6878a0, // industrial blue-grey
-    stroke: 0x202840,
-    power: { consumes: 200 },
-    placementCost: { steel: 120, gear: 30, microchip: 5 },
-    glyph: '⚙',
-  },
-  // §8.3 T3 manufacturing: Precision Lab (3x3). Circuit boards, computing
-  // modules. Recipe assignment lands in a later balance pass.
-  precision_lab: {
-    id: 'precision_lab',
-    displayName: 'Precision Lab',
-    category: 'manufacturing',
-    tier: 3,
-    footprint: SHAPES.square3,
-    fill: 0xa07868, // copper-tinted lab beige
-    stroke: 0x402818,
-    power: { consumes: 250 },
-    placementCost: { steel: 100, glass: 40, microchip: 10 },
-    glyph: '⌗',
-  },
-  // §8.3 T4 manufacturing: Singularity Forge (4x4). T4 endgame artifacts —
-  // antimatter capsules, exotic alloy fragments, quantum chips. Recipe
-  // assignment STILL-DEFERRED to balance pass; def ships now for catalog row.
-  singularity_forge: {
-    id: 'singularity_forge',
-    displayName: 'Singularity Forge',
-    category: 'manufacturing',
-    tier: 4,
-    footprint: SHAPES.square4,
-    fill: 0x402060, // singularity violet
-    stroke: 0x100020,
-    power: { consumes: 600 },
-    placementCost: { steel: 400, exotic_alloy: 5, quantum_chip: 10 },
-    glyph: '✦',
   },
   tank: {
     id: 'tank',
