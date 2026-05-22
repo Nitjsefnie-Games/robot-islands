@@ -69,23 +69,19 @@ loop.
    reuses the existing `affordabilityShortfall(inventory, halvedCost)` helper
    (`placement.ts:115`) — no new affordability helper is introduced.
 
-4. **Button lives in the Maintenance section, next to CONVERT — not in the
-   demolish footer.** The task brief suggested the footer alongside DEMOLISH,
-   but reading `inspector-ui.ts` shows the §13.3 CONVERT button already lives
-   *inside* `maintenanceSection.body` (`inspector-ui.ts:855-890`), not in
-   `footerSection`. REFRESH is conceptually a sibling of CONVERT — both are
-   "act on this building's maintenance state" — whereas DEMOLISH is
-   destruction/cleanup. Placing REFRESH in the maintenance section keeps the
-   two maintenance actions together and the readout they act on directly
-   above them. **This is a deliberate departure from the task brief**, made
-   because the brief's "confirm by reading `inspector-ui.ts`" instruction
-   surfaced CONVERT as the truer sibling.
+4. **Button lives in the inspector footer, directly above the DEMOLISH
+   button.** REFRESH is created in `footerSection` and inserted immediately
+   before `demolishBtn` (`inspector-ui.ts:983-1024`) so it renders directly
+   above it. REFRESH and DEMOLISH read as a natural pair of whole-building
+   lifecycle actions — renew vs. remove — and footer placement keeps the
+   building-level actions grouped at the bottom of the inspector.
 
 5. **No confirmation dialog.** DEMOLISH uses `window.confirm`
    (`inspector-ui.ts:1012`) because it is irreversible destruction; CONVERT —
    the closer analog and also a material-spending action — does **not**
-   (`inspector-ui.ts:883-889`). REFRESH follows CONVERT: it is not
-   destructive (the building stays; the worst outcome of a mis-click is
+   (`inspector-ui.ts:883-889`). REFRESH does **not** inherit DEMOLISH's
+   confirm despite sitting directly above it: it is not destructive (the
+   building stays; the worst outcome of a mis-click is
    spending materials a little early, and the building simply re-degrades
    over the next threshold window). The disabled-when-pristine gate
    (Decision 6) already prevents the most wasteful mis-click.
@@ -200,11 +196,11 @@ this mutation convention.
 > would cycle, the fallback is to inline the trivial shortfall loop in
 > `tryRefreshMaintenance` (it is six lines) rather than restructure modules.
 
-### 2. `inspector-ui.ts` — REFRESH button in the maintenance section
+### 2. `inspector-ui.ts` — REFRESH button in the footer
 
-A new button element, created next to `convertBtn` and appended into
-`maintenanceSection.body` (after `convertBtn`, `inspector-ui.ts:890`). Styling
-copies `convertBtn`'s industrial-readout button style
+A new button element, created in `footerSection` and inserted immediately
+before `demolishBtn` (`inspector-ui.ts:1024`) so it renders directly above
+DEMOLISH. Styling copies `convertBtn`'s industrial-readout button style
 (`inspector-ui.ts:856-882`) — transparent background, `var(--ri-accent)`
 border, hover lift, disabled state in `var(--ri-fg-4)`.
 
@@ -232,8 +228,11 @@ from. No state-rebuild or layer-rebuild is needed (the building's geometry is
 unchanged); a local `paint()` is the only follow-up — same as the CONVERT
 handler (`inspector-ui.ts:884-889`).
 
-Paint logic, inside the existing maintenance-section block
-(`inspector-ui.ts:1357-1388`), in the `else` branch (non-Servitor):
+Paint logic for `refreshBtn` — run from the maintenance-section paint pass
+(`inspector-ui.ts:1357-1388`), which already computes `maintenanceFactor`;
+the button DOM lives in the footer but its show/hide/label/disabled state
+derives from maintenance, so it is updated here, in the `else` branch
+(non-Servitor):
 
 - Compute `cost = refreshCostFor(def)`.
 - **Hide** `refreshBtn` (`style.display = 'none'`) when any of: building is an
