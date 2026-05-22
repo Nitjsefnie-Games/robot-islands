@@ -811,12 +811,74 @@ The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who 
 
 |Building|Footprint|Tier|Notes|
 |-|-|-|-|
+|Evaporator|1x1|T1|Salt|
+|Glassworks|2x2|T1|Glass|
+|Kit Assembler|2x2|T1|Foundation Kit|
+|Lumber Mill|2x2|T1|Lumber|
+|Plank Mill|2x2|T1|Plank|
 |Workshop|2x2|T1|Basic gears, bolts, simple components|
-|Assembler|2x2|T2|Multi-input components|
-|Fabricator|3x3|T3|Advanced components, motors, actuators|
-|Precision Lab|3x3|T3|Circuit boards, computing modules|
-|Singularity Forge|4x4|T4|T4 endgame artifacts|
-|Reality Forge|4x4|T5|T5 transcendent items|
+|Assembler|2x2|T2|Gear|
+|Beam Mill|2x2|T2|Steel Beam|
+|Bearing Press|2x2|T2|Bearing|
+|Brass Alloyer|2x2|T2|Brass|
+|Bronze Alloyer|2x2|T2|Bronze|
+|Cable Drawer|2x2|T2|Heavy Cable|
+|Carbon Steel Mill|3x3|T2|Carbon Steel|
+|Ceramic Kiln|2x2|T2|Ceramic Insulator|
+|Coolant Synthesizer|2x2|T2|Coolant|
+|Flexible Plastic Press|2x2|T2|Flexible Plastic|
+|Galvanizing Bath|3x3|T2|Galvanized Steel|
+|Glass Panel Press|2x2|T2|Glass Panel|
+|Metal Rolling Mill|2x2|T2|Wire|
+|Pipe Mill|2x2|T2|Pipe|
+|Rigid Plastic Press|2x2|T2|Rigid Plastic|
+|Rubber Synthesizer|2x2|T2|Synthetic Rubber|
+|Sheet Metal Mill|2x2|T2|Sheet Metal|
+|Solder Alloyer|2x2|T2|Solder|
+|Spring Winder|2x2|T2|Spring|
+|Battery Factory|3x3|T3|Battery|
+|Fuel Cell Lab|2x2|T3|Fuel Cell|
+|Generator Lab|2x2|T3|Generator|
+|Glass Fiber Spinner|2x2|T3|Glass Fiber|
+|Hydraulic Assembly|2x2|T3|Hydraulic Actuator|
+|Kit Assembler Enriched|2x2|T3|Foundation Kit Enriched|
+|Mag Forge|2x2|T3|Magnet|
+|Magnetic Alloyer|2x2|T3|Magnetic Alloy|
+|Motor Assembly|2x2|T3|Electric Motor|
+|Optical Fiber Drawer|2x2|T3|Optical Fiber|
+|Optical Glass Kiln|2x2|T3|Optical Glass|
+|Pneumatic Assembly|2x2|T3|Pneumatic Actuator|
+|Pump Assembly|2x2|T3|Pump|
+|Stainless Steel Mill|3x3|T3|Stainless Steel|
+|Tool Steel Mill|3x3|T3|Tool Steel|
+|Cryo Containment Assembler|2x2|T4|Cryo Containment Unit|
+|Fuel Rod Assembler|2x2|T4|Nuclear Fuel Rod|
+|Kit Assembler Refined|3x3|T4|Foundation Kit Refined|
+|Plasma Containment Assembler|2x2|T4|Plasma Containment Vessel|
+|Quantum Manipulator|3x3|T4|Time Crystal|
+|Self-Replication Lab|3x3|T4|Self Replication Module|
+|Aether Beacon Lab|3x3|T5|Aether Beacon|
+|Ascendant Assembly|4x4|T5|Ascendant Core|
+|Causal Regulator Lab|3x3|T5|Causal Regulator|
+|Dimensional Fold Lab|3x3|T5|Dimensional Fold|
+|Eldritch Refiner|3x3|T5|Eldritch Processor|
+|Genesis Forge|4x4|T5|Genesis Cell|
+|Memetic Forge|3x3|T5|Memetic Core|
+|Phase Refiner|3x3|T5|Phase Converter|
+|Plasma Forge|3x3|T5|Plasma Charge|
+|Probability Calculator Lab|3x3|T5|Probability Calculator|
+|Reality Engine Lab|3x3|T5|Reality Engine|
+|Reality Forge|4x4|T5|Reality Anchor|
+|Singularity Battery Factory|3x3|T5|Singularity Battery Unit|
+|Tachyonic Transmitter Lab|3x3|T5|Tachyonic Transmitter|
+|Antimatter Refinery|3x3|T6|Antimatter Propellant|
+|Mirror Sat Assembly|3x3|T6|Mirror Sat|
+|OIP Assembly|3x3|T6|Orbital Insertion Package|
+|Relay Sat Assembly|3x3|T6|Relay Sat|
+|Repair Drone Assembly|3x3|T6|Repair Drone|
+|Repair Pack Assembly|3x3|T6|Repair Pack|
+|Scanner Sat Assembly|3x3|T6|Scanner Sat|
+|Sweeper Sat Assembly|3x3|T6|Sweeper Sat|
 
 ### 8.4 Storage
 
@@ -1269,7 +1331,7 @@ Refined Foundation Kit  (T4 vehicles):     1 Enriched + 5 Microchip + 2 Magnet +
 
 T6 vehicles use the Orbital Insertion Package (§14.10) instead — orbital-grade payloads carry their own bootstrap mass, distinct from the Foundation Kit chain.
 
-Standard kits craft at a Workshop (T1) or Assembler (T2+). Enriched and Refined require an Assembler (T2+) and Fabricator (T3+) respectively. Each kit is stored as a single inventory item.
+Standard kits craft at a Workshop (T1) or Assembler (T2+). Enriched and Refined require a Kit Assembler Enriched (T3) and Kit Assembler Refined (T4) respectively. Each kit is stored as a single inventory item.
 
 **Vehicle-to-kit mapping:**
 
