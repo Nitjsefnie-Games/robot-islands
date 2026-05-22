@@ -11,7 +11,7 @@
 //   - Palette + DOM helpers reused from drones-ui
 //   - Header stamp `FREIGHT GRID / LCS-01`
 //   - Stat block (ROUTES / CAP TOTAL / IN-FLIGHT / FUNNEL)
-//   - Create-route form: source/dest/cargo/capacity (collapsible)
+//   - Create-route form: source / via-building / dest / cargo (collapsible)
 //   - Active routes ledger (cargo, capacity, in-flight count, ETA)
 //   - Renderable `Container` for in-world route lines + chevron glyphs
 //     (added to `app.stage` — screen-space — to keep stroke width and
@@ -1096,12 +1096,28 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     return k;
   }
 
+  let lastRoutesKey = '';
+  /** Identity key over the route set — changes when a route is added or
+   *  removed (or its source building changes). Used to rebuild the VIA
+   *  BUILDING select so a consumed building leaves the list and a freed
+   *  one returns. */
+  function routesKey(): string {
+    let k = '';
+    for (const r of deps.world.routes) k += r.id + ':' + (r.sourceBuildingId ?? '') + '|';
+    return k;
+  }
+
   // ---- API impl --------------------------------------------------------------
   function refresh(nowMs: number): void {
     const key = populatedKey();
     if (key !== lastPopulatedKey) {
       buildOptions();
       lastPopulatedKey = key;
+    }
+    const rKey = routesKey();
+    if (rKey !== lastRoutesKey) {
+      buildBuildingOptions();
+      lastRoutesKey = rKey;
     }
     refreshFormReadout();
     refreshStats();
