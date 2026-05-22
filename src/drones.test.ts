@@ -214,10 +214,10 @@ describe('dispatchDrone', () => {
     expect(d.dirX).toBeCloseTo(1);
     expect(d.dirY).toBeCloseTo(0);
     expect(d.fuelLoaded).toBe(20);
-    // Range = 20 * 4 = 80 tiles, outbound = 40 tiles.
-    expect(d.outboundTiles).toBe(40);
-    // Travel time = 80 / 0.5 = 160s → return at 1000 + 160_000. (rebalanced step #19)
-    expect(d.expectedReturnTime).toBe(1000 + 160_000);
+    // Range = 20 * 3 = 60 tiles, outbound = 30 tiles.
+    expect(d.outboundTiles).toBe(30);
+    // Travel time = 60 / 0.5 = 120s → return at 1000 + 120_000. (rebalanced step #19)
+    expect(d.expectedReturnTime).toBe(1000 + 120_000);
     expect(d.scanRadius).toBe(DRONE_SCAN_RADIUS_TILES);
   });
 
@@ -364,7 +364,7 @@ describe('dronePadCentre — §11.1 UI / dispatch origin alignment', () => {
     const dx = targetX - pad.x;
     const dy = targetY - pad.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const fuelNeeded = Math.ceil((2 * dist) / DRONE_TIER_EFFICIENCY);
+    const fuelNeeded = Math.ceil((2 * dist) / DRONE_TIER_EFFICIENCY[1]);
     const r = dispatchDrone(world, home, pad.x, pad.y, dx, dy, fuelNeeded, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -638,7 +638,7 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
 
 describe('drone constants', () => {
   it('matches the documented step-6 tuning', () => {
-    expect(DRONE_TIER_EFFICIENCY).toBe(4);
+    expect(DRONE_TIER_EFFICIENCY[1]).toBe(3);
     expect(DRONE_SPEED_TILES_PER_SEC).toBe(0.5); // rebalanced for idle-game scale, step #19 (was 2)
     expect(DRONE_SCAN_RADIUS_TILES).toBe(8);
   });

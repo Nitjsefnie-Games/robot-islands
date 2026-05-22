@@ -151,7 +151,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // Cached at refresh() so attemptLaunch + range-ring see the same numbers.
   // maxLaunchFuel = min(MAX_FUEL_PER_DRONE, on-hand fuel of the selected tier).
   let maxLaunchFuel = 0;
-  let currentEfficiency = DRONE_TIER_EFFICIENCY;
+  let currentEfficiency = DRONE_TIER_EFFICIENCY[selectedTier];
 
   // -------------------------------------------------------------------------
   // Side dock panel
@@ -851,7 +851,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // the MAX-affordable range for this island right now = min(MAX_FUEL,
     // available) units × current efficiency / 2 (round-trip). Cached on
     // the closure so attemptLaunch + the range ring agree on the limit.
-    currentEfficiency = DRONE_TIER_EFFICIENCY * effectiveSkillMultipliers(origin).droneFuelEfficiency;
+    currentEfficiency = DRONE_TIER_EFFICIENCY[selectedTier] * effectiveSkillMultipliers(origin).droneFuelEfficiency;
     maxLaunchFuel = Math.floor(Math.min(MAX_FUEL_PER_DRONE, onhand));
     const maxOutbound = (maxLaunchFuel * currentEfficiency) / 2;
     fuelStat.valueEl.style.color = maxLaunchFuel > 0 ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
