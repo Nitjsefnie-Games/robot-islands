@@ -172,6 +172,50 @@ export function hasLaunchBuildingFor(origin: IslandSpec, kind: VehicleKind): boo
   return origin.buildings.some((b) => b.defId === required);
 }
 
+/** Whether `origin` can launch a Spacetime Anchor instant-settle — i.e. it
+ *  has a `spacetime_anchor` building. The `anchor`-kind sibling of
+ *  `hasLaunchBuildingFor`. */
+export function originCanAnchorSettle(origin: IslandSpec): boolean {
+  return origin.buildings.some((b) => b.defId === 'spacetime_anchor');
+}
+
+export type SpacetimeSettleResult =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+/** §12.6 — instant T5 settlement via a Spacetime Anchor. Re-checks every
+ *  gate, consumes one `foundation_kit_refined` from the origin island's
+ *  inventory, and populates the target via `populateSettledIsland` with the
+ *  richest (T4-ship-equivalent) loadout. No vehicle, no fuel, no transit.
+ *  Returns `{ ok: false }` WITHOUT mutating anything on any gate failure. */
+export function settleViaSpacetimeAnchor(
+  world: WorldState,
+  islandStates: Map<string, IslandState>,
+  originId: string,
+  targetId: string,
+  nowMs: number,
+): SpacetimeSettleResult {
+  const originSpec = world.islands.find((s) => s.id === originId);
+  const originState = islandStates.get(originId);
+  if (!originSpec || !originState) return { ok: false, reason: 'origin missing' };
+  if (!originCanAnchorSettle(originSpec)) {
+    return { ok: false, reason: 'no Spacetime Anchor on origin' };
+  }
+  if ((originState.inventory.foundation_kit_refined ?? 0) < 1) {
+    return { ok: false, reason: 'need 1 Refined Foundation Kit' };
+  }
+  const targetSpec = world.islands.find((s) => s.id === targetId);
+  if (!targetSpec) return { ok: false, reason: 'target missing' };
+  if (!targetSpec.discovered) return { ok: false, reason: 'target not discovered' };
+  if (targetSpec.populated) return { ok: false, reason: 'target already populated' };
+
+  originState.inventory.foundation_kit_refined =
+    (originState.inventory.foundation_kit_refined ?? 0) - 1;
+  // Richest loadout per §12.3: T4 ship-equivalent dock + starters, one kit.
+  populateSettledIsland(world, islandStates, targetSpec, 'ship', 4, 1, nowMs);
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Starter state helpers (§12.6 per-tier loadouts)
 // ---------------------------------------------------------------------------
