@@ -734,7 +734,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x1f4e1c, // darker forest green vs T1 logger
     stroke: 0x0a1e08,
-    power: { consumes: 80 },
+    power: { consumes: 40 },
     requiredTile: ['tree'],
     placementCost: { stone: 60, wood: 30, iron_ingot: 20 },
     glyph: '⌬',

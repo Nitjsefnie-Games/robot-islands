@@ -1090,7 +1090,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   heavy_logger: {
     cycleSec: 10,
     inputs: {},
-    outputs: { wood: 3 },
+    outputs: { wood: 9 },
     category: 'extraction',
   },
   // §8.1 T2 Deep Mine: 3× ore throughput vs T1 Mine. Output is iron_ore
