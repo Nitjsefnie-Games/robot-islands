@@ -485,6 +485,71 @@ export function dispatchVehicle(
 // Tick — process arrivals
 // ---------------------------------------------------------------------------
 
+/**
+ * Populate a freshly-settled island: flip `populated`, auto-place the dock,
+ * push the tier's starter buildings, build + register the IslandState, run
+ * §9.6 Auto-Patronage, decompose the Foundation Kit(s) into colony
+ * inventory, and grant §12.6 free skill points. Shared by vehicle arrival
+ * (`tickVehicles`) and Spacetime Anchor instant-settle.
+ *
+ * `kind` / `tier` drive the dock def + starter loadout exactly as a vehicle
+ * arrival would; `foundationKitCount` drives the §12.4 kit decomposition.
+ * The caller must have already confirmed `target` is unpopulated. */
+function populateSettledIsland(
+  world: WorldState,
+  islandStates: Map<string, IslandState>,
+  target: IslandSpec,
+  kind: VehicleKind,
+  tier: VehicleTier,
+  foundationKitCount: number,
+  nowMs: number,
+): void {
+  target.populated = true;
+  const autoBuildingDefId = kind === 'ship' ? 'dock' : 'helipad';
+  const dropTile = kind === 'ship' ? findCoastalTile(target) : { x: 0, y: 0 };
+  target.buildings.push({
+    id: `${target.id}-auto-${autoBuildingDefId}-1`,
+    defId: autoBuildingDefId,
+    x: dropTile.x,
+    y: dropTile.y,
+  });
+
+  const starters = computeStarterBuildings(kind, tier, target);
+  for (const b of starters) {
+    target.buildings.push({ id: `${target.id}-starter-${b.defId}`, defId: b.defId, x: b.x, y: b.y });
+  }
+
+  const newState = makeInitialIslandState(target, nowMs);
+  islandStates.set(target.id, newState);
+
+  // §9.6 / §12.7 Auto-Patronage.
+  world.islandStates = islandStates;
+  const ncState = computeNcState(world);
+  if (ncState.milestone >= 3) {
+    spawnAutoPatronageRoutes(world, target.id);
+  }
+
+  // §12.4 Foundation Kit decomposition: credit recipe inputs to the colony.
+  const kitRecipe = RECIPES['kit_assembler'];
+  if (kitRecipe) {
+    for (const [r, amount] of Object.entries(kitRecipe.inputs)) {
+      const id = r as ResourceId;
+      const total = (amount ?? 0) * foundationKitCount;
+      if (total > 0) {
+        newState.inventory[id] = (newState.inventory[id] ?? 0) + total;
+        newState.starterInventoryGrace[id] =
+          (newState.starterInventoryGrace[id] ?? 0) + total;
+      }
+    }
+  }
+
+  // §12.6 free skill points for T3+ arrivals.
+  const freePoints = computeFreeSkillPoints(tier);
+  if (freePoints > 0) {
+    newState.unspentSkillPoints += freePoints;
+  }
+}
+
 /** Per-arrival record returned from `tickVehicles`. Renderer/main use these
  *  to know which targets just became populated so they can rebuild render
  *  layers + register the new IslandState's modifier-multiplier cache entry. */
@@ -614,61 +679,8 @@ export function tickVehicles(
       remaining.push(v);
       continue;
     }
-    // Mutate spec: populated + auto-placed building.
-    target.populated = true;
-    const autoBuildingDefId = v.kind === 'ship' ? 'dock' : 'helipad';
-    // §12.4: ship docks land on a coastal tile (a tile inscribed in the
-    // island that borders a non-inscribed neighbour). Helipads can land
-    // anywhere — keep them at island centre for back-compat. Push onto
-    // the SAME array `IslandState.buildings` will reference;
-    // `makeInitialIslandState` sets `state.buildings = spec.buildings`,
-    // so the dock is visible to the economy starting this frame.
-    const dropTile = v.kind === 'ship' ? findCoastalTile(target) : { x: 0, y: 0 };
-    target.buildings.push({
-      id: `${target.id}-auto-${autoBuildingDefId}-1`,
-      defId: autoBuildingDefId,
-      x: dropTile.x,
-      y: dropTile.y,
-    });
-
-    // §12.6 starter buildings for T3+ vehicles. Positions are computed
-    // from the target's geometry so every starter lands inscribed and
-    // doesn't collide with the auto-placed dock/helipad pushed above.
-    const starters = computeStarterBuildings(v.kind, v.tier, target);
-    for (const b of starters) {
-      target.buildings.push({ id: `${target.id}-starter-${b.defId}`, defId: b.defId, x: b.x, y: b.y });
-    }
-
-    const newState = makeInitialIslandState(target, nowMs);
-    islandStates.set(target.id, newState);
-
-    // §9.6 / §12.7 Auto-Patronage: if 10-island NC milestone is active,
-    // spawn default cargo routes from the nearest Patron Hub.
-    world.islandStates = islandStates;
-    const ncState = computeNcState(world);
-    if (ncState.milestone >= 3) {
-      spawnAutoPatronageRoutes(world, target.id);
-    }
-
-    // §12.4 Foundation Kit decomposition: credit recipe inputs to the colony.
-    const kitRecipe = RECIPES['kit_assembler'];
-    if (kitRecipe) {
-      for (const [r, amount] of Object.entries(kitRecipe.inputs)) {
-        const id = r as ResourceId;
-        const total = (amount ?? 0) * v.foundationKitCount;
-        if (total > 0) {
-          newState.inventory[id] = (newState.inventory[id] ?? 0) + total;
-          newState.starterInventoryGrace[id] =
-            (newState.starterInventoryGrace[id] ?? 0) + total;
-        }
-      }
-    }
-
-    // §12.6 free skill points for T3+ arrivals.
-    const freePoints = computeFreeSkillPoints(v.tier);
-    if (freePoints > 0) {
-      newState.unspentSkillPoints += freePoints;
-    }
+    // Populate the target (shared with the Spacetime Anchor instant path).
+    populateSettledIsland(world, islandStates, target, v.kind, v.tier, v.foundationKitCount, nowMs);
 
     v.status = 'arrived';
     arrivals.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
