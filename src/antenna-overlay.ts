@@ -10,7 +10,7 @@
 
 import { Container, Graphics } from 'pixi.js';
 
-import { computeSignalRanges } from './antenna.js';
+import { computeSignalRanges, isAntennaRedundant } from './antenna.js';
 import { TILE_PX } from './island.js';
 import type { WorldState } from './world.js';
 
@@ -23,6 +23,10 @@ const RING_FILL_ALPHA = 0.04;
 /** Cyan to match the existing telemetry vocabulary (vision halo, status
  *  dots — see ocean.ts `VISION_BLUE`). */
 const SIGNAL_COLOR = 0x7dd3e8;
+/** Rust tint for antennas whose entire sampled perimeter is already covered by
+ *  at least one other antenna. Matches the spec §05 chosen value (~90% blend
+ *  of cyan toward 0xE08B7F). */
+const REDUNDANT_COLOR = 0xd6928a;
 
 export interface AntennaOverlayHandle {
   readonly layer: Container;
@@ -40,14 +44,17 @@ export function mountAntennaOverlay(world: WorldState): AntennaOverlayHandle {
     gfx.clear();
     const populated = world.islands.filter((s) => s.populated);
     const ranges = computeSignalRanges(populated);
-    for (const r of ranges) {
+    for (let i = 0; i < ranges.length; i++) {
+      const r = ranges[i]!;
+      const others = ranges.slice(0, i).concat(ranges.slice(i + 1));
+      const colour = isAntennaRedundant(r, others) ? REDUNDANT_COLOR : SIGNAL_COLOR;
       const px = r.cx * TILE_PX;
       const py = r.cy * TILE_PX;
       const radiusPx = r.radius * TILE_PX;
       gfx
         .circle(px, py, radiusPx)
-        .fill({ color: SIGNAL_COLOR, alpha: RING_FILL_ALPHA })
-        .stroke({ color: SIGNAL_COLOR, width: 1, alpha: RING_STROKE_ALPHA });
+        .fill({ color: colour, alpha: RING_FILL_ALPHA })
+        .stroke({ color: colour, width: 1, alpha: RING_STROKE_ALPHA });
     }
   }
 
