@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remove redundant manufacturing stubs &amp; sync SPEC §8.3 — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #252420;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans); background: #1B1A17; color: var(--gray-700);
+      line-height: 1.55; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1120px; margin: 0 auto; }
+    header.page-head { margin-bottom: 48px; max-width: 860px; }
+    .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.15;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .prompt-box { background: var(--gray-150); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .prompt-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .prompt-box .meta-line { margin-top: 8px; }
+    .prompt-box code { font-family: var(--mono); font-size: 13px; color: var(--slate); }
+    .callout { background: var(--white); border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--clay); border-radius: 10px; padding: 14px 18px;
+      font-size: 13.5px; color: var(--gray-500); margin-bottom: 48px; max-width: 860px; }
+    .callout code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    section { margin-bottom: 64px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat);
+      color: var(--slate); padding: 3px 9px; border-radius: 8px; white-space: nowrap; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    .sec-head h2 code { font-family: var(--mono); font-size: 21px; color: var(--clay); }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 760px; margin-bottom: 28px; }
+    .sec-intro code { font-family: var(--mono); font-size: 13px; color: var(--slate); }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 56px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 18px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .filetable { border: 1.5px solid var(--gray-300); border-radius: 12px; overflow: hidden;
+      background: var(--white); }
+    .filetable .row { display: grid; grid-template-columns: 300px 1fr; gap: 0; }
+    @media (max-width: 780px) { .filetable .row { grid-template-columns: 1fr; } }
+    .filetable .row + .row { border-top: 1.5px solid var(--gray-300); }
+    .filetable .cell { padding: 13px 18px; font-size: 13.5px; }
+    .filetable .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+    @media (max-width: 780px) {
+      .filetable .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .filetable .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .filetable .cell code { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .filetable .cell.desc code { color: var(--slate); }
+    .task-card { background: var(--white); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 24px 26px; }
+    .task-blurb { font-size: 13.5px; color: var(--gray-500); margin-bottom: 16px; max-width: 760px; }
+    .task-blurb code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .files-block { background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 8px; padding: 12px 16px; margin-bottom: 22px; }
+    .files-block .ft { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .files-block ul { list-style: none; }
+    .files-block li { font-size: 13px; color: var(--gray-700); padding: 2px 0; }
+    .files-block li code { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .files-block li .tag { font-family: var(--mono); font-size: 10.5px; color: var(--gray-500); }
+    .steps { display: flex; flex-direction: column; gap: 18px; }
+    .step { display: grid; grid-template-columns: 22px 1fr; gap: 0 12px; }
+    .step .box { width: 16px; height: 16px; border: 1.5px solid var(--clay);
+      border-radius: 4px; margin-top: 3px; }
+    .step .step-body { min-width: 0; }
+    .step .step-title { font-weight: 600; font-size: 14.5px; color: var(--slate); margin-bottom: 6px; }
+    .step .step-text { font-size: 13.5px; color: var(--gray-500); margin-bottom: 10px; }
+    .step .step-text:last-child { margin-bottom: 0; }
+    .step .step-text code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .step .step-text.cmd code { color: var(--olive); }
+    .step ul.bullets { list-style: none; margin: 0 0 10px; }
+    .step ul.bullets li { font-size: 13.5px; color: var(--gray-500);
+      padding: 2px 0 2px 16px; position: relative; }
+    .step ul.bullets li::before { content: '–'; position: absolute; left: 0; color: var(--clay); }
+    .step ul.bullets li code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .code-block { margin: 4px 0 12px; }
+    .code-block .file-label { font-family: var(--mono); font-size: 11.5px;
+      color: var(--gray-500); margin-bottom: 6px; }
+    .code { background: #121110; border: 1px solid var(--gray-300); border-radius: 10px;
+      padding: 16px 18px; overflow-x: auto; }
+    .code pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+      color: #F5F3EC; white-space: pre; }
+    .code .del { color: #E08B7F; }
+    .code .add { color: #8FA56E; }
+    .code .cm  { color: var(--gray-500); }
+    .task-sep { height: 1px; background: var(--gray-300); margin: 28px 0; border: none; }
+    .notes { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+    .note { background: var(--white); border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--olive); border-radius: 10px; padding: 14px 18px;
+      font-size: 13.5px; color: var(--gray-500); }
+    .note code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .note strong { color: var(--slate); font-weight: 600; }
+    footer.page-foot { margin-top: 64px; padding-top: 20px; border-top: 1.5px solid var(--gray-300);
+      font-size: 12px; color: var(--gray-500); font-family: var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Remove redundant manufacturing stubs &amp; sync SPEC §8.3 — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Delete the 3 redundant catalog stubs <code>fabricator</code>, <code>precision_lab</code>, <code>singularity_forge</code> and rewrite SPEC §8.3 to enumerate the implemented manufacturing taxonomy.</div>
+        <div class="meta-line"><strong>Architecture:</strong> Pure deletion — the 3 buildings have zero functional code, so removal is 3 def objects + 3 <code>BuildingDefId</code> union members, plus updating the 3 test files that name them. SPEC §8.3's 6-row table is replaced with the full 68-building <code>category: 'manufacturing'</code> roster. No runtime behaviour changes; strict TypeScript is the safety net for missed references.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, noUnusedLocals), Vite 5, vitest. Markdown for SPEC.md.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-22-building-stub-removal-design.html</code></div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">2</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">5</div></div>
+      <div class="cell"><div class="k">Buildings removed</div><div class="v">3</div></div>
+      <div class="cell"><div class="k">Runtime behaviour</div><div class="v">unchanged</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">Every file the plan touches. Task 1 keeps the build green by changing the def file and all 3 test files that reference the stubs in one commit — they are coupled and cannot land separately. Task 2 is SPEC-only.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/building-defs.ts</code></div><div class="cell desc">Remove the 3 <code>BuildingDefId</code> union members and the 3 def objects (with their comment blocks) for <code>fabricator</code> / <code>precision_lab</code> / <code>singularity_forge</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/building-defs.test.ts</code></div><div class="cell desc">Remove the 3 ids from the expected-id list and delete the <code>describe('§8.3 manufacturing buildings', …)</code> block (3 structural tests).</div></div>
+        <div class="row"><div class="cell"><code>src/economy.test.ts</code></div><div class="cell desc">Re-point one maintenance-test fixture from <code>defId: 'fabricator'</code> to <code>'motor_assembly'</code> (real T3 manufacturing building); fix two stale comments.</div></div>
+        <div class="row"><div class="cell"><code>src/balance.test.ts</code></div><div class="cell desc">Reword one stale comment that says "fabricator chain".</div></div>
+        <div class="row"><div class="cell"><code>SPEC.md</code></div><div class="cell desc">§8.3 — full table rewrite (68 manufacturing buildings). §1272 — re-point the "Fabricator (T3+)" kit reference to a real building.</div></div>
+      </div>
+      <p class="sec-intro" style="margin-top:18px;margin-bottom:0">Line numbers in this plan are <strong>pre-edit</strong> and shift as edits land — match by the quoted content, not by line number. <code>ALL_BUILDING_DEF_IDS</code> is <code>Object.keys</code>-derived and updates itself; no edit needed there. <code>terrain_modifier</code> and the 4 storage buildings are <strong>not</strong> touched.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: Remove the 3 stub buildings</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">All four files in this task change together. Removing a <code>BuildingDefId</code> union member while a test still names it is a compile error; removing a def while the expected-id list still lists it is a test failure. One commit, build + suite green.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/building-defs.ts</code> <span class="tag">— union + defs</span></li>
+            <li>Modify: <code>src/building-defs.test.ts</code> <span class="tag">— id list + structural tests</span></li>
+            <li>Modify: <code>src/economy.test.ts</code> <span class="tag">— fixture defId + comments</span></li>
+            <li>Modify: <code>src/balance.test.ts</code> <span class="tag">— comment</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Remove the 3 union members in building-defs.ts</div>
+            <p class="step-text">Around line 110–114 the <code>BuildingDefId</code> union has the three stub members between <code>'assembler'</code> and <code>'tank'</code>. Delete the three middle lines:</p>
+            <div class="code-block"><div class="code"><pre>  | 'assembler'
+<span class="del">  | 'fabricator'</span>
+<span class="del">  | 'precision_lab'</span>
+<span class="del">  | 'singularity_forge'</span>
+  | 'tank'</pre></div></div>
+            <p class="step-text">Result: <code>'assembler'</code> is immediately followed by <code>'tank'</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Remove the 3 def objects in building-defs.ts</div>
+            <p class="step-text">Around line 1327–1371 (pre-edit) sit the three comment-and-def blocks, contiguous, between the building before them and <code>tank: {</code>. Delete the entire block shown below — after deletion, <code>tank: {</code> must directly follow the closing <code>},</code> of the preceding building:</p>
+            <div class="code-block"><div class="code"><pre><span class="del">  // §8.3 T3 manufacturing: Fabricator (3x3). Advanced components — motors,</span>
+<span class="del">  // actuators, hydraulic / pneumatic systems. Recipe assignment lands in</span>
+<span class="del">  // a later balance pass; the def itself ships now so the catalog row +</span>
+<span class="del">  // tier badge are visible at T3.</span>
+<span class="del">  fabricator: {</span>
+<span class="del">    id: 'fabricator',</span>
+<span class="del">    displayName: 'Fabricator',</span>
+<span class="del">    category: 'manufacturing',</span>
+<span class="del">    tier: 3,</span>
+<span class="del">    footprint: SHAPES.square3,</span>
+<span class="del">    fill: 0x6878a0, // industrial blue-grey</span>
+<span class="del">    stroke: 0x202840,</span>
+<span class="del">    power: { consumes: 200 },</span>
+<span class="del">    placementCost: { steel: 120, gear: 30, microchip: 5 },</span>
+<span class="del">    glyph: '⚙',</span>
+<span class="del">  },</span>
+<span class="del">  // §8.3 T3 manufacturing: Precision Lab (3x3). Circuit boards, computing</span>
+<span class="del">  // modules. Recipe assignment lands in a later balance pass.</span>
+<span class="del">  precision_lab: {</span>
+<span class="del">    id: 'precision_lab',</span>
+<span class="del">    displayName: 'Precision Lab',</span>
+<span class="del">    category: 'manufacturing',</span>
+<span class="del">    tier: 3,</span>
+<span class="del">    footprint: SHAPES.square3,</span>
+<span class="del">    fill: 0xa07868, // copper-tinted lab beige</span>
+<span class="del">    stroke: 0x402818,</span>
+<span class="del">    power: { consumes: 250 },</span>
+<span class="del">    placementCost: { steel: 100, glass: 40, microchip: 10 },</span>
+<span class="del">    glyph: '⌗',</span>
+<span class="del">  },</span>
+<span class="del">  // §8.3 T4 manufacturing: Singularity Forge (4x4). T4 endgame artifacts —</span>
+<span class="del">  // antimatter capsules, exotic alloy fragments, quantum chips. Recipe</span>
+<span class="del">  // assignment STILL-DEFERRED to balance pass; def ships now for catalog row.</span>
+<span class="del">  singularity_forge: {</span>
+<span class="del">    id: 'singularity_forge',</span>
+<span class="del">    displayName: 'Singularity Forge',</span>
+<span class="del">    category: 'manufacturing',</span>
+<span class="del">    tier: 4,</span>
+<span class="del">    footprint: SHAPES.square4,</span>
+<span class="del">    fill: 0x402060, // singularity violet</span>
+<span class="del">    stroke: 0x100020,</span>
+<span class="del">    power: { consumes: 600 },</span>
+<span class="del">    placementCost: { steel: 400, exotic_alloy: 5, quantum_chip: 10 },</span>
+<span class="del">    glyph: '✦',</span>
+<span class="del">  },</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Remove the 3 ids from the expected-id list in building-defs.test.ts</div>
+            <p class="step-text">Around line 45–49 the expected-id array lists the three ids between <code>'assembler'</code> and <code>'tank'</code>. Delete the three middle lines:</p>
+            <div class="code-block"><div class="code"><pre>  'assembler',
+<span class="del">  'fabricator',</span>
+<span class="del">  'precision_lab',</span>
+<span class="del">  'singularity_forge',</span>
+  'tank',</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Delete the §8.3 structural-test block in building-defs.test.ts</div>
+            <p class="step-text">Around line 1934–1953 (pre-edit) the entire <code>describe('§8.3 manufacturing buildings', …)</code> block exists only to assert the 3 removed defs. Delete the whole block (it sits between the <code>ALL_T6_IDS</code> test's closing <code>});</code> and <code>describe('§8.1 T2 extraction buildings', …)</code>):</p>
+            <div class="code-block"><div class="code"><pre><span class="del">  describe('§8.3 manufacturing buildings', () =&gt; {</span>
+<span class="del">  it('fabricator is T3, 3x3, manufacturing category', () =&gt; {</span>
+<span class="del">    const def = BUILDING_DEFS.fabricator;</span>
+<span class="del">    expect(def.tier).toBe(3);</span>
+<span class="del">    expect(def.footprint.tiles.length).toBe(9); // 3x3</span>
+<span class="del">    expect(def.category).toBe('manufacturing');</span>
+<span class="del">  });</span>
+<span class="del">  it('precision_lab is T3, 3x3, manufacturing category', () =&gt; {</span>
+<span class="del">    const def = BUILDING_DEFS.precision_lab;</span>
+<span class="del">    expect(def.tier).toBe(3);</span>
+<span class="del">    expect(def.footprint.tiles.length).toBe(9);</span>
+<span class="del">    expect(def.category).toBe('manufacturing');</span>
+<span class="del">  });</span>
+<span class="del">  it('singularity_forge is T4, 4x4, manufacturing category', () =&gt; {</span>
+<span class="del">    const def = BUILDING_DEFS.singularity_forge;</span>
+<span class="del">    expect(def.tier).toBe(4);</span>
+<span class="del">    expect(def.footprint.tiles.length).toBe(16);</span>
+<span class="del">    expect(def.category).toBe('manufacturing');</span>
+<span class="del">  });</span>
+<span class="del">});</span></pre></div></div>
+            <p class="step-text">Remove any blank line left dangling so there is exactly one blank line between the preceding <code>});</code> and the next <code>describe(</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Re-point the economy.test.ts maintenance fixture</div>
+            <p class="step-text">In <code>src/economy.test.ts</code> around line 2260, one fixture uses the removed defId. Change the <code>defId</code> and its comment:</p>
+            <div class="code-block"><div class="code"><pre><span class="del">          defId: 'fabricator', // T3 — recipe is { lubricant, electric_motor, capacitor }</span>
+<span class="add">          defId: 'motor_assembly', // T3 manufacturing building (was 'fabricator', a removed stub)</span></pre></div></div>
+            <p class="step-text">Around line 2272, fix the stale comment on the inventory block:</p>
+            <div class="code-block"><div class="code"><pre><span class="del">      // T1 recipe satisfied; T3 recipe (electric_motor + capacitor) NOT.</span>
+<span class="add">      // T1 maintenance inputs stocked; T3 maintenance inputs NOT.</span></pre></div></div>
+            <p class="step-text"><code>motor_assembly</code> is tier 3 like the old <code>fabricator</code>; the test asserts tier-driven maintenance-threshold behaviour (<code>MAINTENANCE_THRESHOLD_MS_BY_TIER[3]</code>), so the swap is behaviour-neutral. Do not change the <code>operatingMs</code> / <code>placedAt</code> / <code>maintainedAt</code> values.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Reword the stale balance.test.ts comment</div>
+            <p class="step-text">In <code>src/balance.test.ts</code> around line 114, a comment names "fabricator chain". The chain it actually describes is <code>pcb_etcher → circuit_assembler → processor_fab → compute_module_fab</code>. Reword:</p>
+            <div class="code-block"><div class="code"><pre><span class="del">    // T2 components built outside the basic recipes map — fabricator chain</span>
+<span class="add">    // T2 components built outside the basic recipes map — computing-module chain</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Run the build to verify it compiles</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS — clean <code>tsc -b</code> + vite build. A strict-mode error mentioning <code>fabricator</code>, <code>precision_lab</code> or <code>singularity_forge</code> here means a reference was missed; grep <code>src/</code> for it and remove it before continuing.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Run the test suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: PASS — full suite green. <code>building-defs.test.ts</code>, <code>economy.test.ts</code> and <code>balance.test.ts</code> in particular must pass.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 9: Verify no references remain</div>
+            <p class="step-text cmd">Run: <code>grep -rn "fabricator\|precision_lab\|singularity_forge" src/</code></p>
+            <p class="step-text">Expected: only legitimate substrings remain — e.g. <code>compute_module_fab</code> (contains "fab" but is not "fabricator"). Zero hits on the three exact defIds.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 10: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/building-defs.ts src/building-defs.test.ts \
+        src/economy.test.ts src/balance.test.ts
+git commit -m "$(cat &lt;&lt;'EOF'
+refactor(buildings): remove redundant fabricator/precision_lab/singularity_forge stubs
+
+These 3 manufacturing defs are coarse SPEC §8.3 catalog rows superseded
+by the implementation's fine-grained taxonomy (motor_assembly,
+circuit_assembler, compute_module_fab, etc.). They have no recipe and no
+effect code — placeable but inert. Remove the defs, their union members,
+and the test references. economy.test.ts maintenance fixture re-pointed
+to motor_assembly (T3, behaviour-neutral).
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;
+EOF
+)"</pre></div></div>
+            <p class="step-text">If a subagent other than Claude implements this task, swap the trailer for that agent's own (e.g. <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>).</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: Rewrite SPEC §8.3 &amp; fix §1272</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Markdown-only — no build impact. SPEC.md is the project's locked specification; keep the change scoped to the §8.3 table and the one §1272 sentence. The §8.3 prose heading/intro and every other section stay untouched.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>SPEC.md</code> <span class="tag">— §8.3 table (line ~810), §1272 (line ~1272)</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Derive the manufacturing roster from source</div>
+            <p class="step-text">Do not trust a hand-copied list. Enumerate the authoritative set from <code>src/building-defs.ts</code> — every <code>BUILDING_DEFS</code> entry whose <code>category</code> is <code>'manufacturing'</code> (the 3 stubs are already removed by Task 1, so they will not appear). Read the file and collect every def block, recording <code>id</code>, <code>displayName</code>, <code>tier</code>, <code>footprint</code> for those with <code>category: 'manufacturing'</code>; group by tier. This yields 68 buildings across T1–T6.</p>
+            <p class="step-text">The expected counts, as a checksum: <strong>T1 = 6, T2 = 19, T3 = 15, T4 = 6, T5 = 14, T6 = 8 — total 68.</strong> If your enumeration disagrees, reconcile before writing the table. The full roster (defId · display name · footprint) is in the design spec §04 — use it as the cross-check, not the source.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Build each row's Notes from its recipe</div>
+            <p class="step-text">The §8.3 table columns are <code>Building | Footprint | Tier | Notes</code>. For each building, the Notes cell is a short phrase naming its primary output, taken from <code>RECIPES[defId].outputs</code> in <code>src/recipes.ts</code>. Worked examples:</p>
+            <ul class="bullets">
+              <li><code>motor_assembly</code> → recipe outputs <code>electric_motor</code> → Notes: "Electric motors"</li>
+              <li><code>circuit_assembler</code>… is <code>category: 'electronics'</code>, so it does <strong>not</strong> appear in §8.3 — only <code>'manufacturing'</code> category buildings do.</li>
+              <li><code>pump_assembly</code> → outputs <code>pump</code> → Notes: "Pumps"</li>
+              <li><code>kit_assembler_refined</code> → outputs <code>foundation_kit_refined</code> → Notes: "Refined foundation kits"</li>
+            </ul>
+            <p class="step-text">If a manufacturing building has no <code>RECIPES</code> entry, write Notes as "—" rather than inventing one, and note it in the commit message — but after Task 1 the only recipe-less manufacturing defs should be gone, so flag any survivor as a finding.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Replace the §8.3 table</div>
+            <p class="step-text">In <code>SPEC.md</code>, §8.3 (heading <code>### 8.3 Manufacturing</code>, ~line 810) currently has a 6-row table. Replace the table body — keep the heading and the <code>|Building|Footprint|Tier|Notes|</code> header row — with the 68-row roster from Steps 1–2, grouped in tier order (T1 first). Example of the intended shape (first rows shown; produce all 68):</p>
+            <div class="code-block"><div class="code"><pre>### 8.3 Manufacturing
+
+|Building|Footprint|Tier|Notes|
+|-|-|-|-|
+|Workshop|2x2|T1|Basic gears, bolts, simple components|
+|Kit Assembler|2x2|T1|Standard foundation kits|
+|Plank Mill|2x2|T1|Planks from wood|
+<span class="cm">... (continue through all 68, T1 → T6)</span>
+|Repair Drone Assembly|3x3|T6|Repair drones|</pre></div></div>
+            <p class="step-text">Use each def's <code>displayName</code> verbatim for the Building column and its <code>footprint</code> for the Footprint column (<code>SHAPES.single</code> = 1x1, <code>square2</code> = 2x2, <code>square3</code> = 3x3, <code>square4</code> = 4x4, <code>rect2x3</code> = 2x3, <code>rect3x2</code> = 3x2). Match the existing SPEC table style — no blank separator rows.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Fix the §1272 kit-crafting reference</div>
+            <p class="step-text">Around line 1272, the sentence names <code>Fabricator</code> as the building for Refined kits. Re-point it to the real kit buildings. Locate the sentence (it reads roughly "Standard kits craft at a Workshop (T1) or Assembler (T2+). Enriched and Refined require an Assembler (T2+) and Fabricator (T3+) respectively.") and replace the building names with the actual defs' display names — <code>Kit Assembler Enriched</code> (T3) for Enriched and <code>Kit Assembler Refined</code> (T4) for Refined. Verify the exact current wording in the file before editing, and confirm both <code>kit_assembler_enriched</code> and <code>kit_assembler_refined</code> exist in <code>building-defs.ts</code> with those tiers.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Cross-check the rewritten section</div>
+            <p class="step-text">Verify:</p>
+            <ul class="bullets">
+              <li>Every Building name in the new §8.3 table resolves to a real <code>displayName</code> in <code>building-defs.ts</code>.</li>
+              <li><code>Fabricator</code>, <code>Precision Lab</code>, <code>Singularity Forge</code> appear nowhere in SPEC.md any more: <code>grep -n "Fabricator\|Precision Lab\|Singularity Forge" SPEC.md</code> returns nothing.</li>
+              <li>The §8.3 table has exactly 68 building rows plus the header.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add SPEC.md
+git commit -m "$(cat &lt;&lt;'EOF'
+docs(spec): rewrite §8.3 to the implemented manufacturing taxonomy
+
+§8.3's 6-row table named coarse buildings the implementation never used.
+Replace it with the full 68-building category:'manufacturing' roster
+(T1–T6). Fix the §1272 kit-crafting reference that named the removed
+'Fabricator' — Enriched/Refined kits use Kit Assembler Enriched/Refined.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;
+EOF
+)"</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Notes &amp; verification</h2></div>
+      <div class="notes">
+        <div class="note"><strong>Strict TypeScript is the safety net.</strong> <code>tsconfig.json</code> has <code>strict</code> + <code>noUnusedLocals</code> + <code>noUncheckedIndexedAccess</code>. Any reference to a removed defId — including <code>BUILDING_DEFS.fabricator</code> property access — fails <code>npm run build</code>. Task 1 cannot be silently incomplete.</div>
+        <div class="note"><strong>No UI / live check needed.</strong> The 3 buildings had no recipe and no effect code; removing them changes no rendered behaviour. The build + test suite fully cover this change — there is nothing to screenshot.</div>
+        <div class="note"><strong>Accepted risk (LOW).</strong> A pre-existing save with one of the 3 buildings placed would, after removal, hold a <code>PlacedBuilding</code> whose def lookup is <code>undefined</code>. Not handled — these buildings were never functional, the project is pre-release, no migration infrastructure exists. Noted, not mitigated.</div>
+        <div class="note"><strong>Out of scope.</strong> <code>terrain_modifier</code> (a genuine unbuilt mechanic) and the parallel drift in SPEC §8.1 / §8.2 are deliberately untouched — see design spec §07.</div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands · implementation plan · 2026-05-22 · spec: docs/superpowers/specs/2026-05-22-building-stub-removal-design.html
+    </footer>
+
+  </div>
+</body>
+</html>
