@@ -920,13 +920,13 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     coastal: true,
     glyph: '⚓',
   },
-  // §8.8 / §12.2: Helipad — T2 logistics building that launches §12
+  // §8.8 / §12.2: Helipad — T1 logistics building that launches §12
   // helicopters for settlement. Faster than ships, no coastal requirement.
   helipad: {
     id: 'helipad',
     displayName: 'Helipad',
     category: 'logistics',
-    tier: 2,
+    tier: 1,
     footprint: SHAPES.square2,
     fill: 0x6a8a9a,
     stroke: 0x1f3340,

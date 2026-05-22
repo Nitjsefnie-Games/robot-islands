@@ -258,7 +258,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       // Re-clamp tier to valid range for the new kind.
       const originState = originId ? deps.islandStates.get(originId) ?? null : null;
       const maxTier = originState ? tierForLevel(originState.level) : 1;
-      const minTier = kind === 'helicopter' ? 2 : 1;
+      const minTier = 1;
       selectedTier = Math.max(minTier, Math.min(selectedTier, maxTier)) as VehicleTier;
       paintKindButtons();
       refresh(performance.now());
@@ -850,7 +850,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
 
     // Clamp selectedTier to the valid range for current origin + kind.
     const originTier = originState ? tierForLevel(originState.level) : 1;
-    const minTier: VehicleTier = kind === 'helicopter' ? 2 : 1;
+    const minTier: VehicleTier = 1;
     if (selectedTier > originTier) selectedTier = originTier as VehicleTier;
     if (selectedTier < minTier) selectedTier = minTier;
 
@@ -949,9 +949,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
       return `origin missing ${required}`;
     }
     if (!originState) return 'origin state missing';
-    if (kind === 'helicopter' && tierForLevel(originState.level) < 2) {
-      return 'helicopter requires T2+ origin';
-    }
+
     return null;
   }
 
