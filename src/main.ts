@@ -97,7 +97,7 @@ import {
 } from './orbital.js';
 import { findNextMerge, performMerge } from './island-merge.js';
 import { makeIslandScreenPosResolver, mountRoutesUi } from './routes-ui.js';
-import { computeCableNetworkBalance, tickRoutes } from './routes.js';
+import { computeCableNetworkBalance, drainRoutesForBuilding, tickRoutes } from './routes.js';
 import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
@@ -1217,6 +1217,9 @@ async function main(): Promise<void> {
     onDemolish: (target: InspectorTarget) => {
       const result = demolishBuilding(target.spec, target.state, target.building.id);
       if (!result.ok) return;
+      // A transport building's route drains when the building is removed —
+      // in-flight cargo finishes, then tickRoutes prunes it.
+      drainRoutesForBuilding(worldState, target.building.id);
       // Close the inspector + clear selection BEFORE the layer rebuild so
       // the stale-selection guard in repaintSelection doesn't fire.
       inspector.close();
