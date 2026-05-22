@@ -93,7 +93,9 @@ export const BIOME_DEFS: Readonly<Record<Biome, BiomeDef>> = {
     initialMinorRadius: 7,
     powerSource: 'wind',
     defaultTerrain: 'sand',
-    rareTerrain: ['water', 'water', 'ore', 'oil_well', 'gas_seep', 'clay_pit', 'phosphate_deposit', 'graphite_vein', 'tin_vein', 'bauxite_vein'],
+    // Water heavily weighted (5 of 13) so Coast islands surface water tiles
+    // — at the prior 2/10 weight most coast islands rolled none.
+    rareTerrain: ['water', 'water', 'water', 'water', 'water', 'ore', 'oil_well', 'gas_seep', 'clay_pit', 'phosphate_deposit', 'graphite_vein', 'tin_vein', 'bauxite_vein'],
     displayName: 'Coast',
   },
   volcanic: {
