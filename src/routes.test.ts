@@ -1001,12 +1001,9 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     expect(r.type).toBe('mass_driver');
   });
 
-  it('default capacity placeholder is ~5× T1 cargo (per §9.5 "~5× airship")', () => {
-    // T1 cargo capacity is 0.5 u/s; airship reuses the same per-second
-    // base today (no separate constant). Mass Driver placeholder is 2.5
-    // u/s = 5× cargo, anchoring on the only existing constant. Adjust
-    // when airship gets its own capacity constant.
-    // see routes.ts:113-119 for the anchor decision — revisit if airship gains a base constant
+  it('default capacity is 5× airship per §9.5 "~5× airship capacity"', () => {
+    // Airship base is 2.0 u/s (AIRSHIP_CARGO_CAPACITY_UNITS_PER_SEC);
+    // Mass Driver is 5× that = 10.0 u/s per §9.5.
     expect(MASS_DRIVER_CAPACITY_UNITS_PER_SEC).toBeCloseTo(10.0, 9);
   });
 
