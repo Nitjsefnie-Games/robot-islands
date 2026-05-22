@@ -82,10 +82,27 @@ Returns `null` for a defId that is not a transport building. `speedTilesPerSec`
 is `0`/sentinel for `teleporter` (instant; `transitTimeSec` becomes 0).
 
 Per-tier capacity + speed constants live alongside the existing
-`T1_CARGO_CAPACITY_UNITS_PER_SEC` (0.5), `T1_CARGO_SPEED_TILES_PER_SEC` (1),
-and `MASS_DRIVER_CAPACITY_UNITS_PER_SEC` (2.5). New constants are needed for
-`drone` and `airship` capacity + speed. All are placeholders, tuned later per
-SPEC Appendix A — following the existing placeholder convention in the file.
+`T1_CARGO_CAPACITY_UNITS_PER_SEC` (0.5) and `T1_CARGO_SPEED_TILES_PER_SEC`
+(1). The full proposed progression:
+
+| Tier | Source building | `type`        | Capacity (u/s) | Speed (tiles/s) | Transit, 50-tile route |
+|------|-----------------|---------------|----------------|-----------------|------------------------|
+| T1   | Cargo Dock (`dock`)             | `cargo`       | 0.5  | 1       | 50.0 s  |
+| T2   | Drone Pad (`dronepad`)          | `drone`       | 1.0  | 2       | 25.0 s  |
+| T3   | Airship Dock (`airship_dock`)   | `airship`     | 2.0  | 4       | 12.5 s  |
+| T4   | Mass Driver (`mass_driver`)     | `mass_driver` | 10.0 | 8       | 6.25 s  |
+| T4   | Teleporter Pad (`teleporter_pad`) | `teleporter` | 5.0 | instant | 0 s     |
+
+`cargo`'s `(0.5, 1)` are the existing locked values. `mass_driver` capacity
+is `10.0` = 5 × `airship` per SPEC §9.5 ("~5× airship capacity") — this
+**supersedes** the current `MASS_DRIVER_CAPACITY_UNITS_PER_SEC` placeholder
+of `2.5`, which was explicitly anchored to `cargo × 5` only "until airship
+has its own base" (per the constant's own comment). Airship now has a base,
+so the SPEC-correct anchor applies. `mass_driver` is the throughput king
+(Plains-unique); `teleporter` is the latency king (instant) with strong but
+not maximal throughput. All non-`cargo` values are placeholders, tunable per
+SPEC Appendix A — but the progression shape (monotonic capacity, ×2 speed
+per tier) is the intended contract.
 
 Dispatch (the `tickRoutes` loop) needs **no change**: `drone`/`airship`/
 `teleporter` types and their fuel debits are already implemented; capacity and
