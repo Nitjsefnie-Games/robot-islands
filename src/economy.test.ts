@@ -2257,7 +2257,7 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
         } as PlacedBuilding,
         {
           id: 'fab-plateau',
-          defId: 'fabricator', // T3 — recipe is { lubricant, electric_motor, capacitor }
+          defId: 'motor_assembly', // T3 manufacturing building (was 'fabricator', a removed stub)
           x: 5,
           y: 0,
           operatingMs:
@@ -2269,7 +2269,7 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
       storageCaps: blankCaps(1_000_000),
       inventory: {
         ...blankInventory(),
-        // T1 recipe satisfied; T3 recipe (electric_motor + capacitor) NOT.
+        // T1 maintenance inputs stocked; T3 maintenance inputs NOT.
         lubricant: 100,
         bolt: 100,
       },
