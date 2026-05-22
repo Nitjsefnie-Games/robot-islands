@@ -38,7 +38,10 @@ import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import {
   dispatchVehicle,
+  hasLaunchBuildingFor,
   HELICOPTER_STATS,
+  originCanAnchorSettle,
+  settleViaSpacetimeAnchor,
   SHIP_STATS,
   tuningFor,
   vehicleCurrentPosition,
@@ -103,6 +106,10 @@ export interface SettlementUiDeps {
    *  to the island-state map + modifier cache. The settlement UI just
    *  refreshes its own ledger each frame; it never originates an arrival. */
   onLaunchModeChanged?(armed: boolean): void;
+  /** Called after a successful Spacetime Anchor instant-settle so the host
+   *  can rebuild world render layers (a vehicle arrival rebuilds via the
+   *  ticker; an instant-settle happens on a click and has no ticker hook). */
+  onInstantSettled?: () => void;
 }
 
 // Click tolerance (world tiles) when resolving a map click to a target
@@ -130,7 +137,8 @@ function computeFuel(
 export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps): SettlementUiHandle {
   let visible = false;
   let launchMode = false;
-  let kind: VehicleKind = 'ship';
+  type DispatchKind = VehicleKind | 'anchor';
+  let kind: DispatchKind = 'ship';
   let selectedTier: VehicleTier = 1;
   let fuelLoaded = 0; // auto-computed from origin→target distance in refresh()
   let kitCount = 1;
@@ -226,7 +234,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     kindRow,
     ['display: grid', 'grid-template-columns: 1fr 1fr', 'gap: 6px'].join(';'),
   );
-  function kindBtn(label: string, k: VehicleKind): HTMLButtonElement {
+  function kindBtn(label: string, k: DispatchKind): HTMLButtonElement {
     const b = document.createElement('button');
     b.textContent = label;
     styled(
@@ -260,10 +268,12 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   }
   const shipBtn = kindBtn('◗ SHIP', 'ship');
   const heliBtn = kindBtn('✈ HELI', 'helicopter');
+  const anchorBtn = kindBtn('⧗ ANCHOR', 'anchor');
   function paintKindButtons(): void {
-    const entries: ReadonlyArray<readonly [HTMLButtonElement, VehicleKind]> = [
+    const entries: ReadonlyArray<readonly [HTMLButtonElement, DispatchKind]> = [
       [shipBtn, 'ship'],
       [heliBtn, 'helicopter'],
+      [anchorBtn, 'anchor'],
     ];
     for (const [btn, k] of entries) {
       if (kind === k) {
@@ -280,6 +290,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   paintKindButtons();
   kindRow.appendChild(shipBtn);
   kindRow.appendChild(heliBtn);
+  kindRow.appendChild(anchorBtn);
   body.appendChild(kindRow);
 
   // ---- Origin / target selectors ------------------------------------------
@@ -611,6 +622,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
 
   function repaintRangeRing(): void {
     rangeRingGfx.clear();
+    if (kind === 'anchor') return;
     const originSpec = originId ? deps.islandSpecs.get(originId) ?? null : null;
     if (!originSpec) return;
     const originState = deps.islandStates.get(originSpec.id);
@@ -767,6 +779,28 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     return best;
   }
 
+  /** Show only the dispatch kinds the current origin can launch:
+   *  SHIP needs a Shipyard, HELI a Helipad, ANCHOR a Spacetime Anchor.
+   *  If the current `kind` is no longer available, fall back to the first
+   *  available kind. */
+  function refreshKindButtons(): void {
+    const originSpec = originId ? deps.islandSpecs.get(originId) ?? null : null;
+    const canShip = originSpec ? hasLaunchBuildingFor(originSpec, 'ship') : false;
+    const canHeli = originSpec ? hasLaunchBuildingFor(originSpec, 'helicopter') : false;
+    const canAnchor = originSpec ? originCanAnchorSettle(originSpec) : false;
+    shipBtn.style.display = canShip ? '' : 'none';
+    heliBtn.style.display = canHeli ? '' : 'none';
+    anchorBtn.style.display = canAnchor ? '' : 'none';
+    const available: DispatchKind[] = [
+      ...(canShip ? ['ship' as const] : []),
+      ...(canHeli ? ['helicopter' as const] : []),
+      ...(canAnchor ? ['anchor' as const] : []),
+    ];
+    if (!available.includes(kind)) {
+      kind = available[0] ?? 'ship';
+    }
+  }
+
   // ---- Origin selector option building ------------------------------------
   function rebuildSelectors(): void {
     const populated: IslandSpec[] = [];
@@ -796,6 +830,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     originId = fromSel.value || null;
   }
   rebuildSelectors();
+  refreshKindButtons();
 
   // ---- Stat / status / button refresh -------------------------------------
   function refresh(_nowMs: number): void {
@@ -803,6 +838,8 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     // (vehicle arrival, drone discovery). Cheap; we just rebuild on every
     // refresh — the option count is small.
     rebuildSelectors();
+    refreshKindButtons();
+    const isAnchor = kind === 'anchor';
 
     const originSpec = originId ? deps.islandSpecs.get(originId) ?? null : null;
     const originState = originSpec ? deps.islandStates.get(originSpec.id) ?? null : null;
@@ -829,19 +866,29 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     const fuelResource = fuelForTier(selectedTier);
     fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
 
-    const t = tuningFor(kind, selectedTier);
+    fuelStat.row.style.display = isAnchor ? 'none' : '';
+    rangeRingLayer.visible = launchMode && !isAnchor;
+
     let dist = 0;
     if (originSpec && targetSpec) {
       const dx = originSpec.cx - targetSpec.cx;
       const dy = originSpec.cy - targetSpec.cy;
       dist = Math.sqrt(dx * dx + dy * dy);
     }
-    // Auto-compute fuel: the exact one-way cost to reach the selected target.
-    fuelLoaded = originSpec && targetSpec ? computeFuel(originSpec, targetSpec, t.tilesPerFuel) : 0;
-    const eta = t.speed > 0 ? dist / t.speed : 0;
-    distStat.valueEl.textContent = targetSpec ? `${dist.toFixed(0)} t` : '— t';
-    fuelStat.valueEl.textContent = targetSpec ? `${fuelLoaded} u` : '— u';
-    etaStat.valueEl.textContent = targetSpec ? `${eta.toFixed(0)}s` : '—';
+    if (kind !== 'anchor') {
+      const t = tuningFor(kind, selectedTier);
+      // Auto-compute fuel: the exact one-way cost to reach the selected target.
+      fuelLoaded = originSpec && targetSpec ? computeFuel(originSpec, targetSpec, t.tilesPerFuel) : 0;
+      const eta = t.speed > 0 ? dist / t.speed : 0;
+      distStat.valueEl.textContent = targetSpec ? `${dist.toFixed(0)} t` : '— t';
+      fuelStat.valueEl.textContent = targetSpec ? `${fuelLoaded} u` : '— u';
+      etaStat.valueEl.textContent = targetSpec ? `${eta.toFixed(0)}s` : '—';
+    } else {
+      fuelLoaded = 0;
+      distStat.valueEl.textContent = targetSpec ? `${dist.toFixed(0)} t` : '— t';
+      fuelStat.valueEl.textContent = '— u';
+      etaStat.valueEl.textContent = targetSpec ? 'instant' : '—';
+    }
 
     // Show/hide the target prompt and the stat block detail rows.
     targetPrompt.style.display = targetSpec ? 'none' : 'block';
@@ -891,7 +938,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     originState: IslandState | null,
   ): string | null {
     if (!originSpec) return 'no populated origin';
-    const required = kind === 'ship' ? 'shipyard' : 'helipad';
+    const required = kind === 'ship' ? 'shipyard' : kind === 'helicopter' ? 'helipad' : 'spacetime_anchor';
     if (!originSpec.buildings.some((b) => b.defId === required)) {
       return `origin missing ${required}`;
     }
@@ -1022,6 +1069,20 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     if (!targetSpec) targetSpec = nearestDiscoveredUnpopulated(worldTileX, worldTileY);
     if (!targetSpec) return { ok: false, reason: 'no target near click' };
     targetId = targetSpec.id;
+    if (kind === 'anchor') {
+      if (!originId) return { ok: false, reason: 'no origin' };
+      const res = settleViaSpacetimeAnchor(deps.world, deps.islandStates, originId, targetId, nowMs);
+      if (res.ok) {
+        deps.onInstantSettled?.();
+        setLaunchMode(false);
+        refresh(nowMs);
+        return { ok: true };
+      } else {
+        statusEl.textContent = `rejected: ${res.reason}`;
+        statusEl.style.color = 'var(--ri-danger)';
+        return { ok: false, reason: res.reason };
+      }
+    }
     // Fuel for the ACTUALLY-resolved target — the click may land on a
     // different island than the dropdown selection, so compute it here at
     // click time rather than trusting the refresh()-time preview.
