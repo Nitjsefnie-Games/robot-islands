@@ -123,8 +123,11 @@ function makeTestWorld(): {
     discovered: true,
   });
   const world = freshWorld([homeSpec, targetSpec]);
-  const homeState = makeIslandState({ id: 'home' });
+  const homeState = makeIslandState({ id: 'home', level: 30 });
   homeState.inventory.biofuel = 50;
+  homeState.inventory.diesel = 50;
+  homeState.inventory.aviation_kerosene = 50;
+  homeState.inventory.cryogenic_hydrogen = 50;
   const islandStates = new Map<string, IslandState>([['home', homeState]]);
   return { world, homeSpec, homeState, targetSpec, islandStates };
 }
@@ -240,8 +243,11 @@ describe('§12.4 starter building inscription', () => {
       minorRadius: targetRadius,
     });
     const world = freshWorld([home, target]);
-    const homeState = makeIslandState({ id: 'home' });
+    const homeState = makeIslandState({ id: 'home', level: 30 });
     homeState.inventory.biofuel = 50;
+    homeState.inventory.diesel = 50;
+    homeState.inventory.aviation_kerosene = 50;
+    homeState.inventory.cryogenic_hydrogen = 50;
     homeState.inventory.foundation_kit = 3;
     const islandStates = new Map<string, IslandState>([['home', homeState]]);
     return { world, home, homeState, target, islandStates };
@@ -530,10 +536,38 @@ describe('dispatchVehicle', () => {
     expect(r1.ok).toBe(false);
     if (r1.ok) return;
     expect(r1.reason).toBe('missing-launch-building');
-    // Add helipad → succeeds.
+    // Add helipad + T2 fuel → succeeds.
     home.buildings.push({ id: 'hp', defId: 'helipad', x: 1, y: 1 });
+    homeState.level = 5;
+    homeState.inventory.diesel = 50;
     const r2 = dispatchVehicle(world, home, homeState, target, 'helicopter', 2, 10, 1, 0);
     expect(r2.ok).toBe(true);
+  });
+
+  it('rejects tier > origin tier', () => {
+    const { world, home, homeState, target } = setup();
+    // Origin is T1 (level 1); tier 2 ship is invalid.
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 2, 5, 1, 0);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('invalid-tier');
+  });
+
+  it('rejects helicopter tier 1 (T1 heli does not exist)', () => {
+    const { world, home, homeState, target } = setup();
+    home.buildings.push({ id: 'hp', defId: 'helipad', x: 1, y: 1 });
+    const r = dispatchVehicle(world, home, homeState, target, 'helicopter', 1, 10, 1, 0);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('invalid-tier');
+  });
+
+  it('rejects tier 0 as invalid-tier', () => {
+    const { world, home, homeState, target } = setup();
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 0 as any, 5, 1, 0);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('invalid-tier');
   });
 });
 
@@ -616,6 +650,8 @@ describe('tickVehicles', () => {
   it('places an auto Helipad for a helicopter arrival', () => {
     const { world, home, homeState, target, islandStates } = setup();
     home.buildings.push({ id: 'hp', defId: 'helipad', x: 1, y: 1 });
+    homeState.level = 5;
+    homeState.inventory.diesel = 50;
     // Helicopter T2: speed 0.75 t/s, eff 6 tiles/fuel. 30 tile trip = 40s. Need
     // 30/6 = 5 fuel min. Use 10 fuel.
     dispatchVehicle(world, home, homeState, target, 'helicopter', 2, 10, 1, 0);
@@ -739,7 +775,7 @@ describe('dispatchVehicle — §11.7 tier-matched fuel', () => {
     const { world, home, homeState, target } = tieredSetup(15);
     homeState.inventory.biofuel = 999;
     homeState.inventory.aviation_kerosene = 50;
-    const r = dispatchVehicle(world, home, homeState, target, 'ship', 1, 5, 1, 0);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 3, 5, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.vehicle.fuelResource).toBe('aviation_kerosene');
@@ -751,7 +787,7 @@ describe('dispatchVehicle — §11.7 tier-matched fuel', () => {
     const { world, home, homeState, target } = tieredSetup(15);
     homeState.inventory.biofuel = 999;
     homeState.inventory.aviation_kerosene = 2;
-    const r = dispatchVehicle(world, home, homeState, target, 'ship', 1, 5, 1, 0);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 3, 5, 1, 0);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toBe('insufficient-fuel');
@@ -764,7 +800,7 @@ describe('dispatchVehicle — §11.7 tier-matched fuel', () => {
   it('T4 island (level 30) consumes cryogenic_hydrogen', () => {
     const { world, home, homeState, target } = tieredSetup(30);
     homeState.inventory.cryogenic_hydrogen = 50;
-    const r = dispatchVehicle(world, home, homeState, target, 'ship', 1, 5, 1, 0);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 5, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.vehicle.fuelResource).toBe('cryogenic_hydrogen');

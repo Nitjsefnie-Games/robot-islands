@@ -36,10 +36,13 @@ import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
 import {
   dispatchVehicle,
+  HELICOPTER_STATS,
+  SHIP_STATS,
   tuningFor,
   vehicleCurrentPosition,
   type SettlementVehicle,
   type VehicleKind,
+  type VehicleTier,
 } from './settlement.js';
 import { tierForLevel } from './skilltree.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
@@ -122,6 +125,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   let visible = false;
   let launchMode = false;
   let kind: VehicleKind = 'ship';
+  let selectedTier: VehicleTier = 1;
   let fuelLoaded = 0; // auto-computed from origin→target distance in refresh()
   let kitCount = 1;
   let originId: string | null = null;
@@ -237,6 +241,11 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     );
     b.addEventListener('click', () => {
       kind = k;
+      // Re-clamp tier to valid range for the new kind.
+      const originState = originId ? deps.islandStates.get(originId) ?? null : null;
+      const maxTier = originState ? tierForLevel(originState.level) : 1;
+      const minTier = kind === 'helicopter' ? 2 : 1;
+      selectedTier = Math.max(minTier, Math.min(selectedTier, maxTier)) as VehicleTier;
       paintKindButtons();
       refresh(performance.now());
       b.blur();
@@ -359,10 +368,33 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     return { row, valueEl: v };
   }
   const tierStat = statRow('TIER');
+  const tierSelect = document.createElement('select');
+  tierSelect.style.cssText = [
+    'background: var(--ri-elev)',
+    'color: var(--ri-accent)',
+    'border: 1px solid var(--ri-border)',
+    'font: inherit',
+    'font-size: 11px',
+    'padding: 1px 4px',
+    'cursor: pointer',
+    'border-radius: 3px',
+  ].join(';');
+  for (let t = 1; t <= 6; t++) {
+    const opt = document.createElement('option');
+    opt.value = String(t);
+    opt.textContent = `T${t}`;
+    tierSelect.appendChild(opt);
+  }
+  tierSelect.addEventListener('change', () => {
+    selectedTier = Number(tierSelect.value) as VehicleTier;
+    refresh(performance.now());
+  });
+  tierStat.valueEl.appendChild(tierSelect);
+
   const distStat = statRow('DIST');
   const fuelStat = statRow('FUEL');
+  const fuelStatLabelEl = fuelStat.row.firstChild as HTMLSpanElement;
   const etaStat = statRow('ETA');
-  tierStat.valueEl.style.color = 'var(--ri-accent)';
   fuelStat.valueEl.style.color = 'var(--ri-warn)';
   statBlock.appendChild(tierStat.row);
   statBlock.appendChild(distStat.row);
@@ -737,12 +769,32 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     // refresh — the option count is small.
     rebuildSelectors();
 
-    kitHeadR.textContent = `${kitCount}`;
-    const uiTier: 1 | 2 = kind === 'ship' ? 1 : 2;
-    const t = tuningFor(kind, uiTier);
-    tierStat.valueEl.textContent = `T${t.tier}`;
     const originSpec = originId ? deps.islandSpecs.get(originId) ?? null : null;
+    const originState = originSpec ? deps.islandStates.get(originSpec.id) ?? null : null;
     const targetSpec = targetId ? deps.islandSpecs.get(targetId) ?? null : null;
+
+    // Clamp selectedTier to the valid range for current origin + kind.
+    const originTier = originState ? tierForLevel(originState.level) : 1;
+    const minTier: VehicleTier = kind === 'helicopter' ? 2 : 1;
+    if (selectedTier > originTier) selectedTier = originTier as VehicleTier;
+    if (selectedTier < minTier) selectedTier = minTier;
+
+    // Sync tier select options: disable out-of-range, sync current value.
+    for (let i = 0; i < tierSelect.options.length; i++) {
+      const opt = tierSelect.options[i];
+      if (!opt) continue;
+      const tierNum = Number(opt.value);
+      opt.disabled = tierNum < minTier || tierNum > originTier;
+    }
+    if (Number(tierSelect.value) !== selectedTier) {
+      tierSelect.value = String(selectedTier);
+    }
+
+    // Dynamic fuel label follows the player-selected tier (mirrors drone UI).
+    const fuelResource = fuelForTier(selectedTier);
+    fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
+
+    const t = tuningFor(kind, selectedTier);
     let dist = 0;
     if (originSpec && targetSpec) {
       const dx = originSpec.cx - targetSpec.cx;
@@ -755,6 +807,15 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     distStat.valueEl.textContent = targetSpec ? `${dist.toFixed(0)} t` : '— t';
     fuelStat.valueEl.textContent = targetSpec ? `${fuelLoaded} u` : '— u';
     etaStat.valueEl.textContent = targetSpec ? `${eta.toFixed(0)}s` : '—';
+
+    // Cap kit count to the selected tier's maxKits and update slider.
+    const maxKits = kind === 'ship'
+      ? SHIP_STATS[selectedTier].maxKits
+      : HELICOPTER_STATS[selectedTier].maxKits;
+    if (kitCount > maxKits) kitCount = maxKits;
+    kitSlider.max = String(maxKits);
+    if (Number(kitSlider.value) !== kitCount) kitSlider.value = String(kitCount);
+    kitHeadR.textContent = `${kitCount}`;
 
     // Validation feedback for the status row + arm button.
     const reason = validationReason(originSpec, targetSpec);
@@ -791,9 +852,13 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     }
     const originState = deps.islandStates.get(originSpec.id);
     if (!originState) return 'origin state missing';
+    const originTier = tierForLevel(originState.level);
+    if (kind === 'helicopter' && originTier < 2) {
+      return 'helicopter requires T2+ origin';
+    }
     // §11.7 tier-matched fuel — look up the appropriate grade by the
-    // launching island's tier, surface its friendly name in the reason.
-    const fuelResource = fuelForTier(tierForLevel(originState.level));
+    // player-selected tier, surface its friendly name in the reason.
+    const fuelResource = fuelForTier(selectedTier);
     const onhandFuel = inv(originState, fuelResource);
     const fuelLabel = fuelResource.replace(/_/g, ' ');
     if (onhandFuel < fuelLoaded) return `low ${fuelLabel}: ${onhandFuel.toFixed(0)} on hand`;
@@ -930,18 +995,17 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     }
     if (!targetSpec) targetSpec = nearestDiscoveredUnpopulated(worldTileX, worldTileY);
     if (!targetSpec) return { ok: false, reason: 'no target near click' };
-    const tier: 1 | 2 = kind === 'ship' ? 1 : 2;
     // Fuel for the ACTUALLY-resolved target — the click may land on a
     // different island than the dropdown selection, so compute it here at
     // click time rather than trusting the refresh()-time preview.
-    const launchFuel = computeFuel(originSpec, targetSpec, tuningFor(kind, tier).tilesPerFuel);
+    const launchFuel = computeFuel(originSpec, targetSpec, tuningFor(kind, selectedTier).tilesPerFuel);
     const r = dispatchVehicle(
       deps.world,
       originSpec,
       originState,
       targetSpec,
       kind,
-      tier,
+      selectedTier,
       launchFuel,
       kitCount,
       nowMs,

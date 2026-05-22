@@ -375,7 +375,8 @@ export type DispatchVehicleResult =
         | 'target-populated'
         | 'missing-launch-building'
         | 'already-in-flight'
-        | 'out-of-range';
+        | 'out-of-range'
+        | 'invalid-tier';
     };
 
 /**
@@ -426,9 +427,19 @@ export function dispatchVehicle(
     }
   }
 
+  // Tier validation: must be within the origin island's unlocked range, and
+  // helicopters require tier ≥ 2 (T1 heli is the null entry).
+  const originTier = tierForLevel(originState.level);
+  if (tier < 1 || tier > originTier) {
+    return { ok: false, reason: 'invalid-tier' };
+  }
+  if (kind === 'helicopter' && tier < 2) {
+    return { ok: false, reason: 'invalid-tier' };
+  }
+
   // 4. fuel — §11.7 tier-matched grade only (no fallback), positive, on-hand,
   //    and sufficient to cover the one-way distance.
-  const fuelResource: ResourceId = fuelForTier(tierForLevel(originState.level));
+  const fuelResource: ResourceId = fuelForTier(tier);
   if (fuelLoaded <= 0 || inv(originState, fuelResource) < fuelLoaded) {
     return { ok: false, reason: 'insufficient-fuel' };
   }
