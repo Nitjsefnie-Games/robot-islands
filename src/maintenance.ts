@@ -25,6 +25,7 @@
 
 import type { BuildingDef } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
+import { affordabilityShortfall } from './placement.js';
 import type { ResourceId } from './recipes.js';
 import type { Tier } from './skilltree.js';
 
@@ -167,6 +168,37 @@ export function tryAutoMaintain(
   // doc-convention pattern as `cargoLabel` mutation in inspector-ui.ts.
   // The economy already mutates `discovered` / `populated` on IslandSpec
   // through similar casts.
+  (b as { operatingMs: number; maintainedAt: number }).operatingMs = 0;
+  (b as { operatingMs: number; maintainedAt: number }).maintainedAt = nowMs;
+  return true;
+}
+
+/** Player-triggered maintenance refresh — a manual lump-sum alternative to
+ *  the automatic §4.7 supply loop. Consumes 50% of the building's placement
+ *  cost (`refreshCostFor`) from `inventory`, then resets the building to
+ *  pristine maintenance state (operatingMs = 0, maintainedAt = nowMs) —
+ *  exactly the reset `tryAutoMaintain` performs.
+ *
+ *  Atomic: every halved-cost input is checked present before any is
+ *  consumed. Returns false WITHOUT mutating anything when the refresh is not
+ *  allowed — Eternal Servitor, building already pristine
+ *  (maintenanceFactor >= 1.0), empty placement cost (a free refresh is
+ *  disallowed), or inventory short on any halved-cost resource. */
+export function tryRefreshMaintenance(
+  b: PlacedBuilding,
+  def: BuildingDef,
+  inventory: Record<ResourceId, number>,
+  nowMs: number,
+  thresholdMul = 1,
+): boolean {
+  if (b.eternalServitor === true) return false;
+  if (maintenanceFactor(b, def, thresholdMul) >= 1.0) return false;
+  const cost = refreshCostFor(def);
+  if (Object.keys(cost).length === 0) return false;
+  if (Object.keys(affordabilityShortfall(inventory, cost)).length > 0) return false;
+  for (const [r, need] of Object.entries(cost) as Array<[ResourceId, number]>) {
+    inventory[r] = (inventory[r] ?? 0) - need;
+  }
   (b as { operatingMs: number; maintainedAt: number }).operatingMs = 0;
   (b as { operatingMs: number; maintainedAt: number }).maintainedAt = nowMs;
   return true;
