@@ -416,7 +416,12 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   ledgerWrap.appendChild(ledgerHead);
 
   const ledgerFilterSel = selectStyled();
-  styled(ledgerFilterSel, 'font-size: 10px; padding: 2px 5px; margin: 2px 0 4px');
+  // Compact overrides — set individual props so the selectStyled() base
+  // (dark bg, border, colour) survives. `styled()` replaces cssText, so a
+  // second styled() call here would wipe the select chrome.
+  ledgerFilterSel.style.fontSize = '10px';
+  ledgerFilterSel.style.padding = '2px 5px';
+  ledgerFilterSel.style.margin = '2px 0 4px';
   ledgerWrap.appendChild(ledgerFilterSel);
   ledgerFilterSel.addEventListener('change', () => repaintLedger(performance.now()));
 
