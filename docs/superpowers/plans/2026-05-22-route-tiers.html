@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Building-gated tiered routes — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #252420;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: #1B1A17;
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    /* ---------- header ---------- */
+
+    header.page-head { margin-bottom: 48px; max-width: 860px; }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.15;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .prompt-box {
+      background: var(--gray-150);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+    .prompt-box .meta-line { margin-top: 8px; }
+    .prompt-box code { font-family: var(--mono); font-size: 13px; color: var(--slate); }
+
+    /* ---------- callout ---------- */
+
+    .callout {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--clay);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 48px;
+      max-width: 860px;
+    }
+    .callout code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    /* ---------- section chrome ---------- */
+
+    section { margin-bottom: 56px; }
+
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 760px;
+      margin-bottom: 28px;
+    }
+    .sec-intro code { font-family: var(--mono); font-size: 13px; color: var(--slate); }
+
+    /* ---------- summary strip ---------- */
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v {
+      font-size: 17px;
+      color: var(--slate);
+      font-weight: 600;
+    }
+    .summary .v.accent { color: var(--clay); }
+
+    /* ---------- file-structure table ---------- */
+
+    .filetable {
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--white);
+    }
+    .filetable .row {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 0;
+    }
+    @media (max-width: 780px) { .filetable .row { grid-template-columns: 1fr; } }
+    .filetable .row + .row { border-top: 1.5px solid var(--gray-300); }
+    .filetable .cell { padding: 13px 18px; font-size: 13.5px; }
+    .filetable .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+    @media (max-width: 780px) {
+      .filetable .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .filetable .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .filetable .cell code { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .filetable .cell.desc code { color: var(--slate); }
+
+    /* ---------- task card ---------- */
+
+    .task-card {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 24px 26px;
+    }
+    .task-blurb {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 16px;
+      max-width: 760px;
+    }
+    .task-blurb code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    .files-block {
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 22px;
+    }
+    .files-block .ft {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .files-block ul { list-style: none; }
+    .files-block li {
+      font-size: 13px;
+      color: var(--gray-700);
+      padding: 2px 0;
+    }
+    .files-block li code { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .files-block li .tag {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--gray-500);
+    }
+
+    /* ---------- steps ---------- */
+
+    .steps { display: flex; flex-direction: column; gap: 18px; }
+    .step {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 0 12px;
+    }
+    .step .box {
+      width: 16px; height: 16px;
+      border: 1.5px solid var(--clay);
+      border-radius: 4px;
+      margin-top: 3px;
+    }
+    .step .step-body { min-width: 0; }
+    .step .step-title {
+      font-weight: 600;
+      font-size: 14.5px;
+      color: var(--slate);
+      margin-bottom: 6px;
+    }
+    .step .step-text {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    .step .step-text:last-child { margin-bottom: 0; }
+    .step .step-text code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .step .step-text.cmd code { color: var(--olive); }
+
+    .step ul.bullets { list-style: none; margin: 0 0 10px; }
+    .step ul.bullets li {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      padding: 2px 0 2px 16px;
+      position: relative;
+    }
+    .step ul.bullets li::before {
+      content: '–';
+      position: absolute;
+      left: 0;
+      color: var(--clay);
+    }
+    .step ul.bullets li code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    /* ---------- code panel ---------- */
+
+    .code-block { margin: 4px 0 12px; }
+    .code-block .file-label {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .code {
+      background: #121110;
+      border: 1px solid var(--gray-300);
+      border-radius: 10px;
+      padding: 16px 18px;
+      overflow-x: auto;
+    }
+    .code pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #F5F3EC;
+      white-space: pre;
+    }
+
+    /* ---------- notes ---------- */
+
+    .notes { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+    .note {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--olive);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      color: var(--gray-500);
+    }
+    .note code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .note strong { color: var(--slate); font-weight: 600; }
+
+    footer.page-foot {
+      margin-top: 64px;
+      padding-top: 20px;
+      border-top: 1.5px solid var(--gray-300);
+      font-size: 12px;
+      color: var(--gray-500);
+      font-family: var(--mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Building-gated tiered routes — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Let the player obtain higher-tier inter-island routes (drone/airship/mass_driver/teleporter) by placing transport buildings, instead of every route being hardcoded T1 cargo.</div>
+        <div class="meta-line"><strong>Architecture:</strong> A route is owned by a transport building (<code>Route.sourceBuildingId</code>); the building's def determines the route's tier (capacity + transit speed). The route form gains a building sub-select; demolishing a building drains its route. All tier logic is pure helpers in <code>routes.ts</code> (TDD); <code>routes-ui.ts</code> and <code>main.ts</code> only wire UI to them.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict), Vite 5, PixiJS 8, vitest. Pure layer is unit-tested; render layer is verified live via the daedalus browser extension.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-22-route-tiers-design.md</code></div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">7</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">4</div></div>
+      <div class="cell"><div class="k">New test suites</div><div class="v">4</div></div>
+      <div class="cell"><div class="k">Layer</div><div class="v">pure + render</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">Every file the plan touches, and the nature of the change. Read this before starting any task.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/routes.ts</code></div><div class="cell desc">Add per-tier constants, <code>RouteProfile</code> + <code>routeProfileForBuilding</code>, <code>Route.sourceBuildingId</code>, <code>createRouteFromBuilding</code>, <code>eligibleTransportBuildings</code>, <code>islandHasTeleporterPad</code>, <code>drainRoutesForBuilding</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/routes.test.ts</code></div><div class="cell desc">New tests for every helper above; fix one stale <code>mass_driver</code> assertion.</div></div>
+        <div class="row"><div class="cell"><code>src/routes-ui.ts</code></div><div class="cell desc">Form gains a building sub-select; ledger gains an island filter.</div></div>
+        <div class="row"><div class="cell"><code>src/main.ts</code></div><div class="cell desc"><code>onDemolish</code> drains the demolished building's route.</div></div>
+      </div>
+      <p class="sec-intro" style="margin-top:18px;margin-bottom:0"><code>persistence.ts</code> needs <strong>no change</strong> — <code>sourceBuildingId</code> is optional and rides the existing <code>...r</code> spread in the snapshot/restore paths, exactly as <code>draining</code> does.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: routes.ts data model — tier profiles</h2></div>
+      <div class="task-card">
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/routes.ts</code> (constants block ~line 100-145; <code>Route</code> interface ~line 78-101)</li>
+            <li>Modify: <code>src/routes.test.ts</code> (imports ~line 10-23; assertion at line 1009)</li>
+            <li>Test: <code>src/routes.test.ts</code></li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing test</div>
+          <p class="step-text">Append to <code>src/routes.test.ts</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>describe('routeProfileForBuilding', () =&gt; {
+  it('maps each transport building to its tier profile', () =&gt; {
+    expect(routeProfileForBuilding('dock')).toEqual(
+      { type: 'cargo', capacityPerSec: 0.5, speedTilesPerSec: 1 });
+    expect(routeProfileForBuilding('dronepad')).toEqual(
+      { type: 'drone', capacityPerSec: 1.0, speedTilesPerSec: 2 });
+    expect(routeProfileForBuilding('airship_dock')).toEqual(
+      { type: 'airship', capacityPerSec: 2.0, speedTilesPerSec: 4 });
+    expect(routeProfileForBuilding('mass_driver')).toEqual(
+      { type: 'mass_driver', capacityPerSec: 10.0, speedTilesPerSec: 8 });
+    expect(routeProfileForBuilding('teleporter_pad')).toEqual(
+      { type: 'teleporter', capacityPerSec: 5.0, speedTilesPerSec: 0 });
+  });
+  it('returns null for a non-transport building', () =&gt; {
+    expect(routeProfileForBuilding('logger')).toBeNull();
+    expect(routeProfileForBuilding('workshop')).toBeNull();
+  });
+});</pre></div>
+        </div>
+          <p class="step-text">Add <code>routeProfileForBuilding</code> to the existing <code>import { ... } from './routes.js';</code> block at the top of the file.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run test to verify it fails</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/routes.test.ts -t routeProfileForBuilding</code> Expected: FAIL — <code>routeProfileForBuilding is not a function</code> / TS compile error.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Implement constants + helper</div>
+          <p class="step-text">In <code>src/routes.ts</code>: add a type-only import near the other imports:</p>
+        <div class="code-block">
+          <div class="code"><pre>import type { BuildingDefId } from './building-defs.js';</pre></div>
+        </div>
+          <p class="step-text">In the constants block, <strong>change</strong> the existing line <code>export const MASS_DRIVER_CAPACITY_UNITS_PER_SEC = 2.5;</code> to:</p>
+        <div class="code-block">
+          <div class="code"><pre>export const MASS_DRIVER_CAPACITY_UNITS_PER_SEC = 10.0;</pre></div>
+        </div>
+          <p class="step-text">(Update its comment: the value is now 5 × airship per §9.5, no longer the cargo×5 placeholder.)</p>
+          <p class="step-text">Add these new constants alongside it:</p>
+        <div class="code-block">
+          <div class="code"><pre>/** §2.4 T2 drone cargo — placeholder progression (Appendix A). */
+export const DRONE_CARGO_CAPACITY_UNITS_PER_SEC = 1.0;
+export const DRONE_CARGO_SPEED_TILES_PER_SEC = 2;
+/** §2.4 T3 airship cargo — placeholder progression (Appendix A). */
+export const AIRSHIP_CARGO_CAPACITY_UNITS_PER_SEC = 2.0;
+export const AIRSHIP_CARGO_SPEED_TILES_PER_SEC = 4;
+/** §9.5 Mass Driver transit speed (capacity constant is above). */
+export const MASS_DRIVER_SPEED_TILES_PER_SEC = 8;
+/** §2.4 T4 teleporter — instant transit (speed 0), high throughput. */
+export const TELEPORTER_CARGO_CAPACITY_UNITS_PER_SEC = 5.0;</pre></div>
+        </div>
+          <p class="step-text">Add the profile type + map + helper (place after the constants block, before the "Route id generation" section):</p>
+        <div class="code-block">
+          <div class="code"><pre>/** Tier characteristics a transport building confers on the route it hosts. */
+export interface RouteProfile {
+  readonly type: RouteType;
+  readonly capacityPerSec: number;
+  /** Tiles/sec for transit-time computation. 0 = instant (teleporter). */
+  readonly speedTilesPerSec: number;
+}
+
+/** defId → tier profile. A defId absent here is not a transport building. */
+const ROUTE_PROFILES: Partial&lt;Record&lt;BuildingDefId, RouteProfile&gt;&gt; = {
+  dock:           { type: 'cargo',       capacityPerSec: T1_CARGO_CAPACITY_UNITS_PER_SEC,        speedTilesPerSec: T1_CARGO_SPEED_TILES_PER_SEC },
+  dronepad:       { type: 'drone',       capacityPerSec: DRONE_CARGO_CAPACITY_UNITS_PER_SEC,     speedTilesPerSec: DRONE_CARGO_SPEED_TILES_PER_SEC },
+  airship_dock:   { type: 'airship',     capacityPerSec: AIRSHIP_CARGO_CAPACITY_UNITS_PER_SEC,   speedTilesPerSec: AIRSHIP_CARGO_SPEED_TILES_PER_SEC },
+  mass_driver:    { type: 'mass_driver', capacityPerSec: MASS_DRIVER_CAPACITY_UNITS_PER_SEC,     speedTilesPerSec: MASS_DRIVER_SPEED_TILES_PER_SEC },
+  teleporter_pad: { type: 'teleporter',  capacityPerSec: TELEPORTER_CARGO_CAPACITY_UNITS_PER_SEC, speedTilesPerSec: 0 },
+};
+
+/** The route tier a transport building hosts, or null if `defId` is not a
+ *  transport building. */
+export function routeProfileForBuilding(defId: BuildingDefId): RouteProfile | null {
+  return ROUTE_PROFILES[defId] ?? null;
+}</pre></div>
+        </div>
+          <p class="step-text">Also add the optional field to the <code>Route</code> interface (after <code>inFlight</code> / <code>draining</code>):</p>
+        <div class="code-block">
+          <div class="code"><pre>  /** PlacedBuilding id of the transport building that owns this route.
+   *  Absent on legacy saved routes (grandfathered as plain cargo). */
+  sourceBuildingId?: string;</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Fix the stale mass_driver assertion</div>
+          <p class="step-text">In <code>src/routes.test.ts</code> line ~1009, change:</p>
+        <div class="code-block">
+          <div class="code"><pre>    expect(MASS_DRIVER_CAPACITY_UNITS_PER_SEC).toBeCloseTo(2.5, 9);</pre></div>
+        </div>
+          <p class="step-text">to:</p>
+        <div class="code-block">
+          <div class="code"><pre>    expect(MASS_DRIVER_CAPACITY_UNITS_PER_SEC).toBeCloseTo(10.0, 9);</pre></div>
+        </div>
+          <p class="step-text">(The other uses of <code>MASS_DRIVER_CAPACITY_UNITS_PER_SEC</code> in the file are symbolic and need no change.)</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Run tests to verify they pass</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/routes.test.ts</code> Expected: PASS — all routes tests including <code>routeProfileForBuilding</code> and the mass_driver suite.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/routes.ts src/routes.test.ts
+git commit -m "feat(routes): per-tier route profiles + sourceBuildingId field
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: <code>createRouteFromBuilding</code> — pure route constructor</h2></div>
+      <div class="task-card">
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/routes.ts</code> (add helper near <code>transitTimeForDistance</code>, ~line 757)</li>
+            <li>Test: <code>src/routes.test.ts</code></li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing test</div>
+          <p class="step-text">Append to <code>src/routes.test.ts</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>describe('createRouteFromBuilding', () =&gt; {
+  it('builds an airship route from an Airship Dock', () =&gt; {
+    const b = { id: 'ad-1', defId: 'airship_dock' as const, x: 0, y: 0 };
+    const route = createRouteFromBuilding(b, 'a', 'b', 'iron_ore', 100);
+    expect(route).not.toBeNull();
+    expect(route!.type).toBe('airship');
+    expect(route!.capacityPerSec).toBe(2.0);
+    expect(route!.transitTimeSec).toBeCloseTo(25, 9); // 100 tiles / 4 t/s
+    expect(route!.sourceBuildingId).toBe('ad-1');
+    expect(route!.from).toBe('a');
+    expect(route!.to).toBe('b');
+    expect(route!.filter).toBe('iron_ore');
+    expect(route!.priorityList).toEqual([]);
+    expect(route!.inFlight).toEqual([]);
+  });
+  it('builds an instant teleporter route (transitTimeSec 0)', () =&gt; {
+    const b = { id: 'tp-1', defId: 'teleporter_pad' as const, x: 0, y: 0 };
+    const route = createRouteFromBuilding(b, 'a', 'b', null, 100);
+    expect(route!.type).toBe('teleporter');
+    expect(route!.transitTimeSec).toBe(0);
+    expect(route!.filter).toBeNull();
+  });
+  it('returns null for a non-transport building', () =&gt; {
+    const b = { id: 'lg-1', defId: 'logger' as const, x: 0, y: 0 };
+    expect(createRouteFromBuilding(b, 'a', 'b', null, 100)).toBeNull();
+  });
+});</pre></div>
+        </div>
+          <p class="step-text">Add <code>createRouteFromBuilding</code> to the <code>import { ... } from './routes.js';</code> block.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run test to verify it fails</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/routes.test.ts -t createRouteFromBuilding</code> Expected: FAIL — <code>createRouteFromBuilding is not a function</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Implement the helper</div>
+          <p class="step-text">In <code>src/routes.ts</code>, add a type-only import:</p>
+        <div class="code-block">
+          <div class="code"><pre>import type { PlacedBuilding } from './buildings.js';</pre></div>
+        </div>
+          <p class="step-text">Add the helper near <code>transitTimeForDistance</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>/** Construct a route hosted by `building`. The building's def fixes the
+ *  route tier (type, capacity, transit speed); `transitTimeSec` is derived
+ *  from `distanceTiles`. Returns null if `building` is not a transport
+ *  building. The route is created idle (no in-flight cargo, empty priority
+ *  list). */
+export function createRouteFromBuilding(
+  building: PlacedBuilding,
+  fromIslandId: string,
+  toIslandId: string,
+  filter: ResourceId | null,
+  distanceTiles: number,
+): Route | null {
+  const profile = routeProfileForBuilding(building.defId);
+  if (profile === null) return null;
+  return {
+    id: nextRouteId(),
+    from: fromIslandId,
+    to: toIslandId,
+    type: profile.type,
+    capacityPerSec: profile.capacityPerSec,
+    filter,
+    priorityList: [],
+    transitTimeSec: transitTimeForDistance(distanceTiles, profile.speedTilesPerSec),
+    inFlight: [],
+    sourceBuildingId: building.id,
+  };
+}</pre></div>
+        </div>
+          <p class="step-text">(<code>transitTimeForDistance</code> already returns 0 when <code>speedTilesPerSec &lt;= 0</code>, so the teleporter case needs no special handling.)</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run tests to verify they pass</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/routes.test.ts -t createRouteFromBuilding</code> Expected: PASS — all three cases.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/routes.ts src/routes.test.ts
+git commit -m "feat(routes): createRouteFromBuilding pure constructor
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Task 3: form-gating helpers — <code>eligibleTransportBuildings</code>, <code>islandHasTeleporterPad</code></h2></div>
+      <div class="task-card">
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/routes.ts</code> (add helpers near <code>createRouteFromBuilding</code>)</li>
+            <li>Test: <code>src/routes.test.ts</code></li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing test</div>
+          <p class="step-text">Append to <code>src/routes.test.ts</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>describe('eligibleTransportBuildings', () =&gt; {
+  it('lists free transport buildings, excluding non-transport and taken', () =&gt; {
+    const island = makeIslandSpec('a', 0, 0);
+    island.buildings = [
+      { id: 'd1', defId: 'dock', x: 0, y: 0 },
+      { id: 'd2', defId: 'dock', x: 1, y: 0 },
+      { id: 'lg', defId: 'logger', x: 2, y: 0 },
+    ];
+    const taken = cargoRoute('a', 'b', 'iron_ore');
+    taken.sourceBuildingId = 'd1';
+    const eligible = eligibleTransportBuildings(island, [taken]);
+    expect(eligible.map((b) =&gt; b.id)).toEqual(['d2']);
+  });
+  it('returns all transport buildings when no routes exist', () =&gt; {
+    const island = makeIslandSpec('a', 0, 0);
+    island.buildings = [{ id: 'ad', defId: 'airship_dock', x: 0, y: 0 }];
+    expect(eligibleTransportBuildings(island, []).map((b) =&gt; b.id)).toEqual(['ad']);
+  });
+});
+
+describe('islandHasTeleporterPad', () =&gt; {
+  it('is true only when a teleporter_pad is present', () =&gt; {
+    const island = makeIslandSpec('a', 0, 0);
+    expect(islandHasTeleporterPad(island)).toBe(false);
+    island.buildings = [{ id: 't', defId: 'teleporter_pad', x: 0, y: 0 }];
+    expect(islandHasTeleporterPad(island)).toBe(true);
+  });
+});</pre></div>
+        </div>
+          <p class="step-text">Add <code>eligibleTransportBuildings</code> and <code>islandHasTeleporterPad</code> to the <code>import { ... } from './routes.js';</code> block.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run test to verify it fails</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/routes.test.ts -t eligibleTransportBuildings</code> Expected: FAIL — <code>eligibleTransportBuildings is not a function</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Implement the helpers</div>
+          <p class="step-text">In <code>src/routes.ts</code>, add <code>IslandSpec</code> to the existing world import:</p>
+        <div class="code-block">
+          <div class="code"><pre>import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';</pre></div>
+        </div>
+          <p class="step-text">Add the helpers:</p>
+        <div class="code-block">
+          <div class="code"><pre>/** Transport buildings on `island` that can host a NEW route — they have a
+ *  route profile and don't already own a route in `routes`. */
+export function eligibleTransportBuildings(
+  island: IslandSpec,
+  routes: ReadonlyArray&lt;Route&gt;,
+): PlacedBuilding[] {
+  const taken = new Set&lt;string&gt;();
+  for (const r of routes) {
+    if (r.sourceBuildingId !== undefined) taken.add(r.sourceBuildingId);
+  }
+  return island.buildings.filter(
+    (b) =&gt; routeProfileForBuilding(b.defId) !== null &amp;&amp; !taken.has(b.id),
+  );
+}
+
+/** Whether `island` has a Teleporter Pad — the destination-side gate for a
+ *  `teleporter` route. */
+export function islandHasTeleporterPad(island: IslandSpec): boolean {
+  return island.buildings.some((b) =&gt; b.defId === 'teleporter_pad');
+}</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run tests to verify they pass</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/routes.test.ts -t "eligibleTransportBuildings|islandHasTeleporterPad"</code> Expected: PASS.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/routes.ts src/routes.test.ts
+git commit -m "feat(routes): eligibleTransportBuildings + islandHasTeleporterPad gates
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Task 4: <code>drainRoutesForBuilding</code> — demolish coupling helper</h2></div>
+      <div class="task-card">
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/routes.ts</code> (add helper near <code>drainRoutesForBuilding</code> siblings)</li>
+            <li>Test: <code>src/routes.test.ts</code></li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing test</div>
+          <p class="step-text">Append to <code>src/routes.test.ts</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>describe('drainRoutesForBuilding', () =&gt; {
+  it('marks routes owned by the building as draining', () =&gt; {
+    const r1 = cargoRoute('a', 'b', 'iron_ore'); r1.sourceBuildingId = 'b1';
+    const r2 = cargoRoute('a', 'b', 'coal');     r2.sourceBuildingId = 'b2';
+    const world = makeWorld([r1, r2]);
+    const n = drainRoutesForBuilding(world, 'b1');
+    expect(n).toBe(1);
+    expect(r1.draining).toBe(true);
+    expect(r2.draining).toBeUndefined();
+  });
+  it('returns 0 when no route is owned by the building', () =&gt; {
+    const r1 = cargoRoute('a', 'b', 'iron_ore'); r1.sourceBuildingId = 'b1';
+    const world = makeWorld([r1]);
+    expect(drainRoutesForBuilding(world, 'nope')).toBe(0);
+    expect(r1.draining).toBeUndefined();
+  });
+});</pre></div>
+        </div>
+          <p class="step-text">Add <code>drainRoutesForBuilding</code> to the <code>import { ... } from './routes.js';</code> block.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run test to verify it fails</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/routes.test.ts -t drainRoutesForBuilding</code> Expected: FAIL — <code>drainRoutesForBuilding is not a function</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Implement the helper</div>
+          <p class="step-text">In <code>src/routes.ts</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>/** Soft-delete every route owned by `buildingId` (set on demolish). The
+ *  routes finish their in-flight cargo, then `tickRoutes` prunes them.
+ *  Returns the number of routes newly set to draining. */
+export function drainRoutesForBuilding(world: WorldState, buildingId: string): number {
+  let n = 0;
+  for (const r of world.routes) {
+    if (r.sourceBuildingId === buildingId &amp;&amp; r.draining !== true) {
+      r.draining = true;
+      n += 1;
+    }
+  }
+  return n;
+}</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run tests to verify they pass</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/routes.test.ts -t drainRoutesForBuilding</code> Expected: PASS — both cases.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Run the full suite</div>
+          <p class="step-text cmd">Run: <code>npx vitest run</code> Expected: PASS — all test files (no regressions).</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/routes.ts src/routes.test.ts
+git commit -m "feat(routes): drainRoutesForBuilding for demolish coupling
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Task 5: route form — building sub-select (routes-ui.ts)</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Render-layer task — no unit test; verified by build + live browser check.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/routes-ui.ts</code> (imports ~line 26-33; form DOM ~line 289-309; <code>buildOptions</code> ~line 447; <code>refreshFormReadout</code> ~line 489; <code>commissionRoute</code> ~line 512)</li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Update imports</div>
+          <p class="step-text">In <code>src/routes-ui.ts</code>, replace the <code>import { ... } from './routes.js';</code> block with:</p>
+        <div class="code-block">
+          <div class="code"><pre>import {
+  reorderPriorityList,
+  transitTimeForDistance,
+  routeProfileForBuilding,
+  createRouteFromBuilding,
+  eligibleTransportBuildings,
+  islandHasTeleporterPad,
+  type Route,
+} from './routes.js';</pre></div>
+        </div>
+          <p class="step-text">(<code>nextRouteId</code> and <code>T1_CARGO_CAPACITY_UNITS_PER_SEC</code> are dropped — they are no longer used once <code>commissionRoute</code>/<code>refreshFormReadout</code> below switch to the profile helpers. <code>strict</code> + <code>noUnusedLocals</code> will flag them if left.)</p>
+          <p class="step-text">Add an import for the building catalog:</p>
+        <div class="code-block">
+          <div class="code"><pre>import { BUILDING_DEFS } from './building-defs.js';</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Add the building sub-select to the form</div>
+          <p class="step-text">In <code>src/routes-ui.ts</code>, immediately after the <code>fromRow</code> block (after <code>fromRow.appendChild(fromSel);</code>), add:</p>
+        <div class="code-block">
+          <div class="code"><pre>  const buildingRow = document.createElement('div');
+  styled(buildingRow, 'display: flex; flex-direction: column; gap: 2px');
+  const buildingSel = selectStyled();
+  buildingRow.appendChild(labelEl('VIA BUILDING'));
+  buildingRow.appendChild(buildingSel);</pre></div>
+        </div>
+          <p class="step-text">Change the <code>formWrap.appendChild</code> sequence so <code>buildingRow</code> sits between <code>fromRow</code> and <code>toRow</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>  formWrap.appendChild(fromRow);
+  formWrap.appendChild(buildingRow);
+  formWrap.appendChild(toRow);
+  formWrap.appendChild(cargoRow);</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Populate the building select</div>
+          <p class="step-text">In <code>src/routes-ui.ts</code>, add this function next to <code>buildOptions</code> (after it):</p>
+        <div class="code-block">
+          <div class="code"><pre>  /** Rebuild the VIA BUILDING select for the currently-selected FROM
+   *  island — transport buildings that don't already own a route. */
+  function buildBuildingOptions(): void {
+    const island = deps.islandSpecs.get(fromSel.value);
+    buildingSel.replaceChildren();
+    const eligible = island
+      ? eligibleTransportBuildings(island, deps.world.routes)
+      : [];
+    if (eligible.length === 0) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = '(no transport building free)';
+      buildingSel.appendChild(o);
+      buildingSel.disabled = true;
+      return;
+    }
+    buildingSel.disabled = false;
+    for (const b of eligible) {
+      const profile = routeProfileForBuilding(b.defId)!;
+      const o = document.createElement('option');
+      o.value = b.id;
+      o.textContent =
+        `${BUILDING_DEFS[b.defId].displayName} · ${profile.type} · ${profile.capacityPerSec} u/s`;
+      buildingSel.appendChild(o);
+    }
+  }</pre></div>
+        </div>
+          <p class="step-text">At the end of <code>buildOptions()</code> (after the cargo options are built), add a call:</p>
+        <div class="code-block">
+          <div class="code"><pre>    buildBuildingOptions();</pre></div>
+        </div>
+          <p class="step-text">Change the <code>fromSel</code> change listener so it also rebuilds the building list. Replace:</p>
+        <div class="code-block">
+          <div class="code"><pre>  fromSel.addEventListener('change', () =&gt; refreshFormReadout());</pre></div>
+        </div>
+          <p class="step-text">with:</p>
+        <div class="code-block">
+          <div class="code"><pre>  fromSel.addEventListener('change', () =&gt; {
+    buildBuildingOptions();
+    refreshFormReadout();
+  });
+  buildingSel.addEventListener('change', () =&gt; refreshFormReadout());</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Replace <code>refreshFormReadout</code></div>
+          <p class="step-text">Replace the whole <code>refreshFormReadout</code> function body with:</p>
+        <div class="code-block">
+          <div class="code"><pre>  function refreshFormReadout(): void {
+    const fromId = fromSel.value;
+    const toId = toSel.value;
+    const spec1 = deps.islandSpecs.get(fromId);
+    const spec2 = deps.islandSpecs.get(toId);
+    const building = spec1?.buildings.find((b) =&gt; b.id === buildingSel.value) ?? null;
+    const profile = building ? routeProfileForBuilding(building.defId) : null;
+    const reject = (msg: string): void =&gt; {
+      formReadout.textContent = msg;
+      commitBtn.disabled = true;
+      commitBtn.style.opacity = '0.5';
+      commitBtn.style.cursor = 'not-allowed';
+    };
+    if (!spec1 || !spec2) return reject('');
+    if (fromId === toId) return reject('pick distinct endpoints');
+    if (!building || !profile) return reject('no transport building available');
+    if (profile.type === 'teleporter' &amp;&amp; !islandHasTeleporterPad(spec2)) {
+      return reject('teleporter needs a pad on the destination');
+    }
+    const dx = spec1.cx - spec2.cx;
+    const dy = spec1.cy - spec2.cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const transit = transitTimeForDistance(dist, profile.speedTilesPerSec);
+    formReadout.textContent =
+      `${dist.toFixed(0)} t · ETA ${transit.toFixed(1)}s · ${profile.capacityPerSec} u/s`;
+    commitBtn.disabled = false;
+    commitBtn.style.opacity = '1';
+    commitBtn.style.cursor = 'pointer';
+  }</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Replace <code>commissionRoute</code></div>
+          <p class="step-text">Replace the whole <code>commissionRoute</code> function body with:</p>
+        <div class="code-block">
+          <div class="code"><pre>  function commissionRoute(): void {
+    const fromId = fromSel.value;
+    const toId = toSel.value;
+    const cargoChoice = cargoSel.value;
+    const spec1 = deps.islandSpecs.get(fromId);
+    const spec2 = deps.islandSpecs.get(toId);
+    if (!spec1 || !spec2 || fromId === toId) return;
+    const building = spec1.buildings.find((b) =&gt; b.id === buildingSel.value);
+    if (!building) return;
+    const profile = routeProfileForBuilding(building.defId);
+    if (!profile) return;
+    if (profile.type === 'teleporter' &amp;&amp; !islandHasTeleporterPad(spec2)) return;
+    const dx = spec1.cx - spec2.cx;
+    const dy = spec1.cy - spec2.cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const isAny = cargoChoice === '__any__';
+    const route = createRouteFromBuilding(
+      building, fromId, toId, isAny ? null : (cargoChoice as ResourceId), dist,
+    );
+    if (!route) return;
+    deps.world.routes.push(route);
+    refresh(performance.now());
+  }</pre></div>
+        </div>
+          <p class="step-text">(<code>ResourceId</code> is already imported in <code>routes-ui.ts</code>.)</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Build</div>
+          <p class="step-text cmd">Run: <code>npm run build</code> Expected: <code>tsc -b</code> clean (no unused-import errors), <code>vite build</code> succeeds.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Live verification</div>
+          <p class="step-text">Run a dev rebuild is already done by Step 6. Reload <code>https://islands.nitjsefni.eu/</code> (daedalus tab), open the routes panel (press <code>R</code>), and confirm in the NEW ROUTE form:</p>
+          <ul class="bullets">
+            <li>A <code>VIA BUILDING</code> select appears between FROM and TO.</li>
+            <li>Selecting a FROM island repopulates it with that island's transport buildings (or <code>(no transport building free)</code>).</li>
+            <li>The readout shows the selected tier's capacity; committing creates a route of that tier (check the ledger row's <code>u/s</code>).</li>
+            <li>With no transport building on the FROM island, the commit button is disabled.</li>
+          </ul>
+          <p class="step-text">Use <code>mcp__daedalus__screenshot</code> against the islands tab to confirm.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/routes-ui.ts
+git commit -m "feat(routes): route form gates on transport building tier
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Task 6: active ledger — island filter (routes-ui.ts)</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Render-layer task — verified by build + live browser check.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/routes-ui.ts</code> (ledger header DOM ~line 359-408; <code>repaintLedger</code> ~line 559; <code>buildOptions</code> ~line 447)</li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add the filter select to the ledger header</div>
+          <p class="step-text">In <code>src/routes-ui.ts</code>, immediately after the <code>ledgerHead</code> block is appended (after <code>ledgerWrap.appendChild(ledgerHead);</code>), add:</p>
+        <div class="code-block">
+          <div class="code"><pre>  const ledgerFilterSel = selectStyled();
+  styled(ledgerFilterSel, 'font-size: 10px; padding: 2px 5px; margin: 2px 0 4px');
+  ledgerWrap.appendChild(ledgerFilterSel);</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Populate the filter select</div>
+          <p class="step-text">Add this function next to <code>buildBuildingOptions</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>  /** Rebuild the ledger island-filter select: "All islands" + each
+   *  populated island by name. Preserves the current selection. */
+  function buildLedgerFilterOptions(): void {
+    const prev = ledgerFilterSel.value;
+    ledgerFilterSel.replaceChildren();
+    const all = document.createElement('option');
+    all.value = '';
+    all.textContent = 'All islands';
+    ledgerFilterSel.appendChild(all);
+    for (const isl of populatedIslands()) {
+      const o = document.createElement('option');
+      o.value = isl.id;
+      o.textContent = isl.name;
+      ledgerFilterSel.appendChild(o);
+    }
+    if (prev &amp;&amp; populatedIslands().some((s) =&gt; s.id === prev)) {
+      ledgerFilterSel.value = prev;
+    }
+  }</pre></div>
+        </div>
+          <p class="step-text">At the end of <code>buildOptions()</code> (right after the <code>buildBuildingOptions();</code> call added in Task 5), add:</p>
+        <div class="code-block">
+          <div class="code"><pre>    buildLedgerFilterOptions();</pre></div>
+        </div>
+          <p class="step-text">Add a change listener after the select is created:</p>
+        <div class="code-block">
+          <div class="code"><pre>  ledgerFilterSel.addEventListener('change', () =&gt; repaintLedger(performance.now()));</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Filter rows in <code>repaintLedger</code></div>
+          <p class="step-text">In <code>repaintLedger</code>, replace the line:</p>
+        <div class="code-block">
+          <div class="code"><pre>    const routes = deps.world.routes;</pre></div>
+        </div>
+          <p class="step-text">with:</p>
+        <div class="code-block">
+          <div class="code"><pre>    const filterId = ledgerFilterSel.value;
+    const routes = filterId === ''
+      ? deps.world.routes
+      : deps.world.routes.filter((r) =&gt; r.from === filterId);</pre></div>
+        </div>
+          <p class="step-text">In the same function, change the structural signature line so the filter is part of it (so switching the filter rebuilds the rows):</p>
+        <div class="code-block">
+          <div class="code"><pre>    const sig = filterId + '\u001e' + routes.map(routeStructKey).join('\u001e');</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Build</div>
+          <p class="step-text cmd">Run: <code>npm run build</code> Expected: clean.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Live verification</div>
+          <p class="step-text">Reload <code>https://islands.nitjsefni.eu/</code>, open the routes panel. Confirm a dropdown sits above the ACTIVE list, defaulting to "All islands"; selecting an island narrows the ledger to routes whose source is that island; switching back to "All islands" restores the full list. Screenshot via daedalus.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/routes-ui.ts
+git commit -m "feat(routes): island filter on the active route ledger
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Task 7: demolish drains the building's route (main.ts)</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Integration task — verified by build + live browser check.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/main.ts</code> (routes import ~line 100; <code>onDemolish</code> handler ~line 1217)</li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Update the routes import</div>
+          <p class="step-text">In <code>src/main.ts</code>, change:</p>
+        <div class="code-block">
+          <div class="code"><pre>import { computeCableNetworkBalance, tickRoutes } from './routes.js';</pre></div>
+        </div>
+          <p class="step-text">to:</p>
+        <div class="code-block">
+          <div class="code"><pre>import { computeCableNetworkBalance, drainRoutesForBuilding, tickRoutes } from './routes.js';</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Drain the route on demolish</div>
+          <p class="step-text">In the <code>onDemolish</code> handler, add the drain call right after the success guard. Change:</p>
+        <div class="code-block">
+          <div class="code"><pre>    onDemolish: (target: InspectorTarget) =&gt; {
+      const result = demolishBuilding(target.spec, target.state, target.building.id);
+      if (!result.ok) return;</pre></div>
+        </div>
+          <p class="step-text">to:</p>
+        <div class="code-block">
+          <div class="code"><pre>    onDemolish: (target: InspectorTarget) =&gt; {
+      const result = demolishBuilding(target.spec, target.state, target.building.id);
+      if (!result.ok) return;
+      // A transport building's route drains when the building is removed —
+      // in-flight cargo finishes, then tickRoutes prunes it.
+      drainRoutesForBuilding(worldState, target.building.id);</pre></div>
+        </div>
+          <p class="step-text">(The rest of the handler — inspector close, selection clear, layer rebuild — is unchanged.)</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Build</div>
+          <p class="step-text cmd">Run: <code>npm run build</code> Expected: clean.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Live verification</div>
+          <p class="step-text">Reload <code>https://islands.nitjsefni.eu/</code>. Create a route from a transport building, then demolish that building via the inspector's DEMOLISH button. Confirm the route's ledger row shows <code>DRAINING</code> and is removed once its in-flight cargo lands (instantly if it had none). Screenshot via daedalus.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Run the full suite</div>
+          <p class="step-text cmd">Run: <code>npx vitest run</code> Expected: PASS — all test files.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/main.ts
+git commit -m "feat(routes): demolishing a transport building drains its route
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">09</span><h2>Notes for the implementer</h2></div>
+      <div class="notes">
+        <div class="note">The <code>Co-Authored-By</code> trailer on every commit must name the model that actually authored it (e.g. <code>Kimi K2.6 &lt;noreply@kimi.com&gt;</code> for a kimi subagent). One primary-author trailer per commit.</div>
+        <div class="note">The dev service serves built <code>dist/</code> with no HMR — every live verification needs <code>npm run build</code> first, then a manual browser reload. Do <strong>not</strong> restart <code>robot-islands-dev.service</code>.</div>
+        <div class="note">Tasks 1-4 are pure and fully unit-tested. Tasks 5-7 are render/integration layer: their correctness is confirmed by <code>npm run build</code> + a daedalus screenshot, per the repo's pure-layer-only test discipline.</div>
+        <div class="note"><code>settlement.ts</code>'s three <code>cargo</code> route constructors are intentionally left alone — settled-colony routes stay legacy (no <code>sourceBuildingId</code>), grandfathered. That is out of scope per the spec.</div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands implementation plan &middot; rendered 2026-05-22 &middot; source: 2026-05-22-route-tiers.md
+    </footer>
+
+  </div>
+</body>
+</html>

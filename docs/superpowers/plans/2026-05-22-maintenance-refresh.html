@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manual maintenance-refresh — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #252420;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: #1B1A17;
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    /* ---------- header ---------- */
+
+    header.page-head { margin-bottom: 48px; max-width: 860px; }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.15;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .prompt-box {
+      background: var(--gray-150);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+    .prompt-box .meta-line { margin-top: 8px; }
+    .prompt-box code { font-family: var(--mono); font-size: 13px; color: var(--slate); }
+
+    /* ---------- callout ---------- */
+
+    .callout {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--clay);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 48px;
+      max-width: 860px;
+    }
+    .callout code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    /* ---------- section chrome ---------- */
+
+    section { margin-bottom: 56px; }
+
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 760px;
+      margin-bottom: 28px;
+    }
+    .sec-intro code { font-family: var(--mono); font-size: 13px; color: var(--slate); }
+
+    /* ---------- summary strip ---------- */
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v {
+      font-size: 17px;
+      color: var(--slate);
+      font-weight: 600;
+    }
+    .summary .v.accent { color: var(--clay); }
+
+    /* ---------- file-structure table ---------- */
+
+    .filetable {
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--white);
+    }
+    .filetable .row {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 0;
+    }
+    @media (max-width: 780px) { .filetable .row { grid-template-columns: 1fr; } }
+    .filetable .row + .row { border-top: 1.5px solid var(--gray-300); }
+    .filetable .cell { padding: 13px 18px; font-size: 13.5px; }
+    .filetable .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+    @media (max-width: 780px) {
+      .filetable .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .filetable .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .filetable .cell code { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .filetable .cell.desc code { color: var(--slate); }
+
+    /* ---------- task card ---------- */
+
+    .task-card {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 24px 26px;
+    }
+    .task-blurb {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 16px;
+      max-width: 760px;
+    }
+    .task-blurb code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    .files-block {
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 22px;
+    }
+    .files-block .ft {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .files-block ul { list-style: none; }
+    .files-block li {
+      font-size: 13px;
+      color: var(--gray-700);
+      padding: 2px 0;
+    }
+    .files-block li code { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .files-block li .tag {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--gray-500);
+    }
+
+    /* ---------- steps ---------- */
+
+    .steps { display: flex; flex-direction: column; gap: 18px; }
+    .step {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 0 12px;
+    }
+    .step .box {
+      width: 16px; height: 16px;
+      border: 1.5px solid var(--clay);
+      border-radius: 4px;
+      margin-top: 3px;
+    }
+    .step .step-body { min-width: 0; }
+    .step .step-title {
+      font-weight: 600;
+      font-size: 14.5px;
+      color: var(--slate);
+      margin-bottom: 6px;
+    }
+    .step .step-text {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    .step .step-text:last-child { margin-bottom: 0; }
+    .step .step-text code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .step .step-text.cmd code { color: var(--olive); }
+
+    .step ul.bullets { list-style: none; margin: 0 0 10px; }
+    .step ul.bullets li {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      padding: 2px 0 2px 16px;
+      position: relative;
+    }
+    .step ul.bullets li::before {
+      content: '–';
+      position: absolute;
+      left: 0;
+      color: var(--clay);
+    }
+    .step ul.bullets li code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+
+    /* ---------- code panel ---------- */
+
+    .code-block { margin: 4px 0 12px; }
+    .code-block .file-label {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .code {
+      background: #121110;
+      border: 1px solid var(--gray-300);
+      border-radius: 10px;
+      padding: 16px 18px;
+      overflow-x: auto;
+    }
+    .code pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #F5F3EC;
+      white-space: pre;
+    }
+
+    /* ---------- notes ---------- */
+
+    .notes { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+    .note {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--olive);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      color: var(--gray-500);
+    }
+    .note code { font-family: var(--mono); font-size: 12.5px; color: var(--slate); }
+    .note strong { color: var(--slate); font-weight: 600; }
+
+    footer.page-foot {
+      margin-top: 64px;
+      padding-top: 20px;
+      border-top: 1.5px solid var(--gray-300);
+      font-size: 12px;
+      color: var(--gray-500);
+      font-family: var(--mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Manual maintenance-refresh — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Give the player a one-click "maintenance refresh" on a building — pay half the building's placement-cost materials to snap its §4.7 maintenance state back to pristine.</div>
+        <div class="meta-line"><strong>Architecture:</strong> Two pure helpers in <code>maintenance.ts</code> (<code>refreshCostFor</code>, <code>tryRefreshMaintenance</code>) carry all the logic — affordability, half-cost deduction, state reset — fully unit-tested. <code>inspector-ui.ts</code> only wires a REFRESH button (in the footer, above DEMOLISH) to <code>tryRefreshMaintenance</code>. No change to <code>placement.ts</code>, <code>economy.ts</code>, <code>persistence.ts</code>, or <code>main.ts</code>.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict), Vite 5, PixiJS 8, vitest. Pure layer is unit-tested; render layer is verified by clean build + a daedalus live check.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-22-maintenance-refresh-design.md</code></div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">3</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">3</div></div>
+      <div class="cell"><div class="k">New test suites</div><div class="v">2</div></div>
+      <div class="cell"><div class="k">Layer</div><div class="v">pure + render</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">Every file the plan touches, and the nature of the change. Read this before starting any task.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/maintenance.ts</code></div><div class="cell desc">Add <code>refreshCostFor</code> and <code>tryRefreshMaintenance</code>; add a value import of <code>affordabilityShortfall</code> from <code>placement.ts</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/maintenance.test.ts</code></div><div class="cell desc">New tests for both helpers.</div></div>
+        <div class="row"><div class="cell"><code>src/inspector-ui.ts</code></div><div class="cell desc">A REFRESH button in <code>footerSection</code> above <code>demolishBtn</code>, its click handler, and its paint logic in the maintenance-section paint pass.</div></div>
+      </div>
+      <p class="sec-intro" style="margin-top:18px;margin-bottom:0"><code>placement.ts</code> / <code>economy.ts</code> / <code>persistence.ts</code> / <code>main.ts</code> are <strong>not</strong> touched. <code>operatingMs</code> and <code>maintainedAt</code> are already persisted fields, so a refresh that mutates them needs no persistence change.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: <code>refreshCostFor</code> — the half-cost basket helper</h2></div>
+      <div class="task-card">
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/maintenance.ts</code> (add helper near <code>maintenanceRecipeFor</code>)</li>
+            <li>Test: <code>src/maintenance.test.ts</code></li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing test</div>
+          <p class="step-text">Append to <code>src/maintenance.test.ts</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>describe('refreshCostFor', () =&gt; {
+  it('halves each placement-cost resource, floored', () =&gt; {
+    const def = { placementCost: { stone: 60, wood: 30, iron_ingot: 20 } } as BuildingDef;
+    expect(refreshCostFor(def)).toEqual({ stone: 30, wood: 15, iron_ingot: 10 });
+  });
+  it('drops a resource whose half rounds to 0', () =&gt; {
+    const def = { placementCost: { stone: 7, wood: 1 } } as BuildingDef;
+    expect(refreshCostFor(def)).toEqual({ stone: 3 });
+  });
+  it('returns {} for a def with no placementCost', () =&gt; {
+    expect(refreshCostFor({} as BuildingDef)).toEqual({});
+  });
+});</pre></div>
+        </div>
+          <p class="step-text">In <code>src/maintenance.test.ts</code>, the import from <code>./building-defs.js</code> currently pulls only <code>BUILDING_DEFS</code>. Extend it to also import the type:</p>
+        <div class="code-block">
+          <div class="code"><pre>import { BUILDING_DEFS, type BuildingDef } from './building-defs.js';</pre></div>
+        </div>
+          <p class="step-text">Add <code>refreshCostFor</code> to the import from <code>./maintenance.js</code> (the test file's existing <code>import { ... } from './maintenance.js'</code> block).</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run test to verify it fails</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/maintenance.test.ts -t refreshCostFor</code> Expected: FAIL — <code>refreshCostFor is not a function</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Implement the helper</div>
+          <p class="step-text">In <code>src/maintenance.ts</code>, add (after <code>maintenanceRecipeFor</code>, before <code>tryAutoMaintain</code>):</p>
+        <div class="code-block">
+          <div class="code"><pre>/** The 50%-of-placement-cost basket for a manual maintenance refresh.
+ *  Math.floor per-resource (matching demolishBuilding's refund rounding);
+ *  entries whose half rounds to 0 are dropped. Empty record when the def
+ *  has no placementCost. */
+export function refreshCostFor(def: BuildingDef): Partial&lt;Record&lt;ResourceId, number&gt;&gt; {
+  const out: Partial&lt;Record&lt;ResourceId, number&gt;&gt; = {};
+  for (const [r, n] of Object.entries(def.placementCost ?? {}) as Array&lt;[ResourceId, number]&gt;) {
+    const half = Math.floor(n / 2);
+    if (half &lt;= 0) continue;
+    out[r] = half;
+  }
+  return out;
+}</pre></div>
+        </div>
+          <p class="step-text"><code>BuildingDef</code> and <code>ResourceId</code> are already imported as types in <code>maintenance.ts</code> — no new import needed for this task.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run test to verify it passes</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/maintenance.test.ts -t refreshCostFor</code> Expected: PASS — all three cases.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/maintenance.ts src/maintenance.test.ts
+git commit -m "feat(maintenance): refreshCostFor — 50% placement-cost basket
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: <code>tryRefreshMaintenance</code> — the refresh action</h2></div>
+      <div class="task-card">
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/maintenance.ts</code> (add helper after <code>tryAutoMaintain</code>; add a value import)</li>
+            <li>Test: <code>src/maintenance.test.ts</code></li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing test</div>
+          <p class="step-text">Append to <code>src/maintenance.test.ts</code>. These use the file's existing <code>mkBuilding(defId, operatingMs)</code> and <code>blankInventory()</code> helpers, the real <code>BUILDING_DEFS.heavy_logger</code> (tier 2, <code>placementCost { stone: 60, wood: 30, iron_ingot: 20 }</code> → refresh cost <code>{ stone: 30, wood: 15, iron_ingot: 10 }</code>), and <code>MAINTENANCE_THRESHOLD_MS_BY_TIER</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>describe('tryRefreshMaintenance', () =&gt; {
+  const T2_THRESHOLD = MAINTENANCE_THRESHOLD_MS_BY_TIER[2];
+  const HEAVY = BUILDING_DEFS.heavy_logger;
+
+  function stockedInventory(): Record&lt;ResourceId, number&gt; {
+    const inv = blankInventory();
+    inv.stone = 100;
+    inv.wood = 100;
+    inv.iron_ingot = 100;
+    return inv;
+  }
+
+  it('refreshes a degraded building: deducts half cost, resets operatingMs', () =&gt; {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    const inv = stockedInventory();
+    const ok = tryRefreshMaintenance(b, HEAVY, inv, 5000);
+    expect(ok).toBe(true);
+    expect(inv.stone).toBe(70);
+    expect(inv.wood).toBe(85);
+    expect(inv.iron_ingot).toBe(90);
+    expect(b.operatingMs).toBe(0);
+    expect(b.maintainedAt).toBe(5000);
+    expect(b.placedAt).toBe(0);
+  });
+
+  it('refuses a pristine building (operatingMs below threshold), mutates nothing', () =&gt; {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD - HOUR);
+    const inv = stockedInventory();
+    expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
+    expect(inv.stone).toBe(100);
+    expect(b.operatingMs).toBe(T2_THRESHOLD - HOUR);
+  });
+
+  it('refuses an Eternal Servitor, mutates nothing', () =&gt; {
+    const b = { ...mkBuilding('heavy_logger', T2_THRESHOLD + HOUR), eternalServitor: true };
+    const inv = stockedInventory();
+    expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
+    expect(inv.stone).toBe(100);
+  });
+
+  it('refuses a def with no placementCost (free refresh disallowed)', () =&gt; {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    const def = { tier: 2 } as BuildingDef;
+    const inv = stockedInventory();
+    expect(tryRefreshMaintenance(b, def, inv, 5000)).toBe(false);
+    expect(inv.stone).toBe(100);
+  });
+
+  it('refuses and mutates nothing when inventory is short on any one resource', () =&gt; {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    const inv = stockedInventory();
+    inv.iron_ingot = 5; // need 10
+    expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
+    expect(inv.stone).toBe(100); // atomicity — nothing consumed
+    expect(inv.wood).toBe(100);
+    expect(b.operatingMs).toBe(T2_THRESHOLD + HOUR);
+  });
+
+  it('honours thresholdMul — a building past base but below scaled threshold is pristine', () =&gt; {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    const inv = stockedInventory();
+    expect(tryRefreshMaintenance(b, HEAVY, inv, 5000, 2)).toBe(false);
+    expect(inv.stone).toBe(100);
+  });
+
+  it('result matches tryAutoMaintain — both leave factor 1.0', () =&gt; {
+    const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
+    tryRefreshMaintenance(b, HEAVY, stockedInventory(), 5000);
+    expect(maintenanceFactor(b, HEAVY)).toBe(1.0);
+  });
+});</pre></div>
+        </div>
+          <p class="step-text">Add <code>tryRefreshMaintenance</code> to the test file's <code>import { ... } from './maintenance.js'</code> block. (<code>maintenanceFactor</code>, <code>MAINTENANCE_THRESHOLD_MS_BY_TIER</code>, <code>HOUR</code>, <code>mkBuilding</code>, <code>blankInventory</code> are already available in the file.)</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run test to verify it fails</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/maintenance.test.ts -t tryRefreshMaintenance</code> Expected: FAIL — <code>tryRefreshMaintenance is not a function</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Implement the helper</div>
+          <p class="step-text">In <code>src/maintenance.ts</code>, add a value import near the top (the existing imports are all <code>import type</code>; this is the first value import):</p>
+        <div class="code-block">
+          <div class="code"><pre>import { affordabilityShortfall } from './placement.js';</pre></div>
+        </div>
+          <p class="step-text">(<code>placement.ts</code> imports nothing from <code>maintenance.ts</code>, so this one-directional edge creates no module cycle.)</p>
+          <p class="step-text">Add the helper after <code>tryAutoMaintain</code>:</p>
+        <div class="code-block">
+          <div class="code"><pre>/** Player-triggered maintenance refresh — a manual lump-sum alternative to
+ *  the automatic §4.7 supply loop. Consumes 50% of the building's placement
+ *  cost (`refreshCostFor`) from `inventory`, then resets the building to
+ *  pristine maintenance state (operatingMs = 0, maintainedAt = nowMs) —
+ *  exactly the reset `tryAutoMaintain` performs.
+ *
+ *  Atomic: every halved-cost input is checked present before any is
+ *  consumed. Returns false WITHOUT mutating anything when the refresh is not
+ *  allowed — Eternal Servitor, building already pristine
+ *  (maintenanceFactor &gt;= 1.0), empty placement cost (a free refresh is
+ *  disallowed), or inventory short on any halved-cost resource. */
+export function tryRefreshMaintenance(
+  b: PlacedBuilding,
+  def: BuildingDef,
+  inventory: Record&lt;ResourceId, number&gt;,
+  nowMs: number,
+  thresholdMul = 1,
+): boolean {
+  if (b.eternalServitor === true) return false;
+  if (maintenanceFactor(b, def, thresholdMul) &gt;= 1.0) return false;
+  const cost = refreshCostFor(def);
+  if (Object.keys(cost).length === 0) return false;
+  if (Object.keys(affordabilityShortfall(inventory, cost)).length &gt; 0) return false;
+  for (const [r, need] of Object.entries(cost) as Array&lt;[ResourceId, number]&gt;) {
+    inventory[r] = (inventory[r] ?? 0) - need;
+  }
+  (b as { operatingMs: number; maintainedAt: number }).operatingMs = 0;
+  (b as { operatingMs: number; maintainedAt: number }).maintainedAt = nowMs;
+  return true;
+}</pre></div>
+        </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run tests to verify they pass</div>
+          <p class="step-text cmd">Run: <code>npx vitest run src/maintenance.test.ts</code> Expected: PASS — all maintenance tests, including the new <code>tryRefreshMaintenance</code> block.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Run the full suite</div>
+          <p class="step-text cmd">Run: <code>npx vitest run</code> Expected: PASS — all test files, no regressions.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/maintenance.ts src/maintenance.test.ts
+git commit -m "feat(maintenance): tryRefreshMaintenance — player-triggered refresh
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Task 3: REFRESH button in the inspector footer (inspector-ui.ts)</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Render-layer task — no unit test; verified by clean build + a live browser check.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/inspector-ui.ts</code> (imports; a new <code>refreshBtn</code> before <code>demolishBtn</code> ~line 983; paint logic in the maintenance-section paint pass ~line 1357-1388)</li>
+          </ul>
+        </div>
+        <div class="steps">
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Update imports</div>
+          <p class="step-text">In <code>src/inspector-ui.ts</code>, the existing import from <code>./maintenance.js</code> pulls <code>maintenanceFactor</code> and <code>MAINTENANCE_THRESHOLD_MS_BY_TIER</code> (used by the maintenance paint). Extend it to also import the two new helpers:</p>
+        <div class="code-block">
+          <div class="code"><pre>import {
+  maintenanceFactor,
+  MAINTENANCE_RECIPES,
+  MAINTENANCE_THRESHOLD_MS_BY_TIER,
+  refreshCostFor,
+  tryRefreshMaintenance,
+} from './maintenance.js';</pre></div>
+        </div>
+          <p class="step-text">(Match the file's actual existing <code>./maintenance.js</code> import list — keep whatever symbols it already imports, and add <code>refreshCostFor</code> + <code>tryRefreshMaintenance</code>. <code>affordabilityShortfall</code> from <code>./placement.js</code> is also needed for the paint label — confirm it is imported; if <code>inspector-ui.ts</code> does not already import it, add <code>affordabilityShortfall</code> to the existing <code>./placement.js</code> import.)</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Create the REFRESH button above DEMOLISH</div>
+          <p class="step-text">In <code>src/inspector-ui.ts</code>, immediately <strong>before</strong> the <code>const demolishBtn = document.createElement('button');</code> line (~983), add the REFRESH button. Its styling copies <code>convertBtn</code> (the industrial-readout button, ~line 856-872):</p>
+        <div class="code-block">
+          <div class="code"><pre>  const refreshBtn = document.createElement('button');
+  styled(
+    refreshBtn,
+    [
+      'background: transparent',
+      `color: ${'var(--ri-accent)'}`,
+      `border: 1px solid ${'var(--ri-accent-dim)'}`,
+      'padding: 4px 8px',
+      'cursor: pointer',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+      'letter-spacing: 0.08em',
+      'text-transform: uppercase',
+      'border-radius: 2px',
+      'transition: background 80ms ease, border-color 80ms ease',
+      'text-align: left',
+      'margin-bottom: 4px',
+    ].join(';'),
+  );
+  refreshBtn.style.display = 'none';
+  refreshBtn.addEventListener('mouseenter', () =&gt; {
+    if (refreshBtn.disabled) return;
+    refreshBtn.style.background = 'rgba(125, 211, 232, 0.08)';
+    refreshBtn.style.borderColor = 'var(--ri-accent)';
+  });
+  refreshBtn.addEventListener('mouseleave', () =&gt; {
+    refreshBtn.style.background = 'transparent';
+    refreshBtn.style.borderColor = refreshBtn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-accent-dim)';
+  });
+  refreshBtn.addEventListener('click', () =&gt; {
+    if (!target) return;
+    const def = BUILDING_DEFS[target.building.defId];
+    const ok = tryRefreshMaintenance(
+      target.building,
+      def,
+      target.state.inventory,
+      Date.now(),
+      effectiveSkillMultipliers(target.state).maintenanceThreshold,
+    );
+    if (ok) paint();
+  });
+  footerSection.appendChild(refreshBtn);</pre></div>
+        </div>
+          <p class="step-text">The existing <code>footerSection.appendChild(demolishBtn);</code> line stays as-is — since <code>refreshBtn</code> is appended first, it renders directly above DEMOLISH.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Paint the REFRESH button in the maintenance-section paint</div>
+          <p class="step-text">In the maintenance-section paint pass (~line 1357-1388), <code>refreshBtn</code> must be shown/hidden/labelled per building state.</p>
+          <p class="step-text">In the <strong>Eternal Servitor branch</strong> (<code>if (building.eternalServitor === true) { ... }</code>), add:</p>
+        <div class="code-block">
+          <div class="code"><pre>      refreshBtn.style.display = 'none';</pre></div>
+        </div>
+          <p class="step-text">In the <strong><code>else</code> branch</strong> (non-Servitor), after the existing <code>maintenanceRecipeLine</code> lines and before <code>maintenanceSection.wrap.style.display = '';</code>, add:</p>
+        <div class="code-block">
+          <div class="code"><pre>      const refreshCost = refreshCostFor(def);
+      const refreshFactor = maintenanceFactor(building, def, skillMul.maintenanceThreshold);
+      if (Object.keys(refreshCost).length === 0 || refreshFactor &gt;= 1.0) {
+        refreshBtn.style.display = 'none';
+      } else {
+        const missing = affordabilityShortfall(state.inventory, refreshCost);
+        const parts: string[] = [];
+        for (const [r, need] of Object.entries(refreshCost)) {
+          const have = state.inventory[r as ResourceId] ?? 0;
+          parts.push(`${need} ${r} (${have})`);
+        }
+        refreshBtn.textContent = `REFRESH · ${parts.join(', ')}`;
+        refreshBtn.disabled = Object.keys(missing).length &gt; 0;
+        refreshBtn.style.display = '';
+        if (refreshBtn.disabled) {
+          refreshBtn.style.color = 'var(--ri-fg-4)';
+          refreshBtn.style.borderColor = 'var(--ri-fg-4)';
+          refreshBtn.style.cursor = 'not-allowed';
+          refreshBtn.style.opacity = '0.6';
+        } else {
+          refreshBtn.style.color = 'var(--ri-accent)';
+          refreshBtn.style.borderColor = 'var(--ri-accent-dim)';
+          refreshBtn.style.cursor = 'pointer';
+          refreshBtn.style.opacity = '1';
+        }
+      }</pre></div>
+        </div>
+          <p class="step-text">This mirrors the <code>convertBtn</code> paint exactly (~line 1413-1426). <code>skillMul</code> is already in scope in <code>paint()</code> (<code>const skillMul = effectiveSkillMultipliers(state);</code>, ~line 1240) — use it; if it is not in scope at the maintenance-section paint point, compute <code>effectiveSkillMultipliers(state).maintenanceThreshold</code> inline instead.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Build</div>
+          <p class="step-text cmd">Run: <code>npm run build</code> Expected: <code>tsc -b</code> clean (no unused-import / type errors), <code>vite build</code> succeeds. Fix any error and rebuild until clean.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Live verification</div>
+          <p class="step-text">Reload <code>https://islands.nitjsefni.eu/</code>. Select a building that has accrued maintenance debt (its inspector maintenance line shows <code>OVERDUE — degraded to NN%</code>). Confirm:</p>
+          <ul class="bullets">
+            <li>A <code>REFRESH · &lt;cost&gt;</code> button appears in the inspector footer, directly above DEMOLISH.</li>
+            <li>When the island can't afford the half-cost, the button is disabled (greyed, <code>not-allowed</code>).</li>
+            <li>Clicking it (when affordable) consumes the materials and the maintenance line flips to <code>0h 00m / Th 00m</code>; the REFRESH button then hides (building is pristine).</li>
+            <li>For a pristine building, an Eternal Servitor, or a non-maintained building (power/storage), no REFRESH button shows.</li>
+          </ul>
+          <p class="step-text">Screenshot via <code>mcp__daedalus__screenshot</code> to confirm.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+        <div class="code-block">
+          <div class="code"><pre>git add src/inspector-ui.ts
+git commit -m "feat(maintenance): REFRESH button in the inspector footer
+
+Co-Authored-By: &lt;model&gt; &lt;noreply@anthropic.com&gt;"</pre></div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Notes for the implementer</h2></div>
+      <div class="notes">
+        <div class="note">The <code>Co-Authored-By</code> trailer must name the model that authored the commit (<code>Kimi K2.6 &lt;noreply@kimi.com&gt;</code> for a kimi subagent).</div>
+        <div class="note">The dev service serves built <code>dist/</code> with no HMR — live verification needs <code>npm run build</code> first, then a manual browser reload. Do <strong>not</strong> restart <code>robot-islands-dev.service</code>.</div>
+        <div class="note">Tasks 1-2 are pure and fully unit-tested. Task 3 is render layer: correctness is confirmed by a clean build + a daedalus screenshot, per the repo's pure-layer-only test discipline.</div>
+        <div class="note"><code>placementCostFor</code> (<code>placement.ts</code>) is NOT used — <code>refreshCostFor</code> reads <code>def.placementCost</code> directly, the same source <code>placementCostFor</code> wraps. No need to route through it.</div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands implementation plan &middot; rendered 2026-05-22 &middot; source: 2026-05-22-maintenance-refresh.md
+    </footer>
+
+  </div>
+</body>
+</html>
