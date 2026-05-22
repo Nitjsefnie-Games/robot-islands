@@ -43,10 +43,16 @@ export type ObjectiveId =
   | 'build_lithography_lab'
   | 'build_air_separator'
   | 'build_drilling_rig'
+  // Ship/drone fuel escalates by launching-island tier (`fuelForTier`):
+  // biofuel → diesel → aviation_kerosene → cryogenic_hydrogen. The T1/T2
+  // fuels are taught above; the T3/T4 grades are taught here, before the
+  // player pushes islands past T2 and the cheaper fuels stop qualifying.
+  | 'build_hydrogen_chain'
+  | 'build_kerosene_refinery'
+  | 'build_cryo_fuel_chain'
   // T4 endgame approach
   | 'reach_level_30'
   | 'build_glass_chain'
-  | 'build_hydrogen_chain'
   | 'build_quantum_chip_fab'
   | 'craft_ai_core'
   | 'build_pyroforge'
@@ -223,6 +229,21 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
     hint: 'Place a Drilling Rig on a helium vent — helium-3 feeds the endgame chains.',
     check: (w) => Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'drilling_rig')),
   },
+  build_hydrogen_chain: {
+    title: 'Hydrogen',
+    hint: 'Place a Well and an Electrolyzer — fresh water → hydrogen, the feedstock for high-tier ship and drone fuel.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'well')) && Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'electrolyzer')),
+  },
+  build_kerosene_refinery: {
+    title: 'Aviation Kerosene',
+    hint: 'Place a Kerosene Refinery — crude oil + hydrogen → aviation kerosene, the fuel ships and drones need to launch from a Tier 3 island.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'kerosene_refinery')),
+  },
+  build_cryo_fuel_chain: {
+    title: 'Cryogenic Hydrogen',
+    hint: 'Place a Cryo Lab and a Cryo Compressor — hydrogen + nitrogen → cryo coolant → cryogenic hydrogen, the Tier 4 ship and drone fuel.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'cryo_lab')) && Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'cryo_compressor')),
+  },
   reach_level_30: {
     title: 'Tier 4 Endgame',
     hint: 'Push an island to level 30 to unlock biome-locked T4 uniques (Pyroforge, Cryo Lab, etc.).',
@@ -232,11 +253,6 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
     title: 'Glass',
     hint: 'Place a Sand Pit and a Glassworks — sand → glass, required by every Tier 4 building.',
     check: (w) => Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'sand_pit')) && Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'glassworks')),
-  },
-  build_hydrogen_chain: {
-    title: 'Hydrogen',
-    hint: 'Place a Well and an Electrolyzer — fresh water → hydrogen.',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'well')) && Array.from(w.islandStates?.values() ?? []).some((s) => s.buildings.some((b) => b.defId === 'electrolyzer')),
   },
   build_quantum_chip_fab: {
     title: 'Quantum Chips',
