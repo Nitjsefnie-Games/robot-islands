@@ -81,24 +81,43 @@ describe('checkObjectives', () => {
         'place_logger',
         'place_quarry',
         'place_mine',
+        'build_smelter',
         'place_workshop',
-        'build_biofuel_plant',
-        'produce_biofuel',
+        'build_kit_assembler',
         'reach_level_5',
         'build_dronepad',
+        'build_biofuel_plant',
+        'produce_biofuel',
         'dispatch_first_drone',
+        'build_pump_jack',
+        'build_chlor_alkali_plant',
         'build_lubricant_refinery',
         'produce_lubricant',
         'produce_bolts',
         'maintain_first_building',
         'build_diesel_chain',
+        'build_shipyard',
         'settle_first_island',
         'build_antenna',
         'reach_level_15',
+        'build_coke_oven',
+        'build_blast_furnace',
         'place_steel_mill',
+        'build_rolling_mill',
+        'build_silicon_chain',
+        'build_lithography_lab',
+        'build_air_separator',
+        'build_drilling_rig',
         'reach_level_30',
+        'build_glass_chain',
+        'build_hydrogen_chain',
+        'build_quantum_chip_fab',
         'craft_ai_core',
+        'build_pyroforge',
+        'build_particle_accelerator',
+        'build_quantum_manipulator',
         'reach_level_50',
+        'build_reality_forge',
         'craft_reality_anchor',
       ]),
       current: 'craft_reality_anchor',
@@ -134,8 +153,8 @@ describe('checkObjectives', () => {
     expect(state.completed.has('place_logger')).toBe(true);
     expect(state.completed.has('place_quarry')).toBe(true);
     expect(state.completed.has('place_mine')).toBe(true);
-    // Current advances to the next uncompleted objective (place_workshop).
-    expect(state.current).toBe('place_workshop');
+    // Current advances to the next uncompleted objective (build_smelter).
+    expect(state.current).toBe('build_smelter');
   });
 
   it('place_solar objective detected when solar building exists', () => {
@@ -244,10 +263,8 @@ describe('checkObjectives', () => {
       ] })]]),
     });
     checkObjectives(state, world);
-    // reach_level_5 is the next step after place_workshop — the fuel chain
-    // (build_biofuel_plant, produce_biofuel) is intentionally slotted AFTER
-    // build_dronepad so the player doesn't stockpile biofuel they can't
-    // spend yet (drones are the only T1 biofuel consumer).
-    expect(state.current).toBe('reach_level_5');
+    // build_smelter is the next step after place_workshop — the player hasn't
+    // placed a Smelter yet, so the banner skips ahead to that prerequisite.
+    expect(state.current).toBe('build_smelter');
   });
 });
