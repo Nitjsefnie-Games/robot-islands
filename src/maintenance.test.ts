@@ -425,7 +425,7 @@ describe('tryRefreshMaintenance', () => {
   });
 
   it('refuses an Eternal Servitor, mutates nothing', () => {
-    const b = { ...mkBuilding('heavy_logger', T2_THRESHOLD + HOUR), eternalServitor: true };
+    const b: PlacedBuilding = { ...mkBuilding('heavy_logger', T2_THRESHOLD + HOUR), eternalServitor: true };
     const inv = stockedInventory();
     expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
     expect(inv.stone).toBe(100);
