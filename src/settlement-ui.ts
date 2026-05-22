@@ -871,6 +871,9 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
 
     fuelStat.row.style.display = isAnchor ? 'none' : '';
     rangeRingLayer.visible = launchMode && !isAnchor;
+    // Anchor settles consume exactly one Refined kit — the 1..N kit slider
+    // is meaningless (and labels the wrong resource) in anchor mode.
+    kitWrap.style.display = isAnchor ? 'none' : '';
 
     let dist = 0;
     if (originSpec && targetSpec) {
