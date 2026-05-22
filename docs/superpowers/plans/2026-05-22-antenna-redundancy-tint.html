@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antenna redundancy tint — implementation plan</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+      line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1120px; margin:0 auto; }
+    header.page-head { margin-bottom:48px; max-width:860px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box .meta-line { margin-top:8px; }
+    .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .callout { background:var(--white); border:1.5px solid var(--gray-300);
+      border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+      font-size:13.5px; color:var(--gray-500); margin-bottom:48px; max-width:860px; }
+    .callout code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-head h2 code { font-family:var(--mono); font-size:21px; color:var(--clay); }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:780px; margin-bottom:28px; }
+    .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .filetable { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .filetable .row { display:grid; grid-template-columns:240px 1fr; gap:0; }
+    @media (max-width:780px){ .filetable .row{grid-template-columns:1fr;} }
+    .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+    .filetable .cell { padding:13px 18px; font-size:13.5px; }
+    .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .filetable .cell code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .filetable .cell.desc code { color:var(--slate); }
+    .task-card { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:24px 26px; }
+    .task-blurb { font-size:13.5px; color:var(--gray-500); margin-bottom:16px; max-width:780px; }
+    .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .files-block { background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:8px; padding:12px 16px; margin-bottom:22px; }
+    .files-block .ft { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .files-block ul { list-style:none; }
+    .files-block li { font-size:13px; color:var(--gray-700); padding:2px 0; }
+    .files-block li code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .files-block li .tag { font-family:var(--mono); font-size:10.5px; color:var(--gray-500); }
+    .steps { display:flex; flex-direction:column; gap:18px; }
+    .step { display:grid; grid-template-columns:22px 1fr; gap:0 12px; }
+    .step .box { width:16px; height:16px; border:1.5px solid var(--clay); border-radius:4px; margin-top:3px; }
+    .step .step-body { min-width:0; }
+    .step .step-title { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:6px; }
+    .step .step-text { font-size:13.5px; color:var(--gray-500); margin-bottom:10px; }
+    .step .step-text:last-child { margin-bottom:0; }
+    .step .step-text code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .step .step-text.cmd code { color:var(--olive); }
+    .code-block { margin:4px 0 12px; }
+    .code-block .file-label { font-family:var(--mono); font-size:11.5px; color:var(--gray-500); margin-bottom:6px; }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .cm { color:var(--gray-500); } .code .add { color:#8FA56E; } .code .del { color:#E08B7F; }
+    .notes { display:flex; flex-direction:column; gap:14px; max-width:860px; }
+    .note { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive);
+      border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-500); }
+    .note code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .note strong { color:var(--slate); font-weight:600; }
+    footer.page-foot { margin-top:64px; padding-top:20px; border-top:1.5px solid var(--gray-300);
+      font-size:12px; color:var(--gray-500); font-family:var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Antenna redundancy tint — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Tint an antenna's overlay rust-leaning when its full coverage disc is covered by the union of all OTHER antennas' discs — a visual hint that the antenna is safe to demolish.</div>
+        <div class="meta-line"><strong>Architecture:</strong> A pure helper <code>isAntennaRedundant(test, others, samples=24)</code> in <code>antenna.ts</code> samples the test antenna's perimeter (24 points + centre) and reuses the existing <code>pointInSignalRange</code> union test. <code>antenna-overlay.ts</code> calls it in its existing per-antenna render loop, swapping the colour to <code>REDUNDANT_COLOR = 0xd6928a</code> when the predicate is true. No new files; pure/render separation preserved.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, noUncheckedIndexedAccess, noUnusedLocals), Vite 5, PixiJS 8, vitest.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-22-antenna-redundancy-tint-design.html</code></div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">2</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">3</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v">0</div></div>
+      <div class="cell"><div class="k">Layer split</div><div class="v">pure + render</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">Task 1 is the pure helper + tests — additive in <code>antenna.ts</code>, independently committable. Task 2 wires the helper into the overlay render loop — render-layer only. Each task lands as its own commit.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/antenna.ts</code></div><div class="cell desc">Add <code>REDUNDANT_SAMPLES = 24</code> constant and <code>isAntennaRedundant(test, others, samples?)</code> pure function. No PixiJS import.</div></div>
+        <div class="row"><div class="cell"><code>src/antenna.test.ts</code></div><div class="cell desc">Append a <code>describe('isAntennaRedundant', …)</code> block covering five scenarios.</div></div>
+        <div class="row"><div class="cell"><code>src/antenna-overlay.ts</code></div><div class="cell desc">Add <code>REDUNDANT_COLOR = 0xd6928a</code>. In the existing per-antenna render loop, build an <code>others</code> view (ranges minus self) and pick the colour based on <code>isAntennaRedundant</code>.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: pure <code>isAntennaRedundant</code> + tests</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Pure layer — no PixiJS, no DOM. Reuses the existing <code>pointInSignalRange</code> union test for every sample point. TDD: tests first.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/antenna.ts</code> <span class="tag">— add constant + function</span></li>
+            <li>Modify: <code>src/antenna.test.ts</code> <span class="tag">— new describe block</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing tests</div>
+            <p class="step-text">Append to <code>src/antenna.test.ts</code>. The file already imports <code>SignalRange</code>; add <code>isAntennaRedundant</code> and <code>REDUNDANT_SAMPLES</code> to that import.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// extend the existing import from './antenna.js'</span>
+<span class="cm">// (the file already pulls SignalRange / computeSignalRanges / pointInSignalRange)</span>
+
+import { isAntennaRedundant, REDUNDANT_SAMPLES } from './antenna.js';
+
+describe('isAntennaRedundant', () =&gt; {
+  it('a lone antenna is never redundant', () =&gt; {
+    const test: SignalRange = { cx: 0, cy: 0, radius: 80 };
+    expect(isAntennaRedundant(test, [])).toBe(false);
+  });
+
+  it('an antenna fully inside one bigger antenna is redundant', () =&gt; {
+    <span class="cm">// test radius 50 centred at origin; other radius 200 also at origin → fully covers.</span>
+    const test: SignalRange = { cx: 0, cy: 0, radius: 50 };
+    const others: SignalRange[] = [{ cx: 0, cy: 0, radius: 200 }];
+    expect(isAntennaRedundant(test, others)).toBe(true);
+  });
+
+  it('two co-located identical antennas — each redundant relative to the other', () =&gt; {
+    <span class="cm">// closed-disc test: perimeter samples lie ON the other's perimeter → inside.</span>
+    const a: SignalRange = { cx: 0, cy: 0, radius: 80 };
+    const b: SignalRange = { cx: 0, cy: 0, radius: 80 };
+    expect(isAntennaRedundant(a, [b])).toBe(true);
+    expect(isAntennaRedundant(b, [a])).toBe(true);
+  });
+
+  it('an antenna with a clearly-uncovered perimeter is not redundant', () =&gt; {
+    <span class="cm">// test centred at (0, 0) radius 100; the only "other" sits far to the right.</span>
+    <span class="cm">// The test's left perimeter (~ x = -100) is nowhere near the other's disc.</span>
+    const test: SignalRange = { cx: 0, cy: 0, radius: 100 };
+    const others: SignalRange[] = [{ cx: 500, cy: 0, radius: 50 }];
+    expect(isAntennaRedundant(test, others)).toBe(false);
+  });
+
+  it('union of two flanking antennas covers a test neither one alone covers', () =&gt; {
+    <span class="cm">// test radius 80 at origin. Each "other" (r=100, offset ±40 on x) covers</span>
+    <span class="cm">// only its half — the (40,0) disc misses the test's left perimeter</span>
+    <span class="cm">// (point (-80,0) is dist 120 &gt; 100), the (-40,0) disc misses the right.</span>
+    <span class="cm">// Their UNION covers every perimeter sample. The test must return true</span>
+    <span class="cm">// only if isAntennaRedundant uses the union (pointInSignalRange) and not</span>
+    <span class="cm">// any single-other check.</span>
+    const test: SignalRange = { cx: 0, cy: 0, radius: 80 };
+    const others: SignalRange[] = [
+      { cx: 40, cy: 0, radius: 100 },
+      { cx: -40, cy: 0, radius: 100 },
+    ];
+    expect(isAntennaRedundant(test, others)).toBe(true);
+  });
+
+  it('exports REDUNDANT_SAMPLES = 24', () =&gt; {
+    expect(REDUNDANT_SAMPLES).toBe(24);
+  });
+});</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run the tests, confirm they fail</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/antenna.test.ts</code></p>
+            <p class="step-text">Expected: FAIL — <code>isAntennaRedundant is not exported</code> / <code>REDUNDANT_SAMPLES is not exported</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Implement <code>isAntennaRedundant</code> in <code>src/antenna.ts</code></div>
+            <p class="step-text">Append after the existing <code>pointInSignalRange</code> (~line 77). Re-uses <code>pointInSignalRange</code> for the union test; no new geometric primitive.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">/** Default perimeter sample count for the redundancy check. 24 evenly</span>
+<span class="cm"> *  spaced perimeter points + the centre = 25 union tests per call.</span>
+<span class="cm"> *  Chord length 2·r·sin(π/24) ≈ 0.26·r — tighter than 16 at modest cost. */</span>
+export const REDUNDANT_SAMPLES = 24;
+
+<span class="cm">/** True iff the test antenna's coverage disc is fully covered by the</span>
+<span class="cm"> *  union of `others`' discs. Approximated by sampling N perimeter points</span>
+<span class="cm"> *  + the centre and checking each against the existing union helper.</span>
+<span class="cm"> *  Pure — no PixiJS, no world mutation. A visual hint, not a removal-</span>
+<span class="cm"> *  safety guarantee (see spec §02 for honest error accounting). */</span>
+export function isAntennaRedundant(
+  test: SignalRange,
+  others: ReadonlyArray&lt;SignalRange&gt;,
+  samples: number = REDUNDANT_SAMPLES,
+): boolean {
+  if (others.length === 0) return false;
+  if (!pointInSignalRange(others, test.cx, test.cy)) return false;
+  for (let k = 0; k &lt; samples; k++) {
+    const theta = (2 * Math.PI * k) / samples;
+    const x = test.cx + test.radius * Math.cos(theta);
+    const y = test.cy + test.radius * Math.sin(theta);
+    if (!pointInSignalRange(others, x, y)) return false;
+  }
+  return true;
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run the tests, confirm they pass</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/antenna.test.ts</code></p>
+            <p class="step-text">Expected: PASS — all six new tests green, plus the file's pre-existing tests still green.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Build, then commit</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS clean. Then commit:</p>
+            <div class="code-block"><div class="code"><pre>git add src/antenna.ts src/antenna.test.ts
+git commit -F /tmp/antenna-task1-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/antenna-task1-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(antenna): pure isAntennaRedundant — sampled disc-cover predicate
+
+Adds isAntennaRedundant(test, others, samples=24) to antenna.ts. Reuses
+pointInSignalRange for the union test on 24 perimeter samples + centre.
+Pure — no PixiJS. Will drive the overlay tint in the next commit.</pre></div></div>
+            <p class="step-text">Append a co-author trailer for the implementing agent (e.g. <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>).</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: wire the tint into <code>antenna-overlay.ts</code></h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Render-layer change only. Add the <code>REDUNDANT_COLOR</code> constant, build the per-antenna <code>others</code> view (ranges minus self), pick the colour from <code>isAntennaRedundant</code>, and feed it into the existing fill/stroke pair. No PixiJS API changes.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/antenna-overlay.ts</code> <span class="tag">— constant + per-antenna branch</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add the constant + import (top of <code>antenna-overlay.ts</code>)</div>
+            <p class="step-text">Extend the existing import from <code>./antenna.js</code> to include <code>isAntennaRedundant</code>; add <code>REDUNDANT_COLOR</code> next to <code>SIGNAL_COLOR</code> (~line 19).</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// extend the existing import — keep whatever was there, add isAntennaRedundant:</span>
+import {
+  computeSignalRanges,
+  isAntennaRedundant,
+  type SignalRange,
+} from './antenna.js';
+
+<span class="cm">// near SIGNAL_COLOR (currently 0x7dd3e8 at ~line 19):</span>
+const SIGNAL_COLOR = 0x7dd3e8;
+<span class="add">const REDUNDANT_COLOR = 0xd6928a; <span class="cm">// spec §05 — ~90% blend cyan→0xE08B7F</span></span></pre></div></div>
+            <p class="step-text">If <code>antenna-overlay.ts</code> already imports <code>SignalRange</code> or other names — keep them; only add <code>isAntennaRedundant</code>. If <code>SIGNAL_COLOR</code> lives next to alpha constants on a single block, add <code>REDUNDANT_COLOR</code> directly under it.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Branch the per-antenna render</div>
+            <p class="step-text">In the existing per-antenna draw inside <code>rebuild()</code> (the loop that draws <code>SIGNAL_COLOR</code> at <code>antenna-overlay.ts:47-50</code>), wrap the colour pick in the redundancy test. The loop currently calls <code>computeSignalRanges(populated)</code> once and iterates. Change to:</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// inside rebuild(), replacing the existing forEach/for loop body:</span>
+const ranges: SignalRange[] = computeSignalRanges(populated);
+for (let i = 0; i &lt; ranges.length; i++) {
+  const r = ranges[i]!;
+  <span class="cm">// `others` = ranges without index i. New array per antenna; N is small.</span>
+  const others = ranges.slice(0, i).concat(ranges.slice(i + 1));
+  const colour = isAntennaRedundant(r, others) ? REDUNDANT_COLOR : SIGNAL_COLOR;
+  <span class="cm">// keep the rest of the per-antenna draw exactly as it was — only `colour`</span>
+  <span class="cm">// replaces the previous SIGNAL_COLOR reference in the .fill / .stroke chain.</span>
+  gfx
+    .circle(r.cx * TILE_PX, r.cy * TILE_PX, r.radius * TILE_PX)
+    .fill({ color: colour, alpha: RING_FILL_ALPHA })
+    .stroke({ color: colour, width: 1, alpha: RING_STROKE_ALPHA });
+}</pre></div></div>
+            <p class="step-text">The constants <code>RING_FILL_ALPHA</code> / <code>RING_STROKE_ALPHA</code> / <code>TILE_PX</code> are whatever the existing code already uses — keep their existing names. If the existing loop uses a <code>.forEach</code> or different variable names, preserve those patterns and only swap the colour pick.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS clean. <code>tsc -b</code> in particular flags any import-or-name mismatch.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run the full test suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: PASS — full suite still green. <code>antenna-overlay.ts</code> has no direct unit tests today; correctness here rides on Task 1's tests plus a clean build.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Live smoke-test in the browser</div>
+            <p class="step-text">The dev service serves <code>dist/</code>. Reload <code>https://islands.nitjsefni.eu/</code> after the build (no service restart needed). Look at the antenna overlay on a save where multiple antennas overlap and confirm: a redundant antenna's ring renders in the rust-leaning hue; non-redundant antennas stay cyan. A screenshot via <code>mcp__daedalus__screenshot</code> against the live tab is the canonical check.</p>
+            <p class="step-text">If no overlapping antennas exist in the current save, place a small antenna inside a bigger one's range and confirm the small one turns rust on the next overlay rebuild.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/antenna-overlay.ts
+git commit -F /tmp/antenna-task2-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/antenna-task2-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(antenna): tint fully-redundant antennas rust
+
+The per-antenna overlay picks REDUNDANT_COLOR (0xd6928a) instead of
+SIGNAL_COLOR when isAntennaRedundant returns true. Same alphas / width
+— only the colour changes. Visual hint that the antenna can be safely
+demolished; not a removal guarantee (sample-based predicate).</pre></div></div>
+            <p class="step-text">Append the implementing agent's co-author trailer.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Notes</h2></div>
+      <div class="notes">
+        <div class="note"><strong>Pure / render separation preserved.</strong> Task 1 lives entirely in <code>antenna.ts</code> (pure layer, no PixiJS), tested via <code>antenna.test.ts</code> without a renderer. Task 2 confines render-layer changes to <code>antenna-overlay.ts</code>. <code>drones.ts</code> and <code>orbital.ts</code> (the other readers of antenna ranges) are untouched.</div>
+        <div class="note"><strong>Performance is fine.</strong> The naïve nested loop is O(N · (N · 25)) per <code>refresh()</code> with N = antenna count. For typical N ≤ 50 that's ≤ 62 500 cheap union tests per rebuild; <code>refresh()</code> fires only on world-layer rebuild, not every frame. No caching needed.</div>
+        <div class="note"><strong>T6 / spaceport interaction is out of scope.</strong> A T6 antenna may be geometrically redundant for drone-telemetry but still required for <code>groundStationCommRange</code> (<code>orbital.ts:367-368</code>). The spec defers this to a later refinement — the visual hint here only reflects drone-telemetry redundancy.</div>
+        <div class="note"><strong>Allocation in the per-antenna loop.</strong> <code>ranges.slice().concat()</code> allocates O(N) per antenna. Acceptable on a rebuild path; if profiling later flags it, swap to an index-skipping wrapper around <code>pointInSignalRange</code> rather than re-shaping the array.</div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands · implementation plan · 2026-05-22 · spec: docs/superpowers/specs/2026-05-22-antenna-redundancy-tint-design.html
+    </footer>
+
+  </div>
+</body>
+</html>
