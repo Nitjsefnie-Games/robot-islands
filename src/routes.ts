@@ -34,6 +34,7 @@ import {
   WEATHER_ROUTE_LOSS_RATE,
 } from './weather.js';
 import { CELL_SIZE_TILES, type WorldState } from './world.js';
+import type { BuildingDefId } from './building-defs.js';
 
 /** Transport tier per §2.4. Step 7 only emits `cargo` routes; the field
  *  exists so future tiers can be added without reshaping the data model.
@@ -98,6 +99,9 @@ export interface Route {
    *  `world.routes` once `inFlight` drains empty — so cargo en route at
    *  delete time is never lost. Absent/false on a live route. */
   draining?: boolean;
+  /** PlacedBuilding id of the transport building that owns this route.
+   *  Absent on legacy saved routes (grandfathered as plain cargo). */
+  sourceBuildingId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,14 +127,20 @@ export const TELEPORTER_FUEL_PER_TILE = 0.005;
  *  is independent of speed; idle players accrue larger totals over time. */
 export const T1_CARGO_CAPACITY_UNITS_PER_SEC = 0.5;
 
-/** §9.5 Mass Driver capacity. Spec: "~5× airship capacity." Airship has no
- *  separate base constant today (it inherits the per-route `capacityPerSec`
- *  set by the creator); we anchor on cargo's 0.5/s and ship 5× = 2.5/s as
- *  the Mass Driver placeholder. Tune in Appendix A once airship has its own
- *  base. The constant is plumbed through standard `route.capacityPerSec`,
- *  so weather / specialization / skill multipliers compose as for any other
- *  route. */
-export const MASS_DRIVER_CAPACITY_UNITS_PER_SEC = 2.5;
+/** §9.5 Mass Driver capacity. Spec: "~5× airship capacity." The value is now
+ *  5 × airship per §9.5, no longer the cargo×5 placeholder. */
+export const MASS_DRIVER_CAPACITY_UNITS_PER_SEC = 10.0;
+
+/** §2.4 T2 drone cargo — placeholder progression (Appendix A). */
+export const DRONE_CARGO_CAPACITY_UNITS_PER_SEC = 1.0;
+export const DRONE_CARGO_SPEED_TILES_PER_SEC = 2;
+/** §2.4 T3 airship cargo — placeholder progression (Appendix A). */
+export const AIRSHIP_CARGO_CAPACITY_UNITS_PER_SEC = 2.0;
+export const AIRSHIP_CARGO_SPEED_TILES_PER_SEC = 4;
+/** §9.5 Mass Driver transit speed (capacity constant is above). */
+export const MASS_DRIVER_SPEED_TILES_PER_SEC = 8;
+/** §2.4 T4 teleporter — instant transit (speed 0), high throughput. */
+export const TELEPORTER_CARGO_CAPACITY_UNITS_PER_SEC = 5.0;
 
 /** §9.5 Mass Driver fuel cost: units of Diesel consumed per unit of cargo
  *  dispatched. Spec literal "Consumes Diesel (T2 fuel grade) per dispatch
@@ -149,6 +159,29 @@ export const FUNNELING_BONUS_PERCENT = 0.5;
  *  Level 15 is the T3 breakpoint per §9.2, so the bonus applies for
  *  `destState.level < 15` and zeroes out once the colony reaches T3. */
 export const FUNNELING_TIER_CAP = 15;
+
+/** Tier characteristics a transport building confers on the route it hosts. */
+export interface RouteProfile {
+  readonly type: RouteType;
+  readonly capacityPerSec: number;
+  /** Tiles/sec for transit-time computation. 0 = instant (teleporter). */
+  readonly speedTilesPerSec: number;
+}
+
+/** defId → tier profile. A defId absent here is not a transport building. */
+const ROUTE_PROFILES: Partial<Record<BuildingDefId, RouteProfile>> = {
+  dock:           { type: 'cargo',       capacityPerSec: T1_CARGO_CAPACITY_UNITS_PER_SEC,        speedTilesPerSec: T1_CARGO_SPEED_TILES_PER_SEC },
+  dronepad:       { type: 'drone',       capacityPerSec: DRONE_CARGO_CAPACITY_UNITS_PER_SEC,     speedTilesPerSec: DRONE_CARGO_SPEED_TILES_PER_SEC },
+  airship_dock:   { type: 'airship',     capacityPerSec: AIRSHIP_CARGO_CAPACITY_UNITS_PER_SEC,   speedTilesPerSec: AIRSHIP_CARGO_SPEED_TILES_PER_SEC },
+  mass_driver:    { type: 'mass_driver', capacityPerSec: MASS_DRIVER_CAPACITY_UNITS_PER_SEC,     speedTilesPerSec: MASS_DRIVER_SPEED_TILES_PER_SEC },
+  teleporter_pad: { type: 'teleporter',  capacityPerSec: TELEPORTER_CARGO_CAPACITY_UNITS_PER_SEC, speedTilesPerSec: 0 },
+};
+
+/** The route tier a transport building hosts, or null if `defId` is not a
+ *  transport building. */
+export function routeProfileForBuilding(defId: BuildingDefId): RouteProfile | null {
+  return ROUTE_PROFILES[defId] ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Route id generation

@@ -17,6 +17,7 @@ import {
   MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
   MASS_DRIVER_DIESEL_PER_UNIT,
   nextRouteId,
+  routeProfileForBuilding,
   reorderPriorityList,
   tickRoutes,
   type Route,
@@ -1006,7 +1007,7 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     // u/s = 5× cargo, anchoring on the only existing constant. Adjust
     // when airship gets its own capacity constant.
     // see routes.ts:113-119 for the anchor decision — revisit if airship gains a base constant
-    expect(MASS_DRIVER_CAPACITY_UNITS_PER_SEC).toBeCloseTo(2.5, 9);
+    expect(MASS_DRIVER_CAPACITY_UNITS_PER_SEC).toBeCloseTo(10.0, 9);
   });
 
   it('dispatches like cargo on the standard happy path', () => {
@@ -1020,9 +1021,9 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     const out = dispatchAttempt(world, states, 0, 1);
     expect(out.length).toBe(1);
     expect(out[0]?.resourceId).toBe('iron_ore');
-    // capacity 2.5/s × 1s = 2.5 desired, dest headroom 100 ⇒ 2.5 dispatched.
+    // capacity 10.0/s × 1s = 10.0 desired, dest headroom 100 ⇒ 10.0 dispatched.
     expect(out[0]?.amount).toBeCloseTo(MASS_DRIVER_CAPACITY_UNITS_PER_SEC, 9);
-    expect(src.inventory.iron_ore).toBeCloseTo(100 - 2.5, 9);
+    expect(src.inventory.iron_ore).toBeCloseTo(100 - MASS_DRIVER_CAPACITY_UNITS_PER_SEC, 9);
     // In-flight batch created (positive transit time).
     expect(r.inFlight.length).toBe(1);
   });
@@ -1057,7 +1058,7 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
   });
 
   it('skips dispatch when source has insufficient Diesel for full ask', () => {
-    // 0.001 diesel can fuel only a sliver of the 2.5-unit dispatch. Per the
+    // 0.001 diesel can fuel only a sliver of the 10.0-unit dispatch. Per the
     // teleporter-pattern handler, if the required fuel exceeds what's on
     // hand, the dispatch is skipped wholesale (no partial volumes shipped
     // off a budget-too-small fuel pile).
@@ -1081,14 +1082,14 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     // remaining diesel. Two boundary cases lock the behavior so a future
     // refactor (e.g. reordering the fuel debit) cannot silently flip it.
     //
-    // Capacity 2.5 u/s × 1s = 2.5 units cargo; fuel = 2.5 × 0.05 = 0.125.
+    // Capacity 10.0 u/s × 1s = 10.0 units cargo; fuel = 10.0 × 0.05 = 0.5.
 
-    // Case A: source has exactly `amount` diesel (2.5).
-    // After cargo deduct → 0; fuel check fails (0 < 0.125); cargo refunded.
-    // Outcome: dispatch SKIPPED, source diesel restored to 2.5.
+    // Case A: source has exactly `amount` diesel (10.0).
+    // After cargo deduct → 0; fuel check fails (0 < 0.5); cargo refunded.
+    // Outcome: dispatch SKIPPED, source diesel restored to 10.0.
     {
       const src = makeState('a', {
-        inventory: { ...blankInventory(), diesel: 2.5 },
+        inventory: { ...blankInventory(), diesel: 10.0 },
       });
       const dst = makeState('b');
       const r = massDriverRoute('a', 'b', 'diesel');
@@ -1096,18 +1097,18 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
       const states = new Map([['a', src], ['b', dst]]);
       const out = dispatchAttempt(world, states, 0, 1);
       expect(out.length).toBe(0);
-      expect(src.inventory.diesel).toBeCloseTo(2.5, 9);
+      expect(src.inventory.diesel).toBeCloseTo(10.0, 9);
       expect(dst.inventory.diesel).toBe(0);
       expect(r.inFlight.length).toBe(0);
     }
 
-    // Case B: source has exactly `amount + fuelCost` diesel (2.625).
-    // After cargo deduct → 0.125; fuel check passes (0.125 ≥ 0.125);
+    // Case B: source has exactly `amount + fuelCost` diesel (10.5).
+    // After cargo deduct → 0.5; fuel check passes (0.5 ≥ 0.5);
     // fuel debited → 0. Outcome: dispatch SUCCEEDS, source diesel drained
-    // to 0, in-flight batch carries the 2.5-unit cargo.
+    // to 0, in-flight batch carries the 10.0-unit cargo.
     {
       const src = makeState('a', {
-        inventory: { ...blankInventory(), diesel: 2.625 },
+        inventory: { ...blankInventory(), diesel: 10.5 },
       });
       const dst = makeState('b');
       const r = massDriverRoute('a', 'b', 'diesel');
@@ -1116,10 +1117,10 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
       const out = dispatchAttempt(world, states, 0, 1);
       expect(out.length).toBe(1);
       expect(out[0]?.resourceId).toBe('diesel');
-      expect(out[0]?.amount).toBeCloseTo(2.5, 9);
+      expect(out[0]?.amount).toBeCloseTo(10.0, 9);
       expect(src.inventory.diesel).toBeCloseTo(0, 9);
       expect(r.inFlight.length).toBe(1);
-      expect(r.inFlight[0]?.amount).toBeCloseTo(2.5, 9);
+      expect(r.inFlight[0]?.amount).toBeCloseTo(10.0, 9);
     }
   });
 
@@ -1478,5 +1479,25 @@ describe('route draining — soft delete (finish in-flight, stop dispatch)', () 
     tickRoutes(world, states, 0, 2);
     tickRoutes(world, states, 11_000, 5);
     expect(world.routes.length).toBe(1);
+  });
+});
+
+
+describe('routeProfileForBuilding', () => {
+  it('maps each transport building to its tier profile', () => {
+    expect(routeProfileForBuilding('dock')).toEqual(
+      { type: 'cargo', capacityPerSec: 0.5, speedTilesPerSec: 1 });
+    expect(routeProfileForBuilding('dronepad')).toEqual(
+      { type: 'drone', capacityPerSec: 1.0, speedTilesPerSec: 2 });
+    expect(routeProfileForBuilding('airship_dock')).toEqual(
+      { type: 'airship', capacityPerSec: 2.0, speedTilesPerSec: 4 });
+    expect(routeProfileForBuilding('mass_driver')).toEqual(
+      { type: 'mass_driver', capacityPerSec: 10.0, speedTilesPerSec: 8 });
+    expect(routeProfileForBuilding('teleporter_pad')).toEqual(
+      { type: 'teleporter', capacityPerSec: 5.0, speedTilesPerSec: 0 });
+  });
+  it('returns null for a non-transport building', () => {
+    expect(routeProfileForBuilding('logger')).toBeNull();
+    expect(routeProfileForBuilding('workshop')).toBeNull();
   });
 });
