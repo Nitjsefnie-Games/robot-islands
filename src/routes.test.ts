@@ -9,6 +9,7 @@ import {
 import {
   _resetRouteIdCounter,
   computeCableNetworkBalance,
+  createRouteFromBuilding,
   deliverArrivals,
   dispatchAttempt,
   FUNNELING_BONUS_PERCENT,
@@ -1496,5 +1497,33 @@ describe('routeProfileForBuilding', () => {
   it('returns null for a non-transport building', () => {
     expect(routeProfileForBuilding('logger')).toBeNull();
     expect(routeProfileForBuilding('workshop')).toBeNull();
+  });
+});
+
+describe('createRouteFromBuilding', () => {
+  it('builds an airship route from an Airship Dock', () => {
+    const b = { id: 'ad-1', defId: 'airship_dock' as const, x: 0, y: 0 };
+    const route = createRouteFromBuilding(b, 'a', 'b', 'iron_ore', 100);
+    expect(route).not.toBeNull();
+    expect(route!.type).toBe('airship');
+    expect(route!.capacityPerSec).toBe(2.0);
+    expect(route!.transitTimeSec).toBeCloseTo(25, 9); // 100 tiles / 4 t/s
+    expect(route!.sourceBuildingId).toBe('ad-1');
+    expect(route!.from).toBe('a');
+    expect(route!.to).toBe('b');
+    expect(route!.filter).toBe('iron_ore');
+    expect(route!.priorityList).toEqual([]);
+    expect(route!.inFlight).toEqual([]);
+  });
+  it('builds an instant teleporter route (transitTimeSec 0)', () => {
+    const b = { id: 'tp-1', defId: 'teleporter_pad' as const, x: 0, y: 0 };
+    const route = createRouteFromBuilding(b, 'a', 'b', null, 100);
+    expect(route!.type).toBe('teleporter');
+    expect(route!.transitTimeSec).toBe(0);
+    expect(route!.filter).toBeNull();
+  });
+  it('returns null for a non-transport building', () => {
+    const b = { id: 'lg-1', defId: 'logger' as const, x: 0, y: 0 };
+    expect(createRouteFromBuilding(b, 'a', 'b', null, 100)).toBeNull();
   });
 });

@@ -35,6 +35,7 @@ import {
 } from './weather.js';
 import { CELL_SIZE_TILES, type WorldState } from './world.js';
 import type { BuildingDefId } from './building-defs.js';
+import type { PlacedBuilding } from './buildings.js';
 
 /** Transport tier per §2.4. Step 7 only emits `cargo` routes; the field
  *  exists so future tiers can be added without reshaping the data model.
@@ -805,6 +806,34 @@ export function dispatchAttempt(
 /** Compute a T1 cargo route's transit time from straight-line tile distance
  *  between the two island centres. Pure helper; UI uses this when creating
  *  a new route so player sees the ETA before committing. */
+/** Construct a route hosted by `building`. The building's def fixes the
+ *  route tier (type, capacity, transit speed); `transitTimeSec` is derived
+ *  from `distanceTiles`. Returns null if `building` is not a transport
+ *  building. The route is created idle (no in-flight cargo, empty priority
+ *  list). */
+export function createRouteFromBuilding(
+  building: PlacedBuilding,
+  fromIslandId: string,
+  toIslandId: string,
+  filter: ResourceId | null,
+  distanceTiles: number,
+): Route | null {
+  const profile = routeProfileForBuilding(building.defId);
+  if (profile === null) return null;
+  return {
+    id: nextRouteId(),
+    from: fromIslandId,
+    to: toIslandId,
+    type: profile.type,
+    capacityPerSec: profile.capacityPerSec,
+    filter,
+    priorityList: [],
+    transitTimeSec: transitTimeForDistance(distanceTiles, profile.speedTilesPerSec),
+    inFlight: [],
+    sourceBuildingId: building.id,
+  };
+}
+
 export function transitTimeForDistance(distanceTiles: number, speedTilesPerSec = T1_CARGO_SPEED_TILES_PER_SEC): number {
   if (speedTilesPerSec <= 0) return 0;
   return distanceTiles / speedTilesPerSec;
