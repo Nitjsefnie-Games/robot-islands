@@ -1080,6 +1080,22 @@ describe('IslandSpec.name persistence', () => {
       expect(spec.name).toBe(spec.id);
     }
   });
+
+  it('backfills modifiers = [] on a legacy save without the field', () => {
+    // A save written before island `modifiers` were persisted has none;
+    // the deserializer must default it to [] so the HUD SITE section,
+    // which reads `spec.modifiers` unconditionally, never breaks.
+    const world = makeInitialWorld(0);
+    const snap = serializeWorld(world, new Map(), 0);
+    const legacy = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    for (const isl of legacy.world.islands) {
+      delete (isl as { modifiers?: unknown }).modifiers;
+    }
+    const { world: restored } = deserializeWorld(legacy, 0, 0);
+    for (const spec of restored.islands) {
+      expect(spec.modifiers).toEqual([]);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

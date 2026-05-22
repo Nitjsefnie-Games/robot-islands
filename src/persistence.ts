@@ -481,6 +481,14 @@ export function deserializeWorld(
         typeof (s as { name?: unknown }).name === 'string'
           ? (s as { name: string }).name
           : s.id,
+      // Forward-compat backfill: a save written before island `modifiers`
+      // were persisted has none. `modifiers` is a required IslandSpec field
+      // the HUD SITE section reads unconditionally (`hud.ts`), so a missing
+      // one breaks that island's panel. Default to [] (no modifiers).
+      // Mirrors the `name` backfill above.
+      modifiers: Array.isArray((s as { modifiers?: unknown }).modifiers)
+        ? (s as { modifiers: IslandSpec['modifiers'] }).modifiers
+        : [],
       // The buildings array is mutable on the live spec, so we clone it.
       // The serializer already deep-copied via JSON-equivalence in the IDB
       // layer, but explicit cloning makes the in-memory round-trip path
