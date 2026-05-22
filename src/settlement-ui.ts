@@ -799,6 +799,9 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     if (!available.includes(kind)) {
       kind = available[0] ?? 'ship';
     }
+    // Repaint the selected-kind highlight — the kind may have just flipped
+    // (or its button hidden) and paintKindButtons doesn't otherwise re-run.
+    paintKindButtons();
   }
 
   // ---- Origin selector option building ------------------------------------
