@@ -414,6 +414,12 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   );
 
   ledgerWrap.appendChild(ledgerHead);
+
+  const ledgerFilterSel = selectStyled();
+  styled(ledgerFilterSel, 'font-size: 10px; padding: 2px 5px; margin: 2px 0 4px');
+  ledgerWrap.appendChild(ledgerFilterSel);
+  ledgerFilterSel.addEventListener('change', () => repaintLedger(performance.now()));
+
   ledgerWrap.appendChild(ledgerList);
   body.appendChild(ledgerWrap);
 
@@ -491,6 +497,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     }
     if (prevCargo) cargoSel.value = prevCargo;
     buildBuildingOptions();
+    buildLedgerFilterOptions();
   }
 
   /** Rebuild the VIA BUILDING select for the currently-selected FROM
@@ -517,6 +524,26 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       o.textContent =
         `${BUILDING_DEFS[b.defId].displayName} · ${profile.type} · ${profile.capacityPerSec} u/s`;
       buildingSel.appendChild(o);
+    }
+  }
+
+  /** Rebuild the ledger island-filter select: "All islands" + each
+   *  populated island by name. Preserves the current selection. */
+  function buildLedgerFilterOptions(): void {
+    const prev = ledgerFilterSel.value;
+    ledgerFilterSel.replaceChildren();
+    const all = document.createElement('option');
+    all.value = '';
+    all.textContent = 'All islands';
+    ledgerFilterSel.appendChild(all);
+    for (const isl of populatedIslands()) {
+      const o = document.createElement('option');
+      o.value = isl.id;
+      o.textContent = isl.name;
+      ledgerFilterSel.appendChild(o);
+    }
+    if (prev && populatedIslands().some((s) => s.id === prev)) {
+      ledgerFilterSel.value = prev;
     }
   }
 
@@ -621,13 +648,16 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
 
   function repaintLedger(nowMs: number): void {
     if (isDraggingPriority) return;
-    const routes = deps.world.routes;
+    const filterId = ledgerFilterSel.value;
+    const routes = filterId === ''
+      ? deps.world.routes
+      : deps.world.routes.filter((r) => r.from === filterId);
     ledgerR.textContent = `${routes.length}`;
 
     // Only touch the DOM tree when the route SET or any row's structure
     // changes. Steady-state (just ETA/in-flight ticking) skips straight to
     // the in-place `update` pass below.
-    const sig = routes.map(routeStructKey).join('\u001e');
+    const sig = filterId + '\u001e' + routes.map(routeStructKey).join('\u001e');
     if (sig !== lastLedgerSig) {
       lastLedgerSig = sig;
       const seen = new Set<string>();
