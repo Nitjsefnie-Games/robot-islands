@@ -135,7 +135,31 @@ export type SkillEffect =
   // Robotics tertiary axis — "drone production efficiency". Multiplies the
   // scan radius of dispatched drones for the origin island so the same fuel
   // covers more of the unknown map per round-trip.
-  | { readonly kind: 'droneScanRadiusMul' };
+  | { readonly kind: 'droneScanRadiusMul' }
+  // Phase-C — graph-redesign additions (2026-05-23):
+  //   conditionalBonus  → multiplier active only when condition is true
+  //   crossIslandShared → resource pool / stat shared across networked T3+ islands
+  //   tierBypass        → operate a specific building one tier below requirement
+  //   xpGainMul         → multiplies XP gained per production tick
+  | { readonly kind: 'conditionalBonus'; readonly multiplier: number;
+      readonly appliesTo: RecipeCategory | 'storage' | 'power' | 'xp';
+      readonly condition: ConditionalEffectCondition }
+  | { readonly kind: 'crossIslandShared'; readonly shape:
+      | { readonly kind: 'sharedInventory'; readonly resources: ReadonlyArray<string> }
+      | { readonly kind: 'sharedStorageCap'; readonly resources: ReadonlyArray<string> }
+      | { readonly kind: 'sharedRouteCapacity' } }
+  | { readonly kind: 'tierBypass'; readonly buildings: ReadonlyArray<BuildingDefId>;
+      readonly tierShift: 1 }
+  | { readonly kind: 'xpGainMul'; readonly category?: RecipeCategory };
+
+/** Closed union of conditions for `conditionalBonus`. Each must be evaluable
+ *  in O(1) at tick start; new entries require both a case here and an evaluator
+ *  in `evaluateConditionalEffectCondition` in economy.ts. */
+export type ConditionalEffectCondition =
+  | { readonly kind: 'during-storm' }
+  | { readonly kind: 'during-night' }
+  | { readonly kind: 'networked-to-N-T3-islands'; readonly n: number }
+  | { readonly kind: 'adjacent-tile-is-biome'; readonly biome: Biome };
 
 export interface SkillNode {
   readonly id: NodeId;
@@ -965,6 +989,14 @@ export function effectiveSkillMultipliers(
       case 'structural':
         break;
       case 'launchSuccessAdditive':
+        break;
+      case 'conditionalBonus':
+        break;
+      case 'crossIslandShared':
+        break;
+      case 'tierBypass':
+        break;
+      case 'xpGainMul':
         break;
     }
   }
