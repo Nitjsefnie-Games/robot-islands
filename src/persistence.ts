@@ -665,10 +665,36 @@ export async function loadWorld(): Promise<
   { world: WorldState; islandStates: Map<string, IslandState> } | null
 > {
   try {
-    const stored = (await get(STORAGE_KEY)) as SaveSnapshot | undefined;
+    // Try current key first.
+    let stored = (await get(STORAGE_KEY)) as SaveSnapshot | undefined;
+    let foundKey: string | null = stored ? STORAGE_KEY : null;
+
+    // Fallback: walk supported older versions, highest first.
+    if (stored === undefined) {
+      for (const v of [...SUPPORTED_LOAD_VERSIONS].sort((a, b) => b - a)) {
+        if (v === SCHEMA_VERSION) continue;
+        const oldKey = `robot-islands:save:v${v}`;
+        const old = await get(oldKey);
+        if (old !== undefined) {
+          stored = old as SaveSnapshot;
+          foundKey = oldKey;
+          break;
+        }
+      }
+    }
+
     if (stored === undefined) return null;
-    // deserializeWorld handles version checks and migration.
-    return deserializeWorld(stored);
+    const result = deserializeWorld(stored);
+
+    // Migrate-write-back: if loaded from an older key, persist to current key
+    // and delete the old. Future loads hit the current key directly.
+    if (foundKey !== null && foundKey !== STORAGE_KEY && result !== null) {
+      const snapshot = serializeWorld(result.world, result.islandStates);
+      await set(STORAGE_KEY, snapshot);
+      await del(foundKey);
+    }
+
+    return result;
   } catch (err) {
     console.warn('[robot-islands] loadWorld failed:', err);
     return null;

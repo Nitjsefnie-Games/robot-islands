@@ -3755,21 +3755,41 @@ describe('conditionalBonus', () => {
     expect(evaluateConditionalEffectCondition({ kind: 'during-storm' }, state, undefined)).toBe(false);
   });
 
-  it('evaluateConditionalEffectCondition — during-storm with activeStorm → true', () => {
+  it('evaluateConditionalEffectCondition — during-storm with no nowMs → false', () => {
     const state = makeState();
-    const world = { weather: { activeStorm: 'storm1' } } as any;
-    expect(evaluateConditionalEffectCondition({ kind: 'during-storm' }, state, world)).toBe(true);
+    const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
+    expect(evaluateConditionalEffectCondition({ kind: 'during-storm' }, state, world)).toBe(false);
   });
 
-  it('evaluateConditionalEffectCondition — during-night with no daynight → false', () => {
+  it('evaluateConditionalEffectCondition — during-storm when weather is stormy → true', () => {
+    const state = makeState();
+    const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
+    // Deterministic weather for seed='test', cx=0, cy=0 has a storm at t=3_500_000.
+    expect(evaluateConditionalEffectCondition({ kind: 'during-storm' }, state, world, 3_500_000)).toBe(true);
+  });
+
+  it('evaluateConditionalEffectCondition — during-storm when weather is clear → false', () => {
+    const state = makeState();
+    const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
+    // t=0 falls in a clear interval for the same seed/location.
+    expect(evaluateConditionalEffectCondition({ kind: 'during-storm' }, state, world, 0)).toBe(false);
+  });
+
+  it('evaluateConditionalEffectCondition — during-night with no nowMs → false', () => {
     const state = makeState();
     expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, undefined)).toBe(false);
   });
 
   it('evaluateConditionalEffectCondition — during-night when phase is night → true', () => {
     const state = makeState();
-    const world = { daynight: { phase: 'night' } } as any;
-    expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, world)).toBe(true);
+    // 32_400_000 ms = 0.375 * DAY_DURATION_MS → dayPhase = 0.75 → night.
+    expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, undefined, 32_400_000)).toBe(true);
+  });
+
+  it('evaluateConditionalEffectCondition — during-night when phase is day → false', () => {
+    const state = makeState();
+    // nowMs = 0 → dayPhase = 0.375 → day.
+    expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, undefined, 0)).toBe(false);
   });
 
   it('evaluateConditionalEffectCondition — networked-to-N-T3-islands with enough T3+ networked islands → true', () => {
@@ -3824,8 +3844,8 @@ describe('conditionalBonus', () => {
     };
     const mul = effectiveSkillMultipliers(state, graph);
     expect(mul.recipeRate.extraction).toBe(1);
-    const world = { weather: { activeStorm: 'storm1' } } as any;
-    layerConditionalBonuses(mul, state, world, graph);
+    const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
+    layerConditionalBonuses(mul, state, world, graph, 3_500_000);
     expect(mul.recipeRate.extraction).toBe(1.5);
   });
 
@@ -3873,8 +3893,8 @@ describe('conditionalBonus', () => {
     };
     const mul = effectiveSkillMultipliers(state, graph);
     expect(mul.storageCap).toBe(1);
-    const world = { weather: { activeStorm: 'storm1' } } as any;
-    layerConditionalBonuses(mul, state, world, graph);
+    const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
+    layerConditionalBonuses(mul, state, world, graph, 3_500_000);
     expect(mul.storageCap).toBe(1.3);
   });
 
@@ -3898,8 +3918,8 @@ describe('conditionalBonus', () => {
     };
     const mul = effectiveSkillMultipliers(state, graph);
     expect(mul.powerProduction).toBe(1);
-    const world = { weather: { activeStorm: 'storm1' } } as any;
-    layerConditionalBonuses(mul, state, world, graph);
+    const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
+    layerConditionalBonuses(mul, state, world, graph, 3_500_000);
     expect(mul.powerProduction).toBe(1.2);
   });
 
@@ -3923,8 +3943,8 @@ describe('conditionalBonus', () => {
     };
     const mul = effectiveSkillMultipliers(state, graph);
     expect(mul.xpGain).toBe(1);
-    const world = { weather: { activeStorm: 'storm1' } } as any;
-    layerConditionalBonuses(mul, state, world, graph);
+    const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
+    layerConditionalBonuses(mul, state, world, graph, 3_500_000);
     expect(mul.xpGain).toBe(1.25);
   });
 

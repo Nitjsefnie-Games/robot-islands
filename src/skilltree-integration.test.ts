@@ -5,15 +5,13 @@ import {
   buyKeystone,
   costToUnlock,
   DEFAULT_GRAPH,
-  NODE_CATALOG,
-  type IslandState,
 } from './skilltree.js';
+import type { IslandState } from './economy.js';
 import {
   FULL_CATALOG,
   KEYSTONE_PREREQS,
   BRIDGE_CATALOG,
 } from './skilltree-catalog.js';
-import type { EdgeId } from './skilltree-graph.js';
 
 function makeState(over: Partial<IslandState> = {}): IslandState {
   return {
