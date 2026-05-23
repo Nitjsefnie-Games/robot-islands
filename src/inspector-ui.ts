@@ -906,8 +906,8 @@ export function mountInspectorUi(
     disableBtn,
     [
       'background: transparent',
-      `color: ${'var(--ri-warn, #E8624A)'}`,
-      `border: 1px solid ${'var(--ri-warn-dim, #b85a4a)'}`,
+      `color: ${'var(--ri-danger, #e85d4a)'}`,
+      `border: 1px solid ${'rgba(232,93,74,0.55)'}`,
       'padding: 4px 8px',
       'cursor: pointer',
       'font-family: ui-monospace, monospace',
@@ -922,12 +922,12 @@ export function mountInspectorUi(
   );
   disableBtn.addEventListener('mouseenter', () => {
     if (disableBtn.disabled) return;
-    disableBtn.style.background = 'rgba(232, 98, 74, 0.10)';
-    disableBtn.style.borderColor = 'var(--ri-warn, #E8624A)';
+    disableBtn.style.background = 'rgba(232, 93, 74, 0.10)';
+    disableBtn.style.borderColor = 'var(--ri-danger, #e85d4a)';
   });
   disableBtn.addEventListener('mouseleave', () => {
     disableBtn.style.background = 'transparent';
-    disableBtn.style.borderColor = disableBtn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-warn-dim, #b85a4a)';
+    disableBtn.style.borderColor = disableBtn.disabled ? 'var(--ri-fg-4)' : 'rgba(232,93,74,0.55)';
   });
   disableBtn.addEventListener('click', () => {
     if (!target) return;
