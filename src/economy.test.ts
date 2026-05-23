@@ -3702,6 +3702,8 @@ describe('findNextCapEvent precision-residue handling', () => {
 
 describe('disabled building contributes 0 to power balance', () => {
   it('a disabled smelter draws no power', () => {
+    // Solar produces; disabled smelter would consume but is filtered out.
+    // Assert total power consumed is 0 because the only consumer is disabled.
     const state = makeState({
       buildings: [
         { id: 'solar', defId: 'solar', x: 0, y: 0 },
@@ -3711,9 +3713,7 @@ describe('disabled building contributes 0 to power balance', () => {
     });
     advanceIsland(state, 1000, { defs: BUILDING_DEFS });
     const rates = computeRates(state, { defs: BUILDING_DEFS });
-    // Disabled building is filtered out of validBuildings → absent from byBuilding.
-    const smRate = rates.byBuilding.find((r) => r.building.id === 'sm');
-    expect(smRate).toBeUndefined();
+    expect(rates.power.consumed).toBe(0);
   });
 });
 

@@ -26,7 +26,7 @@
 
 import { checkGates, computeBuffStack } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
-import { isOperational, nextConstructionCompletionMs, tickConstruction } from './construction.js';
+import { nextConstructionCompletionMs, tickConstruction } from './construction.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
   BUILDING_DEFS,
@@ -34,7 +34,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
@@ -614,7 +614,7 @@ export function computeRates(
   // (constructionRemainingMs > 0) are ALSO filtered out — they consume
   // neither power nor recipe inputs, contribute zero output, and are
   // invisible to adjacency-buff scans until they finish.
-  const validBuildings = state.buildings.filter((b) => !b.invalid && isOperational(b) && b.disabled !== true);
+  const validBuildings = state.buildings.filter((b) => isOperationalBuilding(b));
   // §2.7 day-night cycle. `nowMs` defaults to `state.lastTick` so existing
   // callers (and tests) that don't pass an explicit time see the multiplier
   // for the state's own clock. The integrator in `advanceIsland` passes the
@@ -1258,6 +1258,7 @@ export function findNextCapEvent(
   // otherwise long offline catchup splits at the wrong moment.
   const thresholdMul = effectiveSkillMultipliers(state).maintenanceThreshold;
   for (const b of state.buildings) {
+    if (b.disabled === true) continue;
     const def = defs[b.defId];
     const boundary = nextMaintenanceBoundaryMs(b, def, thresholdMul);
     if (boundary === null) continue;
