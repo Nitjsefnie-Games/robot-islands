@@ -61,13 +61,13 @@ import type { NodeId } from './skilltree.js';
 import type { EdgeId } from './skilltree-graph.js';
 import type { OceanCellSpec } from './ocean-cell.js';
 
-import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
+import { attachTerrainAt, WORLD_SEED, type Biome, type IslandSpec, type WorldState } from './world.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
  *  string, so a new key returns "no save" without colliding with older
  *  stores. */
-export const STORAGE_KEY = 'robot-islands:save:v7';
+export const STORAGE_KEY = 'robot-islands:save:v8';
 
 /** User-visible storage-key label. The Settings panel renders this
  *  string in the storage-key footer line. */
@@ -75,11 +75,11 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 7 as const;
+export const SCHEMA_VERSION = 8 as const;
 
 /** Versions that load paths accept. Only the current SCHEMA_VERSION
  *  — all migration paths were removed pre-release. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([SCHEMA_VERSION]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -158,6 +158,70 @@ export interface SerializedWorld {
 /** Top-level snapshot. The `v` field is the schema-version anchor: this
  *  step ships v1, future revisions bump it and the loader returns null
  *  on a v mismatch (caller falls back to a fresh world). */
+// ---------------------------------------------------------------------------
+// Historical snapshot shapes (for migrations)
+// ---------------------------------------------------------------------------
+
+/** v7 island state — flat shape (no {id,state} wrapper) with the old
+ *  progression fields that v8 strips. */
+export interface SerializedIslandStateV7 {
+  readonly id: string;
+  readonly biome: Biome;
+  readonly level: number;
+  readonly xp: number;
+  readonly lastTick: number;
+  readonly inventory: Record<string, number>;
+  readonly buildings: ReadonlyArray<unknown>;
+  readonly unlockedNodes: ReadonlyArray<string>;
+  readonly subPathProgress: ReadonlyArray<[string, { spent: number; complete: boolean }]>;
+  readonly unspentSkillPoints: number;
+  readonly specializationRole: string | null;
+}
+
+/** v7 top-level snapshot shape. */
+export interface SerializedSnapshotV7 {
+  readonly v: 7;
+  readonly now: number;
+  readonly currentIslandId: string;
+  readonly islandStates: ReadonlyArray<SerializedIslandStateV7>;
+}
+
+/** v8 island state — removes subPathProgress / specializationRole and adds
+ *  unlockedEdges. */
+export type SerializedIslandStateV8 = Omit<SerializedIslandStateV7, 'subPathProgress' | 'specializationRole'> & {
+  readonly unlockedEdges: ReadonlyArray<string>;
+};
+
+/** v8 top-level snapshot shape. */
+export interface SerializedSnapshotV8 {
+  readonly v: 8;
+  readonly now: number;
+  readonly currentIslandId: string;
+  readonly islandStates: ReadonlyArray<SerializedIslandStateV8>;
+}
+
+/** Migrate a v7 snapshot to v8. Preserves identity (level, xp, inventory,
+ *  buildings) and resets progression: unlockedNodes → [], unlockedEdges → [],
+ *  strips subPathProgress / specializationRole, recomputes unspentSkillPoints
+ *  as max(0, level - 1). */
+export function migrateV7toV8(s: SerializedSnapshotV7): SerializedSnapshotV8 {
+  return {
+    ...s,
+    v: 8,
+    islandStates: s.islandStates.map((is) => {
+      const { subPathProgress: _sp, specializationRole: _sr, ...rest } = is;
+      void _sp;
+      void _sr;
+      return {
+        ...rest,
+        unlockedNodes: [],
+        unlockedEdges: [],
+        unspentSkillPoints: Math.max(0, is.level - 1),
+      };
+    }),
+  };
+}
+
 export interface SaveSnapshot {
   readonly v: typeof SCHEMA_VERSION;
   /** `Date.now()` wall-clock ms at save time. Used to compute the offline
