@@ -772,14 +772,14 @@ describe('power (§5.1)', () => {
     expect(wsRate).toBeCloseTo((1 / 33) * (50 / 60), 9);
   });
 
-  it('power_systems.1 unlocked: Coal Gen produces 105W instead of 100W', () => {
+  it('power_systems.notable.turbineStaging unlocked: Coal Gen produces 120W instead of 100W', () => {
     const state = makeState({
       buildings: [COAL_GEN],
       inventory: { ...blankInventory(), coal: 50 },
-      unlockedNodes: new Set(['power_systems.1']),
+      unlockedNodes: new Set(['power_systems.notable.turbineStaging']),
     });
     const { power } = computeRates(state);
-    expect(power.produced).toBeCloseTo(105, 9);
+    expect(power.produced).toBeCloseTo(120, 9);
   });
 
   it('Coal Gen with empty outputs is never output-stalled (cap doesn\'t apply)', () => {
@@ -998,41 +998,36 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
 });
 
 describe('skill-tree integration (§9.3)', () => {
-  it('mining.1 unlocked: Mine produces iron_ore at 1.05× base rate', () => {
-    // Base mine rate 0.02/s × 1.05 = 0.021/s. (rebalanced step #19: mine 1/50s)
+  it('mining.notable.blastOptimization unlocked: Mine produces iron_ore at 1.30× base rate', () => {
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
-      unlockedNodes: new Set(['mining.1']),
+      unlockedNodes: new Set(['mining.notable.blastOptimization']),
     });
     const { production } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.061764705882352944, 9);
+    expect(production.iron_ore).toBeCloseTo(0.07647058823529412, 9);
   });
 
-  it('mining.1 + mining.2 stacks multiplicatively: Mine rate × 1.155', () => {
-    // Base mine rate 0.02/s × 1.155. (rebalanced step #19)
+  it('mining.notable.blastOptimization + deepVein stacks multiplicatively: Mine rate × 1.30 × 1.20', () => {
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
-      unlockedNodes: new Set(['mining.1', 'mining.2']),
+      unlockedNodes: new Set(['mining.notable.blastOptimization', 'mining.notable.deepVein']),
     });
     const { production } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.06794117647058824, 9);
+    expect(production.iron_ore).toBeCloseTo(0.09176470588235294, 9);
   });
 
-  it('storage.1 unlocked: effective caps are 1.05× the nominal storageCaps map', () => {
-    // Mine alone, iron_ore start at 100 (nominal cap). With storage.1 the
-    // effective cap is 105 — there's headroom and the mine doesn't stall.
-    // (rebalanced step #19: mine 1/50s = 0.02/s)
+  it('storage.notable.verticalSilo unlocked: effective caps are 1.20× the nominal storageCaps map', () => {
     const state = makeState({
       buildings: [MINE],
       inventory: { ...blankInventory(), iron_ore: 100 },
-      unlockedNodes: new Set(['storage.1']),
+      unlockedNodes: new Set(['storage.notable.verticalSilo']),
     });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
-    // Mine ran for 100s before hitting the new cap (105). Time to fill from
-    // 100 to 105 at 0.02/s = 250s; we ran 100s, so we picked up 2 units.
-    expect(state.inventory.iron_ore).toBeCloseTo(105, 6);
+    // Effective cap is 120. Mine produces ~0.0588/s; after 100s inventory is
+    // ~105.88, well below the 120 cap so the mine never stalled.
+    expect(state.inventory.iron_ore).toBeCloseTo(105.88235294117646, 6);
   });
 });
 

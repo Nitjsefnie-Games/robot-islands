@@ -39,8 +39,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §8 Building catalog | P | All §8.1-§8.10 buildings exist as catalog rows with placement cost + power values. Some T5 (Reality Forge, Singularity Battery, Spacetime Resonator multi-output rotation, Universe Editor, Probability Engine, Genesis Chamber) exist as inert visual rows — see TODO §1. |
 | §9.1 Per-island levels | L | Polynomial-then-exponential XP curve. Skill-point grant: `floor(1.1^level)`. |
 | §9.2 Tier breakpoints | L | T1-T5 by level; T6 by Ascendant-Core-crafted + Spaceport. |
-| §9.3 Skill tree | L | All 15 sub-paths × depth 1-15 = 225 nodes, every node drives a live effect. Cost ramp `round(1.5^(d-1))` so depth 15 sits at 292 points (whole sub-path ≈ 870, full tree ≈ 13,100). Commit threshold N=3 points; branch lock active. Sub-path completion enforced. |
-| §9.4 Specialization passive | L | All five roles declarable from T3+; recipe-category buff/penalty applied via tagged recipes. |
+| §9.3 Skill tree | L | Directed graph: 5 branches × 4 sub-paths = 20 sub-paths. Each sub-path is a chain of filler nodes + hand-curated notables + keystones. Total ~600–800 nodes. Purchases use `costToUnlock` (Dijkstra over the graph from owned nodes) and `buyNode` (charges cheapest-path SP cost, auto-owns intermediates). Threshold-bridges activate when branch-SP spent crosses a threshold. Keystone AND-prereqs gate deep nodes. Aura-bearing notables amplify adjacent owned nodes up to ×1.50. No tier gating, no sub-path commitment lock. |
 | §9.5 Biome-locked uniques | L | All six biome uniques in catalog; placement gated by biome; artificial-island block honoured. |
 | §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) N. |
 | §9.7 Tier Reset | L | Reset logic + cost formula + cooldown + spec'd preserve/clear sets. Merged-island reset operates on the absorber's IslandState transparently (no merge-specific code needed). UI cost preview in the Skill Tree's reset row + confirm dialog. |
@@ -411,7 +410,7 @@ When islands A and B touch:
 * All buildings on both islands remain in place. Adjacency is recomputed across the seam — buildings near the boundary may gain new neighbors that weren't there before.
 * Routes targeting the absorbed island redirect to the merged island. Routes between A and B are deleted (they are now intra-island).
 * Drones in transit returning to the absorbed island return to the merged island.
-* The absorber's specialization role and modifiers are kept; the absorbed island's are voided.
+* The absorber's modifiers are kept; the absorbed island's are voided.
 
 Joining is permanent — there is no un-merge.
 
@@ -1007,20 +1006,20 @@ Tiers are passive thresholds that gate building and recipe availability:
 
 * Tier 1: levels 1-5
 * Tier 2: levels 5-15 (crossing 5 unlocks T2 buildings, recipes, sub-paths)
-* Tier 3: levels 15-30 (crossing 15 unlocks T3, plus Specialization Passive)
+* Tier 3: levels 15-30 (crossing 15 unlocks T3)
 * Tier 4: levels 30-50 (crossing 30 unlocks T4, plus biome-locked uniques)
 * Tier 5: level 50 + AI core crafted (unlocks hidden T5 sub-band on the skill tree)
 * Tier 6: Ascendant Core crafted on this island + Spaceport built (unlocks Orbital sub-path under Logistics; satellite operations available — see Section 14)
 
 ### 9.3 Skill Tree Structure
 
-Three branches, each with sub-paths.
+The skill tree is a **directed graph** of nodes connected by edges. Five top-level branches each contain four sub-paths (20 sub-paths total).
 
 **Extraction**
 
 * Mining (ore output, vein depth, rare reveal)
 * Forestry (wood output, regrowth, exotic species)
-* Drilling (T2+, oil/gas/deep mineral)
+* Drilling (oil/gas/deep mineral)
 * Robotics (construction speed, parallel building, drone production efficiency)
 
 **Refinement**
@@ -1034,59 +1033,52 @@ Three branches, each with sub-paths.
 
 * Storage (caps, specialized vaults, rare material handling)
 * Transport (route capacity, drone fuel, airship range)
-* Network (teleporter, multi-hop, automation)
+* Network (teleporter reach, multi-hop, automation)
+* Patronage (funneling efficiency, colony support)
 
-**Orbital** (T6, see §14.9 for full sub-path details)
+**Orbital** (T6, see §14.9)
 
 * Launch (success rate, pad-explosion mitigation)
 * Communication (antenna and satellite comm range, store-and-forward bandwidth)
 * Discovery (Scanner Sat dwell ramp, coverage radius)
 * Resilience (debris-lodge slowdown reduction, onboard fuel reserve, repair-launch reliability)
 
-**Node depth and cost.** Each sub-path has 10 to 15 nodes ordered by depth (depth 1 = shallow and cheap; deepest = expensive and game-warping). Deeper nodes gate behind tier breakpoints (depth 1-2 require T2, depth 3 requires T3, depth 4 requires T4, depth 5-7 require T5, depth 8+ requires T6). Skill-point cost grows geometrically with depth — placeholder: `cost(depth) = round(1.5^(depth - 1))`, so depth 1 costs 1 point, depth 5 costs 5, depth 10 costs 38, depth 15 costs ~292. Combined with the exponential XP softcap past level 50 (§9.1), the deepest nodes remain heavy commitments reachable only by mature islands.
+**Ocean**
 
-**Magnitude.** Effect magnitude doubles with depth through depth 5 — placeholder: depth 1 = +5%, depth 2 = +10%, depth 3 = +20%, depth 4 = +40%, depth 5 = +80% on the relevant stat. From depth 6 onward, magnitudes either continue geometric (for "more of the same") OR convert into unique unlocks: new recipes, structural rule changes, exotic adjacency effects, biome-locked content access without the biome. The mix between geometric scaling and unique unlocks is per-sub-path, tuned to keep deep investment interesting beyond just "+%".
+* Aquaculture (marine biomass, reef cultivation)
+* Hydroprocessing (desalination, underwater refining)
+* Submarine (deep-sea extraction, abyssal logistics)
+* Oceanography (current prediction, bioluminescent mapping)
 
-**Sub-path commitment.** Before commitment, the player can dabble across multiple sub-paths in a branch by picking depth-1 nodes freely. A sub-path becomes COMMITTED once the player has spent a threshold of points in it (placeholder: N = 3 points). Once committed, the sub-path is locked-in and must be completed before any OTHER sub-path in the same branch can be advanced.
+**Graph anatomy.** Each sub-path is a linear chain of shallow filler nodes (templated, depth-graded) interleaved with hand-curated **notables** (typically 4 per sub-path) and capped by **keystones** (1–2 per sub-path). Filler nodes provide flat % bonuses; notables introduce unique mechanics, auras, or unlocks; keystones are high-cost capstones with AND-prerequisite gates. In addition, **threshold-bridges** (edges activated when a branch has spent enough SP) create cross-sub-path and cross-branch shortcuts. **Graft sockets** on the outer rim reserve slots for future expansion. Total node count is ~600–800.
 
-**Sequential sub-path unlocking within a branch.** Only one sub-path per branch can be in-progress (committed but incomplete) at a time. To advance another sub-path in the same branch, the player must first FULLY complete the currently-in-progress one (purchase every node in it). Across branches, sub-paths progress in parallel — the player can have one in-progress sub-path simultaneously in each of the 3 branches plus Orbital, for up to 4 active commitments at any time.
+**Purchasing.** Players do not buy nodes directly. Instead they nominate a **target node** and the engine computes the cheapest path from any already-owned node to that target using multi-source Dijkstra (`costToUnlock`). Edge weights are the skill-point cost of the node at the edge's destination. The player pays the path total and automatically owns every intermediate node along the way (`buyNode`). This means:
 
-With uncapped levels (§9.1) and the exponential XP softcap past level 50, an island that grinds long enough can theoretically unlock every node — sequencing only governs the ORDER, not the eventual reach.
+* You can "skip" to a deep notable by paying through its filler chain in one action.
+* You can reach a distant notable via an active threshold-bridge if you have invested enough in its source branch.
+* Redundant edges (multiple paths to the same node) are allowed; the cheapest available path is always charged.
+
+**Keystone gates.** Each keystone has an AND-prerequisite list of specific upstream nodes that must already be owned before the keystone can be purchased (`canBuyKeystone` / `buyKeystone`). This is separate from the graph pathing — even if a path exists, the keystone stays locked until every prereq is satisfied.
+
+**Aura amplification.** Notables may carry an aura (radius 1–2 edges, bonus up to +15%). Every owned node adjacent to an aura source has its effect magnitude multiplied by the aura bonus. Multiple auras stack multiplicatively per target, capped at ×1.50.
+
+**Node costs.** Filler costs follow a geometric ramp `round(1.5^(depth - 1))` (depth 1 ≈ 1, depth 5 ≈ 5, depth 10 ≈ 38). Notables and keystones have hand-set costs (typically 3–8 SP). Combined with the skill-point grant curve `max(1, floor(1.1^level))` (§9.1), a late-game island at level 70+ has enough points to complete several sub-paths.
+
+**Effect kinds.** Nodes emit one of the following effect types, consumed by the economy and orbital engines:
+
+* Multiplier effects — `recipeRateMul`, `storageCapMul`, `powerProductionMul`, `powerConsumptionMul`, `routeCapacityMul`, `commRangeMul`, `maintenanceThresholdMul`, `scannerCoverageMul`, `debrisProtectionMul`, `droneFuelEfficiencyMul`, `airshipRangeMul`, `padExplosionReduceMul`, `satBufferCapMul`, `scannerDwellRateMul`, `satFuelReserveMul`, `repairDroneReliabilityMul`, `storageCategoryCapMul`, `constructionTimeMul`, `teleporterEfficiencyMul`, `mineYieldBonusMul`, `mineRareTrickleMul`, `loggerYieldBonusMul`, `loggerExoticTrickleMul`, `droneScanRadiusMul`, `xpGainMul`.
+* Unlock effects — `unlockRecipe` (adds a recipe to a building), `biomeBypass` (removes biome restriction for listed buildings), `tierBypass` (lowers tier requirement by 1 for listed buildings).
+* Structural effects — `exoticAdjacency` (new adjacency pair-boost rules), `structural` (shared power grid, parallel construction), `conditionalBonus` (multiplier active only during storms, night, etc.), `crossIslandShared` (resource pool shared across networked T3+ islands).
+* Orbital effects — `launchSuccessAdditive` (flat +% to launch success).
+
+There is no tier gating on individual nodes, no sub-path commitment lock, and no sequential-completion restriction. Any node reachable via the graph topology can be bought as soon as the player has the SP.
 
 **Practical reach by stage.**
 
-* Mid-game island (level ~25): 1 committed sub-path per branch, 10-15 nodes total (mostly depth 1-3 across active sub-paths)
-* Late-game island (level 50): 1-2 fully completed sub-paths per branch, 30-50 nodes total, reaching depth 5-6 in committed paths
-* Very-late-game island (level 70+): multiple fully-completed sub-paths per branch, 80-100+ nodes, depth 7-10 reachable in dedicated specializations
-* Extreme-late-game island (level 100+): trending toward complete tree mastery; depth 10+ unique unlocks accessible
-
-Per-node enumeration (specific names, exact magnitudes, recipe-unlock effects) is deferred to Appendix A as placeholders. The Orbital sub-path's representative nodes (§14.9) are the worked example — every other sub-path follows the same pattern: depth 1-2 are flat % bonuses, depth 3 introduces a structural change (new recipe, new behavior), depth 4-7 deepen the % bonuses geometrically, depth 8+ unlock unique-effect nodes (new mechanics, exotic adjacencies, biome-bypass access).
-
-Total nodes: ~150-200 designed across all branches and sub-paths. Reaching the deep end is a multi-real-week commitment per island given the exponential level cost past 50.
-
-### 9.4 Specialization Passive (T3+)
-
-From Tier 3 onward, an island MAY declare a role. Declaration is optional and can be deferred indefinitely; an island that never declares has no passive bonus and no penalty (an effective Generalist baseline).
-
-Roles (placeholder magnitudes):
-
-* Foundry Island: +50% smelt rate, -25% non-smelting production
-* Refinery Island: +50% chemistry, -25% non-chemistry
-* Mining Island: +75% raw extraction, -50% manufacturing
-* Logistics Hub: +100% route capacity, +50% storage cap, -25% production
-* Research Beacon: skill XP +50% on this island, base production -25%
-
-Declaration affects only the passive bonus and matching penalty in the role table. It does not unlock unique buildings or restrict skill-tree access — sub-path commitments (§9.3) remain independent of the role.
-
-**Buff/penalty scope is recipe-tagged.** Every recipe in §7 carries a category tag: `smelting`, `chemistry`, `extraction`, `manufacturing`, `construction`, `electronics`, `power`, etc. The role's buff multiplier applies to recipe outputs whose tag matches the role's category; the penalty multiplier applies to recipe outputs whose tag does NOT match. Examples:
-
-* Foundry Island (smelting role): buff applies to all `smelting`-tagged recipes (Smelter, Coke Oven, Blast Furnace, Steel Mill, Pyroforge's Exotic Alloy recipe, etc.); penalty applies to everything else.
-* Refinery Island (chemistry): buff to `chemistry`-tagged recipes (Chemical Reactor, Cracker, Air Separator); penalty to all others.
-* Mining Island (extraction): buff to `extraction`-tagged recipes (Mine, Logger, Quarry, Drilling Rig, Pump Jack, Gas Extractor); penalty to all others.
-
-Per-recipe tags belong in the recipe data definitions (§7); placeholders are noted in Appendix A. Tagging the recipe rather than the building avoids edge cases where a single building hosts recipes of different categories (e.g. a Cracker produces petrochemical, not smelting, outputs).
-
-A declared role is changed only via Tier Reset — see §9.7.
+* Mid-game island (level ~25): ~10–15 nodes total, mostly shallow fillers and 1–2 notables
+* Late-game island (level 50): ~30–50 nodes, several sub-paths partially advanced, first keystone reachable
+* Very-late-game island (level 70+): ~80–100+ nodes, multiple sub-paths near completion, bridge shortcuts active
+* Extreme-late-game island (level 100+): trending toward complete tree mastery; all keystones and cross-branch bridges accessible
 
 ### 9.5 Biome-Locked Uniques (T4)
 
@@ -1128,7 +1120,7 @@ The Patron Hub island pays the routes' fuel costs from its own fuel reserves. If
 
 ### 9.7 Tier Reset
 
-A player may pay to revert an island to Tier 1, primarily to change a Specialization Passive declaration (§9.4) or to undo poorly-chosen sub-path commitments (§9.3). Available from Tier 3 onward — pre-T3 islands have nothing meaningful to reset.
+A player may pay to revert an island to Tier 1, primarily to redo skill-tree choices. Available from Tier 3 onward — pre-T3 islands have nothing meaningful to reset.
 
 **Cost (placeholder):** a pile of T2-T3 components scaling with the island's current level (placeholder formula: cost proportional to level²). High-level resets represent serious production commitment, not casual undo.
 
@@ -1136,8 +1128,7 @@ A player may pay to revert an island to Tier 1, primarily to change a Specializa
 
 * Level → 1, XP → 0
 * All spent skill points refunded as unspent
-* Specialization role cleared (island returns to undeclared Generalist)
-* Sub-path commitments cleared
+* `unlockedNodes` and `unlockedEdges` cleared (full skill-tree wipe)
 * Tier breakpoint state reverts to T1 — T2+ buildings remain placed but stop operating until the island re-climbs into their tier band
 
 **Preserved by reset:**
@@ -1594,7 +1585,7 @@ On hit, two outcomes:
 
 ### 14.9 Orbital Skill Sub-path
 
-Orbital is the fourth top-level branch of the skill tree, parallel to Extraction / Refinement / Logistics (per §9.3). It contains four sub-paths: Launch, Communication, Discovery, Resilience. Sequential-completion rules from §9.3 apply within Orbital: the player can have one in-progress sub-path here at a time.
+Orbital is the fourth top-level branch of the skill tree, parallel to Extraction / Refinement / Logistics / Ocean (per §9.3). It contains four sub-paths: Launch, Communication, Discovery, Resilience.
 
 Representative nodes (depth-ordered placeholders):
 
@@ -1683,8 +1674,6 @@ interface Island {
   xp: number;
   unlockedNodes: Set<NodeId>;
   unspentPoints: number;
-  specializationRole: RoleId | null;
-  declaredAt: number | null;
   lastTick: number;
   populated: boolean;  // false if discovered but not yet settled
 }
@@ -1824,9 +1813,8 @@ function computeRates(island: Island) {
     if (!recipeOk) continue;
 
     const adjBonus = computeAdjacencyBuff(island, b);
-    // All buffs (specialization role, modifiers, Network Consciousness) stack multiplicatively.
+    // All buffs (modifiers, Network Consciousness) stack multiplicatively.
     const buffStack = adjBonus
-                    \* computeSpecializationFactor(island, def.recipe)
                     \* computeModifierBuffs(island, def.recipe)
                     \* computeNetworkBuff(world, island);
     const inputAvail = inputAvailabilityFactor(island, def.recipe);  // continuous [0,1]; 0 = stalled (no output, no XP)
@@ -1872,7 +1860,7 @@ Identical code path. When player returns, every island runs `advanceIsland(islan
 7. Inter-island routes. Funneling.
 8. Biomes and modifiers.
 9. Tier breakpoints, T2 and T3 content unlock.
-10. Specialization passive, Network Consciousness milestones.
+10. Network Consciousness milestones.
 11. Artificial island construction.
 12. T4 endgame content.
 13. T5 transcendent content.
@@ -1893,7 +1881,6 @@ The following numeric values are placeholders to be set during prototype play:
 * Skill tree node count per sub-path (placeholder 10-15)
 * Skill tree node cost scaling (placeholder `cost(depth) = round(1.5^(depth - 1))`)
 * Skill point grant per level-up (placeholder `points\_granted(level) = max(1, floor(1.1^level))`)
-* Sub-path commitment threshold (placeholder N = 3 points spent in the sub-path)
 * Recipe cycle times
 * Recipe input/output ratios
 * Building power consumption/production values
@@ -1903,7 +1890,6 @@ The following numeric values are placeholders to be set during prototype play:
 * Stratification cell side length R
 * Maximum island size by biome
 * Land Reclamation cost curve
-* Specialization passive magnitudes
 * Network Consciousness buff values (production-rate-only multipliers, applied across all networked T3+ islands)
 * Modifier roll count distribution (placeholder: 50/30/15/5 for 0/1/2/3 modifiers)
 * Per-modifier rarity weights (placeholder table in §3.5)

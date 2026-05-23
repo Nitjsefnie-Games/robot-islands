@@ -254,8 +254,8 @@ describe('performMerge', () => {
     const sb = makeState({
       id: 'b',
       unspentSkillPoints: 5,
-      // Simulate 3 points spent into nodes (mining.1=1, mining.2=2).
-      unlockedNodes: new Set(['mining.1', 'mining.2']),
+      // Simulate 3 points spent into a notable (efficientDrills=3).
+      unlockedNodes: new Set(['mining.notable.efficientDrills']),
     });
     expect(islandRefundedPoints(sb)).toBe(5 + 3);
     const world = makeWorld([a, b]);

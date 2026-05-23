@@ -1,25 +1,17 @@
 // Per-island skill tree per SPEC §9.3. Pure logic — no PixiJS, no DOM.
 //
-// Four branches × sub-paths × depth-graded nodes. Players spend skill points
-// (granted on level-up, §9.1) to unlock nodes, which compose multiplicatively
-// into rate, cap, and power multipliers consumed by `computeRates` in
-// `economy.ts`.
+// Directed graph model: five branches × 4 sub-paths each. Each sub-path is a
+// chain of filler nodes (depth-graded, templated) plus hand-curated notables
+// and keystones. Total ~600-800 nodes across the graph.
 //
-// The catalog implements depth 1-15 for all sub-paths (11 legacy + 4 Orbital
-// = 15 sub-paths × 15 depths = 225 nodes). Depths 1-5 use the spec's
-// doubling ramp (+5% → +80%); depths 6-15 continue with a slowed geometric
-// extension (see `magnitudeForDepth`) so late-game investment is meaningful
-// but bounded.
+// Players spend skill points (granted on level-up, §9.1) to unlock nodes,
+// which compose multiplicatively into rate, cap, and power multipliers
+// consumed by `computeRates` in `economy.ts`.
 //
-// Every depth-1 placeholder slot has been wired to a live mechanic:
-//   - Robotics → maintenanceThresholdMul (later degradation)
-//   - Transport → routeCapacityMul (more units per route batch)
-//   - Network + Orbital Communication → commRangeMul (ground + sat comm reach)
-//   - Orbital Discovery → scannerCoverageMul (sat coverage radius at launch)
-//   - Orbital Resilience → debrisProtectionMul (reduces orbital hit chance)
-// `kind: 'placeholder'` and `kind: 'structural'` remain as union members for
-// forward-compat with future sub-paths but no catalog node currently uses
-// them.
+// Purchasing uses `costToUnlock` (Dijkstra over the graph from owned nodes)
+// and `buyNode` (charges the cheapest-path SP cost, auto-owns intermediates).
+// AND-prereq keystones gate via `canBuyKeystone` / `buyKeystone`. Threshold-
+// bridges activate when branch-spent thresholds are met.
 
 import type { BuildingDefId } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';
@@ -29,6 +21,7 @@ import { ALL_RECIPE_CATEGORIES } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
 import type { Biome } from './world.js';
 import type { Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
+import { FULL_CATALOG } from './skilltree-catalog.js';
 
 export type BranchId = 'extraction' | 'refinement' | 'logistics' | 'orbital' | 'ocean';
 
@@ -371,295 +364,22 @@ export function cumulativeSkillPointsForLevel(level: number): number {
   return total;
 }
 
-export function magnitudeForDepth(depth: number): number {
-  // §9.3 "geometric to depth 5: depth 1 = +5%, doubles each step; mixed
-  // thereafter — geometric continuation OR unique unlocks per sub-path."
-  //
-  // We pick "geometric continuation" with a SLOWED ramp post-depth-5 — pure
-  // exponential continuation (×2 per step through depth 15) would land
-  // depth-15 at +819× which is absurd, but a flat zero would make 110 deep
-  // nodes (depth 6-15 × 11 non-orbital sub-paths) cost a fortune in points
-  // for no effect (the previous `structural` placeholder).
-  //
-  // Schedule:
-  //   depth 1-5: 0.05, 0.10, 0.20, 0.40, 0.80              (×2 doubling)
-  //   depth 6-10: 1.20, 1.60, 2.00, 2.40, 2.80             (+0.40 per step)
-  //   depth 11-15: 3.00, 3.20, 3.40, 3.60, 3.80            (+0.20 per step)
-  //
-  // Cost still doubles at every depth (`costForDepth = 2^(d-1)`), so the
-  // late-depth nodes remain expensive enough that this is a credible chase.
-  if (depth <= 5) {
-    return 0.05 * (2 ** (depth - 1));
-  }
-  if (depth <= 10) {
-    return 0.80 + 0.40 * (depth - 5);
-  }
-  if (depth <= 15) {
-    return 2.80 + 0.20 * (depth - 10);
-  }
-  return 0;
-}
-
 /**
- * Required tier for a node at a given depth per §9.3:
- *   depth 1-2 → T2, depth 3 → T3, depth 4 → T4, depth 5-7 → T5, depth 8+ → T6.
- * §9.3's Drilling "T2+" annotation is subsumed by depth-1 → T2 uniformly.
+ * Tier gating was removed in the graph redesign (Task 19); kept as a
+ * backward-compatibility stub so legacy UI code still compiles.
  */
-export function nodeRequiredTier(node: SkillNode): Tier {
-  return tierRequiredForDepth(node.depth);
+export function nodeRequiredTier(_node: SkillNode): Tier {
+  return 1;
 }
 
 // ---------------------------------------------------------------------------
-// Node catalog
+// Validation + spending (backward-compat stubs)
 // ---------------------------------------------------------------------------
-//
-// Depth 1-15 for all 15 sub-paths (11 legacy + 4 Orbital = 225 nodes).
-// Magnitudes per §9.3: depth 1 = +5%, depth 2 = +10%, depth 3 = +20%,
-// depth 4 = +40%, depth 5 = +80%. Costs: depth 1 = 1, depth 2 = 2, …,
-// depth 15 = 16384.
-//
-// Effects:
-//   Mining/Forestry/Drilling: recipe-rate multiplier on `extraction` recipes.
-//   Robotics: placeholder (construction speed — no placement system yet).
-//   Smelting/Chemistry/Electronics: recipe-rate multiplier on the matching
-//     category.
-//   Power Systems: multiplies producers' `power.produces`.
-//   Storage: multiplies every storage cap.
-//   Transport/Network: placeholder until routes/teleporters exist.
-//   Orbital sub-paths (Launch/Communication/Discovery/Resilience): structural
-//     placeholders until satellite/launch mechanics land (§14.9).
-
-function rate(category: RecipeCategory): SkillEffect {
-  return { kind: 'recipeRateMul', category };
-}
-
-const DEPTH1_MAG = 0.05;
-const DEPTH2_MAG = 0.10;
-
-function depth1(
-  subPath: SubPathId,
-  effect: SkillEffect,
-  description: string,
-): SkillNode {
-  return {
-    id: `${subPath}.1`,
-    subPath,
-    depth: 1,
-    cost: 1,
-    magnitude: DEPTH1_MAG,
-    effect,
-    description,
-  };
-}
-
-function depth2(
-  subPath: SubPathId,
-  effect: SkillEffect,
-  description: string,
-): SkillNode {
-  return {
-    id: `${subPath}.2`,
-    subPath,
-    depth: 2,
-    cost: 2,
-    magnitude: DEPTH2_MAG,
-    effect,
-    description,
-  };
-}
-
-function makeDeepNodes(
-  subPath: SubPathId,
-  baseEffect: SkillEffect,
-  depthOverrides?: Readonly<Record<number, { effect: SkillEffect; description?: string }>>,
-): SkillNode[] {
-  // magnitudeForDepth returns non-zero for every depth 1-15 (slowed
-  // geometric continuation past depth 5). `depthOverrides` lets a sub-path
-  // splice in a different effect at specific depths (used for the tertiary
-  // spec themes that only appear at one or two depths).
-  const nodes: SkillNode[] = [];
-  for (let d = 3; d <= 15; d++) {
-    const cost = costForDepth(d);
-    const mag = magnitudeForDepth(d);
-    const override = depthOverrides?.[d];
-    const effect = override?.effect ?? baseEffect;
-    const description =
-      override?.description ?? `${SUBPATH_LABEL[subPath]} +${(mag * 100).toFixed(0)}%`;
-    nodes.push({
-      id: `${subPath}.${d}`,
-      subPath,
-      depth: d,
-      cost,
-      magnitude: mag,
-      effect,
-      description,
-    });
-  }
-  return nodes;
-}
-
-function makeOrbitalNodes(subPath: SubPathId): SkillNode[] {
-  const nodes: SkillNode[] = [];
-  // §14.9 four sub-paths, every spec theme wired:
-  //   launch — additive launch-success bonus (§14.7) at depth 1+,
-  //            pad-explosion mitigation at depth 2 only.
-  //   communication — comm range at depth 1+,
-  //                   store-and-forward bandwidth at depth 2 only.
-  //   discovery — Scanner coverage at depth 1+,
-  //               dwell ramp at depth 2 only.
-  //   resilience — debris protection at depth 1+,
-  //                fuel reserve at depth 2 and repair reliability at depth 3.
-  // After the depth-2/3 variant slot, deeper nodes deepen the primary axis.
-  for (let d = 1; d <= 15; d++) {
-    let effect: SkillEffect;
-    let descSuffix: string;
-    const mag = magnitudeForDepth(d);
-    switch (subPath) {
-      case 'launch':
-        if (d === 2) {
-          effect = { kind: 'padExplosionReduceMul' };
-          descSuffix = `Pad-explosion likelihood ÷${(1 + mag).toFixed(2)}`;
-        } else {
-          effect = { kind: 'launchSuccessAdditive' };
-          descSuffix = `Launch success +${(mag * 100).toFixed(1)}% (additive, capped at 99%)`;
-        }
-        break;
-      case 'communication':
-        if (d === 2) {
-          effect = { kind: 'satBufferCapMul' };
-          descSuffix = `Store-and-forward bandwidth +${(mag * 100).toFixed(0)}%`;
-        } else {
-          effect = { kind: 'commRangeMul' };
-          descSuffix = `Comm range +${(mag * 100).toFixed(0)}%`;
-        }
-        break;
-      case 'discovery':
-        if (d === 2) {
-          effect = { kind: 'scannerDwellRateMul' };
-          descSuffix = `Scanner dwell-ramp rate +${(mag * 100).toFixed(0)}%`;
-        } else {
-          effect = { kind: 'scannerCoverageMul' };
-          descSuffix = `Scanner coverage +${(mag * 100).toFixed(0)}%`;
-        }
-        break;
-      case 'resilience':
-        if (d === 2) {
-          effect = { kind: 'satFuelReserveMul' };
-          descSuffix = `Onboard fuel reserve +${(mag * 100).toFixed(0)}%`;
-        } else if (d === 3) {
-          effect = { kind: 'repairDroneReliabilityMul' };
-          descSuffix = `Repair-drone failure ÷${(1 + mag).toFixed(2)}`;
-        } else {
-          effect = { kind: 'debrisProtectionMul' };
-          descSuffix = `Debris protection +${(mag * 100).toFixed(0)}%`;
-        }
-        break;
-      default:
-        effect = { kind: 'structural', description: `${subPath} depth-${d} unlock`, data: { kind: 'sharedPowerGrid' } };
-        descSuffix = `${SUBPATH_LABEL[subPath]} depth-${d} unlock`;
-    }
-    nodes.push({
-      id: `${subPath}.${d}`,
-      subPath,
-      depth: d,
-      cost: costForDepth(d),
-      magnitude: mag,
-      effect,
-      description: descSuffix,
-    });
-  }
-  return nodes;
-}
-
-export const NODE_CATALOG: ReadonlyArray<SkillNode> = [
-  // Extraction branch
-  depth1('mining', rate('extraction'), 'Ore output +5%'),
-  // Mining secondary theme: "vein depth" → per-Mine yield bonus on top of
-  // the global extraction multiplier.
-  depth2('mining', { kind: 'mineYieldBonusMul' }, 'Mine vein depth +10%'),
-  depth1('forestry', rate('extraction'), 'Wood output +5%'),
-  // Forestry secondary theme: "regrowth" → per-Logger yield bonus.
-  depth2('forestry', { kind: 'loggerYieldBonusMul' }, 'Logger regrowth +10%'),
-  depth1('drilling', rate('extraction'), 'Deep extraction +5%'),
-  depth2('drilling', rate('extraction'), 'Deep extraction +10%'),
-  // Robotics primary axis is construction speed per SPEC §9.3 themes
-  // ("construction speed, parallel building, drone production efficiency").
-  // depth-1 boosts the construction-time mul; depth-2 grants the first
-  // additional concurrent build slot.
-  depth1('robotics', { kind: 'constructionTimeMul' }, 'Construction time ÷1.05 (+5% speed)'),
-  depth2('robotics', { kind: 'parallelBuildCapAdd' }, '+1 concurrent build slot'),
-
-  // Refinement branch
-  depth1('smelting', rate('smelting'), 'Smelter rate +5%'),
-  depth2('smelting', rate('smelting'), 'Smelter rate +10%'),
-  depth1('chemistry', rate('chemistry'), 'Chem rate +5%'),
-  depth2('chemistry', rate('chemistry'), 'Chem rate +10%'),
-  depth1('electronics', rate('electronics'), 'Electronics rate +5%'),
-  depth2('electronics', rate('electronics'), 'Electronics rate +10%'),
-  depth1('power_systems', { kind: 'powerProductionMul' }, 'Power production +5%'),
-  // depth-2: switch axis to consumption efficiency — spec theme
-  // "Power systems (efficiency, advanced generation)".
-  depth2('power_systems', { kind: 'powerConsumptionMul', reduce: true }, 'Power consumption -10%'),
-
-  // Logistics branch
-  depth1('storage', { kind: 'storageCapMul' }, 'Storage caps +5%'),
-  // depth-2: specialized vault — rare-material handling per spec theme.
-  depth2('storage', { kind: 'storageCategoryCapMul', category: 'rare' }, 'Rare-vault caps +10%'),
-  depth1('transport', { kind: 'routeCapacityMul' }, 'Route capacity +5%'),
-  // depth-2: drone fuel efficiency per spec theme
-  // "Transport (route capacity, drone fuel, airship range)".
-  depth2('transport', { kind: 'droneFuelEfficiencyMul' }, 'Drone fuel efficiency +10%'),
-  // Network's primary spec theme is teleporter / network reach; depth-2
-  // keeps the commRange axis it had previously since "Network" semantically
-  // covers multi-hop comm too.
-  depth1('network', { kind: 'teleporterEfficiencyMul' }, 'Teleporter fuel cost ÷1.05'),
-  depth2('network', { kind: 'commRangeMul' }, 'Comm range +10%'),
-
-  // Deep nodes (depth 3-15) for existing sub-paths
-  // Mining depth-3 = rare-reveal trickle (one-shot tertiary slot); deeper
-  // depths continue the primary ore-output ramp.
-  ...makeDeepNodes('mining', rate('extraction'), {
-    3: { effect: { kind: 'mineRareTrickleMul' }, description: 'Mining rare-reveal (helium-3 trickle)' },
-  }),
-  // Forestry depth-3 = exotic-species lumber trickle.
-  ...makeDeepNodes('forestry', rate('extraction'), {
-    3: { effect: { kind: 'loggerExoticTrickleMul' }, description: 'Forestry exotic-species (lumber trickle)' },
-  }),
-  ...makeDeepNodes('drilling', rate('extraction')),
-  // Robotics depth-3 = "drone production efficiency" tertiary theme;
-  // deeper depths continue the primary construction-time ramp.
-  ...makeDeepNodes('robotics', { kind: 'constructionTimeMul' }, {
-    3: { effect: { kind: 'droneScanRadiusMul' }, description: 'Drone scan radius +20%' },
-  }),
-  ...makeDeepNodes('smelting', rate('smelting')),
-  ...makeDeepNodes('chemistry', rate('chemistry')),
-  ...makeDeepNodes('electronics', rate('electronics')),
-  ...makeDeepNodes('power_systems', { kind: 'powerProductionMul' }),
-  ...makeDeepNodes('storage', { kind: 'storageCapMul' }),
-  ...makeDeepNodes('transport', { kind: 'routeCapacityMul' }),
-  ...makeDeepNodes('network', { kind: 'teleporterEfficiencyMul' }),
-
-  // Orbital branch (depth 1-15)
-  ...makeOrbitalNodes('launch'),
-  ...makeOrbitalNodes('communication'),
-  ...makeOrbitalNodes('discovery'),
-  ...makeOrbitalNodes('resilience'),
-];
-
-// ---------------------------------------------------------------------------
-// Validation + spending
-// ---------------------------------------------------------------------------
-
-/** Threshold of points at which a sub-path becomes COMMITTED per §9.3 (placeholder N=3). */
-export const SUBPATH_COMMIT_THRESHOLD = 3;
 
 export type CanSpendReason =
   | 'unknown-node'
   | 'already-unlocked'
-  | 'insufficient-points'
-  | 'tier-locked'
-  | 'depth-prereq'
-  | 'branch-locked';
+  | 'insufficient-points';
 
 export interface CanSpendResult {
   readonly ok: boolean;
@@ -689,10 +409,12 @@ function buildCatalog(nodes: ReadonlyArray<SkillNode>): Catalog {
   return { nodes, byId, bySubPath };
 }
 
+/** Alias to the new hand-curated + generated catalog for backward compat. */
+export const NODE_CATALOG = FULL_CATALOG;
+
 const DEFAULT_CATALOG: Catalog = buildCatalog(NODE_CATALOG);
 
-/** Default skill graph — nodes from NODE_CATALOG with no edges (legacy
- *  flat-catalog mode until the graph-redesign wiring lands). */
+/** Default skill graph — nodes from the live catalog with no edges. */
 export const DEFAULT_GRAPH: Graph = {
   nodes: NODE_CATALOG,
   edges: [],
@@ -701,9 +423,8 @@ export const DEFAULT_GRAPH: Graph = {
 };
 
 /**
- * Decide whether `state` can spend a skill point on `nodeId`. Pure: does not
- * mutate state. Test code may pass a custom catalog to exercise edge cases
- * (e.g. a 3-node sub-path to verify the branch lock fires before completion).
+ * Backward-compat spend gate. The graph engine uses `costToUnlock` /
+ * `buyNode` for real purchases; this stub remains so legacy UI code compiles.
  */
 export function canSpend(
   state: IslandState,
@@ -719,28 +440,12 @@ export function canSpend(
   if (state.unspentSkillPoints < node.cost) {
     return { ok: false, reason: 'insufficient-points' };
   }
-  if (tierForLevel(state.level) < nodeRequiredTier(node)) {
-    return { ok: false, reason: 'tier-locked' };
-  }
-  // Depth prereq: every node at lower depth in the same sub-path must be owned.
-  const sub = cat.bySubPath.get(node.subPath) ?? [];
-  for (const n of sub) {
-    if (n.depth >= node.depth) break;
-    if (!state.unlockedNodes.has(n.id)) {
-      return { ok: false, reason: 'depth-prereq' };
-    }
-  }
-  // TODO(skill-graph Task 8): branch-lock semantics fully removed; replaced
-  // by graph edge prereqs in buyNode.
   return { ok: true };
 }
 
 /**
- * Apply a purchase. Caller must have verified `canSpend(state, nodeId).ok`.
- * Mutates `state.unspentSkillPoints` and `state.unlockedNodes`.
- *
- * TODO(skill-graph Task 8): replaced by buyNode; current implementation is
- * transitional (no edge bookkeeping yet).
+ * Backward-compat point spender. The graph engine uses `buyNode` for real
+ * purchases; this stub remains so legacy UI code compiles.
  */
 export function spendPoint(
   state: IslandState,
@@ -1188,10 +893,8 @@ export function nodeById(id: NodeId): SkillNode | undefined {
  * the HUD island-bar to surface a global "claim available" cue without
  * the player opening the skill-tree modal.
  *
- * The rule is canSpend's: enough points, tier met, depth prereq satisfied,
- * node not already owned. canSpend reads unspentSkillPoints / unlockedNodes /
- * level only — so an island with zero spendable points (or no ready nodes)
- * is correctly false.
+ * The graph engine uses `costToUnlock` / `buyNode` for real purchases;
+ * this predicate is a backward-compat stub that checks points + ownership.
  */
 export function hasPickableSkill(state: IslandState): boolean {
   for (const node of NODE_CATALOG) {
