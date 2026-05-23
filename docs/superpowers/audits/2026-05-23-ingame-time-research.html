@@ -1,0 +1,609 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!--
+  Audit: How in-game time is generated.
+  Sidechannel research only — no source files were modified.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How in-game time is generated — research</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1180px; margin: 0 auto; }
+    header.page-head { margin-bottom: 36px; max-width: 980px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 34px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 32px 0; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 15px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+    .summary .v.warn    { color: var(--warn); }
+    .summary .v.bad     { color: var(--rust); }
+    .verdict { background: var(--white); border: var(--border); border-left: 4px solid var(--olive);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .verdict.yellow { border-left-color: var(--warn); }
+    .verdict .vt { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--olive); margin-bottom: 8px; }
+    .verdict.yellow .vt { color: var(--warn); }
+    .verdict .vh { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .verdict .vb { font-size: 14.5px; color: var(--gray-700); max-width: 880px; }
+    .verdict .vb + .vb { margin-top: 10px; }
+    section { margin-bottom: 56px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate);
+      letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 880px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 880px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.84em; text-decoration: none;
+      white-space: nowrap; }
+    a.cite:hover { text-decoration: underline; }
+    .toc { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+    .diagram-wrap { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 22px; margin: 8px 0 22px; overflow-x: auto; }
+    .diagram-cap { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+    svg { display: block; max-width: 100%; }
+    svg text { font-family: var(--sans); fill: var(--gray-700); font-size: 12px; }
+    svg text.mono { font-family: var(--mono); font-size: 11px; fill: var(--gray-500); }
+    svg text.title { font-family: var(--mono); font-size: 11px; fill: var(--slate); }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--gray-300);
+      vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .badge { display: inline-block; font-family: var(--mono); font-size: 10.5px;
+      padding: 2px 8px; border-radius: 6px; letter-spacing: 0.04em; }
+    .badge.red   { background: #4A2A1C; color: var(--rust); }
+    .badge.amber { background: var(--oat); color: var(--warn); }
+    .badge.green { background: #2D3A24; color: var(--olive); }
+    .callout { background: var(--gray-150); border: var(--border); border-left: 3px solid var(--clay);
+      border-radius: 8px; padding: 12px 16px; margin: 16px 0; font-size: 13.5px; color: var(--gray-700); max-width: 880px; }
+    .callout.warn  { border-left-color: var(--warn); }
+    .callout.bad   { border-left-color: var(--rust); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Research · time generation · robot-islands</div>
+      <h1>How in-game time is generated</h1>
+      <div class="context-box">
+        <span class="label">Question</span>
+        Is in-game time derived from the current wall clock, from a per-save anchor, or from a global game-clock?
+        Trace <code>nowMs</code> from the ticker, through the economy, through save/load, including the §13.3 Time
+        Lock acceleration layer. Side-channel — source files untouched.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Primary clock</div><div class="v accent"><code>performance.now()</code></div></div>
+      <div class="cell"><div class="k">Wall anchor</div><div class="v"><code>Date.now()</code> (per frame)</div></div>
+      <div class="cell"><div class="k">Per-island clock</div><div class="v"><code>state.lastTick</code> only</div></div>
+      <div class="cell"><div class="k">Bugs found</div><div class="v warn">3 (1 minor / 2 cosmetic)</div></div>
+    </div>
+
+    <div class="verdict yellow">
+      <div class="vt">TL;DR</div>
+      <div class="vh">It's a dual-clock model: a per-island <code>performance.now()</code>-domain economy clock, with the wall-clock <code>Date.now()</code> threaded in as the day-night anchor.</div>
+      <div class="vb">
+        There is <strong>no global game clock</strong>. Each island carries its own <code>lastTick</code>
+        (<a class="cite" href="#q2">economy.ts:272</a>) in the <em>per-page</em> <code>performance.now()</code>
+        domain. The ticker calls <code>advanceIsland(state, now, ctx, nowWall)</code> per island per frame
+        (<a class="cite" href="#q2">main.ts:1704</a>) — <code>now</code> drives integration and inventory math,
+        <code>nowWall</code> is forwarded ONLY to the §2.7 solar / day-night sampler so the cycle is "purely
+        time-driven and does not depend on the player's session."
+      </div>
+      <div class="vb">
+        On save, both anchors are captured (<code>savedAt = Date.now()</code>, <code>savedAtPerf =
+        performance.now()</code>, <a class="cite" href="#q4">persistence.ts:217–218</a>). On load, the
+        deserializer computes <code>perfShift = nowPerfMs - savedAtPerf - deltaMs</code>
+        (<a class="cite" href="#q4">persistence.ts:312</a>) and rebases every persisted perf-domain
+        timestamp into the new session's domain. <strong>Offline catchup falls out of this for free</strong>
+        — <code>lastTick</code> is set to <code>nowPerfMs - deltaMs</code>
+        (<a class="cite" href="#q5">persistence.ts:440</a>), and the next frame's
+        <code>advanceIsland</code> integrates the full gap through its existing event-driven loop.
+        §13.3 Time Lock acceleration is just a per-island <code>3×</code> multiplier on segment rates
+        — it never decouples the per-island clock from the global frame clock.
+      </div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#q1">1 · time source</a>
+      <a href="#q2">2 · per-island lastTick</a>
+      <a href="#q3">3 · domains diagram</a>
+      <a href="#q4">4 · save / perfShift</a>
+      <a href="#q5">5 · offline catchup</a>
+      <a href="#q6">6 · Time Lock</a>
+      <a href="#q7">7 · subsystems</a>
+      <a href="#q9">8 · close / quit</a>
+      <a href="#q10">9 · failure modes</a>
+      <a href="#bugs">10 · bugs found</a>
+    </div>
+
+    <!-- ============================================================ -->
+    <section id="q1">
+      <div class="sec-head"><span class="num">Q1</span><h2>What's the time source?</h2></div>
+      <p class="body">
+        The canonical <code>nowMs</code> argument is produced once per frame inside the Pixi ticker callback
+        (<a class="cite" href="#">main.ts:1601</a>):
+      </p>
+      <div class="diagram-wrap">
+        <div class="diagram-cap">Per-frame time capture (main.ts:1580 + 1601 + 1608)</div>
+        <svg viewBox="0 0 920 200" role="img">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="#D97757"/>
+            </marker>
+          </defs>
+          <!-- ticker box -->
+          <rect x="20" y="60" width="220" height="90" rx="10" fill="#252420" stroke="#3A3833"/>
+          <text class="title" x="36" y="84">app.ticker.add(() => …)</text>
+          <text class="mono" x="36" y="106">const now      = performance.now();</text>
+          <text class="mono" x="36" y="124">const nowWall  = Date.now();</text>
+          <text class="mono" x="36" y="142" fill="#8FA56E">// main.ts:1601, 1608</text>
+
+          <!-- arrow to advanceIsland -->
+          <line x1="240" y1="105" x2="370" y2="105" stroke="#D97757" stroke-width="1.5" marker-end="url(#arr)"/>
+
+          <!-- advanceIsland -->
+          <rect x="370" y="40" width="320" height="130" rx="10" fill="#252420" stroke="#3A3833"/>
+          <text class="title" x="388" y="62">advanceIsland(state, now, ctx, nowWall)</text>
+          <text class="mono" x="388" y="84">wallOffset = nowWall − now      // const</text>
+          <text class="mono" x="388" y="102">t = state.lastTick              // perf-dom</text>
+          <text class="mono" x="388" y="120">solar uses (t + wallOffset)     // → wall-dom</text>
+          <text class="mono" x="388" y="138">state.lastTick = now            // perf-dom</text>
+          <text class="mono" x="388" y="158" fill="#8FA56E">// economy.ts:1448–1690</text>
+
+          <!-- arrows to solar + lastTick -->
+          <line x1="690" y1="80" x2="830" y2="60" stroke="#D97757" stroke-width="1.5" marker-end="url(#arr)"/>
+          <line x1="690" y1="140" x2="830" y2="160" stroke="#D97757" stroke-width="1.5" marker-end="url(#arr)"/>
+
+          <rect x="830" y="30" width="80" height="60" rx="8" fill="#3A352B" stroke="#3A3833"/>
+          <text class="title" x="844" y="52">solar</text>
+          <text class="mono" x="844" y="70">wall</text>
+          <text class="mono" x="844" y="84" fill="#E0B47F">Date.now</text>
+
+          <rect x="830" y="130" width="80" height="60" rx="8" fill="#3A352B" stroke="#3A3833"/>
+          <text class="title" x="844" y="152">lastTick</text>
+          <text class="mono" x="844" y="170">perf</text>
+          <text class="mono" x="844" y="184" fill="#D97757">perf.now</text>
+        </svg>
+      </div>
+      <p class="body">
+        Concretely: every economy and routing timestamp lives in the <code>performance.now()</code> domain;
+        only the §2.7 solar / day-night sampler reads <code>Date.now()</code>. Production timestamps elsewhere
+        are minted with <code>performance.now()</code> at the call site — drone launches
+        (<a class="cite">main.ts:567</a>), vehicle launches (<a class="cite">main.ts:581</a>), orbital
+        launches (<a class="cite">main.ts:594</a>), hover tooltip (<a class="cite">main.ts:758</a>), initial
+        island states (<a class="cite">main.ts:903, 914</a>).
+      </p>
+      <p class="body">
+        The Pixi ticker's own <code>lastTime</code> is <strong>not</strong> consulted — the integrator pulls
+        <code>performance.now()</code> directly. Frame-delta is derived as <code>now − lastFrameMs</code>
+        (<a class="cite">main.ts:1614</a>) and only used for some subsystem subticks.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="q2">
+      <div class="sec-head"><span class="num">Q2</span><h2>Global clock vs. per-island lastTick</h2></div>
+      <p class="body">
+        <strong>There is no global game clock.</strong> The only persisted time field is the per-island
+        <code>state.lastTick</code> (<a class="cite">economy.ts:272</a>):
+      </p>
+      <div class="callout">
+        <code>/** Wall-clock timestamp of the last advance, in milliseconds. */ lastTick: number;</code>
+        <br>— economy.ts:271–272. The comment says "wall-clock" but the value is in fact
+        <code>performance.now()</code>-domain (see persistence.ts:28–41 head comment and
+        <code>state.lastTick = nowMs</code> at <a class="cite">economy.ts:1690</a> where <code>nowMs</code>
+        is the perf-clock from main.ts:1601). The comment is stale.
+      </div>
+      <p class="body">
+        The factory <code>makeInitialIslandState(spec, nowMs)</code>
+        (<a class="cite">world.ts:1033</a>) seeds <code>lastTick: nowMs</code> at island creation
+        (<a class="cite">world.ts:1079</a>) — at game-start the seed comes from <code>performance.now()</code>
+        captured in main.ts:903 (home) and main.ts:914 (demo islands).
+      </p>
+      <p class="body">
+        There is no <code>world.tickNowMs</code> or equivalent on <code>WorldState</code>. Subsystems
+        (drones, routes, vehicles, weather, orbital) re-receive the frame's <code>now</code> from main.ts
+        on every call (<a class="cite">main.ts:1785, 1797, 1810–1815, 1830</a>); they don't read a
+        world-level clock field.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="q3">
+      <div class="sec-head"><span class="num">Q3</span><h2>Two time domains, who samples each</h2></div>
+      <p class="body">
+        <code>performance.now()</code> measures elapsed time since the page document started parsing —
+        per-tab, monotonic, sub-millisecond, and <strong>resets to 0 on every page reload</strong>.
+        <code>Date.now()</code> is Unix-epoch milliseconds — moves with the system clock, can jump on NTP
+        sync or DST, but is stable across page reloads.
+      </p>
+      <div class="diagram-wrap">
+        <div class="diagram-cap">Who samples which clock</div>
+        <svg viewBox="0 0 920 380" role="img">
+          <!-- perf column -->
+          <rect x="20" y="20" width="430" height="350" rx="12" fill="#252420" stroke="#3A3833"/>
+          <text class="title" x="38" y="46">performance.now() — PERF DOMAIN</text>
+          <text class="mono" x="38" y="62" fill="#8FA56E">page-load relative · resets on reload · perfShift-ed on save/load</text>
+
+          <text x="38" y="92" fill="#F5F3EC">• island integration tick</text>
+          <text class="mono" x="60" y="108">economy.ts:1448 advanceIsland(state, nowMs, ...)</text>
+          <text x="38" y="132" fill="#F5F3EC">• state.lastTick</text>
+          <text class="mono" x="60" y="148">economy.ts:272 / persistence.ts:440 (lastTick = now − Δ)</text>
+          <text x="38" y="172" fill="#F5F3EC">• drone launch / return ETA</text>
+          <text class="mono" x="60" y="188">drones.ts:442 launchTime: nowMs (=perf.now)</text>
+          <text x="38" y="212" fill="#F5F3EC">• route batch dispatch / arrival</text>
+          <text class="mono" x="60" y="228">routes.ts:556 weather sampled at perf-ms</text>
+          <text x="38" y="252" fill="#F5F3EC">• settlement vehicle launch</text>
+          <text class="mono" x="60" y="268">settlement.ts:525 launchTime: nowMs</text>
+          <text x="38" y="292" fill="#F5F3EC">• building placedAt / maintainedAt / toxicityExpiryMs</text>
+          <text class="mono" x="60" y="308">placement.ts:450 + persistence.ts:330–339 (perfShift)</text>
+          <text x="38" y="332" fill="#F5F3EC">• Tier-Reset declaredAt / lastResetAt</text>
+          <text class="mono" x="60" y="348">skilltree-ui.ts:403/589/869 (perf.now)</text>
+
+          <!-- wall column -->
+          <rect x="470" y="20" width="430" height="350" rx="12" fill="#252420" stroke="#3A3833"/>
+          <text class="title" x="488" y="46">Date.now() — WALL DOMAIN</text>
+          <text class="mono" x="488" y="62" fill="#E0B47F">Unix epoch · survives reloads · jumps on NTP/DST</text>
+
+          <text x="488" y="92" fill="#F5F3EC">• day-night phase sampler</text>
+          <text class="mono" x="510" y="108">main.ts:1608 nowWall = Date.now() per frame</text>
+          <text class="mono" x="510" y="124">→ advanceIsland(., ., ., nowWall) at :1717</text>
+          <text x="488" y="148" fill="#F5F3EC">• solarMultiplier / phase boundaries</text>
+          <text class="mono" x="510" y="164">economy.ts:1472 wallOffset = nowWall − now</text>
+          <text class="mono" x="510" y="180">economy.ts:1529 solar samples (t + wallOffset)</text>
+          <text x="488" y="204" fill="#F5F3EC">• day-night visual tint overlay</text>
+          <text class="mono" x="510" y="220">main.ts:1953 dayNightTint.refresh(nowWall)</text>
+          <text x="488" y="244" fill="#F5F3EC">• HUD phase label</text>
+          <text class="mono" x="510" y="260">hud.ts:380 const nowMs = Date.now()</text>
+          <text x="488" y="284" fill="#F5F3EC">• save / load anchor (savedAt)</text>
+          <text class="mono" x="510" y="300">persistence.ts:192 nowWallMs = Date.now()</text>
+          <text x="488" y="324" fill="#F5F3EC">• inspector "preview rates" calls</text>
+          <text class="mono" x="510" y="340">inspector-ui.ts:1253/1371 (solarClock = Date.now)</text>
+          <text x="488" y="356" fill="#E08B7F">• hud.ts:541 canTierReset(., Date.now())   ← BUG</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="q4">
+      <div class="sec-head"><span class="num">Q4</span><h2>Save / load and the <code>perfShift</code></h2></div>
+      <p class="body">
+        Persistence captures both clocks in the snapshot (<a class="cite">persistence.ts:163–175</a>):
+      </p>
+      <table class="tbl">
+        <thead><tr><th>Field</th><th>Domain</th><th>Captured at</th><th>Site</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">savedAt</td><td>wall (Date.now)</td><td>save time</td><td class="mono">persistence.ts:217</td></tr>
+          <tr><td class="slate">savedAtPerf</td><td>perf (performance.now)</td><td>save time</td><td class="mono">persistence.ts:218</td></tr>
+        </tbody>
+      </table>
+      <p class="body">
+        On load (<a class="cite">persistence.ts:292–489</a>):
+      </p>
+      <ol style="margin: 0 0 18px 24px; font-size: 14.5px; color: var(--gray-700); max-width: 880px;">
+        <li><code>deltaMs = max(0, Date.now() − snapshot.savedAt)</code> — wall-clock outage in ms
+          (<a class="cite">persistence.ts:306</a>).</li>
+        <li><code>perfShift = performance.now() − snapshot.savedAtPerf − deltaMs</code>
+          (<a class="cite">persistence.ts:312</a>).</li>
+        <li>Every persisted perf-domain timestamp is rebased by <code>+ perfShift</code>: drone
+          <code>launchTime</code>/<code>expectedReturnTime</code> (<a class="cite">persistence.ts:364–365</a>),
+          route <code>arrivalTime</code>/<code>dispatchTime</code> (<a class="cite">persistence.ts:371–372</a>),
+          vehicle <code>launchTime</code>/<code>expectedArrivalTime</code> (<a class="cite">persistence.ts:377–378</a>),
+          repair-drone (<a class="cite">persistence.ts:387–388</a>), building
+          <code>placedAt</code>/<code>maintainedAt</code>/<code>toxicityExpiryMs</code>
+          (<a class="cite">persistence.ts:330–339</a>), per-island
+          <code>declaredAt</code>/<code>lastResetAt</code> (<a class="cite">persistence.ts:434–435</a>).</li>
+        <li>Crucially, <code>state.lastTick</code> is set to <code>nowPerfMs − deltaMs</code>
+          (<a class="cite">persistence.ts:440</a>) — i.e. "as far in this session's past as the outage
+          was long." The next frame's <code>advanceIsland</code> integrates the gap in one piecewise
+          loop.</li>
+        <li><code>operatingMs</code> is a duration (not a timestamp) and is <strong>not</strong> shifted
+          (<a class="cite">persistence.ts:311</a>).</li>
+      </ol>
+      <p class="body">
+        Subtle conceptual move: <code>perfShift</code> is not "translate saved-perf → live-perf 1-for-1";
+        it's "translate so a saved timestamp at <code>savedAtPerf</code> lands at
+        <code>nowPerfMs − deltaMs</code>" — i.e. account for the outage. A drone whose
+        <code>expectedReturnTime</code> elapsed during the outage lands at or before <code>nowPerfMs</code>
+        and is processed as already-arrived on the next tick. Same "1 frame or 24 h, one code path" property
+        the lastTick remap gives the economy integrator.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="q5">
+      <div class="sec-head"><span class="num">Q5</span><h2>Offline catchup timeline</h2></div>
+      <p class="body">
+        Question 5 is essentially "what happens when the player returns after N hours?" Diagram:
+      </p>
+      <div class="diagram-wrap">
+        <div class="diagram-cap">Save → close tab → reload → catch-up integration</div>
+        <svg viewBox="0 0 920 340" role="img">
+          <!-- timeline -->
+          <line x1="40" y1="160" x2="880" y2="160" stroke="#3A3833" stroke-width="2"/>
+
+          <!-- tick marks -->
+          <line x1="120" y1="148" x2="120" y2="172" stroke="#8F8D82"/>
+          <line x1="320" y1="148" x2="320" y2="172" stroke="#8F8D82"/>
+          <line x1="520" y1="148" x2="520" y2="172" stroke="#8F8D82"/>
+          <line x1="720" y1="148" x2="720" y2="172" stroke="#8F8D82"/>
+
+          <text class="mono" x="98" y="138">SAVE</text>
+          <text class="mono" x="288" y="138">TAB CLOSED</text>
+          <text class="mono" x="488" y="138">RELOAD</text>
+          <text class="mono" x="680" y="138">NEXT FRAME</text>
+
+          <!-- gap arrow -->
+          <line x1="120" y1="190" x2="520" y2="190" stroke="#E0B47F" stroke-dasharray="4 4"/>
+          <text class="mono" x="280" y="208" fill="#E0B47F">deltaMs = Date.now − savedAt</text>
+
+          <!-- catch-up arrow -->
+          <line x1="520" y1="225" x2="720" y2="225" stroke="#D97757"/>
+          <text class="mono" x="540" y="216" fill="#D97757">lastTick ← nowPerfMs − deltaMs</text>
+          <text class="mono" x="540" y="244" fill="#D97757">advanceIsland integrates entire gap</text>
+
+          <!-- value rows -->
+          <text class="mono" x="40" y="290" fill="#F5F3EC">SAVE BLOB:</text>
+          <text class="mono" x="40" y="306" fill="#8F8D82">savedAt     = Date.now() at save           → snapshot.savedAt</text>
+          <text class="mono" x="40" y="322" fill="#8F8D82">savedAtPerf = performance.now() at save    → snapshot.savedAtPerf</text>
+
+          <!-- top labels -->
+          <text class="title" x="40" y="56">Two clocks captured at save; reload re-anchors both</text>
+          <text class="mono"  x="40" y="76" fill="#8F8D82">  persistence.ts:217–218 (write) ·  persistence.ts:306–312 (read + shift)</text>
+          <text class="mono"  x="40" y="92" fill="#8F8D82">  Net effect: from the integrator's POV, the outage is replayed as one long frame.</text>
+        </svg>
+      </div>
+      <p class="body">
+        The wall-clock delta is the source-of-truth for "how long was I gone."
+        <code>performance.now()</code> can't measure across reloads (it resets to ~0), so the deserializer
+        constructs a synthetic perf-domain past via <code>nowPerfMs − deltaMs</code> and hands the
+        economy a single integrate-this-gap segment. The §15.3 piecewise integrator (subdivided by
+        day-night quadrant boundaries, ramp sub-segments, recipe cap events, etc.) handles the
+        rest transparently.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="q6">
+      <div class="sec-head"><span class="num">Q6</span><h2>Time Lock acceleration (SPEC §13.3)</h2></div>
+      <p class="body">
+        <strong>Time Lock does not decouple the per-island clock from the global frame clock.</strong>
+        It is implemented as a runtime rate multiplier inside the same integrator:
+      </p>
+      <ul style="margin: 0 0 14px 24px; font-size: 14.5px; color: var(--gray-700); max-width: 880px;">
+        <li><strong>Banking:</strong> if the island has any Time Lock and <code>bankingEnabled</code> is set,
+          <code>advanceIsland</code> short-circuits — instead of integrating production, it adds
+          <code>(nowMs − lastTick) / 60000</code> minutes into <code>timeLockBankedMin</code> and returns
+          (<a class="cite">economy.ts:1480–1487</a>). Capped at <code>24 h × locks</code>.</li>
+        <li><strong>Spending:</strong> banked time is consumed as <code>state.accelerationRemainingMin</code>
+          on a target island; while non-zero, every segment multiplies rates by 3×
+          (<a class="cite">economy.ts:1518</a> <code>accelerationMul</code>; consumed at
+          <a class="cite">economy.ts:1665–1675</a>).</li>
+        <li>Concurrency: the integrator clamps the segment end to the moment acceleration runs out
+          (<a class="cite">economy.ts:1586–1588</a>), so the piecewise-constant rate invariant
+          still holds.</li>
+      </ul>
+      <p class="body">
+        The accelerated island still pulls real-time inputs from routes/cables. Per spec §13.3, the
+        multiplier never compounds and never exceeds 3×, "to avoid inter-island flow-conservation problems."
+        Implementation reflects this: only <code>accelerationMul</code> changes, never the
+        <code>t</code>-advance step.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="q7">
+      <div class="sec-head"><span class="num">Q7</span><h2>Subsystem clocks — who samples what</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Subsystem</th><th>Tick anchor</th><th>Persisted timestamps</th><th>Domain</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Economy (advanceIsland)</td><td><code>now</code> = perf</td><td><code>state.lastTick</code></td><td>perf</td></tr>
+          <tr><td class="slate">Day-night cycle</td><td><code>nowWall</code> = wall</td><td>none (function of nowMs)</td><td>wall</td></tr>
+          <tr><td class="slate">Drones (tickDrones)</td><td><code>now</code> = perf</td><td><code>launchTime, expectedReturnTime</code></td><td>perf</td></tr>
+          <tr><td class="slate">Routes (tickRoutes)</td><td><code>now</code> = perf</td><td><code>arrivalTime, dispatchTime</code></td><td>perf</td></tr>
+          <tr><td class="slate">Settlement vehicles</td><td><code>now</code> = perf</td><td><code>launchTime, expectedArrivalTime</code></td><td>perf</td></tr>
+          <tr><td class="slate">Orbital / sat / debris / repair-drone</td><td><code>now</code> = perf</td><td>sat <code>launchTime</code>, repair-drone times</td><td>perf</td></tr>
+          <tr><td class="slate">Weather (deterministic)</td><td><code>now</code> = perf passed in</td><td>none (function of seed+cell+nowMs)</td><td>perf  <span class="badge amber">see Q10</span></td></tr>
+          <tr><td class="slate">Buildings (maintenance ageing)</td><td>elapsed via <code>operatingMs</code></td><td><code>placedAt, maintainedAt, toxicityExpiryMs</code></td><td>perf</td></tr>
+          <tr><td class="slate">Tier reset cooldown</td><td><code>performance.now()</code> at call site</td><td><code>declaredAt, lastResetAt</code></td><td>perf</td></tr>
+          <tr><td class="slate">Autosave</td><td><code>performance.now()</code> for "Saved Ns ago"</td><td><code>savedAt</code> (wall), <code>savedAtPerf</code> (perf)</td><td>both</td></tr>
+          <tr><td class="slate">Singularity Battery</td><td>segment-bounded perf time</td><td><code>singularityStoredWs</code> (joules — not a time)</td><td>n/a</td></tr>
+        </tbody>
+      </table>
+      <p class="body">
+        Note the homogeneous <code>perf</code> column for everything stored — that's why a single
+        <code>perfShift</code> on load is sufficient. The wall clock is read on the fly per-frame at
+        main.ts:1608, never persisted (other than as the immutable <code>savedAt</code> stamp for
+        outage measurement).
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="q9">
+      <div class="sec-head"><span class="num">Q8</span><h2>Page-close / browser-quit</h2></div>
+      <p class="body">
+        <code>document.addEventListener('visibilitychange', …)</code> at
+        <a class="cite">main.ts:1569–1571</a> calls <code>triggerSave()</code> when
+        <code>document.visibilityState === 'hidden'</code> — covers tab-switch, minimize, and the
+        in-flight portion of tab close. There is no <code>pagehide</code> / <code>beforeunload</code>
+        handler — the spec's "primary 'don't lose 30 s of progress' guarantee" rests on this
+        <code>visibilitychange:hidden</code> save plus the 30 s autosave timer
+        (<a class="cite">main.ts:1564 SAVE_INTERVAL_MS = 30_000</a>).
+      </p>
+      <p class="body">
+        Reconstruction on next load depends on <code>Date.now()</code> deltas (the <code>deltaMs</code> at
+        persistence.ts:306). <code>performance.now()</code> deltas are <em>not</em> consulted across the
+        reload boundary — they're meaningless since perf resets to 0 on every page load.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="q10">
+      <div class="sec-head"><span class="num">Q9</span><h2>Failure modes — system-clock jumps</h2></div>
+      <p class="body">
+        <code>performance.now()</code> is monotonic and immune to NTP/DST. <code>Date.now()</code> isn't.
+        Two distinct failure modes:
+      </p>
+      <ol style="margin: 0 0 14px 24px; font-size: 14.5px; color: var(--gray-700); max-width: 880px;">
+        <li><strong>Mid-session NTP jump (forward or backward).</strong> The per-frame
+          <code>wallOffset = nowWall − now</code> (<a class="cite">economy.ts:1472</a>) is recomputed
+          every frame, so the day-night sampler shifts <em>on the next frame</em>. If the system
+          clock jumps forward 2 hours, the next frame's solar multiplier is sampled 2 h later — the
+          day-night phase visibly jumps but the economy itself only sees a single perf-clock frame
+          delta, so inventory isn't double-credited. A backward jump (<code>nowWall</code> drops by Δ)
+          is similarly absorbed — the phase rewinds.</li>
+          <li><strong>Mid-session clock backward, then save + reload.</strong>
+          <code>deltaMs = max(0, Date.now() − snapshot.savedAt)</code>
+          (<a class="cite">persistence.ts:306</a>) clamps a backward jump to 0 — so the catch-up
+          synthetic-past is 0 ms and no offline progress accrues. <em>Forward</em> jumps before save
+          would inflate <code>savedAt</code> and then yield a smaller-than-real deltaMs on the next
+          legitimate reload, costing some offline progress. Both are bounded.</li>
+      </ol>
+      <p class="body">
+        The code does NOT mix <code>Date.now()</code> and <code>performance.now()</code> for the same
+        delta in any production-path integrator. The two domains are kept apart, joined only at
+        <code>wallOffset</code> for the solar sampler. <strong>However</strong>, two UI-facing call sites
+        violate this discipline — see Q10 below.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="bugs">
+      <div class="sec-head"><span class="num">Q10</span><h2>Bugs found — domain confusion</h2></div>
+      <p class="body">
+        Three mixed-domain spots, all UI/cosmetic in impact (none corrupt the economy):
+      </p>
+
+      <div class="callout bad">
+        <strong>Bug A · cooldown gate in HUD reads wall-clock against perf-domain field.</strong>
+        <span class="badge red">SEVERITY · minor</span>
+        <br><br>
+        <a class="cite">hud.ts:541</a> — <code>if (canTierReset(state, Date.now()).ok) { … hint chip … }</code>.
+        <br>
+        <code>canTierReset</code> at <a class="cite">tier-reset.ts:99–101</a> tests
+        <code>nowMs − state.lastResetAt &lt; TIER_RESET_COOLDOWN_MS</code>. <code>lastResetAt</code>
+        is in perf-domain (perfShift-ed on load, stamped at skilltree-ui.ts:589 via
+        <code>performance.now()</code>). With <code>Date.now() ≈ 1.7e12</code> and
+        <code>lastResetAt</code> on the order of 1e4–1e7 even right after a reset, the difference is
+        always &gt;&gt; 24 h — <strong>the HUD cooldown gate always evaluates as off-cooldown</strong>.
+        Result: the HUD "tier-reset available" hint chip flashes even within the 24 h cooldown window.
+        The actual click-handler (skilltree-ui.ts:589) correctly uses <code>performance.now()</code>,
+        so the user can't actually fire a reset — but the hint is misleading.
+      </div>
+
+      <div class="callout warn">
+        <strong>Bug B · inspector's manual "Refresh maintenance" stamps wall-clock into perf-domain field.</strong>
+        <span class="badge amber">SEVERITY · cosmetic</span>
+        <br><br>
+        <a class="cite">inspector-ui.ts:1021</a> — <code>tryRefreshMaintenance(building, def, inv,
+        Date.now(), …)</code>. <code>tryRefreshMaintenance</code>
+        (<a class="cite">maintenance.ts:187–204</a>) writes <code>maintainedAt = nowMs</code>. Every
+        other production write of <code>maintainedAt</code> uses perf-domain
+        (placement.ts:450, economy auto-maintain via maintenance.ts:172).
+        <br><br>
+        Reads: a global <code>grep maintainedAt</code> shows the only runtime read is
+        <code>tutorial.ts:165</code> (<code>b.maintainedAt &gt; b.placedAt</code>) and the inspector
+        UI display. Maintenance gating uses <code>operatingMs</code> (reset to 0 on refresh), not
+        <code>maintainedAt</code>, so the wrong domain in <code>maintainedAt</code> has no functional
+        effect — but the inspector's "Maintained X ago" readout will show a multi-decade-in-the-past
+        value the moment the user clicks Refresh.
+      </div>
+
+      <div class="callout warn">
+        <strong>Bug C · weather() samples day-night phase in perf-domain.</strong>
+        <span class="badge amber">SEVERITY · cosmetic / spec-drift</span>
+        <br><br>
+        Per spec §2.7, the day-night cycle is "purely time-driven and does not depend on the player's
+        session." <code>weather()</code> (<a class="cite">weather.ts:135–171</a>) is called with
+        perf-domain <code>nowMs</code> from main.ts:1944 (overlay), routes.ts:556 (route-loss), and
+        weather-overlay.ts:142/157 (forecast). Inside <code>weather()</code>,
+        <code>dayPhaseName(t)</code> at <a class="cite">weather.ts:151</a> boosts severe-storm weights
+        by 1.25× when the phase is <code>night</code> or <code>dawn</code>.
+        <br><br>
+        Because <code>weather()</code> samples <code>dayPhaseName</code> on a perf-domain
+        <code>t</code>, the night/dawn boost <strong>shifts across page reloads</strong> for the
+        same cell+seed at the same wall-clock moment. The base sequence (the seeded RNG draw chain
+        rooted at <code>${seed}_weather_${cx}_${cy}</code>) is still deterministic — but the
+        per-step weight set isn't. A forecasted severe storm "for tomorrow at 23:00" may not
+        appear at 23:00 after a long-outage reload, because the per-page perf clock has been
+        rebased while the weather function still keys phase off its own perf-domain integrator.
+        Fix would be the same pattern as <code>advanceIsland</code>: pass a wall-clock anchor in
+        and key <code>dayPhaseName</code> off that.
+      </div>
+
+      <p class="body">
+        None of the three corrupts inventory, drones, routes, or saves. They are all consistency holes
+        between (a) the explicit perf-vs-wall discipline the integrator/persistence layer follows and
+        (b) ancillary call sites that bypass it.
+      </p>
+    </section>
+
+    <div class="footer">
+      <p>
+        Research · generated 2026-05-23 · scope: <code>src/main.ts</code>, <code>src/economy.ts</code>,
+        <code>src/persistence.ts</code>, <code>src/daynight.ts</code>, <code>src/weather.ts</code>,
+        <code>src/hud.ts</code>, <code>src/inspector-ui.ts</code>, <code>src/skilltree-ui.ts</code>,
+        <code>src/tier-reset.ts</code>, <code>src/maintenance.ts</code>.
+        Side-channel — no source files modified.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

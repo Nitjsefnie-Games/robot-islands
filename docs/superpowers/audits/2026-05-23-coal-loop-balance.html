@@ -1,0 +1,415 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coal loop self-sustain — balance audit</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1180px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 980px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+
+    .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 36px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+    .summary .v.warn    { color: var(--warn); }
+    .summary .v.bad     { color: var(--rust); }
+
+    .verdict {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--rust);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px;
+    }
+    .verdict.green { border-left-color: var(--olive); }
+    .verdict.yellow { border-left-color: var(--warn); }
+    .verdict.red { border-left-color: var(--rust); }
+    .verdict .vt { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--rust); margin-bottom: 8px; }
+    .verdict.green .vt { color: var(--olive); }
+    .verdict.yellow .vt { color: var(--warn); }
+    .verdict .vh { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .verdict .vb { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .verdict .vb + .vb { margin-top: 8px; }
+
+    section { margin-bottom: 60px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate);
+      letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 840px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 840px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+
+    .toc { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500); text-transform: uppercase;
+      letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    .diagram-wrap { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 22px; margin: 8px 0 22px; overflow-x: auto; }
+    .diagram-cap { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+    svg { display: block; max-width: 100%; }
+    svg text { font-family: var(--sans); fill: var(--gray-700); }
+    svg text.label { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+    svg text.title { font-family: var(--mono); font-size: 11px; fill: var(--slate); }
+
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px;
+      margin-bottom: 18px; }
+    .tbl th, .tbl td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--gray-300);
+      vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .tbl td.num  { font-family: var(--mono); font-size: 12.5px; color: var(--slate); text-align: right; }
+    .tbl td.bad  { color: var(--rust); font-weight: 600; }
+    .tbl td.ok   { color: var(--olive); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .equation {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 16px 22px; margin: 18px 0;
+      font-family: var(--mono); font-size: 13.5px; color: var(--gray-700);
+      white-space: pre; overflow-x: auto;
+    }
+    .equation .em { color: var(--clay); }
+    .equation .ok { color: var(--olive); }
+    .equation .bad { color: var(--rust); }
+
+    .badge { display: inline-block; font-family: var(--mono); font-size: 10.5px;
+      padding: 2px 8px; border-radius: 6px; letter-spacing: 0.04em; }
+    .badge.red   { background: #4A2A1C; color: var(--rust); }
+    .badge.amber { background: var(--oat); color: var(--warn); }
+    .badge.green { background: #2D3A24; color: var(--olive); }
+
+    .callout { background: var(--gray-150); border: var(--border); border-left: 3px solid var(--gray-500);
+      border-radius: var(--radius); padding: 12px 18px; margin: 18px 0; font-size: 13.5px; }
+    .callout strong { color: var(--slate); }
+
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Correctness audit · economy balance</div>
+      <h1>Coal loop self-sustain — can <code>coal_mine</code> + <code>coal_gen</code> close on its own?</h1>
+      <div class="context-box">
+        <span class="label">Question</span>
+        Does the <code>mine</code> (placed on a coal tile, recipe <code>mine_on_coal</code>) produce
+        enough coal — net of the <code>coal_gen</code>'s own consumption — to keep one coal generator
+        fed, while the generator's power output covers the mine's draw? If 1:1 doesn't close, what
+        ratio does? Reference methodology: the Heavy Logger / Biomass Plant rebalance
+        (<code>9cda2aa</code>) — a deliberately tuned self-sustaining T2 forestry power loop.
+      </div>
+    </header>
+
+    <div class="toc">
+      <span class="lbl">Jump</span>
+      <a href="#tldr">TL;DR</a>
+      <a href="#reference">1 — Reference methodology</a>
+      <a href="#numbers">2 — Headline numbers</a>
+      <a href="#math">3 — General-form math</a>
+      <a href="#oneone">4 — At 1:1</a>
+      <a href="#crosscheck">5 — vs biomass loop</a>
+      <a href="#caveats">6 — Caveats</a>
+    </div>
+
+    <div class="summary" id="tldr">
+      <div class="cell"><div class="k">Mine coal/s</div><div class="v">0.0588</div></div>
+      <div class="cell"><div class="k">Gen coal/s</div><div class="v warn">0.500</div></div>
+      <div class="cell"><div class="k">Gen power/s</div><div class="v ok">+100 W</div></div>
+      <div class="cell"><div class="k">Mine power/s</div><div class="v bad">−40 W</div></div>
+      <div class="cell"><div class="k">Net @ 1:1</div><div class="v bad">−0.44 coal/s · +60 W</div></div>
+    </div>
+
+    <div class="verdict red">
+      <div class="vt">Verdict — NOT self-sustaining at any ratio</div>
+      <div class="vh">No combination of <code>mine</code>s + <code>coal_gen</code>s closes both balances. Coal-balance needs ≥ 8.5 mines per generator; that ratio guarantees a ≥ 240 W power deficit per generator.</div>
+      <div class="vb">A single <code>mine_on_coal</code> outputs <code>1 coal / 17 s = 0.0588 coal/s</code>; a single <code>coal_gen</code> burns <code>1 coal / 2 s = 0.5 coal/s</code>. The coal pipe alone demands <strong>N ≥ 8.5 · M</strong> (mines : generators). Substituting that floor into the power equation <code>100·M − 40·N</code> gives <code>100·M − 340·M = −240·M W</code> — every generator that's actually fed costs more power than it produces, by a wide margin.</div>
+      <div class="vb">In-game adjacency buffs (<code>same_def +10%/match, max 2</code> → max +20%) and skill-tree mining bonuses don't close the gap: to flip the power sign you'd need <code>N ≤ 2.5·M</code>, i.e. a <strong>3.4× (+240%) mine output multiplier</strong>. The largest stock buff (+20%) is ~17× too small. The chain is structurally a power sink, not a power source.</div>
+    </div>
+
+    <!-- 1 — Reference methodology -->
+    <section id="reference">
+      <div class="sec-head"><span class="num">1</span><h2>Reference — the forestry-loop rebalance</h2></div>
+      <p class="sec-intro">The user asked the audit to mirror the methodology of the prior balance pass on Heavy Logger + Biomass Plant. That pass is captured in a single commit; its math is the template this audit copies.</p>
+
+      <table class="tbl">
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Commit</td><td class="mono">9cda2aa</td></tr>
+          <tr><td class="slate">Title</td><td>balance(buildings): rework Heavy Logger — 9 wood/10s, 40W draw</td></tr>
+          <tr><td class="slate">Files</td><td><code>src/building-defs.ts</code>, <code>src/recipes.ts</code></td></tr>
+          <tr><td class="slate">Power change</td><td><code>heavy_logger.power.consumes: 80 → 40</code></td></tr>
+          <tr><td class="slate">Output change</td><td><code>recipes.heavy_logger.outputs.wood: 3 → 9</code> (cycleSec still <code>10</code>)</td></tr>
+          <tr><td class="slate">Counterparty (unchanged)</td><td><code>biomass_plant</code>: <code>produces 80W</code>, recipe <code>wood: 1 / 2s</code></td></tr>
+          <tr><td class="slate">Stated outcome</td><td>"a Heavy Logger + Biomass Plant pair nets <strong>+0.4 wood/s</strong> and <strong>+40 W</strong> — self-sustaining and ahead of 4 base Loggers on wood and power"</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Source-of-balance note.</strong> Commit <code>9cda2aa</code> moved only the Heavy Logger side
+        of the pair; Biomass Plant's <code>80 W</code> output and <code>1 wood / 2 s</code> burn predate
+        this rebalance. Phrased the other way: the rebalance tuned the <em>extractor</em> against an
+        already-existing power-side recipe to land on net-positive wood and net-positive power. The
+        coal loop is the inverse case where neither side has been tuned to close.
+      </div>
+    </section>
+
+    <!-- 2 — Numbers -->
+    <section id="numbers">
+      <div class="sec-head"><span class="num">2</span><h2>Coal loop — quoted definitions</h2></div>
+      <p class="sec-intro">There is no distinct <code>coal_mine</code> building; <code>BUILDING_DEFS.mine</code> backs both ore and coal extraction, dispatched at runtime by tile (recipe <code>mine_on_ore</code> vs <code>mine_on_coal</code>). The <code>coal_gen</code> building has its own def + recipe.</p>
+
+      <table class="tbl">
+        <thead><tr><th>Building</th><th>File · line</th><th>Power</th><th>Recipe</th><th>cycleSec</th><th>Inputs</th><th>Outputs</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">mine <span class="badge amber">on coal tile</span></td>
+            <td class="mono">building-defs.ts:604<br>recipes.ts:1077</td>
+            <td class="bad">consumes 40 W</td>
+            <td class="mono">mine_on_coal</td>
+            <td class="num">17</td>
+            <td>—</td>
+            <td><code>coal: 1</code></td>
+          </tr>
+          <tr>
+            <td class="slate">coal_gen</td>
+            <td class="mono">building-defs.ts:672<br>recipes.ts:1125</td>
+            <td class="ok">produces 100 W<br>(no self-consume)</td>
+            <td class="mono">coal_gen</td>
+            <td class="num">2</td>
+            <td><code>coal: 1</code></td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Derived per-second rates.</strong></p>
+      <table class="tbl">
+        <thead><tr><th>Quantity</th><th>Formula</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Mine coal output</td><td class="mono">1 / 17 s</td><td class="num">0.0588 coal/s</td></tr>
+          <tr><td>Mine power draw</td><td class="mono">40 W (continuous when running)</td><td class="num bad">−40 W/s</td></tr>
+          <tr><td>Gen coal consumption</td><td class="mono">1 / 2 s</td><td class="num warn">0.500 coal/s</td></tr>
+          <tr><td>Gen power output</td><td class="mono">100 W (continuous)</td><td class="num ok">+100 W/s</td></tr>
+          <tr><td>Coal demand / supply ratio</td><td class="mono">0.5 ÷ 0.0588</td><td class="num">8.5×</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 3 — General-form math -->
+    <section id="math">
+      <div class="sec-head"><span class="num">3</span><h2>Why no ratio closes</h2></div>
+      <p class="sec-intro">Let <code>N</code> = mines, <code>M</code> = generators. The two balance equations must both be non-negative for self-sustain.</p>
+
+      <div class="equation">coal balance:    <span class="em">N · (1/17)  −  M · (1/2)  ≥  0</span>    ⇒    <span class="em">N  ≥  8.5 · M</span>
+power balance:   <span class="em">M · 100      −  N · 40        ≥  0</span>    ⇒    <span class="em">N  ≤  2.5 · M</span></div>
+
+      <p class="body">The two constraints are mutually exclusive: <code>N ≥ 8.5·M</code> and <code>N ≤ 2.5·M</code> have <strong>no positive-integer solution</strong> (no real solution either). Plugging the coal-floor <code>N = 8.5·M</code> into the power equation:</p>
+
+      <div class="equation">power_net(N = 8.5·M)  =  100·M  −  40 · 8.5·M  =  100·M  −  340·M  =  <span class="bad">−240 · M  W</span></div>
+
+      <p class="body">Every generator that is actually fed enough coal costs <strong>240 W</strong> of net power. Scaling the chain only deepens the hole.</p>
+
+      <p class="body"><strong>Closure-multiplier needed on mine output.</strong> To make both inequalities consistent, mine output must rise by at least <code>8.5 / 2.5 = 3.4×</code> (a <strong>+240% buff</strong>). The strongest in-game multiplier on a single <code>mine</code> from its <code>adjacencyBuffs</code> (same-def, <code>+10%/match, maxMatches: 2</code>) is <strong>+20%</strong>. Skill-tree <code>mineYieldBonusMul</code> nodes add further percentage stacks, but reaching +240% from baseline would require deep tree investment that the audit's "intrinsic balance" framing doesn't grant.</p>
+    </section>
+
+    <!-- 4 — At 1:1 -->
+    <section id="oneone">
+      <div class="sec-head"><span class="num">4</span><h2>Snapshot at 1 mine : 1 generator</h2></div>
+      <p class="sec-intro">For symmetry with the biomass-loop reference (which states its outcome at 1:1), the same equations evaluated for <code>N = M = 1</code>:</p>
+
+      <table class="tbl">
+        <thead><tr><th>Quantity</th><th>Calc</th><th>Net</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">Coal net</td>
+            <td class="mono">0.0588 − 0.500</td>
+            <td class="num bad">−0.441 coal/s</td>
+            <td><span class="badge red">starves</span></td>
+          </tr>
+          <tr>
+            <td class="slate">Power net</td>
+            <td class="mono">100 − 40</td>
+            <td class="num ok">+60 W</td>
+            <td><span class="badge green">surplus — but only because gen is starved</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>The +60 W is illusory.</strong> Once <code>coal</code> drains to zero, the
+        generator's input-availability falls to zero and the recipe stops; <code>computeRates</code>
+        pass-2 multiplies the recipe rate by <code>inputAvail</code>, so <code>power.produces</code>
+        is still 100 W in spec but the recipe-bound running time goes to zero. After the
+        single-mine production-rate steady-state kicks in (gen running at <code>1/8.5</code> of
+        nominal duty cycle), effective gen output ≈ <code>100 · 0.0588 / 0.5 = +11.76 W</code>,
+        and effective coal drain ≈ <code>0</code>. Power net @ steady state ≈
+        <code>11.76 − 40 = −28.2 W</code>. The chain is a net power consumer even when the
+        generator is mostly idle waiting for coal.
+      </div>
+    </section>
+
+    <!-- 5 — Cross-check vs biomass -->
+    <section id="crosscheck">
+      <div class="sec-head"><span class="num">5</span><h2>Cross-check vs. biomass loop</h2></div>
+      <p class="sec-intro">Same loop shape (extractor → consumable → power generator → power back to extractor). The numbers are on dramatically different footings.</p>
+
+      <table class="tbl">
+        <thead><tr><th>Quantity</th><th>Coal loop</th><th>Forestry loop (post-9cda2aa)</th><th>Delta</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">Extractor output</td>
+            <td class="num">0.0588 coal/s<br>(1 / 17 s)</td>
+            <td class="num">0.9 wood/s<br>(9 / 10 s)</td>
+            <td class="num">15.3× higher (forestry)</td>
+          </tr>
+          <tr>
+            <td class="slate">Generator burn</td>
+            <td class="num">0.5 coal/s<br>(1 / 2 s)</td>
+            <td class="num">0.5 wood/s<br>(1 / 2 s)</td>
+            <td class="num">identical</td>
+          </tr>
+          <tr>
+            <td class="slate">Extractor draw</td>
+            <td class="num">40 W</td>
+            <td class="num">40 W</td>
+            <td class="num">identical</td>
+          </tr>
+          <tr>
+            <td class="slate">Generator output</td>
+            <td class="num">100 W</td>
+            <td class="num">80 W</td>
+            <td class="num">coal_gen higher</td>
+          </tr>
+          <tr>
+            <td class="slate">Extractor : generator floor (coal-balanced)</td>
+            <td class="num bad">8.5 : 1</td>
+            <td class="num ok">0.56 : 1<br>(1 logger feeds &gt;1 plant)</td>
+            <td class="num">15.3× harder for coal</td>
+          </tr>
+          <tr>
+            <td class="slate">Power net at 1 : 1</td>
+            <td class="num bad">+60 W nominal / −28 W effective</td>
+            <td class="num ok">+40 W</td>
+            <td class="num">forestry is the only one feasible</td>
+          </tr>
+          <tr>
+            <td class="slate">Self-sustain?</td>
+            <td class="num bad">No (at any ratio)</td>
+            <td class="num ok">Yes (at 1:1, with headroom)</td>
+            <td class="num">—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body">The two loops were <strong>not</strong> tuned to comparable economy. The forestry-loop rebalance picked numbers that close (<code>9 wood / 10 s</code> against <code>1 wood / 2 s</code> burn) — extractor-rate exceeds burn even at 1:1. The coal loop's extractor (<code>1 / 17 s</code>) was sized for the smelter and workshop pipeline that consumes coal at a much slower pace (<code>1 / 27 s</code> and <code>1 / 33 s</code>), not for a 2-second-cycle generator.</p>
+
+      <div class="callout">
+        <strong>Mismatch root cause.</strong> The <code>coal_gen.cycleSec</code> of <code>2 s</code> is documented in <code>recipes.ts</code> as "power buildings stay at original scale" (step #19 rebalance preserved short cycles so power keeps up with consumers). That logic is sound for power keeping pace with downstream demand, but it means the generator's <em>fuel intake</em> rate is also at the un-rebalanced fast cadence, while the mine sits at the <em>10×</em> stretched extraction cadence (<code>5 s → 50 s → ÷3 = 17 s</code>). The result: gen burns coal 8.5× faster than one mine can dig it.
+      </div>
+    </section>
+
+    <!-- 6 — Caveats -->
+    <section id="caveats">
+      <div class="sec-head"><span class="num">6</span><h2>Caveats &amp; what the audit excluded</h2></div>
+
+      <table class="tbl">
+        <thead><tr><th>Caveat</th><th>Effect on conclusion</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">Adjacency buff on <code>mine</code> (<code>same_def +10%/match, max 2</code>)</td>
+            <td>Max +20% mine throughput → ratio floor improves from 8.5 to ~7.08, power deficit shrinks from −240 W to ~−183 W per generator. Still negative.</td>
+          </tr>
+          <tr>
+            <td class="slate">Skill-tree <code>mineYieldBonusMul</code> (mining sub-path)</td>
+            <td>Stacks multiplicatively per node; closing the gap requires +240% on top of baseline. Spec doesn't claim the loop closes at L0 — but the audit's framing is "intrinsic baseline", so skilltree boost is out of scope. Even with skill investment, the user needs to know that without it the chain is unviable.</td>
+          </tr>
+          <tr>
+            <td class="slate">Skill-tree <code>recipeRateMul · extraction</code></td>
+            <td>Multiplies the mine recipe globally; same comment as above — requires deep tree investment.</td>
+          </tr>
+          <tr>
+            <td class="slate">Day/night cycle</td>
+            <td><code>coal_gen</code> is not solar; <code>mine_on_coal</code> is not solar. Day/night has no effect on either side, so the loop's deficit is constant 24/7.</td>
+          </tr>
+          <tr>
+            <td class="slate">Maintenance &amp; toxicity factors</td>
+            <td>Both apply multiplicative reductions to the mine's output rate but never increase it. Including them only widens the deficit; excluding them gives the loop its best case.</td>
+          </tr>
+          <tr>
+            <td class="slate">Other coal consumers (<code>smelter</code>, <code>workshop</code>)</td>
+            <td>Out of scope — the question is the closed mine+generator loop. In practice the mine's <code>1/17 s</code> output is sized for smelter/workshop, both of which consume coal at <code>1/27 s</code> and <code>1/33 s</code> respectively. <strong>One mine can feed multiple smelter+workshop pairs, but cannot feed a single coal generator.</strong></td>
+          </tr>
+          <tr>
+            <td class="slate">Third-resource leakage</td>
+            <td>Neither <code>mine_on_coal</code> nor <code>coal_gen</code> takes any input outside the closed loop (<code>inputs: {}</code> and <code>{ coal: 1 }</code>). The system is genuinely closed apart from power; no hidden dependency breaks the assumption.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>If a rebalance is desired</strong>, the cleanest knob is <code>coal_gen.cycleSec: 2 → ≥ 17/(2·M_per_N)</code> aligned with how much coal one mine actually delivers (e.g. <code>cycleSec: 17</code> would make a 1:1 chain coal-balanced but the power balance would still be tight at <code>+60 W</code>). Alternatively bump <code>mine_on_coal.outputs.coal</code> from <code>1</code> to <code>≥ 9</code> per cycle — same shape as the Heavy Logger rebalance. Either change is one line in <code>recipes.ts</code>; the audit takes no implementation action.</p>
+    </section>
+
+    <div class="footer">
+      <p>Coal loop self-sustain audit · generated 2026-05-23 · sources: <code>src/building-defs.ts:604, :672</code>, <code>src/recipes.ts:1077, :1125</code>, commit <code>9cda2aa</code></p>
+    </div>
+  </div>
+</body>
+</html>
