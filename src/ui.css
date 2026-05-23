@@ -322,6 +322,22 @@ canvas { display: block; }
 }
 .ri-island-opt__name { flex: 1; }
 
+/* Pickable-skill cue — yellow glow on the bar when ANY island has a buyable
+ * skill, plus a right-side dot per island that has one. Uses --ri-warn so
+ * the colour stays consistent with the existing power-low warning vocabulary;
+ * outer box-shadow (vs. flat inner rim) keeps it from merging visually with
+ * the trigger's data-tone="warn" power-low border. */
+.ri-panel.topbar.has-pickable {
+  box-shadow: 0 0 0 2px var(--ri-warn),
+              0 0 12px rgba(245, 167, 66, 0.45),
+              var(--ri-shadow-panel);
+}
+.ri-dot--pickable { display: none; }
+.ri-island-opt[data-pickable="true"] .ri-dot--pickable {
+  display: inline-block;
+  background: var(--ri-warn);
+}
+
 .ri-kv {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: 8px;

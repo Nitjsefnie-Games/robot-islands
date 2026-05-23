@@ -11,8 +11,10 @@ import {
   costForDepth,
   cumulativeSkillPointsForLevel,
   effectiveSkillMultipliers,
+  hasPickableSkill,
   launchSuccessBonus,
   magnitudeForDepth,
+  NODE_CATALOG,
   nodeRequiredTier,
   skillPointsForLevelUp,
   spendPoint,
@@ -647,5 +649,33 @@ describe('§14.7 launchSuccessBonus', () => {
   it('returns 0 when only non-launch nodes are unlocked', () => {
     const s = makeState({ unlockedNodes: new Set(['mining.1']) });
     expect(launchSuccessBonus(s)).toBe(0);
+  });
+});
+
+describe('hasPickableSkill', () => {
+  it('returns false for a fresh level-1 island with zero points', () => {
+    // No spendable points = nothing buyable, regardless of NODE_CATALOG.
+    const state = makeState({ level: 1, unspentSkillPoints: 0 });
+    expect(hasPickableSkill(state)).toBe(false);
+  });
+
+  it('returns true when the island has a spendable point and a ready depth-1 node', () => {
+    // Tier 2 is required for depth-1 nodes; level 5 reaches T2.
+    const state = makeState({ level: 5, unspentSkillPoints: 1 });
+    // Cross-check: at least one node in the catalog should be buyable.
+    expect(NODE_CATALOG.some((n) => canSpend(state, n.id).ok)).toBe(true);
+    expect(hasPickableSkill(state)).toBe(true);
+  });
+
+  it('declaration-pending alone does NOT flip the predicate true', () => {
+    // specializationRole / declaredAt are read-free by canSpend, so a state
+    // with declaration pending but zero spendable points must be false.
+    const state = makeState({
+      level: 15,
+      unspentSkillPoints: 0,
+      specializationRole: null,
+      declaredAt: null,
+    });
+    expect(hasPickableSkill(state)).toBe(false);
   });
 });
