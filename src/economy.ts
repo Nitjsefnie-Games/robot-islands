@@ -1638,8 +1638,10 @@ export function advanceIsland(
       // every modifier's counter loses (segEndMs - t) ms. Counters that reach
       // ≤ 0 fire the shot. We collect fires and dispatch after the loop because
       // resolveShot mutates state.buildings (splicing the modifier out).
+      // NOTE: resolveShot may splice state.buildings during the callback;
+      // subsequent loops over state.buildings must not assume length stability.
+      const dtMs = segEndMs - t;
       if (dtSec > 0 && ctx?.onTerrainShotFire) {
-        const dtMs = segEndMs - t;
         const toFire: string[] = [];
         for (const b of state.buildings) {
           const rem = b.terrainShotRemainingMs;
@@ -1657,7 +1659,6 @@ export function advanceIsland(
       // so the maintenance factor used inside computeRates was computed
       // at the start-of-segment operatingMs, matching §15.3's piecewise-
       // constant-rate invariant.
-      const dtMs = segEndMs - t;
       for (const b of state.buildings) {
         // §9.3 construction: tick down remaining time; operating-time
         // only accrues once the build is complete (the spec's "Idle

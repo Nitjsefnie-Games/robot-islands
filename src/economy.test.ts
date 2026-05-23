@@ -46,7 +46,8 @@ import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
-import { SHOT_DURATION_MS } from './terrain-modifier.js';
+import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
+import { islandInscribedAny } from './island.js';
 
 const MINE: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
 const WORKSHOP: PlacedBuilding = { id: 'b-workshop', defId: 'workshop', x: 0, y: 0 };
@@ -3740,6 +3741,40 @@ describe('advanceIsland — terrain_modifier shot tick', () => {
     const survivor = state.buildings.find((b) => b.id === 'm1');
     expect(survivor?.terrainShotRemainingMs).toBeGreaterThan(0);
     expect(survivor?.terrainShotRemainingMs).toBeLessThan(SHOT_DURATION_MS);
+  });
+
+  it('writes overrides on a non-zero-center island via advanceIsland tick', () => {
+    const spec = attachTerrainAt({
+      id: 'tt', name: 'tt', cx: 50, cy: 50, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    state.buildings.push({
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'grass', terrainShotRemainingMs: SHOT_DURATION_MS,
+    });
+    const fires: string[] = [];
+    advanceIsland(state, SHOT_DURATION_MS + 100, {
+      onTerrainShotFire: (id) => {
+        fires.push(id);
+        // Mirror main.ts callback: resolveShot + rebuild implied.
+        const modifier = state.buildings.find((b) => b.id === id);
+        if (modifier) {
+          resolveShot(
+            spec,
+            state,
+            modifier,
+            (lx: number, ly: number) => islandInscribedAny(spec, lx, ly),
+          );
+        }
+      },
+    });
+    expect(fires).toEqual(['m1']);
+    // Modifier should have self-destructed.
+    expect(state.buildings.find((b) => b.id === 'm1')).toBeUndefined();
+    // All 16 brush tiles should have been written (island is large enough).
+    expect(Object.keys(spec.tileOverrides ?? {}).length).toBe(16);
   });
 });
 

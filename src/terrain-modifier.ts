@@ -14,8 +14,12 @@
 // the building, invalidation pass, rebuildWorldLayers) is Task 4's
 // orchestration in main.ts.
 
+import { BUILDING_DEFS } from './building-defs.js';
+import type { PlacedBuilding } from './buildings.js';
+import type { IslandState } from './economy.js';
 import type { TerrainKind } from './island.js';
 import type { ResourceId } from './recipes.js';
+import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { IslandSpec } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -216,18 +220,14 @@ export function applyTileOverride(
 // Shot resolution — Task 4's pure mutation primitive
 // ---------------------------------------------------------------------------
 
-import type { IslandState } from './economy.js';
-import { BUILDING_DEFS } from './building-defs.js';
-import { footprintTiles, type Rotation } from './shape-mask.js';
-import type { PlacedBuilding } from './buildings.js';
-
 /** Resolve a terrain_modifier shot: write tile overrides for every brush
  *  tile inside the ellipse, remove the modifier from state.buildings, and
  *  re-run the requiredTile invalidation pass against every other building
  *  on the island.
  *
- *  `inscribed` is the island-local "is tile inside the union ellipse?"
- *  predicate (typically `(x,y) => islandInscribedAny(spec, x+spec.cx, y+spec.cy)`).
+ *  `inscribed` receives island-local tile coords (NOT world coords). The
+ *  typical shape is `(x,y) => islandInscribedAny(spec, x, y)` — brushTilesAt
+ *  already emits local tiles, and islandInscribedAny expects local coords.
  *  Tiles outside the predicate are SKIPPED, not refunded — spec
  *  p3_ellipse_boundary = skip_outside_full_charge.
  *

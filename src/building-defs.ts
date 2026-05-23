@@ -592,6 +592,11 @@ export interface BuildingDef {
    *  reads the flag to decide whether to paint the brush preview vs. the bare
    *  footprint outline. Optional / undefined ≡ false for every other def. */
   readonly terrainModifier?: boolean;
+  /** When `true`, the building skips construction and is operational
+   *  immediately on placement. Used by terrain_modifier (v5 spec lock
+   *  `modifier_never_enters_construction`) so the shot timer starts at
+   *  placement instead of after a 2-minute build. Optional / undefined ≡ false. */
+  readonly instantBuild?: boolean;
 }
 
 /** Read-only catalog. Keys = BuildingDefId; every defId MUST have an entry. */
@@ -1410,6 +1415,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel: 50, gear: 20 },
     glyph: '◈',
     terrainModifier: true,
+    instantBuild: true,
   },
   // §8.5 T2 power: Cryogenic Generator (2x2, ice tile / arctic). Consumes
   // cryo_coolant as fuel. High output among T2 power options when an Arctic
