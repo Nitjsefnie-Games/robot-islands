@@ -69,6 +69,7 @@ import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-
 import { resolveShot } from './terrain-modifier.js';
 import { mountPlacementUi } from './placement-ui.js';
 import { mountCargoLabelPicker } from './cargo-label-picker.js';
+import { mountTerrainModifierTargetPicker } from './terrain-modifier-target-picker.js';
 import { mountAnchorPicker } from './anchor-picker.js';
 import { mountSkillTreeUi } from './skilltree-ui.js';
 import { mountGraphUi } from './graph-ui.js';
@@ -1049,6 +1050,8 @@ async function main(): Promise<void> {
   // (Crate today), bypassed entirely for specialized storage and non-
   // storage defs.
   const cargoLabelPicker = mountCargoLabelPicker(document.body);
+  // §03 terrain_modifier v5: target-biome picker — same modal-shell pattern.
+  const terrainTargetPicker = mountTerrainModifierTargetPicker(document.body);
   // §4 ocean-layer (Task 10): anchor picker — same modal-shell pattern as
   // the cargo-label picker. Mounted at body level so the modal floats
   // above the PixiJS canvas; wired into placement-ui via the `pickAnchor`
@@ -1063,6 +1066,7 @@ async function main(): Promise<void> {
       rebuildWorldLayers();
     },
     pickCargoLabel: () => cargoLabelPicker.pick(),
+    pickTerrainTarget: () => terrainTargetPicker.pick(),
     getWorld: () => worldState,
     getStateById: (id) => islandStates.get(id),
     pickAnchor: (cands) => anchorPicker.pick(cands),
