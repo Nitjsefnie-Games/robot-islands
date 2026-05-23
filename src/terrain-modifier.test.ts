@@ -58,6 +58,22 @@ describe('terrain-modifier — conversionCostForTarget', () => {
     expect(c.stone).toBe(500 * 16);
   });
 
+  it('sand costs sand × 16', () => {
+    const c = conversionCostForTarget('sand');
+    expect(c.sand).toBe(500 * 16);
+  });
+
+  it('water costs fresh_water × 16', () => {
+    const c = conversionCostForTarget('water');
+    expect(c.fresh_water).toBe(500 * 16);
+  });
+
+  it('ice costs blanket basket × 16', () => {
+    const c = conversionCostForTarget('ice');
+    expect(c.stone).toBe(200 * 16);
+    expect(c.gear).toBe(100 * 16);
+  });
+
   it('magma_vent costs stone + coal × 16', () => {
     const c = conversionCostForTarget('magma_vent');
     expect(c.stone).toBe(300 * 16);
