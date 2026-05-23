@@ -51,8 +51,9 @@ import {
 import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules } from './skilltree.js';
-import type { EdgeId } from './skilltree-graph.js';
+import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition } from './skilltree.js';
+import type { EdgeId, Graph } from './skilltree-graph.js';
+import { networkedIslandIds } from './network-consciousness.js';
 
 /**
  * Optional context object for `computeRates` and `advanceIsland`. Adding
@@ -522,6 +523,64 @@ function oceanPlatformPausedReason(
   return null;
 }
 
+/** Evaluate a single `conditionalBonus` condition against live state.
+ *  Returns `false` gracefully when world fields (weather, daynight) are absent. */
+export function evaluateConditionalEffectCondition(
+  c: ConditionalEffectCondition,
+  _state: IslandState,
+  world: WorldState | undefined,
+): boolean {
+  switch (c.kind) {
+    case 'during-storm':
+      return (world as any)?.weather?.activeStorm !== undefined;
+    case 'during-night':
+      return (world as any)?.daynight?.phase === 'night';
+    case 'networked-to-N-T3-islands': {
+      if (!world) return false;
+      const networked = networkedIslandIds(world);
+      let count = 0;
+      for (const island of world.islands) {
+        if (!networked.has(island.id)) continue;
+        const level = world.islandStates?.get(island.id)?.level ?? 1;
+        if (tierForLevel(level) >= 3) count++;
+      }
+      return count >= c.n;
+    }
+    case 'adjacent-tile-is-biome':
+      // Placeholder: terrainAt not available at this call site without ctx.
+      return false;
+  }
+}
+
+/** Layer conditional bonuses on top of an existing `SkillMultipliers` bundle.
+ *  Mutates `mul` in place. Caller should pass the result of
+ *  `effectiveSkillMultipliers(state)` as the base. */
+export function layerConditionalBonuses(
+  mul: SkillMultipliers,
+  state: IslandState,
+  world: WorldState | undefined,
+  graph: Graph = DEFAULT_GRAPH,
+): void {
+  for (const nodeId of state.unlockedNodes) {
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    if (!node || node.effect.kind !== 'conditionalBonus') continue;
+    if (!evaluateConditionalEffectCondition(node.effect.condition, state, world)) continue;
+    const effect = node.effect;
+    const m = 1 + effect.multiplier;
+    if (effect.appliesTo === 'storage') {
+      (mul as { storageCap: number }).storageCap *= m;
+    } else if (effect.appliesTo === 'power') {
+      (mul as { powerProduction: number }).powerProduction *= m;
+    } else if (effect.appliesTo === 'xp') {
+      (mul as { xpGain: number }).xpGain *= m;
+    } else {
+      const rr = mul.recipeRate as Record<string, number>;
+      const cur = rr[effect.appliesTo] ?? 1;
+      rr[effect.appliesTo] = cur * m;
+    }
+  }
+}
+
 /** Aggregated electrical balance for an island this tick (§5.1). */
 export interface PowerBalance {
   /** Total W produced by active producers. */
@@ -641,6 +700,7 @@ export function computeRates(
   // nominalRate (so producer/consumer supply ratios stay correct when only
   // one side is buffed). Power multipliers apply in pass 3.
   const skillMul = effectiveSkillMultipliers(state);
+  layerConditionalBonuses(skillMul, state, ctx?.world);
   // §4.5 buff-adjacency stack is per-building, not global — computed
   // lazily inside the pass-1 loop and stashed on the Tentative entry so
   // pass-2's nominalRate sees the same multiplier (preserves
@@ -1608,8 +1668,9 @@ export function advanceIsland(
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps);
-      const xpGainMul = effectiveSkillMultipliers(state).xpGain;
-      accrueXp(state, production, consumption, dtSec, 1, xpGainMul);
+      const skillMulForXp = effectiveSkillMultipliers(state);
+      layerConditionalBonuses(skillMulForXp, state, ctx?.world);
+      accrueXp(state, production, consumption, dtSec, 1, skillMulForXp.xpGain);
       // §13.3 Singularity Battery — apply charge/discharge over the segment.
       if (rawBalance > 0 && maxCap > 0) {
         const chargeWs = rawBalance * dtSec;
