@@ -36,6 +36,7 @@
 
 import {
   bind,
+  dispatchAction,
   installDefaultBindings,
   unbind,
   type InputRegistry,
@@ -251,6 +252,58 @@ export function mountSettingsUi(
       kbSection.appendChild(kbResetRow);
 
       body.appendChild(kbSection);
+
+      // ---- UI Layout section (window-manager) -----------------------------
+      const uiSection = document.createElement('div');
+      uiSection.style.display = 'flex';
+      uiSection.style.flexDirection = 'column';
+      uiSection.style.gap = '6px';
+
+      const uiHeading = document.createElement('div');
+      uiHeading.style.display = 'flex';
+      uiHeading.style.alignItems = 'baseline';
+      uiHeading.style.justifyContent = 'space-between';
+      uiHeading.style.paddingBottom = '4px';
+      uiHeading.style.borderBottom = '1px solid var(--ri-rule)';
+
+      const uiHeadingLabel = document.createElement('span');
+      uiHeadingLabel.textContent = 'UI LAYOUT';
+      uiHeadingLabel.className = 'ri-caps';
+      uiHeadingLabel.style.color = 'var(--ri-accent)';
+      uiHeading.appendChild(uiHeadingLabel);
+
+      const uiHeadingHint = document.createElement('span');
+      uiHeadingHint.textContent = 'drag headers · resize from bottom-right';
+      uiHeadingHint.className = 'ri-muted';
+      uiHeadingHint.style.fontSize = '9.5px';
+      uiHeadingHint.style.letterSpacing = '0.1em';
+      uiHeadingHint.style.textTransform = 'uppercase';
+      uiHeading.appendChild(uiHeadingHint);
+
+      uiSection.appendChild(uiHeading);
+
+      const uiResetRow = document.createElement('div');
+      uiResetRow.style.display = 'flex';
+      uiResetRow.style.justifyContent = 'flex-end';
+      uiResetRow.style.paddingTop = '4px';
+      const uiResetBtn = makeButton('Reset Window Layout', () => {
+        if (!window.confirm('Reset every panel to its default position and size?')) return;
+        dispatchAction(deps.reg, 'reset-ui-layout');
+      });
+      uiResetRow.appendChild(uiResetBtn);
+      uiSection.appendChild(uiResetRow);
+
+      const uiNote = document.createElement('div');
+      uiNote.textContent =
+        'Window positions and sizes are saved per-browser (localStorage). Resetting clears all saved layouts and restores the default docked positions.';
+      uiNote.className = 'ri-muted';
+      uiNote.style.fontSize = '10px';
+      uiNote.style.lineHeight = '1.4';
+      uiNote.style.paddingTop = '4px';
+      uiNote.style.fontStyle = 'italic';
+      uiSection.appendChild(uiNote);
+
+      body.appendChild(uiSection);
 
       // ---- Save section -----------------------------------------------------
       const saveSection = document.createElement('div');
