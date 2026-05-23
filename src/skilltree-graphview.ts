@@ -3,8 +3,17 @@
 // own Application instance (separate from the world canvas) on a fixed
 // DOM overlay. Tasks 3-7 fill in the scene-graph content.
 
-import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
-import { DEFAULT_GRAPH, BRANCH_LABEL, SUBPATH_BRANCH, type BranchId } from './skilltree.js';
+import { Application, Container, Graphics, Text, TextStyle, Circle } from 'pixi.js';
+import {
+  DEFAULT_GRAPH,
+  BRANCH_LABEL,
+  SUBPATH_BRANCH,
+  buyKeystone,
+  buyNode,
+  canBuyKeystone,
+  costToUnlock,
+  type BranchId,
+} from './skilltree.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import { computeSkillGraphLayout, type SkillGraphLayout } from './skilltree-layout.js';
 import type { IslandState } from './economy.js';
@@ -26,8 +35,14 @@ export interface SkillGraphViewDeps {
 
 type NodeKind = 'filler' | 'notable' | 'keystone';
 
+const CONFIRM_THRESHOLD_SP = 20;
+
 const KEYSTONE_TARGETS: ReadonlySet<string> = new Set(
   KEYSTONE_PREREQS.map((k) => String(k.targetNode)),
+);
+
+const KEYSTONE_BY_TARGET: ReadonlyMap<string, typeof KEYSTONE_PREREQS[number]> = new Map(
+  KEYSTONE_PREREQS.map((k) => [String(k.targetNode), k]),
 );
 
 function spentInBranchLocal(state: IslandState, branchId: BranchId): number {
@@ -57,6 +72,7 @@ const COLOR = {
   notableFill:  0xE0B47F, notableStroke:  0xE9E6DC,
   keystoneFill: 0xD38FCC, keystoneStroke: 0xE9E6DC,
   rootFill:     0x8FA56E, rootStroke:     0xE9E6DC,
+  ownedFill:    0x8FA56E,
   socketStroke: 0x7DD3E8,
   label:        0xE9E6DC,
 } as const;
@@ -217,10 +233,37 @@ export function mountSkillGraphView(
   }
   function isVisible(): boolean { return visible; }
 
+  function handleNodeClick(nodeId: GNodeId): void {
+    const state = deps.getState();
+    if (state.unlockedNodes.has(nodeId)) return;
+
+    const ks = KEYSTONE_BY_TARGET.get(String(nodeId));
+    if (ks) {
+      if (!canBuyKeystone(ks, state)) return;
+      if (ks.cost > CONFIRM_THRESHOLD_SP) {
+        if (!window.confirm(`Buy keystone (${ks.cost} SP)?`)) return;
+      }
+      buyKeystone(ks, state);
+      refresh();
+      return;
+    }
+
+    const path = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, nodeId);
+    if (path === null) return;
+    if (state.unspentSkillPoints < path.totalCost) return;
+    if (path.totalCost > CONFIRM_THRESHOLD_SP) {
+      if (!window.confirm(`Buy via ${path.path.length}-edge cheapest path (${path.totalCost} SP)?`)) return;
+    }
+    try { buyNode(DEFAULT_GRAPH, state, nodeId); } catch { return; }
+    refresh();
+  }
+
   function drawNodes(): void {
     if (!layers || !layout) return;
     layers.nodes.removeChildren();
     layers.labels.removeChildren();
+
+    const state = deps.getState();
 
     // Branch roots.
     for (const [branch, p] of layout.branchRoots) {
@@ -245,14 +288,36 @@ export function mountSkillGraphView(
       if (!p) continue;
       const g = new Graphics();
       const kind = classifyNode(String(n.id));
+
+      const owned = state.unlockedNodes.has(n.id as unknown as GNodeId);
+      const ks = KEYSTONE_BY_TARGET.get(String(n.id));
+      const path = ks ? null : costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, n.id as unknown as GNodeId);
+      const reachableCost = ks ? ks.cost : path?.totalCost ?? Infinity;
+      const affordable = state.unspentSkillPoints >= reachableCost;
+      const purchasable = !owned && affordable && (ks ? canBuyKeystone(ks, state) : path !== null);
+
       if (kind === 'filler') {
-        g.circle(p.x, p.y, 6).fill(COLOR.fillerFill).stroke({ color: COLOR.fillerStroke, width: 1 });
+        const fill = owned ? COLOR.ownedFill : COLOR.fillerFill;
+        const strokeAlpha = owned ? 1 : (purchasable ? 1 : 0.4);
+        g.circle(p.x, p.y, 6).fill(fill).stroke({ color: COLOR.fillerStroke, width: 1, alpha: strokeAlpha });
       } else if (kind === 'notable') {
-        g.circle(p.x, p.y, 9).fill(COLOR.notableFill).stroke({ color: COLOR.notableStroke, width: 1.5 });
+        const fill = owned ? COLOR.ownedFill : COLOR.notableFill;
+        const strokeAlpha = owned ? 1 : (purchasable ? 1 : 0.4);
+        g.circle(p.x, p.y, 9).fill(fill).stroke({ color: COLOR.notableStroke, width: 1.5, alpha: strokeAlpha });
       } else {
+        const fill = owned ? COLOR.ownedFill : COLOR.keystoneFill;
+        const strokeAlpha = owned ? 1 : (purchasable ? 1 : 0.4);
         drawHexagon(g, p.x, p.y, 12);
-        g.fill(COLOR.keystoneFill).stroke({ color: COLOR.keystoneStroke, width: 1.5 });
+        g.fill(fill).stroke({ color: COLOR.keystoneStroke, width: 1.5, alpha: strokeAlpha });
       }
+
+      if (!owned) {
+        g.eventMode = 'static';
+        g.cursor = 'pointer';
+        g.hitArea = new Circle(p.x, p.y, kind === 'filler' ? 8 : 12);
+        g.on('pointertap', () => handleNodeClick(n.id as unknown as GNodeId));
+      }
+
       layers.nodes.addChild(g);
     }
 
