@@ -792,9 +792,7 @@
     <ol>
       <li><b>How does the UI render ~600-800 nodes?</b> Graph view is the locked direction (audit Picker 8); concrete UI design is its own spec (probably <code>2026-05-23-skilltree-graphview-ui-design.html</code> as a follow-up).</li>
       <li><b>Hex grid or freeform layout?</b> PoE1 is freeform; PoE2 shifted toward themed weapon-shaped constellations. Affects render code, not data model.</li>
-      <li><b>How does Specialization role (§9.4) reshape the graph?</b> Out of scope here. Could unlock a 5th sub-path per branch ("ascendancy" style) — designed in a separate spec.</li>
       <li><b>Per-node respec?</b> Deferred; if added, becomes a paid action at T2/T3 resource cost (Last-Epoch-style), implemented as a new <code>refundNode</code> function that reverses cheapest-path purchases.</li>
-      <li><b>Aura stacking semantics with overlapping auras?</b> Placeholder: additive within a node, capped at +50%. Final value to playtest.</li>
       <li><b>Graft socket attachment UI?</b> When a cluster jewel (or equivalent) is acquired, how does the player place it? Drag-to-socket vs auto-attach vs choice-prompt. Probably a UI spec follow-up.</li>
       <li><b>Network Consciousness graft unlocks?</b> §9.6 milestones could unlock graft-cluster content. Specifies which milestones unlock which sockets. Design choice deferred.</li>
       <li><b>Exact threshold values per bridge?</b> Tuning concern; placeholder ranges in §09. Playtest-driven.</li>
