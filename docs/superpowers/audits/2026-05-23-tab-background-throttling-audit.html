@@ -1,0 +1,1277 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AUDIT-2026-0523 — Tab-background throttling correctness audit</title>
+<style>
+  :root {
+    --ivory: #252420;
+    --slate: #F5F3EC;
+    --clay: #D97757;
+    --oat: #3A352B;
+    --olive: #8FA56E;
+    --rust: #B04A3F;
+    --amber: #D9A559;
+    --gray-100: #2E2C27;
+    --gray-300: #3A3833;
+    --gray-500: #8F8D82;
+    --gray-700: #CFCCC2;
+    --white: #252420;
+
+    --serif: ui-serif, Georgia, serif;
+    --sans: system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+    --radius-panel: 12px;
+    --radius-row: 8px;
+    --border: 1.5px solid var(--gray-300);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    padding: 56px 24px 120px;
+    background: #1B1A17;
+    color: var(--gray-700);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 880px; margin: 0 auto; }
+
+  header { margin-bottom: 32px; }
+  .audit-id {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--gray-500);
+    letter-spacing: 0.02em;
+    margin-bottom: 8px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 34px;
+    letter-spacing: -0.01em;
+    margin: 0 0 18px;
+    line-height: 1.2;
+    color: var(--slate);
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 5px 12px;
+    line-height: 1;
+  }
+  .pill .k { font-weight: 400; opacity: 0.75; }
+  .pill.verdict-green  { background: var(--olive); color: #1B1A17; }
+  .pill.verdict-yellow { background: var(--amber); color: #1B1A17; }
+  .pill.verdict-red    { background: var(--rust);  color: var(--slate); }
+  .pill.neutral {
+    background: var(--gray-100);
+    color: var(--gray-700);
+    border: var(--border);
+  }
+  .pill.neutral .v { font-family: var(--mono); }
+
+  .tldr {
+    background: #121110;
+    color: var(--slate);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-panel);
+    padding: 22px 26px;
+    margin-bottom: 48px;
+  }
+  .tldr-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--oat);
+    margin-bottom: 10px;
+  }
+  .tldr p { margin: 0 0 12px; font-size: 15.5px; line-height: 1.65; }
+  .tldr p:last-child { margin-bottom: 0; }
+  .tldr code {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    background: rgba(250, 249, 245, 0.12);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .tldr ul { padding-left: 20px; margin: 4px 0 12px; }
+  .tldr li { margin: 4px 0; }
+
+  section { margin-bottom: 52px; scroll-margin-top: 24px; }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 24px;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+    color: var(--slate);
+  }
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 16px;
+    margin: 22px 0 10px;
+    color: var(--slate);
+  }
+  hr.rule { border: none; border-top: 1px solid var(--gray-300); margin: 0 0 22px; }
+  p { margin: 0 0 14px; }
+  code.inline {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--gray-100);
+    padding: 1.5px 5px;
+    border-radius: 4px;
+    color: var(--gray-700);
+  }
+  a.cite {
+    color: var(--clay);
+    text-decoration: none;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  a.cite:hover { text-decoration: underline; }
+
+  /* Flag bar — visible from Chrome flag list */
+  .flag-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) 2fr;
+    gap: 6px 14px;
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius-panel);
+    padding: 14px 18px;
+    margin: 6px 0 18px;
+  }
+  .flag-grid .k {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--slate);
+    padding: 4px 0;
+  }
+  .flag-grid .v {
+    font-size: 13.5px;
+    color: var(--gray-700);
+    padding: 4px 0;
+    border-left: 1px solid var(--gray-300);
+    padding-left: 14px;
+  }
+
+  /* Traffic-light table */
+  table.audit {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+    margin: 8px 0 6px;
+  }
+  table.audit th, table.audit td {
+    text-align: left;
+    padding: 11px 14px;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--gray-100);
+    vertical-align: top;
+  }
+  table.audit tr:last-child td { border-bottom: none; }
+  table.audit th {
+    font-weight: 500;
+    color: var(--gray-500);
+    background: #1E1D1A;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  table.audit td.subsystem {
+    font-family: var(--mono);
+    color: var(--slate);
+    font-size: 13px;
+    white-space: nowrap;
+    width: 130px;
+  }
+  table.audit td.driver {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--gray-700);
+  }
+  .light {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .light::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .light.g { color: var(--olive); }
+  .light.g::before { background: var(--olive); }
+  .light.y { color: var(--amber); }
+  .light.y::before { background: var(--amber); }
+  .light.r { color: var(--rust); }
+  .light.r::before { background: var(--rust); }
+
+  /* Scenario table */
+  table.scenarios {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+  }
+  table.scenarios th, table.scenarios td {
+    padding: 11px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--gray-100);
+    text-align: left;
+    vertical-align: top;
+  }
+  table.scenarios th {
+    background: #1E1D1A;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    font-weight: 500;
+  }
+  table.scenarios td:first-child {
+    font-family: var(--mono);
+    color: var(--slate);
+    white-space: nowrap;
+    width: 150px;
+  }
+  table.scenarios tr:last-child td { border-bottom: none; }
+
+  /* Sequence diagram (SVG container) */
+  .diagram {
+    background: #121110;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-panel);
+    padding: 18px;
+    margin: 12px 0 6px;
+    overflow-x: auto;
+  }
+  .diagram svg { display: block; max-width: 100%; height: auto; }
+
+  /* Finding panel */
+  .finding {
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius-panel);
+    padding: 18px 22px;
+    margin: 12px 0;
+  }
+  .finding-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .finding-id {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gray-500);
+  }
+  .finding-title {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--slate);
+  }
+  .finding-body { font-size: 14px; color: var(--gray-700); }
+  .finding-body p { margin: 0 0 10px; }
+  .finding-body p:last-child { margin: 0; }
+  .finding-body strong { color: var(--slate); font-weight: 600; }
+  .quote {
+    background: #121110;
+    border-left: 3px solid var(--clay);
+    border-radius: 4px;
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--gray-700);
+    margin: 8px 0;
+    line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .quote .path {
+    display: block;
+    color: var(--gray-500);
+    font-size: 11.5px;
+    margin-bottom: 4px;
+  }
+
+  /* Picker (radio recommendations) */
+  .picker {
+    margin: 18px 0 4px;
+    background: #1E1D1A;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-panel);
+    padding: 14px 18px;
+  }
+  .picker-tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--gray-500);
+    margin-bottom: 10px;
+  }
+  .picker-options {
+    display: grid;
+    gap: 8px;
+  }
+  .opt {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-row);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .opt:hover { background: rgba(255,255,255,0.03); }
+  .opt input[type="radio"] {
+    margin-top: 3px;
+    accent-color: var(--clay);
+  }
+  .opt:has(input[type="radio"]:checked) {
+    background: rgba(217, 119, 87, 0.08);
+    border-color: var(--clay);
+  }
+  .o-label {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--gray-700);
+  }
+  .opt:has(input[type="radio"]:checked) .o-label { color: var(--clay); }
+  .o-desc {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-top: 3px;
+  }
+  .picker-current {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gray-500);
+  }
+  .picker-current b { color: var(--slate); }
+
+  /* Selections panel */
+  .selections {
+    background: #121110;
+    color: var(--slate);
+    border: 1px solid var(--clay);
+    border-radius: var(--radius-panel);
+    padding: 18px 22px;
+    margin: 20px 0;
+  }
+  .s-tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--clay);
+    margin-bottom: 8px;
+  }
+  .s-head {
+    font-family: var(--serif);
+    font-size: 20px;
+    color: var(--slate);
+    margin-bottom: 8px;
+  }
+  .s-body {
+    font-size: 13.5px;
+    color: var(--gray-700);
+    margin-bottom: 14px;
+  }
+  .s-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .copy-btn {
+    background: var(--clay);
+    color: #1B1A17;
+    border: none;
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .copy-btn:hover { filter: brightness(1.08); }
+  .copy-btn.copied { background: var(--olive); }
+  .format-toggle {
+    display: inline-flex;
+    border: 1px solid var(--gray-300);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .format-toggle button {
+    background: transparent;
+    color: var(--gray-500);
+    border: none;
+    padding: 6px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .format-toggle button.active {
+    background: var(--gray-300);
+    color: var(--slate);
+  }
+  .copy-status {
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .payload {
+    background: #0E0D0B;
+    color: var(--gray-700);
+    border: 1px solid var(--gray-300);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    max-height: 260px;
+    overflow: auto;
+    margin: 0;
+  }
+
+  /* Fixed TOC */
+  .toc { display: none; }
+  @media (min-width: 1180px) {
+    .toc {
+      display: block;
+      position: fixed;
+      top: 72px;
+      right: max(24px, calc(50vw - 440px - 200px));
+      width: 180px;
+      font-size: 13px;
+    }
+    .toc-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    .toc a {
+      display: block;
+      color: var(--gray-500);
+      text-decoration: none;
+      padding: 5px 0 5px 12px;
+      border-left: 1.5px solid var(--gray-300);
+      line-height: 1.3;
+    }
+    .toc a:hover { color: var(--slate); border-left-color: var(--clay); }
+  }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--gray-300);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gray-500);
+  }
+</style>
+</head>
+<body>
+
+  <nav class="toc">
+    <div class="toc-title">On this page</div>
+    <a href="#tldr">TL;DR</a>
+    <a href="#flags">Chrome flags</a>
+    <a href="#method">Method</a>
+    <a href="#tick-loop">Tick loop</a>
+    <a href="#summary">Traffic-light</a>
+    <a href="#findings">Findings</a>
+    <a href="#scenarios">Scenarios</a>
+    <a href="#risks">Risks</a>
+    <a href="#recommendations">Pickers</a>
+  </nav>
+
+  <div class="page">
+
+    <header>
+      <div class="audit-id">AUDIT-2026-0523 · robot-islands · tab-background throttling</div>
+      <h1>Tab-background throttling — correctness audit</h1>
+      <div class="meta-row">
+        <span class="pill verdict-green">GREEN overall</span>
+        <span class="pill verdict-yellow">3 yellows</span>
+        <span class="pill neutral"><span class="k">Scope</span> <span class="v">routes/economy/drones/orbital/settlement/weather/comm</span></span>
+        <span class="pill neutral"><span class="k">Method</span> <span class="v">static read</span></span>
+        <span class="pill neutral"><span class="k">Files audited</span> <span class="v">main.ts, routes.ts, economy.ts, drones.ts, orbital.ts, settlement.ts, sonar-buoy.ts, weather.ts, daynight.ts, persistence.ts, construction.ts, reactor-toxicity.ts, rate-history.ts</span></span>
+      </div>
+    </header>
+
+    <div class="tldr" id="tldr">
+      <div class="tldr-label">TL;DR</div>
+      <p><strong>Game-state advancement is robust to tab-background throttling for every player-facing subsystem.</strong> Routes, economy, drones, settlement vehicles, sat movement, repair drones, sweeper cleanup, construction, toxicity, day/night, weather, and sonar buoys all read wall-clock (<code>performance.now()</code>) timestamps and correctly catch up across arbitrarily large gaps. A 30-second or 4-hour alt-tab produces the same state as a continuously-foregrounded session of the same wall-clock duration (modulo the 24h offline cap that economy.ts already enforces).</p>
+      <p><strong>Three yellow flags</strong> — all behave-as-spec'd but are frame-rate-dependent by design:</p>
+      <ul>
+        <li><b>F-1 debris hits</b> — one roll per tick (<code>orbital.ts:841</code>). 30s of throttled rAF gives ~30 rolls; foregrounded gives ~1800.</li>
+        <li><b>F-2 scanner discovery</b> — probability sampled once per tick (<code>orbital.ts:996</code>); dwell accrual is correct, the sampling cadence is not.</li>
+        <li><b>F-3 comm-packet propagation</b> — one hop per tick, no time arg (<code>orbital.ts:492</code>). Packets stall in throttled tabs.</li>
+      </ul>
+      <p>A <strong>fourth observation</strong> (yellow, not a bug): <b>F-4 route dispatch bolus</b> — <code>tickRoutes</code> dispatches one batch sized for the full elapsed window on resume, arriving at a single future instant rather than smooth flow. Inventory math is preserved; only the visual / timing shape changes.</p>
+      <p>The user's Chrome flags (<code>--disable-background-timer-throttling</code> et al.) are a useful belt-and-braces but <strong>not load-bearing</strong> — the game is already correct without them. The user could share the build with anyone, and they'd see the same game-state-correctness, with three minor frame-rate-dependent edges in the orbital layer.</p>
+    </div>
+
+    <!-- Chrome flags ================================================== -->
+    <section id="flags">
+      <h2>The user's Chrome flags</h2>
+      <hr class="rule">
+      <p>Chrome's defaults aggressively throttle backgrounded / occluded tabs. The user disabled these via launch flags. The audit question: <em>what is the game's behaviour without these mitigations?</em></p>
+      <div class="flag-grid">
+        <div class="k">--disable-background-timer-throttling</div>
+        <div class="v">By default, <code class="inline">setTimeout</code> / <code class="inline">setInterval</code> in backgrounded tabs are clamped to 1 second minimum. Disabling restores native scheduling.</div>
+        <div class="k">--disable-backgrounding-occluded-windows</div>
+        <div class="v">Stops Chrome from treating a fully covered (but technically focused) window as background. Defaults to ON for visibility-based throttling.</div>
+        <div class="k">--disable-renderer-backgrounding</div>
+        <div class="v">Prevents the renderer process from entering a low-priority state when its tab loses focus. Default behaviour deprioritises the renderer thread.</div>
+        <div class="k">--disable-features=IntensiveWakeUpThrottling</div>
+        <div class="v">After ~1 minute of being hidden, Chrome caps timer wake-ups to 1 per minute. This flag turns off that secondary tier of throttling.</div>
+        <div class="k">--disable-features=CalculateNativeWinOcclusion</div>
+        <div class="v">Stops Chrome from computing whether the window is occluded by other native windows (which would otherwise trigger renderer backgrounding).</div>
+      </div>
+      <p>Without these flags, three things happen in a backgrounded tab:</p>
+      <ul>
+        <li><code class="inline">requestAnimationFrame</code> drops from ~60Hz to ~1Hz (or stops altogether under "frozen" tab lifecycle).</li>
+        <li><code class="inline">setTimeout</code> / <code class="inline">setInterval</code> clamp to 1Hz minimum, falling to ~1/minute after 1 min.</li>
+        <li>The Pixi ticker, which is rAF-driven, fires at the same throttled rate.</li>
+      </ul>
+    </section>
+
+    <!-- Method ======================================================== -->
+    <section id="method">
+      <h2>Audit method</h2>
+      <hr class="rule">
+      <p>Static read of every tick-driver and time-using subsystem. For each, classify the time source:</p>
+      <ul>
+        <li><b>Wall-clock absolute timestamps</b> (e.g. <code class="inline">arrivalTime = nowMs + transitMs</code>, then <code class="inline">if (arrivalTime &lt;= nowMs)</code>) — <span class="light g">GREEN</span>. Behaviour identical regardless of how often the tick fires.</li>
+        <li><b>Wall-clock delta integrated into rate</b> (e.g. <code class="inline">cleared = sweepers × rate × tickDeltaMs/1000</code>) — <span class="light g">GREEN</span>. Same total work over any fixed wall-clock window.</li>
+        <li><b>Fixed-step or per-tick rolls</b> (e.g. one RNG draw per ticker fire, regardless of elapsed) — <span class="light y">YELLOW</span>. Behaviour scales with frame rate.</li>
+        <li><b>Per-frame counters with no time anchor</b> — would be <span class="light r">RED</span>. None found.</li>
+      </ul>
+    </section>
+
+    <!-- Tick loop ===================================================== -->
+    <section id="tick-loop">
+      <h2>The tick loop</h2>
+      <hr class="rule">
+      <p>Single driver: <code class="inline">app.ticker.add(...)</code> in <a class="cite" href="#">main.ts:1575</a>. PixiJS's <code class="inline">Application.ticker</code> is rAF-backed; no <code class="inline">maxFPS</code> / <code class="inline">minFPS</code> is configured, so it fires at whatever cadence the browser's rAF provides.</p>
+      <div class="quote">
+        <span class="path">src/main.ts:1573–1608 (truncated)</span>let lastFrameMs = performance.now();
+app.ticker.add(() => {
+  ...
+  const now = performance.now();
+  const nowWall = Date.now();
+  const prevFrameMs = lastFrameMs;
+  const elapsedSec = Math.max(0, (now - lastFrameMs) / 1000);
+  lastFrameMs = now;
+  ...
+  advanceIsland(s, now, { ... }, nowWall);
+  ...
+  const droneResult = tickDrones(worldState, now, prevFrameMs);
+  ...
+  tickRoutes(worldState, islandStates, now, elapsedSec);
+  const orbitalDeltaMs = now - prevFrameMs;
+  tickSatMovement(worldState, now);
+  tickSweeperCleanup(worldState, orbitalDeltaMs);
+  tickDebris(worldState, now);
+  tickScannerDiscovery(worldState, orbitalDeltaMs, now);
+  tickCommPackets(worldState);
+  tickRepairDrones(worldState, now);
+  tickSonarBuoys(worldState);
+  const vehicleResult = tickVehicles(worldState, islandStates, now);
+});</div>
+      <p>Every per-frame call gets a <code class="inline">performance.now()</code> reading. Routes additionally gets <code class="inline">elapsedSec</code>. Orbital sweeper + scanner additionally get <code class="inline">orbitalDeltaMs</code>. <code class="inline">nowWall = Date.now()</code> is threaded to <code class="inline">advanceIsland</code> for the day/night cycle (which must be a wall-clock function so it survives page refresh per spec §2.7). <strong>No subsystem reads a frame counter, fixed time step, or guesses elapsed.</strong></p>
+
+      <h3>Sequence: what happens during a backgrounded interval</h3>
+      <div class="diagram">
+        <svg viewBox="0 0 820 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sequence diagram of tab background throttling">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#8F8D82"/>
+            </marker>
+            <marker id="arrow-clay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#D97757"/>
+            </marker>
+          </defs>
+          <!-- Lanes -->
+          <text x="60"  y="30" fill="#CFCCC2" font-family="ui-monospace, monospace" font-size="11">Player</text>
+          <text x="220" y="30" fill="#CFCCC2" font-family="ui-monospace, monospace" font-size="11">Chrome rAF</text>
+          <text x="400" y="30" fill="#CFCCC2" font-family="ui-monospace, monospace" font-size="11">Pixi ticker</text>
+          <text x="580" y="30" fill="#CFCCC2" font-family="ui-monospace, monospace" font-size="11">Game state</text>
+          <text x="745" y="30" fill="#CFCCC2" font-family="ui-monospace, monospace" font-size="11">Wall clock</text>
+
+          <line x1="80"  y1="40" x2="80"  y2="350" stroke="#3A3833" stroke-dasharray="2 3"/>
+          <line x1="250" y1="40" x2="250" y2="350" stroke="#3A3833" stroke-dasharray="2 3"/>
+          <line x1="430" y1="40" x2="430" y2="350" stroke="#3A3833" stroke-dasharray="2 3"/>
+          <line x1="610" y1="40" x2="610" y2="350" stroke="#3A3833" stroke-dasharray="2 3"/>
+          <line x1="770" y1="40" x2="770" y2="350" stroke="#3A3833" stroke-dasharray="2 3"/>
+
+          <!-- t = 0 (alt-tab) -->
+          <text x="20" y="78" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">t=0</text>
+          <circle cx="80" cy="74" r="4" fill="#D97757"/>
+          <line x1="84" y1="74" x2="246" y2="74" stroke="#D97757" stroke-width="1.5" marker-end="url(#arrow-clay)"/>
+          <text x="92" y="68" fill="#D97757" font-family="ui-sans-serif" font-size="11">alt-tab</text>
+          <line x1="250" y1="80" x2="246" y2="80" stroke="#8F8D82"/>
+          <text x="100" y="92" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">visibilitychange:hidden → triggerSave() runs (main.ts:1562)</text>
+
+          <!-- rAF throttles -->
+          <text x="20" y="124" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">t=1s</text>
+          <line x1="250" y1="120" x2="426" y2="120" stroke="#8F8D82" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <text x="262" y="114" fill="#8F8D82" font-family="ui-sans-serif" font-size="11">rAF @ ~1Hz</text>
+          <line x1="430" y1="126" x2="606" y2="126" stroke="#8F8D82" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <text x="438" y="120" fill="#8F8D82" font-family="ui-sans-serif" font-size="11">ticker fires</text>
+          <text x="500" y="142" fill="#CFCCC2" font-family="ui-monospace, monospace" font-size="10">advanceIsland(now, ...)</text>
+          <text x="500" y="156" fill="#CFCCC2" font-family="ui-monospace, monospace" font-size="10">elapsedSec ~ 1.0</text>
+          <text x="500" y="170" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">→ correct integration</text>
+
+          <!-- middle of background -->
+          <text x="20" y="208" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">t∈[1s, 30s]</text>
+          <text x="100" y="206" fill="#CFCCC2" font-family="ui-sans-serif" font-size="11">~30 rAF ticks @ 1Hz; each tick integrates ~1s of wall-clock</text>
+          <text x="100" y="222" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">Per-tick rolls (debris, scanner, comm) fire ~30× instead of ~1800×</text>
+
+          <!-- Page lifecycle freeze (deep background) -->
+          <text x="20" y="252" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">t&gt;5min</text>
+          <text x="100" y="250" fill="#CFCCC2" font-family="ui-sans-serif" font-size="11">Chrome may freeze: rAF stops entirely (Page Lifecycle)</text>
+          <text x="100" y="266" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">Game state pauses, wall-clock keeps moving</text>
+
+          <!-- Resume -->
+          <text x="20" y="304" fill="#8F8D82" font-family="ui-monospace, monospace" font-size="10">resume</text>
+          <circle cx="80" cy="300" r="4" fill="#8FA56E"/>
+          <line x1="84" y1="300" x2="426" y2="300" stroke="#8FA56E" stroke-width="1.5" marker-end="url(#arrow-clay)"/>
+          <text x="100" y="294" fill="#8FA56E" font-family="ui-sans-serif" font-size="11">focus → rAF resumes at 60Hz</text>
+          <line x1="430" y1="320" x2="606" y2="320" stroke="#8FA56E" stroke-width="1.5" marker-end="url(#arrow-clay)"/>
+          <text x="438" y="314" fill="#8FA56E" font-family="ui-sans-serif" font-size="11">single ticker call</text>
+          <text x="500" y="336" fill="#CFCCC2" font-family="ui-monospace, monospace" font-size="10">elapsedSec = (gap); advanceIsland catches up via piecewise integrator</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- Traffic-light summary ========================================= -->
+    <section id="summary">
+      <h2>Per-subsystem traffic light</h2>
+      <hr class="rule">
+      <table class="audit">
+        <thead>
+          <tr>
+            <th>Subsystem</th>
+            <th>Time driver</th>
+            <th>Verdict</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="subsystem">Economy</td>
+            <td class="driver">advanceIsland(state, nowMs, ...)<br>piecewise integrator from state.lastTick → nowMs</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Same loop handles 1 frame or 24h offline catchup. Safety bound 10000 iterations vs ~140 expected segments / 7-day catchup.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Routes</td>
+            <td class="driver">tickRoutes(world, states, nowMs, elapsedSec)<br>arrivalTime = nowMs + transitMs (absolute)</td>
+            <td><span class="light g">GREEN</span> *</td>
+            <td>Delivery via <code class="inline">b.arrivalTime &lt;= nowMs</code>. Dispatch math correct. * See F-4: bolus shape on long catchup.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Drones</td>
+            <td class="driver">tickDrones(world, nowMs, prevTickMs)<br>launchTime/expectedReturnTime absolute</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Corridor reveal clamped to <code class="inline">[max(prev, launch), min(now, return)]</code>, so a single tick that spans the entire flight still reveals the full path.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Settlement</td>
+            <td class="driver">tickVehicles(world, states, nowMs)<br>launchTime/expectedArrivalTime absolute; weather + failure rolls evaluated path-wise <em>on arrival</em>, not per-tick</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Most robust subsystem in the codebase wrt throttling — the destruction roll iterates the rasterized path at dispatch time, decoupled from tick cadence.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Sat movement</td>
+            <td class="driver">tickSatMovement(world, nowMs)<br>movingTo.arrivalMs absolute</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Identical pattern to settlement.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Repair drones</td>
+            <td class="driver">tickRepairDrones(world, nowMs)<br>expectedArrivalTime absolute</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Same pattern.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Sweeper cleanup</td>
+            <td class="driver">tickSweeperCleanup(world, tickDeltaMs)<br>cleared = sweepers × rate × dt</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Rate × wall-clock delta is exact for any tick length.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Scanner discovery</td>
+            <td class="driver">tickScannerDiscovery(world, tickDeltaMs, nowMs)<br>dwell accrued via dt, but probability sampled once per tick</td>
+            <td><span class="light y">YELLOW</span></td>
+            <td>F-2 — dwell accumulation is wall-clock correct; the discovery roll cadence is not.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Debris hits</td>
+            <td class="driver">tickDebris(world, nowMs)<br>one roll per tick per sat in field</td>
+            <td><span class="light y">YELLOW</span></td>
+            <td>F-1 — per-tick semantics matches spec §1571, but expected lifetime of an exposed sat depends on frame rate.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Comm packets</td>
+            <td class="driver">tickCommPackets(world)<br>one hop per call, no nowMs/dt arg</td>
+            <td><span class="light y">YELLOW</span></td>
+            <td>F-3 — per-tick semantics matches spec §1518. Packets stall in a backgrounded tab.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Construction</td>
+            <td class="driver">tickConstruction(b, dtMs) called from advanceIsland inner loop</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Decremented within the economy's piecewise integrator; bounded segment so the rate stays piecewise-constant.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Toxicity rolls</td>
+            <td class="driver">advanceToxicityRolls(buildings, seed, prevMs, nowMs)<br>iterates hour boundaries between prev and now</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Deterministic hour-bucket replay — a 4h catchup rolls all 4 hours exactly.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Sonar buoys</td>
+            <td class="driver">tickSonarBuoys(world)<br>idempotent Set adds</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Per-tick frequency irrelevant — the discovered set converges after one tick.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Day/night cycle</td>
+            <td class="driver">dayPhase(nowMs), solarMultiplier(nowMs)<br>pure functions of wall-clock</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Spec §2.7 guarantee preserved.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Weather</td>
+            <td class="driver">weather(seed, cx, cy, nowMs)<br>pure function of wall-clock</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Deterministic from world seed + position + time.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Persistence</td>
+            <td class="driver">savedAt = Date.now(); savedAtPerf = performance.now(); perfShift on restore</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Survives page refresh. visibilitychange handler saves on hidden — never loses progress on tab close.</td>
+          </tr>
+          <tr>
+            <td class="subsystem">Rate-history HUD</td>
+            <td class="driver">averageRate(buffer); pruneRateBuffer by wall-clock cutoff</td>
+            <td><span class="light g">GREEN</span></td>
+            <td>Buffer pruned by timestamp on next sample; warm-up after a long gap re-fills cleanly.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Findings ====================================================== -->
+    <section id="findings">
+      <h2>Findings</h2>
+      <hr class="rule">
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="finding-id">F-1</span>
+          <span class="finding-title">Debris hit probability sampled once per ticker fire</span>
+          <span class="light y">YELLOW</span>
+        </div>
+        <div class="finding-body">
+          <p><code class="inline">tickDebris</code> iterates each locked sat sitting inside a debris field and rolls one RNG draw against <code class="inline">debrisHitProbability</code> per tick. The RNG is seeded by <code class="inline">${seed}_debris_${nowMs}_${sat.id}</code>, so different timestamps produce independent rolls — but the <em>number</em> of rolls per wall-clock window scales with frame rate.</p>
+          <div class="quote">
+            <span class="path">src/orbital.ts:840-845</span>const hitP = debrisHitProbability(field, sat) / protection;
+const rng = makeSeededRng(`${world.seed}_debris_${nowMs}_${sat.id}`);
+if (rng() &gt;= hitP) {
+  survivors.push(sat);
+  continue;
+}</div>
+          <p><strong>Behaviour under throttling.</strong> 30s alt-tab @ throttled 1Hz rAF: ~30 hit-rolls instead of ~1800. Sat lifetime in a debris cell is effectively 60× longer in a backgrounded tab.</p>
+          <p><strong>Spec alignment.</strong> Spec §1571: "Hit probability per tick on any satellite within the cell is <code class="inline">fragments × hit_constant × cross_section</code>." The "per tick" is explicit — so the implementation matches spec. The question is whether spec should be revised to "per second" given the existence of background tabs.</p>
+          <p><strong>Severity.</strong> Yellow. A player who backgrounds the tab essentially gets free debris-field traversal. Exploitable but cheesy; only relevant once T6 orbital play matters, and the player has to be actively neglecting the tab.</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="finding-id">F-2</span>
+          <span class="finding-title">Scanner-sat discovery probability sampled once per ticker fire</span>
+          <span class="light y">YELLOW</span>
+        </div>
+        <div class="finding-body">
+          <p>Same anti-pattern as F-1, in a different subsystem. <code class="inline">tickScannerDiscovery</code> correctly accumulates dwell using <code class="inline">tickDeltaMs</code> (so the saturating-exponential dwell ramp is wall-clock accurate), but the per-tick discovery roll uses the ramp output as a per-tick probability.</p>
+          <div class="quote">
+            <span class="path">src/orbital.ts:974, 996-1009</span>// Bump dwell — wall-clock correct.
+sat.dwellByCellKey[key] = (sat.dwellByCellKey[key] ?? 0) + tickDeltaMs;
+...
+const rng = makeSeededRng(`${world.seed}_scan_${sat.id}_${nowMs}`);
+for (const isl of world.islands) {
+  if (isl.discovered) continue;
+  const { cellX, cellY } = tileToCell(isl.cx, isl.cy);
+  const key = cellKey(cellX, cellY);
+  if (!covered.has(key)) continue;
+  const dwell = sat.dwellByCellKey[key] ?? 0;
+  const effectiveDwell = dwell * (sat.dwellRateMul ?? 1);
+  const p = scannerDiscoveryProbability(effectiveDwell);
+  if (rng() &lt; p) { ... }
+}</div>
+          <p><strong>Behaviour under throttling.</strong> Dwell continues to accrue correctly (so the asymptotic probability is right), but the roll happens once per ticker fire. 30s @ throttled rAF samples the (now high) probability ~30 times instead of ~1800 — discovery still <em>happens</em> at higher dwell, just slower.</p>
+          <p><strong>Spec alignment.</strong> §1604 references "<em>p</em> per tick"; §1934 Appendix A also "per tick". Per-spec.</p>
+          <p><strong>Severity.</strong> Yellow. Lower impact than F-1 because the asymptote (<code class="inline">SCANNER_ASYMPTOTE_P_PER_TICK</code>) eventually drives discovery to certainty; throttling delays it, doesn't break it.</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="finding-id">F-3</span>
+          <span class="finding-title">Comm-packet propagation: one hop per ticker fire</span>
+          <span class="light y">YELLOW</span>
+        </div>
+        <div class="finding-body">
+          <p><code class="inline">tickCommPackets</code> takes <em>no</em> time argument and advances every in-flight packet exactly one hop per call.</p>
+          <div class="quote">
+            <span class="path">src/orbital.ts:492-515 (truncated)</span>export function tickCommPackets(world: WorldState): CommPacket[] {
+  ...
+  for (const pkt of world.commPackets) {
+    ...
+    const next = nextHopToNearestSpaceport(graph, pkt.currentNodeId, targets);
+    if (next !== null) {
+      pkt.currentNodeId = next;
+    }
+    survivors.push(pkt);
+  }
+  ...
+}</div>
+          <p><strong>Behaviour under throttling.</strong> A packet that would normally hop 60 times per second hops ~1× per second when the tab is hidden. End-to-end delivery latency grows linearly with the throttling factor.</p>
+          <p><strong>Spec alignment.</strong> §1518: "moves through the comm graph <em>one hop per tick</em>." Explicit per-tick semantics; the implementation is faithful.</p>
+          <p><strong>Severity.</strong> Yellow. Comm-packet delivery is a soft constraint (the spec acknowledges buffering); slow delivery during a backgrounded session resolves on resume. No state corruption.</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="finding-id">F-4</span>
+          <span class="finding-title">Route dispatch bolus on long catchup</span>
+          <span class="light y">YELLOW</span>
+        </div>
+        <div class="finding-body">
+          <p>Routes correctly receive <code class="inline">elapsedSec</code> as the dispatch window, and <code class="inline">capDemand = route.capacityPerSec × ... × elapsedSec</code> is wall-clock correct in total volume. But every batch dispatched in this one tick gets <code class="inline">arrivalTime = nowMs + transitTimeSec × 1000</code> — they all arrive at the same future instant, not spread across the elapsed window.</p>
+          <div class="quote">
+            <span class="path">src/routes.ts:698, 813-814</span>const capDemand = route.capacityPerSec * capacityMul * skillCapMul * airshipMul * weatherMul * elapsedSec;
+...
+d.route.inFlight.push({
+  resourceId: d.resourceId,
+  amount,
+  arrivalTime: nowMs + d.route.transitTimeSec * 1000,
+  dispatchTime: nowMs,
+  ...
+});</div>
+          <p><strong>Behaviour under throttling.</strong> After a 4h alt-tab on a route with 60s transit:</p>
+          <ul>
+            <li>One huge batch sized for 4h of throughput dispatches at <code class="inline">nowMs</code>.</li>
+            <li>Source inventory is correctly debited (route bookkeeping preserved).</li>
+            <li>Destination headroom clamps via <code class="inline">planRouteCargo</code> (no overflow).</li>
+            <li>The batch lands at <code class="inline">nowMs + 60s</code> — 60s after resume, all at once.</li>
+          </ul>
+          <p>Compare to foregrounded: 4h × 60Hz = ~864000 small batches spread evenly. Same total volume, very different shape.</p>
+          <p><strong>Severity.</strong> Yellow / cosmetic. Inventory totals are correct; only the arrival timing differs. The destination island's <code class="inline">advanceIsland</code> integrator handles step-function input fine (it's an event in <code class="inline">findNextCapEvent</code>). The visible effect: ledger shows "in-flight: <em>huge</em>" for one transit cycle after resume, then snaps to delivered.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scenarios ===================================================== -->
+    <section id="scenarios">
+      <h2>Scenarios</h2>
+      <hr class="rule">
+      <table class="scenarios">
+        <thead>
+          <tr><th>Scenario</th><th>Routes</th><th>Economy</th><th>Drones</th><th>Settlement</th><th>Orbital</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>30s backgrounded</td>
+            <td><span class="light g">G*</span><br>30s of capacity, 1 bolus on resume</td>
+            <td><span class="light g">G</span><br>30s of production, piecewise</td>
+            <td><span class="light g">G</span><br>30s of motion, corridor reveals correctly</td>
+            <td><span class="light g">G</span><br>arrival rolls on schedule</td>
+            <td><span class="light y">Y</span><br>~30 debris/scanner rolls vs ~1800; sat movement OK</td>
+          </tr>
+          <tr>
+            <td>4h backgrounded</td>
+            <td><span class="light g">G*</span><br>4h of capacity in one bolus (F-4)</td>
+            <td><span class="light g">G</span><br>4h piecewise integration, ~80 phase / ramp boundaries</td>
+            <td><span class="light g">G</span><br>any in-flight drone resolves on schedule</td>
+            <td><span class="light g">G</span><br>any in-flight vehicle resolves on schedule</td>
+            <td><span class="light y">Y</span><br>Hit rolls ~14400 throttled vs ~864000 foregrounded; comm packets ~14400 hops max</td>
+          </tr>
+          <tr>
+            <td>24h+ backgrounded</td>
+            <td><span class="light g">G*</span><br>capped at 24h offline (per economy)</td>
+            <td><span class="light g">G</span><br>capped at 24h; safety bound 10000 segments unreachable</td>
+            <td><span class="light g">G</span><br>any drone returns on schedule (clamped)</td>
+            <td><span class="light g">G</span><br>any vehicle arrives on schedule</td>
+            <td><span class="light y">Y</span><br>Same as above; orbital state advances correctly otherwise</td>
+          </tr>
+          <tr>
+            <td>Page-frozen (rAF stops)</td>
+            <td><span class="light g">G*</span><br>same as 4h: one bolus on resume</td>
+            <td><span class="light g">G</span><br>same path as backgrounded gap</td>
+            <td><span class="light g">G</span><br>arrival evaluated on next rAF</td>
+            <td><span class="light g">G</span><br>arrival evaluated on next rAF</td>
+            <td><span class="light y">Y</span><br>0 rolls during freeze; resumes at normal rate</td>
+          </tr>
+          <tr>
+            <td>Tab closed + reopened</td>
+            <td><span class="light g">G</span><br>perfShift on restore preserves arrivalTime</td>
+            <td><span class="light g">G</span><br>lastTick remap from savedAt → resumes catchup</td>
+            <td><span class="light g">G</span><br>launchTime + perfShift preserves trajectory</td>
+            <td><span class="light g">G</span><br>same perfShift treatment</td>
+            <td><span class="light g">G</span><br>state hydrated; orbital ticks resume as normal</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><small>G* = green for game state, but with the F-4 "single bolus" timing shape on resume. No data is wrong; only the arrival distribution differs from foregrounded play.</small></p>
+    </section>
+
+    <!-- Risks ========================================================= -->
+    <section id="risks">
+      <h2>Risks if a player runs without the Chrome flags</h2>
+      <hr class="rule">
+      <p><strong>Most game state advances correctly.</strong> Routes, economy, drones, settlement, weather, day/night, persistence — all are wall-clock-driven and indifferent to rAF cadence. A player on stock Chrome can alt-tab freely and resume to a correctly-advanced world.</p>
+      <p><strong>Frame-rate-dependent edges live in the orbital layer.</strong> Debris exposure (F-1) and comm-packet latency (F-3) lean on per-tick semantics that <em>spec'd as per-tick</em>. A backgrounded tab effectively reduces orbital risk and delivery speed by the throttling factor. Scanner discovery (F-2) also slows but still reaches its asymptote.</p>
+      <p><strong>Cosmetic timing artefact in routes.</strong> The F-4 dispatch bolus is briefly visible in the ledger after a long resume but doesn't affect totals.</p>
+      <p><strong>Page-lifecycle freeze.</strong> If Chrome puts the tab into the deep "frozen" state (which the user's flags do <em>not</em> entirely disable — that's a separate page-lifecycle mechanism), <code class="inline">requestAnimationFrame</code> stops firing. Wall-clock subsystems still resume correctly on unfreeze because they read <code class="inline">performance.now()</code> at resume time. Per-tick subsystems see zero rolls during the freeze interval, then resume normally.</p>
+      <p><strong>Setinterval-driven autosave.</strong> <code class="inline">setInterval(triggerSave, 30000)</code> at <code class="inline">main.ts:1557</code> would normally throttle to 1Hz then 1/min in a hidden tab. The <code class="inline">visibilitychange</code> handler at <code class="inline">main.ts:1562</code> compensates by saving on every hidden transition — so the 30s autosave is just a foregrounded freshness floor, not the primary "don't lose progress" guarantee.</p>
+    </section>
+
+    <!-- Recommendations / pickers ====================================== -->
+    <section id="recommendations">
+      <h2>Recommendations — choose one per finding</h2>
+      <hr class="rule">
+      <p>For each yellow finding the answer isn't obvious — these are design choices about whether to redefine the per-tick semantic in spec, patch the code, or accept the current behaviour. Pick one per finding and copy the payload back.</p>
+
+      <!-- Picker F-1 -->
+      <div class="picker" data-key="f1_debris">
+        <div class="picker-tag">F-1 · debris hit rate</div>
+        <div class="picker-options">
+          <label class="opt">
+            <input type="radio" name="f1_debris" value="leave_as_spec" checked>
+            <div>
+              <div class="o-label">Leave as spec — per-tick is intentional (§1571)</div>
+              <div class="o-desc">Spec defines "per tick" explicitly. Background-tab grace is a free bonus the player effectively earns by not playing actively. No change.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="f1_debris" value="revise_to_per_second">
+            <div>
+              <div class="o-label">Revise spec to "per second" and migrate code</div>
+              <div class="o-desc">Multiply <code class="inline">debrisHitProbability(...)</code> by <code class="inline">tickDeltaMs / 1000</code> in <code class="inline">orbital.ts:840</code>. Same expected hit rate at 60Hz; consistent under throttling. Update Appendix A constants accordingly.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="f1_debris" value="cap_dt_for_rolls">
+            <div>
+              <div class="o-label">Cap dt for per-tick rolls only</div>
+              <div class="o-desc">Add <code class="inline">tickDeltaMs = Math.min(now - prev, MAX_ROLL_DT_MS)</code> when computing roll cadence. Keeps "per tick" as the design unit but smooths out the background-tab edge.</div>
+            </div>
+          </label>
+        </div>
+        <div class="picker-current">Current pick: <b data-current="f1_debris">leave_as_spec</b></div>
+      </div>
+
+      <!-- Picker F-2 -->
+      <div class="picker" data-key="f2_scanner">
+        <div class="picker-tag">F-2 · scanner discovery probability</div>
+        <div class="picker-options">
+          <label class="opt">
+            <input type="radio" name="f2_scanner" value="leave_as_spec" checked>
+            <div>
+              <div class="o-label">Leave as-is — dwell ramp still works</div>
+              <div class="o-desc">Asymptotic probability still drives discovery to certainty; throttling delays but doesn't prevent it. Low impact.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="f2_scanner" value="integrate_probability">
+            <div>
+              <div class="o-label">Integrate probability over dt</div>
+              <div class="o-desc">Treat <code class="inline">scannerDiscoveryProbability(dwell)</code> as a per-second rate and compute the cumulative non-discovery probability over <code class="inline">tickDeltaMs</code>. Same expected discovery time at 60Hz, frame-rate-independent.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="f2_scanner" value="leave_but_clarify_spec">
+            <div>
+              <div class="o-label">Leave code; clarify spec wording</div>
+              <div class="o-desc">Add a footnote to §1604 noting that "per tick" assumes 60Hz and that backgrounded tabs effectively slow discovery. No code change.</div>
+            </div>
+          </label>
+        </div>
+        <div class="picker-current">Current pick: <b data-current="f2_scanner">leave_as_spec</b></div>
+      </div>
+
+      <!-- Picker F-3 -->
+      <div class="picker" data-key="f3_comm">
+        <div class="picker-tag">F-3 · comm-packet propagation</div>
+        <div class="picker-options">
+          <label class="opt">
+            <input type="radio" name="f3_comm" value="leave_as_spec" checked>
+            <div>
+              <div class="o-label">Leave as-is — spec explicit (§1518)</div>
+              <div class="o-desc">"One hop per tick" is verbatim spec. Latency growth in a backgrounded tab is acceptable; no state corruption. Resolves on resume.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="f3_comm" value="time_budget_per_hop">
+            <div>
+              <div class="o-label">Time-budget per hop</div>
+              <div class="o-desc">Store <code class="inline">pkt.nextHopAtMs</code>; advance only when <code class="inline">nowMs &gt;= nextHopAtMs</code>. One tick can advance many hops if the elapsed window covers many hop intervals. Frame-rate-independent.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="f3_comm" value="catchup_loop_in_tick">
+            <div>
+              <div class="o-label">Catchup loop inside tickCommPackets</div>
+              <div class="o-desc">Pass <code class="inline">tickDeltaMs</code> and iterate <code class="inline">Math.floor(dt / HOP_INTERVAL_MS)</code> hops per packet per tick. Same effect as above with less per-packet state.</div>
+            </div>
+          </label>
+        </div>
+        <div class="picker-current">Current pick: <b data-current="f3_comm">leave_as_spec</b></div>
+      </div>
+
+      <!-- Picker F-4 -->
+      <div class="picker" data-key="f4_route_bolus">
+        <div class="picker-tag">F-4 · route dispatch bolus on resume</div>
+        <div class="picker-options">
+          <label class="opt">
+            <input type="radio" name="f4_route_bolus" value="leave_as_is" checked>
+            <div>
+              <div class="o-label">Leave as-is — totals are correct</div>
+              <div class="o-desc">Inventory totals match foregrounded play. The bolus visually resolves in one transit window after resume. Cosmetic only.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="f4_route_bolus" value="cap_elapsed_per_tick">
+            <div>
+              <div class="o-label">Cap elapsedSec per tickRoutes call</div>
+              <div class="o-desc">Pass <code class="inline">Math.min(elapsedSec, MAX_ROUTE_DT_SEC)</code> (e.g. 5s) and re-tick routes in a loop. Smooths the bolus over multiple synthetic ticks at the cost of more loop iterations on long catchup.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="f4_route_bolus" value="stagger_arrivals">
+            <div>
+              <div class="o-label">Stagger arrival times within the bolus</div>
+              <div class="o-desc">When a single tickRoutes call dispatches more than 1 transit-window worth of cargo, split the dispatch into N sub-batches with arrival times spread across <code class="inline">[nowMs, nowMs + elapsedSec × 1000]</code>. Restores foregrounded shape.</div>
+            </div>
+          </label>
+        </div>
+        <div class="picker-current">Current pick: <b data-current="f4_route_bolus">leave_as_is</b></div>
+      </div>
+
+      <!-- Overall verdict picker -->
+      <div class="picker" data-key="overall_action">
+        <div class="picker-tag">Overall — what comes next</div>
+        <div class="picker-options">
+          <label class="opt">
+            <input type="radio" name="overall_action" value="no_action" checked>
+            <div>
+              <div class="o-label">No action — audit confirms current behaviour is acceptable</div>
+              <div class="o-desc">The user's Chrome flags work for them; the build is robust enough to share. All four yellows are intentional / cosmetic.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="overall_action" value="patch_orbital">
+            <div>
+              <div class="o-label">Patch orbital subsystems only (F-1 + F-2 + F-3)</div>
+              <div class="o-desc">Tighten the three per-tick semantics in <code class="inline">orbital.ts</code>. Spec amendments to §1518, §1571, §1604.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="overall_action" value="patch_all">
+            <div>
+              <div class="o-label">Patch all four findings</div>
+              <div class="o-desc">F-1/2/3 above plus stagger route arrivals (F-4) for foregrounded-shaped delivery on resume.</div>
+            </div>
+          </label>
+          <label class="opt">
+            <input type="radio" name="overall_action" value="defer_to_runtime_test">
+            <div>
+              <div class="o-label">Defer — write a runtime test first</div>
+              <div class="o-desc">Build a headless harness that drives the tick loop at synthetic frame rates (60Hz vs 1Hz) over equal wall-clock windows and diffs the resulting state. Use the results to prioritise.</div>
+            </div>
+          </label>
+        </div>
+        <div class="picker-current">Current pick: <b data-current="overall_action">no_action</b></div>
+      </div>
+
+      <aside class="selections" id="selections-panel" aria-label="Your picks">
+        <div class="s-tag">Your picks — copy and send back</div>
+        <div class="s-head">Selections</div>
+        <div class="s-body">Click any radio above to update this panel. Hit <b>Copy</b> to put the payload on your clipboard. Paste back to confirm the next action; if anything in the audit needs adjusting based on your picks I'll cut a follow-up doc.</div>
+        <div class="s-tools">
+          <button type="button" class="copy-btn" id="copy-selections" aria-label="Copy selections to clipboard">Copy selections</button>
+          <div class="format-toggle" role="tablist" aria-label="Output format">
+            <button type="button" data-format="json" class="active" role="tab" aria-selected="true">JSON</button>
+            <button type="button" data-format="kv" role="tab" aria-selected="false">key: value</button>
+          </div>
+          <span class="copy-status" id="copy-status" aria-live="polite"></span>
+        </div>
+        <pre class="payload" id="selections-payload" tabindex="0">{}</pre>
+      </aside>
+    </section>
+
+    <footer>
+      Audited 2026-05-23 · static read of master @ 267fa62 · auditor: robot-islands lead session · 17 subsystems traced, 4 yellow flags surfaced, 0 reds.
+    </footer>
+
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var KEYS = ['f1_debris', 'f2_scanner', 'f3_comm', 'f4_route_bolus', 'overall_action'];
+
+      var payloadEl = document.getElementById('selections-payload');
+      var copyBtn   = document.getElementById('copy-selections');
+      var statusEl  = document.getElementById('copy-status');
+      var formatBtns = document.querySelectorAll('.selections .format-toggle button');
+
+      var currentFormat = 'json';
+
+      function readSelections() {
+        var out = {};
+        for (var i = 0; i < KEYS.length; i++) {
+          var key = KEYS[i];
+          var checked = document.querySelector('input[type="radio"][name="' + key + '"]:checked');
+          out[key] = checked ? checked.value : null;
+        }
+        return out;
+      }
+
+      function render() {
+        var sel = readSelections();
+        for (var k in sel) {
+          if (!Object.prototype.hasOwnProperty.call(sel, k)) continue;
+          var b = document.querySelector('[data-current="' + k + '"]');
+          if (b) b.textContent = sel[k] === null ? '—' : sel[k];
+        }
+        var text;
+        if (currentFormat === 'json') {
+          text = JSON.stringify({
+            audit: 'robot-islands/2026-05-23-tab-background-throttling-audit',
+            picks: sel
+          }, null, 2);
+        } else {
+          var lines = ['# Picks for robot-islands/2026-05-23-tab-background-throttling-audit'];
+          for (var j = 0; j < KEYS.length; j++) {
+            var key2 = KEYS[j];
+            lines.push(key2 + ': ' + (sel[key2] === null ? '(none)' : sel[key2]));
+          }
+          text = lines.join('\n');
+        }
+        payloadEl.textContent = text;
+      }
+
+      var radios = document.querySelectorAll('.picker input[type="radio"]');
+      for (var i = 0; i < radios.length; i++) {
+        radios[i].addEventListener('change', render);
+      }
+
+      formatBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentFormat = btn.getAttribute('data-format');
+          formatBtns.forEach(function (b) {
+            var active = b === btn;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          render();
+        });
+      });
+
+      function showStatus(msg, ok) {
+        statusEl.textContent = msg;
+        statusEl.style.color = ok ? 'var(--olive)' : 'var(--rust)';
+        if (showStatus._t) clearTimeout(showStatus._t);
+        showStatus._t = setTimeout(function () { statusEl.textContent = ''; }, 2200);
+      }
+
+      copyBtn.addEventListener('click', function () {
+        var text = payloadEl.textContent;
+        var done = function (ok) {
+          if (ok) {
+            copyBtn.classList.add('copied');
+            copyBtn.textContent = 'Copied';
+            setTimeout(function () {
+              copyBtn.classList.remove('copied');
+              copyBtn.textContent = 'Copy selections';
+            }, 1600);
+            showStatus('copied ' + text.length + ' chars', true);
+          } else {
+            showStatus('copy failed — triple-click the block', false);
+          }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () { done(true); },
+            function () { done(false); }
+          );
+        } else {
+          var range = document.createRange();
+          range.selectNodeContents(payloadEl);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          done(false);
+        }
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>
