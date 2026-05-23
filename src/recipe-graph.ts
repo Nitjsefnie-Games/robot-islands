@@ -10,6 +10,25 @@ export interface RecipeTableEntry {
   readonly n: number;
 }
 
+/** Per spec v2 section 05 — eight gate dimensions in the data.
+ *  Status (met / pending / N/A) is decided at RENDER time against the
+ *  active island; this layer is pure and stores only the requirement. */
+export type GateKind =
+  | 'tier'      // def.tier (1-4) -- runtime: tierForLevel(state.level) >= def.tier
+  | 't5'        // def.tier === 5 -- runtime: t5Unlocked(state)
+  | 't6'        // def.tier === 6 -- runtime: t6Unlocked(state, hasSpaceport)
+  | 'biome'     // def.requiredBiomes -- runtime: canPlaceOnIsland(def, spec)
+  | 'tile'      // def.requiredTile -- placement-time only (catalog row = N/A)
+  | 'coastal'   // def.coastal -- placement-time only (catalog row = N/A)
+  | 'heat'      // def.requiresHeat -- runtime adjacency (catalog row = N/A)
+  | 'adjacency';// def.gates[] -- runtime adjacency (catalog row = N/A)
+
+export interface GateEntry {
+  readonly kind: GateKind;
+  /** Display string (e.g. "L≥30", "biome=volcanic", "tile=ore|coal", "heat-src"). */
+  readonly label: string;
+}
+
 export interface RecipeTableRow {
   readonly category: RecipeCategory;
   readonly recipeKey: string;
@@ -19,6 +38,7 @@ export interface RecipeTableRow {
   readonly inputs: ReadonlyArray<RecipeTableEntry>;
   readonly outputs: ReadonlyArray<RecipeTableEntry>;
   readonly cycleSec: number;
+  readonly gates: ReadonlyArray<GateEntry>;
 }
 
 function ownerOf(recipeKey: string): BuildingDefId {
@@ -49,6 +69,50 @@ export function buildRecipeTableRows(): ReadonlyArray<RecipeTableRow> {
     const buildingLabel = def?.displayName ?? buildingId;
     const tier = def?.tier ?? 0;
 
+    const gates: GateEntry[] = [];
+    if (def) {
+      // Tier band — splits T5 / T6 into endgame kinds since their status
+      // predicates differ (need aiCoreCrafted / ascendantCoreCrafted flags).
+      if (def.tier === 5) {
+        gates.push({ kind: 't5', label: 'L≥50 · ai_core' });
+      } else if (def.tier === 6) {
+        // Spaceport is exempt from the spaceport-placed half (chicken-and-egg)
+        if (buildingId === 'spaceport') {
+          gates.push({ kind: 't6', label: 'ascendant_core' });
+        } else {
+          gates.push({ kind: 't6', label: 'ascendant_core · spaceport' });
+        }
+      } else if (def.tier > 1) {
+        // L≥6 / L≥11 / L≥16 / etc. — tierForLevel band edges (spec §9.2).
+        const lvl = (def.tier - 1) * 5 + 1;
+        gates.push({ kind: 'tier', label: `L≥${lvl}` });
+      }
+      if (def.requiredBiomes && def.requiredBiomes.length > 0) {
+        gates.push({ kind: 'biome', label: `biome=${def.requiredBiomes.join('|')}` });
+      }
+      if (def.requiredTile && def.requiredTile.length > 0) {
+        gates.push({ kind: 'tile', label: `tile=${def.requiredTile.join('|')}` });
+      }
+      if (def.coastal) {
+        gates.push({ kind: 'coastal', label: 'coastal' });
+      }
+      if (def.requiresHeat) {
+        gates.push({ kind: 'heat', label: 'heat-src' });
+      }
+      if (def.gates && def.gates.length > 0) {
+        for (const g of def.gates) {
+          let label: string;
+          switch (g.matchType) {
+            case 'def_id':       label = `adj=${g.defId ?? '?'}`; break;
+            case 'same_category':label = `adj=${g.category ?? '?'}`; break;
+            case 'heat_source':  label = 'adj=heat-src'; break;
+            default:             label = `adj=${String(g.matchType)}`;
+          }
+          gates.push({ kind: 'adjacency', label });
+        }
+      }
+    }
+
     rows.push({
       category: recipe.category,
       recipeKey,
@@ -58,6 +122,7 @@ export function buildRecipeTableRows(): ReadonlyArray<RecipeTableRow> {
       inputs,
       outputs,
       cycleSec: recipe.cycleSec,
+      gates,
     });
   }
 

@@ -3,8 +3,12 @@
 // drag handle, resize grip, and localStorage persistence come from
 // ui-zones.ts + window-manager.ts; this module owns the body content.
 
-import { buildRecipeTableRows, type RecipeTableRow } from './recipe-graph.js';
+import { buildRecipeTableRows, type GateEntry, type RecipeTableRow } from './recipe-graph.js';
 import { mountPanel, Zone, type PanelHandle } from './ui-zones.js';
+import type { IslandState } from './economy.js';
+import type { IslandSpec } from './world.js';
+import { t5Unlocked } from './skilltree.js';
+import { canPlaceOnIsland, BUILDING_DEFS } from './building-defs.js';
 
 export interface GraphUi {
   show(): void;
@@ -13,7 +17,19 @@ export interface GraphUi {
   isVisible(): boolean;
 }
 
-export function mountGraphUi(parentEl: HTMLElement): GraphUi {
+export interface MountGraphUiOptions {
+  /** Optional getter so the GATES column can repaint its met / pending /
+   *  N/A colours against the currently-active island on each open. When
+   *  omitted, every gate renders as N/A (gray) — degrades gracefully but
+   *  the colour signal is lost. */
+  readonly getState?: () => IslandState;
+  readonly getSpec?: () => IslandSpec;
+}
+
+export function mountGraphUi(
+  parentEl: HTMLElement,
+  opts: MountGraphUiOptions = {},
+): GraphUi {
   const rows = buildRecipeTableRows();
 
   // Group by category, preserving sort order within each group.
@@ -57,7 +73,12 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
   // hide/show without rebuilding the DOM.
   interface SectionRef {
     readonly header: HTMLDivElement;
-    readonly rowEls: ReadonlyArray<{ el: HTMLDivElement; haystack: string }>;
+    readonly rowEls: ReadonlyArray<{
+      el: HTMLDivElement;
+      haystack: string;
+      gates: ReadonlyArray<GateEntry>;
+      gateSpans: ReadonlyArray<HTMLSpanElement>;
+    }>;
   }
   const sections: SectionRef[] = [];
 
@@ -75,11 +96,12 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
     header.style.borderBottom = '1px solid #243b52';
     container.appendChild(header);
 
-    const rowEls: { el: HTMLDivElement; haystack: string }[] = [];
+    const rowEls: { el: HTMLDivElement; haystack: string; gates: ReadonlyArray<GateEntry>; gateSpans: ReadonlyArray<HTMLSpanElement> }[] = [];
     for (const row of bucket) {
       const rowEl = document.createElement('div');
+      rowEl.dataset.rowBuilding = row.buildingId;
       rowEl.style.display = 'grid';
-      rowEl.style.gridTemplateColumns = '260px 1fr 1fr 60px';
+      rowEl.style.gridTemplateColumns = '180px 150px 1fr 1fr 60px';
       rowEl.style.gap = '10px';
       rowEl.style.padding = '6px 4px';
       rowEl.style.borderBottom = '1px solid #1a2330';
@@ -110,6 +132,37 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
       bCell.appendChild(tier);
       if (recipeNote.textContent) bCell.appendChild(recipeNote);
 
+      // GATES cell — inline text, dot-separated. Status colour is filled in
+      // later by refreshGatesStatus() against the active island.
+      const gatesCell = document.createElement('div');
+      gatesCell.style.display = 'flex';
+      gatesCell.style.flexWrap = 'wrap';
+      gatesCell.style.gap = '0 6px';
+      gatesCell.style.alignItems = 'center';
+      gatesCell.style.lineHeight = '1.35';
+      const gateSpans: HTMLSpanElement[] = [];
+      if (row.gates.length === 0) {
+        const dash = document.createElement('span');
+        dash.textContent = '—';
+        dash.style.color = '#5a7080';
+        gatesCell.appendChild(dash);
+      } else {
+        for (let gi = 0; gi < row.gates.length; gi++) {
+          const g = row.gates[gi]!;
+          const span = document.createElement('span');
+          span.textContent = g.label;
+          span.dataset.gateKind = g.kind;
+          gateSpans.push(span);
+          gatesCell.appendChild(span);
+          if (gi < row.gates.length - 1) {
+            const sep = document.createElement('span');
+            sep.textContent = '·';
+            sep.style.color = '#3a4452';
+            gatesCell.appendChild(sep);
+          }
+        }
+      }
+
       const inCell = document.createElement('div');
       inCell.textContent = row.inputs.length
         ? row.inputs.map((e) => `${e.n} ${e.resource}`).join(', ')
@@ -128,6 +181,7 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
       cycleCell.style.textAlign = 'right';
 
       rowEl.appendChild(bCell);
+      rowEl.appendChild(gatesCell);
       rowEl.appendChild(inCell);
       rowEl.appendChild(outCell);
       rowEl.appendChild(cycleCell);
@@ -139,13 +193,76 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
         row.category,
         ...row.inputs.map((e) => e.resource),
         ...row.outputs.map((e) => e.resource),
+        ...row.gates.map((g) => g.label),
       ]
         .join(' ')
         .toLowerCase();
-      rowEls.push({ el: rowEl, haystack });
+      rowEls.push({ el: rowEl, haystack, gates: row.gates, gateSpans });
     }
     sections.push({ header, rowEls });
   }
+
+  const STATUS_MET = '#8FA56E';
+  const STATUS_PENDING = '#D97757';
+  const STATUS_NA = '#5a7080';
+
+  function refreshGatesStatus(): void {
+    const state = opts.getState ? opts.getState() : null;
+    const spec  = opts.getSpec  ? opts.getSpec()  : null;
+    // Without either getter every gate falls through to N/A — degraded but safe.
+    for (const section of sections) {
+      for (const { gates, gateSpans } of section.rowEls) {
+        for (let i = 0; i < gates.length; i++) {
+          const g = gates[i]!;
+          const span = gateSpans[i]!;
+          let status: 'met' | 'pending' | 'na' = 'na';
+          switch (g.kind) {
+            case 'tier': {
+              // label is "L≥N" — parse N defensively.
+              if (state) {
+                const m = /L≥(\d+)/.exec(g.label);
+                const need = m ? Number(m[1]) : 0;
+                status = state.level >= need ? 'met' : 'pending';
+              }
+              break;
+            }
+            case 't5':
+              if (state) {
+                status = t5Unlocked(state) ? 'met' : 'pending';
+              }
+              break;
+            case 't6':
+              if (state) {
+                status = state.ascendantCoreCrafted ? 'met' : 'pending';
+              }
+              break;
+            case 'biome':
+              if (spec) {
+                const def = BUILDING_DEFS[
+                  (span.closest('[data-row-building]')?.getAttribute('data-row-building') ?? '') as keyof typeof BUILDING_DEFS
+                ];
+                status = def && canPlaceOnIsland(def, spec) ? 'met' : 'pending';
+              }
+              break;
+            case 'tile':
+            case 'coastal':
+            case 'heat':
+            case 'adjacency':
+              // Placement-time / runtime-adjacency predicates have no live answer
+              // for a catalog row (spec §05). Render as N/A.
+              status = 'na';
+              break;
+          }
+          span.style.color =
+            status === 'met' ? STATUS_MET :
+            status === 'pending' ? STATUS_PENDING :
+            STATUS_NA;
+        }
+      }
+    }
+  }
+
+  refreshGatesStatus();
 
   function applyFilter(): void {
     const q = search.value.trim().toLowerCase();
@@ -226,6 +343,7 @@ return {
     if (visible) return;
     visible = true;
     panelHandle.setVisible(true);
+    refreshGatesStatus();
     setTimeout(() => search.focus(), 0);
   },
   hide(): void {
@@ -241,6 +359,7 @@ return {
     }
     visible = true;
     panelHandle.setVisible(true);
+    refreshGatesStatus();
     setTimeout(() => search.focus(), 0);
     return true;
   },
