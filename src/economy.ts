@@ -37,7 +37,8 @@ import {
 import { hasOperationalBuilding, isOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
-import { nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
+import { dayPhaseName, nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
+import { weather } from './weather.js';
 import { resolveHeatAssignments, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
 import { footprintTiles } from './shape-mask.js';
@@ -527,14 +528,22 @@ function oceanPlatformPausedReason(
  *  Returns `false` gracefully when world fields (weather, daynight) are absent. */
 export function evaluateConditionalEffectCondition(
   c: ConditionalEffectCondition,
-  _state: IslandState,
+  state: IslandState,
   world: WorldState | undefined,
+  nowMs?: number,
 ): boolean {
   switch (c.kind) {
-    case 'during-storm':
-      return (world as any)?.weather?.activeStorm !== undefined;
-    case 'during-night':
-      return (world as any)?.daynight?.phase === 'night';
+    case 'during-storm': {
+      if (!world || nowMs === undefined) return false;
+      const island = world.islands.find((i) => i.id === state.id);
+      if (!island) return false;
+      const cell = weather(world.seed, island.cx, island.cy, nowMs, island.biome);
+      return cell.state === 'storm' || cell.state === 'severe_storm' || cell.state === 'catastrophic';
+    }
+    case 'during-night': {
+      if (nowMs === undefined) return false;
+      return dayPhaseName(nowMs) === 'night';
+    }
     case 'networked-to-N-T3-islands': {
       if (!world) return false;
       const networked = networkedIslandIds(world);
@@ -560,11 +569,12 @@ export function layerConditionalBonuses(
   state: IslandState,
   world: WorldState | undefined,
   graph: Graph = DEFAULT_GRAPH,
+  nowMs?: number,
 ): void {
   for (const nodeId of state.unlockedNodes) {
     const node = graph.nodes.find((n) => n.id === nodeId);
     if (!node || node.effect.kind !== 'conditionalBonus') continue;
-    if (!evaluateConditionalEffectCondition(node.effect.condition, state, world)) continue;
+    if (!evaluateConditionalEffectCondition(node.effect.condition, state, world, nowMs)) continue;
     const effect = node.effect;
     const m = 1 + effect.multiplier;
     if (effect.appliesTo === 'storage') {
@@ -700,7 +710,7 @@ export function computeRates(
   // nominalRate (so producer/consumer supply ratios stay correct when only
   // one side is buffed). Power multipliers apply in pass 3.
   const skillMul = effectiveSkillMultipliers(state);
-  layerConditionalBonuses(skillMul, state, ctx?.world);
+  layerConditionalBonuses(skillMul, state, ctx?.world, DEFAULT_GRAPH, nowMs);
   // §4.5 buff-adjacency stack is per-building, not global — computed
   // lazily inside the pass-1 loop and stashed on the Tentative entry so
   // pass-2's nominalRate sees the same multiplier (preserves
@@ -1669,7 +1679,7 @@ export function advanceIsland(
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps);
       const skillMulForXp = effectiveSkillMultipliers(state);
-      layerConditionalBonuses(skillMulForXp, state, ctx?.world);
+      layerConditionalBonuses(skillMulForXp, state, ctx?.world, DEFAULT_GRAPH, nowMs);
       accrueXp(state, production, consumption, dtSec, 1, skillMulForXp.xpGain);
       // §13.3 Singularity Battery — apply charge/discharge over the segment.
       if (rawBalance > 0 && maxCap > 0) {

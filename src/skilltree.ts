@@ -369,14 +369,6 @@ export function cumulativeSkillPointsForLevel(level: number): number {
   return total;
 }
 
-/**
- * Tier gating was removed in the graph redesign (Task 19); kept as a
- * backward-compatibility stub so legacy UI code still compiles.
- */
-export function nodeRequiredTier(_node: SkillNode): Tier {
-  return 1;
-}
-
 // ---------------------------------------------------------------------------
 // Validation + spending (backward-compat stubs)
 // ---------------------------------------------------------------------------
@@ -849,9 +841,12 @@ export function skillUnlockedAdjacencyRules(
 function computeAuraAmplifiers(state: IslandState, graph: Graph): Map<NodeId, number> {
   const amp = new Map<NodeId, number>();
   const neighbours = buildAdjacency(graph);
+  // O(n) map build replaces O(n·m) repeated .find() scans.
+  const byId = new Map<string, SkillNode>();
+  for (const n of graph.nodes) byId.set(n.id as string, n);
 
   for (const nodeId of state.unlockedNodes) {
-    const node = graph.nodes.find((n) => n.id === nodeId);
+    const node = byId.get(nodeId as string);
     if (node?.aura === undefined) continue;
     const { radius, bonus } = node.aura;
     const reachable = nodesWithinRadius(nodeId, radius, neighbours);

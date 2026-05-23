@@ -18,8 +18,8 @@ import {
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 
 /** Build a minimal IslandState satisfying the pieces the HUD helpers read.
- *  Only `inventory`, `storageCaps`, `specializationRole`, `unlockedNodes`,
- *  and `subPathProgress` are touched by `inv()` / `cap()`. */
+ *  Only `inventory`, `storageCaps`, `unlockedNodes`, and `unlockedEdges`
+ *  are touched by `inv()` / `cap()`. */
 function makeState(
   overrides: {
     inventory?: Partial<Record<ResourceId, number>>;

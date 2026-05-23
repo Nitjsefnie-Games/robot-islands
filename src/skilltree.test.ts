@@ -18,7 +18,6 @@ import {
   hasPickableSkill,
   launchSuccessBonus,
   NODE_CATALOG,
-  nodeRequiredTier,
   skillPointsForLevelUp,
   spendPoint,
   t5Unlocked,
@@ -173,12 +172,6 @@ describe('t6Unlocked (§14.1 T6 access gate)', () => {
   });
 });
 
-describe('nodeRequiredTier', () => {
-  it('returns T1 for all nodes (tier gating removed in graph redesign)', () => {
-    expect(nodeRequiredTier({ id: 'x.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(1);
-    expect(nodeRequiredTier({ id: 'x.8', subPath: 'mining', depth: 8, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(1);
-  });
-});
 
 describe('canSpend', () => {
   it('allows an island with enough points to buy a node', () => {

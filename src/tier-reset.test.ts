@@ -5,8 +5,7 @@
 //     cooldown-active, insufficient-resources) and ok=true when all gates pass.
 //   - Cooldown blocks for 24h after last reset; allows after.
 //   - Skill point refund — preserve unspent + sum spent into unspent, then
-//     clear unlockedNodes / subPathProgress.
-//   - specializationRole + declaredAt cleared.
+//     clear unlockedNodes / unlockedEdges.
 //   - Inventory preserved minus cost; storageCaps preserved; buildings
 //     preserved (operating timestamps untouched).
 //   - level → 1, xp → 0.
