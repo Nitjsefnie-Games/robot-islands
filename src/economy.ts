@@ -206,12 +206,6 @@ export interface IslandState {
   level: number;
   /** Skill points granted by level-ups but not yet spent. */
   unspentSkillPoints: number;
-  /** Set true after the one-time grant-curve migration tops up this island's
-   *  unspentSkillPoints for level-ups taken under the old flat 1-per-level
-   *  schedule. Persistence applies the top-up when loading any save without
-   *  this flag set. Forward-compat: missing field on legacy saves = needs
-   *  migration, present-and-true = already migrated. */
-  skillPointGrantMigrationApplied?: boolean;
   /** Set of unlocked skill-tree node ids (§9.3). */
   unlockedNodes: Set<NodeId>;
   /** Per-sub-path progress, sparse: only sub-paths with ≥1 spent point have entries. */

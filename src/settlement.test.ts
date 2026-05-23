@@ -1030,15 +1030,6 @@ describe('§12.4 Foundation Kit starter-inventory grace cap', () => {
     const r = restored.get('home')!;
     expect(r.starterInventoryGrace.iron_ingot).toBe(5);
     expect(r.starterInventoryGrace.bolt).toBe(3);
-
-    // Legacy saves missing the field default to all-zero grace.
-    for (const entry of json.islandStates) {
-      delete (entry.state as { starterInventoryGrace?: unknown }).starterInventoryGrace;
-    }
-    const { islandStates: legacyRestored } = deserializeWorld(json, 0, 0);
-    const lr = legacyRestored.get('home')!;
-    expect(lr.starterInventoryGrace.iron_ingot).toBe(0);
-    expect(lr.starterInventoryGrace.bolt).toBe(0);
   });
 });
 

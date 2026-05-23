@@ -82,23 +82,4 @@ export function planCargo(
   return out;
 }
 
-/** Convert a route that may carry the legacy {filter, priorityList} shape
- *  to the {mode, cargo} shape. Idempotent: a route that already has `mode`
- *  is returned unchanged. */
-export function migrateLegacyCargo(
-  r: {
-    mode?: CargoMode;
-    cargo?: CargoEntry[];
-    filter?: ResourceId | null;
-    priorityList?: ReadonlyArray<ResourceId>;
-  },
-): { mode: CargoMode; cargo: CargoEntry[] } {
-  if (r.mode !== undefined && r.cargo !== undefined) {
-    return { mode: r.mode, cargo: r.cargo };
-  }
-  if (r.filter !== undefined && r.filter !== null) {
-    return { mode: 'priority', cargo: [{ resourceId: r.filter }] };
-  }
-  const list = r.priorityList ?? [];
-  return { mode: 'priority', cargo: list.map((resourceId) => ({ resourceId })) };
-}
+
