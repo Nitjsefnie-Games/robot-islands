@@ -339,7 +339,7 @@ describe('skill tree depth', () => {
     const s = makeState({
       unlockedNodes: new Set(['mining.1', 'mining.2', 'mining.3', 'mining.6', 'launch.1']),
     });
-    const m = effectiveSkillMultipliers(s, deepCatalog);
+    const m = effectiveSkillMultipliers(s, { nodes: deepCatalog, edges: [], bridges: [], graftSockets: [] } as Graph);
     // 1.05 * 1.10 * 1.20 = 1.386
     expect(m.recipeRate.extraction).toBeCloseTo(1.386, 9);
     expect(m.recipeRate.smelting).toBe(1);
@@ -695,6 +695,65 @@ describe('buyNode', () => {
     state.unlockedNodes.add('Z');
     buyNode(g, state, 'Z');
     expect(state.unspentSkillPoints).toBe(10);
+  });
+});
+
+describe('effectiveSkillMultipliers — graph mode + auras', () => {
+  it('folds two recipeRateMul nodes multiplicatively, not additively', () => {
+    const nodes: SkillNode[] = [
+      { id: 'n1' as import('./skilltree.js').NodeId, subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
+      { id: 'n2' as import('./skilltree.js').NodeId, subPath: 'mining', depth: 2, cost: 2, magnitude: 0.05, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
+    ];
+    const g: Graph = { nodes, edges: [], bridges: [], graftSockets: [] } as Graph;
+    const state = makeState();
+    state.unlockedNodes.add('n1');
+    state.unlockedNodes.add('n2');
+    const mul = effectiveSkillMultipliers(state, g);
+    expect(mul.recipeRate.extraction).toBeCloseTo(1.05 * 1.05, 4); // 1.1025, NOT 1.10
+  });
+
+  it('aura amplifies adjacent owned node’s factor', () => {
+    const nodes: SkillNode[] = [
+      { id: 'auraNode' as import('./skilltree.js').NodeId, subPath: 'mining', depth: 1, cost: 1, magnitude: 0, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '', aura: { radius: 1, bonus: 0.15 } },
+      { id: 'neighbour' as import('./skilltree.js').NodeId, subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
+    ];
+    const edges = [
+      { id: 'e1' as EdgeId, from: 'auraNode' as import('./skilltree-graph.js').NodeId, to: 'neighbour' as import('./skilltree-graph.js').NodeId, cost: 1 },
+    ];
+    const g: Graph = { nodes, edges, bridges: [], graftSockets: [] } as Graph;
+    const state = makeState();
+    state.unlockedNodes.add('auraNode');
+    state.unlockedNodes.add('neighbour');
+    const mul = effectiveSkillMultipliers(state, g);
+    // neighbour's per-node factor becomes 1 + 0.10 * 1.15 = 1.115
+    expect(mul.recipeRate.extraction).toBeCloseTo(1.115, 3);
+  });
+
+  it('caps aura amplification at ×1.50', () => {
+    const nodes: SkillNode[] = [
+      { id: 'target' as import('./skilltree.js').NodeId, subPath: 'mining', depth: 1, cost: 1, magnitude: 0.10, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
+      ...Array.from({ length: 5 }, (_, i) => ({
+        id: `aura${i}` as import('./skilltree.js').NodeId,
+        subPath: 'mining' as import('./skilltree.js').SubPathId,
+        depth: 1, cost: 1, magnitude: 0,
+        effect: { kind: 'recipeRateMul' as const, category: 'extraction' as import('./recipes.js').RecipeCategory },
+        description: '',
+        aura: { radius: 1 as const, bonus: 0.15 },
+      })),
+    ];
+    const edges = Array.from({ length: 5 }, (_, i) => ({
+      id: `e${i}` as EdgeId,
+      from: `aura${i}` as import('./skilltree-graph.js').NodeId,
+      to: 'target' as import('./skilltree-graph.js').NodeId,
+      cost: 1,
+    }));
+    const g: Graph = { nodes, edges, bridges: [], graftSockets: [] } as Graph;
+    const state = makeState();
+    state.unlockedNodes.add('target');
+    for (let i = 0; i < 5; i++) state.unlockedNodes.add(`aura${i}`);
+    const mul = effectiveSkillMultipliers(state, g);
+    // target.magnitude=0.10 → factor 1 + 0.10 * 1.5 = 1.15
+    expect(mul.recipeRate.extraction).toBeCloseTo(1.15, 3);
   });
 });
 
