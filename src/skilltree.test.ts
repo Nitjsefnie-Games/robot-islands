@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
+  buyKeystone,
   buyNode,
+  canBuyKeystone,
   canSpend,
   costForDepth,
   costToUnlock,
@@ -26,7 +28,7 @@ import {
   tierRequiredForDepth,
   type SkillNode,
 } from './skilltree.js';
-import type { EdgeId, Graph } from './skilltree-graph.js';
+import type { EdgeId, Graph, KeystonePrereq } from './skilltree-graph.js';
 
 function blankInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -693,5 +695,33 @@ describe('buyNode', () => {
     state.unlockedNodes.add('Z');
     buyNode(g, state, 'Z');
     expect(state.unspentSkillPoints).toBe(10);
+  });
+});
+
+describe('canBuyKeystone / buyKeystone', () => {
+  it('requires all AND-prereqs to be owned', () => {
+    const ks: KeystonePrereq = {
+      targetNode: 'K1' as import('./skilltree-graph.js').NodeId,
+      requires: ['A' as import('./skilltree-graph.js').NodeId, 'B' as import('./skilltree-graph.js').NodeId],
+      cost: 10,
+    };
+    const state = makeState({ unspentSkillPoints: 15 });
+    state.unlockedNodes.add('A');
+    expect(canBuyKeystone(ks, state)).toBe(false);
+    state.unlockedNodes.add('B');
+    expect(canBuyKeystone(ks, state)).toBe(true);
+  });
+
+  it('buyKeystone charges flat cost + owns target', () => {
+    const ks: KeystonePrereq = {
+      targetNode: 'K1' as import('./skilltree-graph.js').NodeId,
+      requires: ['A' as import('./skilltree-graph.js').NodeId],
+      cost: 8,
+    };
+    const state = makeState({ unspentSkillPoints: 10 });
+    state.unlockedNodes.add('A');
+    buyKeystone(ks, state);
+    expect(state.unspentSkillPoints).toBe(2);
+    expect(state.unlockedNodes.has('K1')).toBe(true);
   });
 });
