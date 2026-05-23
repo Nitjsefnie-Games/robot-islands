@@ -116,7 +116,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(6);
+    expect(snap.v).toBe(7);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -477,8 +477,8 @@ describe('schema version', () => {
     expect(() => deserializeWorld(future, 0, 0)).toThrow(/not supported/);
   });
 
-  it('exports STORAGE_KEY containing v6 so it does not collide with stale saves', () => {
-    expect(STORAGE_KEY).toMatch(/v6$/);
+  it('exports STORAGE_KEY containing v7 so it does not collide with stale saves', () => {
+    expect(STORAGE_KEY).toMatch(/v7$/);
   });
 
   it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
@@ -491,9 +491,9 @@ describe('schema version', () => {
   it('rejects a synthetic future version via the SCHEMA_VERSION gate', () => {
     const world = makeInitialWorld(0);
     const snap = serializeWorld(world, new Map(), 0);
-    const v7Shaped = { ...snap, v: 7 } as unknown as SaveSnapshot;
-    expect(() => deserializeWorld(v7Shaped, 0, 0)).toThrow(/not supported/);
-    expect(isValidSaveSnapshot(v7Shaped)).toBe(false);
+    const v8Shaped = { ...snap, v: 8 } as unknown as SaveSnapshot;
+    expect(() => deserializeWorld(v8Shaped, 0, 0)).toThrow(/not supported/);
+    expect(isValidSaveSnapshot(v8Shaped)).toBe(false);
   });
 
   it('rejects a v3-shaped snapshot (the §2.1 infinite-map bump is breaking)', () => {
@@ -1455,7 +1455,7 @@ describe('§14.4 commPackets persistence', () => {
 // ---------------------------------------------------------------------------
 
 describe('oceanCells round-trip', () => {
-  it('v6 saves roundtrip cleanly (oceanCells + depthRevealedCells preserved)', () => {
+  it('v7 saves roundtrip cleanly (oceanCells + depthRevealedCells preserved)', () => {
     const world = makeInitialWorld(0);
     // Add a couple of explicit depth reveals so the round-trip exercises
     // a non-empty Set (the fresh world starts with an empty depth set).
@@ -1479,5 +1479,31 @@ describe('oceanCells round-trip', () => {
     const keys = (snap.world.oceanCells ?? []).map(([k]) => k);
     const sorted = [...keys].sort();
     expect(keys).toEqual(sorted);
+  });
+});
+
+
+describe('persistence — tileOverrides round-trip (schema 7)', () => {
+  it('survives serializeWorld → deserializeWorld unchanged', () => {
+    const world = makeInitialWorld(0); // existing test fixture
+    const homeSpec = world.islands.find((s) => s.id === 'home');
+    expect(homeSpec).toBeDefined();
+    (homeSpec as IslandSpec).tileOverrides = {
+      '1,1': 'magma_vent',
+      '-3,4': 'uranium_vein',
+    };
+    const states = new Map<string, IslandState>();
+    states.set('home', makeInitialIslandState(homeSpec!, 0));
+    const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
+    expect(snap.v).toBe(7);
+    const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
+    const rh = rehydrated.islands.find((s) => s.id === 'home');
+    expect(rh?.tileOverrides).toEqual({
+      '1,1': 'magma_vent',
+      '-3,4': 'uranium_vein',
+    });
+    // And the closure observes them.
+    expect(rh?.terrainAt?.(1, 1)).toBe('magma_vent');
+    expect(rh?.terrainAt?.(-3, 4)).toBe('uranium_vein');
   });
 });

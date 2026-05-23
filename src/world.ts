@@ -154,6 +154,18 @@ export interface IslandSpec {
   buildings: PlacedBuilding[];
   /** Terrain function in island-local coords. Defaults to grass everywhere. */
   readonly terrainAt?: (x: number, y: number) => TerrainKind;
+  /** §03 design-spec terrain_modifier: sparse per-tile overrides written by
+   *  the modifier's shot. Key format `${x},${y}` in island-local tile
+   *  coords (mirrors the discovery-cell key shape). Stores only the
+   *  CURRENT kind — no `originalType`, no history (v5 lock
+   *  `no_revert_mechanic`). `attachTerrainAt`'s closure consults this
+   *  BEFORE falling through to `terrainAtForBiome`; precedence is
+   *  overrides-then-biome. Mutable — the modifier's shot inserts a
+   *  key per converted tile; `last_placed_wins` per the v5 picker means
+   *  later writes silently overwrite earlier ones. Optional for forward-
+   *  compat: legacy saves (schema 6) load with the field undefined and
+   *  the closure behaves identically to today. */
+  tileOverrides?: Record<string, TerrainKind>;
   /** Active modifiers on this island per §3.5. Step 8 hard-codes the demo
    *  set on `DEMO_ISLANDS`; future steps roll from `rollModifiers` at
    *  generation. Empty array means no modifiers active. Mutable: the §13.3
@@ -256,10 +268,20 @@ export function attachTerrainAt<B extends Omit<IslandSpec, 'terrainAt'>>(base: B
   (spec as { terrainAt: (x: number, y: number) => TerrainKind }).terrainAt = (
     x,
     y,
-  ) =>
-    terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
+  ) => {
+    // terrain_modifier §03 — overrides take precedence over the biome
+    // closure. Read `spec.tileOverrides` LIVE (not captured at closure-
+    // build time) so a shot landing mid-session is observed on the next
+    // call; matches the by-reference invariant for `spec.biome` / radii.
+    const overrides = spec.tileOverrides;
+    if (overrides !== undefined) {
+      const k = overrides[`${x},${y}`];
+      if (k !== undefined) return k;
+    }
+    return terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
       islandInscribedAny(spec, px, py),
     );
+  };
   return spec;
 }
 
