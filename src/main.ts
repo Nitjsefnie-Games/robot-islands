@@ -36,6 +36,7 @@ import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes
 import { advanceIsland, computeRates, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
 import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
+import { computeSharedNetworkState } from './network.js';
 
 import { tierForLevel } from './skilltree.js';
 import { renderCellGrid } from './grid.js';
@@ -1720,6 +1721,7 @@ async function main(): Promise<void> {
       };
     };
     const cableBalances = computeCableNetworkBalance(worldState, islandStates, cableLocalCtxFor);
+    const sharedNetwork = computeSharedNetworkState(worldState);
 
     const islandPower = new Map<string, PowerBalance>();
     const islandNets = new Map<string, Record<ResourceId, number>>();
@@ -1731,19 +1733,29 @@ async function main(): Promise<void> {
       // every recomputeRates call within the tick.
       const spec = islandSpecsById.get(s.id);
       const isLatticeIsland = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(s.id);
+      const isNetParticipant = sharedNetwork.participantIds.has(s.id);
       const crossIsland = crossIslandById.get(s.id);
       const cableComponent = cableBalances.get(s.id);
       const geothermalActive = spec?.modifiers.includes('geothermal_active') === true;
       const inscribedFor = spec
         ? (lx: number, ly: number) => islandInscribedAny(spec, lx, ly)
         : () => false;
+
+      // §Task-19: cross-island shared network overrides ( Lattice takes precedence).
+      const sharedInventory = isNetParticipant && !isLatticeIsland
+        ? Object.fromEntries(sharedNetwork.sharedInventory) as Record<ResourceId, number>
+        : undefined;
+      const sharedCaps = isNetParticipant && !isLatticeIsland
+        ? Object.fromEntries(sharedNetwork.sharedStorageCap) as Record<ResourceId, number>
+        : undefined;
+
       advanceIsland(s, now, {
         modifierMul: modifierMulFor(s.id),
         ncBuff: ncBuffFor(s),
         terrainAt: spec?.terrainAt,
-        inventory: isLatticeIsland ? unifiedInv : undefined,
+        inventory: isLatticeIsland ? unifiedInv : sharedInventory,
         crossIsland,
-        caps: isLatticeIsland ? unifiedCaps : undefined,
+        caps: isLatticeIsland ? unifiedCaps : sharedCaps,
         cableComponent,
         worldSeed: worldState.seed,
         geothermalActive,
@@ -1760,9 +1772,9 @@ async function main(): Promise<void> {
         modifierMul: modifierMulFor(s.id),
         ncBuff: ncBuffFor(s),
         terrainAt: spec?.terrainAt,
-        inventory: isLatticeIsland ? unifiedInv : undefined,
+        inventory: isLatticeIsland ? unifiedInv : sharedInventory,
         crossIsland,
-        caps: isLatticeIsland ? unifiedCaps : undefined,
+        caps: isLatticeIsland ? unifiedCaps : sharedCaps,
         cableComponent,
         geothermalActive,
         solarBoost: solarBoostByIsland.get(s.id),

@@ -11,14 +11,17 @@ import {
   BRANCH_SUBPATHS,
   NODE_CATALOG,
   SUBPATH_LABEL,
-  canSpend,
-  nodeRequiredTier,
-  spendPoint,
+  buyNode,
+  canBuyKeystone,
+  buyKeystone,
+  costToUnlock,
+  DEFAULT_GRAPH,
   tierForLevel,
   type BranchId,
   type SkillNode,
   type SubPathId,
 } from './skilltree.js';
+import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import { type IslandState, xpForLevel } from './economy.js';
 
 import {
@@ -140,7 +143,7 @@ export function mountSkillTreeUi(
     main.appendChild(descEl);
 
     const tierTag = document.createElement('span');
-    tierTag.textContent = `T${nodeRequiredTier(node)}`;
+    tierTag.textContent = `D${node.depth}`;
     tierTag.style.color = 'var(--ri-fg-3)';
     tierTag.style.fontSize = '10px';
     tierTag.style.letterSpacing = '0.08em';
@@ -162,11 +165,28 @@ export function mountSkillTreeUi(
     row.appendChild(tierTag);
     row.appendChild(costTag);
 
+    function canPurchase(state: IslandState): boolean {
+      if (state.unlockedNodes.has(node.id)) return false;
+      const ks = KEYSTONE_PREREQS.find((k) => k.targetNode === node.id);
+      if (ks) return canBuyKeystone(ks, state);
+      const path = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, node.id);
+      if (path === null) return false;
+      return state.unspentSkillPoints >= path.totalCost;
+    }
+
     row.addEventListener('click', () => {
       const state = getState();
-      const r = canSpend(state, node.id);
-      if (!r.ok) return;
-      spendPoint(state, node.id);
+      const ks = KEYSTONE_PREREQS.find((k) => k.targetNode === node.id);
+      if (ks) {
+        if (!canBuyKeystone(ks, state)) return;
+        buyKeystone(ks, state);
+      } else {
+        try {
+          buyNode(DEFAULT_GRAPH, state, node.id);
+        } catch {
+          return;
+        }
+      }
       refresh();
       row.animate(
         [
@@ -178,8 +198,7 @@ export function mountSkillTreeUi(
     });
     row.addEventListener('mouseenter', () => {
       const state = getState();
-      const r = canSpend(state, node.id);
-      if (r.ok) {
+      if (canPurchase(state)) {
         row.style.background = 'var(--ri-hover)';
         row.style.borderLeftColor = 'var(--ri-accent)';
         row.style.cursor = 'pointer';
@@ -409,11 +428,11 @@ export function mountSkillTreeUi(
     },
     buildFooter(footer) {
       const footerL = document.createElement('span');
-      footerL.textContent = 'click a node to spend a skill point';
+      footerL.textContent = 'graph-purchase: Dijkstra cheapest path from owned nodes';
       footerL.className = 'ri-muted';
       const footerR = document.createElement('span');
       footerR.textContent =
-        'depth 1-2 require T2 · depth 3→T3 · depth 4→T4 · depth 5-7→T5 · depth 8+→T6 · costs grow round(1.5^(depth-1))';
+        'click a node to purchase via cheapest graph path · keystone gates require all prereqs · costs grow round(1.5^(depth-1))';
       footerR.className = 'ri-muted';
       footer.prepend(footerL);
       footer.appendChild(footerR);
@@ -427,7 +446,16 @@ export function mountSkillTreeUi(
   function applyState(node: SkillNode, ref: NodeRowRef): void {
     const state = getState();
     const owned = state.unlockedNodes.has(node.id);
-    const r = canSpend(state, node.id);
+    const ks = KEYSTONE_PREREQS.find((k) => k.targetNode === node.id);
+    const unlockCost = ks
+      ? ks.cost
+      : costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, node.id)?.totalCost ?? null;
+    const purchasable = owned
+      ? false
+      : ks
+        ? canBuyKeystone(ks, state)
+        : unlockCost !== null && state.unspentSkillPoints >= unlockCost;
+    ref.costTag.textContent = owned ? `${node.cost} SP` : unlockCost !== null ? `${unlockCost} SP` : '—';
     if (owned) {
       ref.statusDot.textContent = '●';
       ref.statusDot.style.color = 'var(--ri-accent)';
@@ -439,7 +467,7 @@ export function mountSkillTreeUi(
       ref.tierTag.style.borderColor = 'var(--ri-accent-dim)';
       ref.tierTag.style.color = 'var(--ri-accent-dim)';
       ref.row.style.opacity = '1';
-    } else if (r.ok) {
+    } else if (purchasable) {
       ref.statusDot.textContent = '◇';
       ref.statusDot.style.color = 'var(--ri-warn)';
       ref.titleEl.style.color = 'var(--ri-fg-1)';
