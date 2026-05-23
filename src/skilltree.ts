@@ -28,7 +28,7 @@ import type { RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
 import type { Biome } from './world.js';
-import type { Edge, EdgeId, Graph, BridgeEdge } from './skilltree-graph.js';
+import type { Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
 
 export type BranchId = 'extraction' | 'refinement' | 'logistics' | 'orbital';
 
@@ -1140,6 +1140,28 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
     state.unlockedNodes.add(e.to as NodeId);
     state.unlockedEdges.add(e.id as EdgeId);
   }
+}
+
+/** Gate predicate for AND-prereq keystones. True when all required upstream
+ *  nodes are owned, the target is not already owned, and the player has
+ *  enough unspent SP for the flat keystone cost. */
+export function canBuyKeystone(ks: KeystonePrereq, state: IslandState): boolean {
+  if (state.unlockedNodes.has(ks.targetNode as NodeId)) return false;
+  if (state.unspentSkillPoints < ks.cost) return false;
+  for (const req of ks.requires) {
+    if (!state.unlockedNodes.has(req as NodeId)) return false;
+  }
+  return true;
+}
+
+/** Charge the flat keystone cost and add the target node to unlockedNodes.
+ *  Throws if canBuyKeystone returns false. */
+export function buyKeystone(ks: KeystonePrereq, state: IslandState): void {
+  if (!canBuyKeystone(ks, state)) {
+    throw new Error(`buyKeystone: prereqs unsatisfied for ${ks.targetNode}`);
+  }
+  state.unspentSkillPoints -= ks.cost;
+  state.unlockedNodes.add(ks.targetNode as NodeId);
 }
 
 function isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Graph): boolean {
