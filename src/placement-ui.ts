@@ -29,6 +29,7 @@ import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import type { IslandState } from './economy.js';
 import { TILE_PX } from './island.js';
+import type { TerrainKind } from './island.js';
 import {
   affordabilityShortfall,
   placeBuilding,
@@ -42,6 +43,7 @@ import { candidateAnchors, type AnchorCandidate } from './anchor-picker.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { ResourceId } from './recipes.js';
 import { VISION_BLUE, tileToWorldPx, type IslandSpec, type WorldState } from './world.js';
+import { brushTilesAt, SHOT_DURATION_MS } from './terrain-modifier.js';
 
 /** §4.6 picker dep: opens the cargo-label modal and resolves to the
  *  player's pick, or `null` if cancelled. The default implementation in
@@ -238,6 +240,10 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
    *  Passed verbatim to `placeBuilding` on commit; the override is silently
    *  ignored by `placeBuilding` for non-generic defs. */
   let activeCargoLabel: ResourceId | undefined = undefined;
+  /** terrain_modifier v5 — target TerrainKind picked at picker-time. Undefined
+   *  for non-modifier defs and during the pending window before
+   *  pickTerrainTarget resolves. Threaded into placeBuilding on commit. */
+  let activeTerrainTarget: TerrainKind | undefined = undefined;
   /** Monotonic begin counter — used to detect a stale picker resolution
    *  when the player started a new placement before the previous picker
    *  promise resolved. Bumped on every `begin()`. The picker callback
@@ -336,6 +342,31 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
         .fill({ color, alpha: 0.2 })
         .stroke({ width: 2, color, alpha: 0.95, alignment: 1 });
     }
+
+    // terrain_modifier v5 brush preview — overdraw the 12-tile ring with
+    // a dimmer cyan so the player sees the FULL 16-tile shot scope. Footprint
+    // is already painted by the loop above; the ring is the union of the 4×4
+    // brush block minus the 2×2 footprint.
+    if (def.terrainModifier === true) {
+      const brush = brushTilesAt(localX, localY);
+      const footKeys = new Set(tiles.map((t) => `${t.x},${t.y}`));
+      for (const t of brush) {
+        const key = `${t.x},${t.y}`;
+        if (footKeys.has(key)) continue; // already drawn by footprint loop
+        const tileWx = (t.x * TILE_PX + islandWorldPx.x) - half;
+        const tileWy = (t.y * TILE_PX + islandWorldPx.y) - half;
+        outlineGfx
+          .rect(tileWx, tileWy, TILE_PX, TILE_PX)
+          .stroke({ width: 1, color, alpha: 0.6 })
+          .fill({ color, alpha: 0.10 });
+      }
+      // Annotate the label tail with the player's chosen target (when set) so
+      // the brush + label form one coherent preview.
+      if (activeTerrainTarget !== undefined) {
+        labelText.text = labelText.text + `  ·  → ${activeTerrainTarget.toUpperCase()}`;
+      }
+    }
+
     previewLayer.visible = true;
 
     // Status label in screen space. Positioned offset from cursor so it
@@ -483,6 +514,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     rotation = 0;
     cursorSeen = false;
     activeCargoLabel = undefined;
+    activeTerrainTarget = undefined;
     // §4.6: generic-storage defs ask the picker BEFORE entering placement
     // mode. While the picker is open `active` stays false so canvas
     // mousedown / commit handlers no-op (the picker modal also intercepts
@@ -531,6 +563,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     active = false;
     activeDefId = null;
     activeCargoLabel = undefined;
+    activeTerrainTarget = undefined;
     rotation = 0;
     previewLayer.visible = false;
     statusLayer.visible = false;
@@ -684,6 +717,9 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       () => placedIdFor(localX, localY),
       undefined, // nowMs — keep the default (state.lastTick)
       activeCargoLabel, // §4.6 picker pick — undefined for non-generic defs
+      undefined, // anchorIslandId — land path, never set
+      def.terrainModifier === true ? activeTerrainTarget : undefined,
+      def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
     );
     if (!result.ok) return { ok: false, reason: result.reason };
     cancel();
