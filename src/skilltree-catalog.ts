@@ -1,5 +1,5 @@
-import type { SkillNode, NodeId } from './skilltree.js';
-import type { KeystonePrereq } from './skilltree-graph.js';
+import type { SkillNode, NodeId, BranchId } from './skilltree.js';
+import type { KeystonePrereq, BridgeEdge, GraftSocket } from './skilltree-graph.js';
 
 // ---------------------------------------------------------------------------
 // Extraction branch
@@ -1081,6 +1081,194 @@ export const KEYSTONE_PREREQS: KeystonePrereq[] = [
   ksp('chemistry.keystone.catalyticMastery', ['chemistry.notable.pressurizedReactors', 'chemistry.notable.greenChemistry'], 8),
   ksp('storage.keystone.vaultMastery', ['storage.notable.vaultClimate', 'storage.notable.componentRacks'], 8),
   ksp('network.keystone.meshMastery', ['network.notable.relayAmplifier', 'network.notable.scannerUplink'], 8),
+];
+
+// ---------------------------------------------------------------------------
+// Threshold-bridges — OR-style alt-entry edges between sub-paths
+// ---------------------------------------------------------------------------
+
+function be(
+  id: string,
+  from: string,
+  to: string,
+  cost: number,
+  threshold: Array<{ branch: BranchId; minSpent: number }>,
+): BridgeEdge {
+  return {
+    id: id as import('./skilltree-graph.js').EdgeId,
+    from: from as import('./skilltree-graph.js').NodeId,
+    to: to as import('./skilltree-graph.js').NodeId,
+    cost,
+    mode: 'or' as import('./skilltree-graph.js').EdgePrereqMode,
+    threshold,
+  } as BridgeEdge;
+}
+
+export const BRIDGE_CATALOG: BridgeEdge[] = [
+  // ── Within-branch: Extraction ─────────────────────────────────────────────
+  be('br.ext.mining-forestry', 'mining.notable.deepVein', 'forestry.notable.silvicultureHub', 5, [
+    { branch: 'extraction', minSpent: 8 },
+  ]),
+  be('br.ext.forestry-robotics', 'forestry.notable.selectiveHarvest', 'robotics.notable.swarmAssembly', 5, [
+    { branch: 'extraction', minSpent: 8 },
+  ]),
+  be('br.ext.drilling-mining', 'drilling.notable.deepBore', 'mining.notable.blastOptimization', 6, [
+    { branch: 'extraction', minSpent: 10 },
+  ]),
+
+  // ── Within-branch: Refinement ─────────────────────────────────────────────
+  be('br.ref.smelting-chemistry', 'smelting.notable.inductionArc', 'chemistry.notable.catalyticCracking', 5, [
+    { branch: 'refinement', minSpent: 8 },
+  ]),
+  be('br.ref.chemistry-electronics', 'chemistry.notable.polymerMatrix', 'electronics.notable.quantumEtching', 5, [
+    { branch: 'refinement', minSpent: 8 },
+  ]),
+  be('br.ref.electronics-power', 'electronics.notable.cleanRoom', 'power_systems.notable.turbineStaging', 5, [
+    { branch: 'refinement', minSpent: 10 },
+  ]),
+
+  // ── Within-branch: Logistics ──────────────────────────────────────────────
+  be('br.log.storage-transport', 'storage.notable.verticalSilo', 'transport.notable.heavyHaul', 5, [
+    { branch: 'logistics', minSpent: 8 },
+  ]),
+  be('br.log.transport-network', 'transport.notable.supplyHub', 'network.notable.meshNetwork', 5, [
+    { branch: 'logistics', minSpent: 8 },
+  ]),
+  be('br.log.network-storage', 'network.notable.meshNetwork', 'storage.notable.predictiveMaintenance', 6, [
+    { branch: 'logistics', minSpent: 10 },
+  ]),
+
+  // ── Within-branch: Orbital ────────────────────────────────────────────────
+  be('br.orb.launch-comm', 'launch.notable.padRedundancy', 'communication.notable.groundStationHub', 5, [
+    { branch: 'orbital', minSpent: 8 },
+  ]),
+  be('br.orb.comm-discovery', 'communication.notable.relayConstellation', 'discovery.notable.dwellOptimization', 5, [
+    { branch: 'orbital', minSpent: 8 },
+  ]),
+  be('br.orb.discovery-resilience', 'discovery.notable.deepField', 'resilience.notable.orbitalShields', 6, [
+    { branch: 'orbital', minSpent: 10 },
+  ]),
+
+  // ── Within-branch: Ocean ──────────────────────────────────────────────────
+  be('br.ocean.patronage-aqua', 'patronage.notable.sponsorContracts', 'aquaculture.notable.kelpTowers', 5, [
+    { branch: 'ocean', minSpent: 8 },
+  ]),
+  be('br.ocean.aqua-hydro', 'aquaculture.notable.maricultureGrid', 'hydroprocessing.notable.desalinationCascade', 5, [
+    { branch: 'ocean', minSpent: 8 },
+  ]),
+  be('br.ocean.submarine-oceanography', 'submarine.notable.deepFreighter', 'oceanography.notable.buoyArray', 6, [
+    { branch: 'ocean', minSpent: 10 },
+  ]),
+
+  // ── Cross-branch ──────────────────────────────────────────────────────────
+  be('br.cross.mining-smelting', 'mining.keystone.veinmaster', 'smelting.keystone.foundryMastery', 12, [
+    { branch: 'extraction', minSpent: 20 },
+    { branch: 'refinement', minSpent: 20 },
+  ]),
+  be('br.cross.robotics-electronics', 'robotics.keystone.parallelConstruction', 'electronics.keystone.quantumYield', 12, [
+    { branch: 'extraction', minSpent: 18 },
+    { branch: 'refinement', minSpent: 18 },
+  ]),
+  be('br.cross.transport-launch', 'transport.keystone.hubCapacity', 'launch.keystone.padMastery', 14, [
+    { branch: 'logistics', minSpent: 20 },
+    { branch: 'orbital', minSpent: 20 },
+  ]),
+  be('br.cross.network-comm', 'network.keystone.meshMastery', 'communication.keystone.networkedExtract', 12, [
+    { branch: 'logistics', minSpent: 18 },
+    { branch: 'orbital', minSpent: 18 },
+  ]),
+  be('br.cross.power-discovery', 'power_systems.keystone.researchBeacon', 'discovery.keystone.deepScan', 12, [
+    { branch: 'refinement', minSpent: 18 },
+    { branch: 'orbital', minSpent: 18 },
+  ]),
+  be('br.cross.storage-patronage', 'storage.keystone.masterCache', 'patronage.keystone.diplomaticImmunity', 12, [
+    { branch: 'logistics', minSpent: 18 },
+    { branch: 'ocean', minSpent: 18 },
+  ]),
+  be('br.cross.chemistry-hydro', 'chemistry.keystone.refineryMastery', 'hydroprocessing.keystone.desalMastery', 12, [
+    { branch: 'refinement', minSpent: 20 },
+    { branch: 'ocean', minSpent: 20 },
+  ]),
+  be('br.cross.drilling-submarine', 'drilling.keystone.earlyRig', 'submarine.keystone.deepPressure', 14, [
+    { branch: 'extraction', minSpent: 18 },
+    { branch: 'ocean', minSpent: 18 },
+  ]),
+  be('br.cross.forest-aqua', 'forestry.keystone.silvicultureMastery', 'aquaculture.keystone.maricultureMastery', 12, [
+    { branch: 'extraction', minSpent: 18 },
+    { branch: 'ocean', minSpent: 18 },
+  ]),
+  be('br.cross.resilience-power', 'resilience.keystone.orbitalFortress', 'power_systems.keystone.fusionLock', 12, [
+    { branch: 'orbital', minSpent: 18 },
+    { branch: 'refinement', minSpent: 18 },
+  ]),
+  be('br.cross.launch-network', 'launch.notable.reserveTanks', 'network.notable.teleporterCoil', 10, [
+    { branch: 'orbital', minSpent: 15 },
+    { branch: 'logistics', minSpent: 15 },
+  ]),
+  be('br.cross.oceanography-mining', 'oceanography.keystone.sonarPair', 'mining.keystone.deepCore', 12, [
+    { branch: 'ocean', minSpent: 18 },
+    { branch: 'extraction', minSpent: 18 },
+  ]),
+];
+
+// ---------------------------------------------------------------------------
+// Graft sockets — reserved attachment positions on the outer rim of each branch
+// ---------------------------------------------------------------------------
+
+export const GRAFT_SOCKET_CATALOG: GraftSocket[] = [
+  // Extraction (~8)
+  { id: 'gs.ext.mining-1', branchId: 'extraction', subPathId: 'mining', attachmentDepth: 7 },
+  { id: 'gs.ext.mining-2', branchId: 'extraction', subPathId: 'mining', attachmentDepth: 9 },
+  { id: 'gs.ext.forestry-1', branchId: 'extraction', subPathId: 'forestry', attachmentDepth: 7 },
+  { id: 'gs.ext.forestry-2', branchId: 'extraction', subPathId: 'forestry', attachmentDepth: 9 },
+  { id: 'gs.ext.drilling-1', branchId: 'extraction', subPathId: 'drilling', attachmentDepth: 7 },
+  { id: 'gs.ext.drilling-2', branchId: 'extraction', subPathId: 'drilling', attachmentDepth: 9 },
+  { id: 'gs.ext.robotics-1', branchId: 'extraction', subPathId: 'robotics', attachmentDepth: 7 },
+  { id: 'gs.ext.robotics-2', branchId: 'extraction', subPathId: 'robotics', attachmentDepth: 9 },
+
+  // Refinement (~8)
+  { id: 'gs.ref.smelting-1', branchId: 'refinement', subPathId: 'smelting', attachmentDepth: 7 },
+  { id: 'gs.ref.smelting-2', branchId: 'refinement', subPathId: 'smelting', attachmentDepth: 9 },
+  { id: 'gs.ref.chemistry-1', branchId: 'refinement', subPathId: 'chemistry', attachmentDepth: 7 },
+  { id: 'gs.ref.chemistry-2', branchId: 'refinement', subPathId: 'chemistry', attachmentDepth: 9 },
+  { id: 'gs.ref.electronics-1', branchId: 'refinement', subPathId: 'electronics', attachmentDepth: 7 },
+  { id: 'gs.ref.electronics-2', branchId: 'refinement', subPathId: 'electronics', attachmentDepth: 9 },
+  { id: 'gs.ref.power-1', branchId: 'refinement', subPathId: 'power_systems', attachmentDepth: 7 },
+  { id: 'gs.ref.power-2', branchId: 'refinement', subPathId: 'power_systems', attachmentDepth: 9 },
+
+  // Logistics (~6)
+  { id: 'gs.log.storage-1', branchId: 'logistics', subPathId: 'storage', attachmentDepth: 7 },
+  { id: 'gs.log.storage-2', branchId: 'logistics', subPathId: 'storage', attachmentDepth: 9 },
+  { id: 'gs.log.transport-1', branchId: 'logistics', subPathId: 'transport', attachmentDepth: 7 },
+  { id: 'gs.log.transport-2', branchId: 'logistics', subPathId: 'transport', attachmentDepth: 9 },
+  { id: 'gs.log.network-1', branchId: 'logistics', subPathId: 'network', attachmentDepth: 7 },
+  { id: 'gs.log.network-2', branchId: 'logistics', subPathId: 'network', attachmentDepth: 9 },
+
+  // Orbital (~12 — largest share, SPACE-expansion landing pad)
+  { id: 'gs.orb.launch-1', branchId: 'orbital', subPathId: 'launch', attachmentDepth: 7 },
+  { id: 'gs.orb.launch-2', branchId: 'orbital', subPathId: 'launch', attachmentDepth: 9 },
+  { id: 'gs.orb.comm-1', branchId: 'orbital', subPathId: 'communication', attachmentDepth: 7 },
+  { id: 'gs.orb.comm-2', branchId: 'orbital', subPathId: 'communication', attachmentDepth: 9 },
+  { id: 'gs.orb.discovery-1', branchId: 'orbital', subPathId: 'discovery', attachmentDepth: 7 },
+  { id: 'gs.orb.discovery-2', branchId: 'orbital', subPathId: 'discovery', attachmentDepth: 9 },
+  { id: 'gs.orb.resilience-1', branchId: 'orbital', subPathId: 'resilience', attachmentDepth: 7 },
+  { id: 'gs.orb.resilience-2', branchId: 'orbital', subPathId: 'resilience', attachmentDepth: 9 },
+  { id: 'gs.orb.launch-3', branchId: 'orbital', subPathId: 'launch', attachmentDepth: 11 },
+  { id: 'gs.orb.comm-3', branchId: 'orbital', subPathId: 'communication', attachmentDepth: 11 },
+  { id: 'gs.orb.discovery-3', branchId: 'orbital', subPathId: 'discovery', attachmentDepth: 11 },
+  { id: 'gs.orb.resilience-3', branchId: 'orbital', subPathId: 'resilience', attachmentDepth: 11 },
+
+  // Ocean (~10)
+  { id: 'gs.ocean.patronage-1', branchId: 'ocean', subPathId: 'patronage', attachmentDepth: 7 },
+  { id: 'gs.ocean.patronage-2', branchId: 'ocean', subPathId: 'patronage', attachmentDepth: 9 },
+  { id: 'gs.ocean.aquaculture-1', branchId: 'ocean', subPathId: 'aquaculture', attachmentDepth: 7 },
+  { id: 'gs.ocean.aquaculture-2', branchId: 'ocean', subPathId: 'aquaculture', attachmentDepth: 9 },
+  { id: 'gs.ocean.hydro-1', branchId: 'ocean', subPathId: 'hydroprocessing', attachmentDepth: 7 },
+  { id: 'gs.ocean.hydro-2', branchId: 'ocean', subPathId: 'hydroprocessing', attachmentDepth: 9 },
+  { id: 'gs.ocean.submarine-1', branchId: 'ocean', subPathId: 'submarine', attachmentDepth: 7 },
+  { id: 'gs.ocean.submarine-2', branchId: 'ocean', subPathId: 'submarine', attachmentDepth: 9 },
+  { id: 'gs.ocean.oceanography-1', branchId: 'ocean', subPathId: 'oceanography', attachmentDepth: 7 },
+  { id: 'gs.ocean.oceanography-2', branchId: 'ocean', subPathId: 'oceanography', attachmentDepth: 9 },
 ];
 
 // ---------------------------------------------------------------------------
