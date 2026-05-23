@@ -609,7 +609,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x9a9a9a,
     stroke: 0x222222,
-    power: { consumes: 40 },
+    power: { consumes: 25 }, // 2026-05-23 coal loop rebalance — also applies to mine_on_ore via shared def.
     requiredTile: ['ore', 'coal'],
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 30, wood: 15 },

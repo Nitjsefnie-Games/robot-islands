@@ -555,11 +555,11 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
 
 // Building fixtures with §5.1 power fields. SOLAR and COAL_GEN inherit
 // their power values from BUILDING_DEFS. Mine and Workshop pick up the
-// production defs' 40W / 60W consumes via the production catalog. The
+// production defs' 25W / 60W consumes via the production catalog. The
 // heavier-draw MINE_PWR_80 needs a one-off catalog where mine consumes 80W.
 const SOLAR: PlacedBuilding = { id: 'b-solar', defId: 'solar', x: 0, y: 0 };
 const COAL_GEN: PlacedBuilding = { id: 'b-coal-gen', defId: 'coal_gen', x: 0, y: 0 };
-const MINE_PWR: PlacedBuilding = MINE; // mine def already consumes 40W
+const MINE_PWR: PlacedBuilding = MINE; // mine def already consumes 25W
 const WORKSHOP_PWR: PlacedBuilding = WORKSHOP; // workshop def already consumes 60W
 const MINE_PWR_80: PlacedBuilding = { id: 'b-mine-80', defId: 'mine', x: 0, y: 0 };
 
@@ -592,12 +592,12 @@ describe('§5.3 cable network — computeRates honours cableComponent.unified', 
       cableComponent: {
         unified: true,
         producedTotal: 100,
-        consumedTotal: 40,
+        consumedTotal: 25,
         cableCapacityTotal: 100,
-        requiredTransmission: 40,
+        requiredTransmission: 25,
       },
     });
-    expect(power.consumed).toBe(40);
+    expect(power.consumed).toBe(25);
     expect(power.factor).toBe(1);
   });
 
@@ -665,14 +665,14 @@ describe('power (§5.1)', () => {
   });
 
   it('powerFactor = 1 when supply meets demand (Solar + Coal Gen feed Mine + Workshop)', () => {
-    // 50 + 100 = 150W produced; 40 + 60 = 100W consumed → factor = 1.
+    // 50 + 100 = 150W produced; 25 + 60 = 85W consumed → factor = 1.
     const state = makeState({
       buildings: [SOLAR, COAL_GEN, MINE_PWR, WORKSHOP_PWR],
       inventory: { ...blankInventory(), coal: 50 },
     });
     const { power, byBuilding, net } = computeRates(state);
     expect(power.produced).toBe(150);
-    expect(power.consumed).toBe(100);
+    expect(power.consumed).toBe(85);
     expect(power.factor).toBe(1);
     // Mine still at full 0.02/s, Workshop at full 0.01/s. (rebalanced step #19)
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
@@ -713,27 +713,27 @@ describe('power (§5.1)', () => {
     });
     const { power, byBuilding } = computeRates(state);
     expect(power.produced).toBe(0);
-    expect(power.consumed).toBe(40);
-    expect(power.factor).toBe(0); // 0/40 = 0
+    expect(power.consumed).toBe(25);
+    expect(power.factor).toBe(0); // 0/25 = 0
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     expect(mineRate).toBe(0); // mine throttled to zero by powerFactor
   });
 
-  it('Solar alone (50W) vs Mine + Workshop (100W) → factor = 0.5', () => {
+  it('Solar alone (50W) vs Mine + Workshop (85W) → factor ≈ 0.588', () => {
     // Independent test: when only Solar produces (no coal_gen in scene),
-    // 50W feeds 100W of demand. Both consumers throttled to 0.5×.
+    // 50W feeds 85W of demand. Both consumers throttled to 50/85 ≈ 0.588×.
     const state = makeState({
       buildings: [SOLAR, MINE_PWR, WORKSHOP_PWR],
       inventory: { ...blankInventory(), coal: 50, iron_ore: 50 },
     });
     const { power, byBuilding } = computeRates(state);
     expect(power.produced).toBe(50);
-    expect(power.consumed).toBe(100);
-    expect(power.factor).toBe(0.5);
+    expect(power.consumed).toBe(85);
+    expect(power.factor).toBeCloseTo(50 / 85, 9);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBeCloseTo(0.029411764705882353, 9); // rebalanced step #19
-    expect(wsRate).toBeCloseTo(0.015151515151515152, 9); // rebalanced step #19
+    expect(mineRate).toBeCloseTo((1 / 17) * (50 / 85), 9); // rebalanced step #19
+    expect(wsRate).toBeCloseTo((1 / 33) * (50 / 85), 9); // rebalanced step #19
   });
 
   it('output-stalled consumer draws ZERO power (§5.1 throughput-scaled rebalance)', () => {
@@ -875,7 +875,7 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
       inventory: { ...blankInventory(), coal: 50 },
     });
     const { power } = computeRates(state, { defs });
-    expect(power.consumed).toBeCloseTo(20, 9);
+    expect(power.consumed).toBeCloseTo(12.5, 9);
     expect(power.factor).toBe(1);
   });
 
@@ -916,11 +916,11 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     });
     const { power } = computeRates(state, { defs });
     // Mine: gateMul ≈ 0.2576, ia = 1 (no inputs), oa = 1 → frac ≈ 0.2576.
-    //   Mine contribution = 40 × 0.2576 ≈ 10.303W
+    //   Mine contribution = 25 × 0.2576 ≈ 6.439W
     // Workshop: gateMul = 1, ia = 0.5 (half-supplied iron_ore), oa = 1.
     //   Workshop contribution = 60 × 0.5 = 30W
-    // Total ≈ 40.303W.
-    expect(power.consumed).toBeCloseTo(40 * (0.5 * (1 / 33) / (1 / 17)) + 60 * 0.5, 6);
+    // Total ≈ 36.439W.
+    expect(power.consumed).toBeCloseTo(25 * (0.5 * (1 / 33) / (1 / 17)) + 60 * 0.5, 6);
     expect(power.factor).toBe(1);
   });
 
@@ -956,9 +956,9 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
       inventory: { ...blankInventory(), coal: 50, iron_ore: 0 },
     });
     const { power } = computeRates(state, { defs });
-    // Mine: 40 × mineGate × 1 × 1
+    // Mine: 25 × mineGate × 1 × 1
     // Workshop: 60 × 0.5 × 0.5 × 1 = 15
-    const expectedMine = 40 * mineGate;
+    const expectedMine = 25 * mineGate;
     const expectedWorkshop = 60 * 0.5 * 0.5;
     expect(power.consumed).toBeCloseTo(expectedMine + expectedWorkshop, 6);
   });
@@ -1976,7 +1976,7 @@ describe('step-11 — artificial-island construction integration (§2.5)', () =>
 
 describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
   it('Mine on a coal-tile spec produces coal at 1/50s (not iron_ore)', () => {
-    // Mine on coal tile → mine_on_coal. Rate 1/50s = 0.02/s. Over 100s = 2 coal. (rebalanced step #19)
+    // Mine on coal tile → mine_on_coal. Rate 9/10s = 0.9 coal/s. Over 100 s = 90 coal. (rebalanced 2026-05-23)
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
@@ -1985,7 +1985,7 @@ describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
       defs: POWER_FREE,
       terrainAt: () => 'coal',
     });
-    expect(state.inventory.coal).toBeCloseTo(5.88235294117647, 9);
+    expect(state.inventory.coal).toBeCloseTo(90, 9);
     expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
   });
 
@@ -2015,7 +2015,7 @@ describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
   });
 
   it('Mine on a mixed ore+coal footprint picks the coal variant (any coal tile wins)', () => {
-    // 1 coal tile among 4 ore tiles → mine_on_coal. 0.02/s × 100s = 2 coal. (rebalanced step #19)
+    // 1 coal tile among 4 ore tiles → mine_on_coal. 0.9/s × 100s = 90 coal. (rebalanced 2026-05-23)
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
@@ -2024,7 +2024,7 @@ describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
       defs: POWER_FREE,
       terrainAt: (x, y) => (x === 1 && y === 1 ? 'coal' : 'ore'),
     });
-    expect(state.inventory.coal).toBeCloseTo(5.88235294117647, 9);
+    expect(state.inventory.coal).toBeCloseTo(90, 9);
     expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
   });
 });
@@ -2572,18 +2572,18 @@ describe('day-night solar modulation (§2.7)', () => {
 
     // Sanity-check the magnitude. Under SOLAR_RAMP_SEGMENTS=8 sub-segmenting:
     //   Dusk (6h, mul 1→0): start-of-sub-seg muls = [1, 7/8, 6/8, ..., 1/8];
-    //     factor = min(1, 1.25 × mul); sum factors = 5.28125;
-    //     iron = 0.02/s × 5.28125 × 2700s = 285.1875
+    //     factor = min(1, 2 × mul); sum factors = 6.5;
+    //     iron = (1/17)/s × 6.5 × 2700s = 1032.3529
     //   Night (6h, mul 0): iron = 0
     //   Dawn (6h, mul 0→1): start-of-sub-seg muls = [0, 1/8, 2/8, ..., 7/8];
-    //     sum factors = 4.28125; iron = 0.02 × 4.28125 × 2700 = 231.1875
-    //   Day (6h, mul 1): iron = 0.02 × 21600 = 432
-    // Total = 285.1875 + 0 + 231.1875 + 432 = 948.375.
+    //     sum factors = 5.5; iron = (1/17) × 5.5 × 2700 = 873.5294
+    //   Day (6h, mul 1): iron = (1/17) × 21600 = 1270.5882
+    // Total = 1032.3529 + 0 + 873.5294 + 1270.5882 = 3176.4706.
     // (Dawn under-shoots and Dusk over-shoots by symmetric amounts; the
     // FULL-window integral over dawn + dusk is preserved exactly because the
     // mid-point Riemann sum on a linear ramp equals the analytic integral.
     // The asymmetry here arises only because the throttle clips one side.)
-    expect(offline.inventory.iron_ore).toBeCloseTo(2789.338235294118, 3);
+    expect(offline.inventory.iron_ore).toBeCloseTo(3176.470588235294, 3);
   });
 
   it('offline catchup with solar-only producer drops to zero at night', () => {
@@ -2601,13 +2601,13 @@ describe('day-night solar modulation (§2.7)', () => {
     });
     advanceIsland(state, 24 * HOUR);
     // Quadrants in this window:
-    //   [0, 3h)   Day   rate 0.02 → 216
-    //   [3h, 9h)  Dusk  ramp-sub-seg sum → 285.1875 (see prior test for derivation)
+    //   [0, 3h)   Day   rate (1/17) → 635.2941
+    //   [3h, 9h)  Dusk  ramp-sub-seg sum → 1032.3529 (see prior test for derivation)
     //   [9h, 15h) Night rate 0 → 0
-    //   [15h, 21h) Dawn ramp-sub-seg sum → 231.1875
-    //   [21h, 24h) Day  rate 0.02 → 216
-    // Total = 216 + 285.1875 + 0 + 231.1875 + 216 = 948.375.
-    expect(state.inventory.iron_ore).toBeCloseTo(2789.338235294118, 3);
+    //   [15h, 21h) Dawn ramp-sub-seg sum → 873.5294
+    //   [21h, 24h) Day  rate (1/17) → 635.2941
+    // Total = 635.2941 + 1032.3529 + 0 + 873.5294 + 635.2941 = 3176.4706.
+    expect(state.inventory.iron_ore).toBeCloseTo(3176.470588235294, 3);
   });
 
   it('§2.7 unmetered solar integral over a full dawn+dusk window matches analytic 0.5', () => {
