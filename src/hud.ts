@@ -20,7 +20,7 @@ import {
   type RateSample,
 } from './rate-history.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
-import { tierForLevel, type Tier } from './skilltree.js';
+import { hasPickableSkill, tierForLevel, type Tier } from './skilltree.js';
 import { canTierReset } from './tier-reset.js';
 import { toDisplayName } from './ui-tokens.js';
 import { mountPanel, Zone } from './ui-zones.js';
@@ -311,7 +311,10 @@ export function mountIslandBar(
     const level = document.createElement('span');
     level.classList.add('ri-mono', 'ri-muted');
     level.textContent = `L${state.level}`;
-    opt.append(dot, name, level);
+    const pickableDot = document.createElement('span');
+    pickableDot.className = 'ri-dot ri-dot--pickable';
+    opt.append(dot, name, level, pickableDot);
+    opt.dataset.pickable = 'false';
     opt.addEventListener('click', (ev) => {
       ev.stopPropagation();
       onSelect(spec.id);
@@ -340,7 +343,8 @@ export function mountIslandBar(
       }
     }
 
-    // Update each option's tone / level / active flag.
+    // Update each option's tone / level / active flag / pickable flag.
+    let anyPickable = false;
     for (const spec of populated) {
       const opt = optMap.get(spec.id);
       if (!opt) continue;
@@ -352,7 +356,13 @@ export function mountIslandBar(
       const state = world.islandStates?.get(spec.id);
       const level = opt.querySelector('.ri-mono') as HTMLElement | null;
       if (state && level) level.textContent = `L${state.level}`;
+      if (state) {
+        const pickable = hasPickableSkill(state);
+        opt.dataset.pickable = pickable ? 'true' : 'false';
+        if (pickable) anyPickable = true;
+      }
     }
+    bar.classList.toggle('has-pickable', anyPickable);
 
     // Reflect the active island on the trigger.
     const activeSpec = populated.find((i) => i.id === activeId) ?? populated[0];

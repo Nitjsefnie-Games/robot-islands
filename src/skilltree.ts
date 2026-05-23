@@ -1018,3 +1018,22 @@ export function launchSuccessBonus(
 export function nodeById(id: NodeId): SkillNode | undefined {
   return DEFAULT_CATALOG.byId.get(id);
 }
+
+/**
+ * True if `state` has at least one skill-tree node it can buy right now.
+ * Composition: NODE_CATALOG.some(canSpend.ok) with early exit. Used by
+ * the HUD island-bar to surface a global "claim available" cue without
+ * the player opening the skill-tree modal.
+ *
+ * The rule is canSpend's: enough points, tier met, depth prereq satisfied,
+ * sub-path not branch-locked, node not already owned. canSpend reads
+ * unspentSkillPoints / unlockedNodes / level / subPathProgress only —
+ * so an island with role declaration pending but zero spendable points
+ * (or no ready nodes) is correctly false.
+ */
+export function hasPickableSkill(state: IslandState): boolean {
+  for (const node of NODE_CATALOG) {
+    if (canSpend(state, node.id).ok) return true;
+  }
+  return false;
+}
