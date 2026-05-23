@@ -42,7 +42,6 @@ import {
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
-  type SerializedSnapshotV8,
 } from './persistence.js';
 import {
   attachTerrainAt,
@@ -1471,45 +1470,175 @@ describe('migrateV7toV8', () => {
   it('preserves identity fields and resets progression', () => {
     const v7: SerializedSnapshotV7 = {
       v: 7,
-      now: 100000,
-      currentIslandId: 'island-a',
+      savedAt: 100000,
+      savedAtPerf: 95000,
+      world: {
+        islands: [],
+        drones: [],
+        routes: [],
+        vehicles: [],
+        satellites: [],
+        repairDrones: [],
+        debrisFields: [],
+        commPackets: [],
+      },
       islandStates: [
         {
           id: 'island-a',
-          biome: 'plains',
-          level: 12,
-          xp: 8500,
-          lastTick: 95000,
-          inventory: { iron_ore: 50 },
-          buildings: [],
-          unlockedNodes: ['mining.1', 'mining.2', 'forestry.1'],
-          subPathProgress: [['mining', { spent: 3, complete: false }]],
-          unspentSkillPoints: 2,
-          specializationRole: 'foundry',
-        } as any,
+          state: {
+            id: 'island-a',
+            buildings: [],
+            inventory: { iron_ore: 50 },
+            storageCaps: {},
+            funnelPending: {},
+            starterInventoryGrace: {},
+            xp: 8500,
+            level: 12,
+            unspentSkillPoints: 2,
+            unlockedNodes: ['mining.1', 'mining.2', 'forestry.1'],
+            subPathProgress: [['mining', { spent: 3, complete: false }]],
+            specializationRole: 'foundry',
+            declaredAt: null,
+            lastResetAt: null,
+            lastTick: 95000,
+            aiCoreCrafted: false,
+            ascendantCoreCrafted: false,
+            timeLockBankedMin: 0,
+            accelerationQueue: [],
+            accelerationRemainingMin: 0,
+            bankingEnabled: false,
+            genesisTarget: null,
+            singularityStoredWs: 0,
+          } as unknown as import('./persistence.js').SerializedIslandStateV7,
+        },
       ],
-    } as any;
+    };
 
     const v8 = migrateV7toV8(v7);
 
     expect(v8.v).toBe(8);
-    expect(v8.islandStates[0]!.level).toBe(12);
-    expect(v8.islandStates[0]!.xp).toBe(8500);
-    expect(v8.islandStates[0]!.inventory).toEqual({ iron_ore: 50 });
-    expect(v8.islandStates[0]!.unlockedNodes).toEqual([]);
-    expect(v8.islandStates[0]!.unlockedEdges).toEqual([]);
-    expect(v8.islandStates[0]!.unspentSkillPoints).toBe(11);
-    expect((v8.islandStates[0] as any).subPathProgress).toBeUndefined();
-    expect((v8.islandStates[0] as any).specializationRole).toBeUndefined();
+    expect(v8.islandStates[0]!.state.level).toBe(12);
+    expect(v8.islandStates[0]!.state.xp).toBe(8500);
+    expect(v8.islandStates[0]!.state.inventory).toEqual({ iron_ore: 50 });
+    expect(v8.islandStates[0]!.state.unlockedNodes).toEqual([]);
+    expect(v8.islandStates[0]!.state.unlockedEdges).toEqual([]);
+    expect(v8.islandStates[0]!.state.unspentSkillPoints).toBe(11);
+    expect((v8.islandStates[0]!.state as any).subPathProgress).toBeUndefined();
+    expect((v8.islandStates[0]!.state as any).specializationRole).toBeUndefined();
   });
 
   it('recomputes unspentSkillPoints as max(0, level - 1)', () => {
-    const v7 = { v: 7, now: 0, currentIslandId: 'a', islandStates: [
-      { id: 'a', level: 1, xp: 0, lastTick: 0, inventory: {}, buildings: [], unlockedNodes: [], subPathProgress: [], unspentSkillPoints: 999, specializationRole: null } as any,
-      { id: 'b', level: 50, xp: 0, lastTick: 0, inventory: {}, buildings: [], unlockedNodes: [], subPathProgress: [], unspentSkillPoints: 0, specializationRole: null } as any,
-    ] } as any;
+    const v7: SerializedSnapshotV7 = {
+      v: 7,
+      savedAt: 0,
+      savedAtPerf: 0,
+      world: {
+        islands: [],
+        drones: [],
+        routes: [],
+        vehicles: [],
+        satellites: [],
+        repairDrones: [],
+        debrisFields: [],
+        commPackets: [],
+      },
+      islandStates: [
+        {
+          id: 'a',
+          state: {
+            id: 'a',
+            buildings: [],
+            inventory: {},
+            storageCaps: {},
+            funnelPending: {},
+            starterInventoryGrace: {},
+            xp: 0,
+            level: 1,
+            unspentSkillPoints: 999,
+            unlockedNodes: [],
+            subPathProgress: [],
+            specializationRole: null,
+            declaredAt: null,
+            lastResetAt: null,
+            lastTick: 0,
+            aiCoreCrafted: false,
+            ascendantCoreCrafted: false,
+            timeLockBankedMin: 0,
+            accelerationQueue: [],
+            accelerationRemainingMin: 0,
+            bankingEnabled: false,
+            genesisTarget: null,
+            singularityStoredWs: 0,
+          } as unknown as import('./persistence.js').SerializedIslandStateV7,
+        },
+        {
+          id: 'b',
+          state: {
+            id: 'b',
+            buildings: [],
+            inventory: {},
+            storageCaps: {},
+            funnelPending: {},
+            starterInventoryGrace: {},
+            xp: 0,
+            level: 50,
+            unspentSkillPoints: 0,
+            unlockedNodes: [],
+            subPathProgress: [],
+            specializationRole: null,
+            declaredAt: null,
+            lastResetAt: null,
+            lastTick: 0,
+            aiCoreCrafted: false,
+            ascendantCoreCrafted: false,
+            timeLockBankedMin: 0,
+            accelerationQueue: [],
+            accelerationRemainingMin: 0,
+            bankingEnabled: false,
+            genesisTarget: null,
+            singularityStoredWs: 0,
+          } as unknown as import('./persistence.js').SerializedIslandStateV7,
+        },
+      ],
+    };
     const v8 = migrateV7toV8(v7);
-    expect(v8.islandStates[0]!.unspentSkillPoints).toBe(0);
-    expect(v8.islandStates[1]!.unspentSkillPoints).toBe(49);
+    expect(v8.islandStates[0]!.state.unspentSkillPoints).toBe(0);
+    expect(v8.islandStates[1]!.state.unspentSkillPoints).toBe(49);
+  });
+});
+
+describe('deserializeWorld v7 → v8 round-trip', () => {
+  it('migrates a v7 snapshot and yields v8 in-memory state', () => {
+    const world = makeInitialWorld(0);
+    const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
+    const states = new Map<string, IslandState>([['home', homeState]]);
+    const v8snap = serializeWorld(world, states, 0, 0);
+
+    // Forge a v7-shaped snapshot from the v8 one.
+    const v7 = {
+      ...v8snap,
+      v: 7,
+      islandStates: v8snap.islandStates.map((entry) => {
+        const { unlockedEdges: _ue, ...stateRest } = entry.state;
+        return {
+          id: entry.id,
+          state: {
+            ...stateRest,
+            unlockedNodes: [...entry.state.unlockedNodes],
+            subPathProgress: [['mining', { spent: 1, complete: false }]] as [string, { spent: number; complete: boolean }][],
+            unspentSkillPoints: 0,
+            specializationRole: 'mining' as string | null,
+          },
+        };
+      }),
+    } as unknown as SaveSnapshot;
+
+    const { islandStates: restored } = deserializeWorld(v7, 0, 0);
+    const home = restored.get('home')!;
+    expect(home.level).toBe(5);
+    expect(home.xp).toBe(1200);
+    expect(home.unspentSkillPoints).toBe(4);
+    expect(home.unlockedNodes.size).toBe(0);
+    expect(home.unlockedEdges.size).toBe(0);
   });
 });

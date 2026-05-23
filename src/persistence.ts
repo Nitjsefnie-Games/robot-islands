@@ -61,7 +61,7 @@ import type { NodeId } from './skilltree.js';
 import type { EdgeId } from './skilltree-graph.js';
 import type { OceanCellSpec } from './ocean-cell.js';
 
-import { attachTerrainAt, WORLD_SEED, type Biome, type IslandSpec, type WorldState } from './world.js';
+import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
@@ -162,64 +162,49 @@ export interface SerializedWorld {
 // Historical snapshot shapes (for migrations)
 // ---------------------------------------------------------------------------
 
-/** v7 island state — flat shape (no {id,state} wrapper) with the old
- *  progression fields that v8 strips. */
-export interface SerializedIslandStateV7 {
-  readonly id: string;
-  readonly biome: Biome;
-  readonly level: number;
-  readonly xp: number;
-  readonly lastTick: number;
-  readonly inventory: Record<string, number>;
-  readonly buildings: ReadonlyArray<unknown>;
-  readonly unlockedNodes: ReadonlyArray<string>;
+/** v7 island state — same as v8 but without unlockedEdges and with the old
+ *  progression fields subPathProgress and specializationRole. */
+export type SerializedIslandStateV7 = Omit<SerializedIslandState, 'unlockedEdges'> & {
   readonly subPathProgress: ReadonlyArray<[string, { spent: number; complete: boolean }]>;
-  readonly unspentSkillPoints: number;
   readonly specializationRole: string | null;
-}
-
-/** v7 top-level snapshot shape. */
-export interface SerializedSnapshotV7 {
-  readonly v: 7;
-  readonly now: number;
-  readonly currentIslandId: string;
-  readonly islandStates: ReadonlyArray<SerializedIslandStateV7>;
-}
-
-/** v8 island state — removes subPathProgress / specializationRole and adds
- *  unlockedEdges. */
-export type SerializedIslandStateV8 = Omit<SerializedIslandStateV7, 'subPathProgress' | 'specializationRole'> & {
-  readonly unlockedEdges: ReadonlyArray<string>;
 };
 
-/** v8 top-level snapshot shape. */
-export interface SerializedSnapshotV8 {
-  readonly v: 8;
-  readonly now: number;
-  readonly currentIslandId: string;
-  readonly islandStates: ReadonlyArray<SerializedIslandStateV8>;
+/** v7 top-level snapshot shape. Mirrors SaveSnapshot but with v7 island
+ *  states and schema version pinned to 7. */
+export interface SerializedSnapshotV7 {
+  readonly v: 7;
+  readonly savedAt: number;
+  readonly savedAtPerf: number;
+  readonly world: SerializedWorld;
+  readonly islandStates: ReadonlyArray<{
+    readonly id: string;
+    readonly state: SerializedIslandStateV7;
+  }>;
 }
 
-/** Migrate a v7 snapshot to v8. Preserves identity (level, xp, inventory,
- *  buildings) and resets progression: unlockedNodes → [], unlockedEdges → [],
- *  strips subPathProgress / specializationRole, recomputes unspentSkillPoints
- *  as max(0, level - 1). */
-export function migrateV7toV8(s: SerializedSnapshotV7): SerializedSnapshotV8 {
+/** Migrate a v7 snapshot to v8 (SaveSnapshot). Preserves identity (level, xp,
+ *  inventory, buildings) and resets progression: unlockedNodes → [],
+ *  unlockedEdges → [], strips subPathProgress / specializationRole,
+ *  recomputes unspentSkillPoints as max(0, level - 1). */
+export function migrateV7toV8(s: SerializedSnapshotV7): SaveSnapshot {
   return {
     ...s,
-    v: 8,
-    islandStates: s.islandStates.map((is) => {
-      const { subPathProgress: _sp, specializationRole: _sr, ...rest } = is;
+    v: 8 as const,
+    islandStates: s.islandStates.map((entry) => {
+      const { subPathProgress: _sp, specializationRole: _sr, ...stateRest } = entry.state;
       void _sp;
       void _sr;
       return {
-        ...rest,
-        unlockedNodes: [],
-        unlockedEdges: [],
-        unspentSkillPoints: Math.max(0, is.level - 1),
+        id: entry.id,
+        state: {
+          ...stateRest,
+          unlockedNodes: [] as ReadonlyArray<NodeId>,
+          unlockedEdges: [] as ReadonlyArray<EdgeId>,
+          unspentSkillPoints: Math.max(0, entry.state.level - 1),
+        },
       };
     }),
-  };
+  } as SaveSnapshot;
 }
 
 export interface SaveSnapshot {
@@ -355,9 +340,15 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
+  // Walk v7 → v8 migration chain.
+  if ((snapshot as unknown as { v: number }).v === 7) {
+    snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7);
+  }
+
   if (snapshot.v !== SCHEMA_VERSION) {
     throw new Error(
-      `save version ${String(snapshot.v)} not supported (current: ${String(SCHEMA_VERSION)}); migration paths were removed pre-release`,
+      `save version ${String(snapshot.v)} not supported (current: ${String(SCHEMA_VERSION)}); ` +
+      `supported versions: ${[...SUPPORTED_LOAD_VERSIONS].join(', ')}.`,
     );
   }
 
@@ -676,12 +667,7 @@ export async function loadWorld(): Promise<
   try {
     const stored = (await get(STORAGE_KEY)) as SaveSnapshot | undefined;
     if (stored === undefined) return null;
-    if (stored.v !== SCHEMA_VERSION) {
-      console.warn(
-        `[robot-islands] loadWorld: ignoring snapshot with unknown v=${String(stored.v)}`,
-      );
-      return null;
-    }
+    // deserializeWorld handles version checks and migration.
     return deserializeWorld(stored);
   } catch (err) {
     console.warn('[robot-islands] loadWorld failed:', err);
