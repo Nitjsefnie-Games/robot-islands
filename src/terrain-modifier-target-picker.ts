@@ -24,13 +24,28 @@ const NATURAL_ORDER: TerrainKind[] = [
   'grass', 'sand', 'stone', 'water', 'tree', 'ice', 'magma_vent',
 ];
 
+// Drift guard: every natural target must appear in NATURAL_ORDER so the picker
+// doesn't silently omit a newly-added kind.
+if (
+  new Set(NATURAL_ORDER).size !== NATURAL_TARGET_TERRAINS.size ||
+  ![...NATURAL_TARGET_TERRAINS].every((k) => NATURAL_ORDER.includes(k))
+) {
+  throw new Error(
+    'terrain-modifier-target-picker: NATURAL_ORDER out of sync with NATURAL_TARGET_TERRAINS',
+  );
+}
+
 function rareSortedList(): TerrainKind[] {
   return Array.from(RARE_TARGET_TERRAINS).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 function formatBasket(basket: Partial<Record<ResourceId, number>>): string {
   const entries = Object.entries(basket).filter(([, n]) => (n ?? 0) > 0);
-  if (entries.length === 0) return '(free)';
+  if (entries.length === 0) {
+    // Reserved for future free-target classifications; today every target has
+    // a non-zero cost basket.
+    return '(free)';
+  }
   return entries.map(([r, n]) => `${n} ${r}`).join(' + ');
 }
 
@@ -54,14 +69,19 @@ export function mountTerrainModifierTargetPicker(
 
   const buttonByKind = new Map<TerrainKind, HTMLButtonElement>();
 
+  function repaintSelection(): void {
+    for (const [kind, btn] of buttonByKind) {
+      btn.dataset['active'] = kind === selected ? 'true' : 'false';
+    }
+  }
+
   function makeRow(kind: TerrainKind): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
+    btn.className = 'ri-chip';
     btn.style.cssText =
       'display:flex;justify-content:space-between;align-items:center;' +
-      'width:100%;padding:8px 12px;margin:2px 0;border-radius:6px;' +
-      'border:1px solid var(--ri-border);background:transparent;' +
-      'color:var(--ri-fg-1);cursor:pointer;font-family:ui-monospace,monospace;';
+      'width:100%;margin:2px 0;';
     const nameSpan = document.createElement('span');
     nameSpan.textContent = kind.toUpperCase();
     const costSpan = document.createElement('span');
@@ -72,7 +92,10 @@ export function mountTerrainModifierTargetPicker(
     btn.appendChild(nameSpan);
     btn.appendChild(costSpan);
     btn.addEventListener('click', () => resolveWith(kind));
-    btn.addEventListener('mouseenter', () => { selected = kind; });
+    btn.addEventListener('mouseenter', () => {
+      selected = kind;
+      repaintSelection();
+    });
     buttonByKind.set(kind, btn);
     return btn;
   }
@@ -99,6 +122,8 @@ export function mountTerrainModifierTargetPicker(
       rareHead.style.cssText = 'font-family:ui-monospace,monospace;font-size:11px;letter-spacing:0.06em;color:var(--ri-clay);margin-top:6px;';
       body.appendChild(rareHead);
       for (const k of rareSortedList()) body.appendChild(makeRow(k));
+
+      repaintSelection();
     },
   });
   handle.hide();
@@ -108,12 +133,13 @@ export function mountTerrainModifierTargetPicker(
     if (e.key === 'Escape') { e.preventDefault(); cancel(); return; }
     if (e.key === 'Enter') { e.preventDefault(); resolveWith(selected); return; }
   }
-  document.addEventListener('keydown', onKeydown, true);
+  document.addEventListener('keydown', onKeydown);
 
   return {
     pick(): Promise<TerrainKind | null> {
       if (pending) { pending(null); pending = null; }
       selected = 'grass';
+      repaintSelection();
       return new Promise<TerrainKind | null>((resolve) => {
         pending = resolve;
         handle.show();
