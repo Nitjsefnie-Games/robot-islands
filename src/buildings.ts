@@ -115,18 +115,37 @@ export interface PlacedBuilding {
  *  provider-scan call sites so adding a new "is this thing actually
  *  available?" filter (e.g. §NEW disabled toggle) is a single-line edit
  *  here instead of a fan-out across the tree. Pure. */
+export function isOperationalBuilding(
+  b: { invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean },
+): boolean {
+  if (b.invalid === true) return false;
+  if ((b.constructionRemainingMs ?? 0) > 0) return false;
+  if (b.disabled === true) return false;
+  return true;
+}
+
 export function hasOperationalBuilding(
-  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number }>,
-  defId: string,
+  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean }>,
+  defId: BuildingDefId,
 ): boolean {
   for (const b of buildings) {
     if (b.defId !== defId) continue;
-    if (b.invalid === true) continue;
-    if ((b.constructionRemainingMs ?? 0) > 0) continue;
-    if (((b as unknown) as { disabled?: boolean }).disabled === true) continue;
+    if (!isOperationalBuilding(b)) continue;
     return true;
   }
   return false;
+}
+
+export function findOperationalBuilding(
+  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean }>,
+  defId: BuildingDefId,
+): PlacedBuilding | undefined {
+  for (const b of buildings) {
+    if (b.defId !== defId) continue;
+    if (!isOperationalBuilding(b)) continue;
+    return b as PlacedBuilding;
+  }
+  return undefined;
 }
 
 export type ConvertToServitorResult =

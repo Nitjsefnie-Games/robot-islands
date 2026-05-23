@@ -24,7 +24,7 @@
 import { Container, Graphics } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { hasOperationalBuilding } from './buildings.js';
+import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
@@ -60,7 +60,7 @@ export function dronePadCentre(
   spec: IslandSpec,
   state: IslandState,
 ): { x: number; y: number } | null {
-  const pad = state.buildings.find((b) => b.defId === 'dronepad' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true);
+  const pad = findOperationalBuilding(state.buildings, 'dronepad');
   if (!pad) return null;
   const def = BUILDING_DEFS[pad.defId as BuildingDefId];
   return {

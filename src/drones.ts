@@ -17,7 +17,7 @@
 
 import { computeSignalRanges, pointInSignalRange } from './antenna.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { hasOperationalBuilding } from './buildings.js';
+import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
 import { cellCenterTile, corridorCells, islandCells, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
@@ -423,7 +423,7 @@ export function dispatchDrone(
   let spawnY = originY;
   const originSpec = world.islands.find((i) => i.id === origin.id);
   if (originSpec) {
-    const dronepad = origin.buildings.find((b) => b.defId === 'dronepad' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true);
+    const dronepad = findOperationalBuilding(origin.buildings, 'dronepad');
     if (dronepad) {
       const dpDef = BUILDING_DEFS[dronepad.defId as BuildingDefId];
       spawnX = originSpec.cx + dronepad.x + shapeWidth(dpDef.footprint) / 2;

@@ -19,6 +19,7 @@
 // keep working unchanged.
 
 import { BUILDING_DEFS } from './building-defs.js';
+import { isOperationalBuilding } from './buildings.js';
 import { pointInVision, type VisionSource } from './vision-source.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import {
@@ -86,7 +87,7 @@ export function computeVisionSources(
     //    defs. The merge-time coordinate shift means every building's
     //    (x, y) is already in the absorber's local frame.
     for (const b of spec.buildings) {
-      if (b.invalid === true || (b.constructionRemainingMs ?? 0) > 0 || ((b as unknown) as { disabled?: boolean }).disabled === true) continue;
+      if (!isOperationalBuilding(b)) continue;
       const radius = LIGHTHOUSE_VISION_RADII[b.defId];
       if (radius === undefined) continue;
       const def = BUILDING_DEFS[b.defId];

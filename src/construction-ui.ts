@@ -32,6 +32,7 @@ import {
 } from './artificial-island.js';
 import { BIOME_DEFS } from './biomes.js';
 import type { IslandState } from './economy.js';
+import { hasOperationalBuilding } from './buildings.js';
 import { tierForLevel } from './skilltree.js';
 import { mountModal } from './ui-modal.js';
 import {
@@ -487,7 +488,7 @@ export function mountConstructionUi(
       const state = options.islandStates.get(spec.id);
       if (!state) continue;
       if (tierForLevel(state.level) < 3) continue;
-      if (!spec.buildings.some((b) => b.defId === 'platform_constructor')) continue;
+      if (!hasOperationalBuilding(spec.buildings, 'platform_constructor')) continue;
       out.push({ spec, state });
     }
     return out;
