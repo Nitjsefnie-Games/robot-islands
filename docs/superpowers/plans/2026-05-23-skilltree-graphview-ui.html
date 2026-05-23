@@ -619,9 +619,11 @@ EOF</pre>
 defineAction(reg, <span class="str">'toggle-skill-graph'</span>, () =&gt; {
   skillGraph.toggle();
 });</pre>
-      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px">Then find the existing Esc / dismiss-modal handler (search for <code>'dismiss-modal'</code> in <code>main.ts</code>) and add a <code>skillGraph.hide()</code> call alongside the existing <code>skillTree.hide()</code> / <code>buildingsUi.hide()</code> calls. And find the refresh-on-tick block (search for <code>skillTree.refresh()</code>, around line 1985) and add <code>skillGraph.refresh()</code> in the same block.</p>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px">Then find the existing Esc / dismiss-modal handler (search for <code>'dismiss-modal'</code> in <code>main.ts</code>) and add a <code>skillGraph.hide()</code> call alongside the existing <code>skillTree.hide()</code> / <code>buildingsUi.hide()</code> calls.</p>
 
-      <div class="step"><b>Step 4.</b> Bind a key for testing. In <code>src/input.ts</code>, find the existing default-bindings block and add a binding (any free key) for <code>toggle-skill-graph</code>. Suggested: <code>'KeyJ'</code> &rarr; <code>'toggle-skill-graph'</code>. The permanent UI entry-point lands in Task 9.</div>
+      <div class="callout warn" style="margin-left:24px;max-width:880px"><b>Do NOT wire <code>skillGraph.refresh()</code> into the per-frame ticker block</b> (around <code>main.ts:1985</code> &mdash; the <code>skillTree.refresh()</code> / <code>buildingsUi.refresh()</code> calls). <code>refresh()</code> on the graph view is expensive (rebuilds 1230 Graphics primitives + runs <code>costToUnlock</code> per node once Task 6 lands). At 60 fps that's ~30 KOps of Dijkstra per second purely for repaint. The full repaint is only needed on <b>show()</b> (already in T2), after a <b>purchase</b> (added in T6), and on a <b>filter chip toggle</b> (added in T8). T8 will add a separate cheap <code>refreshHud()</code> for the live SP/Owned counters &mdash; that's what goes in the ticker.</div>
+
+      <div class="step"><b>Step 4.</b> Bind a key for testing. In <code>src/input.ts</code>, find the existing default-bindings block and add <code>bind(reg, 'KeyN', 'toggle-skill-graph');</code>. (Other letter keys are already bound &mdash; verified: W A D K Y B J R C T V I S O G H. KeyN is free; mnemonic: "Network/Nodes".) The permanent UI entry-point lands in Task 9.</div>
 
       <div class="step"><b>Step 5.</b> Build + tests.</div>
       <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -8</pre>
@@ -1391,15 +1393,22 @@ w.addChild(sockets);
 }</pre>
       <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px"><b>Note:</b> in <code>drawNodes()</code>, skip emitting graphics whose <code>kind</code> isn't currently filtered on. Branch roots are always visible.</p>
 
-      <div class="step"><b>Step 4.</b> In <code>refresh()</code>, populate the counters from state:</div>
-      <pre><span class="kw">function</span> refresh(): <span class="kw">void</span> {
-  <span class="kw">if</span> (!visible || !app || !world || !layers) <span class="kw">return</span>;
+      <div class="step"><b>Step 4.</b> Split <code>refresh()</code> into the expensive full-repaint path (unchanged) and a cheap HUD-only path. Update the live counters from state in both; only the full <code>refresh()</code> rebuilds the scene Graphics.</div>
+      <pre><span class="kw">function</span> refreshHud(): <span class="kw">void</span> {
+  <span class="kw">if</span> (!visible) <span class="kw">return</span>;
   <span class="kw">const</span> state = deps.getState();
   spLine.textContent = `Unspent SP: ${state.unspentSkillPoints}`;
   ownedLine.textContent = `Owned: ${state.unlockedNodes.size} / ${DEFAULT_GRAPH.nodes.length}`;
+}
+
+<span class="kw">function</span> refresh(): <span class="kw">void</span> {
+  <span class="kw">if</span> (!visible || !app || !world || !layers) <span class="kw">return</span>;
+  <span class="kw">const</span> state = deps.getState();
   drawEdges(state);
   drawNodes();
+  refreshHud();
 }</pre>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px">Export <code>refreshHud</code> on the <code>SkillGraphView</code> interface (add the field next to <code>refresh</code>). Then in <code>src/main.ts</code>, find the per-frame ticker block (around line 1985, alongside <code>skillTree.refresh()</code>) and add <code>skillGraph.refreshHud()</code> &mdash; NOT <code>skillGraph.refresh()</code>. The cheap path only touches two <code>&lt;div&gt;</code> text nodes; the full repaint stays on-demand (show / post-buy / filter chip).</p>
 
       <div class="step"><b>Step 5.</b> Build + tests.</div>
       <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
