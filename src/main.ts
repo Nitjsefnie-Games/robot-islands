@@ -997,7 +997,10 @@ async function main(): Promise<void> {
     skillTree.toggle();
   });
 
-  const graphUi = mountGraphUi(document.body);
+  const graphUi = mountGraphUi(document.body, {
+    getState: activeState,
+    getSpec: activeSpec,
+  });
   defineAction(reg, 'toggle-graph', () => {
     graphUi.toggle();
   });
