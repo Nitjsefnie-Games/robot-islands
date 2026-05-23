@@ -36,7 +36,7 @@ import {
   footprintTiles,
 } from './shape-mask.js';
 export { rotateShape, type ShapeMask };
-import type { PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import { constructionTimeFor } from './construction.js';
 import type { IslandState } from './economy.js';
 import { tileInscribedInEllipse } from './island.js';
@@ -171,7 +171,7 @@ export function validatePlacement(
   if (def.oceanPlacement === true) {
     return { ok: false, reason: 'def-is-ocean' };
   }
-  const hasSpaceport = spec.buildings.some((b) => b.defId === 'spaceport');
+  const hasSpaceport = hasOperationalBuilding(spec.buildings, 'spaceport');
   if (
     !buildingUnlocked(
       state.level,

@@ -35,6 +35,7 @@ import { inv } from './economy.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import {
   dispatchVehicle,
@@ -611,7 +612,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     kind: VehicleKind,
   ): { x: number; y: number } | null {
     const defId = kind === 'ship' ? 'shipyard' : 'helipad';
-    const b = spec.buildings.find((bld) => bld.defId === defId);
+    const b = findOperationalBuilding(spec.buildings, defId);
     if (!b) return null;
     const def = BUILDING_DEFS[defId as BuildingDefId];
     return {
@@ -945,7 +946,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   ): string | null {
     if (!originSpec) return 'no populated origin';
     const required = kind === 'ship' ? 'shipyard' : kind === 'helicopter' ? 'helipad' : 'spacetime_anchor';
-    if (!originSpec.buildings.some((b) => b.defId === required)) {
+    if (!hasOperationalBuilding(originSpec.buildings, required)) {
       return `origin missing ${required}`;
     }
     if (!originState) return 'origin state missing';

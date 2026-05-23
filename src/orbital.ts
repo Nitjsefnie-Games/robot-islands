@@ -9,7 +9,7 @@ import { ANTENNA_SIGNAL_RADII } from './antenna.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { CELL_SIZE_TILES, cellKey, parseCellKey, tileToCell } from './discovery.js';
 import { inv } from './economy.js';
-import { hasOperationalBuilding } from './buildings.js';
+import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
 import { makeSeededRng } from './rng.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, launchSuccessBonus } from './skilltree.js';
@@ -240,7 +240,7 @@ export function launchSatellite(
   }
 
   // Spaceport reference (also re-used for the failure path's tier-revert).
-  const spaceport = state.buildings.find((b) => b.defId === 'spaceport' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true)!;
+  const spaceport = findOperationalBuilding(state.buildings, 'spaceport')!;
 
   // Spawn position = Spaceport footprint centre. Same idiom Antenna /
   // Lighthouse use for "where this building emits from": world-tile coords
@@ -358,7 +358,7 @@ export function launchSatellite(
 
 export function groundStationCommRange(world: WorldState, islandId: string): number {
   const state = world.islandStates?.get(islandId);
-  const sp = state?.buildings.find((b) => b.defId === 'spaceport' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true);
+  const sp = findOperationalBuilding(state?.buildings ?? [], 'spaceport');
   const tier = sp?.tier ?? 1;
   let base = tier === 1 ? 200 : tier === 2 ? 300 : 400;
   // §14.2: T6 Antenna doubles as a satellite dish — if present on the
@@ -1022,7 +1022,7 @@ export function upgradeSpaceport(
 ): { ok: true } | { ok: false; reason: string } {
   const state = world.islandStates?.get(islandId);
   if (!state) return { ok: false, reason: 'no-island' };
-  const sp = state.buildings.find((b) => b.defId === 'spaceport' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true);
+  const sp = findOperationalBuilding(state.buildings, 'spaceport');
   if (!sp) return { ok: false, reason: 'no-spaceport' };
   const currentTier = sp.tier ?? 1;
   if (currentTier >= 3) return { ok: false, reason: 'max-tier' };

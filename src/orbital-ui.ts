@@ -32,6 +32,7 @@ import {
 } from './orbital.js';
 import type { ResourceId } from './recipes.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
@@ -150,7 +151,7 @@ function spaceportSpawn(
 ): { x: number; y: number } | null {
   const spec = world.islands.find((i) => i.id === state.id);
   if (!spec) return null;
-  const sp = state.buildings.find((b) => b.defId === 'spaceport');
+  const sp = findOperationalBuilding(state.buildings, 'spaceport');
   if (!sp) return null;
   const def = BUILDING_DEFS[sp.defId as BuildingDefId];
   return {
@@ -360,7 +361,7 @@ export function mountOrbitalUi(
       font-size: 12px;
     `;
 
-    const spaceport = state.buildings.find((b) => b.defId === 'spaceport');
+    const spaceport = findOperationalBuilding(state.buildings, 'spaceport');
     const tier = spaceport?.tier ?? 1;
     const ascendant = state.ascendantCoreCrafted === true;
 
@@ -485,7 +486,7 @@ export function mountOrbitalUi(
         inv(state, v.payload) >= 1 &&
         inv(state, 'orbital_insertion_package') >= 1 &&
         inv(state, 'antimatter_propellant') >= 1;
-      const hasSpaceport = state.buildings.some((b) => b.defId === 'spaceport');
+      const hasSpaceport = hasOperationalBuilding(state.buildings, 'spaceport');
       const enabled = ascendant && hasMaterials && hasSpaceport;
       if (!enabled) {
         btn.disabled = true;
@@ -556,7 +557,7 @@ export function mountOrbitalUi(
     bodyEl.replaceChildren();
     const spaceportIslands: IslandState[] = [];
     for (const s of deps.islandStates.values()) {
-      if (s.buildings.some((b) => b.defId === 'spaceport')) {
+      if (hasOperationalBuilding(s.buildings, 'spaceport')) {
         spaceportIslands.push(s);
       }
     }

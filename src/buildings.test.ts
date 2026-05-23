@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import {
+  hasOperationalBuilding,
+  isOperationalBuilding,
+  findOperationalBuilding,
+  type PlacedBuilding,
+} from './buildings.js';
 
 function b(over: Partial<PlacedBuilding> & { id: string; defId: PlacedBuilding['defId'] }): PlacedBuilding {
   return { x: 0, y: 0, ...over };
@@ -31,12 +36,7 @@ describe('hasOperationalBuilding', () => {
   });
 
   it('skips disabled buildings (the field is the whole point — checked against future-Task-2)', () => {
-    // Asserts the predicate already filters on b.disabled even before
-    // PlacedBuilding.disabled lands in Task 2. The field is an extra string
-    // key per TS structural typing, so we cast through unknown.
-    const list: PlacedBuilding[] = [
-      ({ id: 'a', defId: 'spaceport', x: 0, y: 0, disabled: true } as unknown) as PlacedBuilding,
-    ];
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabled: true } as unknown as Parameters<typeof b>[0])];
     expect(hasOperationalBuilding(list, 'spaceport')).toBe(false);
   });
 
@@ -47,5 +47,47 @@ describe('hasOperationalBuilding', () => {
       b({ id: 'c', defId: 'spaceport' }),
     ];
     expect(hasOperationalBuilding(list, 'spaceport')).toBe(true);
+  });
+});
+
+describe('isOperationalBuilding', () => {
+  it('returns true for a plain operational building', () => {
+    expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport' }))).toBe(true);
+  });
+
+  it('returns false for invalid', () => {
+    expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport', invalid: true }))).toBe(false);
+  });
+
+  it('returns false for under-construction', () => {
+    expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport', constructionRemainingMs: 1000 }))).toBe(false);
+  });
+
+  it('returns false for disabled', () => {
+    expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport', disabled: true } as unknown as Parameters<typeof b>[0]))).toBe(false);
+  });
+});
+
+describe('findOperationalBuilding', () => {
+  it('returns undefined for an empty list', () => {
+    expect(findOperationalBuilding([], 'spaceport')).toBeUndefined();
+  });
+
+  it('returns the building when found and operational', () => {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport' })];
+    expect(findOperationalBuilding(list, 'spaceport')).toEqual(list[0]);
+  });
+
+  it('returns undefined when the only match is invalid', () => {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', invalid: true })];
+    expect(findOperationalBuilding(list, 'spaceport')).toBeUndefined();
+  });
+
+  it('returns the first operational match', () => {
+    const list: PlacedBuilding[] = [
+      b({ id: 'a', defId: 'spaceport', invalid: true }),
+      b({ id: 'b', defId: 'spaceport' }),
+    ];
+    expect(findOperationalBuilding(list, 'spaceport')).toEqual(list[1]);
   });
 });
