@@ -91,6 +91,7 @@ interface SceneLayers {
   edges: Container;
   bridgesInactive: Container;
   bridgesActive: Container;
+  highlight: Container;
   nodes: Container;
   labels: Container;
 }
@@ -106,6 +107,22 @@ export function mountSkillGraphView(
   const canvasWrap = document.createElement('div');
   canvasWrap.className = 'ri-skillgraph-canvas';
   overlay.appendChild(canvasWrap);
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'ri-skillgraph-tooltip';
+  tooltip.style.position = 'absolute';
+  tooltip.style.pointerEvents = 'none';
+  tooltip.style.display = 'none';
+  tooltip.style.zIndex = '10';
+  tooltip.style.background = 'rgba(37, 36, 32, 0.96)';
+  tooltip.style.border = '1px solid #3A3833';
+  tooltip.style.padding = '8px 12px';
+  tooltip.style.maxWidth = '280px';
+  tooltip.style.fontFamily = 'system-ui, sans-serif';
+  tooltip.style.fontSize = '12px';
+  tooltip.style.color = '#CFCCC2';
+  tooltip.style.lineHeight = '1.4';
+  canvasWrap.appendChild(tooltip);
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'ri-skillgraph-close';
@@ -201,10 +218,11 @@ export function mountSkillGraphView(
     const edges = new Container();          edges.label = 'edges';
     const bridgesInactive = new Container(); bridgesInactive.label = 'bridges-inactive';
     const bridgesActive = new Container();   bridgesActive.label = 'bridges-active';
+    const highlight = new Container();       highlight.label = 'highlight';
     const nodes = new Container();          nodes.label = 'nodes';
     const labels = new Container();         labels.label = 'labels';
-    w.addChild(edges, bridgesInactive, bridgesActive, nodes, labels);
-    layers = { edges, bridgesInactive, bridgesActive, nodes, labels };
+    w.addChild(edges, bridgesInactive, bridgesActive, highlight, nodes, labels);
+    layers = { edges, bridgesInactive, bridgesActive, highlight, nodes, labels };
 
     layout = computeSkillGraphLayout(DEFAULT_GRAPH);
     drawNodes();
@@ -256,6 +274,72 @@ export function mountSkillGraphView(
     }
     try { buyNode(DEFAULT_GRAPH, state, nodeId); } catch { return; }
     refresh();
+  }
+
+  function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]!));
+  }
+
+  function positionTooltip(cx: number, cy: number): void {
+    const rect = canvasWrap.getBoundingClientRect();
+    tooltip.style.left = `${cx - rect.left + 14}px`;
+    tooltip.style.top = `${cy - rect.top + 14}px`;
+  }
+
+  function showTooltip(node: typeof DEFAULT_GRAPH.nodes[number], cx: number, cy: number): void {
+    const state = deps.getState();
+    const owned = state.unlockedNodes.has(node.id as unknown as GNodeId);
+    const ks = KEYSTONE_BY_TARGET.get(String(node.id));
+    const reachable = owned ? 0 : ks ? ks.cost
+      : costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, node.id as unknown as GNodeId)?.totalCost ?? null;
+    const costLine = owned
+      ? '<span style="color:#8FA56E">OWNED</span>'
+      : reachable === null
+        ? '<span style="color:#E08B7F">UNREACHABLE</span>'
+        : `<span style="color:#E0B47F">${reachable} SP</span> ${reachable <= state.unspentSkillPoints ? '' : '(insufficient)'}`;
+    tooltip.innerHTML =
+      `<div style="color:#E9E6DC;font-weight:600;margin-bottom:4px">${escapeHtml(String(node.id))}</div>` +
+      `<div style="margin-bottom:6px">${escapeHtml(node.description ?? '')}</div>` +
+      `<div>${costLine}</div>`;
+    tooltip.style.display = 'block';
+    positionTooltip(cx, cy);
+  }
+
+  function drawHighlight(nodeId: GNodeId): void {
+    if (!layers || !layout) return;
+    layers.highlight.removeChildren();
+
+    const g = new Graphics();
+    const getPos = (id: string) => layout!.nodes.get(id as unknown as GNodeId);
+    for (const e of DEFAULT_GRAPH.edges) {
+      if (e.from !== nodeId && e.to !== nodeId) continue;
+      const a = getPos(String(e.from));
+      const b = getPos(String(e.to));
+      if (!a || !b) continue;
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+    }
+    for (const e of DEFAULT_GRAPH.bridges) {
+      if (e.from !== nodeId && e.to !== nodeId) continue;
+      const a = getPos(String(e.from));
+      const b = getPos(String(e.to));
+      if (!a || !b) continue;
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+    }
+    g.stroke({ color: 0xD97757, width: 2.4, alpha: 1 });
+    layers.highlight.addChild(g);
+
+    const node = DEFAULT_GRAPH.nodes.find((n) => (n.id as unknown as GNodeId) === nodeId);
+    if (node?.aura) {
+      const p = getPos(String(nodeId));
+      if (p) {
+        const ring = new Graphics();
+        const radiusPx = node.aura.radius * 24;
+        ring.circle(p.x, p.y, radiusPx).stroke({ color: 0xE0B47F, width: 1.5, alpha: 0.7 });
+        layers.highlight.addChild(ring);
+      }
+    }
   }
 
   function drawNodes(): void {
@@ -311,12 +395,23 @@ export function mountSkillGraphView(
         g.fill(fill).stroke({ color: COLOR.keystoneStroke, width: 1.5, alpha: strokeAlpha });
       }
 
+      g.eventMode = 'static';
+      g.cursor = !owned ? 'pointer' : 'default';
+      g.hitArea = new Circle(p.x, p.y, kind === 'filler' ? 8 : 12);
       if (!owned) {
-        g.eventMode = 'static';
-        g.cursor = 'pointer';
-        g.hitArea = new Circle(p.x, p.y, kind === 'filler' ? 8 : 12);
         g.on('pointertap', () => handleNodeClick(n.id as unknown as GNodeId));
       }
+      g.on('pointerover', (ev) => {
+        showTooltip(n, ev.clientX, ev.clientY);
+        drawHighlight(n.id as unknown as GNodeId);
+      });
+      g.on('pointermove', (ev) => {
+        positionTooltip(ev.clientX, ev.clientY);
+      });
+      g.on('pointerout', () => {
+        tooltip.style.display = 'none';
+        layers!.highlight.removeChildren();
+      });
 
       layers.nodes.addChild(g);
     }
