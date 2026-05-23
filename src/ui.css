@@ -1,4 +1,41 @@
-/* Robot Islands — global UI stylesheet.
+/* Full-page skill-graph overlay — sits above HUD, below modal-zone. */
+.ri-skillgraph-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 980;
+  background: rgba(11, 14, 20, 0.92);
+  display: flex;
+  flex-direction: column;
+}
+.ri-skillgraph-overlay[hidden] { display: none; }
+.ri-skillgraph-overlay .ri-skillgraph-canvas {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+}
+.ri-skillgraph-overlay .ri-skillgraph-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.ri-skillgraph-overlay .ri-skillgraph-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 2;
+  background: rgba(37, 36, 32, 0.85);
+  color: var(--ri-fg-1);
+  border: 1px solid var(--ri-border-strong);
+  font-family: var(--ri-mono, ui-monospace, monospace);
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.ri-skillgraph-overlay .ri-skillgraph-close:hover {
+  background: rgba(217, 119, 87, 0.20);
+  border-color: var(--ri-accent);
+}/* Robot Islands — global UI stylesheet.
  *
  * Imported once from `main.ts`:  import './ui.css';
  *
