@@ -427,6 +427,9 @@ async function main(): Promise<void> {
   defineAction(reg, 'toggle-settlement', () => undefined);
   // §14 T6 orbital launch modal — bound below after the UI is mounted.
   defineAction(reg, 'toggle-orbital', () => undefined);
+  // §NEW building-disable toggle — bound below after inspector mounts.
+  // No default key binding (p_hotkey_binding=via_input_registry_unbound).
+  defineAction(reg, 'toggle-building-disable', () => undefined);
   // Step-11 modal — bound below after the UI is mounted.
   defineAction(reg, 'toggle-construction', () => undefined);
   // Step-19 inventory modal — bound below after the UI is mounted.
@@ -1237,6 +1240,24 @@ async function main(): Promise<void> {
       repaintSelection();
       rebuildWorldLayers();
     },
+    onToggleDisabled: (target: InspectorTarget) => {
+      const b = target.building;
+      const wasDisabled = b.disabled === true;
+      b.disabled = !wasDisabled;
+      // p_routes_disabled_source=route_drains_and_removes: on the
+      // false→true transition, soft-delete every route owned by this
+      // building. In-flight cargo finishes (tickRoutes prunes the route
+      // once inFlight.length === 0), and re-enabling the building does NOT
+      // restore the routes — the player must reconfigure them. Same
+      // behaviour as demolish (main.ts:1230).
+      if (!wasDisabled) {
+        drainRoutesForBuilding(worldState, b.id);
+      }
+      // Rebuild world layers so building-alerts-overlay re-paints the cue.
+      rebuildWorldLayers();
+      buildingAlertsOverlay.invalidate();
+      inspector.refresh();
+    },
     // §3.4 Land Reclamation: mutate spec/state via the pure helper, then
     // rebuild the world layer so the new ellipse mask propagates to
     // `renderIsland` (which recomputes `computeIslandTiles` from the
@@ -1269,6 +1290,25 @@ async function main(): Promise<void> {
       rebuildWorldLayers();
       inspector.refresh();
     },
+  });
+
+  // §NEW building-disable action handler (p_hotkey_binding=unbound).
+  // Mirrors the onToggleDisabled callback logic for keyboard dispatch.
+  defineAction(reg, 'toggle-building-disable', () => {
+    const selectedId = inspector.getSelectedBuildingId();
+    if (selectedId === null) return;
+    for (const [, state] of worldState.islandStates ?? new Map()) {
+      const building = state.buildings.find((b: { id: string }) => b.id === selectedId);
+      if (building === undefined) continue;
+      if ((building.constructionRemainingMs ?? 0) > 0) return; // no-op while constructing
+      const wasDisabled = building.disabled === true;
+      building.disabled = !wasDisabled;
+      if (!wasDisabled) drainRoutesForBuilding(worldState, building.id);
+      rebuildWorldLayers();
+      buildingAlertsOverlay.invalidate();
+      inspector.refresh();
+      return;
+    }
   });
 
   // Step-11 Construction modal — sister to skill tree + buildings catalog.

@@ -182,6 +182,12 @@ export interface InspectorDeps {
    *  caller wants to refuse with no state change), but the step-2.5 path
    *  always succeeds. */
   onDemolish(target: InspectorTarget): void;
+  /** Toggle target.building.disabled. Called from the new disableBtn.
+   *  main.ts flips the flag, drains routes on the false→true
+   *  transition (per p_routes_disabled_source=route_drains_and_removes
+   *  — drained routes are NOT restored on re-enable), and triggers a
+   *  world-layer rebuild so the alerts-overlay re-paints the cue. */
+  onToggleDisabled(target: InspectorTarget): void;
   /** §3.4 Land Reclamation: called when the player clicks one of the
    *  +1 major / +1 minor expand buttons. main.ts owns the actual
    *  `expandIsland` call (so the inspector stays DOM-pure) and is
@@ -891,6 +897,46 @@ export function mountInspectorUi(
   });
   maintenanceSection.body.appendChild(convertBtn);
 
+  // §NEW per-building disable toggle (spec 2026-05-23-building-disable).
+  // Mirrors convertBtn styling; label flips Disable ↔ Enable in paint().
+  // DOM-disabled while target.building.constructionRemainingMs > 0 per
+  // p_constructed_disable=no_finish_first.
+  const disableBtn = document.createElement('button');
+  styled(
+    disableBtn,
+    [
+      'background: transparent',
+      `color: ${'var(--ri-warn, #E8624A)'}`,
+      `border: 1px solid ${'var(--ri-warn-dim, #b85a4a)'}`,
+      'padding: 4px 8px',
+      'cursor: pointer',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+      'letter-spacing: 0.08em',
+      'text-transform: uppercase',
+      'border-radius: 2px',
+      'transition: background 80ms ease, border-color 80ms ease',
+      'text-align: left',
+      'margin-top: 4px',
+    ].join(';'),
+  );
+  disableBtn.addEventListener('mouseenter', () => {
+    if (disableBtn.disabled) return;
+    disableBtn.style.background = 'rgba(232, 98, 74, 0.10)';
+    disableBtn.style.borderColor = 'var(--ri-warn, #E8624A)';
+  });
+  disableBtn.addEventListener('mouseleave', () => {
+    disableBtn.style.background = 'transparent';
+    disableBtn.style.borderColor = disableBtn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-warn-dim, #b85a4a)';
+  });
+  disableBtn.addEventListener('click', () => {
+    if (!target) return;
+    if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
+    deps.onToggleDisabled(target);
+    paint();
+  });
+  maintenanceSection.body.appendChild(disableBtn);
+
   // §13.3 Universe Editor — biome-reassign action. Shown only when the
   // selected building is a `universe_editor`. Cost preview + confirm
   // dialog with the spec's "real cost" wording.
@@ -1501,6 +1547,18 @@ export function mountInspectorUi(
     } else {
       convertBtn.style.display = 'none';
     }
+
+    // §NEW disable-toggle button paint.
+    const isUnderConstruction = (building.constructionRemainingMs ?? 0) > 0;
+    const isDisabled = building.disabled === true;
+    disableBtn.textContent = isDisabled ? 'Enable' : 'Disable';
+    disableBtn.disabled = isUnderConstruction;
+    disableBtn.style.opacity = isUnderConstruction ? '0.45' : '1';
+    disableBtn.title = isUnderConstruction
+      ? 'Cannot disable while under construction — wait for the build to finish.'
+      : (isDisabled
+          ? 'Resume operation. Free. Drained routes are not restored.'
+          : 'Stop production / power / gates. Drains routes owned by this building. Free; reversible.');
 
     // §3.4 Land Reclamation section — only for the Hub itself. Renders
     // two expansion buttons; each is enabled when canExpandIsland
