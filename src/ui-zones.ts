@@ -90,6 +90,12 @@ interface PanelRecord {
   readonly zone: ZoneId;
   readonly order: number;
   visible: boolean;
+  /** True iff the window-manager has placed this panel at a free
+   *  (x, y, w, h) position from the persisted layout. layoutZone skips
+   *  free panels in the cursor stack — sibling panels in the same zone
+   *  re-flow to fill the gap. Flipped via setPanelFree from
+   *  window-manager.ts. */
+  free: boolean;
 }
 
 const records = new Map<string, PanelRecord>();
@@ -108,6 +114,7 @@ function layout(): void {
   const buckets = new Map<ZoneId, PanelRecord[]>();
   for (const rec of records.values()) {
     if (!rec.visible) continue;
+    if (rec.free) continue; // owned by window-manager, not the stack
     let arr = buckets.get(rec.zone);
     if (!arr) { arr = []; buckets.set(rec.zone, arr); }
     arr.push(rec);
@@ -185,12 +192,21 @@ export function mountPanel(el: HTMLElement, opts: PanelMountOptions): PanelHandl
   const rec: PanelRecord = {
     el, id: opts.id, zone: opts.zone,
     order: opts.order ?? 0, visible: true,
+    free: false,
   };
   records.set(opts.id, rec);
 
   // Re-layout whenever the panel's intrinsic size changes (text content,
   // collapsed sections, etc.). Cheap — only the panel's zone gets re-stacked.
-  const ro = new ResizeObserver(() => scheduleLayout());
+  const ro = new ResizeObserver(() => {
+    // Window-manager sets riActiveMutation during user drag/resize. Bailing
+    // here prevents the zone re-stack from fighting the user's pointer.
+    if (el.dataset.riActiveMutation === '1') return;
+    // Free panels are owned by window-manager — their size changes shouldn't
+    // re-stack the zone either.
+    if (rec.free) return;
+    scheduleLayout();
+  });
   ro.observe(el);
 
   scheduleLayout();
@@ -225,4 +241,45 @@ export function mountPanel(el: HTMLElement, opts: PanelMountOptions): PanelHandl
  *  to one of an identical computed height — RO won't fire). */
 export function requestZoneLayout(): void {
   scheduleLayout();
+}
+
+/** Flip a registered panel's `free` flag. When true, layoutZone skips it
+ *  and the window-manager owns its inline left/top/width/height. When
+ *  flipped back to false, the next scheduleLayout() pass will re-stack
+ *  the panel into its zone. Called by window-manager.ts. */
+export function setPanelFree(id: string, free: boolean): void {
+  const rec = records.get(id);
+  if (!rec) return;
+  if (rec.free === free) return;
+  rec.free = free;
+  scheduleLayout();
+}
+
+/** Clear every panel's `free` flag and wipe the inline left/top/width/
+ *  height/z-index/transform that the window-manager may have set; then
+ *  request a re-stack. Called by resetUiLayout(). The transform clear
+ *  is defensive — TC chrome panels use translateX(-50%) and we never
+ *  set it free, but if a future change starts setting non-chrome panels
+ *  with transforms we want this to be the canonical reset. */
+export function restoreAllToZones(): void {
+  for (const rec of records.values()) {
+    rec.free = false;
+    const s = rec.el.style;
+    // Leave dataset.riActiveMutation alone; pointer handlers clear it.
+    s.left = s.top = s.width = s.height = s.zIndex = '';
+    // Preserve TC's translateX(-50%) — that's set by layoutZone itself
+    // on the next pass, so blanking it here is safe. Other zones don't
+    // use transform.
+    s.transform = '';
+    rec.el.classList.remove('ri-free');
+  }
+  scheduleLayout();
+}
+
+/** Internal accessor for window-manager: needs the live record map to
+ *  enumerate all panels for cross-panel z-rank rewriting. Returning a
+ *  read-only view keeps the contract one-way: callers can read, the
+ *  zone manager owns mutation. */
+export function panelRecordIds(): readonly string[] {
+  return Array.from(records.keys());
 }
