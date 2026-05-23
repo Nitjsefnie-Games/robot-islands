@@ -4,11 +4,11 @@
 // DOM overlay. Tasks 3-7 fill in the scene-graph content.
 
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
-import { DEFAULT_GRAPH, BRANCH_LABEL, type BranchId } from './skilltree.js';
+import { DEFAULT_GRAPH, BRANCH_LABEL, SUBPATH_BRANCH, type BranchId } from './skilltree.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import { computeSkillGraphLayout, type SkillGraphLayout } from './skilltree-layout.js';
 import type { IslandState } from './economy.js';
-import type { NodeId } from './skilltree-graph.js';
+import type { BridgeEdge, NodeId as GNodeId } from './skilltree-graph.js';
 
 export interface SkillGraphView {
   readonly el: HTMLDivElement;
@@ -29,6 +29,20 @@ type NodeKind = 'filler' | 'notable' | 'keystone';
 const KEYSTONE_TARGETS: ReadonlySet<string> = new Set(
   KEYSTONE_PREREQS.map((k) => String(k.targetNode)),
 );
+
+function spentInBranchLocal(state: IslandState, branchId: BranchId): number {
+  let sum = 0;
+  for (const nid of state.unlockedNodes) {
+    const node = DEFAULT_GRAPH.nodes.find((n) => n.id === nid);
+    if (!node) continue;
+    if (SUBPATH_BRANCH[node.subPath] === branchId) sum += node.cost;
+  }
+  return sum;
+}
+
+function isBridgeActiveLocal(b: BridgeEdge, state: IslandState): boolean {
+  return b.threshold.some(({ branch, minSpent }) => spentInBranchLocal(state, branch) >= minSpent);
+}
 
 function classifyNode(id: string): NodeKind {
   if (KEYSTONE_TARGETS.has(id)) return 'keystone';
@@ -170,7 +184,7 @@ export function mountSkillGraphView(
 
     // Catalog nodes.
     for (const n of DEFAULT_GRAPH.nodes) {
-      const p = layout.nodes.get(n.id as unknown as NodeId);
+      const p = layout.nodes.get(n.id as unknown as GNodeId);
       if (!p) continue;
       const g = new Graphics();
       const kind = classifyNode(String(n.id));
@@ -201,9 +215,69 @@ export function mountSkillGraphView(
     }
   }
 
+  function drawEdges(state: IslandState): void {
+    if (!layers || !layout) return;
+    layers.edges.removeChildren();
+    layers.bridgesInactive.removeChildren();
+    layers.bridgesActive.removeChildren();
+
+    const getPos = (id: string): { x: number; y: number } | null =>
+      layout!.nodes.get(id as unknown as GNodeId) ?? null;
+
+    // Standard + AND edges.
+    const g = new Graphics();
+    for (const e of DEFAULT_GRAPH.edges) {
+      const a = getPos(String(e.from));
+      const b = getPos(String(e.to));
+      if (!a || !b) continue;
+      const owned = state.unlockedEdges.has(e.id);
+      if (e.mode === 'and') {
+        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
+          color: 0xD97757, width: 1.6, alpha: 1,
+        });
+      } else if (owned) {
+        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
+          color: 0xD97757, width: 1.6, alpha: 1,
+        });
+      } else {
+        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
+          color: 0x3A3833, width: 1, alpha: 1,
+        });
+      }
+    }
+    layers.edges.addChild(g);
+
+    // Bridge edges, split into the two layers.
+    const gInactive = new Graphics();
+    const gActive = new Graphics();
+    for (const br of DEFAULT_GRAPH.bridges) {
+      const a = getPos(String(br.from));
+      const b = getPos(String(br.to));
+      if (!a || !b) continue;
+      const active = isBridgeActiveLocal(br, state);
+      // Render as 8 dash segments along the line (Pixi 8 has no native dash).
+      const target = active ? gActive : gInactive;
+      const SEGMENTS = 12;
+      for (let i = 0; i < SEGMENTS; i += 2) {
+        const t0 = i / SEGMENTS;
+        const t1 = (i + 1) / SEGMENTS;
+        target.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0)
+              .lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1);
+      }
+      target.stroke({
+        color: active ? 0x7DD3E8 : 0x8A877E,
+        width: active ? 1.4 : 1,
+        alpha: active ? 1 : 0.3,
+      });
+    }
+    layers.bridgesInactive.addChild(gInactive);
+    layers.bridgesActive.addChild(gActive);
+  }
+
   function refresh(): void {
     if (!visible || !app || !world || !layers) return;
-    void deps;
+    const state = deps.getState();
+    drawEdges(state);
     drawNodes();
   }
 
