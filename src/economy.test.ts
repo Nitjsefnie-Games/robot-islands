@@ -38,6 +38,7 @@ import {
   type DefCatalog,
   type IslandState,
 } from './economy.js';
+import { checkGates } from './adjacency.js';
 import { placeBuilding, validatePlacement } from './placement.js';
 import { ALL_RESOURCES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
 import { effectiveSpecializationMultipliers } from './specialization.js';
@@ -3693,5 +3694,50 @@ describe('findNextCapEvent precision-residue handling', () => {
     // lastTick advances either way (the outer `if (segEndMs <= t) t = nowMs`
     // exits the loop both pre- and post-fix), so check it's wired.
     expect(state.lastTick).toBe(nowMs);
+  });
+});
+
+
+// All four test names match the spec §05 verification table exactly.
+
+describe('disabled building contributes 0 to power balance', () => {
+  it('a disabled smelter draws no power', () => {
+    const state = makeState({
+      buildings: [
+        { id: 'solar', defId: 'solar', x: 0, y: 0 },
+        { id: 'sm', defId: 'smelter', x: 4, y: 0, disabled: true },
+      ],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 100 },
+    });
+    advanceIsland(state, 1000, { defs: BUILDING_DEFS });
+    const rates = computeRates(state, { defs: BUILDING_DEFS });
+    // Disabled building is filtered out of validBuildings → absent from byBuilding.
+    const smRate = rates.byBuilding.find((r) => r.building.id === 'sm');
+    expect(smRate).toBeUndefined();
+  });
+});
+
+describe('disabled building does not accrue operatingMs', () => {
+  it('operatingMs stays at its pre-disable value across a 1h advance', () => {
+    const state = makeState({
+      buildings: [{ id: 'm', defId: 'mine', x: 0, y: 0, disabled: true, operatingMs: 5000 }],
+      inventory: blankInventory(),
+    });
+    advanceIsland(state, 3600 * 1000, { defs: BUILDING_DEFS });
+    const m = state.buildings.find((b) => b.id === 'm')!;
+    expect(m.operatingMs ?? 0).toBe(5000);
+  });
+});
+
+describe('disabled provider fails downstream gates', () => {
+  it('a coke oven stalls when its adjacent coal furnace is disabled', () => {
+    const validBuildings = [
+      { id: 'h', defId: 'coal_furnace', x: 2, y: 0, disabled: true } as PlacedBuilding,
+      { id: 'c', defId: 'coke_oven', x: 0, y: 0 } as PlacedBuilding,
+    ];
+    const filtered = validBuildings.filter((b) => !b.invalid && !b.disabled);
+    const coke = validBuildings[1]!;
+    const gate = checkGates(coke, filtered, BUILDING_DEFS, false, undefined);
+    expect(gate.effectiveMul).toBe(0);
   });
 });
