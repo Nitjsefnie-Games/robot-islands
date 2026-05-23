@@ -38,8 +38,11 @@ import {
   STORAGE_KEY_DISPLAY,
   deserializeWorld,
   isValidSaveSnapshot,
+  migrateV7toV8,
   serializeWorld,
   type SaveSnapshot,
+  type SerializedSnapshotV7,
+  type SerializedSnapshotV8,
 } from './persistence.js';
 import {
   attachTerrainAt,
@@ -116,7 +119,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(7);
+    expect(snap.v).toBe(8);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -459,7 +462,7 @@ describe('schema version', () => {
   });
 
   it('exports STORAGE_KEY containing v7 so it does not collide with stale saves', () => {
-    expect(STORAGE_KEY).toMatch(/v7$/);
+    expect(STORAGE_KEY).toMatch(/v8$/);
   });
 
   it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
@@ -472,9 +475,9 @@ describe('schema version', () => {
   it('rejects a synthetic future version via the SCHEMA_VERSION gate', () => {
     const world = makeInitialWorld(0);
     const snap = serializeWorld(world, new Map(), 0);
-    const v8Shaped = { ...snap, v: 8 } as unknown as SaveSnapshot;
-    expect(() => deserializeWorld(v8Shaped, 0, 0)).toThrow(/not supported/);
-    expect(isValidSaveSnapshot(v8Shaped)).toBe(false);
+    const futureShaped = { ...snap, v: 99 } as unknown as SaveSnapshot;
+    expect(() => deserializeWorld(futureShaped, 0, 0)).toThrow(/not supported/);
+    expect(isValidSaveSnapshot(futureShaped)).toBe(false);
   });
 
   it('rejects a v3-shaped snapshot (the §2.1 infinite-map bump is breaking)', () => {
@@ -1451,7 +1454,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(7);
+    expect(snap.v).toBe(8);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -1461,5 +1464,52 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     // And the closure observes them.
     expect(rh?.terrainAt?.(1, 1)).toBe('magma_vent');
     expect(rh?.terrainAt?.(-3, 4)).toBe('uranium_vein');
+  });
+});
+
+describe('migrateV7toV8', () => {
+  it('preserves identity fields and resets progression', () => {
+    const v7: SerializedSnapshotV7 = {
+      v: 7,
+      now: 100000,
+      currentIslandId: 'island-a',
+      islandStates: [
+        {
+          id: 'island-a',
+          biome: 'plains',
+          level: 12,
+          xp: 8500,
+          lastTick: 95000,
+          inventory: { iron_ore: 50 },
+          buildings: [],
+          unlockedNodes: ['mining.1', 'mining.2', 'forestry.1'],
+          subPathProgress: [['mining', { spent: 3, complete: false }]],
+          unspentSkillPoints: 2,
+          specializationRole: 'foundry',
+        } as any,
+      ],
+    } as any;
+
+    const v8 = migrateV7toV8(v7);
+
+    expect(v8.v).toBe(8);
+    expect(v8.islandStates[0]!.level).toBe(12);
+    expect(v8.islandStates[0]!.xp).toBe(8500);
+    expect(v8.islandStates[0]!.inventory).toEqual({ iron_ore: 50 });
+    expect(v8.islandStates[0]!.unlockedNodes).toEqual([]);
+    expect(v8.islandStates[0]!.unlockedEdges).toEqual([]);
+    expect(v8.islandStates[0]!.unspentSkillPoints).toBe(11);
+    expect((v8.islandStates[0] as any).subPathProgress).toBeUndefined();
+    expect((v8.islandStates[0] as any).specializationRole).toBeUndefined();
+  });
+
+  it('recomputes unspentSkillPoints as max(0, level - 1)', () => {
+    const v7 = { v: 7, now: 0, currentIslandId: 'a', islandStates: [
+      { id: 'a', level: 1, xp: 0, lastTick: 0, inventory: {}, buildings: [], unlockedNodes: [], subPathProgress: [], unspentSkillPoints: 999, specializationRole: null } as any,
+      { id: 'b', level: 50, xp: 0, lastTick: 0, inventory: {}, buildings: [], unlockedNodes: [], subPathProgress: [], unspentSkillPoints: 0, specializationRole: null } as any,
+    ] } as any;
+    const v8 = migrateV7toV8(v7);
+    expect(v8.islandStates[0]!.unspentSkillPoints).toBe(0);
+    expect(v8.islandStates[1]!.unspentSkillPoints).toBe(49);
   });
 });
