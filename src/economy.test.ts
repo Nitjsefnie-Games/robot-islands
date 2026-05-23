@@ -45,6 +45,8 @@ import { effectiveSpecializationMultipliers } from './specialization.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
+import { attachTerrainAt, makeInitialIslandState } from './world.js';
+import { SHOT_DURATION_MS } from './terrain-modifier.js';
 
 const MINE: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
 const WORKSHOP: PlacedBuilding = { id: 'b-workshop', defId: 'workshop', x: 0, y: 0 };
@@ -3699,6 +3701,47 @@ describe('findNextCapEvent precision-residue handling', () => {
 
 
 // All four test names match the spec §05 verification table exactly.
+
+describe('advanceIsland — terrain_modifier shot tick', () => {
+  it('fires onTerrainShotFire when the countdown reaches zero', () => {
+    const spec = attachTerrainAt({
+      id: 'tt', name: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    state.buildings.push({
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'grass', terrainShotRemainingMs: SHOT_DURATION_MS,
+    });
+    const fires: string[] = [];
+    advanceIsland(state, SHOT_DURATION_MS + 100, {
+      onTerrainShotFire: (id) => fires.push(id),
+    });
+    expect(fires).toEqual(['m1']);
+  });
+
+  it('does NOT fire mid-segment (counter still positive)', () => {
+    const spec = attachTerrainAt({
+      id: 'tt', name: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    state.buildings.push({
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'grass', terrainShotRemainingMs: SHOT_DURATION_MS,
+    });
+    const fires: string[] = [];
+    advanceIsland(state, SHOT_DURATION_MS / 2, {
+      onTerrainShotFire: (id) => fires.push(id),
+    });
+    expect(fires).toEqual([]);
+    const survivor = state.buildings.find((b) => b.id === 'm1');
+    expect(survivor?.terrainShotRemainingMs).toBeGreaterThan(0);
+    expect(survivor?.terrainShotRemainingMs).toBeLessThan(SHOT_DURATION_MS);
+  });
+});
 
 describe('disabled building contributes 0 to power balance', () => {
   it('a disabled smelter draws no power', () => {

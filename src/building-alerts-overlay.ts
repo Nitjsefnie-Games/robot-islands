@@ -24,6 +24,7 @@ import type { IslandState } from './economy.js';
 import { BASE_CONSTRUCTION_MS_BY_TIER } from './construction.js';
 import { TILE_PX } from './island.js';
 import { maintenanceFactor } from './maintenance.js';
+import { SHOT_DURATION_MS } from './terrain-modifier.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { WorldState } from './world.js';
 
@@ -101,6 +102,31 @@ export function mountBuildingAlertsOverlay(
           gfx.circle(tlPx, tlPy, radius + 1).fill({ color: 0x000000, alpha: 0.7 });
           gfx.circle(tlPx, tlPy, radius).fill({ color: 0x103040 });
           // Arc — sweep from -π/2 (top) clockwise by completed × 2π.
+          if (completed > 0) {
+            const start = -Math.PI / 2;
+            const end = start + completed * Math.PI * 2;
+            gfx
+              .moveTo(tlPx, tlPy)
+              .arc(tlPx, tlPy, radius - 1, start, end)
+              .lineTo(tlPx, tlPy)
+              .fill({ color: CONSTRUCTION_CYAN });
+          }
+        } else if ((b.terrainShotRemainingMs ?? 0) > 0) {
+          // terrain_modifier v5 — same cyan arc, base = SHOT_DURATION_MS.
+          const remShot = b.terrainShotRemainingMs ?? 0;
+          const base = SHOT_DURATION_MS;
+          const completed = Math.max(0, Math.min(1, 1 - remShot / base));
+          const half = TILE_PX / 2;
+          const rx = (spec.cx + minTx) * TILE_PX - half;
+          const ry = (spec.cy + minTy) * TILE_PX - half;
+          const rw = (maxTx - minTx + 1) * TILE_PX;
+          const rh = (maxTy - minTy + 1) * TILE_PX;
+          gfx.rect(rx, ry, rw, rh).fill({ color: CONSTRUCTION_CYAN, alpha: 0.18 });
+          const tlPx = (spec.cx + minTx) * TILE_PX - TILE_PX / 2;
+          const tlPy = (spec.cy + minTy) * TILE_PX - TILE_PX / 2;
+          const radius = 5;
+          gfx.circle(tlPx, tlPy, radius + 1).fill({ color: 0x000000, alpha: 0.7 });
+          gfx.circle(tlPx, tlPy, radius).fill({ color: 0x103040 });
           if (completed > 0) {
             const start = -Math.PI / 2;
             const end = start + completed * Math.PI * 2;

@@ -148,6 +148,12 @@ export interface RatesContext {
    *  the anchor, the platform cannot safely produce). Production callers
    *  (main.ts) MUST pass `world` so platforms function. */
   readonly world?: WorldState;
+  /** terrain_modifier v5 callback — invoked once per modifier whose shot
+   *  countdown reached ≤ 0 in the current segment. Receives the building's
+   *  id; the caller (main.ts) is expected to dispatch resolveShot + a
+   *  rebuildWorldLayers() call. The callback fires INSIDE advanceIsland so
+   *  multi-segment catch-up resolves shots in simulated-time order. */
+  readonly onTerrainShotFire?: (buildingId: string) => void;
 }
 
 /**
@@ -1562,6 +1568,17 @@ export function advanceIsland(
       nextBatteryMs = t + depletionTimeSec * 1000;
     }
     const nextEventMs = findNextCapEvent(state, net, t, nowMs, ctx);
+    // terrain_modifier v5 — segment-end clamp by the soonest pending shot.
+    // Without this, a 30s segment containing a 4s shot would integrate past
+    // fire-time and ResolveShot would land at the wrong simulated moment.
+    let nextShotMs = Infinity;
+    for (const b of state.buildings) {
+      const rem = b.terrainShotRemainingMs;
+      if (rem !== undefined && rem > 0) {
+        const fireT = t + rem;
+        if (fireT < nextShotMs) nextShotMs = fireT;
+      }
+    }
     // §2.7: bound the segment to the next phase boundary so the constant-
     // rate invariant of §15.3 still holds across day-night transitions. A
     // quadrant lasts 6h; offline catchup of N days produces ≤ 4N + extras
@@ -1601,7 +1618,7 @@ export function advanceIsland(
     }
     // Clamp to nowMs; findNextCapEvent already returns nowMs when nothing
     // changes, but if all rates are zero we still need to exit the loop.
-    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextSolarMs, nextAccelMs, nextBatteryMs, nextRotationMs, nowMs);
+    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextSolarMs, nextAccelMs, nextBatteryMs, nextRotationMs, nextShotMs, nowMs);
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps);
@@ -1617,6 +1634,22 @@ export function advanceIsland(
         state.singularityStoredWs -= discharge;
       }
       levelUpIfReady(state);
+      // terrain_modifier v5 — decrement and fire. After the segment integrates,
+      // every modifier's counter loses (segEndMs - t) ms. Counters that reach
+      // ≤ 0 fire the shot. We collect fires and dispatch after the loop because
+      // resolveShot mutates state.buildings (splicing the modifier out).
+      if (dtSec > 0 && ctx?.onTerrainShotFire) {
+        const dtMs = segEndMs - t;
+        const toFire: string[] = [];
+        for (const b of state.buildings) {
+          const rem = b.terrainShotRemainingMs;
+          if (rem === undefined) continue;
+          const next = rem - dtMs;
+          (b as { terrainShotRemainingMs?: number }).terrainShotRemainingMs = Math.max(0, next);
+          if (rem > 0 && next <= 0) toFire.push(b.id);
+        }
+        for (const id of toFire) ctx.onTerrainShotFire(id);
+      }
       // §4.7 operating-time accrual: every building accrues regardless of
       // whether it produced this segment (§4.7 literal: "Idle buildings,
       // stalled buildings, and inactive buildings ... accrue maintenance

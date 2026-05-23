@@ -10,8 +10,11 @@ import {
   PAYBACK_HORIZON_CYCLES,
   RARE_TARGET_INPUT,
   RARE_TARGET_TERRAINS,
+  resolveShot,
   SHOT_DURATION_MS,
 } from './terrain-modifier.js';
+import { makeInitialIslandState } from './world.js';
+import type { PlacedBuilding } from './buildings.js';
 import type { TerrainKind } from './island.js';
 
 const ALL_KINDS: TerrainKind[] = [
@@ -111,5 +114,75 @@ describe('terrain-modifier — applyTileOverride', () => {
 describe('terrain-modifier — constants sanity', () => {
   it('SHOT_DURATION_MS is a positive ms value', () => {
     expect(SHOT_DURATION_MS).toBeGreaterThan(0);
+  });
+});
+
+describe('terrain-modifier — resolveShot', () => {
+  function inscribedAlways(): (x: number, y: number) => boolean {
+    return () => true;
+  }
+
+  it('writes overrides for every brush tile inside the predicate', () => {
+    const spec = attachTerrainAt({
+      id: 'tt', name: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    const modifier: PlacedBuilding = {
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'uranium_vein', terrainShotRemainingMs: 0,
+    };
+    state.buildings.push(modifier);
+    const result = resolveShot(spec, state, modifier, inscribedAlways());
+    expect(result.tilesWritten).toBe(16);
+    expect(Object.keys(spec.tileOverrides ?? {}).length).toBe(16);
+    expect(state.buildings.find((b) => b.id === 'm1')).toBeUndefined();
+  });
+
+  it('skips out-of-ellipse tiles (full charge already paid, no refund)', () => {
+    const spec = attachTerrainAt({
+      id: 'tt', name: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    const modifier: PlacedBuilding = {
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'grass', terrainShotRemainingMs: 0,
+    };
+    state.buildings.push(modifier);
+    // Predicate accepts only y >= 0 tiles — chops off the top row (4 tiles).
+    const inscribed = (_x: number, y: number): boolean => y >= 0;
+    const result = resolveShot(spec, state, modifier, inscribed);
+    expect(result.tilesWritten).toBe(12);
+  });
+
+  it('marks a Mine invalid when the override breaks requiredTile', () => {
+    // Pre-build an island where tile (5, 5) is `ore` and a Mine sits on it.
+    // After resolveShot converts the brush around (5, 5) to grass, the Mine
+    // should be invalidated.
+    const spec = attachTerrainAt({
+      id: 'tt', name: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    // Place a Mine at (5, 5) — on natural ore terrain.
+    state.buildings.push({
+      id: 'mine1', defId: 'mine', x: 5, y: 5, rotation: 0,
+    });
+    // Place a modifier whose brush covers (5, 5).
+    const modifier: PlacedBuilding = {
+      id: 'm1', defId: 'terrain_modifier', x: 4, y: 4, rotation: 0,
+      terrainTarget: 'grass', terrainShotRemainingMs: 0,
+    };
+    state.buildings.push(modifier);
+    // Before shot: Mine is valid (footprint on ore).
+    expect(state.buildings.find((b) => b.id === 'mine1')?.invalid).toBeUndefined();
+    const result = resolveShot(spec, state, modifier, inscribedAlways());
+    // After shot: Mine is invalidated because its footprint is now grass.
+    expect(result.buildingsInvalidated).toBeGreaterThanOrEqual(1);
+    expect(state.buildings.find((b) => b.id === 'mine1')?.invalid).toBe(true);
   });
 });
