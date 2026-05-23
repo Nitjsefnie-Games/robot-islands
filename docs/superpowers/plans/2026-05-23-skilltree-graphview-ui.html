@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill graph — graph-view UI · implementation plan</title>
+<style>
+  :root {
+    --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+    --tan:#E0B47F; --pink:#D38FCC; --red:#E08B7F; --info:#7DD3E8;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+    line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1180px; margin:0 auto; }
+  header.page-head { margin-bottom:48px; max-width:900px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--gray-500); margin-bottom:12px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:36px; line-height:1.15;
+    color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+  .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+    border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+  .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+    letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+  .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+  .callout { background:var(--white); border:1.5px solid var(--gray-300);
+    border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+    font-size:13.5px; color:var(--gray-700); margin: 14px 0; max-width:900px; }
+  .callout.info { border-left-color:var(--info); }
+  .callout.warn { border-left-color:var(--red); }
+  .callout code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .callout b { color:var(--slate); }
+
+  section { margin-bottom:56px; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+    color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:24px;
+    color:var(--slate); letter-spacing:-0.01em; }
+  .sec-head h2 code { font-family:var(--mono); font-size:18px; color:var(--clay); }
+  .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:840px; margin-bottom:20px; }
+  .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--tan); }
+
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:40px; max-width: 1080px; }
+  @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+  .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+    border-radius:10px; padding:14px 16px; }
+  .summary .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+    letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+  .summary .v { font-size:15px; color:var(--slate); font-weight:600; }
+  .summary .v.accent { color:var(--clay); }
+
+  .filetable { border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden;
+    background:var(--white); margin-bottom:32px; }
+  .filetable .row { display:grid; grid-template-columns:280px 100px 1fr; gap:0; }
+  @media (max-width:900px){ .filetable .row{grid-template-columns:1fr;} }
+  .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+  .filetable .cell { padding:11px 14px; font-size:13px; vertical-align:top; }
+  .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+  @media (max-width:900px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+  .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+    font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+  .filetable .cell code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+  .filetable .pill { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--mono);
+    font-size:10.5px; font-weight:600; }
+  .filetable .pill.new { background:var(--olive); color:var(--ivory); }
+  .filetable .pill.mod { background:var(--tan); color:var(--ivory); }
+  .filetable .pill.del { background:var(--red); color:var(--ivory); }
+
+  .task-card { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px;
+    padding:18px 22px; margin-bottom:18px; }
+  .task-blurb { font-size:13.5px; color:var(--gray-700); margin-bottom:14px; max-width:880px; }
+  .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .task-blurb b { color:var(--slate); }
+
+  .files-block { background:var(--gray-150); border:1px solid var(--gray-300); border-radius:8px;
+    padding:10px 13px; margin-bottom:14px; font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+  .files-block .h { color:var(--gray-500); font-size:10.5px; text-transform:uppercase;
+    letter-spacing:0.06em; margin-bottom:6px; }
+  .files-block code { color:var(--tan); }
+
+  .step { margin: 10px 0; padding-left: 24px; position: relative; font-size:14px; color:var(--gray-700); }
+  .step::before { content: "☐"; position: absolute; left: 0; top: 0; color: var(--gray-500); }
+  .step b { color: var(--slate); }
+  .step code { font-family:var(--mono); font-size:12.5px; color:var(--tan); background: var(--gray-150);
+    padding: 1px 5px; border-radius: 3px; }
+
+  pre { background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px;
+    padding: 10px 14px; margin: 8px 0 14px 24px; overflow-x: auto; font-family: var(--mono);
+    font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 1000px; }
+  pre.bash { background: #1F1D19; color: var(--olive); }
+  pre.bash::before { content: "$ "; color: var(--gray-500); }
+  pre .comment { color: var(--gray-500); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--olive); }
+  pre .ty { color: var(--info); }
+  pre .fn { color: var(--tan); }
+
+  .expected { background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 0 6px 6px 0;
+    padding: 6px 12px; margin: 6px 0 10px 24px; font-family: var(--mono); font-size: 12px;
+    color: var(--gray-700); max-width: 980px; }
+  .expected b { color: var(--olive); }
+
+  .toc { background: var(--gray-150); border-left: 3px solid var(--info); border-radius: 0 6px 6px 0;
+    padding: 14px 22px; margin: 28px 0 36px; max-width: 980px; }
+  .toc h3 { color: var(--gray-500); font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: 0.07em; font-weight: 600; margin-bottom: 10px; font-family: var(--mono); }
+  .toc ol { list-style: none; column-count: 2; column-gap: 28px; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--gray-700); text-decoration: none; }
+  .toc a:hover { color: var(--clay); }
+  .toc .num { color: var(--gray-500); font-family: var(--mono); margin-right: 8px; font-size: 11.5px; }
+
+  .footer { color: var(--gray-500); margin-top: 64px; font-size: 12px; padding-top: 18px;
+    border-top: 1.5px solid var(--gray-300); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · skilltree · graph-view UI · 2026-05-23</div>
+    <h1>Skill graph — graph-view UI (PixiJS, algorithmic, full-page)</h1>
+    <div class="prompt-box">
+      <span class="label">For agentic workers</span>
+      <b>REQUIRED SUB-SKILL:</b> use <code>superpowers:subagent-driven-development</code>. Steps use checkbox markers (the ☐ glyphs); flip to ✓ as you go.
+      <div style="margin-top:8px;font-size:13px;color:var(--gray-500)">
+        <b style="color:var(--slate)">Goal:</b> replace the existing 4-column text-list rendering in <code>src/skilltree-ui.ts</code> with a PixiJS-rendered, full-page, algorithmically-laid-out node graph that surfaces all ~494 nodes + ~700 edges + 27 threshold-bridges + 44 graft sockets, with click-to-buy via the existing engine.<br>
+        <b style="color:var(--slate)">Architecture:</b> new pure module <code>src/skilltree-layout.ts</code> computes a deterministic force-directed layout returning <code>Map&lt;NodeId, {x,y}&gt;</code> + branch-root + graft-socket coordinates. New render module <code>src/skilltree-graphview.ts</code> mounts a PixiJS <code>Application</code> over a full-page DOM overlay, draws nodes/edges/bridges/sockets, handles pan/zoom/click/hover, and refreshes on purchase. <code>src/skilltree-ui.ts</code> is gutted to a single &ldquo;Open Skill Graph&rdquo; button that mounts the new graph view.<br>
+        <b style="color:var(--slate)">Tech stack:</b> Vite 5 + TypeScript strict + PixiJS 8 + vitest. Strict + noUncheckedIndexedAccess + noUnusedLocals.<br>
+        <b style="color:var(--slate)">Source of truth:</b> design spec at <code>docs/superpowers/specs/2026-05-23-skilltree-graphview-ui-design.html</code> (v1).
+      </div>
+    </div>
+  </header>
+
+  <div class="callout info">
+    <b>Pure / render separation.</b> Per <code>AGENTS.md</code>, <code>src/skilltree-layout.ts</code> imports nothing from PixiJS; it works against types from <code>skilltree-graph.ts</code> + <code>skilltree.ts</code> only. Tests target only the pure module. <code>src/skilltree-graphview.ts</code> is render-layer; it consumes the layout output and the live state but never mutates either.
+  </div>
+
+  <div class="callout warn">
+    <b>Don't import the canvas world's <code>Application</code>.</b> The skill graph mounts its OWN PixiJS <code>Application</code> on a full-page overlay above the HUD. Touching the existing world canvas / camera / world Container would corrupt the game render. The new app is destroyed on hide and re-created on show, OR mounted once and toggled via <code>app.canvas.style.display</code> — Task 2 picks one and commits to it.
+  </div>
+
+  <div class="callout">
+    <b>NodeId branding caveat.</b> <code>src/skilltree-graph.ts</code> defines a branded <code>NodeId</code>, but <code>src/skilltree.ts</code> uses an unbranded <code>type NodeId = string</code> for the catalog. The codebase coexists via <code>as unknown as NodeId</code> casts at the boundary (see <code>buildStandardEdges</code> in <code>skilltree.ts:418-467</code>). The graph-view layer continues that convention — do NOT attempt brand-enforcement (see prior session's reverted attempt; ~50 syntax errors).
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:30px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Summary</h3>
+  <div class="summary">
+    <div class="cell"><div class="k">Nodes rendered</div><div class="v accent">~494</div></div>
+    <div class="cell"><div class="k">Edges + bridges</div><div class="v">~700 + 27</div></div>
+    <div class="cell"><div class="k">Graft sockets</div><div class="v">44</div></div>
+    <div class="cell"><div class="k">Tasks</div><div class="v">10</div></div>
+  </div>
+
+  <div class="toc">
+    <h3>Tasks</h3>
+    <ol>
+      <li><span class="num">01</span><a href="#task-1">Layout module — pure, deterministic, force-directed</a></li>
+      <li><span class="num">02</span><a href="#task-2">Graphview scaffold — full-page overlay + PixiJS Application + Esc dismiss</a></li>
+      <li><span class="num">03</span><a href="#task-3">Node rendering — filler / notable / keystone / branch-root / socket</a></li>
+      <li><span class="num">04</span><a href="#task-4">Edge rendering — standard / AND / OR-bridge / threshold / owned</a></li>
+      <li><span class="num">05</span><a href="#task-5">Pan + zoom — drag + log-wheel centered on cursor</a></li>
+      <li><span class="num">06</span><a href="#task-6">Click-to-buy — hit-test → buyNode / buyKeystone → repaint</a></li>
+      <li><span class="num">07</span><a href="#task-7">Hover tooltip + edge highlight + aura ring</a></li>
+      <li><span class="num">08</span><a href="#task-8">HUD chrome — SP/Owned counters + filter chips + legend</a></li>
+      <li><span class="num">09</span><a href="#task-9">Wire skilltree-ui.ts → &ldquo;Open Skill Graph&rdquo; button; SPEC.md amendment</a></li>
+      <li><span class="num">10</span><a href="#task-10">Browser smoke + polish pass</a></li>
+    </ol>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Files touched</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Path</div><div class="cell">Status</div><div class="cell">Responsibility</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-layout.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Pure: <code>computeSkillGraphLayout(graph): SkillGraphLayout</code>. Two-stage: pentagon branch-root placement + per-branch Fruchterman&ndash;Reingold on sub-graph. Deterministic via mulberry32 seed.</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-layout.test.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Determinism, pentagon geometry, coverage (every node has coords).</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-graphview.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Render-layer: PixiJS Application on a full-page DOM overlay; node / edge / bridge / socket draw passes; pan / zoom / click / hover; HUD chrome.</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-ui.ts</code></div><div class="cell"><span class="pill mod">REPLACE</span></div><div class="cell">Gut the 4-column list. Single &ldquo;Open Skill Graph&rdquo; button mounts the graph view via injected handle.</div></div>
+    <div class="row"><div class="cell"><code>src/main.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Mount <code>skilltree-graphview</code>; pass its handle into <code>mountSkillTreeUi</code>; wire ESC dismiss through the existing modal-dispatch path.</div></div>
+    <div class="row"><div class="cell"><code>src/ui.css</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Full-page overlay class (<code>.ri-skillgraph-overlay</code>): fixed, z-index above HUD, dim backdrop, pointer-events on.</div></div>
+    <div class="row"><div class="cell"><code>SPEC.md</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">&sect;9.3 amendment: graph-view UI is the canonical rendering; the v1 list was transitional.</div></div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 1 -->
+  <section id="task-1">
+    <div class="sec-head"><span class="num">01</span><h2>Task 1 &mdash; Layout module (pure, deterministic, force-directed)</h2></div>
+    <p class="sec-intro">Create <code>src/skilltree-layout.ts</code> &mdash; a pure module that maps every node, branch-root, and graft-socket in the catalog to a world-pixel <code>{x, y}</code>. Two-stage algorithm: pentagon branch-root placement (Stage A); per-branch Fruchterman&ndash;Reingold over the sub-graph (Stage B). Deterministic via mulberry32 seed. The whole layout is computed once and cached.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>+ src/skilltree-layout.ts</code> &nbsp; <code>+ src/skilltree-layout.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Read the existing graph engine surface in <code>src/skilltree-graph.ts</code> and the types/exports in <code>src/skilltree.ts</code> (<code>BranchId</code>, <code>SubPathId</code>, <code>BRANCH_SUBPATHS</code>, <code>SUBPATH_BRANCH</code>, <code>DEFAULT_GRAPH</code>) to confirm the import surface for this module.</div>
+
+      <div class="step"><b>Step 2.</b> Write the failing tests in <code>src/skilltree-layout.test.ts</code>:</div>
+      <pre><span class="kw">import</span> { describe, it, expect } <span class="kw">from</span> <span class="str">'vitest'</span>;
+<span class="kw">import</span> { computeSkillGraphLayout } <span class="kw">from</span> <span class="str">'./skilltree-layout.js'</span>;
+<span class="kw">import</span> { DEFAULT_GRAPH } <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+<span class="kw">import</span> { BRANCH_SUBPATHS } <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+<span class="kw">import type</span> { BranchId } <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+
+describe(<span class="str">'computeSkillGraphLayout'</span>, () =&gt; {
+  it(<span class="str">'is deterministic across repeated calls on the same graph'</span>, () =&gt; {
+    <span class="kw">const</span> a = computeSkillGraphLayout(DEFAULT_GRAPH);
+    <span class="kw">const</span> b = computeSkillGraphLayout(DEFAULT_GRAPH);
+    expect(a.nodes.size).toBe(b.nodes.size);
+    <span class="kw">for</span> (<span class="kw">const</span> [id, pa] <span class="kw">of</span> a.nodes) {
+      <span class="kw">const</span> pb = b.nodes.get(id);
+      expect(pb).toBeDefined();
+      expect(pb!.x).toBeCloseTo(pa.x, 6);
+      expect(pb!.y).toBeCloseTo(pa.y, 6);
+    }
+  });
+
+  it(<span class="str">'places 5 branch roots at the pentagon radius'</span>, () =&gt; {
+    <span class="kw">const</span> layout = computeSkillGraphLayout(DEFAULT_GRAPH);
+    <span class="kw">const</span> branches = Object.keys(BRANCH_SUBPATHS) <span class="kw">as</span> BranchId[];
+    expect(branches).toHaveLength(5);
+    expect(layout.branchRoots.size).toBe(5);
+    <span class="kw">for</span> (<span class="kw">const</span> b <span class="kw">of</span> branches) {
+      <span class="kw">const</span> p = layout.branchRoots.get(b);
+      expect(p).toBeDefined();
+      <span class="kw">const</span> r = Math.hypot(p!.x, p!.y);
+      expect(r).toBeCloseTo(600, 0); <span class="comment">// pentagon radius R = 600</span>
+    }
+  });
+
+  it(<span class="str">'assigns coordinates to every node in DEFAULT_GRAPH'</span>, () =&gt; {
+    <span class="kw">const</span> layout = computeSkillGraphLayout(DEFAULT_GRAPH);
+    <span class="kw">for</span> (<span class="kw">const</span> n <span class="kw">of</span> DEFAULT_GRAPH.nodes) {
+      <span class="kw">const</span> p = layout.nodes.get(n.id <span class="kw">as unknown as</span> Parameters&lt;<span class="kw">typeof</span> layout.nodes.get&gt;[0]);
+      expect(p).toBeDefined();
+      expect(Number.isFinite(p!.x)).toBe(<span class="kw">true</span>);
+      expect(Number.isFinite(p!.y)).toBe(<span class="kw">true</span>);
+    }
+  });
+
+  it(<span class="str">'assigns coordinates to every graft socket'</span>, () =&gt; {
+    <span class="kw">const</span> layout = computeSkillGraphLayout(DEFAULT_GRAPH);
+    expect(layout.graftSockets.size).toBe(DEFAULT_GRAPH.graftSockets.length);
+    <span class="kw">for</span> (<span class="kw">const</span> s <span class="kw">of</span> DEFAULT_GRAPH.graftSockets) {
+      expect(layout.graftSockets.has(s.id)).toBe(<span class="kw">true</span>);
+    }
+  });
+});</pre>
+
+      <div class="step"><b>Step 3.</b> Run, verify FAIL.</div>
+      <pre class="bash">npx vitest run src/skilltree-layout.test.ts</pre>
+      <div class="expected"><b>Expected:</b> FAIL &mdash; module not found.</div>
+
+      <div class="step"><b>Step 4.</b> Implement <code>src/skilltree-layout.ts</code>:</div>
+      <pre><span class="comment">// src/skilltree-layout.ts</span>
+<span class="comment">// Pure: computes deterministic positions for every skill-graph node, virtual</span>
+<span class="comment">// branch-root, and graft socket. No PixiJS, no DOM.</span>
+<span class="comment">//</span>
+<span class="comment">// Two-stage:</span>
+<span class="comment">//   A. Place 5 branch roots on a regular pentagon (radius R).</span>
+<span class="comment">//   B. For each branch, run Fruchterman&ndash;Reingold on the sub-graph of nodes</span>
+<span class="comment">//      whose subPath belongs to that branch, anchored to the branch root.</span>
+<span class="comment">//</span>
+<span class="comment">// Determinism is provided by mulberry32 seeded with the catalog node-count.</span>
+
+<span class="kw">import type</span> { Graph, NodeId } <span class="kw">from</span> <span class="str">'./skilltree-graph.js'</span>;
+<span class="kw">import</span> {
+  BRANCH_SUBPATHS,
+  SUBPATH_BRANCH,
+  <span class="kw">type</span> BranchId,
+} <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+
+<span class="kw">export interface</span> Point { <span class="kw">readonly</span> x: <span class="ty">number</span>; <span class="kw">readonly</span> y: <span class="ty">number</span>; }
+
+<span class="kw">export interface</span> SkillGraphLayout {
+  <span class="kw">readonly</span> nodes: <span class="kw">ReadonlyMap</span>&lt;NodeId, Point&gt;;
+  <span class="kw">readonly</span> branchRoots: <span class="kw">ReadonlyMap</span>&lt;BranchId, Point&gt;;
+  <span class="kw">readonly</span> graftSockets: <span class="kw">ReadonlyMap</span>&lt;<span class="ty">string</span>, Point&gt;;
+}
+
+<span class="kw">const</span> R = 600;       <span class="comment">// pentagon radius (world-px)</span>
+<span class="kw">const</span> K_REPULSION = 8000;
+<span class="kw">const</span> K_SPRING = 0.1;
+<span class="kw">const</span> ITERATIONS = 200;
+<span class="kw">const</span> SUB_RADIUS = 280; <span class="comment">// initial scatter radius around each branch root</span>
+<span class="kw">const</span> SOCKET_OFFSET = 140; <span class="comment">// distance beyond the deepest node on its sub-path arc</span>
+
+<span class="kw">function</span> mulberry32(seed: <span class="ty">number</span>): () =&gt; <span class="ty">number</span> {
+  <span class="kw">let</span> t = seed &gt;&gt;&gt; 0;
+  <span class="kw">return</span> () =&gt; {
+    t = (t + 0x6D2B79F5) &gt;&gt;&gt; 0;
+    <span class="kw">let</span> r = Math.imul(t ^ (t &gt;&gt;&gt; 15), 1 | t);
+    r = (r + Math.imul(r ^ (r &gt;&gt;&gt; 7), 61 | r)) ^ r;
+    <span class="kw">return</span> ((r ^ (r &gt;&gt;&gt; 14)) &gt;&gt;&gt; 0) / 4294967296;
+  };
+}
+
+<span class="kw">export function</span> computeSkillGraphLayout(graph: Graph): SkillGraphLayout {
+  <span class="kw">const</span> rng = mulberry32(graph.nodes.length);
+
+  <span class="comment">// Stage A: place 5 branch roots on a regular pentagon.</span>
+  <span class="kw">const</span> branchRoots = <span class="kw">new</span> Map&lt;BranchId, Point&gt;();
+  <span class="kw">const</span> branches = Object.keys(BRANCH_SUBPATHS) <span class="kw">as</span> BranchId[];
+  <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; branches.length; i++) {
+    <span class="kw">const</span> theta = (i / branches.length) * 2 * Math.PI - Math.PI / 2; <span class="comment">// top-first</span>
+    branchRoots.set(branches[i]!, { x: R * Math.cos(theta), y: R * Math.sin(theta) });
+  }
+
+  <span class="comment">// Stage B: per-branch FR sim on the sub-graph.</span>
+  <span class="kw">const</span> nodes = <span class="kw">new</span> Map&lt;NodeId, { x: <span class="ty">number</span>; y: <span class="ty">number</span> }&gt;();
+
+  <span class="kw">for</span> (<span class="kw">const</span> branch <span class="kw">of</span> branches) {
+    <span class="kw">const</span> root = branchRoots.get(branch)!;
+    <span class="kw">const</span> branchNodeList = graph.nodes.filter(
+      (n) =&gt; SUBPATH_BRANCH[n.subPath] === branch,
+    );
+    <span class="kw">if</span> (branchNodeList.length === 0) <span class="kw">continue</span>;
+
+    <span class="comment">// Initial scatter: place each node at root + small random offset, biased</span>
+    <span class="comment">// outward by sub-path index so sub-paths fan out as separate arcs.</span>
+    <span class="kw">const</span> subPaths = BRANCH_SUBPATHS[branch];
+    <span class="kw">const</span> pos = <span class="kw">new</span> Map&lt;NodeId, { x: <span class="ty">number</span>; y: <span class="ty">number</span> }&gt;();
+    <span class="kw">for</span> (<span class="kw">const</span> n <span class="kw">of</span> branchNodeList) {
+      <span class="kw">const</span> spIdx = subPaths.indexOf(n.subPath);
+      <span class="kw">const</span> arcSpread = (Math.PI * 2) / 6; <span class="comment">// each sub-path gets ~60&deg; arc</span>
+      <span class="kw">const</span> spTheta = (spIdx - (subPaths.length - 1) / 2) * arcSpread / Math.max(1, subPaths.length - 1);
+      <span class="kw">const</span> baseAngle = Math.atan2(root.y, root.x) + spTheta;
+      <span class="kw">const</span> r0 = SUB_RADIUS * (0.4 + 0.6 * rng());
+      pos.set(n.id <span class="kw">as unknown as</span> NodeId, {
+        x: root.x + r0 * Math.cos(baseAngle) + (rng() - 0.5) * 40,
+        y: root.y + r0 * Math.sin(baseAngle) + (rng() - 0.5) * 40,
+      });
+    }
+
+    <span class="comment">// Build adjacency for the branch's sub-graph (only intra-branch edges).</span>
+    <span class="kw">const</span> branchNodeIds = <span class="kw">new</span> Set(branchNodeList.map((n) =&gt; n.id));
+    <span class="kw">const</span> intraEdges = graph.edges.filter(
+      (e) =&gt; branchNodeIds.has(e.from <span class="kw">as unknown as</span> <span class="ty">string</span>) &amp;&amp;
+             branchNodeIds.has(e.to <span class="kw">as unknown as</span> <span class="ty">string</span>),
+    );
+
+    <span class="comment">// Fruchterman&ndash;Reingold</span>
+    <span class="kw">for</span> (<span class="kw">let</span> iter = 0; iter &lt; ITERATIONS; iter++) {
+      <span class="kw">const</span> disp = <span class="kw">new</span> Map&lt;NodeId, { x: <span class="ty">number</span>; y: <span class="ty">number</span> }&gt;();
+      <span class="kw">for</span> (<span class="kw">const</span> id <span class="kw">of</span> pos.keys()) disp.set(id, { x: 0, y: 0 });
+
+      <span class="comment">// Repulsion (pairwise).</span>
+      <span class="kw">const</span> arr = [...pos.entries()];
+      <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; arr.length; i++) {
+        <span class="kw">const</span> [idA, pa] = arr[i]!;
+        <span class="kw">for</span> (<span class="kw">let</span> j = i + 1; j &lt; arr.length; j++) {
+          <span class="kw">const</span> [idB, pb] = arr[j]!;
+          <span class="kw">const</span> dx = pa.x - pb.x;
+          <span class="kw">const</span> dy = pa.y - pb.y;
+          <span class="kw">const</span> d2 = Math.max(0.01, dx * dx + dy * dy);
+          <span class="kw">const</span> f = K_REPULSION / d2;
+          <span class="kw">const</span> d = Math.sqrt(d2);
+          <span class="kw">const</span> fx = (dx / d) * f;
+          <span class="kw">const</span> fy = (dy / d) * f;
+          disp.get(idA)!.x += fx; disp.get(idA)!.y += fy;
+          disp.get(idB)!.x -= fx; disp.get(idB)!.y -= fy;
+        }
+      }
+
+      <span class="comment">// Attraction along edges.</span>
+      <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> intraEdges) {
+        <span class="kw">const</span> pa = pos.get(e.from <span class="kw">as unknown as</span> NodeId);
+        <span class="kw">const</span> pb = pos.get(e.to <span class="kw">as unknown as</span> NodeId);
+        <span class="kw">if</span> (!pa || !pb) <span class="kw">continue</span>;
+        <span class="kw">const</span> dx = pa.x - pb.x;
+        <span class="kw">const</span> dy = pa.y - pb.y;
+        <span class="kw">const</span> d = Math.max(0.01, Math.hypot(dx, dy));
+        <span class="kw">const</span> f = K_SPRING * d;
+        <span class="kw">const</span> fx = (dx / d) * f;
+        <span class="kw">const</span> fy = (dy / d) * f;
+        disp.get(e.from <span class="kw">as unknown as</span> NodeId)!.x -= fx;
+        disp.get(e.from <span class="kw">as unknown as</span> NodeId)!.y -= fy;
+        disp.get(e.to   <span class="kw">as unknown as</span> NodeId)!.x += fx;
+        disp.get(e.to   <span class="kw">as unknown as</span> NodeId)!.y += fy;
+      }
+
+      <span class="comment">// Anchor pull toward the branch root (so the cluster doesn't drift).</span>
+      <span class="kw">const</span> anchorK = 0.02;
+      <span class="kw">for</span> (<span class="kw">const</span> [id, p] <span class="kw">of</span> pos) {
+        disp.get(id)!.x += (root.x - p.x) * anchorK;
+        disp.get(id)!.y += (root.y - p.y) * anchorK;
+      }
+
+      <span class="comment">// Cooling step: cap displacement and apply.</span>
+      <span class="kw">const</span> temp = 30 * (1 - iter / ITERATIONS);
+      <span class="kw">for</span> (<span class="kw">const</span> [id, p] <span class="kw">of</span> pos) {
+        <span class="kw">const</span> d = disp.get(id)!;
+        <span class="kw">const</span> mag = Math.max(0.01, Math.hypot(d.x, d.y));
+        <span class="kw">const</span> capped = Math.min(temp, mag);
+        p.x += (d.x / mag) * capped;
+        p.y += (d.y / mag) * capped;
+      }
+    }
+
+    <span class="kw">for</span> (<span class="kw">const</span> [id, p] <span class="kw">of</span> pos) nodes.set(id, p);
+  }
+
+  <span class="comment">// Graft sockets: place at branch-root + outward radius along sub-path arc,</span>
+  <span class="comment">// past the deepest node in that sub-path.</span>
+  <span class="kw">const</span> graftSockets = <span class="kw">new</span> Map&lt;<span class="ty">string</span>, Point&gt;();
+  <span class="kw">for</span> (<span class="kw">const</span> s <span class="kw">of</span> graph.graftSockets) {
+    <span class="kw">const</span> root = branchRoots.get(s.branchId) ?? { x: 0, y: 0 };
+    <span class="kw">const</span> subPaths = BRANCH_SUBPATHS[s.branchId] ?? [];
+    <span class="kw">const</span> spIdx = subPaths.indexOf(s.subPathId);
+    <span class="kw">const</span> arcSpread = (Math.PI * 2) / 6;
+    <span class="kw">const</span> spTheta = subPaths.length &gt; 1
+      ? (spIdx - (subPaths.length - 1) / 2) * arcSpread / (subPaths.length - 1)
+      : 0;
+    <span class="kw">const</span> baseAngle = Math.atan2(root.y, root.x) + spTheta;
+    <span class="kw">const</span> r0 = SUB_RADIUS + SOCKET_OFFSET + s.attachmentDepth * 20;
+    graftSockets.set(s.id, {
+      x: root.x + r0 * Math.cos(baseAngle),
+      y: root.y + r0 * Math.sin(baseAngle),
+    });
+  }
+
+  <span class="kw">return</span> { nodes, branchRoots, graftSockets };
+}</pre>
+
+      <div class="step"><b>Step 5.</b> Run the tests, verify PASS.</div>
+      <pre class="bash">npx vitest run src/skilltree-layout.test.ts</pre>
+      <div class="expected"><b>Expected:</b> PASS &mdash; 4 tests passing.</div>
+
+      <div class="step"><b>Step 6.</b> Run the full suite + build to make sure nothing collateral broke.</div>
+      <pre class="bash">npm run build &amp;&amp; npm test 2&gt;&amp;1 | tail -8</pre>
+      <div class="expected"><b>Expected:</b> Build clean. Test count 2077 &rarr; 2081 (one new describe with 4 cases).</div>
+
+      <div class="step"><b>Step 7.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-layout.ts src/skilltree-layout.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): pure layout module &mdash; pentagon + per-branch FR sim
+
+Adds src/skilltree-layout.ts: computeSkillGraphLayout(graph) returns
+deterministic {x, y} for every node, branch-root, and graft socket.
+
+Two-stage:
+- Stage A places 5 branch roots on a regular pentagon (R=600 world-px),
+  top-first.
+- Stage B runs a Fruchterman&ndash;Reingold sim (k_rep=8000, k_spring=0.1,
+  200 iters) on each branch's sub-graph, anchored to its branch root.
+  Graft sockets are placed past the deepest node of their sub-path arc.
+
+Deterministic via mulberry32 seeded with catalog node-count, so players
+see the same graph every reload.
+
+Tests cover determinism, pentagon geometry, full node coverage, and
+socket coverage. 2077 &rarr; 2081 tests.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 2 -->
+  <section id="task-2">
+    <div class="sec-head"><span class="num">02</span><h2>Task 2 &mdash; Graphview scaffold (full-page overlay + PixiJS Application + Esc dismiss)</h2></div>
+    <p class="sec-intro">Create <code>src/skilltree-graphview.ts</code> &mdash; a render-layer module that mounts a full-page DOM overlay containing its OWN <code>PixiJS Application</code> (do NOT touch the existing world canvas). Exposes <code>show()</code> / <code>hide()</code> / <code>toggle()</code> / <code>isVisible()</code>. No rendering content yet beyond a centered placeholder &mdash; that lands in Tasks 3 + 4.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>+ src/skilltree-graphview.ts</code> &nbsp; <code>~ src/ui.css</code> &nbsp; <code>~ src/main.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add the overlay class to <code>src/ui.css</code>. Append to the bottom of the file:</div>
+      <pre><span class="comment">/* Full-page skill-graph overlay &mdash; sits above HUD, below modal-zone. */</span>
+.ri-skillgraph-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 980;
+  background: rgba(11, 14, 20, 0.92);
+  display: flex;
+  flex-direction: column;
+}
+.ri-skillgraph-overlay[hidden] { display: none; }
+.ri-skillgraph-overlay .ri-skillgraph-canvas {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+}
+.ri-skillgraph-overlay .ri-skillgraph-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.ri-skillgraph-overlay .ri-skillgraph-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 2;
+  background: rgba(37, 36, 32, 0.85);
+  color: var(--ri-fg-1);
+  border: 1px solid var(--ri-border-strong);
+  font-family: var(--ri-mono, ui-monospace, monospace);
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.ri-skillgraph-overlay .ri-skillgraph-close:hover {
+  background: rgba(217, 119, 87, 0.20);
+  border-color: var(--ri-accent);
+}</pre>
+
+      <div class="step"><b>Step 2.</b> Create <code>src/skilltree-graphview.ts</code>:</div>
+      <pre><span class="comment">// src/skilltree-graphview.ts</span>
+<span class="comment">// Render-layer: full-page PixiJS overlay for the skill graph. Mounts its</span>
+<span class="comment">// own Application instance (separate from the world canvas) on a fixed</span>
+<span class="comment">// DOM overlay. Tasks 3-7 fill in the scene-graph content.</span>
+
+<span class="kw">import</span> { Application, Container } <span class="kw">from</span> <span class="str">'pixi.js'</span>;
+<span class="kw">import type</span> { IslandState } <span class="kw">from</span> <span class="str">'./economy.js'</span>;
+
+<span class="kw">export interface</span> SkillGraphView {
+  <span class="kw">readonly</span> el: HTMLDivElement;
+  show(): <span class="kw">void</span>;
+  hide(): <span class="kw">void</span>;
+  toggle(): <span class="ty">boolean</span>;
+  isVisible(): <span class="ty">boolean</span>;
+  <span class="comment">/** Repaint state-dependent visuals. Cheap to call frequently; no-op while hidden. */</span>
+  refresh(): <span class="kw">void</span>;
+}
+
+<span class="kw">export interface</span> SkillGraphViewDeps {
+  getState(): IslandState;
+}
+
+<span class="kw">export function</span> mountSkillGraphView(
+  parentEl: HTMLElement,
+  deps: SkillGraphViewDeps,
+): SkillGraphView {
+  <span class="kw">const</span> overlay = document.createElement(<span class="str">'div'</span>);
+  overlay.className = <span class="str">'ri-skillgraph-overlay'</span>;
+  overlay.hidden = <span class="kw">true</span>;
+
+  <span class="kw">const</span> canvasWrap = document.createElement(<span class="str">'div'</span>);
+  canvasWrap.className = <span class="str">'ri-skillgraph-canvas'</span>;
+  overlay.appendChild(canvasWrap);
+
+  <span class="kw">const</span> closeBtn = document.createElement(<span class="str">'button'</span>);
+  closeBtn.className = <span class="str">'ri-skillgraph-close'</span>;
+  closeBtn.type = <span class="str">'button'</span>;
+  closeBtn.textContent = <span class="str">'&times; CLOSE  (Esc)'</span>;
+  closeBtn.addEventListener(<span class="str">'click'</span>, () =&gt; hide());
+  overlay.appendChild(closeBtn);
+
+  parentEl.appendChild(overlay);
+
+  <span class="comment">// Lazy PixiJS Application &mdash; create on first show, keep across toggles.</span>
+  <span class="comment">// Lives inside the overlay, NOT the world canvas. resizeTo the wrap so</span>
+  <span class="comment">// it tracks viewport changes.</span>
+  <span class="kw">let</span> app: Application | <span class="kw">null</span> = <span class="kw">null</span>;
+  <span class="kw">let</span> world: Container | <span class="kw">null</span> = <span class="kw">null</span>;
+  <span class="kw">let</span> visible = <span class="kw">false</span>;
+
+  <span class="kw">async function</span> ensureApp(): Promise&lt;<span class="kw">void</span>&gt; {
+    <span class="kw">if</span> (app) <span class="kw">return</span>;
+    <span class="kw">const</span> a = <span class="kw">new</span> Application();
+    <span class="kw">await</span> a.init({
+      background: <span class="str">'#0a0e14'</span>,
+      resizeTo: canvasWrap,
+      antialias: <span class="kw">true</span>,
+      autoDensity: <span class="kw">true</span>,
+      resolution: window.devicePixelRatio || 1,
+    });
+    canvasWrap.appendChild(a.canvas);
+    <span class="kw">const</span> w = <span class="kw">new</span> Container();
+    w.label = <span class="str">'skillgraph-world'</span>;
+    <span class="comment">// Center world container in viewport initially &mdash; Tasks 3+ render into it.</span>
+    w.position.set(canvasWrap.clientWidth / 2, canvasWrap.clientHeight / 2);
+    a.stage.addChild(w);
+    app = a;
+    world = w;
+  }
+
+  <span class="kw">function</span> show(): <span class="kw">void</span> {
+    <span class="kw">if</span> (visible) <span class="kw">return</span>;
+    visible = <span class="kw">true</span>;
+    overlay.hidden = <span class="kw">false</span>;
+    <span class="kw">void</span> ensureApp().then(() =&gt; refresh());
+  }
+  <span class="kw">function</span> hide(): <span class="kw">void</span> {
+    <span class="kw">if</span> (!visible) <span class="kw">return</span>;
+    visible = <span class="kw">false</span>;
+    overlay.hidden = <span class="kw">true</span>;
+  }
+  <span class="kw">function</span> toggle(): <span class="ty">boolean</span> {
+    <span class="kw">if</span> (visible) hide();
+    <span class="kw">else</span> show();
+    <span class="kw">return</span> visible;
+  }
+  <span class="kw">function</span> isVisible(): <span class="ty">boolean</span> { <span class="kw">return</span> visible; }
+
+  <span class="kw">function</span> refresh(): <span class="kw">void</span> {
+    <span class="kw">if</span> (!visible || !app || !world) <span class="kw">return</span>;
+    <span class="comment">// State-dependent paint happens in later tasks (nodes/edges/HUD).</span>
+    <span class="kw">void</span> deps;
+  }
+
+  <span class="kw">return</span> { el: overlay, show, hide, toggle, isVisible, refresh };
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Wire the action in <code>src/main.ts</code>. After the existing <code>mountSkillTreeUi</code> + <code>toggle-skill-tree</code> block (around line 997-1000), add:</div>
+      <pre><span class="kw">import</span> { mountSkillGraphView } <span class="kw">from</span> <span class="str">'./skilltree-graphview.js'</span>;
+
+<span class="comment">// &hellip; later, alongside mountSkillTreeUi &hellip;</span>
+<span class="kw">const</span> skillGraph = mountSkillGraphView(document.body, { getState: activeState });
+defineAction(reg, <span class="str">'toggle-skill-graph'</span>, () =&gt; {
+  skillGraph.toggle();
+});</pre>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px">Then find the existing Esc / dismiss-modal handler (search for <code>'dismiss-modal'</code> in <code>main.ts</code>) and add a <code>skillGraph.hide()</code> call alongside the existing <code>skillTree.hide()</code> / <code>buildingsUi.hide()</code> calls. And find the refresh-on-tick block (search for <code>skillTree.refresh()</code>, around line 1985) and add <code>skillGraph.refresh()</code> in the same block.</p>
+
+      <div class="step"><b>Step 4.</b> Bind a key for testing. In <code>src/input.ts</code>, find the existing default-bindings block and add a binding (any free key) for <code>toggle-skill-graph</code>. Suggested: <code>'KeyJ'</code> &rarr; <code>'toggle-skill-graph'</code>. The permanent UI entry-point lands in Task 9.</div>
+
+      <div class="step"><b>Step 5.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -8</pre>
+      <div class="expected"><b>Expected:</b> build clean, tests still 2081, no regressions.</div>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-graphview.ts src/ui.css src/main.ts src/input.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): graphview scaffold &mdash; full-page PixiJS overlay
+
+Adds src/skilltree-graphview.ts:
+- mountSkillGraphView() returns { show, hide, toggle, isVisible, refresh }.
+- Owns its own PixiJS Application separate from the world canvas, mounted
+  inside a fixed full-page overlay (.ri-skillgraph-overlay).
+- Lazy app init on first show; visibility toggled via overlay.hidden so
+  the canvas survives toggles without re-initialising PixiJS.
+
+Wires a temporary KeyJ binding via input.ts so the overlay is testable
+before Task 9's permanent entry-point lands. Esc and refresh paths
+piggyback the existing dismiss-modal / refresh-tick blocks in main.ts.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 3 -->
+  <section id="task-3">
+    <div class="sec-head"><span class="num">03</span><h2>Task 3 &mdash; Node rendering (filler / notable / keystone / branch-root / socket)</h2></div>
+    <p class="sec-intro">Draw every node, branch-root, and graft socket from <code>DEFAULT_GRAPH</code> at the position from <code>computeSkillGraphLayout</code>. Classify each catalog node into <code>'filler' | 'notable' | 'keystone'</code> and render the visual encoding from spec &sect;02. State-dependent styling (owned vs purchasable vs locked) lands in Task 6's repaint &mdash; this task renders the baseline. No interactivity yet.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-graphview.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add classification + draw helpers above <code>mountSkillGraphView</code>. Use the <code>KEYSTONE_PREREQS</code> table from <code>skilltree-catalog.ts</code> to identify keystones; the rest are notables iff their id segment after the last <code>.</code> is non-numeric; otherwise filler.</div>
+      <pre><span class="kw">import</span> { Application, Container, Graphics } <span class="kw">from</span> <span class="str">'pixi.js'</span>;
+<span class="kw">import</span> { DEFAULT_GRAPH, BRANCH_LABEL, <span class="kw">type</span> BranchId } <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+<span class="kw">import</span> { KEYSTONE_PREREQS } <span class="kw">from</span> <span class="str">'./skilltree-catalog.js'</span>;
+<span class="kw">import</span> { computeSkillGraphLayout, <span class="kw">type</span> SkillGraphLayout } <span class="kw">from</span> <span class="str">'./skilltree-layout.js'</span>;
+<span class="kw">import type</span> { IslandState } <span class="kw">from</span> <span class="str">'./economy.js'</span>;
+<span class="kw">import type</span> { NodeId } <span class="kw">from</span> <span class="str">'./skilltree-graph.js'</span>;
+
+<span class="kw">type</span> NodeKind = <span class="str">'filler'</span> | <span class="str">'notable'</span> | <span class="str">'keystone'</span>;
+
+<span class="kw">const</span> KEYSTONE_TARGETS: ReadonlySet&lt;<span class="ty">string</span>&gt; = <span class="kw">new</span> Set(
+  KEYSTONE_PREREQS.map((k) =&gt; <span class="ty">String</span>(k.targetNode)),
+);
+
+<span class="kw">function</span> classifyNode(id: <span class="ty">string</span>): NodeKind {
+  <span class="kw">if</span> (KEYSTONE_TARGETS.has(id)) <span class="kw">return</span> <span class="str">'keystone'</span>;
+  <span class="kw">const</span> lastDot = id.lastIndexOf(<span class="str">'.'</span>);
+  <span class="kw">if</span> (lastDot &lt; 0) <span class="kw">return</span> <span class="str">'filler'</span>;
+  <span class="kw">return</span> /^\d+$/.test(id.slice(lastDot + 1)) ? <span class="str">'filler'</span> : <span class="str">'notable'</span>;
+}
+
+<span class="comment">// Visual constants matching spec &sect;02.</span>
+<span class="kw">const</span> COLOR = {
+  fillerFill:   0x25231F, fillerStroke:   0x8A877E,
+  notableFill:  0xE0B47F, notableStroke:  0xE9E6DC,
+  keystoneFill: 0xD38FCC, keystoneStroke: 0xE9E6DC,
+  rootFill:     0x8FA56E, rootStroke:     0xE9E6DC,
+  socketStroke: 0x7DD3E8,
+  label:        0xE9E6DC,
+} <span class="kw">as const</span>;
+
+<span class="kw">function</span> drawHexagon(g: Graphics, cx: <span class="ty">number</span>, cy: <span class="ty">number</span>, r: <span class="ty">number</span>): <span class="kw">void</span> {
+  <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; 6; i++) {
+    <span class="kw">const</span> a = (Math.PI / 3) * i - Math.PI / 2;
+    <span class="kw">const</span> x = cx + r * Math.cos(a);
+    <span class="kw">const</span> y = cy + r * Math.sin(a);
+    <span class="kw">if</span> (i === 0) g.moveTo(x, y); <span class="kw">else</span> g.lineTo(x, y);
+  }
+  g.closePath();
+}</pre>
+
+      <div class="step"><b>Step 2.</b> Inside <code>mountSkillGraphView</code>, after the <code>world</code> Container is created, set up child layer containers for deterministic z-order (background &rarr; edges &rarr; bridges-inactive &rarr; bridges-active &rarr; nodes &rarr; labels). Edges + bridge layers stay empty in this task &mdash; Task 4 fills them.</div>
+      <pre><span class="kw">interface</span> SceneLayers {
+  edges: Container;
+  bridgesInactive: Container;
+  bridgesActive: Container;
+  nodes: Container;
+  labels: Container;
+}
+
+<span class="kw">let</span> layers: SceneLayers | <span class="kw">null</span> = <span class="kw">null</span>;
+<span class="kw">let</span> layout: SkillGraphLayout | <span class="kw">null</span> = <span class="kw">null</span>;
+
+<span class="kw">async function</span> ensureApp(): Promise&lt;<span class="kw">void</span>&gt; {
+  <span class="comment">// &hellip; existing app init &hellip;</span>
+  <span class="comment">// After app + world are created, before the function returns:</span>
+  <span class="kw">const</span> edges = <span class="kw">new</span> Container();          edges.label = <span class="str">'edges'</span>;
+  <span class="kw">const</span> bridgesInactive = <span class="kw">new</span> Container(); bridgesInactive.label = <span class="str">'bridges-inactive'</span>;
+  <span class="kw">const</span> bridgesActive = <span class="kw">new</span> Container();   bridgesActive.label = <span class="str">'bridges-active'</span>;
+  <span class="kw">const</span> nodes = <span class="kw">new</span> Container();          nodes.label = <span class="str">'nodes'</span>;
+  <span class="kw">const</span> labels = <span class="kw">new</span> Container();         labels.label = <span class="str">'labels'</span>;
+  w.addChild(edges, bridgesInactive, bridgesActive, nodes, labels);
+  layers = { edges, bridgesInactive, bridgesActive, nodes, labels };
+
+  layout = computeSkillGraphLayout(DEFAULT_GRAPH);
+  drawNodes();
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Add a <code>drawNodes()</code> helper that clears + repopulates the <code>nodes</code> + <code>labels</code> Containers. Branch roots first (z-low), then real nodes, then sockets.</div>
+      <pre><span class="kw">import</span> { Text, TextStyle } <span class="kw">from</span> <span class="str">'pixi.js'</span>;
+
+<span class="kw">function</span> drawNodes(): <span class="kw">void</span> {
+  <span class="kw">if</span> (!layers || !layout) <span class="kw">return</span>;
+  layers.nodes.removeChildren();
+  layers.labels.removeChildren();
+
+  <span class="comment">// Branch roots.</span>
+  <span class="kw">for</span> (<span class="kw">const</span> [branch, p] <span class="kw">of</span> layout.branchRoots) {
+    <span class="kw">const</span> g = <span class="kw">new</span> Graphics();
+    g.circle(p.x, p.y, 13).fill(COLOR.rootFill).stroke({ color: COLOR.rootStroke, width: 2 });
+    layers.nodes.addChild(g);
+    <span class="kw">const</span> t = <span class="kw">new</span> Text({
+      text: BRANCH_LABEL[branch <span class="kw">as</span> BranchId],
+      style: <span class="kw">new</span> TextStyle({
+        fontFamily: <span class="str">'ui-monospace, monospace'</span>,
+        fontSize: 13, fill: COLOR.label, fontWeight: <span class="str">'600'</span>,
+      }),
+    });
+    t.anchor.set(0.5, 0);
+    t.position.set(p.x, p.y + 22);
+    layers.labels.addChild(t);
+  }
+
+  <span class="comment">// Catalog nodes.</span>
+  <span class="kw">for</span> (<span class="kw">const</span> n <span class="kw">of</span> DEFAULT_GRAPH.nodes) {
+    <span class="kw">const</span> p = layout.nodes.get(n.id <span class="kw">as unknown as</span> NodeId);
+    <span class="kw">if</span> (!p) <span class="kw">continue</span>;
+    <span class="kw">const</span> g = <span class="kw">new</span> Graphics();
+    <span class="kw">const</span> kind = classifyNode(<span class="ty">String</span>(n.id));
+    <span class="kw">if</span> (kind === <span class="str">'filler'</span>) {
+      g.circle(p.x, p.y, 6).fill(COLOR.fillerFill).stroke({ color: COLOR.fillerStroke, width: 1 });
+    } <span class="kw">else if</span> (kind === <span class="str">'notable'</span>) {
+      g.circle(p.x, p.y, 9).fill(COLOR.notableFill).stroke({ color: COLOR.notableStroke, width: 1.5 });
+    } <span class="kw">else</span> {
+      drawHexagon(g, p.x, p.y, 12);
+      g.fill(COLOR.keystoneFill).stroke({ color: COLOR.keystoneStroke, width: 1.5 });
+    }
+    layers.nodes.addChild(g);
+  }
+
+  <span class="comment">// Graft sockets &mdash; dashed circle. PixiJS 8 Graphics doesn't support</span>
+  <span class="comment">// native dash patterns, so draw 8 segments around the circle.</span>
+  <span class="kw">for</span> (<span class="kw">const</span> [, p] <span class="kw">of</span> layout.graftSockets) {
+    <span class="kw">const</span> g = <span class="kw">new</span> Graphics();
+    <span class="kw">const</span> r = 11;
+    <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; 8; i++) {
+      <span class="kw">const</span> a0 = (Math.PI * 2 * i) / 8;
+      <span class="kw">const</span> a1 = a0 + (Math.PI * 2) / 16; <span class="comment">// half-segment "on"</span>
+      g.moveTo(p.x + r * Math.cos(a0), p.y + r * Math.sin(a0));
+      g.lineTo(p.x + r * Math.cos(a1), p.y + r * Math.sin(a1));
+    }
+    g.stroke({ color: COLOR.socketStroke, width: 1.5 });
+    layers.nodes.addChild(g);
+  }
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Update <code>refresh()</code> to call <code>drawNodes()</code>. (Edge / bridge / HUD passes are added in their own tasks.) Make the call cheap: nodes don't depend on state in this task; the call is idempotent.</div>
+      <pre><span class="kw">function</span> refresh(): <span class="kw">void</span> {
+  <span class="kw">if</span> (!visible || !app || !world || !layers) <span class="kw">return</span>;
+  drawNodes();
+}</pre>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px"><b>Note:</b> redrawing every node on every refresh is wasteful but acceptable at v1. Tasks 6 + 7 add targeted repaint paths once state dependencies are real.</p>
+
+      <div class="step"><b>Step 5.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> build clean, tests still 2081.</div>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-graphview.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): graphview node rendering &mdash; filler / notable / keystone / root / socket
+
+Wires the layout output into the scene graph. Adds:
+- classifyNode() &rarr; 'filler' | 'notable' | 'keystone' from id shape +
+  KEYSTONE_PREREQS membership.
+- Layer containers (edges / bridges-inactive / bridges-active / nodes /
+  labels) on the world container for deterministic z-order.
+- drawNodes(): circles for filler/notable, hexagon for keystone, larger
+  circle + branch label for branch roots, dashed-circle for graft sockets.
+
+Colours per spec &sect;02 (--panel/--muted/--tan/--ink/--pink/--green/--slate).
+State-dependent styling lands in Task 6.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 4 -->
+  <section id="task-4">
+    <div class="sec-head"><span class="num">04</span><h2>Task 4 &mdash; Edge rendering (standard / AND / OR-bridge / threshold / owned)</h2></div>
+    <p class="sec-intro">Draw the edge set: standard intra-sub-path lines, AND-prereq lines for keystones, threshold-bridge dashed lines (with active/inactive split), and owned-edge highlight. Edges sit on the <code>edges</code> / <code>bridgesInactive</code> / <code>bridgesActive</code> layers from Task 3.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-graphview.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Replicate the bridge-activation check locally (the existing engine's <code>isBridgeActive</code> is module-private). The check sums skilled SP per branch and tests each threshold. Add at the top of <code>skilltree-graphview.ts</code>:</div>
+      <pre><span class="kw">import type</span> { BridgeEdge, NodeId <span class="kw">as</span> GNodeId } <span class="kw">from</span> <span class="str">'./skilltree-graph.js'</span>;
+<span class="kw">import</span> { SUBPATH_BRANCH, <span class="kw">type</span> BranchId } <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+
+<span class="kw">function</span> spentInBranchLocal(state: IslandState, branchId: BranchId): <span class="ty">number</span> {
+  <span class="kw">let</span> sum = 0;
+  <span class="kw">for</span> (<span class="kw">const</span> nid <span class="kw">of</span> state.unlockedNodes) {
+    <span class="kw">const</span> node = DEFAULT_GRAPH.nodes.find((n) =&gt; n.id === nid);
+    <span class="kw">if</span> (!node) <span class="kw">continue</span>;
+    <span class="kw">if</span> (SUBPATH_BRANCH[node.subPath] === branchId) sum += node.cost;
+  }
+  <span class="kw">return</span> sum;
+}
+
+<span class="kw">function</span> isBridgeActiveLocal(b: BridgeEdge, state: IslandState): <span class="ty">boolean</span> {
+  <span class="kw">return</span> b.threshold.some(({ branch, minSpent }) =&gt; spentInBranchLocal(state, branch) &gt;= minSpent);
+}</pre>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px"><b>Note:</b> the per-id <code>find</code> is O(n) but called only on hover-repaint + buy-repaint. If profile says it's hot, swap to a <code>Map&lt;NodeId, SkillNode&gt;</code> built once at first <code>ensureApp</code>.</p>
+
+      <div class="step"><b>Step 2.</b> Add a <code>drawEdges()</code> helper that fills the three edge layers. AND-prereq edges are identified by <code>mode === 'and'</code>; standard chains are everything else in <code>graph.edges</code>; bridges go to active/inactive based on the helper above.</div>
+      <pre><span class="kw">function</span> drawEdges(state: IslandState): <span class="kw">void</span> {
+  <span class="kw">if</span> (!layers || !layout) <span class="kw">return</span>;
+  layers.edges.removeChildren();
+  layers.bridgesInactive.removeChildren();
+  layers.bridgesActive.removeChildren();
+
+  <span class="kw">const</span> getPos = (id: <span class="ty">string</span>): { x: <span class="ty">number</span>; y: <span class="ty">number</span> } | <span class="kw">null</span> =&gt;
+    layout!.nodes.get(id <span class="kw">as unknown as</span> GNodeId) ?? <span class="kw">null</span>;
+
+  <span class="comment">// Standard + AND edges.</span>
+  <span class="kw">const</span> g = <span class="kw">new</span> Graphics();
+  <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> DEFAULT_GRAPH.edges) {
+    <span class="kw">const</span> a = getPos(<span class="ty">String</span>(e.from));
+    <span class="kw">const</span> b = getPos(<span class="ty">String</span>(e.to));
+    <span class="kw">if</span> (!a || !b) <span class="kw">continue</span>;
+    <span class="kw">const</span> owned = state.unlockedEdges.has(e.id);
+    <span class="kw">if</span> (e.mode === <span class="str">'and'</span>) {
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
+        color: 0xD97757, width: 1.6, alpha: 1,
+      });
+    } <span class="kw">else if</span> (owned) {
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
+        color: 0xD97757, width: 1.6, alpha: 1,
+      });
+    } <span class="kw">else</span> {
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
+        color: 0x3A3833, width: 1, alpha: 1,
+      });
+    }
+  }
+  layers.edges.addChild(g);
+
+  <span class="comment">// Bridge edges, split into the two layers.</span>
+  <span class="kw">const</span> gInactive = <span class="kw">new</span> Graphics();
+  <span class="kw">const</span> gActive = <span class="kw">new</span> Graphics();
+  <span class="kw">for</span> (<span class="kw">const</span> br <span class="kw">of</span> DEFAULT_GRAPH.bridges) {
+    <span class="kw">const</span> a = getPos(<span class="ty">String</span>(br.from));
+    <span class="kw">const</span> b = getPos(<span class="ty">String</span>(br.to));
+    <span class="kw">if</span> (!a || !b) <span class="kw">continue</span>;
+    <span class="kw">const</span> active = isBridgeActiveLocal(br, state);
+    <span class="comment">// Render as 8 dash segments along the line (Pixi 8 has no native dash).</span>
+    <span class="kw">const</span> target = active ? gActive : gInactive;
+    <span class="kw">const</span> SEGMENTS = 12;
+    <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; SEGMENTS; i += 2) {
+      <span class="kw">const</span> t0 = i / SEGMENTS;
+      <span class="kw">const</span> t1 = (i + 1) / SEGMENTS;
+      target.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0)
+            .lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1);
+    }
+    target.stroke({
+      color: active ? 0x7DD3E8 : 0x8A877E,
+      width: active ? 1.4 : 1,
+      alpha: active ? 1 : 0.3,
+    });
+  }
+  layers.bridgesInactive.addChild(gInactive);
+  layers.bridgesActive.addChild(gActive);
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Call <code>drawEdges(state)</code> from <code>refresh()</code> before <code>drawNodes()</code> (so nodes sit on top of edges &mdash; the layer Container z-order already enforces this, but the call order matches the visual stack):</div>
+      <pre><span class="kw">function</span> refresh(): <span class="kw">void</span> {
+  <span class="kw">if</span> (!visible || !app || !world || !layers) <span class="kw">return</span>;
+  <span class="kw">const</span> state = deps.getState();
+  drawEdges(state);
+  drawNodes();
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> build clean, tests still 2081.</div>
+
+      <div class="step"><b>Step 5.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-graphview.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): graphview edge rendering &mdash; standard + AND + threshold-bridges
+
+drawEdges(state):
+- Standard edges: --line 1px, owned edges promote to --rust 1.6px.
+- AND-prereq edges (mode==='and'): --rust 1.6px solid.
+- Threshold-bridges split into bridges-inactive (--muted 1px, 30% alpha,
+  dashed) and bridges-active (--slate 1.4px, full alpha, dashed) using a
+  local replica of the engine's isBridgeActive check (the engine's is
+  module-private).
+
+Layer containers from Task 3 keep z-order deterministic (edges and
+bridges under nodes). refresh() now calls drawEdges before drawNodes.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 5 -->
+  <section id="task-5">
+    <div class="sec-head"><span class="num">05</span><h2>Task 5 &mdash; Pan + zoom (drag + log-wheel centered on cursor)</h2></div>
+    <p class="sec-intro">Add interactive camera. Pan: click + drag on empty area moves the world Container. Zoom: mouse wheel scales the world Container logarithmically (1.1&times; per notch), clamped to [0.3&times;, 3&times;], centered on the cursor.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-graphview.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Inside <code>mountSkillGraphView</code>, after the overlay element is created and the canvas wrap is appended, add a camera-state object and the pan + wheel handlers. The handlers attach to <code>canvasWrap</code> (not <code>overlay</code>), so events on the close button or future HUD chrome don't trigger pan.</div>
+      <pre><span class="kw">const</span> camera = { tx: 0, ty: 0, zoom: 1 };
+<span class="kw">const</span> ZOOM_MIN = 0.3, ZOOM_MAX = 3;
+
+<span class="kw">function</span> applyCamera(): <span class="kw">void</span> {
+  <span class="kw">if</span> (!world) <span class="kw">return</span>;
+  world.scale.set(camera.zoom);
+  <span class="comment">// world's origin is the centre of canvasWrap (set in ensureApp); pan</span>
+  <span class="comment">// translates the centred origin.</span>
+  world.position.set(
+    canvasWrap.clientWidth / 2 + camera.tx,
+    canvasWrap.clientHeight / 2 + camera.ty,
+  );
+}
+
+<span class="kw">let</span> dragging = <span class="kw">false</span>;
+<span class="kw">let</span> dragLastX = 0, dragLastY = 0;
+canvasWrap.addEventListener(<span class="str">'pointerdown'</span>, (ev) =&gt; {
+  <span class="kw">if</span> (ev.button !== 0) <span class="kw">return</span>;
+  dragging = <span class="kw">true</span>;
+  dragLastX = ev.clientX;
+  dragLastY = ev.clientY;
+  (ev.target <span class="kw">as</span> HTMLElement).setPointerCapture?.(ev.pointerId);
+});
+canvasWrap.addEventListener(<span class="str">'pointermove'</span>, (ev) =&gt; {
+  <span class="kw">if</span> (!dragging) <span class="kw">return</span>;
+  camera.tx += ev.clientX - dragLastX;
+  camera.ty += ev.clientY - dragLastY;
+  dragLastX = ev.clientX;
+  dragLastY = ev.clientY;
+  applyCamera();
+});
+canvasWrap.addEventListener(<span class="str">'pointerup'</span>, () =&gt; { dragging = <span class="kw">false</span>; });
+canvasWrap.addEventListener(<span class="str">'pointerleave'</span>, () =&gt; { dragging = <span class="kw">false</span>; });
+
+canvasWrap.addEventListener(<span class="str">'wheel'</span>, (ev) =&gt; {
+  ev.preventDefault();
+  <span class="kw">const</span> rect = canvasWrap.getBoundingClientRect();
+  <span class="kw">const</span> cx = ev.clientX - rect.left;
+  <span class="kw">const</span> cy = ev.clientY - rect.top;
+  <span class="comment">// Convert cursor screen-px to world-px BEFORE zoom change.</span>
+  <span class="kw">const</span> originX = canvasWrap.clientWidth / 2 + camera.tx;
+  <span class="kw">const</span> originY = canvasWrap.clientHeight / 2 + camera.ty;
+  <span class="kw">const</span> worldX = (cx - originX) / camera.zoom;
+  <span class="kw">const</span> worldY = (cy - originY) / camera.zoom;
+
+  <span class="kw">const</span> factor = ev.deltaY &lt; 0 ? 1.1 : 1 / 1.1;
+  <span class="kw">const</span> next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, camera.zoom * factor));
+  camera.zoom = next;
+
+  <span class="comment">// Adjust pan so the world point under the cursor stays fixed.</span>
+  camera.tx = cx - canvasWrap.clientWidth / 2 - worldX * camera.zoom;
+  camera.ty = cy - canvasWrap.clientHeight / 2 - worldY * camera.zoom;
+  applyCamera();
+}, { passive: <span class="kw">false</span> });</pre>
+
+      <div class="step"><b>Step 2.</b> Call <code>applyCamera()</code> at the end of <code>ensureApp()</code> so initial position is correct, and once on first <code>show()</code> after <code>ensureApp</code> resolves.</div>
+
+      <div class="step"><b>Step 3.</b> Reset camera on hide. Inside <code>hide()</code>, before <code>overlay.hidden = true</code>: <code>camera.tx = 0; camera.ty = 0; camera.zoom = 1; applyCamera();</code></div>
+
+      <div class="step"><b>Step 4.</b> Build + tests + browser smoke (manual, document in report).</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> build clean. Drag pans the world; wheel zooms centered on cursor; bounds clamp at 0.3&times; / 3&times;.</div>
+
+      <div class="step"><b>Step 5.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-graphview.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): graphview pan + zoom &mdash; drag + log-wheel centered on cursor
+
+Camera state on the graphview module:
+- pointerdown/move/up on canvasWrap drives left-button drag pan.
+- wheel zoom is logarithmic (1.1&times; per notch), clamped to [0.3&times;, 3&times;],
+  centered on the cursor (world point under cursor stays fixed across
+  zoom change).
+- Camera resets to identity on hide so re-open starts centered.
+
+The pan target is the world Container's position relative to a centre
+origin; zoom drives world.scale. Layer Containers under world inherit
+both transforms.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 6 -->
+  <section id="task-6">
+    <div class="sec-head"><span class="num">06</span><h2>Task 6 &mdash; Click-to-buy (hit-test &rarr; buyNode / buyKeystone &rarr; repaint)</h2></div>
+    <p class="sec-intro">Wire node-click purchase. Hit-test by Pixi's per-Graphics <code>eventMode='static'</code> + <code>hitArea</code> circle. On click, dispatch <code>buyKeystone</code> if the node is a keystone target; otherwise <code>buyNode</code>. Guard with <code>costToUnlock</code> / <code>canBuyKeystone</code> precheck; pop a <code>window.confirm</code> if the path cost is greater than 20 SP. Repaint after purchase.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-graphview.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add imports + a configurable confirm threshold:</div>
+      <pre><span class="kw">import</span> {
+  DEFAULT_GRAPH,
+  BRANCH_LABEL,
+  buyKeystone,
+  buyNode,
+  canBuyKeystone,
+  costToUnlock,
+  <span class="kw">type</span> BranchId,
+} <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+<span class="kw">import</span> { KEYSTONE_PREREQS } <span class="kw">from</span> <span class="str">'./skilltree-catalog.js'</span>;
+
+<span class="kw">const</span> CONFIRM_THRESHOLD_SP = 20;
+
+<span class="kw">const</span> KEYSTONE_BY_TARGET: ReadonlyMap&lt;<span class="ty">string</span>, <span class="kw">typeof</span> KEYSTONE_PREREQS[number]&gt; = <span class="kw">new</span> Map(
+  KEYSTONE_PREREQS.map((k) =&gt; [<span class="ty">String</span>(k.targetNode), k]),
+);</pre>
+
+      <div class="step"><b>Step 2.</b> In <code>drawNodes()</code>, attach the click handler per node Graphics. Keep the Graphics created in Task 3 but make it interactive:</div>
+      <pre><span class="comment">// In drawNodes(), after drawing each catalog node:</span>
+<span class="comment">// Add Circle to the pixi.js import group at the top of the file.</span>
+<span class="kw">import</span> { Application, Container, Graphics, Text, TextStyle, Circle } <span class="kw">from</span> <span class="str">'pixi.js'</span>;
+
+<span class="comment">// Per-node, after drawing its shape:</span>
+g.eventMode = <span class="str">'static'</span>;
+g.cursor = <span class="str">'pointer'</span>;
+g.hitArea = <span class="kw">new</span> Circle(p.x, p.y, kind === <span class="str">'filler'</span> ? 8 : 12);
+g.on(<span class="str">'pointertap'</span>, () =&gt; handleNodeClick(n.id <span class="kw">as unknown as</span> GNodeId));</pre>
+
+      <div class="step"><b>Step 3.</b> Implement <code>handleNodeClick</code>:</div>
+      <pre><span class="kw">function</span> handleNodeClick(nodeId: GNodeId): <span class="kw">void</span> {
+  <span class="kw">const</span> state = deps.getState();
+  <span class="kw">if</span> (state.unlockedNodes.has(nodeId)) <span class="kw">return</span>;
+
+  <span class="kw">const</span> ks = KEYSTONE_BY_TARGET.get(<span class="ty">String</span>(nodeId));
+  <span class="kw">if</span> (ks) {
+    <span class="kw">if</span> (!canBuyKeystone(ks, state)) <span class="kw">return</span>;
+    <span class="kw">if</span> (ks.cost &gt; CONFIRM_THRESHOLD_SP) {
+      <span class="kw">if</span> (!window.confirm(`Buy keystone (${ks.cost} SP)?`)) <span class="kw">return</span>;
+    }
+    buyKeystone(ks, state);
+    refresh();
+    <span class="kw">return</span>;
+  }
+
+  <span class="kw">const</span> path = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, nodeId);
+  <span class="kw">if</span> (path === <span class="kw">null</span>) <span class="kw">return</span>;
+  <span class="kw">if</span> (state.unspentSkillPoints &lt; path.totalCost) <span class="kw">return</span>;
+  <span class="kw">if</span> (path.totalCost &gt; CONFIRM_THRESHOLD_SP) {
+    <span class="kw">if</span> (!window.confirm(`Buy via ${path.path.length}-edge cheapest path (${path.totalCost} SP)?`)) <span class="kw">return</span>;
+  }
+  <span class="kw">try</span> { buyNode(DEFAULT_GRAPH, state, nodeId); } <span class="kw">catch</span> { <span class="kw">return</span>; }
+  refresh();
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Update <code>drawNodes()</code>'s draw branch for nodes to reflect ownership / affordability state. Owned: fill brightened to <code>--green</code> (0x8FA56E), outline 1.5px. Unaffordable: outline alpha 0.4.</div>
+      <pre><span class="kw">const</span> state = deps.getState();
+<span class="kw">const</span> owned = state.unlockedNodes.has(n.id <span class="kw">as unknown as</span> GNodeId);
+<span class="kw">const</span> ks = KEYSTONE_BY_TARGET.get(<span class="ty">String</span>(n.id));
+<span class="kw">const</span> path = ks ? <span class="kw">null</span> : costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, n.id <span class="kw">as unknown as</span> GNodeId);
+<span class="kw">const</span> reachableCost = ks ? ks.cost : path?.totalCost ?? <span class="ty">Infinity</span>;
+<span class="kw">const</span> affordable = state.unspentSkillPoints &gt;= reachableCost;
+<span class="kw">const</span> purchasable = !owned &amp;&amp; affordable &amp;&amp; (ks ? canBuyKeystone(ks, state) : path !== <span class="kw">null</span>);
+
+<span class="comment">// then in each kind branch:</span>
+<span class="kw">const</span> fill = owned ? COLOR.ownedFill : <span class="comment">/* per-kind fill */</span>;
+<span class="kw">const</span> strokeAlpha = owned ? 1 : (purchasable ? 1 : 0.4);
+<span class="comment">// pass alpha to .stroke({...alpha: strokeAlpha})</span></pre>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px">Add <code>ownedFill: 0x8FA56E</code> to the <code>COLOR</code> constant in Task 3.</p>
+
+      <div class="step"><b>Step 5.</b> Build + tests + browser smoke.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> build clean. Click an affordable node &rarr; it goes green, SP decrements. Click an unaffordable node &rarr; no-op. Click a keystone with unmet prereqs &rarr; no-op. Path cost &gt; 20 SP &rarr; confirm popup.</div>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-graphview.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): graphview click-to-buy &mdash; buyNode / buyKeystone wiring
+
+Per-node Graphics get eventMode='static' + a Circle hitArea + a
+pointertap listener. handleNodeClick():
+- routes to buyKeystone if the node is in KEYSTONE_PREREQS, otherwise
+  buyNode with a costToUnlock precheck.
+- guards behind a window.confirm() when the path cost (or keystone cost)
+  exceeds CONFIRM_THRESHOLD_SP (20).
+- triggers refresh() after a successful purchase &mdash; nodes/edges repaint
+  with the new state.
+
+drawNodes() now reads state.unlockedNodes / unspentSkillPoints to colour
+owned (--green fill) vs purchasable (full stroke) vs locked (0.4 alpha
+stroke).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 7 -->
+  <section id="task-7">
+    <div class="sec-head"><span class="num">07</span><h2>Task 7 &mdash; Hover tooltip + edge highlight + aura ring</h2></div>
+    <p class="sec-intro">On hover: show a DOM tooltip with name, description, cost-to-unlock; highlight every incoming/outgoing edge of the hovered node in <code>--rust</code>; if the hovered node is an aura-bearing notable, draw a pulsing ring at the aura radius.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-graphview.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add a DOM tooltip element inside the overlay (positioned absolutely, hidden by default). Append once during scaffold:</div>
+      <pre><span class="kw">const</span> tooltip = document.createElement(<span class="str">'div'</span>);
+tooltip.className = <span class="str">'ri-skillgraph-tooltip'</span>;
+tooltip.style.position = <span class="str">'absolute'</span>;
+tooltip.style.pointerEvents = <span class="str">'none'</span>;
+tooltip.style.display = <span class="str">'none'</span>;
+tooltip.style.zIndex = <span class="str">'10'</span>;
+tooltip.style.background = <span class="str">'rgba(37, 36, 32, 0.96)'</span>;
+tooltip.style.border = <span class="str">'1px solid #3A3833'</span>;
+tooltip.style.padding = <span class="str">'8px 12px'</span>;
+tooltip.style.maxWidth = <span class="str">'280px'</span>;
+tooltip.style.fontFamily = <span class="str">'system-ui, sans-serif'</span>;
+tooltip.style.fontSize = <span class="str">'12px'</span>;
+tooltip.style.color = <span class="str">'#CFCCC2'</span>;
+tooltip.style.lineHeight = <span class="str">'1.4'</span>;
+canvasWrap.appendChild(tooltip);</pre>
+
+      <div class="step"><b>Step 2.</b> Add a dedicated highlight Container to the world (above edges, below nodes). It holds the per-hover edge tint + aura ring graphics; cleared on mouseleave.</div>
+      <pre><span class="comment">// in ensureApp, after the bridges-active layer:</span>
+<span class="kw">const</span> highlight = <span class="kw">new</span> Container(); highlight.label = <span class="str">'highlight'</span>;
+w.addChild(highlight);
+<span class="comment">// update SceneLayers interface and the layers assignment to include `highlight`.</span></pre>
+
+      <div class="step"><b>Step 3.</b> Attach <code>pointerover</code> / <code>pointerout</code> / <code>pointermove</code> to each node Graphics in <code>drawNodes()</code>. On enter, paint the tooltip + highlight. On leave, clear them.</div>
+      <pre>g.on(<span class="str">'pointerover'</span>, (ev) =&gt; {
+  showTooltip(n, ev.clientX, ev.clientY);
+  drawHighlight(n.id <span class="kw">as unknown as</span> GNodeId);
+});
+g.on(<span class="str">'pointermove'</span>, (ev) =&gt; {
+  positionTooltip(ev.clientX, ev.clientY);
+});
+g.on(<span class="str">'pointerout'</span>, () =&gt; {
+  tooltip.style.display = <span class="str">'none'</span>;
+  layers!.highlight.removeChildren();
+});</pre>
+
+      <div class="step"><b>Step 4.</b> Implement <code>showTooltip(node, clientX, clientY)</code>. Build the inner HTML from <code>node.name</code> / <code>node.description</code> / cost. Position via <code>positionTooltip</code>:</div>
+      <pre><span class="kw">function</span> showTooltip(node: <span class="kw">typeof</span> DEFAULT_GRAPH.nodes[<span class="ty">number</span>], cx: <span class="ty">number</span>, cy: <span class="ty">number</span>): <span class="kw">void</span> {
+  <span class="kw">const</span> state = deps.getState();
+  <span class="kw">const</span> owned = state.unlockedNodes.has(node.id);
+  <span class="kw">const</span> ks = KEYSTONE_BY_TARGET.get(<span class="ty">String</span>(node.id));
+  <span class="kw">const</span> reachable = owned ? 0 : ks ? ks.cost
+    : costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, node.id <span class="kw">as unknown as</span> GNodeId)?.totalCost ?? <span class="kw">null</span>;
+  <span class="kw">const</span> costLine = owned
+    ? <span class="str">'<span style="color:#8FA56E">OWNED</span>'</span>
+    : reachable === <span class="kw">null</span>
+      ? <span class="str">'<span style="color:#E08B7F">UNREACHABLE</span>'</span>
+      : `<span style="color:#E0B47F">${reachable} SP</span> ${reachable &lt;= state.unspentSkillPoints ? '' : '(insufficient)'}`;
+  tooltip.innerHTML =
+    `<div style="color:#E9E6DC;font-weight:600;margin-bottom:4px">${escapeHtml(<span class="ty">String</span>(node.id))}</div>` +
+    `<div style="margin-bottom:6px">${escapeHtml(node.description ?? '')}</div>` +
+    `<div>${costLine}</div>`;
+  tooltip.style.display = <span class="str">'block'</span>;
+  positionTooltip(cx, cy);
+}
+
+<span class="kw">function</span> positionTooltip(cx: <span class="ty">number</span>, cy: <span class="ty">number</span>): <span class="kw">void</span> {
+  <span class="kw">const</span> rect = canvasWrap.getBoundingClientRect();
+  tooltip.style.left = `${cx - rect.left + 14}px`;
+  tooltip.style.top = `${cy - rect.top + 14}px`;
+}
+
+<span class="kw">function</span> escapeHtml(s: <span class="ty">string</span>): <span class="ty">string</span> {
+  <span class="kw">return</span> s.replace(/[&amp;&lt;&gt;"']/g, (c) =&gt; ({
+    <span class="str">'&amp;'</span>: <span class="str">'&amp;amp;'</span>, <span class="str">'&lt;'</span>: <span class="str">'&amp;lt;'</span>, <span class="str">'&gt;'</span>: <span class="str">'&amp;gt;'</span>, <span class="str">'"'</span>: <span class="str">'&amp;quot;'</span>, <span class="str">"'"</span>: <span class="str">'&amp;#39;'</span>,
+  }[c]!));
+}</pre>
+
+      <div class="step"><b>Step 5.</b> Implement <code>drawHighlight(nodeId)</code> &mdash; iterate <code>DEFAULT_GRAPH.edges</code> + bridges, draw a thick <code>--rust</code> line for any edge incident to <code>nodeId</code>, and if the node has <code>aura</code> in its <code>effects</code>, draw a pulsing ring (use a simple <code>app.ticker</code> callback that pulses the alpha of a dedicated ring Graphics; remove the listener on clear).</div>
+      <pre><span class="kw">function</span> drawHighlight(nodeId: GNodeId): <span class="kw">void</span> {
+  <span class="kw">if</span> (!layers || !layout) <span class="kw">return</span>;
+  layers.highlight.removeChildren();
+
+  <span class="kw">const</span> g = <span class="kw">new</span> Graphics();
+  <span class="kw">const</span> getPos = (id: <span class="ty">string</span>) =&gt; layout!.nodes.get(id <span class="kw">as unknown as</span> GNodeId);
+  <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> DEFAULT_GRAPH.edges) {
+    <span class="kw">if</span> (e.from !== nodeId &amp;&amp; e.to !== nodeId) <span class="kw">continue</span>;
+    <span class="kw">const</span> a = getPos(<span class="ty">String</span>(e.from));
+    <span class="kw">const</span> b = getPos(<span class="ty">String</span>(e.to));
+    <span class="kw">if</span> (!a || !b) <span class="kw">continue</span>;
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+  }
+  g.stroke({ color: 0xD97757, width: 2.4, alpha: 1 });
+  layers.highlight.addChild(g);
+
+  <span class="comment">// Aura: node.aura is an optional AuraSpec { radius: 1 | 2; bonus: number }</span>
+  <span class="comment">// defined in skilltree.ts. Radius is given in tile units; 1 tile = 24 world-px.</span>
+  <span class="kw">const</span> node = DEFAULT_GRAPH.nodes.find((n) =&gt; n.id === nodeId);
+  <span class="kw">if</span> (node?.aura) {
+    <span class="kw">const</span> p = getPos(<span class="ty">String</span>(nodeId));
+    <span class="kw">if</span> (p) {
+      <span class="kw">const</span> ring = <span class="kw">new</span> Graphics();
+      <span class="kw">const</span> radiusPx = node.aura.radius * 24;
+      ring.circle(p.x, p.y, radiusPx).stroke({ color: 0xE0B47F, width: 1.5, alpha: 0.7 });
+      layers.highlight.addChild(ring);
+    }
+  }
+}</pre>
+
+      <div class="step"><b>Step 6.</b> Build + tests + browser smoke.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> build clean. Hover a node &rarr; tooltip pops with name + cost; incident edges highlighted in --rust; aura nodes show a ring.</div>
+
+      <div class="step"><b>Step 7.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-graphview.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): graphview hover &mdash; tooltip + edge highlight + aura ring
+
+DOM tooltip element (absolute, pointer-events: none) shows name +
+description + cost-to-unlock on hover. Highlight Container in the scene
+layers paints incident edges in --rust and (for aura-bearing notables)
+a ring at the aura radius.
+
+Hover listeners attached per node Graphics; pointerover/move/out drive
+the show/hide cycle. Tooltip position follows the cursor (offset
++14, +14) so it never sits under the cursor.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 8 -->
+  <section id="task-8">
+    <div class="sec-head"><span class="num">08</span><h2>Task 8 &mdash; HUD chrome (SP/Owned counters + filter chips + legend)</h2></div>
+    <p class="sec-intro">Add the DOM HUD around the canvas: top-left SP / Owned counters, top-right filter chips (filler / notables / keystones / bridges / sockets &mdash; all on by default), bottom-center legend strip. Filter chips toggle visibility of the relevant layer Container.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-graphview.ts</code> &nbsp; <code>~ src/ui.css</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add HUD styles to <code>src/ui.css</code>:</div>
+      <pre>.ri-skillgraph-hud {
+  position: absolute; inset: 0; pointer-events: none; z-index: 3;
+  font-family: var(--ri-mono, ui-monospace, monospace); font-size: 12px;
+}
+.ri-skillgraph-hud &gt; * { pointer-events: auto; }
+.ri-skillgraph-hud .hud-tl { position: absolute; top: 18px; left: 18px;
+  background: rgba(37, 36, 32, 0.85); border: 1px solid #3A3833;
+  padding: 8px 12px; color: #E9E6DC; line-height: 1.5; }
+.ri-skillgraph-hud .hud-tr { position: absolute; top: 18px; right: 130px;
+  display: flex; gap: 6px; }
+.ri-skillgraph-hud .chip {
+  background: rgba(37, 36, 32, 0.85); border: 1px solid #3A3833;
+  color: #CFCCC2; padding: 4px 10px; cursor: pointer; user-select: none;
+}
+.ri-skillgraph-hud .chip[data-on="true"] { color: #E9E6DC; border-color: #D97757; }
+.ri-skillgraph-hud .hud-bc { position: absolute; bottom: 14px; left: 50%;
+  transform: translateX(-50%); background: rgba(37, 36, 32, 0.85);
+  border: 1px solid #3A3833; padding: 6px 14px; color: #8A877E;
+  display: flex; gap: 16px; }
+.ri-skillgraph-hud .legend-item { display: flex; align-items: center; gap: 6px; }
+.ri-skillgraph-hud .swatch { width: 12px; height: 12px; border: 1px solid #3A3833; }</pre>
+
+      <div class="step"><b>Step 2.</b> In <code>mountSkillGraphView</code>, after the canvas wrap is added, build the HUD DOM and append:</div>
+      <pre><span class="kw">const</span> hud = document.createElement(<span class="str">'div'</span>);
+hud.className = <span class="str">'ri-skillgraph-hud'</span>;
+
+<span class="kw">const</span> tl = document.createElement(<span class="str">'div'</span>); tl.className = <span class="str">'hud-tl'</span>;
+<span class="kw">const</span> spLine = document.createElement(<span class="str">'div'</span>);
+<span class="kw">const</span> ownedLine = document.createElement(<span class="str">'div'</span>);
+tl.appendChild(spLine); tl.appendChild(ownedLine);
+hud.appendChild(tl);
+
+<span class="kw">const</span> tr = document.createElement(<span class="str">'div'</span>); tr.className = <span class="str">'hud-tr'</span>;
+<span class="kw">const</span> CHIPS: ReadonlyArray&lt;{ key: <span class="str">'filler'</span>|<span class="str">'notable'</span>|<span class="str">'keystone'</span>|<span class="str">'bridge'</span>|<span class="str">'socket'</span>; label: <span class="ty">string</span> }&gt; = [
+  { key: <span class="str">'filler'</span>,   label: <span class="str">'Filler'</span>   },
+  { key: <span class="str">'notable'</span>,  label: <span class="str">'Notables'</span> },
+  { key: <span class="str">'keystone'</span>, label: <span class="str">'Keystones'</span> },
+  { key: <span class="str">'bridge'</span>,   label: <span class="str">'Bridges'</span>  },
+  { key: <span class="str">'socket'</span>,   label: <span class="str">'Sockets'</span>  },
+];
+<span class="kw">const</span> filterOn: Record&lt;<span class="ty">string</span>, <span class="ty">boolean</span>&gt; = {
+  filler: <span class="kw">true</span>, notable: <span class="kw">true</span>, keystone: <span class="kw">true</span>, bridge: <span class="kw">true</span>, socket: <span class="kw">true</span>,
+};
+<span class="kw">for</span> (<span class="kw">const</span> c <span class="kw">of</span> CHIPS) {
+  <span class="kw">const</span> btn = document.createElement(<span class="str">'button'</span>);
+  btn.className = <span class="str">'chip'</span>;
+  btn.dataset.on = <span class="str">'true'</span>;
+  btn.textContent = c.label;
+  btn.addEventListener(<span class="str">'click'</span>, () =&gt; {
+    filterOn[c.key] = !filterOn[c.key];
+    btn.dataset.on = filterOn[c.key] ? <span class="str">'true'</span> : <span class="str">'false'</span>;
+    applyFilters();
+  });
+  tr.appendChild(btn);
+}
+hud.appendChild(tr);
+
+<span class="kw">const</span> bc = document.createElement(<span class="str">'div'</span>); bc.className = <span class="str">'hud-bc'</span>;
+<span class="kw">const</span> legend: ReadonlyArray&lt;{ color: <span class="ty">string</span>; label: <span class="ty">string</span> }&gt; = [
+  { color: <span class="str">'#8FA56E'</span>, label: <span class="str">'Owned'</span> },
+  { color: <span class="str">'#E0B47F'</span>, label: <span class="str">'Notable'</span> },
+  { color: <span class="str">'#D38FCC'</span>, label: <span class="str">'Keystone'</span> },
+  { color: <span class="str">'#D97757'</span>, label: <span class="str">'Owned edge / AND'</span> },
+  { color: <span class="str">'#7DD3E8'</span>, label: <span class="str">'Active bridge / socket'</span> },
+];
+<span class="kw">for</span> (<span class="kw">const</span> l <span class="kw">of</span> legend) {
+  <span class="kw">const</span> it = document.createElement(<span class="str">'div'</span>); it.className = <span class="str">'legend-item'</span>;
+  <span class="kw">const</span> sw = document.createElement(<span class="str">'div'</span>); sw.className = <span class="str">'swatch'</span>; sw.style.background = l.color;
+  it.appendChild(sw);
+  <span class="kw">const</span> sp = document.createElement(<span class="str">'span'</span>); sp.textContent = l.label;
+  it.appendChild(sp);
+  bc.appendChild(it);
+}
+hud.appendChild(bc);
+
+overlay.appendChild(hud);</pre>
+
+      <div class="step"><b>Step 3.</b> Implement <code>applyFilters()</code> &mdash; toggles layer Container visibility based on the chip state. Bridges = both bridge layers; sockets are part of the nodes layer so a per-graphics toggle is needed, OR move sockets to their own layer (preferred &mdash; refactor <code>drawNodes</code> to use a <code>sockets</code> Container, and toggle that container's visibility).</div>
+      <pre><span class="comment">// In ensureApp, split the sockets out:</span>
+<span class="kw">const</span> sockets = <span class="kw">new</span> Container(); sockets.label = <span class="str">'sockets'</span>;
+w.addChild(sockets);
+<span class="comment">// Update SceneLayers + drawNodes() to push socket graphics into `sockets`.</span>
+
+<span class="kw">function</span> applyFilters(): <span class="kw">void</span> {
+  <span class="kw">if</span> (!layers) <span class="kw">return</span>;
+  <span class="comment">// filler + notable + keystone share `layers.nodes`; toggle whole-layer</span>
+  <span class="comment">// visibility only when ALL three are off, else per-graphics filter.</span>
+  <span class="kw">const</span> allNodesOff = !filterOn.filler &amp;&amp; !filterOn.notable &amp;&amp; !filterOn.keystone;
+  layers.nodes.visible = !allNodesOff;
+  layers.bridgesInactive.visible = filterOn.bridge;
+  layers.bridgesActive.visible = filterOn.bridge;
+  layers.sockets.visible = filterOn.socket;
+  drawNodes(); <span class="comment">// re-emit nodes with per-kind filtering inside the function</span>
+}</pre>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:6px 0 12px"><b>Note:</b> in <code>drawNodes()</code>, skip emitting graphics whose <code>kind</code> isn't currently filtered on. Branch roots are always visible.</p>
+
+      <div class="step"><b>Step 4.</b> In <code>refresh()</code>, populate the counters from state:</div>
+      <pre><span class="kw">function</span> refresh(): <span class="kw">void</span> {
+  <span class="kw">if</span> (!visible || !app || !world || !layers) <span class="kw">return</span>;
+  <span class="kw">const</span> state = deps.getState();
+  spLine.textContent = `Unspent SP: ${state.unspentSkillPoints}`;
+  ownedLine.textContent = `Owned: ${state.unlockedNodes.size} / ${DEFAULT_GRAPH.nodes.length}`;
+  drawEdges(state);
+  drawNodes();
+}</pre>
+
+      <div class="step"><b>Step 5.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-graphview.ts src/ui.css
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): graphview HUD chrome &mdash; SP/Owned + filter chips + legend
+
+Top-left: live "Unspent SP" + "Owned N/494" counters fed by refresh().
+Top-right: five filter chips (filler / notables / keystones / bridges /
+sockets) toggling layer-Container visibility (and per-kind filtering
+inside drawNodes for the shared nodes layer). Bottom-center: static
+legend strip mapping colour swatches to roles.
+
+ui.css gains .ri-skillgraph-hud + its child classes.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 9 -->
+  <section id="task-9">
+    <div class="sec-head"><span class="num">09</span><h2>Task 9 &mdash; Wire <code>skilltree-ui.ts</code> &rarr; &ldquo;Open Skill Graph&rdquo; button; SPEC.md amendment</h2></div>
+    <p class="sec-intro">Replace the 4-column text-list rendering in <code>skilltree-ui.ts</code> with a single &ldquo;Open Skill Graph&rdquo; button that, when clicked, opens the graphview. The skill-tree modal shrinks to: stats strip + tier-reset section + the new button. The text-list rendering goes away entirely &mdash; no fallback. Amend <code>SPEC.md</code> &sect;9.3 to name the graph-view UI as canonical.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-ui.ts</code> &nbsp; <code>~ src/main.ts</code> &nbsp; <code>~ src/input.ts</code> &nbsp; <code>~ SPEC.md</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Refactor <code>mountSkillTreeUi</code> in <code>src/skilltree-ui.ts</code>:
+        <br>&bull; Drop the imports of <code>BRANCH_LABEL</code>, <code>BRANCH_SUBPATHS</code>, <code>NODE_CATALOG</code>, <code>SUBPATH_LABEL</code>, <code>SkillNode</code>, <code>SubPathId</code>, <code>buyNode</code>, <code>buyKeystone</code>, <code>canBuyKeystone</code>, <code>costToUnlock</code>, <code>DEFAULT_GRAPH</code>, <code>KEYSTONE_PREREQS</code>.
+        <br>&bull; Delete <code>nodeRow</code>, <code>NodeRowRef</code>, <code>nodeRefs</code>, <code>subStatusRefs</code>, <code>applyState</code>.
+        <br>&bull; Inside <code>buildBody</code>, delete the branchGrid construction. Replace with a single &ldquo;Open Skill Graph&rdquo; button.
+        <br>&bull; Add a new dep <code>openSkillGraph(): void</code> to <code>SkillTreeUiDeps</code>; the button calls it.
+      </div>
+      <pre><span class="kw">export interface</span> SkillTreeUiDeps {
+  getState(): IslandState;
+  openSkillGraph(): <span class="kw">void</span>;
+}
+
+<span class="comment">// in buildBody, replacing the branchGrid block:</span>
+<span class="kw">const</span> openBtn = document.createElement(<span class="str">'button'</span>);
+openBtn.className = <span class="str">'ri-btn'</span>;
+openBtn.textContent = <span class="str">'&#9826; OPEN SKILL GRAPH'</span>;
+openBtn.style.alignSelf = <span class="str">'center'</span>;
+openBtn.style.marginTop = <span class="str">'10px'</span>;
+openBtn.style.fontSize = <span class="str">'14px'</span>;
+openBtn.style.padding = <span class="str">'10px 22px'</span>;
+openBtn.addEventListener(<span class="str">'click'</span>, () =&gt; {
+  deps.openSkillGraph();
+  handle.hide(); <span class="comment">// modal yields to full-page overlay</span>
+});
+body.appendChild(openBtn);</pre>
+
+      <div class="step"><b>Step 2.</b> Simplify <code>refresh()</code> &mdash; the per-node repaint and per-sub-path completion loops are gone. Keep only the stats-strip + tier-reset refresh.</div>
+
+      <div class="step"><b>Step 3.</b> Wire the dep in <code>src/main.ts</code> &mdash; pass <code>{ getState: activeState, openSkillGraph: () =&gt; skillGraph.show() }</code> to <code>mountSkillTreeUi</code>. Make sure <code>skillGraph</code> is declared BEFORE <code>skillTree</code> (move its <code>mountSkillGraphView</code> call up if needed).</div>
+
+      <div class="step"><b>Step 4.</b> Update the temporary KeyJ binding from Task 2 to the permanent one OR remove it entirely. Either:
+        <br>(a) Keep <code>KeyJ</code> for direct graphview access (skip the intermediate modal); or
+        <br>(b) Drop the binding &mdash; the only entry is the &ldquo;Open Skill Graph&rdquo; button inside the legacy <code>KeyK</code> modal.
+        <br><b>Recommended:</b> (a) &mdash; opens directly without forcing the user through the legacy modal. Document the binding in <code>AGENTS.md</code>'s &ldquo;Input&rdquo; section if there is one.</div>
+
+      <div class="step"><b>Step 5.</b> Amend <code>SPEC.md</code> &sect;9.3 (after the existing graph-redesign rewrite). Append (or insert near the end of the section):</div>
+      <pre>&gt; <span class="kw">**Graph-view UI (canonical, 2026-05-23):**</span> the skill graph is rendered
+&gt; as a full-page, pannable / zoomable PixiJS overlay (see
+&gt; <span class="str">`src/skilltree-graphview.ts`</span> + <span class="str">`src/skilltree-layout.ts`</span>). Per-node
+&gt; click triggers <span class="str">`buyNode`</span> via the cheapest-path solver (or
+&gt; <span class="str">`buyKeystone`</span> for AND-gated keystones). The v1 4-column text list
+&gt; that briefly shipped in <span class="str">`src/skilltree-ui.ts`</span> was transitional;
+&gt; the legacy modal now contains only the stats strip, tier-reset
+&gt; section, and an "Open Skill Graph" button.</pre>
+
+      <div class="step"><b>Step 6.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -8</pre>
+      <div class="expected"><b>Expected:</b> build clean. Tests may drop slightly if any test asserted on the old skilltree-ui DOM structure &mdash; check and either update or delete those tests.</div>
+
+      <div class="step"><b>Step 7.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-ui.ts src/main.ts src/input.ts SPEC.md
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): replace 4-column list with "Open Skill Graph" button
+
+The legacy skilltree-ui.ts modal shrinks to: stats strip + tier-reset
+section + a single "Open Skill Graph" button that mounts the new
+full-page PixiJS graphview (skilltree-graphview.ts). The 4-column text
+list, per-node DOM rows, and applyState repaint loop are deleted &mdash;
+the graphview is the canonical rendering of &sect;9.3.
+
+Adds openSkillGraph() to SkillTreeUiDeps and wires it in main.ts.
+SPEC.md &sect;9.3 amended to name the graph-view UI as canonical.
+
+KeyJ stays bound to toggle-skill-graph so the graphview is reachable
+directly without going through the legacy modal.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 10 -->
+  <section id="task-10">
+    <div class="sec-head"><span class="num">10</span><h2>Task 10 &mdash; Browser smoke + polish pass</h2></div>
+    <p class="sec-intro">Manual browser smoke via Daedalus. Verify the full flow: open via KeyJ or button &rarr; pan &rarr; zoom &rarr; hover &rarr; click-buy &rarr; close. Capture a screenshot. Fix any layout glitches that show up; otherwise no code changes &mdash; this task is the verification gate.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-graphview.ts (only if smoke surfaces bugs)</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Build the bundle.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10</pre>
+
+      <div class="step"><b>Step 2.</b> Tell the lead "build green; ready for browser smoke" in the return contract. The lead handles the Daedalus tab interaction (list tabs &rarr; reload &rarr; KeyJ &rarr; screenshot). Do NOT attempt Daedalus calls from inside a kimi subagent &mdash; the MCP isn't available to kimi.</div>
+
+      <div class="step"><b>Step 3.</b> If the lead reports back any specific bug (clustering, edges off-screen, click hit-test off, etc.), patch it in a follow-up commit. Fix the bug, re-run <code>npm run build &amp;&amp; npm test</code>, commit with a <code>fix(skilltree):</code> subject, push.</div>
+
+      <div class="step"><b>Step 4.</b> If smoke passes clean, commit a no-op marker OR skip the commit entirely &mdash; the task closes via the lead's verification log on the dispatch report.</div>
+      <pre class="bash"><span class="comment"># only if there was a smoke fix:</span>
+git add src/skilltree-graphview.ts
+git commit -F - &lt;&lt;'EOF'
+fix(skilltree): &lt;specific smoke finding&gt;
+
+&lt;1-sentence root cause + fix&gt;.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Implementation plan v1 &middot; 2026-05-23 &middot; references: design spec
+      <code>robot-islands/2026-05-23-skilltree-graphview-ui-design</code> v1
+      &middot; precedent plan <code>robot-islands/2026-05-23-skilltree-graph-redesign</code> v1.</p>
+  </div>
+
+</div>
+</body>
+</html>
