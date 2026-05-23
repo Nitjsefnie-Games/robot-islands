@@ -333,8 +333,8 @@ describe('skill tree depth', () => {
       { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
       { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
       { id: 'mining.3', subPath: 'mining', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
-      { id: 'mining.6', subPath: 'mining', depth: 6, cost: 32, magnitude: 0, effect: { kind: 'structural', description: 'mining unique unlock (depth 6)' }, description: '' },
-      { id: 'launch.1', subPath: 'launch', depth: 1, cost: 1, magnitude: 0, effect: { kind: 'structural', description: 'launch depth-1 unlock' }, description: '' },
+      { id: 'mining.6', subPath: 'mining', depth: 6, cost: 32, magnitude: 0, effect: { kind: 'structural', description: 'mining unique unlock (depth 6)', data: { kind: 'sharedPowerGrid' } }, description: '' },
+      { id: 'launch.1', subPath: 'launch', depth: 1, cost: 1, magnitude: 0, effect: { kind: 'structural', description: 'launch depth-1 unlock', data: { kind: 'sharedPowerGrid' } }, description: '' },
     ];
     const s = makeState({
       unlockedNodes: new Set(['mining.1', 'mining.2', 'mining.3', 'mining.6', 'launch.1']),
