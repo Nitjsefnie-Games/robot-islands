@@ -40,11 +40,23 @@ export const K_RARE_MULT = 1.5;
  *  cycleSec. */
 export const PAYBACK_HORIZON_CYCLES = 90;
 
-/** Per-tile basket for natural-target shots. Applied 16× (one per brush tile)
- *  at placement-commit per p2_animation_cost = upfront_cost. Spec §04 placeholder. */
-export const NATURAL_PER_TILE_BASKET: Readonly<Partial<Record<ResourceId, number>>> = {
-  stone: 5,
-  gear: 2,
+/** Number of tiles in one terrain_modifier brush shot. */
+const BRUSH_TILES = 16;
+
+/** Per-natural-target input cost (per tile). Per-shot cost = entries × 16 tiles.
+ *  Heavy magnitudes by design — modifier is a strategic placement-cost unlock,
+ *  not a scaling lever. Each natural-target tile costs the resource it would
+ *  produce, except grass + magma_vent which have no direct extractor (blanket). */
+export const NATURAL_TARGET_INPUT_PER_TILE: Readonly<
+  Record<'grass' | 'stone' | 'tree' | 'sand' | 'ice' | 'water' | 'magma_vent', Record<string, number>>
+> = {
+  grass:       { stone: 200, gear: 100 },   // no extractor; blanket
+  stone:       { stone: 500 },               // self-cost (mine output)
+  tree:        { wood: 500 },                // logger output
+  sand:        { sand: 500 },                // quarry output
+  ice:         { ice: 500 },                 // arctic extractor output
+  water:       { water: 500 },               // well output
+  magma_vent:  { stone: 300, coal: 50 },     // no extractor; coal as heat-source proxy
 };
 
 // ---------------------------------------------------------------------------
@@ -152,11 +164,13 @@ export function conversionCostForTarget(
   target: TerrainKind,
 ): Partial<Record<ResourceId, number>> {
   if (NATURAL_TARGET_TERRAINS.has(target)) {
-    const out: Partial<Record<ResourceId, number>> = {};
-    for (const [r, n] of Object.entries(NATURAL_PER_TILE_BASKET)) {
-      out[r as ResourceId] = (n ?? 0) * 16;
+    const perTile = NATURAL_TARGET_INPUT_PER_TILE[target as keyof typeof NATURAL_TARGET_INPUT_PER_TILE];
+    if (perTile === undefined) return {};
+    const out: Record<string, number> = {};
+    for (const [r, qty] of Object.entries(perTile)) {
+      out[r] = qty * BRUSH_TILES;
     }
-    return out;
+    return out as Partial<Record<ResourceId, number>>;
   }
   if (RARE_TARGET_TERRAINS.has(target)) {
     const input = RARE_TARGET_INPUT[target];
@@ -167,7 +181,7 @@ export function conversionCostForTarget(
       return {};
     }
     const perTile = K_RARE_MULT * naturalExtractionRate(target) * PAYBACK_HORIZON_CYCLES;
-    return { [input]: Math.ceil(perTile * 16) };
+    return { [input]: Math.ceil(perTile * BRUSH_TILES) };
   }
   // Unclassified kind — return an empty basket. The coverage test catches this.
   return {};
