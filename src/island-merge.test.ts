@@ -89,9 +89,8 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     level: 1,
     unspentSkillPoints: 0,
     unlockedNodes: new Set(),
-    subPathProgress: new Map(),
+    unlockedEdges: new Set(),
     funnelPending: emptyFunnel(),
-    specializationRole: null,
     declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
@@ -255,13 +254,8 @@ describe('performMerge', () => {
     const sb = makeState({
       id: 'b',
       unspentSkillPoints: 5,
-      // Simulate "3 points spent into 2 nodes (cost 1 each)" via the
-      // subPathProgress map — the merge code sums `progress.spent` here.
-      // Use two sub-paths for variety so the sum is genuinely cross-path.
-      subPathProgress: new Map([
-        ['mining', { spent: 2, complete: false }],
-        ['forestry', { spent: 1, complete: false }],
-      ]),
+      // Simulate 3 points spent into nodes (mining.1=1, mining.2=2).
+      unlockedNodes: new Set(['mining.1', 'mining.2']),
     });
     expect(islandRefundedPoints(sb)).toBe(5 + 3);
     const world = makeWorld([a, b]);
@@ -288,11 +282,11 @@ describe('performMerge', () => {
     expect(sa.xp).toBe(1234);
   });
 
-  it("preserves absorber's modifiers and specialization role (absorbed's are voided)", () => {
+  it("preserves absorber's modifiers (absorbed's are voided)", () => {
     const a = makeSpec({ id: 'a', modifiers: ['stable'] });
     const b = makeSpec({ id: 'b', cx: 20, cy: 0, modifiers: ['cursed_storms', 'fertile'] });
-    const sa = makeState({ id: 'a', specializationRole: 'logistics_hub' });
-    const sb = makeState({ id: 'b', specializationRole: 'mining' });
+    const sa = makeState({ id: 'a' });
+    const sb = makeState({ id: 'b' });
     const world = makeWorld([a, b]);
     const states = new Map<string, IslandState>([
       ['a', sa],
@@ -300,7 +294,6 @@ describe('performMerge', () => {
     ]);
     performMerge(world, states, a, b);
     expect(a.modifiers).toEqual(['stable']);
-    expect(sa.specializationRole).toBe('logistics_hub');
   });
 
   it("shifts absorbed buildings into absorber's local frame by the offset", () => {

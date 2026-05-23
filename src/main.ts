@@ -36,11 +36,7 @@ import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes
 import { advanceIsland, computeRates, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
 import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
-import {
-  effectiveSpecializationMultipliers,
-  IDENTITY_SPECIALIZATION,
-  type SpecializationMultipliers,
-} from './specialization.js';
+
 import { tierForLevel } from './skilltree.js';
 import { renderCellGrid } from './grid.js';
 import { mountHud, mountIslandBar } from './hud.js';
@@ -1663,14 +1659,6 @@ async function main(): Promise<void> {
     // happens at the call site below (not inside advanceIsland) so the
     // pure economy doesn't take a dependency on `tierForLevel`.
     const ncState = computeNcState(worldState);
-    // Specialization multipliers depend only on `state.specializationRole`,
-    // which is mutable from the UI. Recompute per-island per-frame; the
-    // fold is constant-cost and pre-baking it would require invalidation
-    // plumbing on the declare-role callback.
-    const specMulFor = (s: IslandState): SpecializationMultipliers =>
-      s.specializationRole === null
-        ? IDENTITY_SPECIALIZATION
-        : effectiveSpecializationMultipliers(s.specializationRole);
     const ncBuffFor = (s: IslandState): number =>
       tierForLevel(s.level) >= 3 ? ncState.globalProductionBuff : 1;
     // Advance every populated island in turn. Routes are dispatched AFTER
@@ -1722,7 +1710,6 @@ async function main(): Promise<void> {
       const stForCtx = islandStates.get(id);
       return {
         modifierMul: modifierMulFor(id),
-        specMul: stForCtx ? specMulFor(stForCtx) : undefined,
         ncBuff: stForCtx ? ncBuffFor(stForCtx) : undefined,
         terrainAt: spec?.terrainAt,
         inventory: isLatticeIsland ? unifiedInv : undefined,
@@ -1752,7 +1739,6 @@ async function main(): Promise<void> {
         : () => false;
       advanceIsland(s, now, {
         modifierMul: modifierMulFor(s.id),
-        specMul: specMulFor(s),
         ncBuff: ncBuffFor(s),
         terrainAt: spec?.terrainAt,
         inventory: isLatticeIsland ? unifiedInv : undefined,
@@ -1772,7 +1758,6 @@ async function main(): Promise<void> {
       }, nowWall);
       const { net, power } = computeRates(s, {
         modifierMul: modifierMulFor(s.id),
-        specMul: specMulFor(s),
         ncBuff: ncBuffFor(s),
         terrainAt: spec?.terrainAt,
         inventory: isLatticeIsland ? unifiedInv : undefined,
@@ -1919,7 +1904,6 @@ async function main(): Promise<void> {
     const postTickGeothermal = postTickActiveP?.modifiers.includes('geothermal_active') === true;
     const { net: postNet, power: postPower } = computeRates(postTickActiveS, {
       modifierMul: modifierMulFor(postTickActiveS.id),
-      specMul: specMulFor(postTickActiveS),
       ncBuff: ncBuffFor(postTickActiveS),
       terrainAt: postTickActiveP?.terrainAt,
       inventory: postTickLattice ? unifiedInv : undefined,
@@ -1948,7 +1932,6 @@ async function main(): Promise<void> {
       const activeCableComponent = cableBalances.get(activeS.id);
       const { net: activeNet, power: activePower } = computeRates(activeS, {
         modifierMul: modifierMulFor(activeS.id),
-        specMul: specMulFor(activeS),
         ncBuff: ncBuffFor(activeS),
         terrainAt: activeP?.terrainAt,
         inventory: unifiedInv,

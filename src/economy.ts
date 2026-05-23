@@ -51,13 +51,8 @@ import {
 import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, type SubPathId } from './skilltree.js';
-import {
-  effectiveSpecializationMultipliers,
-  IDENTITY_SPECIALIZATION,
-  type RoleId,
-  type SpecializationMultipliers,
-} from './specialization.js';
+import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId } from './skilltree.js';
+import type { EdgeId } from './skilltree-graph.js';
 
 /**
  * Optional context object for `computeRates` and `advanceIsland`. Adding
@@ -92,7 +87,6 @@ export type PausedReason = 'anchor-depopulated' | 'terrain-lost';
 export interface RatesContext {
   readonly modifierMul?: ModifierMultipliers;
   readonly defs?: DefCatalog;
-  readonly specMul?: SpecializationMultipliers;
   readonly ncBuff?: number;
   /** Optional island terrain closure. Threaded to `resolveRecipe` for
    *  tile-dependent recipe selection per §8.1 (Mine produces ore on an
@@ -214,8 +208,9 @@ export interface IslandState {
   unspentSkillPoints: number;
   /** Set of unlocked skill-tree node ids (§9.3). */
   unlockedNodes: Set<NodeId>;
-  /** Per-sub-path progress, sparse: only sub-paths with ≥1 spent point have entries. */
-  subPathProgress: Map<SubPathId, { spent: number; complete: boolean }>;
+  /** Set of owned graph edge ids. An edge can be owned even when its endpoint
+   *  is reached via another path (redundant unlocks are allowed). */
+  unlockedEdges: Set<EdgeId>;
   /** Pending bonus XP credits per resource per §10 (Funneling). When a route
    *  delivers `r` to this island and the island is below the funneling tier
    *  cap, `r × xp_weight[r] × funneling_bonus_percent` accumulates here. The
@@ -224,12 +219,6 @@ export interface IslandState {
    *  as 0 — `makeInitialIslandState` seeds all ResourceIds to 0 explicitly
    *  so the deductions in `accrueXp` never see undefined. */
   funnelPending: Record<ResourceId, number>;
-  /** §9.4 declared specialization role, or `null` for the Generalist
-   *  baseline. Declaration is one-way except via §9.7 Tier Reset, which
-   *  clears it back to null — see `tier-reset.ts`. The economy reads this
-   *  each frame via `effectiveSpecializationMultipliers` to fold the role's
-   *  buff/penalty into the rate, storage, and XP multipliers. */
-  specializationRole: RoleId | null;
   /** Wall-clock timestamp (ms) at which the player declared the current role.
    *  Null until the first declaration. Carries no economic semantics in
    *  step 10 — it's a UX hook for the §9.7 Tier Reset cooldown timer
@@ -371,12 +360,7 @@ export function cap(
   // lookup returns undefined and the category-mul defaults to 1.
   const cat = RESOURCE_STORAGE_CATEGORY[r];
   const catMul = cat ? mult.storageCategoryCap[cat] ?? 1 : 1;
-  // Specialization storage multiplier (§9.4 logistics_hub) reads from state
-  // so every cap()-call site (outputAvail, findNextCapEvent, applyRates, the
-  // HUD) sees the same effective cap without threading specMul as a param.
-  // Identity role → 1.0, composes cleanly.
-  const specMul = effectiveSpecializationMultipliers(state.specializationRole).storageCapMul;
-  const computedCap = nominal * skillMul * catMul * specMul;
+  const computedCap = nominal * skillMul * catMul;
   if (opts?.ignoreGrace) return computedCap;
   const grace = state.starterInventoryGrace[r] ?? 0;
   return Math.max(computedCap, grace);
@@ -611,7 +595,6 @@ export function computeRates(
   const {
     modifierMul = IDENTITY_MODIFIER_MULTIPLIERS,
     defs = BUILDING_DEFS,
-    specMul = IDENTITY_SPECIALIZATION,
     ncBuff = 1,
     terrainAt,
   } = ctx ?? {};
@@ -868,8 +851,7 @@ export function computeRates(
       (skillMul.recipeRate[recipe.category] ?? 1) *
       (modifierMul.recipeRateByCategory[recipe.category] ?? 1) *
       modifierMul.globalRecipeRate *
-      (specMul.recipeRateByCategory[recipe.category] ?? 1) *
-      specMul.globalRecipeRate *
+
       ncBuff;
     const isT5Extractor =
       b.defId === 'aetheric_conduit' ||
@@ -905,8 +887,7 @@ export function computeRates(
       (skillMul.recipeRate[te.recipe.category] ?? 1) *
       (modifierMul.recipeRateByCategory[te.recipe.category] ?? 1) *
       modifierMul.globalRecipeRate *
-      (specMul.recipeRateByCategory[te.recipe.category] ?? 1) *
-      specMul.globalRecipeRate *
+
       ncBuff;
     // §4.5: soft-gate effectiveMul scales nominalRate so inputAvail's
     // demand calculation matches actual consumption under the gate.
@@ -1471,7 +1452,7 @@ export function advanceIsland(
    *  the long-standing test convention (`nowMs = 12*HOUR ⇒ Night`). */
   wallClockNowMs?: number,
 ): void {
-  const { specMul = IDENTITY_SPECIALIZATION, defs = BUILDING_DEFS } = ctx ?? {};
+  const { defs = BUILDING_DEFS } = ctx ?? {};
   // §2.7 perf→wall offset. `wallClockNowMs - nowMs` is constant across this
   // advance call, so each segment's wall-clock time is `t + wallOffset`.
   // Tests that omit `wallClockNowMs` fall back to `wallOffset = 0` — the
@@ -1622,7 +1603,7 @@ export function advanceIsland(
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps);
-      accrueXp(state, production, consumption, dtSec, specMul.xpMul);
+      accrueXp(state, production, consumption, dtSec);
       // §13.3 Singularity Battery — apply charge/discharge over the segment.
       if (rawBalance > 0 && maxCap > 0) {
         const chargeWs = rawBalance * dtSec;

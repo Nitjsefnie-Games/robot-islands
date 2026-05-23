@@ -340,7 +340,7 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
     expect(state.level).toBe(1);
     expect(state.xp).toBe(0);
     expect(state.unspentSkillPoints).toBe(0);
-    expect(state.specializationRole).toBeNull();
+    expect(state.unlockedEdges.size).toBe(0);
     expect(state.aiCoreCrafted).toBe(false);
     expect(state.ascendantCoreCrafted).toBe(false);
   });

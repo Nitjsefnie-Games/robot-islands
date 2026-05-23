@@ -41,7 +41,6 @@ import {
 import { checkGates } from './adjacency.js';
 import { placeBuilding, validatePlacement } from './placement.js';
 import { ALL_RESOURCES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
-import { effectiveSpecializationMultipliers } from './specialization.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
@@ -100,9 +99,8 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     level: 1,
     unspentSkillPoints: 0,
     unlockedNodes: new Set(),
-    subPathProgress: new Map(),
+    unlockedEdges: new Set(),
     funnelPending: blankFunnel(),
-    specializationRole: null,
     declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
@@ -1080,57 +1078,6 @@ describe('funneling — consumption drains pending bonus XP credit (§10)', () =
   });
 });
 
-describe('xpMul applies to funnel drain', () => {
-  // research_beacon role has xpMul = 1.5, globalRecipeRate = 0.75.
-  // Workshop 1/100s = 0.01/s base. Over 1000s: (rebalanced step #19)
-  // Workshop with that role:
-  //   - recipe rate × 0.75 → consumes iron_ore at 0.01 × 0.75 = 0.0075/s
-  //   - produces bolt at 0.0075/s → production XP = 0.0075 × 10 × 1000s × 1.5(xpMul) = 112.5
-  //   - funnel drain over 1000s: 0.0075 × 1000 = 7.5 units consumed
-  //     → drain owed = 7.5 × xp_weight[iron_ore](1) × 0.5 = 3.75
-  //     → after xpMul(1.5): 3.75 × 1.5 = 5.625 bonus XP from drain
-  //   - total XP = 112.5 + 5.625 = 118.125
-  //
-  // Baseline (no role, identity multipliers):
-  //   - consumes iron_ore at 0.01/s → 10 units consumed → drain = 10 × 1 × 0.5 = 5 bonus XP
-  //   - production XP = 0.01 × 10 × 1000s = 100; total = 100 + 5 = 105
-  it('research_beacon role: funnel drain is also scaled by xpMul (1.5×)', () => {
-    const beaconMul = effectiveSpecializationMultipliers('research_beacon');
-    // Baseline state (no role). High level so XP gain doesn't trigger level-up
-    // (rebalanced step #19 lowered xpForLevel coefficient — gains of ~118 XP would
-    // cross L2 threshold ≈ 115 and drain state.xp).
-    const baseline = makeState({
-      buildings: [WORKSHOP],
-      inventory: { ...blankInventory(), iron_ore: 100, coal: 100 },
-      level: 50, // avoid level-up triggering during this XP-only test
-    });
-    baseline.funnelPending.iron_ore = 500; // plenty, won't be fully drained
-    advanceIsland(baseline, 1_000_000, { defs: POWER_FREE });
-    // baseline production XP: 0.01 bolt/s × 1000s × 10 = 100; drain: 5
-    expect(baseline.xp).toBeCloseTo(318.1818181818182, 6);
-
-    // research_beacon state
-    const beacon = makeState({
-      buildings: [WORKSHOP],
-      inventory: { ...blankInventory(), iron_ore: 100, coal: 100 },
-      specializationRole: 'research_beacon',
-      level: 50, // avoid level-up triggering during this XP-only test
-    });
-    beacon.funnelPending.iron_ore = 500; // same large pool
-    advanceIsland(beacon, 1_000_000, { defs: POWER_FREE, specMul: beaconMul, ncBuff: 1 });
-    // production XP: 0.0075/s × 1000s × 10 × 1.5(xpMul) = 112.5
-    // drain component: 7.5 units consumed × 1 × 0.5 × 1.5(xpMul) = 5.625
-    // total = 118.125
-    expect(beacon.xp).toBeCloseTo(357.9545454545455, 6);
-    // The drain alone (XP - production XP) is scaled by xpMul.
-    const baselineDrain = baseline.xp - 100; // baseline production = 100
-    const beaconDrain = beacon.xp - 112.5;  // beacon production = 112.5
-    // xpMul scaled the drain as well — beacon drain > baseline drain
-    expect(beaconDrain).toBeGreaterThan(baselineDrain);
-    expect(beaconDrain).toBeCloseTo(245.4545454545455, 6);
-    expect(baselineDrain).toBeCloseTo(218.1818181818182, 6);
-  });
-});
 
 describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
   it('mineral_rich: extraction-tagged Mine runs at 1.25× base rate', () => {
@@ -1476,69 +1423,6 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
 // Step 10 — specialization roles + Network Consciousness
 // -----------------------------------------------------------------------
 
-describe('step-10 — specialization role integration (§9.4)', () => {
-  it('foundry role: smelting × 1.5, manufacturing × 0.75', () => {
-    // Smelter 1/80s = 0.0125/s; Workshop 1/100s = 0.01/s. (rebalanced step #19)
-    const SMELTER: PlacedBuilding = { id: 'b-smelter', defId: 'smelter', x: 0, y: 0 };
-    const WORK: PlacedBuilding = { id: 'b-work', defId: 'workshop', x: 0, y: 0 };
-    // Power-free catalog for both — POWER_FREE strips mine/workshop only,
-    // and the smelter ships with power.consumes. Strip both here for the test.
-    const noPower = ((): DefCatalog => {
-      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
-      for (const id of ['smelter', 'workshop'] as const) {
-        const def = base[id];
-        const { power: _power, ...rest } = def;
-        base[id] = rest as BuildingDef;
-      }
-      return base;
-    })();
-    const foundryMul = effectiveSpecializationMultipliers('foundry');
-    const state = makeState({
-      buildings: [SMELTER, WORK],
-      inventory: { ...blankInventory(), iron_ore: 1000, coal: 1000 },
-      storageCaps: blankCaps(10000),
-    });
-    const { byBuilding } = computeRates(state, { defs: noPower, specMul: foundryMul, ncBuff: 1 });
-    // Smelter base 1/80 = 0.0125/s × 1.5 = 0.01875. Workshop base 1/100 = 0.01/s × 0.75 = 0.0075. (rebalanced step #19)
-    const smelterRate = byBuilding.find((b) => b.building.defId === 'smelter')!.effectiveRate;
-    const workRate = byBuilding.find((b) => b.building.defId === 'workshop')!.effectiveRate;
-    expect(smelterRate).toBeCloseTo(0.05555555555555555, 9);
-    expect(workRate).toBeCloseTo(0.022727272727272728, 9);
-  });
-
-  it('research_beacon role: XP gain × 1.5, recipe rates × 0.75', () => {
-    // Mine 1/50s = 0.02/s. research_beacon: rate × 0.75 → 0.015/s. (rebalanced step #19)
-    // Over 100s: production = 1.5 iron_ore; XP = 1.5 × 1 × 1.5 = 2.25.
-    const beaconMul = effectiveSpecializationMultipliers('research_beacon');
-    const state = makeState({
-      buildings: [MINE],
-      inventory: blankInventory(),
-      specializationRole: 'research_beacon',
-    });
-    advanceIsland(state, 100_000, { defs: POWER_FREE, specMul: beaconMul, ncBuff: 1 });
-    expect(state.inventory.iron_ore).toBeCloseTo(4.411764705882352, 9);
-    expect(state.xp).toBeCloseTo(6.617647058823529, 9);
-  });
-
-  it('NC buff +5% applies to T3+ island production but NOT to T1 island', () => {
-    // Mine 1/50s = 0.02/s. Over 100s: T1 = 2.0 units, T3 = 2.0 × 1.05 = 2.1. (rebalanced step #19)
-    const NC_BUFF = 1.05;
-    const t1 = makeState({
-      buildings: [MINE],
-      inventory: blankInventory(),
-      level: 1, // T1
-    });
-    const t3 = makeState({
-      buildings: [MINE],
-      inventory: blankInventory(),
-      level: 15, // T3
-    });
-    advanceIsland(t1, 100_000, { defs: POWER_FREE, ncBuff: 1 });
-    advanceIsland(t3, 100_000, { defs: POWER_FREE, ncBuff: NC_BUFF });
-    expect(t1.inventory.iron_ore).toBeCloseTo(5.88235294117647, 9);
-    expect(t3.inventory.iron_ore).toBeCloseTo(6.176470588235294, 9);
-  });
-});
 
 // -----------------------------------------------------------------------
 // Step 12 — T4 endgame production integration (§6.5 / §9.5)

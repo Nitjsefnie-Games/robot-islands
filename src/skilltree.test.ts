@@ -53,9 +53,8 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     level: 1,
     unspentSkillPoints: 0,
     unlockedNodes: new Set(),
-    subPathProgress: new Map(),
+    unlockedEdges: new Set(),
     funnelPending: blankFunnel(),
-    specializationRole: null,
     declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
@@ -199,7 +198,6 @@ describe('canSpend', () => {
       level: 5,
       unspentSkillPoints: 5,
       unlockedNodes: new Set(['mining.1']),
-      subPathProgress: new Map([['mining', { spent: 1, complete: false }]]),
     });
     expect(canSpend(s, 'mining.1')).toEqual({
       ok: false,
@@ -220,7 +218,6 @@ describe('canSpend', () => {
       level: 5,
       unspentSkillPoints: 5,
       unlockedNodes: new Set(['mining.1']),
-      subPathProgress: new Map([['mining', { spent: 1, complete: false }]]),
     });
     expect(canSpend(s, 'mining.2')).toEqual({ ok: true });
   });
@@ -232,109 +229,20 @@ describe('canSpend', () => {
       level: 5,
       unspentSkillPoints: 5,
       unlockedNodes: new Set(['mining.1']),
-      // Spent over the commit threshold to simulate "committed but incomplete"
-      // in mining; uses a synthetic spent count for the cross-branch test.
-      subPathProgress: new Map([['mining', { spent: 3, complete: false }]]),
     });
     expect(canSpend(s, 'smelting.1')).toEqual({ ok: true });
   });
 });
 
-describe('canSpend — branch lock (synthetic catalog)', () => {
-  // Step-5 catalog has only depth 1+2 per sub-path, so committing at the
-  // 3-point threshold simultaneously completes the sub-path. To exercise
-  // the "committed but incomplete" branch lock, we inject a 3-node sub-path
-  // catalog with cost 1 each. Spending 3 points across all three nodes
-  // commits the sub-path; spending only 1 leaves it committed-incomplete.
-
-  const SYNTH_CATALOG: ReadonlyArray<SkillNode> = [
-    {
-      id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05,
-      effect: { kind: 'placeholder' }, description: 's1',
-    },
-    {
-      id: 'mining.2', subPath: 'mining', depth: 2, cost: 1, magnitude: 0.05,
-      effect: { kind: 'placeholder' }, description: 's2',
-    },
-    {
-      id: 'mining.3', subPath: 'mining', depth: 3, cost: 1, magnitude: 0.05,
-      effect: { kind: 'placeholder' }, description: 's3',
-    },
-    {
-      id: 'forestry.1', subPath: 'forestry', depth: 1, cost: 1, magnitude: 0.05,
-      effect: { kind: 'placeholder' }, description: 'sf',
-    },
-    {
-      id: 'smelting.1', subPath: 'smelting', depth: 1, cost: 1, magnitude: 0.05,
-      effect: { kind: 'placeholder' }, description: 'ssm',
-    },
-  ];
-
-  it('does not lock siblings before the commit threshold is reached', () => {
-    // 2 points spent on mining (depth 1 + 2) is below the threshold of 3.
-    // Forestry must still be reachable while mining is sub-threshold.
-    const s = makeState({ level: 30, unspentSkillPoints: 10 });
-    spendPoint(s, 'mining.1', SYNTH_CATALOG);
-    spendPoint(s, 'mining.2', SYNTH_CATALOG);
-    expect(canSpend(s, 'forestry.1', SYNTH_CATALOG)).toEqual({ ok: true });
-  });
-
-  it('locks sibling sub-paths when committed-incomplete (4-node mining)', () => {
-    const SYNTH4: ReadonlyArray<SkillNode> = [
-      {
-        id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05,
-        effect: { kind: 'placeholder' }, description: 's1',
-      },
-      {
-        id: 'mining.2', subPath: 'mining', depth: 2, cost: 1, magnitude: 0.05,
-        effect: { kind: 'placeholder' }, description: 's2',
-      },
-      {
-        id: 'mining.3', subPath: 'mining', depth: 3, cost: 1, magnitude: 0.05,
-        effect: { kind: 'placeholder' }, description: 's3',
-      },
-      {
-        id: 'mining.4', subPath: 'mining', depth: 4, cost: 1, magnitude: 0.05,
-        effect: { kind: 'placeholder' }, description: 's4',
-      },
-      {
-        id: 'forestry.1', subPath: 'forestry', depth: 1, cost: 1, magnitude: 0.05,
-        effect: { kind: 'placeholder' }, description: 'sf',
-      },
-      {
-        id: 'smelting.1', subPath: 'smelting', depth: 1, cost: 1, magnitude: 0.05,
-        effect: { kind: 'placeholder' }, description: 'ssm',
-      },
-    ];
-    const s = makeState({ level: 50, unspentSkillPoints: 10 });
-    spendPoint(s, 'mining.1', SYNTH4);
-    spendPoint(s, 'mining.2', SYNTH4);
-    spendPoint(s, 'mining.3', SYNTH4);
-    // 3 points spent on mining, 4 nodes in catalog → COMMITTED + INCOMPLETE.
-    // forestry.1 (same branch) must be blocked.
-    expect(canSpend(s, 'forestry.1', SYNTH4)).toEqual({
-      ok: false,
-      reason: 'branch-locked',
-    });
-    // smelting.1 (refinement branch) must be unaffected.
-    expect(canSpend(s, 'smelting.1', SYNTH4)).toEqual({ ok: true });
-    // Buying mining.4 completes the sub-path; forestry then unlocks.
-    spendPoint(s, 'mining.4', SYNTH4);
-    expect(canSpend(s, 'forestry.1', SYNTH4)).toEqual({ ok: true });
-  });
-});
-
 describe('spendPoint', () => {
-  it('decrements points, adds to unlockedNodes, updates sub-path progress', () => {
+  it('decrements points and adds to unlockedNodes', () => {
     const s = makeState({ level: 5, unspentSkillPoints: 3 });
     spendPoint(s, 'mining.1');
     expect(s.unspentSkillPoints).toBe(2);
     expect(s.unlockedNodes.has('mining.1')).toBe(true);
-    const prog = s.subPathProgress.get('mining');
-    expect(prog).toEqual({ spent: 1, complete: false });
   });
 
-  it('marks a sub-path complete when all catalog nodes are owned', () => {
+  it('allows spending on all nodes in a small catalog', () => {
     const TWO_NODE_CATALOG: ReadonlyArray<SkillNode> = [
       { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'placeholder' }, description: '' },
       { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'placeholder' }, description: '' },
@@ -342,7 +250,8 @@ describe('spendPoint', () => {
     const s = makeState({ level: 5, unspentSkillPoints: 5 });
     spendPoint(s, 'mining.1', TWO_NODE_CATALOG);
     spendPoint(s, 'mining.2', TWO_NODE_CATALOG);
-    expect(s.subPathProgress.get('mining')).toEqual({ spent: 3, complete: true });
+    expect(s.unlockedNodes.has('mining.1')).toBe(true);
+    expect(s.unlockedNodes.has('mining.2')).toBe(true);
     expect(s.unspentSkillPoints).toBe(2);
   });
 });
@@ -438,7 +347,7 @@ describe('skill tree depth', () => {
     expect(canSpend(s, 'mining.3')).toEqual({ ok: false, reason: 'tier-locked' });
   });
 
-  it('spendPoint with deep nodes updates subPathProgress.complete correctly when all nodes in a sub-path are owned', () => {
+  it('allows spending all nodes in a deep catalog', () => {
     const deepCatalog: ReadonlyArray<SkillNode> = [
       { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'placeholder' }, description: '' },
       { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'placeholder' }, description: '' },
@@ -447,22 +356,18 @@ describe('skill tree depth', () => {
     const s = makeState({ level: 15, unspentSkillPoints: 10 });
     spendPoint(s, 'mining.1', deepCatalog);
     spendPoint(s, 'mining.2', deepCatalog);
-    expect(s.subPathProgress.get('mining')).toEqual({ spent: 3, complete: false });
+    expect(s.unlockedNodes.has('mining.1')).toBe(true);
+    expect(s.unlockedNodes.has('mining.2')).toBe(true);
     spendPoint(s, 'mining.3', deepCatalog);
-    expect(s.subPathProgress.get('mining')).toEqual({ spent: 7, complete: true });
+    expect(s.unlockedNodes.has('mining.3')).toBe(true);
   });
 
-  it('branch lock engages on default catalog after mining.1 + mining.2 (committed but incomplete)', () => {
+  it('parallel work in different branches is allowed', () => {
     const s = makeState({ level: 50, unspentSkillPoints: 10 });
     spendPoint(s, 'mining.1');
     spendPoint(s, 'mining.2');
-    // 3 points spent on mining → committed but incomplete (15 nodes in catalog).
-    // forestry.1 (same branch) must be blocked.
-    expect(canSpend(s, 'forestry.1')).toEqual({
-      ok: false,
-      reason: 'branch-locked',
-    });
-    // smelting.1 (refinement branch) must be unaffected.
+    // With graph redesign, branch lock is removed.
+    expect(canSpend(s, 'forestry.1')).toEqual({ ok: true });
     expect(canSpend(s, 'smelting.1')).toEqual({ ok: true });
   });
 });
@@ -673,7 +578,6 @@ describe('hasPickableSkill', () => {
     const state = makeState({
       level: 15,
       unspentSkillPoints: 0,
-      specializationRole: null,
       declaredAt: null,
     });
     expect(hasPickableSkill(state)).toBe(false);

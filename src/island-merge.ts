@@ -17,6 +17,7 @@
 // overlap.
 
 import type { IslandState } from './economy.js';
+import { nodeById } from './skilltree.js';
 import {
   islandsOverlap,
   islandTileCount,
@@ -69,8 +70,9 @@ export function chooseMergeAbsorber(
  *  the cost a player paid into each sub-path; one point per cost-1 node). */
 export function islandRefundedPoints(state: IslandState): number {
   let spent = 0;
-  for (const progress of state.subPathProgress.values()) {
-    spent += progress.spent;
+  for (const nodeId of state.unlockedNodes) {
+    const node = nodeById(nodeId);
+    if (node) spent += node.cost;
   }
   return state.unspentSkillPoints + spent;
 }
