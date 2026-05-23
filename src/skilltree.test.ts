@@ -9,6 +9,7 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   canSpend,
   costForDepth,
+  costToUnlock,
   cumulativeSkillPointsForLevel,
   effectiveSkillMultipliers,
   hasPickableSkill,
@@ -24,6 +25,7 @@ import {
   tierRequiredForDepth,
   type SkillNode,
 } from './skilltree.js';
+import type { EdgeId, Graph } from './skilltree-graph.js';
 
 function blankInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -581,5 +583,58 @@ describe('hasPickableSkill', () => {
       declaredAt: null,
     });
     expect(hasPickableSkill(state)).toBe(false);
+  });
+});
+
+describe('costToUnlock', () => {
+  function mkNode(id: string): SkillNode {
+    return {
+      id: id as import('./skilltree.js').NodeId,
+      subPath: 'mining',
+      depth: 1,
+      cost: 0,
+      magnitude: 0,
+      effect: { kind: 'recipeRateMul', category: 'extraction' },
+      description: id,
+    };
+  }
+
+  function mkGraph(): Graph {
+    const nodes: SkillNode[] = [
+      mkNode('R'), mkNode('A'), mkNode('X'), mkNode('Z'),
+      mkNode('B'), mkNode('Y'),
+    ];
+    const edges = [
+      { id: 'e_RA' as EdgeId, from: 'R' as import('./skilltree-graph.js').NodeId, to: 'A' as import('./skilltree-graph.js').NodeId, cost: 2 },
+      { id: 'e_AX' as EdgeId, from: 'A' as import('./skilltree-graph.js').NodeId, to: 'X' as import('./skilltree-graph.js').NodeId, cost: 3 },
+      { id: 'e_XZ' as EdgeId, from: 'X' as import('./skilltree-graph.js').NodeId, to: 'Z' as import('./skilltree-graph.js').NodeId, cost: 5 },
+      { id: 'e_RB' as EdgeId, from: 'R' as import('./skilltree-graph.js').NodeId, to: 'B' as import('./skilltree-graph.js').NodeId, cost: 3 },
+      { id: 'e_BY' as EdgeId, from: 'B' as import('./skilltree-graph.js').NodeId, to: 'Y' as import('./skilltree-graph.js').NodeId, cost: 2 },
+    ];
+    return { nodes, edges, bridges: [], graftSockets: [] } as Graph;
+  }
+
+  it('finds cheapest path from owned R to Z (= 2+3+5 = 10)', () => {
+    const g = mkGraph();
+    const owned = new Set(['R']);
+    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned } as any, 'Z');
+    expect(result).not.toBeNull();
+    expect(result!.totalCost).toBe(10);
+    expect(result!.path.map((e) => e.id)).toEqual(['e_RA', 'e_AX', 'e_XZ']);
+  });
+
+  it('uses owned A as a starting frontier (cost = A→X→Z = 8)', () => {
+    const g = mkGraph();
+    const owned = new Set(['R', 'A']);
+    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned } as any, 'Z');
+    expect(result).not.toBeNull();
+    expect(result!.totalCost).toBe(8);
+  });
+
+  it('returns null when no path exists', () => {
+    const g = mkGraph();
+    const owned = new Set(['R']);
+    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned } as any, 'NOTREAL');
+    expect(result).toBeNull();
   });
 });
