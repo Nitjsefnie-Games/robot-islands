@@ -37,6 +37,7 @@
 //     // call handle.destroy() on unmount
 
 import { Z } from './ui-tokens.js';
+import { makePanelDraggable } from './window-manager.js';
 
 export const Zone = {
   /** Top-left. Stacks downward. Reserved for slim status hints. */
@@ -210,6 +211,12 @@ export function mountPanel(el: HTMLElement, opts: PanelMountOptions): PanelHandl
   ro.observe(el);
 
   scheduleLayout();
+  // Hook the window-manager. The helper skips chrome panels via
+  // CHROME_PANEL_IDS, so passing every mountPanel caller through it is
+  // safe — chrome panels stay anchored and never gain drag affordances.
+  makePanelDraggable(el, opts.id, {
+    minWidth: opts.minWidth,
+  });
 
   return {
     el,
