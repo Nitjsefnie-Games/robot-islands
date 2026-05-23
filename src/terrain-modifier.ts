@@ -48,15 +48,15 @@ const BRUSH_TILES = 16;
  *  not a scaling lever. Each natural-target tile costs the resource it would
  *  produce, except grass + magma_vent which have no direct extractor (blanket). */
 export const NATURAL_TARGET_INPUT_PER_TILE: Readonly<
-  Record<'grass' | 'stone' | 'tree' | 'sand' | 'ice' | 'water' | 'magma_vent', Record<string, number>>
+  Record<'grass' | 'stone' | 'tree' | 'sand' | 'ice' | 'water' | 'magma_vent', Partial<Record<ResourceId, number>>>
 > = {
-  grass:       { stone: 200, gear: 100 },   // no extractor; blanket
-  stone:       { stone: 500 },               // self-cost (mine output)
-  tree:        { wood: 500 },                // logger output
-  sand:        { sand: 500 },                // quarry output
-  ice:         { ice: 500 },                 // arctic extractor output
-  water:       { water: 500 },               // well output
-  magma_vent:  { stone: 300, coal: 50 },     // no extractor; coal as heat-source proxy
+  grass:       { stone: 200, gear: 100 },        // no extractor; blanket
+  stone:       { stone: 500 },                    // self-cost
+  tree:        { wood: 500 },                     // logger output
+  sand:        { sand: 500 },                     // quarry output
+  ice:         { stone: 200, gear: 100 },         // no Ice ResourceId; blanket fallback
+  water:       { fresh_water: 500 },              // well output
+  magma_vent:  { stone: 300, coal: 50 },          // no extractor; coal heat-source proxy
 };
 
 // ---------------------------------------------------------------------------
@@ -166,11 +166,11 @@ export function conversionCostForTarget(
   if (NATURAL_TARGET_TERRAINS.has(target)) {
     const perTile = NATURAL_TARGET_INPUT_PER_TILE[target as keyof typeof NATURAL_TARGET_INPUT_PER_TILE];
     if (perTile === undefined) return {};
-    const out: Record<string, number> = {};
+    const out: Partial<Record<ResourceId, number>> = {};
     for (const [r, qty] of Object.entries(perTile)) {
-      out[r] = qty * BRUSH_TILES;
+      if (qty !== undefined) out[r as ResourceId] = qty * BRUSH_TILES;
     }
-    return out as Partial<Record<ResourceId, number>>;
+    return out;
   }
   if (RARE_TARGET_TERRAINS.has(target)) {
     const input = RARE_TARGET_INPUT[target];
