@@ -1,0 +1,1808 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Per-building enable/disable toggle — design spec</title>
+<style>
+  :root {
+    --ivory:    #1B1A17;
+    --slate:    #F5F3EC;
+    --clay:     #D97757;
+    --oat:      #3A352B;
+    --olive:    #8FA56E;
+    --rust:     #E08B7F;
+    --gray-150: #2E2C27;
+    --gray-300: #3A3833;
+    --gray-500: #8F8D82;
+    --gray-700: #CFCCC2;
+    --white:    #252420;
+
+    --signal:        #7dd3e8;
+    --signal-soft:   rgba(125,211,232,0.18);
+    --disable-red:   #E8624A;
+    --disable-soft:  rgba(232, 98, 74, 0.18);
+
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+    --radius: 12px;
+    --border: 1.5px solid var(--gray-300);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--sans);
+    background: var(--ivory);
+    color: var(--gray-700);
+    line-height: 1.58;
+    padding: 56px 32px 120px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1080px; margin: 0 auto; }
+
+  /* ---------- header ---------- */
+  header.page-head { margin-bottom: 40px; max-width: 880px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 36px;
+    line-height: 1.14;
+    color: var(--slate);
+    margin-bottom: 18px;
+    letter-spacing: -0.01em;
+  }
+  .context-box {
+    background: var(--gray-150);
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-size: 14.5px;
+    color: var(--gray-700);
+  }
+  .context-box .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  /* ---------- summary strip ---------- */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+  @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  .summary .cell {
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .summary .k {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+    margin-bottom: 6px;
+  }
+  .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+  .summary .v.accent { color: var(--clay); }
+  .summary .v.ok     { color: var(--olive); }
+  .summary .v.warn   { color: var(--rust); }
+
+  /* ---------- decision banner ---------- */
+  .decision {
+    background: var(--white);
+    border: var(--border);
+    border-left: 4px solid var(--clay);
+    border-radius: var(--radius);
+    padding: 22px 26px;
+    margin-bottom: 56px;
+  }
+  .decision .d-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--clay);
+    margin-bottom: 8px;
+  }
+  .decision .d-head {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--slate);
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+  }
+  .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+  .decision .d-body + .d-body { margin-top: 8px; }
+
+  /* ---------- section chrome ---------- */
+  section { margin-bottom: 56px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 8px;
+  }
+  .sec-head .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--oat);
+    color: var(--slate);
+    padding: 3px 9px;
+    border-radius: 8px;
+  }
+  .sec-head h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 26px;
+    color: var(--slate);
+    letter-spacing: -0.01em;
+  }
+  .sec-intro {
+    font-size: 14.5px;
+    color: var(--gray-500);
+    max-width: 760px;
+    margin-bottom: 22px;
+  }
+  p.body { font-size: 14.5px; max-width: 800px; margin-bottom: 14px; }
+  p.body strong { color: var(--slate); }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--gray-150);
+    border: 1px solid var(--gray-300);
+    border-radius: 5px;
+    padding: 1px 5px;
+    color: #C9B98A;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--gray-150);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    color: var(--gray-700);
+    overflow-x: auto;
+    margin: 6px 0 16px;
+    max-width: 820px;
+  }
+  pre code { background: none; border: none; padding: 0; color: inherit; }
+
+  /* ---------- generic data table ---------- */
+  .tbl {
+    width: 100%;
+    border: var(--border);
+    border-radius: var(--radius);
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    font-size: 13.5px;
+  }
+  .tbl th, .tbl td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--gray-300);
+    vertical-align: top;
+  }
+  .tbl th {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+    background: var(--gray-150);
+    font-weight: 600;
+  }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl td { color: var(--gray-700); }
+  .tbl td.slate { color: var(--slate); font-weight: 600; }
+
+  /* ---------- comparison cards ---------- */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+  .compare .col {
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .compare .col-head {
+    padding: 12px 18px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: var(--border);
+  }
+  .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+  .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+  .compare .col-body { padding: 14px 18px; font-size: 13.5px; }
+  .compare .col-body ul { list-style: none; }
+  .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+  .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+  .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+  /* ---------- callout ---------- */
+  .callout {
+    background: var(--white);
+    border: var(--border);
+    border-left: 4px solid var(--olive);
+    border-radius: var(--radius);
+    padding: 14px 18px 12px;
+    font-size: 13.5px;
+    color: var(--gray-700);
+    margin-bottom: 16px;
+    max-width: 880px;
+  }
+  .callout.warn { border-left-color: var(--rust); }
+  .callout .ct {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--olive);
+    margin-bottom: 5px;
+  }
+  .callout.warn .ct { color: var(--rust); }
+
+  /* ---------- figures ---------- */
+  .figure {
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px 12px;
+    margin-bottom: 18px;
+  }
+  .figure .cap {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-bottom: 10px;
+  }
+  .figure svg { display: block; width: 100%; height: auto; }
+  .fig-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 820px) { .fig-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- pickers ---------- */
+  .pickers { display: grid; grid-template-columns: 1fr; gap: 32px; }
+  .picker {
+    background: var(--white);
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px 18px;
+  }
+  .picker legend {
+    display: none;
+  }
+  .picker .p-key {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--clay);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .picker .p-title {
+    font-family: var(--serif);
+    font-size: 18px;
+    color: var(--slate);
+    font-weight: 500;
+    margin-bottom: 5px;
+    letter-spacing: -0.005em;
+  }
+  .picker .p-intro {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-bottom: 14px;
+    max-width: 780px;
+  }
+  .picker .opts {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 820px) { .picker .opts { grid-template-columns: 1fr; } }
+  .picker .opts.single { grid-template-columns: 1fr; }
+  .picker .opt {
+    display: block;
+    padding: 0;
+    border: 1.5px solid var(--gray-300);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+    background: transparent;
+    overflow: hidden;
+    position: relative;
+  }
+  .picker .opt:hover { border-color: var(--gray-500); background: rgba(255,255,255,0.015); }
+  .picker .opt .o-mock {
+    display: block;
+    background: var(--ivory);
+    border-bottom: 1px solid var(--gray-300);
+    padding: 10px 12px;
+  }
+  .picker .opt .o-mock svg { display: block; width: 100%; height: auto; }
+  .picker .opt .o-body {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 4px 12px;
+    padding: 10px 12px 12px 10px;
+  }
+  .picker .opt input[type="radio"] {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    margin-top: 3px;
+    accent-color: var(--clay);
+    width: 14px; height: 14px;
+    cursor: pointer;
+  }
+  .picker .opt .o-label {
+    grid-row: 1; grid-column: 2;
+    font-size: 14px;
+    color: var(--slate);
+    font-weight: 600;
+  }
+  .picker .opt .o-rat {
+    grid-row: 2; grid-column: 2;
+    font-size: 12.5px;
+    color: var(--gray-500);
+    line-height: 1.5;
+  }
+  .picker .opt[data-default="true"] .o-label::after {
+    content: ' · default';
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--olive);
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+  .picker .opt:has(input[type="radio"]:checked) .o-label { color: var(--clay); }
+  .picker .opt:has(input[type="radio"]:checked) {
+    border-color: var(--clay);
+    background: rgba(217, 119, 87, 0.06);
+  }
+  .picker .opt:has(input[type="radio"]:checked) .o-mock {
+    border-bottom-color: rgba(217, 119, 87, 0.40);
+  }
+  .picker .p-current {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-top: 1px dashed var(--gray-300);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--gray-500);
+  }
+  .picker .p-current b {
+    color: var(--olive);
+    font-weight: 600;
+  }
+
+  /* ---------- selections panel ---------- */
+  .selections {
+    background: var(--white);
+    border: var(--border);
+    border-left: 4px solid var(--olive);
+    border-radius: var(--radius);
+    padding: 22px 24px 20px;
+    margin-top: 56px;
+    max-width: 980px;
+  }
+  .selections .s-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--olive);
+    margin-bottom: 6px;
+  }
+  .selections .s-head {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--slate);
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+  }
+  .selections .s-body {
+    font-size: 14px;
+    color: var(--gray-700);
+    max-width: 780px;
+    margin-bottom: 14px;
+  }
+  .selections .s-tools {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .selections button.copy-btn {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    border-radius: 7px;
+    border: 1.5px solid var(--olive);
+    background: transparent;
+    color: var(--olive);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .selections button.copy-btn:hover { background: var(--olive); color: var(--ivory); }
+  .selections button.copy-btn.copied { background: var(--olive); color: var(--ivory); }
+  .selections .format-toggle {
+    display: inline-flex;
+    gap: 0;
+    border: 1.5px solid var(--gray-300);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .selections .format-toggle button {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--gray-500);
+    cursor: pointer;
+    transition: background 100ms, color 100ms;
+  }
+  .selections .format-toggle button.active {
+    background: var(--oat);
+    color: var(--slate);
+  }
+  .selections .copy-status {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--olive);
+    letter-spacing: 0.04em;
+  }
+  .selections pre.payload {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--gray-150);
+    border: 1px solid var(--gray-300);
+    border-radius: 8px;
+    padding: 14px 18px;
+    color: #C9B98A;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    cursor: text;
+    user-select: text;
+  }
+
+  .footer {
+    color: var(--gray-500);
+    font-size: 13px;
+    margin-top: 64px;
+    padding-top: 22px;
+    border-top: 1px solid var(--gray-300);
+  }
+  .footer code { color: #C9B98A; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Design spec · Robot Islands · §4 / §5 / §4.7 · v1</div>
+    <h1>Per-building enable/disable toggle</h1>
+    <div class="context-box">
+      <span class="label">Context</span>
+      Today, the only ways a player can <em>stop</em> a particular building
+      from working are demolition (irreversible, partial scrap refund) or
+      indirect starvation (let it run out of inputs). There is no
+      &ldquo;mothball this thing for a while&rdquo; switch. This spec
+      defines a per-building <code>disabled?: boolean</code> flag toggled
+      from the inspector. A disabled building is <strong>functionally
+      non-existent</strong>: no power flow, no recipe in/out, no gate
+      provisioning, no maintenance accrual. Toggling either direction is
+      free, instantaneous, and lossless. The user has confirmed the
+      behaviour; this spec surfaces only the residual design forks for a
+      final pick-and-paste cycle before code lands.
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="cell"><div class="k">New field</div><div class="v accent">PlacedBuilding.disabled</div></div>
+    <div class="cell"><div class="k">Files touched</div><div class="v">~8 + tests</div></div>
+    <div class="cell"><div class="k">Toggle cost</div><div class="v ok">Free / instant</div></div>
+    <div class="cell"><div class="k">Pickers</div><div class="v">9 open forks</div></div>
+  </div>
+
+  <div class="decision">
+    <div class="d-tag">Decision</div>
+    <div class="d-head">
+      Add <code>disabled?: boolean</code> to <code>PlacedBuilding</code>;
+      gate the economy tick on it; surface a single
+      <code>Enable</code>/<code>Disable</code> button in the inspector.
+    </div>
+    <div class="d-body">
+      The user spec locks the runtime contract. What this design call covers:
+      <strong>where the UI lives</strong>, <strong>what a disabled
+      building looks like</strong>, <strong>how it composes with the
+      five orthogonal &ldquo;not running right now&rdquo; states already
+      in the codebase</strong> (construction, ocean-pause,
+      maintenance-degrade, route-draining, in-flight vehicles), and
+      <strong>what happens to owned dispatches</strong> (routes,
+      drones, helicopters, satellites) when their source is disabled
+      mid-flight.
+    </div>
+    <div class="d-body">
+      <strong>Insertion chokepoint:</strong>
+      <code>state.buildings.filter((b) =&gt; !b.invalid &amp;&amp; isOperational(b))</code>
+      at <code>src/economy.ts:617</code> is the single line every economy
+      pass (rates, gates, power, heat) feeds off. Appending
+      <code>&amp;&amp; !b.disabled</code> there knocks out power, recipe,
+      and gate-provider semantics in one stroke. Maintenance accrual at
+      <code>src/economy.ts:1627</code> iterates raw <code>state.buildings</code>
+      and needs a <em>second</em> skip — that's the only other in-engine
+      site that has to change. UI sites that surface
+      &ldquo;is there a Spaceport / Reality Forge / Lattice Node on this
+      island&rdquo; (orbital.ts, lattice.ts, inspector-ui.ts, drones.ts,
+      antenna.ts, lighthouse.ts &mdash; the &ldquo;provider scan&rdquo;
+      pattern) each grow a <code>!b.disabled</code> filter.
+    </div>
+  </div>
+
+  <!-- ====================================================== -->
+  <section id="research">
+    <div class="sec-head"><span class="num">01</span><h2>Research &mdash; where the flag lands</h2></div>
+    <p class="sec-intro">File-line citations and quoted helpers for every
+      site the change touches. Implementer reconciles with the picks below
+      before writing.</p>
+
+    <h3 class="sub-h" style="font-family:var(--serif); font-size:17px; color:var(--slate); margin:14px 0 8px; font-weight:500;">1.1 — <code>PlacedBuilding</code> field, alongside existing mutables</h3>
+    <p class="body">
+      <code>src/buildings.ts:26</code> declares the interface. The
+      <em>mutable</em> per-instance fields already include
+      <code>cargoLabel</code> (§4.6 relabel), <code>paused</code> (§4
+      ocean-pause, set by the tick), <code>constructionRemainingMs</code>
+      (§9.3, ticked every segment), <code>operatingMs</code>
+      (§4.7 maintenance accrual), <code>maintainedAt</code> (§4.7
+      auto-maint timestamp), <code>eternalServitor</code> (§13.3
+      one-way flip), <code>tier</code> (§14.2 spaceport upgrade),
+      <code>toxicityExpiryMs</code> (§4.5), and <code>invalid</code>
+      (footprint terrain mismatch). The new field slots in identically:
+    </p>
+    <pre><code>/** Player toggle (§NEW). When `true`, the building is functionally
+ *  non-existent for this tick: no power flow, no recipe in/out, no
+ *  gate provisioning, no `operatingMs` accrual. Toggling either way
+ *  is free and instantaneous (no resources gained / lost). Optional
+ *  so legacy saves load as `false` (enabled) by default. */
+disabled?: boolean;</code></pre>
+
+    <h3 class="sub-h" style="font-family:var(--serif); font-size:17px; color:var(--slate); margin:18px 0 8px; font-weight:500;">1.2 — Power, recipe execution, and gate provisioning &mdash; one chokepoint</h3>
+    <p class="body">
+      <code>src/economy.ts:617</code> filters
+      <code>state.buildings</code> once per tick into
+      <code>validBuildings</code>:
+    </p>
+    <pre><code>const validBuildings = state.buildings.filter((b) =&gt; !b.invalid &amp;&amp; isOperational(b));</code></pre>
+    <p class="body">
+      That single array drives <em>all</em> downstream passes inside
+      <code>computeRates</code>:
+    </p>
+    <ul style="margin: 6px 0 14px 22px; font-size: 13.5px; color: var(--gray-700);">
+      <li><strong>Heat assignment</strong> &mdash; <code>resolveHeatAssignments(validBuildings, ...)</code> at <code>economy.ts:665</code>.</li>
+      <li><strong>Gate provisioning</strong> &mdash; <code>checkGates(b, validBuildings, defs, ...)</code> at <code>economy.ts:847, 973, 1017</code>. The neighbor pool is <code>validBuildings</code>, so a building filtered here is invisible to <code>matchesGate</code> (<code>src/adjacency.ts:279</code>).</li>
+      <li><strong>Recipe pass-1 / pass-2 / pass-4</strong> &mdash; <code>for (const b of validBuildings) { ... }</code> at <code>economy.ts:702, 952, 1014</code>.</li>
+      <li><strong>Power balance</strong> &mdash; pass-3 sums <code>powerProduced</code> / <code>powerConsumed</code> only over <code>validBuildings</code> (<code>economy.ts:950&ndash;1011</code>).</li>
+      <li><strong>Buff-adjacency</strong> &mdash; <code>computeBuffStack(b, validBuildings, defs)</code> at <code>economy.ts:799</code>.</li>
+    </ul>
+    <p class="body">
+      Appending <code>&amp;&amp; !b.disabled</code> to the filter at
+      <code>economy.ts:617</code> covers <strong>three of the five
+      runtime bullets</strong> (no power, no recipe in/out, no gate
+      provisioning) plus heat-source disabling, buff-source disabling,
+      and adjacency-neighbor invisibility. One line.
+    </p>
+
+    <h3 class="sub-h" style="font-family:var(--serif); font-size:17px; color:var(--slate); margin:18px 0 8px; font-weight:500;">1.3 — Maintenance accrual &mdash; the second site</h3>
+    <p class="body">
+      <code>src/economy.ts:1627</code> iterates <code>state.buildings</code>
+      directly (NOT <code>validBuildings</code>) to advance
+      <code>operatingMs</code>:
+    </p>
+    <pre><code>for (const b of state.buildings) {
+  const wasUnderConstruction = (b.constructionRemainingMs ?? 0) &gt; 0;
+  if (wasUnderConstruction) { tickConstruction(b, dtMs); continue; }
+  // ... recipe-output filter ...
+  accrueOperatingTime(b, dtMs);  // ← bumps operatingMs
+}</code></pre>
+    <p class="body">
+      This is intentionally raw because §4.7 says &ldquo;Idle buildings,
+      stalled buildings, and inactive buildings ... accrue maintenance
+      time the same as actively-producing ones.&rdquo; The user spec
+      <em>contradicts</em> §4.7 for the disabled case: a disabled
+      building does NOT accrue. Adding
+      <code>if (b.disabled) continue;</code> after the construction
+      check is the second engine edit.
+    </p>
+
+    <h3 class="sub-h" style="font-family:var(--serif); font-size:17px; color:var(--slate); margin:18px 0 8px; font-weight:500;">1.4 — Provider-scan sites &mdash; the anti-pattern</h3>
+    <div class="callout warn">
+      <div class="ct">Anti-pattern</div>
+      The codebase has <strong>~12 provider-scan sites</strong> that walk
+      <code>state.buildings</code> / <code>spec.buildings</code> outside
+      <code>computeRates</code> to ask &ldquo;does this island have a
+      <code>spaceport</code>?&rdquo; / &ldquo;a <code>reality_forge</code>?&rdquo;
+      / &ldquo;a <code>lattice_node</code>?&rdquo; / etc. Each is a
+      separate touch the disabled-filter has to be appended to. There's
+      no shared helper. Adding a
+      <code>hasOperationalBuilding(state, defId)</code> helper that
+      encapsulates <code>!b.invalid &amp;&amp; isOperational(b) &amp;&amp; !b.disabled</code>
+      would be a small refactor worth bundling.
+    </div>
+    <table class="tbl">
+      <thead><tr><th>Site</th><th>Purpose</th><th>Needs <code>!b.disabled</code>?</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/antenna.ts:51</code></td><td>Signal-range provider scan (vision)</td><td class="slate">Yes</td></tr>
+        <tr><td><code>src/lighthouse.ts:88</code></td><td>Vision-radius source scan</td><td class="slate">Yes</td></tr>
+        <tr><td><code>src/lattice.ts:28</code></td><td>Lattice-node presence (Omniscient Lattice cross-island gate)</td><td class="slate">Yes</td></tr>
+        <tr><td><code>src/drones.ts:166</code></td><td>Launch-tower presence (drone dispatch)</td><td class="slate">Yes</td></tr>
+        <tr><td><code>src/drones.ts:235, 425</code></td><td>Probability-engine / dronepad lookup</td><td class="slate">Yes</td></tr>
+        <tr><td><code>src/orbital.ts:220, 242, 360, 367, 400, 433, 525, 560, 598, 1024</code></td><td>Spaceport / antenna_t6 / OTS presence (orbital ops)</td><td class="slate">Yes (10 sites)</td></tr>
+        <tr><td><code>src/inspector-ui.ts:1465</code></td><td>Reality Forge presence (gates the Convert button)</td><td class="slate">Yes</td></tr>
+        <tr><td><code>src/buildings-ui.ts:210, 257, 280</code></td><td>Spaceport-aware tier-unlock UI</td><td class="slate">Yes</td></tr>
+        <tr><td><code>src/economy.ts:675</code></td><td>Spaceport-aware <code>buildingUnlocked</code> precheck</td><td class="slate">Implicitly via 1.2</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub-h" style="font-family:var(--serif); font-size:17px; color:var(--slate); margin:18px 0 8px; font-weight:500;">1.5 — Existing &ldquo;not-running&rdquo; states &mdash; orthogonality</h3>
+    <p class="body">
+      Five states already mean &ldquo;this building isn't producing right
+      now.&rdquo; The new <code>disabled</code> is the sixth, and is
+      <em>player-toggled</em> (the others are engine-driven). Compose
+      semantics:
+    </p>
+    <table class="tbl">
+      <thead><tr><th>State</th><th>Source</th><th>Compose with disabled</th></tr></thead>
+      <tbody>
+        <tr><td class="slate">construction</td><td><code>constructionRemainingMs &gt; 0</code> (§9.3)</td><td>Orthogonal — see picker <code>p_constructed_disable</code>.</td></tr>
+        <tr><td class="slate">ocean-pause</td><td><code>paused === 'anchor-depopulated' / 'terrain-lost'</code> (§4)</td><td>Engine-set; disabled OR paused both halt the building. No conflict.</td></tr>
+        <tr><td class="slate">maintenance-degraded</td><td><code>maintenanceFactor(b, def) &lt; 1</code> (§4.7)</td><td>Disabled freezes <code>operatingMs</code> &mdash; degradation pauses but does NOT reset on enable.</td></tr>
+        <tr><td class="slate">route-draining</td><td><code>route.draining === true</code> (§4)</td><td>See picker <code>p_routes_disabled_source</code>.</td></tr>
+        <tr><td class="slate">vehicles-in-transit</td><td>drones / helicopters / route in-flight batches</td><td>See picker <code>p_routes_pending_inbound</code> and <code>p_owned_subordinates</code>.</td></tr>
+        <tr><td class="slate">invalid</td><td><code>b.invalid === true</code> (terrain mismatch after biome shift)</td><td>Both filter out at the same chokepoint. Independent flags.</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub-h" style="font-family:var(--serif); font-size:17px; color:var(--slate); margin:18px 0 8px; font-weight:500;">1.6 — Inspector pattern (where the new button slots)</h3>
+    <p class="body">
+      <code>src/inspector-ui.ts</code> already exposes four per-building
+      controls in this house style: the cargo-label dropdown
+      (<code>cargoLabelControls</code> at <code>:654</code>), the Convert
+      to Eternal Servitor button (<code>convertBtn</code> at
+      <code>:857</code>), the maintenance refresh button
+      (<code>refreshBtn</code> at <code>:985</code>), and the
+      demolish button (<code>demolishBtn</code> at <code>:1028</code>).
+      All four follow the same idiom: a <code>document.createElement('button')</code>
+      with a uniform <code>styled(...)</code> stamp, an
+      <code>addEventListener('click', ...)</code> that mutates state and
+      calls <code>paint()</code>. The new <code>disableBtn</code> mirrors
+      this verbatim &mdash; same styling, same flow.
+    </p>
+
+    <h3 class="sub-h" style="font-family:var(--serif); font-size:17px; color:var(--slate); margin:18px 0 8px; font-weight:500;">1.7 — Persistence round-trip</h3>
+    <p class="body">
+      <code>src/persistence.ts:329</code> serialises buildings via a
+      shallow spread (<code>{ ...b, ...(timestamp shifts) }</code>). A
+      new optional <code>disabled?: boolean</code> field rides through
+      automatically &mdash; no schema bump, no migration. Legacy saves
+      load with the field absent (treated as <code>false</code>).
+      Forward-compat is intrinsic.
+    </p>
+
+    <h3 class="sub-h" style="font-family:var(--serif); font-size:17px; color:var(--slate); margin:18px 0 8px; font-weight:500;">1.8 — Render layer</h3>
+    <p class="body">
+      <code>src/buildings.ts:219</code> (<code>renderBuildings</code>)
+      draws each placed building as: drop shadow + per-tile desaturated
+      fill + glyph. A disabled building gets a visual cue applied here
+      &mdash; the exact form is <code>p_visual_cue</code> below. The
+      construction overlay (<code>building-alerts-overlay.ts:82</code>)
+      already shows the precedent for an &ldquo;overlay glyph + tint&rdquo;
+      pattern, so the disabled cue can plausibly live in either layer
+      (renderer-level for an alpha/dashed stroke, alerts-overlay for a
+      corner badge).
+    </p>
+  </section>
+
+  <!-- ====================================================== -->
+  <section id="visualizations">
+    <div class="sec-head"><span class="num">02</span><h2>State diagram &amp; inspector mock</h2></div>
+    <p class="sec-intro">How <code>disabled</code> composes with the
+      existing &ldquo;not-running&rdquo; states, and where the new button
+      sits in the inspector chrome.</p>
+
+    <div class="figure">
+      <div class="cap">State composition — disabled is orthogonal to engine-driven states</div>
+      <svg viewBox="0 0 940 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="State diagram showing six orthogonal building states">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#7dd3e8"/>
+          </marker>
+          <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#E8624A"/>
+          </marker>
+        </defs>
+        <!-- background -->
+        <rect width="940" height="360" fill="#0E1116"/>
+
+        <!-- LIVE state (centre) -->
+        <rect x="380" y="150" width="180" height="60" rx="8" fill="#1a2030" stroke="#7dd3e8" stroke-width="2"/>
+        <text x="470" y="178" text-anchor="middle" font-family="ui-serif, Georgia, serif" font-size="17" fill="#7dd3e8">LIVE</text>
+        <text x="470" y="196" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10" fill="#8FA56E" letter-spacing="1">producing · drawing · accruing</text>
+
+        <!-- engine-driven states (left half) -->
+        <g>
+          <rect x="60" y="40" width="180" height="48" rx="6" fill="#1a2030" stroke="#3a4452"/>
+          <text x="150" y="62" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#CFCCC2">UNDER-CONSTRUCTION</text>
+          <text x="150" y="78" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82">constructionRemainingMs &gt; 0</text>
+
+          <rect x="60" y="100" width="180" height="48" rx="6" fill="#1a2030" stroke="#3a4452"/>
+          <text x="150" y="122" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#CFCCC2">OCEAN-PAUSED</text>
+          <text x="150" y="138" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82">paused === &apos;anchor-depopulated&apos;</text>
+
+          <rect x="60" y="160" width="180" height="48" rx="6" fill="#1a2030" stroke="#3a4452"/>
+          <text x="150" y="182" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#CFCCC2">MAINT-DEGRADED</text>
+          <text x="150" y="198" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82">factor &lt; 1.0 (still runs)</text>
+
+          <rect x="60" y="220" width="180" height="48" rx="6" fill="#1a2030" stroke="#3a4452"/>
+          <text x="150" y="242" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#CFCCC2">INVALID</text>
+          <text x="150" y="258" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82">b.invalid (terrain mismatch)</text>
+
+          <rect x="60" y="280" width="180" height="48" rx="6" fill="#1a2030" stroke="#3a4452"/>
+          <text x="150" y="302" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#CFCCC2">ROUTE-DRAINING</text>
+          <text x="150" y="318" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82">route owned by b is winding down</text>
+        </g>
+
+        <!-- arrows from engine states to LIVE -->
+        <line x1="240" y1="64" x2="380" y2="160" stroke="#7dd3e8" stroke-width="1.5" marker-end="url(#arr)" opacity="0.7"/>
+        <line x1="240" y1="124" x2="380" y2="170" stroke="#7dd3e8" stroke-width="1.5" marker-end="url(#arr)" opacity="0.7"/>
+        <line x1="240" y1="184" x2="380" y2="180" stroke="#7dd3e8" stroke-width="1.5" marker-end="url(#arr)" opacity="0.7"/>
+        <line x1="240" y1="244" x2="380" y2="190" stroke="#7dd3e8" stroke-width="1.5" marker-end="url(#arr)" opacity="0.7"/>
+        <line x1="240" y1="304" x2="380" y2="200" stroke="#7dd3e8" stroke-width="1.5" marker-end="url(#arr)" opacity="0.7"/>
+
+        <!-- player-driven: DISABLED (right) -->
+        <rect x="700" y="150" width="180" height="60" rx="8" fill="#2a1410" stroke="#E8624A" stroke-width="2"/>
+        <text x="790" y="178" text-anchor="middle" font-family="ui-serif, Georgia, serif" font-size="17" fill="#E8624A">DISABLED</text>
+        <text x="790" y="196" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82" letter-spacing="1">b.disabled === true</text>
+
+        <!-- bidirectional arrow LIVE ↔ DISABLED -->
+        <line x1="560" y1="174" x2="700" y2="174" stroke="#E8624A" stroke-width="2" marker-end="url(#arr2)" marker-start="url(#arr2)"/>
+        <text x="630" y="166" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9.5" fill="#E8624A" letter-spacing="0.5">player toggle</text>
+        <text x="630" y="194" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9.5" fill="#8F8D82">free · instant · lossless</text>
+
+        <!-- bottom legend showing intersection cases -->
+        <rect x="380" y="280" width="500" height="60" rx="6" fill="#181D27" stroke="#3a4452"/>
+        <text x="630" y="300" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82" letter-spacing="1">DISABLED ∧ UNDER-CONSTRUCTION → progress frozen (see picker p_constructed_disable)</text>
+        <text x="630" y="318" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82" letter-spacing="1">DISABLED ∧ MAINT-DEGRADED → operatingMs frozen, factor stays at last value</text>
+        <text x="630" y="334" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82" letter-spacing="1">DISABLED ∧ ROUTE-OWNER → see picker p_routes_disabled_source</text>
+      </svg>
+    </div>
+
+    <div class="figure">
+      <div class="cap">Inspector mock — where the new Enable/Disable button sits</div>
+      <svg viewBox="0 0 720 460" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Inspector panel mock showing the new Disable button placed between Convert and Refresh">
+        <!-- inspector panel chrome -->
+        <rect x="20" y="20" width="320" height="420" rx="8" fill="#181D27" stroke="#3a4452" stroke-width="1.5"/>
+        <!-- inspector header -->
+        <rect x="20" y="20" width="320" height="26" rx="8" fill="#1a212d"/>
+        <text x="32" y="38" font-family="ui-monospace, monospace" font-size="10" fill="#7dd3e8" letter-spacing="2">INSPECT</text>
+        <text x="92" y="38" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82" letter-spacing="1.5">BLD-217</text>
+        <text x="320" y="38" font-family="ui-monospace, monospace" font-size="13" fill="#8F8D82">×</text>
+
+        <!-- name/def -->
+        <text x="32" y="62" font-family="ui-serif, Georgia, serif" font-size="15" fill="#F5F3EC">Workshop</text>
+        <text x="32" y="80" font-family="ui-monospace, monospace" font-size="9.5" fill="#8F8D82">T1 · MANUFACTURING · 4×4</text>
+
+        <!-- section: rates -->
+        <text x="32" y="108" font-family="ui-monospace, monospace" font-size="9.5" fill="#CFCCC2" letter-spacing="1">RATES</text>
+        <rect x="32" y="116" width="296" height="1" fill="#3a4452"/>
+        <text x="32" y="132" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82">→ +0.50/s plank</text>
+        <text x="32" y="146" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82">← −0.50/s wood</text>
+
+        <!-- section: maintenance -->
+        <text x="32" y="174" font-family="ui-monospace, monospace" font-size="9.5" fill="#CFCCC2" letter-spacing="1">MAINTENANCE (§4.7)</text>
+        <rect x="32" y="182" width="296" height="1" fill="#3a4452"/>
+        <text x="32" y="198" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82">factor 0.93 · op 4h32m</text>
+
+        <!-- existing convert button -->
+        <rect x="32" y="212" width="160" height="22" rx="2" fill="transparent" stroke="#5a7080" stroke-width="1"/>
+        <text x="40" y="226" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8" letter-spacing="1.5">CONVERT TO SERVITOR</text>
+
+        <!-- NEW: disable button (highlighted) -->
+        <rect x="32" y="244" width="160" height="22" rx="2" fill="rgba(232, 98, 74, 0.10)" stroke="#E8624A" stroke-width="1.5"/>
+        <text x="40" y="258" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A" letter-spacing="1.5">DISABLE</text>
+
+        <!-- footer divider -->
+        <rect x="20" y="380" width="320" height="60" fill="#0E1116"/>
+        <rect x="20" y="380" width="320" height="1" fill="#3a4452"/>
+        <!-- refresh + demolish in footer -->
+        <rect x="32" y="392" width="138" height="20" rx="2" fill="transparent" stroke="#5a7080" stroke-width="1"/>
+        <text x="40" y="404" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8" letter-spacing="1.5">REFRESH MAINT</text>
+        <rect x="180" y="392" width="138" height="20" rx="2" fill="transparent" stroke="#E08B7F" stroke-width="1"/>
+        <text x="188" y="404" font-family="ui-monospace, monospace" font-size="9" fill="#E08B7F" letter-spacing="1.5">DEMOLISH</text>
+
+        <!-- callout pointing at the new button -->
+        <line x1="200" y1="255" x2="380" y2="255" stroke="#E8624A" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <circle cx="200" cy="255" r="3" fill="#E8624A"/>
+        <rect x="380" y="230" width="320" height="60" rx="6" fill="#1a2030" stroke="#E8624A" stroke-width="1.5"/>
+        <text x="396" y="250" font-family="ui-monospace, monospace" font-size="11" fill="#E8624A" letter-spacing="1">NEW · ENABLE / DISABLE</text>
+        <text x="396" y="266" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82">Toggles b.disabled. Label flips to ENABLE</text>
+        <text x="396" y="280" font-family="ui-monospace, monospace" font-size="10" fill="#8F8D82">when the building is already disabled.</text>
+
+        <!-- key sites reference -->
+        <text x="380" y="318" font-family="ui-monospace, monospace" font-size="10" fill="#CFCCC2" letter-spacing="0.5">house-style template:</text>
+        <text x="380" y="334" font-family="ui-monospace, monospace" font-size="9.5" fill="#8F8D82">inspector-ui.ts:857  convertBtn</text>
+        <text x="380" y="348" font-family="ui-monospace, monospace" font-size="9.5" fill="#8F8D82">inspector-ui.ts:985  refreshBtn</text>
+        <text x="380" y="362" font-family="ui-monospace, monospace" font-size="9.5" fill="#8F8D82">inspector-ui.ts:1028 demolishBtn</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ====================================================== -->
+  <section id="open-choices">
+    <div class="sec-head"><span class="num">03</span><h2>Open design choices &mdash; pick &amp; send back</h2></div>
+    <p class="sec-intro">Each fieldset is a residual design fork the user
+      spec didn't lock. Defaults reflect the prose. Click any other option
+      to redirect; the <b>Selections</b> panel at the bottom updates live.
+      Hit <em>Copy</em> to grab the payload and paste back.</p>
+
+    <div class="pickers">
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 01 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_ui_surface">
+        <legend>Picker 01</legend>
+        <div class="p-key">p_ui_surface</div>
+        <div class="p-title">Where the toggle lives</div>
+        <div class="p-intro">How the player reaches the enable/disable
+          action. Existing per-building controls (demolish, refresh,
+          convert) all live in the inspector panel; this picker decides
+          whether to follow that pattern or add a faster path.</div>
+        <div class="opts">
+
+          <label class="opt" data-value="inspector_panel_button" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Disable button in the inspector body, next to Convert">
+                <rect x="12" y="12" width="296" height="116" rx="6" fill="#181D27" stroke="#3a4452"/>
+                <rect x="12" y="12" width="296" height="20" rx="6" fill="#1a212d"/>
+                <text x="22" y="26" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8" letter-spacing="2">INSPECT</text>
+                <text x="76" y="26" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1.5">BLD-217</text>
+                <text x="22" y="50" font-family="ui-monospace, monospace" font-size="9" fill="#CFCCC2" letter-spacing="1">RATES · MAINT</text>
+                <rect x="22" y="60" width="140" height="14" rx="2" fill="transparent" stroke="#5a7080"/>
+                <text x="28" y="70" font-family="ui-monospace, monospace" font-size="7.5" fill="#7dd3e8" letter-spacing="1.5">CONVERT</text>
+                <rect x="22" y="80" width="140" height="14" rx="2" fill="rgba(232, 98, 74, 0.12)" stroke="#E8624A" stroke-width="1.5"/>
+                <text x="28" y="90" font-family="ui-monospace, monospace" font-size="7.5" fill="#E8624A" letter-spacing="1.5">DISABLE</text>
+                <rect x="22" y="106" width="80" height="14" rx="2" fill="transparent" stroke="#5a7080"/>
+                <text x="28" y="116" font-family="ui-monospace, monospace" font-size="7.5" fill="#7dd3e8" letter-spacing="1.5">REFRESH</text>
+                <rect x="108" y="106" width="80" height="14" rx="2" fill="transparent" stroke="#E08B7F"/>
+                <text x="114" y="116" font-family="ui-monospace, monospace" font-size="7.5" fill="#E08B7F" letter-spacing="1.5">DEMOLISH</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_ui_surface" value="inspector_panel_button" checked>
+              <span class="o-label">Inspector panel button (matches demolish / refresh / convert)</span>
+              <span class="o-rat">A new button in the inspector body, immediately after the maintenance section, mirroring <code>convertBtn</code> styling from <code>inspector-ui.ts:857</code>. Label flips <b>Disable ↔ Enable</b> based on <code>target.building.disabled</code>. Zero new surface area; consistent with every other per-building action.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="hover_quickaction">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tiny power-button icon hovers above the building on cursor hover">
+                <rect x="12" y="12" width="296" height="116" rx="6" fill="#0E1116" stroke="#1a212d"/>
+                <rect x="120" y="48" width="60" height="60" rx="2" fill="#7dd3e8" opacity="0.4" stroke="#7dd3e8" stroke-width="1"/>
+                <text x="150" y="84" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#0E1116">⚙</text>
+                <!-- hover icon -->
+                <circle cx="150" cy="34" r="11" fill="#181D27" stroke="#E8624A" stroke-width="1.5"/>
+                <path d="M 150 28 L 150 36" stroke="#E8624A" stroke-width="2" stroke-linecap="round"/>
+                <path d="M 145 31 a 7 7 0 1 0 10 0" fill="none" stroke="#E8624A" stroke-width="2"/>
+                <line x1="150" y1="45" x2="150" y2="48" stroke="#E8624A" stroke-width="1" stroke-dasharray="2"/>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_ui_surface" value="hover_quickaction">
+              <span class="o-label">Hover quick-action icon over the sprite</span>
+              <span class="o-rat">A small power-button glyph that appears on hover above the building, click toggles. No inspector dependency. Adds a new render layer + pointer-tracking; doesn't compose with the existing hover-tooltip layer cleanly. Faster but a real UX maintenance burden.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="right_click_context_menu">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Right-click context menu pops up next to the building with Enable, Disable, Demolish">
+                <rect x="12" y="12" width="296" height="116" rx="6" fill="#0E1116"/>
+                <rect x="60" y="40" width="60" height="60" rx="2" fill="#7dd3e8" opacity="0.4" stroke="#7dd3e8"/>
+                <text x="90" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#0E1116">⚙</text>
+                <!-- context menu -->
+                <rect x="130" y="32" width="130" height="76" rx="2" fill="#181D27" stroke="#3a4452"/>
+                <rect x="130" y="32" width="130" height="22" fill="rgba(232, 98, 74, 0.12)"/>
+                <text x="138" y="46" font-family="ui-monospace, monospace" font-size="9.5" fill="#E8624A" letter-spacing="1.5">DISABLE</text>
+                <text x="138" y="68" font-family="ui-monospace, monospace" font-size="9.5" fill="#CFCCC2" letter-spacing="1.5">INSPECT</text>
+                <rect x="135" y="76" width="120" height="1" fill="#3a4452"/>
+                <text x="138" y="94" font-family="ui-monospace, monospace" font-size="9.5" fill="#E08B7F" letter-spacing="1.5">DEMOLISH</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_ui_surface" value="right_click_context_menu">
+              <span class="o-label">Right-click context menu</span>
+              <span class="o-rat">A new on-canvas context menu pattern. Powerful but no current precedent in the codebase &mdash; the rest of the per-building interaction model is &ldquo;left-click selects, inspector shows actions.&rdquo; Adds DOM + event-handling that doesn't exist anywhere else.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="inspector_plus_hotkey">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Inspector button plus a D hotkey while a building is selected">
+                <rect x="12" y="12" width="180" height="116" rx="6" fill="#181D27" stroke="#3a4452"/>
+                <text x="22" y="30" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8" letter-spacing="2">INSPECT · BLD-217</text>
+                <rect x="22" y="48" width="140" height="14" rx="2" fill="rgba(232, 98, 74, 0.12)" stroke="#E8624A" stroke-width="1.5"/>
+                <text x="28" y="58" font-family="ui-monospace, monospace" font-size="7.5" fill="#E8624A" letter-spacing="1.5">DISABLE</text>
+                <rect x="22" y="68" width="80" height="14" rx="2" fill="transparent" stroke="#5a7080"/>
+                <text x="28" y="78" font-family="ui-monospace, monospace" font-size="7.5" fill="#E08B7F" letter-spacing="1.5">DEMOLISH</text>
+                <!-- hotkey card -->
+                <rect x="208" y="40" width="92" height="60" rx="6" fill="#1a212d" stroke="#3a4452"/>
+                <rect x="232" y="52" width="44" height="36" rx="5" fill="#0E1116" stroke="#7dd3e8" stroke-width="1.5"/>
+                <text x="254" y="78" text-anchor="middle" font-family="ui-serif, Georgia, serif" font-size="22" fill="#7dd3e8">D</text>
+                <text x="254" y="116" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#8F8D82">while selected</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_ui_surface" value="inspector_plus_hotkey">
+              <span class="o-label">Inspector button + a hotkey</span>
+              <span class="o-rat">Same as default, plus an <code>input.ts</code> action (<code>toggle-disable-selected</code>) bound to a key that toggles when a building is selected. Costs one extra binding line; gives power-users the keyboard path. Hotkey choice itself is <code>p_hotkey_binding</code> below.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_ui_surface">inspector_panel_button</b></div>
+      </fieldset>
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 02 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_visual_cue">
+        <legend>Picker 02</legend>
+        <div class="p-key">p_visual_cue</div>
+        <div class="p-title">How a disabled building renders</div>
+        <div class="p-intro">The visual signal that says &ldquo;this
+          building is off.&rdquo; Mocks show a 4×4 Workshop in each
+          state, sized to the same footprint so the cues are directly
+          comparable. Defaults to <b>low-alpha + dashed outline</b>
+          &mdash; readable without an extra glyph.</div>
+        <div class="opts">
+
+          <label class="opt" data-value="low_alpha" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Workshop dimmed to 40% alpha with a dashed stroke outline">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <g opacity="0.4">
+                  <rect x="40" y="20" width="72" height="72" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                  <text x="76" y="68" text-anchor="middle" font-family="ui-monospace, monospace" font-size="32" fill="#f5f3ec" opacity="0.85">⚙</text>
+                </g>
+                <rect x="40" y="20" width="72" height="72" fill="none" stroke="#E8624A" stroke-width="2" stroke-dasharray="4 3"/>
+                <!-- reference (live) -->
+                <text x="190" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">reference (LIVE)</text>
+                <g>
+                  <rect x="186" y="42" width="48" height="48" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                  <text x="210" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#f5f3ec" opacity="0.85">⚙</text>
+                </g>
+                <text x="252" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A" letter-spacing="1">disabled</text>
+                <g opacity="0.4">
+                  <rect x="248" y="42" width="48" height="48" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                  <text x="272" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#f5f3ec" opacity="0.85">⚙</text>
+                </g>
+                <rect x="248" y="42" width="48" height="48" fill="none" stroke="#E8624A" stroke-width="1.5" stroke-dasharray="3 2"/>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_visual_cue" value="low_alpha" checked>
+              <span class="o-label">Low alpha + dashed outline (0.40 alpha, 4-3 dash, red)</span>
+              <span class="o-rat">Sprite drops to 40% alpha, dashed red outline overlays the bounding box. Instantly readable, no extra glyph, mirrors the existing construction-tint precedent at <code>building-alerts-overlay.ts:82</code>. Renders at the alerts-overlay layer so <code>buildings.ts</code> stays untouched.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="dim_plus_red_x">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Workshop dimmed plus a red X overlay glyph">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <g opacity="0.5">
+                  <rect x="40" y="20" width="72" height="72" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                  <text x="76" y="68" text-anchor="middle" font-family="ui-monospace, monospace" font-size="32" fill="#f5f3ec" opacity="0.85">⚙</text>
+                </g>
+                <line x1="46" y1="26" x2="106" y2="86" stroke="#E8624A" stroke-width="4" stroke-linecap="round"/>
+                <line x1="106" y1="26" x2="46" y2="86" stroke="#E8624A" stroke-width="4" stroke-linecap="round"/>
+                <text x="190" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">reference</text>
+                <g>
+                  <rect x="186" y="42" width="48" height="48" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                  <text x="210" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#f5f3ec" opacity="0.85">⚙</text>
+                </g>
+                <text x="252" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A" letter-spacing="1">disabled</text>
+                <g opacity="0.5">
+                  <rect x="248" y="42" width="48" height="48" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                </g>
+                <line x1="252" y1="46" x2="292" y2="86" stroke="#E8624A" stroke-width="2.5" stroke-linecap="round"/>
+                <line x1="292" y1="46" x2="252" y2="86" stroke="#E8624A" stroke-width="2.5" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_visual_cue" value="dim_plus_red_x">
+              <span class="o-label">Dim + red &times; overlay</span>
+              <span class="o-rat">50% alpha plus a big diagonal red X across the footprint. Unmistakable; reads as &ldquo;crossed out / off.&rdquo; Heavier visual than the dashed outline; at high zoom-out it competes with the maintenance dot and the construction arc for corner real estate.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="dashed_outline_only">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Workshop at full alpha with only a dashed red outline">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <rect x="40" y="20" width="72" height="72" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                <text x="76" y="68" text-anchor="middle" font-family="ui-monospace, monospace" font-size="32" fill="#f5f3ec" opacity="0.85">⚙</text>
+                <rect x="36" y="16" width="80" height="80" fill="none" stroke="#E8624A" stroke-width="2.5" stroke-dasharray="6 4"/>
+                <text x="190" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">reference</text>
+                <g>
+                  <rect x="186" y="42" width="48" height="48" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                  <text x="210" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#f5f3ec" opacity="0.85">⚙</text>
+                </g>
+                <text x="252" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A" letter-spacing="1">disabled</text>
+                <rect x="248" y="42" width="48" height="48" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                <text x="272" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#f5f3ec" opacity="0.85">⚙</text>
+                <rect x="244" y="38" width="56" height="56" fill="none" stroke="#E8624A" stroke-width="1.5" stroke-dasharray="4 3"/>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_visual_cue" value="dashed_outline_only">
+              <span class="o-label">Dashed outline only (full-alpha sprite)</span>
+              <span class="o-rat">Sprite at full intensity, dashed red outline overlays it. Subtle &mdash; reads at near zoom, becomes invisible when zoomed out. Won't communicate &ldquo;this is off&rdquo; at strategic zoom levels.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="desaturate">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Workshop pulled fully to grayscale">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <rect x="40" y="20" width="72" height="72" fill="#6c6862" stroke="#3a3833" stroke-width="2"/>
+                <text x="76" y="68" text-anchor="middle" font-family="ui-monospace, monospace" font-size="32" fill="#CFCCC2" opacity="0.85">⚙</text>
+                <text x="190" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">reference</text>
+                <g>
+                  <rect x="186" y="42" width="48" height="48" fill="#c45c2a" stroke="#7a3818" stroke-width="2"/>
+                  <text x="210" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#f5f3ec" opacity="0.85">⚙</text>
+                </g>
+                <text x="252" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">disabled</text>
+                <rect x="248" y="42" width="48" height="48" fill="#6c6862" stroke="#3a3833" stroke-width="2"/>
+                <text x="272" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#CFCCC2" opacity="0.85">⚙</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_visual_cue" value="desaturate">
+              <span class="o-label">Full desaturate (no outline)</span>
+              <span class="o-rat">Pull the building to grayscale (existing <code>desaturate</code> helper at <code>island.ts</code>). The sprite is <em>already</em> 30% desaturated in <code>renderBuildings</code>; pushing to 100% would visually pop because the colour identity disappears. But the cue is ambiguous &mdash; player might read it as &ldquo;stalled because of starvation&rdquo; rather than &ldquo;deliberately off.&rdquo; No red signals intent.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_visual_cue">low_alpha</b></div>
+      </fieldset>
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 03 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_routes_pending_inbound">
+        <legend>Picker 03</legend>
+        <div class="p-key">p_routes_pending_inbound</div>
+        <div class="p-title">In-flight route cargo when the source is disabled</div>
+        <div class="p-intro">A route's <code>sourceBuildingId</code>
+          (<code>routes.ts:107</code>) is the building that &ldquo;owns&rdquo;
+          the route &mdash; demolishing that building drains the route
+          (<code>drainRoutesForBuilding</code> at <code>routes.ts:899</code>).
+          What about cargo that's already mid-flight at the moment of
+          disable?</div>
+        <div class="opts">
+
+          <label class="opt" data-value="deliver_anyway" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cargo already dispatched lands at the destination; new dispatch stops">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <circle cx="40" cy="55" r="14" fill="#1a2030" stroke="#E8624A" stroke-width="2"/>
+                <text x="40" y="58" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">OFF</text>
+                <circle cx="280" cy="55" r="14" fill="#1a2030" stroke="#7dd3e8" stroke-width="2"/>
+                <text x="280" y="58" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8">DST</text>
+                <path d="M 54 55 Q 160 30 266 55" fill="none" stroke="#7dd3e8" stroke-width="1.5" stroke-dasharray="3 2"/>
+                <circle cx="200" cy="38" r="5" fill="#7dd3e8"/>
+                <text x="200" y="22" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8">in-flight → lands</text>
+                <path d="M 54 75 Q 160 90 266 75" fill="none" stroke="#3a3833" stroke-width="1.5" stroke-dasharray="2 4"/>
+                <text x="160" y="100" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82">no new dispatch</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_routes_pending_inbound" value="deliver_anyway" checked>
+              <span class="o-label">Cargo in <code>inFlight[]</code> still lands</span>
+              <span class="o-rat">Pre-dispatched batches arrive at their <code>arrivalTime</code> — same as a demolished-source route's drain behaviour. Physics &mdash; cargo already left, it lands. Disabling stops <em>new</em> dispatch via the chokepoint filter at <code>economy.ts:617</code> (the source vanishes from <code>validBuildings</code>, and <code>tickRoutes</code> at <code>routes.ts:668</code> already short-circuits draining routes; we add the same skip for routes whose source is disabled).</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="recall_in_flight">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="In-flight cargo recalls to source on disable, refunding inventory">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <circle cx="40" cy="55" r="14" fill="#1a2030" stroke="#E8624A" stroke-width="2"/>
+                <text x="40" y="58" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">OFF</text>
+                <circle cx="280" cy="55" r="14" fill="#1a2030" stroke="#7dd3e8" stroke-width="2"/>
+                <text x="280" y="58" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8">DST</text>
+                <path d="M 200 38 Q 110 22 54 55" fill="none" stroke="#E8624A" stroke-width="1.5" stroke-dasharray="3 2" marker-end="url(#arr3)"/>
+                <defs><marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#E8624A"/></marker></defs>
+                <circle cx="200" cy="38" r="5" fill="#E8624A"/>
+                <text x="160" y="20" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">recalled → refunded</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_routes_pending_inbound" value="recall_in_flight">
+              <span class="o-label">Recall in-flight batches, refund source inventory</span>
+              <span class="o-rat">On disable, walk <code>route.inFlight</code>, return each batch's items to the source island's inventory, deduct from <code>inFlight</code>. Symmetric to a &ldquo;cost is zero&rdquo; semantics &mdash; nothing in flight is lost. But contradicts how demolish currently behaves (which lets the cargo land) and adds a new code path that didn't exist before.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_routes_pending_inbound">deliver_anyway</b></div>
+      </fieldset>
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 04 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_routes_disabled_source">
+        <legend>Picker 04</legend>
+        <div class="p-key">p_routes_disabled_source</div>
+        <div class="p-title">What happens to a route whose <code>sourceBuildingId</code> is disabled</div>
+        <div class="p-intro">Routes have an explicit <code>draining</code>
+          flag set by demolition. Disabling is reversible, demolition is
+          not &mdash; so the policy should differ.</div>
+        <div class="opts">
+
+          <label class="opt" data-value="route_pauses" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Route stays in world.routes but pauses new dispatch while source is disabled">
+                <rect width="320" height="100" fill="#0E1116"/>
+                <rect x="20" y="22" width="280" height="60" rx="4" fill="#181D27" stroke="#3a4452"/>
+                <text x="32" y="40" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8" letter-spacing="1">ROUTE LCS-04</text>
+                <text x="32" y="56" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A" letter-spacing="1">status: PAUSED (source OFF)</text>
+                <text x="32" y="72" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">dispatch: 0 / cycle · in-flight: 2 cargo lands</text>
+                <circle cx="284" cy="52" r="6" fill="#E8624A"/>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_routes_disabled_source" value="route_pauses" checked>
+              <span class="o-label">Route pauses (new flag <code>route.sourceDisabled</code> implied by chokepoint)</span>
+              <span class="o-rat">The route stays in <code>world.routes</code>. The phase-1 demand loop at <code>routes.ts:666</code> already short-circuits draining routes; add an equivalent skip for routes whose <code>sourceBuildingId</code> matches a disabled building. Re-enabling resumes new dispatch automatically. No new persistent flag &mdash; the predicate is computable from <code>state.buildings</code>.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="route_drains_and_removes">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Disabling triggers draining; route is removed once empty">
+                <rect width="320" height="100" fill="#0E1116"/>
+                <rect x="20" y="22" width="280" height="60" rx="4" fill="#181D27" stroke="#E8624A" stroke-dasharray="3 2"/>
+                <text x="32" y="40" font-family="ui-monospace, monospace" font-size="9" fill="#E08B7F" letter-spacing="1">ROUTE LCS-04 (draining)</text>
+                <text x="32" y="56" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">will be removed when in-flight = 0</text>
+                <text x="32" y="72" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">re-enable does NOT restore the route</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_routes_disabled_source" value="route_drains_and_removes">
+              <span class="o-label">Disable triggers <code>draining=true</code> (same as demolish)</span>
+              <span class="o-rat">Disable calls <code>drainRoutesForBuilding</code> directly. Re-enabling the source does NOT restore the route &mdash; the player must reconfigure it. Symmetric with demolish but contradicts &ldquo;cost is zero in both directions.&rdquo;</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="route_independent">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Route ignores source-building disable, pulls from island inventory directly">
+                <rect width="320" height="100" fill="#0E1116"/>
+                <rect x="20" y="22" width="280" height="60" rx="4" fill="#181D27" stroke="#3a4452"/>
+                <text x="32" y="40" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">ROUTE LCS-04 (active)</text>
+                <text x="32" y="56" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8" letter-spacing="1">pulls from island inventory · indifferent to source-bldg state</text>
+                <text x="32" y="72" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">disabling the source just stops production into the pool</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_routes_disabled_source" value="route_independent">
+              <span class="o-label">Routes don't care (pull from island inventory)</span>
+              <span class="o-rat">Routes pull from <em>island</em> inventory, not the source building's local output (the building delivers to inventory; the route drains inventory). The disabled source stops <em>filling</em> inventory, so the route naturally starves. Simpler semantics but loses the &ldquo;owned by this building&rdquo; mental model the player has from the routes UI.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_routes_disabled_source">route_pauses</b></div>
+      </fieldset>
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 05 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_owned_subordinates">
+        <legend>Picker 05</legend>
+        <div class="p-key">p_owned_subordinates</div>
+        <div class="p-title">Drones / helicopters / satellites in transit when their owner-building is disabled</div>
+        <div class="p-intro">A Drone Pad has launched drones currently
+          in-flight. A Spaceport has satellites tracked in orbital
+          state. A Launch Tower has a queued launch about to fire. The
+          owner-building is disabled mid-operation. What happens to
+          those subordinates?</div>
+        <div class="opts">
+
+          <label class="opt" data-value="complete_then_block" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="In-flight drones complete normally; no new launches while disabled">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <rect x="20" y="30" width="64" height="48" rx="4" fill="#1a2030" stroke="#E8624A" stroke-width="2"/>
+                <text x="52" y="58" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">PAD-1 OFF</text>
+                <!-- in-flight drone -->
+                <circle cx="180" cy="40" r="4" fill="#7dd3e8"/>
+                <line x1="176" y1="40" x2="184" y2="40" stroke="#7dd3e8" stroke-width="0.8"/>
+                <text x="180" y="28" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#7dd3e8">drone-12 → returns normally</text>
+                <!-- blocked launch -->
+                <text x="180" y="72" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#8F8D82">drone-13 dispatch: ✕ blocked</text>
+                <text x="180" y="86" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#8F8D82">launch queue: paused</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_owned_subordinates" value="complete_then_block" checked>
+              <span class="o-label">In-flight completes; no new launches while disabled</span>
+              <span class="o-rat">Drones in flight return to their pad on their scheduled <code>expectedReturnTime</code>. Satellites stay in orbit. Queued launches pause. New launches require an enabled owner &mdash; the existing checks at <code>drones.ts:166</code>, <code>orbital.ts:220</code> grow a <code>!owner.disabled</code> filter. Mirrors <code>p_routes_pending_inbound = deliver_anyway</code> exactly.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="recall_all">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="All in-flight subordinates recall immediately on disable">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <rect x="20" y="30" width="64" height="48" rx="4" fill="#1a2030" stroke="#E8624A" stroke-width="2"/>
+                <text x="52" y="58" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">PAD-1 OFF</text>
+                <path d="M 180 40 L 90 50" stroke="#E8624A" stroke-width="1.5" stroke-dasharray="3 2" marker-end="url(#arr4)"/>
+                <defs><marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#E8624A"/></marker></defs>
+                <circle cx="180" cy="40" r="4" fill="#E8624A"/>
+                <text x="180" y="28" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#E8624A">drone-12 → returns now</text>
+                <text x="180" y="86" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#E8624A">satellites de-orbit · queue refunded</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_owned_subordinates" value="recall_all">
+              <span class="o-label">Recall everything immediately</span>
+              <span class="o-rat">Drones snap to their pad. Satellites de-orbit (or queue de-orbits). Queued launches refund their materials. Aggressive &mdash; ensures &ldquo;functionally non-existent&rdquo; is literal. Adds new code paths in drones, orbital, and routes; risk of unintended cargo loss / launch refund weirdness.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="ignore_owner_disable">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Subordinates continue normally; disable only blocks new dispatch indirectly">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <rect x="20" y="30" width="64" height="48" rx="4" fill="#1a2030" stroke="#E8624A" stroke-width="2"/>
+                <text x="52" y="58" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">PAD-1 OFF</text>
+                <circle cx="180" cy="40" r="4" fill="#7dd3e8"/>
+                <text x="180" y="28" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#7dd3e8">drone-12 → continues, lands at PAD-1</text>
+                <text x="180" y="72" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#8F8D82">drone-13 dispatch: no UI block, fails on next launch check</text>
+                <text x="180" y="86" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#8F8D82">satellites: unchanged</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_owned_subordinates" value="ignore_owner_disable">
+              <span class="o-label">Don't touch subordinates &mdash; let normal checks fail</span>
+              <span class="o-rat">No explicit subordinate-handling code. Subordinates run normally; new operations fail because <code>state.buildings.some(b =&gt; b.defId === 'dronepad' &amp;&amp; !b.disabled)</code> returns false. Simplest implementation; risks subtle bugs where a returning drone tries to land at an off pad and is in a weird state.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_owned_subordinates">complete_then_block</b></div>
+      </fieldset>
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 06 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_constructed_disable">
+        <legend>Picker 06</legend>
+        <div class="p-key">p_constructed_disable</div>
+        <div class="p-title">Can a building be disabled while under construction?</div>
+        <div class="p-intro">Construction is the only existing state with
+          a &ldquo;progress counter&rdquo;. Disable should be either
+          orthogonal (freeze the counter) or disallowed.</div>
+        <div class="opts">
+
+          <label class="opt" data-value="yes_pauses_construction" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Under-construction building can be disabled; construction freezes">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <rect x="20" y="20" width="120" height="72" rx="4" fill="#1a2030" stroke="#E8624A" stroke-width="2"/>
+                <text x="80" y="44" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">DISABLED</text>
+                <circle cx="80" cy="64" r="14" fill="#0E1116" stroke="#60c8e0" stroke-width="1.5"/>
+                <path d="M 80 64 L 80 52 A 12 12 0 0 1 91 70 z" fill="#60c8e0" opacity="0.6"/>
+                <text x="80" y="86" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#60c8e0">28% (frozen)</text>
+                <text x="180" y="38" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">constructionRemainingMs</text>
+                <text x="180" y="54" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">stops decrementing in</text>
+                <text x="180" y="68" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">economy.ts:1633 while</text>
+                <text x="180" y="82" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">b.disabled is true.</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_constructed_disable" value="yes_pauses_construction" checked>
+              <span class="o-label">Yes; freezes <code>constructionRemainingMs</code></span>
+              <span class="o-rat">Player can shelve a half-built building. <code>tickConstruction</code> at <code>economy.ts:1634</code> is wrapped in <code>if (b.disabled) continue;</code> before the if-was-under-construction branch. Re-enabling resumes the build from the same remaining time.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="no_finish_first">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Disable button is greyed out while a building is under construction">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <rect x="20" y="20" width="120" height="72" rx="4" fill="#1a2030" stroke="#60c8e0" stroke-width="2"/>
+                <circle cx="80" cy="56" r="16" fill="#0E1116" stroke="#60c8e0" stroke-width="1.5"/>
+                <path d="M 80 56 L 80 40 A 16 16 0 0 1 96 56 z" fill="#60c8e0" opacity="0.6"/>
+                <text x="80" y="84" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#60c8e0">28% building</text>
+                <rect x="180" y="48" width="120" height="20" rx="3" fill="transparent" stroke="#3a3833"/>
+                <text x="240" y="62" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1.5">DISABLE (disabled)</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_constructed_disable" value="no_finish_first">
+              <span class="o-label">No &mdash; button greyed out during construction</span>
+              <span class="o-rat">Inspector button shows but is disabled (DOM <code>disabled</code> attribute). Simpler engine: no extra branch in the construction tick. But it means the player has to wait through (potentially a long) build before they can switch a mis-placed building off &mdash; demolish remains the only escape.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="yes_but_destroys_progress">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Disabling resets construction progress to 0">
+                <rect width="320" height="110" fill="#0E1116"/>
+                <rect x="20" y="20" width="120" height="72" rx="4" fill="#1a2030" stroke="#E8624A" stroke-width="2"/>
+                <circle cx="80" cy="56" r="16" fill="#0E1116" stroke="#3a3833" stroke-width="1.5"/>
+                <text x="80" y="84" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#E8624A">0% (reset)</text>
+                <text x="180" y="56" font-family="ui-monospace, monospace" font-size="9" fill="#E08B7F" letter-spacing="1">progress destroyed on disable</text>
+                <text x="180" y="72" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">violates &ldquo;cost is zero&rdquo;</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_constructed_disable" value="yes_but_destroys_progress">
+              <span class="o-label">Yes &mdash; but disable forfeits construction progress</span>
+              <span class="o-rat">Punitive. Contradicts the user spec's &ldquo;cost is zero in both directions&rdquo; line. Listed only for completeness.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_constructed_disable">yes_pauses_construction</b></div>
+      </fieldset>
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 07 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_gate_provisioning">
+        <legend>Picker 07</legend>
+        <div class="p-key">p_gate_provisioning</div>
+        <div class="p-title">Gate provisioning &mdash; confirm user spec</div>
+        <div class="p-intro">The user spec says &ldquo;Disables any gate
+          this building provides&rdquo;. Surfacing a one-line confirmation
+          picker so the implementer can't drift.</div>
+        <div class="opts single">
+
+          <label class="opt" data-value="disabled_does_not_provide_gates" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 580 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Smelter requires adjacent workshop; disabled workshop does NOT count as a provider">
+                <rect width="580" height="120" fill="#0E1116"/>
+                <!-- workshop OFF -->
+                <rect x="40" y="32" width="60" height="60" fill="#c45c2a" opacity="0.4" stroke="#E8624A" stroke-width="2" stroke-dasharray="4 3"/>
+                <text x="70" y="68" text-anchor="middle" font-family="ui-monospace, monospace" font-size="26" fill="#f5f3ec" opacity="0.5">⚙</text>
+                <text x="70" y="108" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">WORKSHOP (OFF)</text>
+                <!-- smelter -->
+                <rect x="120" y="32" width="60" height="60" fill="#8a4830" stroke="#3a1f10" stroke-width="2"/>
+                <text x="150" y="68" text-anchor="middle" font-family="ui-monospace, monospace" font-size="26" fill="#f5f3ec" opacity="0.85">⚒</text>
+                <text x="150" y="108" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E08B7F">SMELTER (stalled — gate failed)</text>
+                <!-- arrow -->
+                <line x1="200" y1="62" x2="280" y2="62" stroke="#E08B7F" stroke-width="1.5" marker-end="url(#arr5)" stroke-dasharray="3 2"/>
+                <defs><marker id="arr5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#E08B7F"/></marker></defs>
+                <!-- explanation -->
+                <text x="300" y="46" font-family="ui-monospace, monospace" font-size="10" fill="#CFCCC2" letter-spacing="1">smelter's `requires adj workshop`</text>
+                <text x="300" y="62" font-family="ui-monospace, monospace" font-size="10" fill="#CFCCC2" letter-spacing="1">gate is evaluated against</text>
+                <text x="300" y="78" font-family="ui-monospace, monospace" font-size="10" fill="#CFCCC2" letter-spacing="1">`validBuildings`. Workshop is</text>
+                <text x="300" y="94" font-family="ui-monospace, monospace" font-size="10" fill="#CFCCC2" letter-spacing="1">filtered out → smelter stalls.</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_gate_provisioning" value="disabled_does_not_provide_gates" checked>
+              <span class="o-label">Disabled building does NOT satisfy any other building's gate (user spec)</span>
+              <span class="o-rat">Free for nothing &mdash; falls out of the <code>validBuildings</code> chokepoint filter. <code>checkGates</code> walks <code>validBuildings</code> as its neighbor pool, so disabled buildings are invisible to <code>matchesGate</code>. Same applies to heat-source provisioning (<code>resolveHeatAssignments</code> only sees <code>validBuildings</code>). One line covers everything.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="disabled_still_provides_gates">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 580 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Alternative: disabled workshop still counts structurally as an adjacent workshop">
+                <rect width="580" height="120" fill="#0E1116"/>
+                <rect x="40" y="32" width="60" height="60" fill="#c45c2a" opacity="0.4" stroke="#E8624A" stroke-width="2" stroke-dasharray="4 3"/>
+                <text x="70" y="68" text-anchor="middle" font-family="ui-monospace, monospace" font-size="26" fill="#f5f3ec" opacity="0.5">⚙</text>
+                <text x="70" y="108" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#E8624A">WORKSHOP (OFF)</text>
+                <rect x="120" y="32" width="60" height="60" fill="#8a4830" stroke="#3a1f10" stroke-width="2"/>
+                <text x="150" y="68" text-anchor="middle" font-family="ui-monospace, monospace" font-size="26" fill="#f5f3ec" opacity="0.85">⚒</text>
+                <text x="150" y="108" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8FA56E">SMELTER (still runs)</text>
+                <line x1="200" y1="62" x2="280" y2="62" stroke="#8FA56E" stroke-width="1.5" marker-end="url(#arr6)"/>
+                <defs><marker id="arr6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8FA56E"/></marker></defs>
+                <text x="300" y="46" font-family="ui-monospace, monospace" font-size="10" fill="#CFCCC2" letter-spacing="1">structural-only reading: a</text>
+                <text x="300" y="62" font-family="ui-monospace, monospace" font-size="10" fill="#CFCCC2" letter-spacing="1">disabled workshop is still &ldquo;there.&rdquo;</text>
+                <text x="300" y="78" font-family="ui-monospace, monospace" font-size="10" fill="#E08B7F" letter-spacing="1">contradicts user-spec framing of</text>
+                <text x="300" y="94" font-family="ui-monospace, monospace" font-size="10" fill="#E08B7F" letter-spacing="1">&ldquo;functionally non-existent.&rdquo;</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_gate_provisioning" value="disabled_still_provides_gates">
+              <span class="o-label">Disabled building STILL provides gates structurally</span>
+              <span class="o-rat">Treat gate-provision as a structural property (the workshop's footprint is still there). Less restrictive but contradicts the user spec. Listed only so the user can flip if &ldquo;functionally non-existent&rdquo; was over-strong.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_gate_provisioning">disabled_does_not_provide_gates</b></div>
+      </fieldset>
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 08 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_convert_while_disabled">
+        <legend>Picker 08</legend>
+        <div class="p-key">p_convert_while_disabled</div>
+        <div class="p-title">Can the inspector's &ldquo;Convert to Eternal Servitor&rdquo; act on a disabled building?</div>
+        <div class="p-intro">§13.3 Convert (<code>inspector-ui.ts:885</code>)
+          consumes materials and flips <code>eternalServitor</code> on
+          the target. Should it require the building be enabled?</div>
+        <div class="opts">
+
+          <label class="opt" data-value="allow" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Convert button is enabled on a disabled building">
+                <rect width="320" height="80" fill="#0E1116"/>
+                <rect x="20" y="20" width="120" height="40" rx="4" fill="rgba(125, 211, 232, 0.08)" stroke="#7dd3e8"/>
+                <text x="80" y="42" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#7dd3e8" letter-spacing="1.5">CONVERT</text>
+                <text x="80" y="54" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#8F8D82">allowed when disabled</text>
+                <text x="160" y="36" font-family="ui-monospace, monospace" font-size="9" fill="#CFCCC2" letter-spacing="1">building can be converted</text>
+                <text x="160" y="50" font-family="ui-monospace, monospace" font-size="9" fill="#CFCCC2" letter-spacing="1">while offline (no extra gate)</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_convert_while_disabled" value="allow" checked>
+              <span class="o-label">Allow Convert on disabled buildings</span>
+              <span class="o-rat">Convert is a one-way upgrade; nothing in its semantics conflicts with the target being currently off. No additional gate needed.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="block">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Convert button is disabled while building is disabled">
+                <rect width="320" height="80" fill="#0E1116"/>
+                <rect x="20" y="20" width="120" height="40" rx="4" fill="transparent" stroke="#3a3833"/>
+                <text x="80" y="42" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1.5">CONVERT (off)</text>
+                <text x="160" y="42" font-family="ui-monospace, monospace" font-size="9" fill="#E08B7F" letter-spacing="1">re-enable to convert</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_convert_while_disabled" value="block">
+              <span class="o-label">Block Convert &mdash; require enabled</span>
+              <span class="o-rat">Forces the player to re-enable a building before converting. Defensible if &ldquo;disabled&rdquo; should feel maximally non-existent. Adds a one-line DOM-disabled check.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_convert_while_disabled">allow</b></div>
+      </fieldset>
+
+      <!-- ━━━━━━━━━━━━━━━━━ PICKER 09 ━━━━━━━━━━━━━━━━━ -->
+      <fieldset class="picker" data-key="p_hotkey_binding">
+        <legend>Picker 09</legend>
+        <div class="p-key">p_hotkey_binding</div>
+        <div class="p-title">Hotkey for &ldquo;toggle disable on selected building&rdquo;</div>
+        <div class="p-intro">Only meaningful if <code>p_ui_surface</code>
+          = <code>inspector_plus_hotkey</code>. Otherwise leave the
+          action defined but unbound and skip this picker.</div>
+        <div class="opts">
+
+          <label class="opt" data-value="keyD_when_selected" data-default="true">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="D key bound to toggle-disable-selected">
+                <rect width="320" height="80" fill="#0E1116"/>
+                <rect x="120" y="20" width="40" height="40" rx="6" fill="#0E1116" stroke="#7dd3e8" stroke-width="1.5"/>
+                <text x="140" y="46" text-anchor="middle" font-family="ui-serif, Georgia, serif" font-size="22" fill="#7dd3e8">D</text>
+                <text x="200" y="36" font-family="ui-monospace, monospace" font-size="9" fill="#CFCCC2" letter-spacing="1">→ toggle-disable-selected</text>
+                <text x="200" y="50" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">(no current binding for D)</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_hotkey_binding" value="keyD_when_selected" checked>
+              <span class="o-label">D &mdash; toggle on selected (D for Disable)</span>
+              <span class="o-rat"><code>KeyD</code> is currently unbound in <code>input.ts</code> (defaults: WASD/Arrows pan, +/- zoom, H home, G grid, C construction). Caveat: <code>D</code> is the WASD-right pan default. Suggest the implementer re-check <code>input.ts</code> &mdash; if D is needed for pan, prefer <code>X</code>.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="keyX_when_selected">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="X key bound to toggle-disable-selected">
+                <rect width="320" height="80" fill="#0E1116"/>
+                <rect x="120" y="20" width="40" height="40" rx="6" fill="#0E1116" stroke="#E8624A" stroke-width="1.5"/>
+                <text x="140" y="46" text-anchor="middle" font-family="ui-serif, Georgia, serif" font-size="22" fill="#E8624A">X</text>
+                <text x="200" y="36" font-family="ui-monospace, monospace" font-size="9" fill="#CFCCC2" letter-spacing="1">→ toggle-disable-selected</text>
+                <text x="200" y="50" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">no WASD-pan collision</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_hotkey_binding" value="keyX_when_selected">
+              <span class="o-label">X &mdash; toggle on selected</span>
+              <span class="o-rat">No pan-key collision. Reads as &ldquo;cross out&rdquo; mnemonic.</span>
+            </span>
+          </label>
+
+          <label class="opt" data-value="via_input_registry_unbound">
+            <span class="o-mock" aria-hidden="true">
+              <svg viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Action defined in registry, no default binding">
+                <rect width="320" height="80" fill="#0E1116"/>
+                <rect x="20" y="22" width="280" height="36" rx="6" fill="#181D27" stroke="#3a4452"/>
+                <text x="34" y="42" font-family="ui-monospace, monospace" font-size="9" fill="#CFCCC2" letter-spacing="1">defineAction('toggle-disable-selected', …)</text>
+                <text x="34" y="54" font-family="ui-monospace, monospace" font-size="9" fill="#8F8D82" letter-spacing="1">// no bind(…) — player can wire one via settings</text>
+              </svg>
+            </span>
+            <span class="o-body">
+              <input type="radio" name="p_hotkey_binding" value="via_input_registry_unbound">
+              <span class="o-label">Defined but unbound</span>
+              <span class="o-rat">Define the action with <code>defineAction</code> in <code>input.ts</code>, no default key. Player binds in settings if they want. Costs nothing in the default UX.</span>
+            </span>
+          </label>
+
+        </div>
+        <div class="p-current">current: <b data-current="p_hotkey_binding">keyD_when_selected</b></div>
+      </fieldset>
+
+    </div>
+  </section>
+
+  <!-- ====================================================== -->
+  <section id="changes">
+    <div class="sec-head"><span class="num">04</span><h2>Change inventory (default-pick projection)</h2></div>
+    <p class="sec-intro">What the implementation touches if every picker
+      stays at its default. Reconciled with whichever picks come back.</p>
+    <table class="tbl">
+      <thead><tr><th>File</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td class="slate"><code>src/buildings.ts:26</code></td><td>Add <code>disabled?: boolean</code> to <code>PlacedBuilding</code>. Docstring matches the §4 / §5 / §4.7 chain.</td></tr>
+        <tr><td class="slate"><code>src/economy.ts:617</code></td><td>Append <code>&amp;&amp; !b.disabled</code> to the <code>validBuildings</code> filter. One line; covers power, recipes, gates, heat, buffs, adjacency.</td></tr>
+        <tr><td class="slate"><code>src/economy.ts:1627</code></td><td>Insert <code>if (b.disabled) continue;</code> after the construction-skip in the maintenance accrual loop. Freezes <code>operatingMs</code> per the user spec.</td></tr>
+        <tr><td class="slate"><code>src/routes.ts:666</code></td><td>Phase-1 demand loop: <code>continue</code> for routes whose <code>sourceBuildingId</code> matches a disabled building. New helper <code>isRouteSourceDisabled(route, states)</code>.</td></tr>
+        <tr><td class="slate"><code>src/antenna.ts:51</code>, <code>lighthouse.ts:88</code></td><td>Provider scans: skip <code>b.disabled === true</code>. (Vision sources that are off don't grant vision.)</td></tr>
+        <tr><td class="slate"><code>src/orbital.ts</code> (10 sites), <code>drones.ts:166</code>, <code>lattice.ts:28</code>, <code>buildings-ui.ts:210/257/280</code>, <code>inspector-ui.ts:1465</code></td><td>Provider-scan sites: append <code>!b.disabled</code> filter, or call a new shared <code>hasOperationalBuilding(state, defId)</code> helper (recommended).</td></tr>
+        <tr><td class="slate"><code>src/inspector-ui.ts</code> (new block between Convert and Refresh)</td><td>New <code>disableBtn</code>: same styling stamp as <code>convertBtn</code>, label flips <code>Disable ↔ Enable</code> based on <code>target.building.disabled</code>. Click handler sets <code>target.building.disabled = !target.building.disabled</code>, then calls <code>paint()</code>.</td></tr>
+        <tr><td class="slate"><code>src/building-alerts-overlay.ts</code></td><td>Per <code>p_visual_cue</code> default: paint a 0.40-alpha bounding-box rect + dashed red stroke over the building when <code>b.disabled === true</code>. Mirrors the construction-tint code at lines 82&ndash;111.</td></tr>
+        <tr><td class="slate"><code>src/input.ts</code> (conditional)</td><td>If picker <code>p_ui_surface</code> = <code>inspector_plus_hotkey</code>: <code>defineAction('toggle-disable-selected', …)</code> + <code>bind(reg, &lt;code&gt;, …)</code> per <code>p_hotkey_binding</code>.</td></tr>
+        <tr><td class="slate"><code>src/economy.test.ts</code> + others</td><td>New tests: (1) disabled building contributes 0 to power; (2) <code>operatingMs</code> frozen across a 1h advance; (3) a smelter requiring an adjacent workshop stalls when the workshop is disabled; (4) toggling is idempotent and lossless across a save round-trip.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ====================================================== -->
+  <section id="verification">
+    <div class="sec-head"><span class="num">05</span><h2>Verification</h2></div>
+    <p class="sec-intro">Concrete checks the implementer can run. All
+      vitest paths from the pure layer; manual smoke via the dev tab.</p>
+    <table class="tbl">
+      <thead><tr><th>Check</th><th>Expected</th></tr></thead>
+      <tbody>
+        <tr><td><code>npx vitest run -t &quot;disabled building contributes 0 to power balance&quot;</code></td><td>Pass: a solar + smelter, smelter disabled, <code>computeRates(...).power.consumed === 0</code> for the smelter.</td></tr>
+        <tr><td><code>npx vitest run -t &quot;disabled building does not accrue operatingMs&quot;</code></td><td>Pass: 1h advance with <code>disabled = true</code>, <code>b.operatingMs</code> unchanged.</td></tr>
+        <tr><td><code>npx vitest run -t &quot;disabled provider fails downstream gates&quot;</code></td><td>Pass: smelter with <code>gates: [{ matchType: 'def_id', defId: 'workshop' }]</code>, disabled workshop → <code>checkGates(...).effectiveMul === 0</code>.</td></tr>
+        <tr><td><code>npx vitest run -t &quot;disable is lossless across save round-trip&quot;</code></td><td>Pass: serialize / restore preserves <code>b.disabled</code>.</td></tr>
+        <tr><td><code>npx vitest run -t &quot;construction freezes while disabled&quot;</code></td><td>Pass: under-construction building disabled, <code>constructionRemainingMs</code> unchanged across advance.</td></tr>
+        <tr><td>Manual: build, reload <code>islands.nitjsefni.eu</code>, select a workshop, click Disable, observe sprite goes 0.40 alpha + dashed red, smelter chain stalls. Click Enable, observe chain restarts.</td><td>All visual + economy effects observed without restart of <code>robot-islands-dev.service</code>.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ====================================================== -->
+  <section id="risks">
+    <div class="sec-head"><span class="num">06</span><h2>Risks &amp; mitigations</h2></div>
+    <table class="tbl">
+      <thead><tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Implementer misses one of the ~12 provider-scan sites; e.g. a disabled spaceport still unlocks tier-T6 in the buildings UI.</td><td>Med</td><td>Add <code>hasOperationalBuilding(state, defId)</code> helper in a shared module and grep for all call sites that match the pattern <code>buildings\.(some|find).*defId ===</code>. Convert one-by-one. Add an audit test enumerating the expected list.</td></tr>
+        <tr><td>Maintenance-tick second site is forgotten &mdash; disabled buildings still age.</td><td>Med</td><td>Verification check 2 above is the explicit guardrail. Test fails loudly if the second site is missed.</td></tr>
+        <tr><td>Route in-flight cargo accidentally lost when a route's source is disabled (under <code>route_drains_and_removes</code> pick).</td><td>Low</td><td>Default pick (<code>route_pauses</code>) avoids the path entirely. If the player picks <code>route_drains_and_removes</code>, surface a confirm dialog in the inspector.</td></tr>
+        <tr><td>Disabled cue at strategic zoom is unreadable.</td><td>Low</td><td>Default <code>low_alpha</code> + dashed outline is bright red + dashed; the construction-tint overlay (which is the precedent) has the same legibility behaviour at all zoom levels. If reports come in, escalate to <code>dim_plus_red_x</code>.</td></tr>
+        <tr><td>Hotkey <code>D</code> conflicts with WASD pan.</td><td>Low</td><td>Default picker note already calls this out — recommend <code>X</code> or <code>via_input_registry_unbound</code> in the brief that goes to the implementer.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ====================================================== -->
+  <section id="deferred">
+    <div class="sec-head"><span class="num">07</span><h2>Out of scope</h2></div>
+    <div class="compare">
+      <div class="col good">
+        <div class="col-head">Considered, deferred</div>
+        <div class="col-body"><ul>
+          <li>Per-island &ldquo;disable all of category X&rdquo; bulk action.</li>
+          <li>Schedule-based disable (cron / day-night-driven).</li>
+          <li>Auto-disable on starvation (the recipe already stalls; auto-disable would be a separate UX pattern).</li>
+          <li>Alert-overlay corner badge for disabled state (orthogonal to <code>p_visual_cue</code>) &mdash; consider if user reports the sprite-level cue is too quiet.</li>
+        </ul></div>
+      </div>
+      <div class="col bad">
+        <div class="col-head">Not in this spec</div>
+        <div class="col-body"><ul>
+          <li>Demolition flow changes &mdash; demolish remains separate from disable.</li>
+          <li>Construction-cost refund tweaks &mdash; disable doesn't refund anything.</li>
+          <li>Multi-select disable (no multi-select UI exists yet).</li>
+        </ul></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================== -->
+  <!-- Selections panel — copy & send back                    -->
+  <!-- ====================================================== -->
+  <aside class="selections" id="selections-panel" aria-label="Your picks">
+    <div class="s-tag">Your picks — copy and send back</div>
+    <div class="s-head">Selections</div>
+    <div class="s-body">Click any radio above to update this panel. Hit
+      <b>Copy</b> to put the payload on your clipboard, or triple-click
+      the block to select it manually. Paste back to lock the picks; the
+      implementer reconciles prose with whatever changed and cuts v2.</div>
+
+    <div class="s-tools">
+      <button type="button" class="copy-btn" id="copy-selections" aria-label="Copy selections to clipboard">Copy selections</button>
+      <div class="format-toggle" role="tablist" aria-label="Output format">
+        <button type="button" data-format="json" class="active" role="tab" aria-selected="true">JSON</button>
+        <button type="button" data-format="kv" role="tab" aria-selected="false">key: value</button>
+      </div>
+      <span class="copy-status" id="copy-status" aria-live="polite"></span>
+    </div>
+
+    <pre class="payload" id="selections-payload" tabindex="0">{}</pre>
+  </aside>
+
+  <div class="footer">
+    <p>Design spec · generated 2026-05-23 · v1 · related to
+      <code>SPEC.md §4 / §5 / §4.7 / §9.3 / §13.3</code>,
+      <code>src/economy.ts:617</code> (chokepoint),
+      <code>src/economy.ts:1627</code> (maintenance accrual),
+      <code>src/inspector-ui.ts</code> (button surface).
+      Sidechannel artifact &mdash; not committed.</p>
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    var KEYS = [
+      'p_ui_surface',
+      'p_visual_cue',
+      'p_routes_pending_inbound',
+      'p_routes_disabled_source',
+      'p_owned_subordinates',
+      'p_constructed_disable',
+      'p_gate_provisioning',
+      'p_convert_while_disabled',
+      'p_hotkey_binding'
+    ];
+
+    var payloadEl  = document.getElementById('selections-payload');
+    var copyBtn    = document.getElementById('copy-selections');
+    var statusEl   = document.getElementById('copy-status');
+    var formatBtns = document.querySelectorAll('.selections .format-toggle button');
+
+    var currentFormat = 'json';
+
+    function readSelections() {
+      var out = {};
+      for (var i = 0; i < KEYS.length; i++) {
+        var key = KEYS[i];
+        var checked = document.querySelector('input[type="radio"][name="' + key + '"]:checked');
+        out[key] = checked ? checked.value : null;
+      }
+      return out;
+    }
+
+    function render() {
+      var sel = readSelections();
+      for (var k in sel) {
+        if (!Object.prototype.hasOwnProperty.call(sel, k)) continue;
+        var b = document.querySelector('[data-current="' + k + '"]');
+        if (b) b.textContent = sel[k] === null ? '—' : sel[k];
+      }
+      var text;
+      if (currentFormat === 'json') {
+        text = JSON.stringify({
+          spec: 'robot-islands/2026-05-23-building-disable-design',
+          version: 'v1',
+          picks: sel
+        }, null, 2);
+      } else {
+        var lines = ['# Picks for robot-islands/2026-05-23-building-disable-design (v1)'];
+        for (var j = 0; j < KEYS.length; j++) {
+          var key2 = KEYS[j];
+          lines.push(key2 + ': ' + (sel[key2] === null ? '(none)' : sel[key2]));
+        }
+        text = lines.join('\n');
+      }
+      payloadEl.textContent = text;
+    }
+
+    var radios = document.querySelectorAll('.picker input[type="radio"]');
+    for (var i = 0; i < radios.length; i++) {
+      radios[i].addEventListener('change', render);
+    }
+
+    formatBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        currentFormat = btn.getAttribute('data-format');
+        formatBtns.forEach(function (b) {
+          var active = b === btn;
+          b.classList.toggle('active', active);
+          b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        render();
+      });
+    });
+
+    function showStatus(msg, ok) {
+      statusEl.textContent = msg;
+      statusEl.style.color = ok ? 'var(--olive)' : 'var(--rust)';
+      if (showStatus._t) clearTimeout(showStatus._t);
+      showStatus._t = setTimeout(function () {
+        statusEl.textContent = '';
+      }, 2200);
+    }
+
+    copyBtn.addEventListener('click', function () {
+      var text = payloadEl.textContent;
+      var done = function (ok) {
+        if (ok) {
+          copyBtn.classList.add('copied');
+          copyBtn.textContent = 'Copied';
+          setTimeout(function () {
+            copyBtn.classList.remove('copied');
+            copyBtn.textContent = 'Copy selections';
+          }, 1600);
+          showStatus('copied ' + text.length + ' chars', true);
+        } else {
+          showStatus('copy failed — triple-click the block', false);
+        }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () { done(true); },
+          function () { done(false); }
+        );
+      } else {
+        var range = document.createRange();
+        range.selectNodeContents(payloadEl);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        done(false);
+      }
+    });
+
+    render();
+  })();
+</script>
+</body>
+</html>
