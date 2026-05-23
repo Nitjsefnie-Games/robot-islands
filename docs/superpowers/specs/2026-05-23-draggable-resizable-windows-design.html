@@ -1,0 +1,1967 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draggable + resizable + persisted HUD windows — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1080px; margin: 0 auto; }
+
+    /* ── header ─────────────────────────────────────────────── */
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ── summary strip ──────────────────────────────────────── */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ── decision banner ────────────────────────────────────── */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 780px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    /* ── section chrome ─────────────────────────────────────── */
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 780px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 780px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre.code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: #C9B98A;
+      line-height: 1.55;
+      white-space: pre;
+      overflow-x: auto;
+      max-width: 980px;
+      margin-bottom: 14px;
+    }
+
+    /* ── tables ─────────────────────────────────────────────── */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono  { font-family: var(--mono); font-size: 12px; color: var(--clay); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .tag {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      padding: 1px 7px;
+      border-radius: 5px;
+      letter-spacing: 0.04em;
+    }
+    .tag.modal { background: #2E211C; color: var(--rust); }
+    .tag.float { background: #232A1C; color: var(--olive); }
+    .tag.chrome { background: var(--oat); color: var(--slate); }
+
+    /* ── compare cards ──────────────────────────────────────── */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* ── change inventory ───────────────────────────────────── */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ── checklist ──────────────────────────────────────────── */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 880px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ── risk table ─────────────────────────────────────────── */
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    /* ── deferred ───────────────────────────────────────────── */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    /* ── pickers ────────────────────────────────────────────── */
+    .pickers {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+    .picker {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px 14px;
+      margin: 0;
+    }
+    .picker > legend {
+      padding: 0 8px;
+      margin-left: -4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--clay);
+    }
+    .picker .p-title {
+      font-family: var(--serif);
+      font-size: 17px;
+      color: var(--slate);
+      font-weight: 500;
+      margin-bottom: 4px;
+      letter-spacing: -0.005em;
+    }
+    .picker .p-intro {
+      font-size: 13px;
+      color: var(--gray-500);
+      margin-bottom: 14px;
+      max-width: 760px;
+    }
+    .picker .opts { display: flex; flex-direction: column; gap: 10px; }
+    .picker .opt {
+      display: block;
+      padding: 0;
+      border: 1.5px solid var(--gray-300);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease;
+      background: transparent;
+      overflow: hidden;
+      position: relative;
+    }
+    .picker .opt:hover { border-color: var(--gray-500); background: rgba(255,255,255,0.015); }
+    .picker .opt .o-mock {
+      display: block;
+      background: var(--ivory);
+      border-bottom: 1px solid var(--gray-300);
+      padding: 8px 10px;
+    }
+    .picker .opt .o-mock svg { display: block; width: 100%; height: auto; }
+    .picker .opt .o-body {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 4px 12px;
+      padding: 10px 12px 12px 10px;
+    }
+    .picker .opt input[type="radio"] {
+      grid-row: 1 / span 2;
+      grid-column: 1;
+      margin-top: 3px;
+      accent-color: var(--clay);
+      width: 14px; height: 14px;
+      cursor: pointer;
+    }
+    .picker .opt .o-label {
+      grid-row: 1; grid-column: 2;
+      font-size: 14px;
+      color: var(--slate);
+      font-weight: 600;
+    }
+    .picker .opt .o-rat {
+      grid-row: 2; grid-column: 2;
+      font-size: 12.5px;
+      color: var(--gray-500);
+      line-height: 1.5;
+    }
+    .picker .opt[data-default="true"] .o-label::after {
+      content: ' · default';
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--olive);
+      letter-spacing: 0.05em;
+      font-weight: 500;
+    }
+    .picker .opt:has(input[type="radio"]:checked) .o-label { color: var(--clay); }
+    .picker .opt:has(input[type="radio"]:checked) {
+      border-color: var(--clay);
+      background: rgba(217, 119, 87, 0.06);
+    }
+    .picker .opt:has(input[type="radio"]:checked) .o-mock {
+      border-bottom-color: rgba(217, 119, 87, 0.40);
+    }
+    .picker .p-current {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-top: 1px dashed var(--gray-300);
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--gray-500);
+    }
+    .picker .p-current b {
+      color: var(--olive);
+      font-weight: 600;
+    }
+
+    /* ── selections panel ───────────────────────────────────── */
+    .selections {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--olive);
+      border-radius: var(--radius);
+      padding: 22px 24px 20px;
+      margin-top: 56px;
+      max-width: 980px;
+    }
+    .selections .s-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--olive);
+      margin-bottom: 6px;
+    }
+    .selections .s-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .selections .s-body {
+      font-size: 14px;
+      color: var(--gray-700);
+      max-width: 760px;
+      margin-bottom: 14px;
+    }
+    .selections .s-tools {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .selections button.copy-btn {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 7px 14px;
+      border-radius: 7px;
+      border: 1.5px solid var(--olive);
+      background: transparent;
+      color: var(--olive);
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .selections button.copy-btn:hover { background: var(--olive); color: var(--ivory); }
+    .selections button.copy-btn.copied { background: var(--olive); color: var(--ivory); }
+    .selections .format-toggle {
+      display: inline-flex;
+      gap: 0;
+      border: 1.5px solid var(--gray-300);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .selections .format-toggle button {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      border: 0;
+      background: transparent;
+      color: var(--gray-500);
+      cursor: pointer;
+      transition: background 100ms, color 100ms;
+    }
+    .selections .format-toggle button.active {
+      background: var(--oat);
+      color: var(--slate);
+    }
+    .selections .copy-status {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--olive);
+      letter-spacing: 0.04em;
+    }
+    .selections pre.payload {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: #C9B98A;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+      cursor: text;
+      user-select: text;
+    }
+
+    /* ── illustration wrappers ──────────────────────────────── */
+    .figure {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px 14px;
+      margin-bottom: 18px;
+    }
+    .figure .cap {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    .figure svg { display: block; width: 100%; height: auto; }
+    .fig-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    @media (max-width: 820px) { .fig-grid { grid-template-columns: 1fr; } }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+    .footer code { color: #C9B98A; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands · HUD chrome · v1</div>
+      <h1>Draggable, resizable, persisted HUD windows</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Today every floating HUD panel auto-docks into a zone via
+        <code>mountPanel(el, { zone, order })</code> in <code>src/ui-zones.ts</code>.
+        Zones are non-overlapping screen regions (TL/TR/BL/BR/TC/L/R) and within
+        a zone panels stack along the primary axis with a fixed gutter. The
+        player can't move them, can't resize them, and any preference vanishes
+        on reload. This spec defines a small <em>window manager</em> that
+        adds drag + resize + per-browser persistence to every <em>floating</em>
+        panel (modals stay scrim-centered, chrome stays anchored) without
+        breaking the existing zone-stack fallback when no saved layout exists.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">In-scope panels</div><div class="v accent">5 floating</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">3 + 1 new</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+      <div class="cell"><div class="k">Persistence</div><div class="v">localStorage</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">
+        Add a new module <code>src/window-manager.ts</code> that augments
+        every floating panel with header-drag + bottom-right-corner-resize
+        affordances, persists the per-panel <code>{ x, y, w, h, zRank }</code>
+        in a versioned <code>localStorage</code> key
+        (<code>ri-ui-layout-v1</code>), and integrates with
+        <code>ui-zones.ts</code> so that &ldquo;free&rdquo; (saved-layout)
+        panels are skipped when the zone manager computes its stack cursor.
+      </div>
+      <div class="d-body">
+        Mounting stays one-line: <code>mountPanel</code> reads the layout
+        store on insertion; if an entry exists, it applies the saved
+        rectangle and marks the record <code>free</code> (zone stack skips
+        it). If no entry exists, the existing zone-stack layout runs
+        unchanged &mdash; everyone with no saved layout sees the current UI.
+      </div>
+      <div class="d-body">
+        Modals (<code>mountModal</code> from <code>src/ui-modal.ts</code>)
+        are out of scope: they are scrim-centered overlays with no
+        anchor to persist. Chrome panels &mdash; <code>#action-strip</code>
+        (TR) and <code>#island-bar</code> (TC) &mdash; are also out of
+        scope by default, because they're orientation anchors the player
+        needs to find at fixed coords.
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- 00 — Open design choices: interactive pickers                      -->
+    <!-- ================================================================= -->
+    <section id="open-choices">
+      <div class="sec-head"><span class="num">00</span><h2>Open design choices &mdash; pick &amp; send back</h2></div>
+      <p class="sec-intro">Each fieldset below is a design call I had to
+        make. Defaults reflect the prose elsewhere in the spec. Click any
+        other option to redirect &mdash; the <b>Selections</b> panel at the
+        bottom of the page updates live and a copy button hands you the
+        payload to paste back. Changing a picker here does not edit the
+        prose in §01-§09; the prose illustrates the <em>defaults</em>.
+        The implementer will reconcile with your final picks before
+        touching code.</p>
+
+      <div class="pickers">
+
+        <!-- ────────── PICKER 01 ────────── -->
+        <fieldset class="picker" data-key="drag_handle">
+          <legend>Picker 01</legend>
+          <div class="p-title">Drag handle</div>
+          <div class="p-intro">Where the pointer can grab the window to
+            move it. Every floating panel today already has a stamped
+            header strip (e.g. <code>DRONE OPS / DSP-01</code>,
+            <code>INSPECT / BLD-01</code>, <code>FREIGHT GRID / LCS-01</code>);
+            the HUD economy panel has <code>.ri-panel__head</code>. Mocks
+            show a panel with the active drag region highlighted.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="header" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Header strip is the drag handle">
+                  <rect x="12" y="12" width="296" height="72" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <!-- header (highlighted) -->
+                  <rect x="12" y="12" width="296" height="22" rx="6"
+                        fill="#1a212d" stroke="#7dd3e8" stroke-width="1.5"/>
+                  <text x="22" y="27" font-family="ui-monospace, Menlo, monospace" font-size="9.5" fill="#7dd3e8" letter-spacing="2">DRONE OPS</text>
+                  <text x="100" y="27" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791" letter-spacing="1.5">DSP-01</text>
+                  <text x="280" y="27" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#6c7791">×</text>
+                  <!-- drag-icon dots -->
+                  <circle cx="166" cy="23" r="0.9" fill="#7dd3e8"/>
+                  <circle cx="170" cy="23" r="0.9" fill="#7dd3e8"/>
+                  <circle cx="174" cy="23" r="0.9" fill="#7dd3e8"/>
+                  <circle cx="166" cy="27" r="0.9" fill="#7dd3e8"/>
+                  <circle cx="170" cy="27" r="0.9" fill="#7dd3e8"/>
+                  <circle cx="174" cy="27" r="0.9" fill="#7dd3e8"/>
+                  <!-- body -->
+                  <rect x="18" y="42" width="80" height="6" rx="1" fill="#3a4452"/>
+                  <rect x="18" y="54" width="180" height="4" rx="1" fill="#2a3240"/>
+                  <rect x="18" y="62" width="160" height="4" rx="1" fill="#2a3240"/>
+                  <rect x="18" y="70" width="140" height="4" rx="1" fill="#2a3240"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="drag_handle" value="header" checked>
+                <span class="o-label">Existing header strip (<code>.ri-panel__head</code> / stamped header div)</span>
+                <span class="o-rat">Every floating panel already has one. Cursor on the header switches to <code>grab</code> via CSS attribute selector. Pointerdown that lands on a header child <em>button</em> (the <code>×</code> close, etc.) is ignored via <code>event.target.closest('button,input,select,textarea')</code> &mdash; no double-binding. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="whole">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Whole panel is draggable">
+                  <rect x="12" y="12" width="296" height="72" rx="6"
+                        fill="#1a212d" stroke="#7dd3e8" stroke-width="1.5"/>
+                  <rect x="12" y="12" width="296" height="22" rx="6"
+                        fill="#1a212d" stroke="none"/>
+                  <text x="22" y="27" font-family="ui-monospace, Menlo, monospace" font-size="9.5" fill="#7dd3e8" letter-spacing="2">DRONE OPS</text>
+                  <text x="100" y="27" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791" letter-spacing="1.5">DSP-01</text>
+                  <text x="280" y="27" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#6c7791">×</text>
+                  <rect x="18" y="42" width="80" height="6" rx="1" fill="#3a4452"/>
+                  <rect x="18" y="54" width="180" height="4" rx="1" fill="#2a3240"/>
+                  <rect x="18" y="62" width="160" height="4" rx="1" fill="#2a3240"/>
+                  <rect x="18" y="70" width="140" height="4" rx="1" fill="#2a3240"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="drag_handle" value="whole">
+                <span class="o-label">Whole panel is the handle (with button-target skip)</span>
+                <span class="o-rat">Pointerdown anywhere starts a drag unless the target is inside an interactive child. Generous hit-target, but bigger surface for accidental drags &mdash; routes-ui has cargo rows with HTML5 drag-drop list reordering (<code>routes-ui.ts:848</code>), and the inspector body has scroll. Risk of swallowing pointer events inside the body. Not recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="pill">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dedicated drag pill above the header">
+                  <rect x="12" y="22" width="296" height="62" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <!-- drag pill (highlighted) -->
+                  <rect x="140" y="12" width="40" height="8" rx="4"
+                        fill="#1a212d" stroke="#7dd3e8" stroke-width="1"/>
+                  <line x1="150" y1="16" x2="170" y2="16" stroke="#7dd3e8" stroke-width="0.8"/>
+                  <!-- header -->
+                  <text x="22" y="36" font-family="ui-monospace, Menlo, monospace" font-size="9.5" fill="#7dd3e8" letter-spacing="2">DRONE OPS</text>
+                  <text x="100" y="36" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791" letter-spacing="1.5">DSP-01</text>
+                  <text x="280" y="36" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#6c7791">×</text>
+                  <rect x="18" y="46" width="80" height="6" rx="1" fill="#3a4452"/>
+                  <rect x="18" y="58" width="180" height="4" rx="1" fill="#2a3240"/>
+                  <rect x="18" y="66" width="160" height="4" rx="1" fill="#2a3240"/>
+                  <rect x="18" y="74" width="140" height="4" rx="1" fill="#2a3240"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="drag_handle" value="pill">
+                <span class="o-label">Add a top-center drag pill (new affordance)</span>
+                <span class="o-rat">macOS-style pill above the panel chrome. Clearer "this is a window" signal at the cost of every panel growing 8px of vertical headroom. Two of the five in-scope panels are already tight on space (drones-ui uses <code>max-height: calc(100vh - 32px)</code>). Spec-cost-too-high vs. reusing the existing header.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="drag_handle">header</b></div>
+        </fieldset>
+
+        <!-- ────────── PICKER 02 ────────── -->
+        <fieldset class="picker" data-key="resize_affordance">
+          <legend>Picker 02</legend>
+          <div class="p-title">Resize affordance</div>
+          <div class="p-intro">Where the resize grip lives on the panel
+            frame. All four options keep <code>min-width</code> /
+            <code>min-height</code> floors (set per-panel today via
+            <code>mountPanel</code> options &mdash; the HUD passes
+            <code>minWidth: 260, maxWidth: 360</code>). Mocks show one
+            panel with the grip(s) highlighted.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="br_corner" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bottom-right corner grip">
+                  <rect x="12" y="12" width="296" height="72" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="12" y="12" width="296" height="22" rx="6"
+                        fill="#1a212d" stroke="none"/>
+                  <text x="22" y="27" font-family="ui-monospace, Menlo, monospace" font-size="9.5" fill="#7dd3e8" letter-spacing="2">DRONE OPS</text>
+                  <text x="280" y="27" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#6c7791">×</text>
+                  <rect x="18" y="42" width="80" height="6" rx="1" fill="#3a4452"/>
+                  <rect x="18" y="54" width="180" height="4" rx="1" fill="#2a3240"/>
+                  <rect x="18" y="62" width="160" height="4" rx="1" fill="#2a3240"/>
+                  <!-- grip -->
+                  <line x1="298" y1="78" x2="304" y2="72" stroke="#7dd3e8" stroke-width="1"/>
+                  <line x1="298" y1="82" x2="304" y2="76" stroke="#7dd3e8" stroke-width="1"/>
+                  <line x1="302" y1="82" x2="304" y2="80" stroke="#7dd3e8" stroke-width="1"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="resize_affordance" value="br_corner" checked>
+                <span class="o-label">Bottom-right corner grip only</span>
+                <span class="o-rat">A 14&times;14 <code>.ri-resize</code> grip absolutely-positioned at the panel's bottom-right with three diagonal stripes. <code>cursor: nwse-resize</code>. Pointer-driven, no native <code>resize: both</code> (which collides with custom drag handling, and won't repaint via the same RAF loop). Smallest surface, single drag affordance to discover. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="four_corners">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="All four corner grips">
+                  <rect x="12" y="12" width="296" height="72" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="12" y="12" width="296" height="22" rx="6" fill="#1a212d"/>
+                  <text x="22" y="27" font-family="ui-monospace, Menlo, monospace" font-size="9.5" fill="#7dd3e8" letter-spacing="2">DRONE OPS</text>
+                  <!-- four corners highlighted -->
+                  <rect x="12" y="12" width="6" height="6" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                  <rect x="302" y="12" width="6" height="6" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                  <rect x="12" y="78" width="6" height="6" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                  <rect x="302" y="78" width="6" height="6" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="resize_affordance" value="four_corners">
+                <span class="o-label">All four corner grips</span>
+                <span class="o-rat">Resize from any corner; the dragged corner anchors the opposite. Four grip DOMs per panel, four cursors. Trade-off: more flexibility, slightly more visual noise on tight panels. Worth it only if playtest shows BR-only is awkward in practice.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="corners_edges">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Corners and edges">
+                  <rect x="12" y="12" width="296" height="72" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="12" y="12" width="296" height="22" rx="6" fill="#1a212d"/>
+                  <text x="22" y="27" font-family="ui-monospace, Menlo, monospace" font-size="9.5" fill="#7dd3e8" letter-spacing="2">DRONE OPS</text>
+                  <rect x="12" y="12" width="6" height="6" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                  <rect x="302" y="12" width="6" height="6" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                  <rect x="12" y="78" width="6" height="6" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                  <rect x="302" y="78" width="6" height="6" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                  <line x1="14" y1="48" x2="14" y2="58" stroke="#7dd3e8" stroke-width="1"/>
+                  <line x1="306" y1="48" x2="306" y2="58" stroke="#7dd3e8" stroke-width="1"/>
+                  <line x1="155" y1="14" x2="165" y2="14" stroke="#7dd3e8" stroke-width="1"/>
+                  <line x1="155" y1="82" x2="165" y2="82" stroke="#7dd3e8" stroke-width="1"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="resize_affordance" value="corners_edges">
+                <span class="o-label">Four corners + four edges (8 grips)</span>
+                <span class="o-rat">Full desktop-OS-style frame. Eight grips per panel = ~40 extra DOM nodes across the five panels. Maximum control, maximum visual noise. Unnecessary for the actual use case (player wants to nudge the HUD an inch).</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="css_native">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Native CSS resize both">
+                  <rect x="12" y="12" width="296" height="72" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="12" y="12" width="296" height="22" rx="6" fill="#1a212d"/>
+                  <text x="22" y="27" font-family="ui-monospace, Menlo, monospace" font-size="9.5" fill="#7dd3e8" letter-spacing="2">DRONE OPS</text>
+                  <!-- browser-native grip squiggle -->
+                  <polyline points="296,84 308,84 308,72" fill="none" stroke="#6c7791" stroke-width="1"/>
+                  <line x1="300" y1="82" x2="306" y2="76" stroke="#6c7791" stroke-width="0.7"/>
+                  <line x1="302" y1="84" x2="306" y2="80" stroke="#6c7791" stroke-width="0.7"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="resize_affordance" value="css_native">
+                <span class="o-label">Browser-native <code>resize: both</code></span>
+                <span class="o-rat">Zero JS for resize. CSS only. Caveat 1: browser-native resize fires no <code>pointerup</code> for the resize handle &mdash; need a <code>ResizeObserver</code> debounce to persist the new size. Caveat 2: glyph styling is browser-defined and doesn't match the dark cyan palette. Functional but jarring.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="resize_affordance">br_corner</b></div>
+        </fieldset>
+
+        <!-- ────────── PICKER 03 ────────── -->
+        <fieldset class="picker" data-key="persistence_target">
+          <legend>Picker 03</legend>
+          <div class="p-title">Persistence target</div>
+          <div class="p-intro">Where the per-panel
+            <code>{ x, y, w, h, zRank }</code> bundle is saved.
+            <code>src/persistence.ts</code> serializes the world into IndexedDB
+            (key <code>robot-islands:save:v4</code>, schema v5); a separate
+            localStorage key sidesteps both the snapshot schema and the
+            <code>idb-keyval</code> async API. Mocks show the storage scope.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="local_per_browser" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 88" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Per-browser via localStorage">
+                  <!-- browser frame -->
+                  <rect x="14" y="14" width="292" height="60" rx="8"
+                        fill="#0e1116" stroke="#7dd3e8" stroke-width="1.5"/>
+                  <text x="26" y="34" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8" letter-spacing="1.4">localStorage</text>
+                  <text x="26" y="48" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">ri-ui-layout-v1</text>
+                  <!-- world saves inside -->
+                  <rect x="160" y="24" width="60" height="18" rx="3" fill="none" stroke="#3a4452" stroke-width="1"/>
+                  <text x="166" y="36" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">world A</text>
+                  <rect x="230" y="24" width="60" height="18" rx="3" fill="none" stroke="#3a4452" stroke-width="1"/>
+                  <text x="236" y="36" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">world B</text>
+                  <line x1="190" y1="44" x2="190" y2="50" stroke="#7dd3e8" stroke-width="1"/>
+                  <line x1="260" y1="44" x2="260" y2="50" stroke="#7dd3e8" stroke-width="1"/>
+                  <text x="200" y="62" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">shared layout</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="persistence_target" value="local_per_browser" checked>
+                <span class="o-label">Per-browser <code>localStorage</code> key (<code>ri-ui-layout-v1</code>)</span>
+                <span class="o-rat">Layout survives world resets. Synchronous read on module init (no awaiting IDB ready). Schema versioned via key suffix (bump to <code>v2</code> later if shape changes). Resetting the world doesn't lose ergonomics &mdash; one of the actual playtest gripes the spec is addressing. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="per_world_in_idb">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 88" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Per-world in the IDB snapshot">
+                  <rect x="14" y="14" width="292" height="60" rx="8" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <text x="26" y="34" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8" letter-spacing="1.4">IDB · robot-islands:save:v4</text>
+                  <rect x="160" y="40" width="60" height="20" rx="3" fill="#1a212d" stroke="#7dd3e8" stroke-width="1"/>
+                  <text x="164" y="53" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">uiLayout</text>
+                  <rect x="230" y="40" width="60" height="20" rx="3" fill="none" stroke="#3a4452" stroke-width="1"/>
+                  <text x="234" y="53" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">vehicles</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="persistence_target" value="per_world_in_idb">
+                <span class="o-label">Per-world inside the IDB snapshot</span>
+                <span class="o-rat">Add <code>uiLayout</code> to <code>SaveSnapshot</code>. Each world carries its own layout. Caveat: bump <code>SCHEMA_VERSION</code> to invalidate prior saves <em>or</em> default-on-missing &mdash; both cost more code than localStorage. World reset = layout reset, which is the wrong default.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="per_world_with_reset">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 88" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Per-world plus reset button">
+                  <rect x="14" y="14" width="292" height="60" rx="8" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <text x="26" y="34" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8" letter-spacing="1.4">IDB · uiLayout per world</text>
+                  <rect x="26" y="42" width="120" height="20" rx="3" fill="none" stroke="#7dd3e8" stroke-width="1"/>
+                  <text x="32" y="55" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8">Reset layout</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="persistence_target" value="per_world_with_reset">
+                <span class="o-label">Per-world in IDB + Reset-all button</span>
+                <span class="o-rat">Worst of both: per-world saves lose on reset; the reset button doesn't help on the world-reset case (the snapshot is gone). The extra button isn't a substitute for picking the right scope.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="persistence_target">local_per_browser</b></div>
+        </fieldset>
+
+        <!-- ────────── PICKER 04 ────────── -->
+        <fieldset class="picker" data-key="off_screen_policy">
+          <legend>Picker 04</legend>
+          <div class="p-title">Off-screen / resize recovery</div>
+          <div class="p-intro">What happens when the saved
+            <code>{ x, y, w, h }</code> would place the panel partly or
+            fully off-viewport &mdash; the player resized the browser
+            window between sessions, switched monitors, or rotated a
+            tablet. Mocks show a panel saved at (1300, 200) being loaded
+            on a 1100&times;620 viewport.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="clamp" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Clamp to viewport on load">
+                  <rect x="14" y="12" width="200" height="76" rx="4" fill="#0e1116" stroke="#7dd3e8" stroke-width="1.5"/>
+                  <text x="22" y="26" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8">viewport 1100x620</text>
+                  <!-- ghost saved pos -->
+                  <rect x="225" y="22" width="50" height="34" rx="3" fill="none" stroke="#3a4452" stroke-dasharray="2 2"/>
+                  <text x="230" y="36" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#6c7791">saved</text>
+                  <!-- arrow -->
+                  <line x1="226" y1="38" x2="180" y2="56" stroke="#7dd3e8" stroke-width="1" marker-end="url(#arr1)"/>
+                  <defs>
+                    <marker id="arr1" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7dd3e8"/></marker>
+                  </defs>
+                  <rect x="156" y="44" width="50" height="34" rx="3" fill="#1a212d" stroke="#7dd3e8" stroke-width="1"/>
+                  <text x="162" y="58" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">clamped</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="off_screen_policy" value="clamp" checked>
+                <span class="o-label">Clamp on load (keep size, force into viewport)</span>
+                <span class="o-rat">On every load and on every <code>window.resize</code>, the manager clamps each saved <code>(x, y)</code> so the panel header is guaranteed visible (header height &ge; 22px, width &ge; 80px on-screen). Size is preserved if it fits, otherwise capped to <code>innerWidth/Height - gutter</code>. Safe default; no panel ever becomes unreachable. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="snap_to_zone">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Snap to zone if dropped near edge">
+                  <rect x="14" y="12" width="292" height="76" rx="4" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <!-- zone edges -->
+                  <line x1="22" y1="18" x2="22" y2="82" stroke="#7dd3e8" stroke-dasharray="2 2" stroke-width="0.7"/>
+                  <line x1="298" y1="18" x2="298" y2="82" stroke="#7dd3e8" stroke-dasharray="2 2" stroke-width="0.7"/>
+                  <line x1="22" y1="18" x2="298" y2="18" stroke="#7dd3e8" stroke-dasharray="2 2" stroke-width="0.7"/>
+                  <line x1="22" y1="82" x2="298" y2="82" stroke="#7dd3e8" stroke-dasharray="2 2" stroke-width="0.7"/>
+                  <rect x="244" y="38" width="50" height="34" rx="3" fill="#1a212d" stroke="#7dd3e8" stroke-width="1"/>
+                  <text x="250" y="52" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">snap → BR</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="off_screen_policy" value="snap_to_zone">
+                <span class="o-label">Snap to nearest zone if within N px of edge</span>
+                <span class="o-rat">If dropped within ~24 px of a zone anchor, snap back into the stack (delete the saved entry, mark <code>free=false</code>). Otherwise stay free. Magnetic feel, but the player can't put a panel exactly along an edge if they wanted to. Available as a follow-up; clamp-only is the safer first cut.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="literal">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Keep literal coords even if off-screen">
+                  <rect x="14" y="12" width="200" height="76" rx="4" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="245" y="22" width="50" height="34" rx="3" fill="#1a212d" stroke="#e85d4a" stroke-width="1" stroke-dasharray="2 2"/>
+                  <text x="252" y="36" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e85d4a">off-screen</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="off_screen_policy" value="literal">
+                <span class="o-label">Keep literal coordinates (even if off-screen)</span>
+                <span class="o-rat">Most "faithful" but breaks the contract that every panel is reachable. Player has to know about the reset hotkey to recover. Not recommended &mdash; the reset hotkey is the escape hatch, clamp is the default safety net.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="off_screen_policy">clamp</b></div>
+        </fieldset>
+
+        <!-- ────────── PICKER 05 ────────── -->
+        <fieldset class="picker" data-key="z_order">
+          <legend>Picker 05</legend>
+          <div class="p-title">Z-order on focus</div>
+          <div class="p-intro">When two windows overlap, which is on top.
+            Today everything is fixed at <code>Z.panel = 20</code>
+            (<code>src/ui-tokens.ts:88</code>) and DOM order picks the
+            winner. Mocks show two overlapping panels with the focused
+            one highlighted.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="last_interacted" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Click-to-front via last-interacted timestamp">
+                  <!-- back panel -->
+                  <rect x="40" y="18" width="160" height="56" rx="6" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="40" y="18" width="160" height="18" rx="6" fill="#1a212d"/>
+                  <text x="50" y="32" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">INSPECT · z=20</text>
+                  <!-- front panel (focused) -->
+                  <rect x="120" y="34" width="160" height="56" rx="6" fill="#0e1116" stroke="#7dd3e8" stroke-width="1.5"/>
+                  <rect x="120" y="34" width="160" height="18" rx="6" fill="#1a212d"/>
+                  <text x="130" y="48" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8">DRONE OPS · z=21</text>
+                  <text x="130" y="64" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">click-to-front</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="z_order" value="last_interacted" checked>
+                <span class="o-label">Click-to-front (last-interacted timestamp)</span>
+                <span class="o-rat">On pointerdown anywhere inside a panel, write <code>zRank = ++globalZCounter</code>; reassign every panel's <code>style.zIndex = Z.panel + (rank % 20)</code>. <code>Z.modal = 60</code> still wins over any floating panel (modals always cover). Persists to the layout store so the front-most window stays in front after reload. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="dom_order">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DOM order — last-mounted wins">
+                  <rect x="40" y="18" width="160" height="56" rx="6" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="120" y="34" width="160" height="56" rx="6" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <text x="130" y="50" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">all z=20 · DOM order</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="z_order" value="dom_order">
+                <span class="o-label">Static DOM order (today's behaviour)</span>
+                <span class="o-rat">Whichever panel was mounted last wins. Cheapest but the player can't bring a back panel forward without re-toggling it. Already a small friction; gets worse the more panels become movable.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="hover_to_front">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hover to front">
+                  <rect x="40" y="18" width="160" height="56" rx="6" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="120" y="34" width="160" height="56" rx="6" fill="#0e1116" stroke="#7dd3e8" stroke-width="1.2"/>
+                  <text x="130" y="52" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8">hover lifts</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="z_order" value="hover_to_front">
+                <span class="o-label">Hover-to-front (no click needed)</span>
+                <span class="o-rat">Panels reorder on <code>pointerenter</code>. Feels magical the first time, then disorienting when reading a half-occluded panel that disappears under the cursor. Rejected.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="z_order">last_interacted</b></div>
+        </fieldset>
+
+        <!-- ────────── PICKER 06 ────────── -->
+        <fieldset class="picker" data-key="reset_surface">
+          <legend>Picker 06</legend>
+          <div class="p-title">Reset surface</div>
+          <div class="p-intro">How the player un-stucks a misplaced layout
+            or returns to the zone-stack default. Mocks show the surface
+            location.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="both" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Settings button + keyboard shortcut">
+                  <rect x="20" y="22" width="120" height="22" rx="4" fill="#0e1116" stroke="#7dd3e8"/>
+                  <text x="32" y="36" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8">⟲ Reset layout</text>
+                  <text x="32" y="62" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">in Settings panel</text>
+                  <rect x="170" y="22" width="120" height="22" rx="4" fill="#0e1116" stroke="#7dd3e8"/>
+                  <text x="182" y="36" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8">Shift+Alt+R</text>
+                  <text x="182" y="62" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">via input registry</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="reset_surface" value="both" checked>
+                <span class="o-label">Settings panel button <em>and</em> keyboard action</span>
+                <span class="o-rat">Add a <code>reset-ui-layout</code> action to <code>input.ts</code> (default bind: <code>Shift+Alt+KeyR</code> &mdash; safer than the brief's <code>Ctrl+Alt+R</code>, which Firefox reserves for tab restore on some platforms). Same action gets a button in the Settings panel "UI" section. Per AGENTS.md "every key goes through the registry". Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="settings_only">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Settings button only">
+                  <rect x="80" y="32" width="160" height="32" rx="6" fill="#0e1116" stroke="#7dd3e8"/>
+                  <text x="98" y="52" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8">⟲ Reset layout</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="reset_surface" value="settings_only">
+                <span class="o-label">Settings button only</span>
+                <span class="o-rat">No keybinding. Discoverable but slow to reach if a panel is so misplaced the Settings hotkey itself is buried. Mitigated because the Settings modal opens centered (not zone-stacked), so the player can always get to it.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="hotkey_only">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Keyboard only">
+                  <rect x="80" y="32" width="160" height="32" rx="6" fill="#0e1116" stroke="#7dd3e8"/>
+                  <text x="106" y="52" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8">Shift+Alt+R</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="reset_surface" value="hotkey_only">
+                <span class="o-label">Keyboard action only</span>
+                <span class="o-rat">Discoverable only via the Settings keybinding list. Symmetric with the existing <code>toggle-grid</code> (G) etc., but a panel reset isn't as obvious as a grid toggle.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="none">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="No reset; player edits localStorage">
+                  <rect x="20" y="32" width="280" height="32" rx="6" fill="#0e1116" stroke="#3a4452"/>
+                  <text x="32" y="52" font-family="ui-monospace, Menlo, monospace" font-size="9.5" fill="#6c7791">DevTools › Application › localStorage › delete</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="reset_surface" value="none">
+                <span class="o-label">No reset surface (rely on clamp + DevTools)</span>
+                <span class="o-rat">The clamp policy in Picker 04 already guarantees every panel stays reachable, so technically a reset is "only" for player preference. Still, hiding behind DevTools is unfriendly. Rejected.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="reset_surface">both</b></div>
+        </fieldset>
+
+        <!-- ────────── PICKER 07 ────────── -->
+        <fieldset class="picker" data-key="scope">
+          <legend>Picker 07</legend>
+          <div class="p-title">Scope &mdash; which panels become windows</div>
+          <div class="p-intro">Of the seven things <code>mountPanel</code>
+            is called for today, three are chrome / modals-by-another-name
+            and two are stamped side-docks the player would actively want
+            to move. Mocks show the in-scope set highlighted.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="non_modal_blocklist" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="All non-modal panels minus a chrome blocklist">
+                  <rect x="14" y="14" width="292" height="92" rx="6" fill="#0e1116" stroke="#3a4452"/>
+                  <!-- chrome (TR action strip, TC bar) — blocked -->
+                  <rect x="282" y="22" width="18" height="80" rx="3" fill="#1a212d" stroke="#6c7791" stroke-dasharray="2 2"/>
+                  <text x="287" y="106" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#6c7791" transform="rotate(-90 287 100)">action-strip</text>
+                  <rect x="84" y="20" width="160" height="14" rx="3" fill="#1a212d" stroke="#6c7791" stroke-dasharray="2 2"/>
+                  <text x="138" y="30" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#6c7791">island-bar</text>
+                  <!-- in-scope -->
+                  <rect x="22" y="46" width="80" height="56" rx="4" fill="#1a212d" stroke="#7dd3e8" stroke-width="1.4"/>
+                  <text x="32" y="62" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">inspector</text>
+                  <rect x="116" y="46" width="80" height="56" rx="4" fill="#1a212d" stroke="#7dd3e8" stroke-width="1.4"/>
+                  <text x="124" y="62" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">drones</text>
+                  <text x="124" y="74" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">routes</text>
+                  <text x="124" y="86" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">settle</text>
+                  <rect x="208" y="46" width="68" height="56" rx="4" fill="#1a212d" stroke="#7dd3e8" stroke-width="1.4"/>
+                  <text x="216" y="62" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">hud-economy</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="scope" value="non_modal_blocklist" checked>
+                <span class="o-label">All non-modal panels &minus; hardcoded chrome blocklist</span>
+                <span class="o-rat">Default: <code>hud-economy, inspector-panel, drones-panel, routes-panel, settlement-panel</code> become windows. <code>action-strip</code> (TR icon column) and <code>island-bar</code> (TC dropdown) stay anchored chrome &mdash; they're orientation anchors and <code>island-bar</code> uses <code>transform: translateX(-50%)</code> which any drag would have to clear. The blocklist lives in <code>window-manager.ts</code> as a <code>const CHROME_PANEL_IDS = new Set([...])</code>. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="opt_in_flag">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Opt-in via mountPanel flag">
+                  <rect x="14" y="20" width="292" height="60" rx="6" fill="#0e1116" stroke="#3a4452"/>
+                  <text x="28" y="42" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8">mountPanel(el, {</text>
+                  <text x="44" y="56" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8">zone: 'BR',</text>
+                  <text x="44" y="70" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#D97757">draggable: true,</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="scope" value="opt_in_flag">
+                <span class="o-label">Per-callsite opt-in <code>draggable: true</code> flag</span>
+                <span class="o-rat">Every callsite explicitly opts in. Five edits at minimum; risk of "we forgot to add it to settlement-ui in the same PR". Doesn't gain anything blocklist-default doesn't already give you. Rejected.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="all">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="All panels, no exemptions">
+                  <rect x="14" y="14" width="292" height="68" rx="6" fill="#0e1116" stroke="#3a4452"/>
+                  <rect x="282" y="22" width="18" height="56" rx="3" fill="#1a212d" stroke="#7dd3e8" stroke-width="1.4"/>
+                  <rect x="84" y="20" width="160" height="14" rx="3" fill="#1a212d" stroke="#7dd3e8" stroke-width="1.4"/>
+                  <text x="138" y="30" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">island-bar (translateX)</text>
+                  <rect x="22" y="44" width="60" height="32" rx="3" fill="#1a212d" stroke="#7dd3e8" stroke-width="1.4"/>
+                  <rect x="86" y="44" width="60" height="32" rx="3" fill="#1a212d" stroke="#7dd3e8" stroke-width="1.4"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="scope" value="all">
+                <span class="o-label">All floating panels (no exemptions)</span>
+                <span class="o-rat">Treat every <code>mountPanel</code> caller equally. Pitfall: <code>island-bar</code> centers via <code>transform: translateX(-50%)</code> (<code>ui-zones.ts:148</code>) and the <code>action-strip</code> is a vertical icon column with no header chrome &mdash; both need bespoke handling. Cleaner to start narrow.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="scope">non_modal_blocklist</b></div>
+        </fieldset>
+
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 01 — Background                                                    -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Background &mdash; panel inventory + zone system</h2></div>
+      <p class="sec-intro">What exists today, with file:line citations.</p>
+
+      <p class="body"><strong>Zones</strong> are an enum in
+        <code>src/ui-zones.ts:41-56</code>: <code>TL, TR, BL, BR, TC, L, R</code>.
+        Each has a primary axis (<code>ZONE_AXIS</code>,
+        <code>ui-zones.ts:59-62</code>): TL/TR/TC/L/R stack
+        <em>down</em>, BL/BR stack <em>up</em>. A zone's first panel
+        sits flush with the viewport edge plus a <code>VIEWPORT_GUTTER = 12</code>
+        px gap; each subsequent panel offsets by <code>prev.height + PANEL_GAP (8)</code>
+        (<code>ui-zones.ts:64-65, 121-171</code>).</p>
+
+      <p class="body"><strong>Placement</strong> is auto. The function
+        <code>layoutZone(zone, panels)</code> in
+        <code>ui-zones.ts:121-171</code> assigns
+        <code>position: fixed</code> + edge anchors based on the zone id.
+        TC uses <code>left: 50%; transform: translateX(-50%)</code>
+        (<code>ui-zones.ts:148-150</code>) &mdash; relevant for the
+        chrome-exemption discussion. ResizeObserver
+        (<code>ui-zones.ts:193-194</code>) re-stacks whenever a panel's
+        intrinsic size changes; <code>window.resize</code> re-stacks the
+        whole world (<code>ui-zones.ts:174</code>).</p>
+
+      <p class="body"><strong>All panels are DOM</strong>, not PixiJS. The
+        zone manager appends to <code>document.body</code> if a panel has
+        no parent (<code>ui-zones.ts:181</code>). <code>mountPanel</code>
+        records each panel under its id, stamps
+        <code>data-ri-panel</code> + <code>data-ri-zone</code> attrs, and
+        returns a <code>PanelHandle { el, requestLayout, setVisible, destroy }</code>
+        (<code>ui-zones.ts:178-221</code>).</p>
+
+      <p class="body"><strong>Existing chrome</strong>: <code>.ri-panel</code>
+        in <code>src/ui.css:86-93</code> declares a translucent dark
+        background (<code>var(--ri-panel)</code> = <code>rgba(14, 18, 26, 0.88)</code>),
+        a 1px <code>var(--ri-border-strong)</code> border, 6px radius,
+        an 8-blur backdrop filter, and <code>var(--ri-shadow-panel)</code>
+        (<code>ui-tokens.ts:78</code>). <code>.ri-panel__head</code>
+        (<code>ui.css:95-108</code>) is the standard 22-px header used by
+        <code>hud-economy</code>; the side-docks
+        (<code>inspector-ui.ts:299-340</code>,
+        <code>drones-ui.ts:179-220</code>,
+        <code>settlement-ui.ts</code>, <code>routes-ui.ts</code>) build
+        identical-looking stamped headers inline. <em>No</em> existing
+        drag or resize hooks; the only drag-drop in the codebase is the
+        cargo-row reordering inside the routes panel
+        (<code>routes-ui.ts:848-919</code>) which is HTML5
+        <code>draggable</code>, intra-panel, and unrelated.</p>
+
+      <p class="body"><strong>Modals</strong> use a separate primitive
+        (<code>mountModal</code> in <code>src/ui-modal.ts</code>) with a
+        scrim-centered layout, <code>Z.modal = 60</code>
+        (<code>ui-tokens.ts:92</code>), and an explicit
+        <code>show/hide/toggle</code> handle. Modals are out of scope.</p>
+
+      <p class="body"><strong>Persistence</strong> lives in
+        <code>src/persistence.ts</code>. <code>SaveSnapshot</code>
+        (<code>persistence.ts:239-251</code>) carries
+        <code>{ v, savedAt, savedAtPerf, world, islandStates }</code>;
+        no <code>uiLayout</code> field today. Storage key
+        <code>robot-islands:save:v4</code>, schema v5
+        (<code>persistence.ts:105, 113-159</code>), via
+        <code>idb-keyval</code>. Layout could live there (per-world) or
+        in a separate <code>localStorage</code> key (per-browser) &mdash; see
+        Picker 03.</p>
+
+      <h3 style="font-family: var(--serif); font-size: 19px; color: var(--slate); font-weight: 500; margin: 14px 0 10px;">Inventory of every <code>mountPanel</code> / <code>mountModal</code> caller</h3>
+
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width: 22%;">DOM id / handle</th>
+            <th style="width: 12%;">Kind</th>
+            <th style="width: 10%;">Zone</th>
+            <th style="width: 26%;">Source</th>
+            <th>What it shows</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="slate">hud-economy</td><td><span class="tag float">floating</span></td><td class="mono">BR</td><td class="mono">hud.ts:480</td><td>HUD economy: XP, power, network, modifiers, top output rates with sparklines, inventory button.</td></tr>
+          <tr><td class="slate">inspector-panel</td><td><span class="tag float">floating</span></td><td class="mono">L</td><td class="mono">inspector-ui.ts:1097</td><td>Selected-building inspector (sister to drones/routes/settlement &mdash; cyan stamped header <code>INSPECT / BLD-01</code>).</td></tr>
+          <tr><td class="slate">drones-panel</td><td><span class="tag float">floating</span></td><td class="mono">R, order 0</td><td class="mono">drones-ui.ts:501</td><td>Drone-ops side dock (<code>DRONE OPS / DSP-01</code>): arm + target + in-flight ledger.</td></tr>
+          <tr><td class="slate">routes-panel</td><td><span class="tag float">floating</span></td><td class="mono">R, order 1</td><td class="mono">routes-ui.ts:453</td><td>Freight-grid side dock (<code>FREIGHT GRID / LCS-01</code>): scheduled cargo routes, priority list.</td></tr>
+          <tr><td class="slate">settlement-panel</td><td><span class="tag float">floating</span></td><td class="mono">R, order 2</td><td class="mono">settlement-ui.ts:595</td><td>Settle-ops side dock (<code>SETTLE OPS / SCV-01</code>): vehicle dispatch.</td></tr>
+          <tr><td class="slate">action-strip</td><td><span class="tag chrome">chrome</span></td><td class="mono">TR</td><td class="mono">ui.ts:43</td><td>Vertical icon column mirroring the keyboard action registry. Orientation anchor; not a window.</td></tr>
+          <tr><td class="slate">island-bar</td><td><span class="tag chrome">chrome</span></td><td class="mono">TC</td><td class="mono">hud.ts:243</td><td>Multi-island selector + day-phase + save indicator. Uses <code>transform: translateX(-50%)</code> for centering; not a window.</td></tr>
+          <tr><td>inventory modal</td><td><span class="tag modal">modal</span></td><td>scrim</td><td class="mono">inventory-ui.ts:392</td><td>Per-resource table, key <kbd>I</kbd>. Out of scope.</td></tr>
+          <tr><td>settings modal</td><td><span class="tag modal">modal</span></td><td>scrim</td><td class="mono">settings-ui.ts:197</td><td>Keybinding rebind + save management. Out of scope (but acquires a Reset-layout button per Picker 06).</td></tr>
+          <tr><td>buildings catalog modal</td><td><span class="tag modal">modal</span></td><td>scrim</td><td class="mono">buildings-ui.ts:107</td><td>All <code>BUILDING_DEFS</code> as a card grid. Out of scope.</td></tr>
+          <tr><td>skilltree modal</td><td><span class="tag modal">modal</span></td><td>scrim</td><td class="mono">skilltree-ui.ts:450</td><td>§9.3 skill tree, four branch columns. Out of scope.</td></tr>
+          <tr><td>construction modal</td><td><span class="tag modal">modal</span></td><td>scrim</td><td class="mono">construction-ui.ts:319</td><td>§2.5 artificial-island form. Out of scope.</td></tr>
+          <tr><td>orbital modal</td><td><span class="tag modal">modal</span></td><td>scrim</td><td class="mono">orbital-ui.ts:589</td><td>§14 satellite launch. Out of scope.</td></tr>
+          <tr><td>graph modal</td><td><span class="tag modal">modal</span></td><td>scrim</td><td class="mono">graph-ui.ts:163</td><td>Recipe-graph table. Out of scope.</td></tr>
+          <tr><td>hover-tooltip</td><td>floater</td><td>cursor</td><td class="mono">hover-tooltip.ts:531</td><td>Pure ephemeral cursor tooltip, <code>pointer-events: none</code>. Not a window.</td></tr>
+          <tr><td>tutorial banner</td><td>floater</td><td>bottom-center</td><td class="mono">tutorial-ui.ts:7</td><td>Single-line objective; vanishes between objectives. Not a window.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 02 — The draggable + resizable mechanic                            -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>The draggable + resizable mechanic</h2></div>
+      <p class="sec-intro">The exact pointer choreography and the
+        zone-manager handshake that prevents the two systems from fighting
+        for the same panel each frame.</p>
+
+      <h3 style="font-family: var(--serif); font-size: 19px; color: var(--slate); font-weight: 500; margin: 4px 0 10px;">Before / after</h3>
+      <div class="figure">
+        <div class="cap">Figure 02-A · hud-economy mounted in BR (left) and dragged to the centre (right)</div>
+        <svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Before-after of HUD economy">
+          <!-- left: viewport with BR-docked HUD -->
+          <rect x="20" y="20" width="320" height="200" rx="8" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+          <text x="32" y="40" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#6c7791" letter-spacing="1">BEFORE · zone BR</text>
+          <!-- ocean simulacrum -->
+          <rect x="32" y="50" width="296" height="158" rx="4" fill="#0a1018"/>
+          <circle cx="120" cy="120" r="34" fill="#1f2d34" opacity="0.6"/>
+          <circle cx="220" cy="160" r="22" fill="#1f2d34" opacity="0.5"/>
+          <!-- HUD docked BR -->
+          <rect x="232" y="116" width="96" height="86" rx="5" fill="#0e1116" stroke="#3a4452"/>
+          <rect x="232" y="116" width="96" height="18" rx="5" fill="#1a212d"/>
+          <text x="240" y="129" font-family="ui-monospace, Menlo, monospace" font-size="8.5" fill="#7dd3e8" letter-spacing="1.3">NORTH REACH</text>
+          <rect x="238" y="142" width="64" height="4" fill="#3a4452"/>
+          <rect x="238" y="150" width="84" height="3" fill="#2a3240"/>
+          <rect x="238" y="158" width="74" height="3" fill="#2a3240"/>
+          <!-- right: dragged -->
+          <rect x="380" y="20" width="320" height="200" rx="8" fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+          <text x="392" y="40" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8" letter-spacing="1">AFTER · free position</text>
+          <rect x="392" y="50" width="296" height="158" rx="4" fill="#0a1018"/>
+          <circle cx="480" cy="120" r="34" fill="#1f2d34" opacity="0.6"/>
+          <circle cx="580" cy="160" r="22" fill="#1f2d34" opacity="0.5"/>
+          <!-- HUD floating somewhere -->
+          <rect x="476" y="90" width="120" height="100" rx="5" fill="#0e1116" stroke="#7dd3e8" stroke-width="1.4"/>
+          <rect x="476" y="90" width="120" height="18" rx="5" fill="#1a212d"/>
+          <text x="484" y="103" font-family="ui-monospace, Menlo, monospace" font-size="8.5" fill="#7dd3e8" letter-spacing="1.3">NORTH REACH</text>
+          <text x="571" y="103" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#6c7791">×</text>
+          <rect x="484" y="116" width="74" height="4" fill="#3a4452"/>
+          <rect x="484" y="124" width="100" height="3" fill="#2a3240"/>
+          <rect x="484" y="132" width="92" height="3" fill="#2a3240"/>
+          <rect x="484" y="140" width="86" height="3" fill="#2a3240"/>
+          <rect x="484" y="148" width="80" height="3" fill="#2a3240"/>
+          <!-- resize grip BR -->
+          <line x1="588" y1="184" x2="594" y2="178" stroke="#7dd3e8"/>
+          <line x1="588" y1="188" x2="594" y2="182" stroke="#7dd3e8"/>
+          <line x1="592" y1="188" x2="594" y2="186" stroke="#7dd3e8"/>
+          <!-- saved size annotation -->
+          <text x="476" y="208" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">saved {x:96, y:70, w:120, h:100, zRank:1}</text>
+        </svg>
+      </div>
+
+      <div class="fig-grid">
+        <div class="figure">
+          <div class="cap">Figure 02-B · drag handle &amp; resize grip close-up</div>
+          <svg viewBox="0 0 340 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Panel with annotated drag handle and resize grip">
+            <rect x="20" y="20" width="300" height="180" rx="6" fill="#0e1116" stroke="#3a4452"/>
+            <!-- header -->
+            <rect x="20" y="20" width="300" height="26" rx="6" fill="#1a212d"/>
+            <text x="32" y="38" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8" letter-spacing="1.5">DRONE OPS</text>
+            <text x="118" y="38" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791" letter-spacing="1.5">DSP-01</text>
+            <text x="306" y="38" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#6c7791">×</text>
+            <!-- drag region annotation -->
+            <rect x="20" y="20" width="270" height="26" rx="6" fill="none" stroke="#D97757" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <text x="20" y="14" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#D97757" letter-spacing="1">drag handle · cursor: grab</text>
+            <!-- body -->
+            <rect x="30" y="58" width="80" height="6" fill="#3a4452"/>
+            <rect x="30" y="74" width="220" height="4" fill="#2a3240"/>
+            <rect x="30" y="84" width="200" height="4" fill="#2a3240"/>
+            <rect x="30" y="94" width="180" height="4" fill="#2a3240"/>
+            <rect x="30" y="104" width="220" height="4" fill="#2a3240"/>
+            <rect x="30" y="114" width="200" height="4" fill="#2a3240"/>
+            <!-- resize grip BR -->
+            <line x1="304" y1="190" x2="314" y2="180" stroke="#7dd3e8" stroke-width="1.4"/>
+            <line x1="304" y1="194" x2="314" y2="184" stroke="#7dd3e8" stroke-width="1.4"/>
+            <line x1="308" y1="194" x2="314" y2="188" stroke="#7dd3e8" stroke-width="1.4"/>
+            <rect x="298" y="174" width="22" height="22" fill="none" stroke="#7dd3e8" stroke-width="1.2" stroke-dasharray="3 3"/>
+            <text x="232" y="170" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8" letter-spacing="0.8">.ri-resize</text>
+            <text x="200" y="210" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8">14×14 · cursor: nwse-resize</text>
+          </svg>
+        </div>
+
+        <div class="figure">
+          <div class="cap">Figure 02-C · z-order via last-interacted timestamp</div>
+          <svg viewBox="0 0 340 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two overlapping panels, focused one in front">
+            <!-- background panel -->
+            <rect x="30" y="40" width="180" height="120" rx="6" fill="#0e1116" stroke="#3a4452"/>
+            <rect x="30" y="40" width="180" height="22" rx="6" fill="#1a212d"/>
+            <text x="42" y="56" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#6c7791" letter-spacing="1.4">INSPECT · BLD-01</text>
+            <rect x="42" y="76" width="80" height="4" fill="#2a3240"/>
+            <rect x="42" y="86" width="100" height="4" fill="#2a3240"/>
+            <text x="42" y="150" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">zRank: 1 · z=21</text>
+            <!-- foreground panel (focused, drawn after so it covers) -->
+            <rect x="130" y="80" width="180" height="120" rx="6" fill="#0e1116" stroke="#7dd3e8" stroke-width="1.6"/>
+            <rect x="130" y="80" width="180" height="22" rx="6" fill="#1a212d"/>
+            <text x="142" y="96" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#7dd3e8" letter-spacing="1.4">DRONE OPS · DSP-01</text>
+            <rect x="142" y="116" width="80" height="4" fill="#3a4452"/>
+            <rect x="142" y="126" width="100" height="4" fill="#2a3240"/>
+            <rect x="142" y="136" width="120" height="4" fill="#2a3240"/>
+            <text x="142" y="190" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">zRank: 2 · z=22 · focused</text>
+            <!-- arrow from background to "promoted on click" -->
+            <text x="30" y="20" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791" letter-spacing="1">click on DRONE OPS → zRank++</text>
+          </svg>
+        </div>
+      </div>
+
+      <h3 style="font-family: var(--serif); font-size: 19px; color: var(--slate); font-weight: 500; margin: 18px 0 10px;">Pointer choreography</h3>
+
+      <p class="body"><strong>Drag</strong> uses
+        <code>pointerdown</code> on the header element →
+        <code>setPointerCapture</code> → <code>pointermove</code> updates
+        <code>style.left/top</code> → <code>pointerup</code> writes
+        <code>{x, y, zRank}</code> to the layout store and releases capture.
+        While dragging, <code>document.body.style.userSelect = 'none'</code>
+        and <code>cursor: grabbing</code>. A first-time pointerdown
+        flips the record's <code>free</code> flag in
+        <code>ui-zones.ts</code>'s <code>records</code> map; the zone's
+        next <code>layoutZone</code> pass skips the panel from the cursor
+        accumulator, and sibling panels in the zone re-flow upward to fill
+        the gap.</p>
+
+      <p class="body"><strong>Resize</strong> uses the same pointer-capture
+        idiom on a dedicated <code>.ri-resize</code> handle child appended
+        once by <code>window-manager.ts</code> on first mount. The handle
+        is 14&times;14 absolute-positioned at the panel's bottom-right
+        (<code>right: 0; bottom: 0</code>), with three diagonal cyan
+        stripes drawn via CSS gradients. <code>cursor: nwse-resize</code>.
+        <code>pointermove</code> clamps <code>w</code> &ge;
+        <code>minWidth ?? 200</code> and <code>h</code> &ge;
+        <code>minHeight ?? 120</code>. <code>pointerup</code> writes the
+        new <code>{w, h}</code> to the store.</p>
+
+      <p class="body"><strong>Click-to-front</strong> fires on any
+        <code>pointerdown</code> inside the panel (capturing,
+        <code>{passive: true}</code>): bump
+        <code>globalZCounter</code>, write the panel's
+        <code>zRank</code>, recompute every panel's
+        <code>style.zIndex = Z.panel + (rank % 20)</code>. Modal scrim at
+        <code>Z.modal = 60</code> (<code>ui-tokens.ts:92</code>) always
+        wins.</p>
+
+      <p class="body"><strong>Zone-manager handshake</strong>: the
+        <code>PanelRecord</code> interface
+        (<code>ui-zones.ts:87-93</code>) gains a
+        <code>free: boolean</code> field.
+        <code>layoutZone(zone, arr)</code>
+        (<code>ui-zones.ts:121-171</code>) filters by
+        <code>!rec.free</code> when computing the cursor stack;
+        free panels are still <code>position: fixed</code> but their
+        <code>top/left/right/bottom</code> are written by the
+        window-manager, not by <code>layoutZone</code>. The existing
+        <code>ResizeObserver</code> firing on a free panel must NOT
+        trigger <code>layoutZone</code> for that panel &mdash; the manager
+        gates RO callbacks during an active drag/resize via a per-panel
+        <code>activeMutation</code> flag.</p>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 03 — Persistence shape + reset                                     -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Persistence shape + reset</h2></div>
+      <p class="sec-intro">The serialized layout, the storage key, the
+        load/save lifecycle, and the reset surfaces.</p>
+
+      <p class="body"><strong>Storage</strong>:
+        <code>localStorage.getItem('ri-ui-layout-v1')</code> &mdash; one
+        key, JSON-encoded value, synchronous read on first
+        <code>mountPanel</code>. Per-browser, world-agnostic. Bump key
+        suffix on schema change.</p>
+
+      <pre class="code">// Versioned envelope; bump `v` and key suffix in lockstep.
+interface UiLayoutBlob {
+  readonly v: 1;
+  readonly panels: Readonly&lt;Record&lt;string, PanelLayout&gt;&gt;;
+  readonly globalZCounter: number;
+}
+
+interface PanelLayout {
+  /** Pixel offset from viewport top-left, clamped on load. */
+  readonly x: number;
+  readonly y: number;
+  /** Saved pixel size. Honors the panel's per-mount minWidth/minHeight. */
+  readonly w: number;
+  readonly h: number;
+  /** Last-interacted timestamp for stacking; modulo 20 → z-index offset. */
+  readonly zRank: number;
+}</pre>
+
+      <p class="body"><strong>Load lifecycle</strong>: on
+        <code>mountPanel(el, opts)</code>, <code>window-manager.ts</code>
+        reads the blob once (cached in module scope) and looks up
+        <code>blob.panels[opts.id]</code>. If found and
+        <code>opts.id</code> is not in <code>CHROME_PANEL_IDS</code>:
+        clamp <code>(x, y)</code> against
+        <code>window.innerWidth/Height</code>, apply
+        <code>style.left/top/width/height</code>, mark the
+        <code>PanelRecord.free = true</code> so the zone manager skips
+        it, and write the saved <code>zRank</code> into the panel's
+        <code>data-zrank</code>. If not found: the panel falls through to
+        the existing zone-stack layout unchanged.</p>
+
+      <p class="body"><strong>Save lifecycle</strong>:
+        <code>pointerup</code> on header drag or
+        <code>.ri-resize</code> handle commits to the in-memory blob and
+        writes to <code>localStorage</code>. Writes are debounced
+        ~250 ms via <code>setTimeout</code> so a fast drag emits one
+        write, not dozens.</p>
+
+      <p class="body"><strong>Reset</strong>: the
+        <code>reset-ui-layout</code> action (registered in
+        <code>input.ts</code>, default
+        <kbd>Shift+Alt+R</kbd>) and the Settings panel button both call
+        <code>resetUiLayout()</code> in
+        <code>window-manager.ts</code>. It removes the localStorage key,
+        clears <code>blob.panels</code> in module memory, flips every
+        record's <code>free</code> back to <code>false</code>, clears
+        the inline <code>style.top/left/width/height/zIndex</code> on
+        each affected panel, and calls
+        <code>requestZoneLayout()</code> (already exported at
+        <code>ui-zones.ts:226-228</code>) to re-stack from scratch.</p>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 04 — Z-order + focus                                               -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Z-order + focus</h2></div>
+      <p class="sec-intro">How overlapping windows resolve.</p>
+      <p class="body"><strong>Base</strong>:
+        <code>Z.panel = 20</code> for every floating panel
+        (<code>ui-tokens.ts:88</code>).
+        <strong>Focused window</strong>: <code>z-index = Z.panel + (rank mod 20)</code>
+        so focused panels live in <code>[20, 39]</code> &mdash; comfortably
+        below <code>Z.toast = 40</code>, <code>Z.modal = 60</code>,
+        <code>Z.tooltip = 80</code>. <code>globalZCounter</code> is the
+        monotonic source: every focus event increments it; each panel's
+        <code>zRank</code> is the counter snapshot at its last focus.
+        Z-index is recomputed across all floating panels on each focus
+        event to keep <code>rank % 20</code> meaningful when the counter
+        rolls past 20.</p>
+      <p class="body"><strong>Focus event</strong>: any
+        <code>pointerdown</code> in the panel's bounding box, captured
+        in capturing phase so it fires even when an inner button
+        <code>stopPropagation()</code>s. Drag and resize both trigger it
+        as a side effect of their own <code>pointerdown</code>.</p>
+      <p class="body"><strong>Chrome interaction</strong>:
+        <code>action-strip</code> (TR) and <code>island-bar</code> (TC)
+        keep <code>Z.panel</code> base, never participate in click-to-front
+        (they're not in the focus pool). The HUD economy panel and the
+        four side-docks are the only focus-pool members.</p>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 05 — File / change inventory                                       -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches.</p>
+      <div class="changes">
+
+        <div class="change">
+          <div class="file">src/window-manager.ts <span style="color: var(--olive);">(new)</span></div>
+          <div class="what"><span class="lead">New helper module.</span> Exports <code>makePanelDraggable</code>, <code>resetUiLayout</code>, <code>CHROME_PANEL_IDS</code>, plus the <code>PanelLayout</code> / <code>UiLayoutBlob</code> types. ~250 LOC. Pure DOM + localStorage; no PixiJS, no IDB.</div>
+        </div>
+
+        <div class="change">
+          <div class="file">src/ui-zones.ts:87-93, 109-119</div>
+          <div class="what"><span class="lead">Augment PanelRecord with <code>free</code>; filter from cursor stack.</span> Add <code>free: boolean</code> field (default <code>false</code>). In <code>layout()</code>, skip records where <code>rec.free === true</code> when building the per-zone bucket. Export a <code>setFree(id, free)</code> helper so <code>window-manager.ts</code> can flip the bit on first drag.</div>
+        </div>
+
+        <div class="change">
+          <div class="file">src/ui-zones.ts:178-221 (mountPanel)</div>
+          <div class="what"><span class="lead">Wire window-manager on mount.</span> After the record is registered and the initial <code>scheduleLayout()</code> runs, call <code>makePanelDraggable(el, opts.id, { minWidth: opts.minWidth, maxWidth: opts.maxWidth })</code>. The helper internally decides whether the panel is in <code>CHROME_PANEL_IDS</code> (no-op) or a window (drag + resize + persistence). <code>mountPanel</code>'s API is unchanged.</div>
+        </div>
+
+        <div class="change">
+          <div class="file">src/ui.css:86-93, +new rules</div>
+          <div class="what"><span class="lead">Add <code>.ri-resize</code> grip + <code>.ri-panel[data-free="true"]</code> cursor states.</span> The grip uses CSS gradients for the three diagonal stripes; positioned absolute, bottom-right. Header gets <code>cursor: grab</code> via <code>.ri-panel__head, [data-ri-drag-handle]:hover { cursor: grab; }</code> (the new <code>data-ri-drag-handle</code> attr is stamped on the picked-up header element so stamped headers in <code>inspector-ui</code> / <code>drones-ui</code> / etc. participate without each gaining the class).</div>
+        </div>
+
+        <div class="change">
+          <div class="file">src/input.ts (default bindings)</div>
+          <div class="what"><span class="lead">Register <code>reset-ui-layout</code> action.</span> Wire to <code>resetUiLayout()</code> from <code>window-manager.ts</code>. Default key: <code>Shift+Alt+KeyR</code>. Conforms to AGENTS.md "every key goes through the registry"; UI button (settings-ui) calls the same dispatcher.</div>
+        </div>
+
+        <div class="change">
+          <div class="file">src/settings-ui.ts</div>
+          <div class="what"><span class="lead">Add a "UI" section with the Reset-layout button.</span> Single <code>.ri-warnbtn</code>-style button that dispatches the <code>reset-ui-layout</code> action.</div>
+        </div>
+
+        <div class="change">
+          <div class="file">src/window-manager.test.ts <span style="color: var(--olive);">(new)</span></div>
+          <div class="what"><span class="lead">Pure-fn tests.</span> <code>clampToViewport(rect, vw, vh)</code>, <code>readBlob()/writeBlob()</code> round-trip with malformed JSON, <code>parseLayoutBlob</code> rejecting wrong <code>v</code>. Pointer interaction tested via jsdom is brittle — opt for visual smoke via the Daedalus screenshot path instead.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 06 — Helper module signature                                       -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Helper module signature (<code>src/window-manager.ts</code>)</h2></div>
+      <p class="sec-intro">The complete public surface, typed.</p>
+
+      <pre class="code">// src/window-manager.ts
+//
+// Augments floating panels mounted via `ui-zones.mountPanel` with:
+//   - header-drag to free-position
+//   - bottom-right grip to resize
+//   - per-browser persistence to localStorage (key: ri-ui-layout-v1)
+//   - click-to-front z-order via a global rank counter
+//
+// Chrome panels (action-strip, island-bar) are explicitly excluded; modals
+// don't go through mountPanel at all so they're naturally out.
+
+/** localStorage key. Bump the trailing `:v1` when changing PanelLayout shape. */
+export const LAYOUT_STORAGE_KEY = 'ri-ui-layout-v1';
+
+/** Panels in this set are skipped by makePanelDraggable — they remain
+ *  zone-anchored chrome. Drives Picker 07's default. */
+export const CHROME_PANEL_IDS: ReadonlySet&lt;string&gt; = new Set([
+  'action-strip',
+  'island-bar',
+]);
+
+export interface PanelLayout {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+  readonly zRank: number;
+}
+
+export interface UiLayoutBlob {
+  readonly v: 1;
+  readonly panels: Readonly&lt;Record&lt;string, PanelLayout&gt;&gt;;
+  readonly globalZCounter: number;
+}
+
+export interface MakeDraggableOptions {
+  /** Minimum width in px the user can resize to. Default 200. */
+  readonly minWidth?: number;
+  /** Minimum height in px the user can resize to. Default 120. */
+  readonly minHeight?: number;
+  /** Pick a non-default drag-handle child. Default: the element matching
+   *  `.ri-panel__head, [data-ri-drag-handle]` inside the panel. */
+  readonly handle?: HTMLElement;
+}
+
+/** Augment `panel` with drag + resize + persistence. Idempotent: a second
+ *  call on the same panel id is a no-op. Called from `mountPanel` after
+ *  the panel is in the DOM and registered with the zone manager. */
+export function makePanelDraggable(
+  panel: HTMLElement,
+  id: string,
+  opts?: MakeDraggableOptions,
+): void;
+
+/** Clear every persisted layout entry; restore zone-stack defaults for
+ *  every floating panel. Triggered by the `reset-ui-layout` input action
+ *  and the Settings UI button. */
+export function resetUiLayout(): void;
+
+/** Pure: clamp a rectangle to the viewport so the header is reachable.
+ *  Exported for unit tests; called internally on load and on resize. */
+export function clampToViewport(
+  rect: { x: number; y: number; w: number; h: number },
+  viewport: { w: number; h: number },
+  minVisible?: number, // default 80
+): { x: number; y: number; w: number; h: number };
+
+/** Pure: validate a JSON-parsed blob; returns null on shape mismatch so the
+ *  caller falls back to an empty layout (same pattern as persistence.ts'
+ *  `isValidSaveSnapshot`). Exported for tests. */
+export function parseLayoutBlob(raw: unknown): UiLayoutBlob | null;</pre>
+
+      <p class="body">The pure helpers (<code>clampToViewport</code>,
+        <code>parseLayoutBlob</code>) are testable without a DOM. The
+        impure <code>makePanelDraggable</code> / <code>resetUiLayout</code>
+        side-effect on the live <code>localStorage</code> and on the DOM,
+        and are covered by Daedalus visual-smoke per
+        <code>AGENTS.md</code>'s preview-server doctrine (no HMR; build,
+        reload, screenshot).</p>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 07 — Verification checklist                                        -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Verification checklist</h2></div>
+      <p class="sec-intro">Concrete, runnable. The implementer ticks each
+        before declaring done.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>npm test</code></strong> passes; new <code>window-manager.test.ts</code> covers <code>clampToViewport</code>, <code>parseLayoutBlob</code>, localStorage round-trip.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>npm run build</code></strong> compiles clean under <code>strict</code> + <code>noUncheckedIndexedAccess</code> + <code>noUnusedLocals</code> + <code>noUnusedParameters</code> (per <code>AGENTS.md</code>).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Fresh-load smoke.</strong> Clear <code>localStorage</code>, reload <code>https://islands.nitjsefni.eu/</code>; every floating panel sits in its zone-default position. Drag the HUD economy panel from BR to centre; reload; panel re-opens at centre.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Resize smoke.</strong> Grab the bottom-right grip; resize down to minWidth=260/minHeight=120; release; reload; panel re-opens at the resized dimensions.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Off-screen recovery.</strong> Drag a panel to (1500, 1500); resize viewport down to 1100×600; reload — panel header is visible inside viewport (clamp applied).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Click-to-front.</strong> Open drones + inspector overlapping; click the back panel — it comes to the front; reload; that panel is still in front.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Reset via Settings.</strong> Open Settings (key <kbd>S</kbd>), click Reset Layout; all panels snap back to zone defaults; <code>localStorage.getItem('ri-ui-layout-v1')</code> is <code>null</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Reset via keyboard.</strong> <kbd>Shift+Alt+R</kbd> reproduces the same reset.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Modal still wins.</strong> While a side dock is at maximum z, opening Inventory (key <kbd>I</kbd>) covers it; closing the modal leaves the dock's z-order intact.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Chrome unaffected.</strong> The <code>action-strip</code> (TR) and <code>island-bar</code> (TC) cannot be dragged; their cursors do NOT become <code>grab</code> on hover.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Inner interactions still work.</strong> Inside <code>routes-panel</code>, HTML5-drag-drop cargo reordering still works; clicking the <code>×</code> close button on a docked panel doesn't start a drag.</div></div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 08 — Risks                                                         -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>ResizeObserver loop on a free panel.</strong> The zone manager registers a ResizeObserver per panel that calls <code>scheduleLayout()</code> on size change (<code>ui-zones.ts:193-194</code>). If a user resize fires the RO and the RO re-triggers <code>layoutZone</code>, the panel's <code>style.left/top</code> could be reset under the player.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Make <code>layout()</code> early-out per record when <code>rec.free === true</code> for that <em>zone</em>, AND have <code>window-manager.ts</code> set <code>el.dataset.riActiveMutation = '1'</code> on pointerdown / clear on pointerup. The RO callback bails if the dataset flag is set.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Header drag conflicts with the in-header close button.</strong> Every stamped header has a child <code>×</code> button (<code>inspector-ui.ts:342</code>, <code>drones-ui.ts:222</code>, <code>settlement-ui.ts:202</code>, <code>routes-ui.ts:154</code>) and <code>routes-ui</code> has list-row HTML5 drag.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell"><code>pointerdown</code> handler returns early if <code>event.target.closest('button, input, select, textarea, [draggable="true"]') !== null</code>. Tested via the verification "inner interactions" case.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>localStorage quota / disabled.</strong> Some browsers throttle, some users disable storage. <code>localStorage.setItem</code> can throw <code>QuotaExceededError</code>.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Wrap every <code>setItem</code> in <code>try/catch</code>; on failure, <code>console.warn</code> and keep the in-memory blob. Layout still works for the session; only persistence is lost. Same pattern as <code>persistence.ts</code>'s save fallthrough (<code>persistence.ts:938</code>).</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Touch / tablet handling.</strong> <code>pointerdown</code> covers touch and mouse uniformly, but pinch-zoom can fire <code>pointermove</code> events with two pointers.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell"><code>pointerType === 'mouse' || event.isPrimary === true</code> gate. Multi-touch on tablets is deferred to a follow-up (§09).</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>TC chrome panel uses <code>transform: translateX(-50%)</code>.</strong> If someone adds <code>island-bar</code> to the in-scope set later without clearing the transform, dragging it will be off by half its width.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Solved by the chrome blocklist default. Documented in the <code>CHROME_PANEL_IDS</code> comment in <code>window-manager.ts</code>.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>z-index overflow.</strong> A long session of constant focus-switching grows <code>globalZCounter</code> without bound.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Modulo by 20 keeps the actual <code>z-index</code> bounded. The rank counter itself grows but is a 53-bit integer — overflow is &gt;10^15 clicks away.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 09 — Out of scope                                                  -->
+    <!-- ================================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">09</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Explicitly deferred. Named so the reader knows
+        it was considered, not missed.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Modals (skilltree, inventory, settings, buildings, construction, orbital, graph)</div>
+          <div class="dd">Mounted via <code>mountModal</code> in <code>src/ui-modal.ts</code>; scrim-centered with a fixed <code>.ri-modal</code> max-width. The drag/resize/persistence story for modals is a different shape (centered-by-default, occasional resize) and a separate spec.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Chrome panels (action-strip, island-bar)</div>
+          <div class="dd">Orientation anchors. Picker 07's recommended default. If a future user-research note shows people want to move them, the unlock is to remove the id from <code>CHROME_PANEL_IDS</code> — and for <code>island-bar</code>, also clear the <code>transform: translateX(-50%)</code> on first drag.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Touch / mobile multi-pointer</div>
+          <div class="dd">The Robot Islands UI is implicitly desktop-only today (keyboard registry, hover-tooltip, side docks). Multi-touch drag-resize is its own follow-up. Single-pointer touch works via <code>pointerType === 'touch'</code> and <code>isPrimary</code>; pinch-zoom + drag-at-the-same-time is out.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Snap-to-zone (Picker 04 alternative)</div>
+          <div class="dd">"If dropped within N px of a zone anchor, re-dock." Magnetic feel, but not necessary for the minimum useful behaviour. Available as a follow-up if playtest shows the clamp-only default is too sticky.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Layout import / export</div>
+          <div class="dd">Power-users moving between machines could export the JSON blob and paste it on the other browser. Trivial to add later (one button next to the Settings Reset). Not in v1.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Edge resize handles (left/right/top/bottom only)</div>
+          <div class="dd">Picker 02's "corners+edges" option is deferred. Bottom-right grip covers the actual ergonomic need (panels never need to grow upward in this game).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- Selections — copy & send back                                      -->
+    <!-- ================================================================= -->
+    <aside class="selections" id="selections-panel" aria-label="Your picks">
+      <div class="s-tag">Your picks — copy and send back</div>
+      <div class="s-head">Selections</div>
+      <div class="s-body">Click any radio above to update this panel.
+        Hit <b>Copy</b> to put the payload on your clipboard, or
+        triple-click the block to select it manually. Paste back to
+        confirm your final design picks; I'll reconcile the prose and
+        cut v2 if anything changed.</div>
+
+      <div class="s-tools">
+        <button type="button" class="copy-btn" id="copy-selections" aria-label="Copy selections to clipboard">Copy selections</button>
+        <div class="format-toggle" role="tablist" aria-label="Output format">
+          <button type="button" data-format="json" class="active" role="tab" aria-selected="true">JSON</button>
+          <button type="button" data-format="kv" role="tab" aria-selected="false">key: value</button>
+        </div>
+        <span class="copy-status" id="copy-status" aria-live="polite"></span>
+      </div>
+
+      <pre class="payload" id="selections-payload" tabindex="0">{}</pre>
+    </aside>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-05-23 · v1 (first cut) · related to <code>AGENTS.md</code> §Architecture / §One responsibility per file and <code>src/ui-zones.ts</code> · supersedes nothing.</p>
+    </div>
+
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var KEYS = [
+        'drag_handle',
+        'resize_affordance',
+        'persistence_target',
+        'off_screen_policy',
+        'z_order',
+        'reset_surface',
+        'scope'
+      ];
+
+      var payloadEl  = document.getElementById('selections-payload');
+      var copyBtn    = document.getElementById('copy-selections');
+      var statusEl   = document.getElementById('copy-status');
+      var formatBtns = document.querySelectorAll('.selections .format-toggle button');
+
+      var currentFormat = 'json';
+
+      function readSelections() {
+        var out = {};
+        for (var i = 0; i < KEYS.length; i++) {
+          var key = KEYS[i];
+          var checked = document.querySelector('input[type="radio"][name="' + key + '"]:checked');
+          out[key] = checked ? checked.value : null;
+        }
+        return out;
+      }
+
+      function render() {
+        var sel = readSelections();
+        for (var k in sel) {
+          if (!Object.prototype.hasOwnProperty.call(sel, k)) continue;
+          var b = document.querySelector('[data-current="' + k + '"]');
+          if (b) b.textContent = sel[k] === null ? '—' : sel[k];
+        }
+        var text;
+        if (currentFormat === 'json') {
+          text = JSON.stringify({
+            spec: 'robot-islands/2026-05-23-draggable-resizable-windows-design',
+            version: 'v1',
+            picks: sel
+          }, null, 2);
+        } else {
+          var lines = ['# Picks for robot-islands/2026-05-23-draggable-resizable-windows-design (v1)'];
+          for (var j = 0; j < KEYS.length; j++) {
+            var key2 = KEYS[j];
+            lines.push(key2 + ': ' + (sel[key2] === null ? '(none)' : sel[key2]));
+          }
+          text = lines.join('\n');
+        }
+        payloadEl.textContent = text;
+      }
+
+      var radios = document.querySelectorAll('.picker input[type="radio"]');
+      for (var i = 0; i < radios.length; i++) {
+        radios[i].addEventListener('change', render);
+      }
+
+      formatBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentFormat = btn.getAttribute('data-format');
+          formatBtns.forEach(function (b) {
+            var active = b === btn;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          render();
+        });
+      });
+
+      function showStatus(msg, ok) {
+        statusEl.textContent = msg;
+        statusEl.style.color = ok ? 'var(--olive)' : 'var(--rust)';
+        if (showStatus._t) clearTimeout(showStatus._t);
+        showStatus._t = setTimeout(function () {
+          statusEl.textContent = '';
+        }, 2200);
+      }
+
+      copyBtn.addEventListener('click', function () {
+        var text = payloadEl.textContent;
+        var done = function (ok) {
+          if (ok) {
+            copyBtn.classList.add('copied');
+            copyBtn.textContent = 'Copied';
+            setTimeout(function () {
+              copyBtn.classList.remove('copied');
+              copyBtn.textContent = 'Copy selections';
+            }, 1600);
+            showStatus('copied ' + text.length + ' chars', true);
+          } else {
+            showStatus('copy failed — triple-click the block', false);
+          }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () { done(true); },
+            function () { done(false); }
+          );
+        } else {
+          var range = document.createRange();
+          range.selectNodeContents(payloadEl);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          done(false);
+        }
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>
