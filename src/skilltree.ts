@@ -1121,6 +1121,27 @@ export function costToUnlock(
   return { path, totalCost: total };
 }
 
+/** Charge SP and mutate state to own the cheapest-path edges and nodes leading
+ *  to `target`. Throws on unreachable target or insufficient SP. No-op if
+ *  target is already owned. */
+export function buyNode(graph: Graph, state: IslandState, target: NodeId): void {
+  if (state.unlockedNodes.has(target)) return;
+
+  const result = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, target);
+  if (result === null) throw new Error(`buyNode: unreachable target ${target}`);
+  if (state.unspentSkillPoints < result.totalCost) {
+    throw new Error(
+      `buyNode: insufficient SP (need ${result.totalCost}, have ${state.unspentSkillPoints})`,
+    );
+  }
+
+  state.unspentSkillPoints -= result.totalCost;
+  for (const e of result.path) {
+    state.unlockedNodes.add(e.to as NodeId);
+    state.unlockedEdges.add(e.id as EdgeId);
+  }
+}
+
 function isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Graph): boolean {
   return bridge.threshold.some(({ branch, minSpent }) => spentInBranch(state, branch, graph) >= minSpent);
 }

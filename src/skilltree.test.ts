@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
+  buyNode,
   canSpend,
   costForDepth,
   costToUnlock,
@@ -636,5 +637,61 @@ describe('costToUnlock', () => {
     const owned = new Set(['R']);
     const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned } as any, 'NOTREAL');
     expect(result).toBeNull();
+  });
+});
+
+describe('buyNode', () => {
+  function mkNode(id: string): SkillNode {
+    return {
+      id: id as import('./skilltree.js').NodeId,
+      subPath: 'mining',
+      depth: 1,
+      cost: 0,
+      magnitude: 0,
+      effect: { kind: 'recipeRateMul', category: 'extraction' },
+      description: id,
+    };
+  }
+
+  function mkGraph(): Graph {
+    const nodes: SkillNode[] = [
+      mkNode('R'), mkNode('A'), mkNode('X'), mkNode('Z'),
+      mkNode('B'), mkNode('Y'),
+    ];
+    const edges = [
+      { id: 'e_RA' as EdgeId, from: 'R' as import('./skilltree-graph.js').NodeId, to: 'A' as import('./skilltree-graph.js').NodeId, cost: 2 },
+      { id: 'e_AX' as EdgeId, from: 'A' as import('./skilltree-graph.js').NodeId, to: 'X' as import('./skilltree-graph.js').NodeId, cost: 3 },
+      { id: 'e_XZ' as EdgeId, from: 'X' as import('./skilltree-graph.js').NodeId, to: 'Z' as import('./skilltree-graph.js').NodeId, cost: 5 },
+      { id: 'e_RB' as EdgeId, from: 'R' as import('./skilltree-graph.js').NodeId, to: 'B' as import('./skilltree-graph.js').NodeId, cost: 3 },
+      { id: 'e_BY' as EdgeId, from: 'B' as import('./skilltree-graph.js').NodeId, to: 'Y' as import('./skilltree-graph.js').NodeId, cost: 2 },
+    ];
+    return { nodes, edges, bridges: [], graftSockets: [] } as Graph;
+  }
+
+  it('buys Z from R-only state, auto-owns A and X intermediates', () => {
+    const g = mkGraph();
+    const state = makeState({ unspentSkillPoints: 20 });
+    state.unlockedNodes.add('R');
+    buyNode(g, state, 'Z');
+    expect(state.unspentSkillPoints).toBe(10); // 20 - 10
+    expect(state.unlockedNodes.has('A')).toBe(true);
+    expect(state.unlockedNodes.has('X')).toBe(true);
+    expect(state.unlockedNodes.has('Z')).toBe(true);
+    expect(state.unlockedEdges.size).toBe(3);
+  });
+
+  it('throws on insufficient SP', () => {
+    const g = mkGraph();
+    const state = makeState({ unspentSkillPoints: 5 });
+    state.unlockedNodes.add('R');
+    expect(() => buyNode(g, state, 'Z')).toThrow(/insufficient/);
+  });
+
+  it('is a no-op when target is already owned', () => {
+    const g = mkGraph();
+    const state = makeState({ unspentSkillPoints: 10 });
+    state.unlockedNodes.add('Z');
+    buyNode(g, state, 'Z');
+    expect(state.unspentSkillPoints).toBe(10);
   });
 });
