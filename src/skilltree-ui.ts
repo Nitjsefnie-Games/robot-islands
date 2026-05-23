@@ -1,27 +1,8 @@
-// Skill-tree panel — DOM overlay rendering §9.3 as four branch columns.
-//
-// Phase 4b.2: migrated to the shared ri-modal shell (mountModal from
-// ui-modal.ts). Branch columns and tier-reset row
-// are rendered inside the modal body; footer hints live in buildFooter.
-// Static inline styles are replaced with .ri-* classes where possible;
-// dynamic state-driven colours use CSS custom properties.
+// Skill-tree panel — DOM overlay rendering §9.3 as a stats strip + tier-reset
+// section + "Open Skill Graph" button. The full-page PixiJS graphview in
+// `skilltree-graphview.ts` is the canonical rendering.
 
-import {
-  BRANCH_LABEL,
-  BRANCH_SUBPATHS,
-  NODE_CATALOG,
-  SUBPATH_LABEL,
-  buyNode,
-  canBuyKeystone,
-  buyKeystone,
-  costToUnlock,
-  DEFAULT_GRAPH,
-  tierForLevel,
-  type BranchId,
-  type SkillNode,
-  type SubPathId,
-} from './skilltree.js';
-import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
+import { tierForLevel } from './skilltree.js';
 import { type IslandState, xpForLevel } from './economy.js';
 
 import {
@@ -53,18 +34,10 @@ export interface SkillTreeUiOptions {
 
 /** Active-island getter injected at mount. The panel reads the active
  *  island's state through this every refresh / click — switching active
- *  retargets the panel without re-mount. */
+ *  retargets the panel without re-mounting. */
 export interface SkillTreeUiDeps {
   getState(): IslandState;
-}
-
-interface NodeRowRef {
-  readonly row: HTMLDivElement;
-  readonly statusDot: HTMLSpanElement;
-  readonly tierTag: HTMLSpanElement;
-  readonly costTag: HTMLSpanElement;
-  readonly descEl: HTMLDivElement;
-  readonly titleEl: HTMLDivElement;
+  openSkillGraph(): void;
 }
 
 export function mountSkillTreeUi(
@@ -73,8 +46,6 @@ export function mountSkillTreeUi(
   _options: SkillTreeUiOptions = {},
 ): SkillTreeUi {
   const getState = (): IslandState => deps.getState();
-  const nodeRefs = new Map<string, NodeRowRef>();
-  const subStatusRefs = new Map<SubPathId, HTMLSpanElement>();
 
   let refresh: () => void = () => undefined;
 
@@ -89,133 +60,6 @@ export function mountSkillTreeUi(
   pointsVal.classList.add('ri-mono');
   const tierResetDetail = document.createElement('span');
   const tierResetBtn = document.createElement('button');
-
-
-
-  function nodeRow(node: SkillNode, branch: BranchId): HTMLDivElement {
-    const row = document.createElement('div');
-    row.style.display = 'grid';
-    row.style.gridTemplateColumns = '14px 1fr auto auto';
-    row.style.alignItems = 'baseline';
-    row.style.gap = '9px';
-    row.style.padding = '5px 9px 5px 6px';
-    row.style.borderLeft = '2px solid var(--ri-fg-4)';
-    row.style.marginLeft = '8px';
-    row.style.transition = 'background 100ms ease, border-color 100ms ease';
-    row.style.cursor = 'default';
-
-    const tick = document.createElement('span');
-    tick.textContent = String(node.depth).padStart(1, '0') + '.';
-    tick.style.color = 'var(--ri-fg-4)';
-    tick.style.fontSize = '10px';
-    tick.style.letterSpacing = '0';
-
-    const main = document.createElement('div');
-    main.style.display = 'flex';
-    main.style.flexDirection = 'column';
-    main.style.gap = '1px';
-    main.style.minWidth = '0';
-
-    const titleRow = document.createElement('div');
-    titleRow.style.display = 'flex';
-    titleRow.style.alignItems = 'baseline';
-    titleRow.style.gap = '7px';
-
-    const statusDot = document.createElement('span');
-    statusDot.textContent = '○';
-    statusDot.style.color = 'var(--ri-fg-4)';
-    statusDot.style.fontSize = '11px';
-
-    const titleEl = document.createElement('div');
-    titleEl.textContent = `${SUBPATH_LABEL[node.subPath]} ${node.depth}`;
-    titleEl.style.color = 'var(--ri-fg-1)';
-    titleEl.style.fontSize = '12px';
-    titleEl.style.fontWeight = '500';
-
-    titleRow.appendChild(statusDot);
-    titleRow.appendChild(titleEl);
-    main.appendChild(titleRow);
-
-    const descEl = document.createElement('div');
-    descEl.textContent = node.description;
-    descEl.style.color = 'var(--ri-fg-3)';
-    descEl.style.fontSize = '10.5px';
-    main.appendChild(descEl);
-
-    const tierTag = document.createElement('span');
-    tierTag.textContent = `D${node.depth}`;
-    tierTag.style.color = 'var(--ri-fg-3)';
-    tierTag.style.fontSize = '10px';
-    tierTag.style.letterSpacing = '0.08em';
-    tierTag.style.border = '1px solid var(--ri-fg-4)';
-    tierTag.style.padding = '1px 5px';
-    tierTag.style.borderRadius = '2px';
-
-    const costTag = document.createElement('span');
-    costTag.textContent = `${node.cost} SP`;
-    costTag.style.color = 'var(--ri-warn)';
-    costTag.style.fontSize = '10.5px';
-    costTag.style.letterSpacing = '0.04em';
-    costTag.style.fontWeight = '600';
-    costTag.style.minWidth = '38px';
-    costTag.style.textAlign = 'right';
-
-    row.appendChild(tick);
-    row.appendChild(main);
-    row.appendChild(tierTag);
-    row.appendChild(costTag);
-
-    function canPurchase(state: IslandState): boolean {
-      if (state.unlockedNodes.has(node.id)) return false;
-      const ks = KEYSTONE_PREREQS.find((k) => k.targetNode === node.id);
-      if (ks) return canBuyKeystone(ks, state);
-      const path = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, node.id);
-      if (path === null) return false;
-      return state.unspentSkillPoints >= path.totalCost;
-    }
-
-    row.addEventListener('click', () => {
-      const state = getState();
-      const ks = KEYSTONE_PREREQS.find((k) => k.targetNode === node.id);
-      if (ks) {
-        if (!canBuyKeystone(ks, state)) return;
-        buyKeystone(ks, state);
-      } else {
-        try {
-          buyNode(DEFAULT_GRAPH, state, node.id);
-        } catch {
-          return;
-        }
-      }
-      refresh();
-      row.animate(
-        [
-          { backgroundColor: 'rgba(125, 211, 232, 0.18)' },
-          { backgroundColor: 'rgba(125, 211, 232, 0)' },
-        ],
-        { duration: 380, easing: 'ease-out' },
-      );
-    });
-    row.addEventListener('mouseenter', () => {
-      const state = getState();
-      if (canPurchase(state)) {
-        row.style.background = 'var(--ri-hover)';
-        row.style.borderLeftColor = 'var(--ri-accent)';
-        row.style.cursor = 'pointer';
-      }
-    });
-    row.addEventListener('mouseleave', () => {
-      row.style.background = '';
-      const ref = nodeRefs.get(node.id);
-      if (ref) applyState(node, ref);
-      row.style.cursor = 'default';
-    });
-
-    void branch;
-    nodeRefs.set(node.id, { row, statusDot, tierTag, costTag, descEl, titleEl });
-    return row;
-  }
-
 
   const handle = mountModal(parentEl, {
     title: 'SKILL TREE',
@@ -352,79 +196,19 @@ export function mountSkillTreeUi(
 
       body.appendChild(tierSection);
 
-      // ---- Branch columns ---------------------------------------------------
-      const branchGrid = document.createElement('div');
-      branchGrid.style.display = 'grid';
-      branchGrid.style.gridTemplateColumns = '1fr 1fr 1fr 1fr';
-      branchGrid.style.gap = '1px';
-      branchGrid.style.background = 'var(--ri-border-strong)';
-
-      for (const branch of Object.keys(BRANCH_SUBPATHS) as BranchId[]) {
-        const col = document.createElement('div');
-        col.style.background = 'var(--ri-panel)';
-        col.style.padding = '14px 12px 18px';
-        col.style.display = 'flex';
-        col.style.flexDirection = 'column';
-        col.style.gap = '14px';
-
-        const colHeader = document.createElement('div');
-        colHeader.className = 'ri-sectionhead';
-        colHeader.style.padding = '0 0 6px';
-
-        const branchName = document.createElement('span');
-        branchName.textContent = BRANCH_LABEL[branch].toUpperCase();
-        branchName.style.color = 'var(--ri-accent)';
-        branchName.style.fontSize = '11px';
-        branchName.style.fontWeight = '600';
-        branchName.style.letterSpacing = '0.2em';
-
-        const branchSub = document.createElement('span');
-        branchSub.textContent = '/ branch';
-        branchSub.className = 'ri-muted';
-        branchSub.style.fontSize = '9.5px';
-        branchSub.style.letterSpacing = '0.1em';
-
-        colHeader.appendChild(branchName);
-        colHeader.appendChild(branchSub);
-        col.appendChild(colHeader);
-
-        for (const subPath of BRANCH_SUBPATHS[branch]) {
-          const sub = document.createElement('div');
-          sub.style.display = 'flex';
-          sub.style.flexDirection = 'column';
-          sub.style.gap = '2px';
-
-          const subRow = document.createElement('div');
-          subRow.className = 'ri-kv';
-          subRow.style.padding = '2px 0';
-
-          const subName = document.createElement('span');
-          subName.className = 'ri-chip';
-          subName.style.cursor = 'default';
-          subName.textContent = SUBPATH_LABEL[subPath];
-
-          const subStatus = document.createElement('span');
-          subStatus.className = 'ri-kv__v';
-          subStatus.style.fontSize = '10px';
-
-          subRow.appendChild(subName);
-          subRow.appendChild(subStatus);
-          sub.appendChild(subRow);
-
-          const subPathNodes = NODE_CATALOG
-            .filter((n) => n.subPath === subPath)
-            .slice()
-            .sort((a, b) => a.depth - b.depth);
-          for (const node of subPathNodes) {
-            sub.appendChild(nodeRow(node, branch));
-          }
-          col.appendChild(sub);
-
-          subStatusRefs.set(subPath, subStatus);
-        }
-        branchGrid.appendChild(col);
-      }
-      body.appendChild(branchGrid);
+      // ---- Open Skill Graph button ------------------------------------------
+      const openBtn = document.createElement('button');
+      openBtn.className = 'ri-btn';
+      openBtn.textContent = '\u2726 OPEN SKILL GRAPH';
+      openBtn.style.alignSelf = 'center';
+      openBtn.style.marginTop = '10px';
+      openBtn.style.fontSize = '14px';
+      openBtn.style.padding = '10px 22px';
+      openBtn.addEventListener('click', () => {
+        deps.openSkillGraph();
+        handle.hide(); // modal yields to full-page overlay
+      });
+      body.appendChild(openBtn);
     },
     buildFooter(footer) {
       const footerL = document.createElement('span');
@@ -432,7 +216,7 @@ export function mountSkillTreeUi(
       footerL.className = 'ri-muted';
       const footerR = document.createElement('span');
       footerR.textContent =
-        'click a node to purchase via cheapest graph path · keystone gates require all prereqs · costs grow round(1.5^(depth-1))';
+        'click a node to purchase via cheapest graph path \u00b7 keystone gates require all prereqs \u00b7 costs grow round(1.5^(depth-1))';
       footerR.className = 'ri-muted';
       footer.prepend(footerL);
       footer.appendChild(footerR);
@@ -443,73 +227,24 @@ export function mountSkillTreeUi(
   // State-driven repaint helpers
   // ---------------------------------------------------------------------------
 
-  function applyState(node: SkillNode, ref: NodeRowRef): void {
-    const state = getState();
-    const owned = state.unlockedNodes.has(node.id);
-    const ks = KEYSTONE_PREREQS.find((k) => k.targetNode === node.id);
-    const unlockCost = ks
-      ? ks.cost
-      : costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, node.id)?.totalCost ?? null;
-    const purchasable = owned
-      ? false
-      : ks
-        ? canBuyKeystone(ks, state)
-        : unlockCost !== null && state.unspentSkillPoints >= unlockCost;
-    ref.costTag.textContent = owned ? `${node.cost} SP` : unlockCost !== null ? `${unlockCost} SP` : '—';
-    if (owned) {
-      ref.statusDot.textContent = '●';
-      ref.statusDot.style.color = 'var(--ri-accent)';
-      ref.titleEl.style.color = 'var(--ri-accent)';
-      ref.descEl.style.color = 'var(--ri-fg-3)';
-      ref.row.style.borderLeftColor = 'var(--ri-accent)';
-      ref.costTag.style.color = 'var(--ri-accent-dim)';
-      ref.costTag.style.textDecoration = 'line-through';
-      ref.tierTag.style.borderColor = 'var(--ri-accent-dim)';
-      ref.tierTag.style.color = 'var(--ri-accent-dim)';
-      ref.row.style.opacity = '1';
-    } else if (purchasable) {
-      ref.statusDot.textContent = '◇';
-      ref.statusDot.style.color = 'var(--ri-warn)';
-      ref.titleEl.style.color = 'var(--ri-fg-1)';
-      ref.descEl.style.color = 'var(--ri-fg-3)';
-      ref.row.style.borderLeftColor = 'var(--ri-warn)';
-      ref.costTag.style.color = 'var(--ri-warn)';
-      ref.costTag.style.textDecoration = 'none';
-      ref.tierTag.style.borderColor = 'var(--ri-fg-4)';
-      ref.tierTag.style.color = 'var(--ri-fg-3)';
-      ref.row.style.opacity = '1';
-    } else {
-      ref.statusDot.textContent = '○';
-      ref.statusDot.style.color = 'var(--ri-fg-4)';
-      ref.titleEl.style.color = 'var(--ri-fg-3)';
-      ref.descEl.style.color = 'var(--ri-fg-4)';
-      ref.row.style.borderLeftColor = 'var(--ri-fg-4)';
-      ref.costTag.style.color = 'var(--ri-fg-4)';
-      ref.costTag.style.textDecoration = 'none';
-      ref.tierTag.style.borderColor = 'var(--ri-fg-4)';
-      ref.tierTag.style.color = 'var(--ri-fg-4)';
-      ref.row.style.opacity = '0.78';
-    }
-  }
-
   function refreshTierReset(): void {
     const state = getState();
     const now = performance.now();
     const cost = tierResetCost(state.level);
     const r = canTierReset(state, now);
-    let detail = `cost: ${cost.steel} steel · ${cost.gear} gear`;
+    let detail = `cost: ${cost.steel} steel \u00b7 ${cost.gear} gear`;
     if (state.lastResetAt !== null) {
       const elapsed = now - state.lastResetAt;
       const remaining = TIER_RESET_COOLDOWN_MS - elapsed;
       if (remaining > 0) {
         const h = Math.floor(remaining / 3_600_000);
         const m = Math.floor((remaining % 3_600_000) / 60_000);
-        detail += `  ·  cooldown: ${h}h ${m.toString().padStart(2, '0')}m`;
+        detail += `  \u00b7  cooldown: ${h}h ${m.toString().padStart(2, '0')}m`;
       }
     }
     tierResetDetail.textContent = detail;
     if (r.ok) {
-      tierResetBtn.textContent = '▼ RESET';
+      tierResetBtn.textContent = '\u25bc RESET';
       tierResetBtn.style.color = 'var(--ri-warn)';
       tierResetBtn.style.borderColor = 'var(--ri-warn)';
       tierResetBtn.style.cursor = 'pointer';
@@ -518,7 +253,7 @@ export function mountSkillTreeUi(
       let label: string;
       switch (r.reason) {
         case 'tier-too-low':
-          label = 'LOCKED · T3+';
+          label = 'LOCKED \u00b7 T3+';
           break;
         case 'cooldown-active':
           label = 'COOLDOWN';
@@ -545,31 +280,6 @@ export function mountSkillTreeUi(
     pointsVal.textContent = String(state.unspentSkillPoints);
 
     refreshTierReset();
-
-    for (const node of NODE_CATALOG) {
-      const ref = nodeRefs.get(node.id);
-      if (!ref) continue;
-      applyState(node, ref);
-    }
-
-    for (const branch of Object.keys(BRANCH_SUBPATHS) as BranchId[]) {
-      for (const sp of BRANCH_SUBPATHS[branch]) {
-        const subEl = subStatusRefs.get(sp);
-        if (!subEl) continue;
-        const subNodes = NODE_CATALOG.filter((n) => n.subPath === sp);
-        const owned = subNodes.filter((n) => state.unlockedNodes.has(n.id)).length;
-        if (owned === subNodes.length && subNodes.length > 0) {
-          subEl.textContent = '◉ complete';
-          subEl.style.color = 'var(--ri-accent)';
-        } else if (owned > 0) {
-          subEl.textContent = `◑ ${owned}/${subNodes.length}`;
-          subEl.style.color = 'var(--ri-fg-3)';
-        } else {
-          subEl.textContent = '◇ open';
-          subEl.style.color = 'var(--ri-fg-4)';
-        }
-      }
-    }
   };
 
   function show(): void {

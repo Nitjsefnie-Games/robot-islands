@@ -1080,6 +1080,15 @@ There is no tier gating on individual nodes, no sub-path commitment lock, and no
 * Very-late-game island (level 70+): ~80–100+ nodes, multiple sub-paths near completion, bridge shortcuts active
 * Extreme-late-game island (level 100+): trending toward complete tree mastery; all keystones and cross-branch bridges accessible
 
+> **Graph-view UI (canonical, 2026-05-23):** the skill graph is rendered
+> as a full-page, pannable / zoomable PixiJS overlay (see
+> `src/skilltree-graphview.ts` + `src/skilltree-layout.ts`). Per-node
+> click triggers `buyNode` via the cheapest-path solver (or
+> `buyKeystone` for AND-gated keystones). The v1 4-column text list
+> that briefly shipped in `src/skilltree-ui.ts` was transitional;
+> the legacy modal now contains only the stats strip, tier-reset
+> section, and an "Open Skill Graph" button.
+
 ### 9.5 Biome-Locked Uniques (T4)
 
 At Tier 4, biome-specific unique buildings unlock per island. These buildings are bottlenecks: each one is the only place in the world where its key resource can be produced. Endgame players must therefore colonize at least one island of every relevant biome to access the full T4 supply chain. Artificial islands cannot host biome-locked uniques (see §2.5).

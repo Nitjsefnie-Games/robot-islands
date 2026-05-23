@@ -850,7 +850,7 @@ async function main(): Promise<void> {
   mountUi(reg, [
     { icon: 'building',  action: 'toggle-buildings',    label: 'Buildings',   kbd: 'B' },
     { icon: 'inventory', action: 'toggle-inventory',    label: 'Inventory',   kbd: 'I' },
-    { icon: 'drone',     action: 'toggle-drones',       label: 'Drones',      kbd: 'J' },
+    { icon: 'drone',     action: 'toggle-drones',       label: 'Drones',      kbd: 'N' },
     { icon: 'route',     action: 'toggle-routes',       label: 'Routes',      kbd: 'R' },
     { icon: 'settle',    action: 'toggle-settlement',   label: 'Settlement',  kbd: 'V' },
     { icon: 'construct', action: 'toggle-construction', label: 'Construct',   kbd: 'C' },
@@ -995,7 +995,12 @@ async function main(): Promise<void> {
   // Skill tree panel — modal-ish DOM overlay, dismissed via KeyK, Escape,
   // or its close button. Reads the active island's state through the
   // getter on every refresh, so click-to-switch retargets without remount.
-  const skillTree = mountSkillTreeUi(document.body, { getState: activeState });
+  const skillGraph = mountSkillGraphView(document.body, { getState: activeState });
+  defineAction(reg, 'toggle-skill-graph', () => {
+    skillGraph.toggle();
+  });
+
+  const skillTree = mountSkillTreeUi(document.body, { getState: activeState, openSkillGraph: () => skillGraph.show() });
   defineAction(reg, 'toggle-skill-tree', () => {
     skillTree.toggle();
   });
@@ -1006,11 +1011,6 @@ async function main(): Promise<void> {
   });
   defineAction(reg, 'toggle-graph', () => {
     graphUi.toggle();
-  });
-
-  const skillGraph = mountSkillGraphView(document.body, { getState: activeState });
-  defineAction(reg, 'toggle-skill-graph', () => {
-    skillGraph.toggle();
   });
 
   // Buildings catalog — sister modal panel to the skill tree. KeyB toggles;

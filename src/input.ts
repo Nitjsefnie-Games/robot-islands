@@ -96,9 +96,9 @@ export function installDefaultBindings(reg: InputRegistry): void {
   // Escape dispatches a generic dismiss action; main.ts wires it to
   // close whichever modal is currently visible (skill tree OR buildings).
   bind(reg, 'Escape', 'dismiss-modal');
-  // J = "journey/jet" — toggles the drone-ops side dock. Side panels don't
-  // get an Escape binding (Escape is reserved for modal dismissal).
-  bind(reg, 'KeyJ', 'toggle-drones');
+  // J = skill graph — direct toggle of the full-page PixiJS graphview
+  // (bypasses the legacy KeyK modal).
+  bind(reg, 'KeyJ', 'toggle-skill-graph');
   // R = routes — opens the freight-grid side dock (step 7).
   bind(reg, 'KeyR', 'toggle-routes');
   // C = construction — opens the artificial-island construction modal
@@ -124,8 +124,8 @@ export function installDefaultBindings(reg: InputRegistry): void {
   bind(reg, 'KeyS', 'toggle-settings');
   // O = orbital — T6 satellite launch modal (§14.2-14.7).
   bind(reg, 'KeyO', 'toggle-orbital');
-  // N = network/nodes — toggles the full-page skill-graph overlay (Tasks 3-9).
-  bind(reg, 'KeyN', 'toggle-skill-graph');
+  // N = drone-ops side dock (migrated from KeyJ so J can be skill graph).
+  bind(reg, 'KeyN', 'toggle-drones');
   bind(reg, 'Equal', 'zoom-in'); // '=' / '+' on US layouts
   bind(reg, 'NumpadAdd', 'zoom-in');
   bind(reg, 'Minus', 'zoom-out');
