@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill graph — full redesign · implementation plan</title>
+<style>
+  :root {
+    --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+    --tan:#E0B47F; --pink:#D38FCC; --red:#E08B7F; --info:#7DD3E8;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+    line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1180px; margin:0 auto; }
+  header.page-head { margin-bottom:48px; max-width:900px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--gray-500); margin-bottom:12px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:36px; line-height:1.15;
+    color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+  .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+    border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+  .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+    letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+  .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+  .callout { background:var(--white); border:1.5px solid var(--gray-300);
+    border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+    font-size:13.5px; color:var(--gray-700); margin: 14px 0; max-width:900px; }
+  .callout.info { border-left-color:var(--info); }
+  .callout.warn { border-left-color:var(--red); }
+  .callout code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .callout b { color:var(--slate); }
+
+  section { margin-bottom:56px; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+    color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:24px;
+    color:var(--slate); letter-spacing:-0.01em; }
+  .sec-head h2 code { font-family:var(--mono); font-size:18px; color:var(--clay); }
+  .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:840px; margin-bottom:20px; }
+  .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--tan); }
+
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:40px; max-width: 1080px; }
+  @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+  .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+    border-radius:10px; padding:14px 16px; }
+  .summary .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+    letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+  .summary .v { font-size:15px; color:var(--slate); font-weight:600; }
+  .summary .v.accent { color:var(--clay); }
+
+  .filetable { border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden;
+    background:var(--white); margin-bottom:32px; }
+  .filetable .row { display:grid; grid-template-columns:280px 100px 1fr; gap:0; }
+  @media (max-width:900px){ .filetable .row{grid-template-columns:1fr;} }
+  .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+  .filetable .cell { padding:11px 14px; font-size:13px; vertical-align:top; }
+  .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+  @media (max-width:900px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+  .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+    font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+  .filetable .cell code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+  .filetable .pill { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--mono);
+    font-size:10.5px; font-weight:600; }
+  .filetable .pill.new { background:var(--olive); color:var(--ivory); }
+  .filetable .pill.mod { background:var(--tan); color:var(--ivory); }
+  .filetable .pill.del { background:var(--red); color:var(--ivory); }
+
+  .task-card { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px;
+    padding:18px 22px; margin-bottom:18px; }
+  .task-blurb { font-size:13.5px; color:var(--gray-700); margin-bottom:14px; max-width:880px; }
+  .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .task-blurb b { color:var(--slate); }
+
+  .files-block { background:var(--gray-150); border:1px solid var(--gray-300); border-radius:8px;
+    padding:10px 13px; margin-bottom:14px; font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+  .files-block .h { color:var(--gray-500); font-size:10.5px; text-transform:uppercase;
+    letter-spacing:0.06em; margin-bottom:6px; }
+  .files-block code { color:var(--tan); }
+
+  .step { margin: 10px 0; padding-left: 24px; position: relative; font-size:14px; color:var(--gray-700); }
+  .step::before { content: "☐"; position: absolute; left: 0; top: 0; color: var(--gray-500); }
+  .step b { color: var(--slate); }
+  .step code { font-family:var(--mono); font-size:12.5px; color:var(--tan); background: var(--gray-150);
+    padding: 1px 5px; border-radius: 3px; }
+
+  pre { background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px;
+    padding: 10px 14px; margin: 8px 0 14px 24px; overflow-x: auto; font-family: var(--mono);
+    font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 1000px; }
+  pre.bash { background: #1F1D19; color: var(--olive); }
+  pre.bash::before { content: "$ "; color: var(--gray-500); }
+  pre .comment { color: var(--gray-500); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--olive); }
+  pre .ty { color: var(--info); }
+  pre .fn { color: var(--tan); }
+
+  .expected { background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 0 6px 6px 0;
+    padding: 6px 12px; margin: 6px 0 10px 24px; font-family: var(--mono); font-size: 12px;
+    color: var(--gray-700); max-width: 980px; }
+  .expected b { color: var(--olive); }
+
+  .toc { background: var(--gray-150); border-left: 3px solid var(--info); border-radius: 0 6px 6px 0;
+    padding: 14px 22px; margin: 28px 0 36px; max-width: 980px; }
+  .toc h3 { color: var(--gray-500); font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: 0.07em; font-weight: 600; margin-bottom: 10px; font-family: var(--mono); }
+  .toc ol { list-style: none; column-count: 2; column-gap: 28px; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--gray-700); text-decoration: none; }
+  .toc a:hover { color: var(--clay); }
+  .toc .num { color: var(--gray-500); font-family: var(--mono); margin-right: 8px; font-size: 11.5px; }
+
+  .footer { color: var(--gray-500); margin-top: 64px; font-size: 12px; padding-top: 18px;
+    border-top: 1.5px solid var(--gray-300); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · skilltree · graph redesign · 2026-05-23</div>
+    <h1>Skill graph — full redesign as a directed PoE-density graph</h1>
+    <div class="prompt-box">
+      <span class="label">For agentic workers</span>
+      <b>REQUIRED SUB-SKILL:</b> use <code>superpowers:subagent-driven-development</code> (recommended) or <code>superpowers:executing-plans</code>. Steps use checkbox markers (the ☐ glyphs); flip to ✓ as you go.
+      <div style="margin-top:8px;font-size:13px;color:var(--gray-500)">
+        <b style="color:var(--slate)">Goal:</b> replace the existing 225-node linear skill catalog and its commit-and-branch-lock progression rules with a directed graph of ~600-800 nodes spanning 5 branches × 4 sub-paths, where progression is gated purely by SP cost + edge prereqs and a silent-cheapest-path solver computes ownership.<br>
+        <b style="color:var(--slate)">Architecture:</b> new <code>src/skilltree-graph.ts</code> pure module hosts the graph types; the rewritten <code>src/skilltree.ts</code> hosts the solver + multiplier fold; <code>src/skilltree-catalog.ts</code> hosts the data (filler nodes via archetype generator, hand-curated notables and keystones). Persistence schema bumps 7 → 8 with a <code>migrateV7toV8</code> function preserving identity but resetting progression. SPEC §9.4 (Specialization roles) is deleted; the role's useful effects are absorbed into specific keystones in the graph.<br>
+        <b style="color:var(--slate)">Tech stack:</b> Vite 5 + TypeScript strict + PixiJS 8 + vitest. Strict + noUncheckedIndexedAccess + noUnusedLocals.<br>
+        <b style="color:var(--slate)">Source of truth:</b> design spec at <code>docs/superpowers/specs/2026-05-23-skilltree-graph-redesign-design.html</code> (v4); supersedes <code>SPEC.md §9.3</code> for current implementation.
+      </div>
+    </div>
+  </header>
+
+  <div class="callout warn">
+    <b>Folding semantics — multiplicative, not additive.</b> Every effect-kind magnitude is the per-node bonus above 1 (<code>magnitude = 0.05</code> ≡ ×1.05 factor). The engine folds via product <code>total = ∏ (1 + magᵢ)</code> across owned nodes for the same effect kind. See <code>skilltree.ts:880-920</code> in the existing implementation — the new code preserves this fold semantics. Throughout the plan, any "+X%" shorthand should be read as "per-node factor ×(1 + X/100)".
+  </div>
+
+  <div class="callout info">
+    <b>Persistence policy — bump = migrate.</b> Every schema bump from v7 onward ships a <code>migrateV<i>N</i></code> function (see <code>AGENTS.md → Persistence migrations</code>). This plan bumps 7→8 and adds <code>migrateV7toV8</code> as the first chained migration under the new policy. v6→v7 (<code>323feff</code>) remains the last fail-fast bump.
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:30px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Summary</h3>
+  <div class="summary">
+    <div class="cell"><div class="k">Nodes</div><div class="v accent">~600–800</div></div>
+    <div class="cell"><div class="k">Branches × sub-paths</div><div class="v">5 × 4 = 20</div></div>
+    <div class="cell"><div class="k">Schema bump</div><div class="v">7 → 8</div></div>
+    <div class="cell"><div class="k">Tasks</div><div class="v">20</div></div>
+  </div>
+
+  <div class="toc">
+    <h3>Tasks</h3>
+    <ol>
+      <li><span class="num">01</span><a href="#task-1">Graph types + new SkillEffect kinds</a></li>
+      <li><span class="num">02</span><a href="#task-2">IslandState shape (unlockedEdges; drop subPathProgress/specializationRole)</a></li>
+      <li><span class="num">03</span><a href="#task-3">SerializedSnapshotV7 + migrateV7toV8 (engine half)</a></li>
+      <li><span class="num">04</span><a href="#task-4">loadWorld wiring + v7→v8 migration test</a></li>
+      <li><span class="num">05</span><a href="#task-5">Delete specialization module + references</a></li>
+      <li><span class="num">06</span><a href="#task-6">Drop routeCapacityMultiplier(role) at routes.ts</a></li>
+      <li><span class="num">07</span><a href="#task-7">costToUnlock — multi-source Dijkstra</a></li>
+      <li><span class="num">08</span><a href="#task-8">buyNode — apply cheapest path</a></li>
+      <li><span class="num">09</span><a href="#task-9">AND-prereq keystone canBuy gate</a></li>
+      <li><span class="num">10</span><a href="#task-10">effectiveSkillMultipliers rewrite + glyph-locality auras</a></li>
+      <li><span class="num">11</span><a href="#task-11">Wire unlockRecipe + biomeBypass + tierBypass</a></li>
+      <li><span class="num">12</span><a href="#task-12">Wire exoticAdjacency + structural + xpGainMul</a></li>
+      <li><span class="num">13</span><a href="#task-13">Wire conditionalBonus + crossIslandShared</a></li>
+      <li><span class="num">14</span><a href="#task-14">Filler archetype generator + first sub-path content</a></li>
+      <li><span class="num">15</span><a href="#task-15">Generate filler nodes for all 20 sub-paths</a></li>
+      <li><span class="num">16</span><a href="#task-16">Hand-curate notables — 5 per sub-path × 20 = ~100</a></li>
+      <li><span class="num">17</span><a href="#task-17">Hand-curate keystones — ~30 total (absorbs §9.4 role effects)</a></li>
+      <li><span class="num">18</span><a href="#task-18">Threshold-bridges + graft socket positions</a></li>
+      <li><span class="num">19</span><a href="#task-19">Delete old skilltree.ts internals + SPEC.md amendment</a></li>
+      <li><span class="num">20</span><a href="#task-20">Final integration test sweep + smoke through HUD</a></li>
+    </ol>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Files touched</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Path</div><div class="cell">Status</div><div class="cell">Responsibility</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-graph.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Graph types: <code>NodeId</code>, <code>EdgeId</code>, <code>Edge</code>, <code>BridgeEdge</code>, <code>GraftSocket</code>, <code>Graph</code>. Pure (no PixiJS).</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree.ts</code></div><div class="cell"><span class="pill mod">REWRITE</span></div><div class="cell">Solver (<code>costToUnlock</code>, <code>buyNode</code>, <code>canBuyKeystone</code>) + multiplier fold (<code>effectiveSkillMultipliers</code> incl. glyph-locality auras). Pure.</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-catalog.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell"><code>NODE_CATALOG</code>, <code>EDGE_CATALOG</code>, <code>BRIDGE_CATALOG</code>, <code>GRAFT_SOCKET_CATALOG</code>.</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-archetypes.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Filler archetypes + <code>generateFillerNodes()</code>.</div></div>
+    <div class="row"><div class="cell"><code>src/persistence.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Schema 7→8; <code>SerializedSnapshotV7</code> type; <code>migrateV7toV8</code>; <code>SUPPORTED_LOAD_VERSIONS = {7, 8}</code>; <code>loadWorld</code> migration walker.</div></div>
+    <div class="row"><div class="cell"><code>src/economy.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Drop <code>effectiveSpecializationMultipliers</code>; integrate <code>conditionalBonus</code> + <code>xpGainMul</code> in computeRates / XP accrual.</div></div>
+    <div class="row"><div class="cell"><code>src/recipes.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell"><code>availableRecipes(buildingDefId, skillState)</code> joins base + <code>unlockRecipe</code>-unlocked sets.</div></div>
+    <div class="row"><div class="cell"><code>src/placement.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell"><code>validateBiomePlacement</code> consults <code>biomeBypass</code> skill state.</div></div>
+    <div class="row"><div class="cell"><code>src/routes.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Remove <code>routeCapacityMultiplier(role)</code>; capacity now folds via graph keystone <code>routeCapacityMul</code>.</div></div>
+    <div class="row"><div class="cell"><code>src/tier-reset.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Remove <code>state.specializationRole = null</code> clear; simplify.</div></div>
+    <div class="row"><div class="cell"><code>src/world.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell"><code>makeInitialIslandState</code>: drop <code>specializationRole</code>; add <code>unlockedEdges: new Set()</code>.</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-ui.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Remove Specialization section (cards, declare, refresh handlers). Leave the modal shell; the graph-view rebuild is a follow-up spec.</div></div>
+    <div class="row"><div class="cell"><code>src/specialization.ts</code></div><div class="cell"><span class="pill del">DELETE</span></div><div class="cell">Module gone.</div></div>
+    <div class="row"><div class="cell"><code>src/specialization.test.ts</code></div><div class="cell"><span class="pill del">DELETE</span></div><div class="cell">Tests gone.</div></div>
+    <div class="row"><div class="cell"><code>SPEC.md</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">§9.3 rewrite (graph model); §9.4 removed; §9.7 simplified (no role to reset).</div></div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 1 -->
+  <section id="task-1">
+    <div class="sec-head"><span class="num">01</span><h2>Task 1 — Graph types + new <code>SkillEffect</code> kinds</h2></div>
+    <p class="sec-intro">Add the new graph primitives in a fresh <code>src/skilltree-graph.ts</code>. Extend <code>SkillEffect</code> in <code>src/skilltree.ts</code> with 4 new kinds: <code>conditionalBonus</code>, <code>crossIslandShared</code>, <code>tierBypass</code>, <code>xpGainMul</code>. No behaviour change yet — types only.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>+ src/skilltree-graph.ts</code> &nbsp; <code>~ src/skilltree.ts</code> &nbsp; <code>+ src/skilltree-graph.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Create <code>src/skilltree-graph.test.ts</code> with a type-only sanity test that imports the new types and constructs a small fixture. This proves the types exist and compose.</div>
+      <pre><span class="comment">// src/skilltree-graph.test.ts</span>
+<span class="kw">import</span> { describe, it, expect } <span class="kw">from</span> <span class="str">'vitest'</span>;
+<span class="kw">import type</span> { Edge, BridgeEdge, GraftSocket, Graph, NodeId, EdgeId } <span class="kw">from</span> <span class="str">'./skilltree-graph.js'</span>;
+
+describe(<span class="str">'skilltree-graph types'</span>, () =&gt; {
+  it(<span class="str">'composes a minimal Graph fixture'</span>, () =&gt; {
+    <span class="kw">const</span> e1: Edge = { id: <span class="str">'e1'</span> <span class="kw">as</span> EdgeId, from: <span class="str">'root.extraction'</span> <span class="kw">as</span> NodeId, to: <span class="str">'mining.1'</span> <span class="kw">as</span> NodeId, cost: 1 };
+    <span class="kw">const</span> bridge: BridgeEdge = {
+      id: <span class="str">'b1'</span> <span class="kw">as</span> EdgeId,
+      from: <span class="str">'mining.4'</span> <span class="kw">as</span> NodeId,
+      to: <span class="str">'forestry.4'</span> <span class="kw">as</span> NodeId,
+      cost: 5,
+      threshold: [{ branch: <span class="str">'extraction'</span>, minSpent: 8 }],
+    };
+    <span class="kw">const</span> socket: GraftSocket = { id: <span class="str">'gs1'</span>, branchId: <span class="str">'orbital'</span>, subPathId: <span class="str">'launch'</span>, attachmentDepth: 6 };
+    <span class="kw">const</span> g: Graph = { nodes: [], edges: [e1], bridges: [bridge], graftSockets: [socket] };
+    expect(g.edges).toHaveLength(1);
+  });
+});</pre>
+
+      <div class="step"><b>Step 2.</b> Run the test and verify it FAILS with "Cannot find module './skilltree-graph.js'".</div>
+      <pre class="bash">npx vitest run src/skilltree-graph.test.ts</pre>
+      <div class="expected"><b>Expected:</b> FAIL — module not found.</div>
+
+      <div class="step"><b>Step 3.</b> Create <code>src/skilltree-graph.ts</code> with the type primitives.</div>
+      <pre><span class="comment">// src/skilltree-graph.ts</span>
+<span class="comment">// Pure graph types for the per-island skill graph. No PixiJS, no DOM.</span>
+<span class="comment">// Engine: `costToUnlock` finds the cheapest unowned-edge path from the</span>
+<span class="comment">// player's frontier to a target node; `buyNode` applies that path.</span>
+<span class="comment">// AND-prereq keystones gate on full upstream ownership instead.</span>
+
+<span class="kw">import type</span> { BranchId, SubPathId, SkillNode } <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+
+<span class="kw">export type</span> NodeId = <span class="ty">string</span> &amp; { <span class="kw">readonly</span> __nodeBrand: <span class="kw">unique symbol</span> };
+<span class="kw">export type</span> EdgeId = <span class="ty">string</span> &amp; { <span class="kw">readonly</span> __edgeBrand: <span class="kw">unique symbol</span> };
+
+<span class="kw">export type</span> EdgePrereqMode = <span class="str">'single'</span> | <span class="str">'or'</span> | <span class="str">'and'</span>;
+
+<span class="comment">/** Standard graph edge with an SP cost. Used for filler chains and notables. */</span>
+<span class="kw">export interface</span> Edge {
+  <span class="kw">readonly</span> id: EdgeId;
+  <span class="kw">readonly</span> from: NodeId;
+  <span class="kw">readonly</span> to: NodeId;
+  <span class="kw">readonly</span> cost: <span class="ty">number</span>;          <span class="comment">// SP charged when this edge is part of the cheapest path</span>
+  <span class="kw">readonly</span> mode?: EdgePrereqMode; <span class="comment">// default 'single'. 'or' = alt-entry; 'and' = participate in a keystone's AND-prereq</span>
+}
+
+<span class="comment">/** Threshold-gated edge (Borderlands pattern). Activates when at least one</span>
+<span class="comment"> *  threshold is met. Belongs to its own catalog so the solver can skip them</span>
+<span class="comment"> *  with O(1) gate checks instead of scanning every edge. */</span>
+<span class="kw">export interface</span> BridgeEdge <span class="kw">extends</span> Edge {
+  <span class="kw">readonly</span> threshold: <span class="kw">ReadonlyArray</span>&lt;{ <span class="kw">readonly</span> branch: BranchId; <span class="kw">readonly</span> minSpent: <span class="ty">number</span> }&gt;;
+}
+
+<span class="comment">/** Reserved attachment position for future content. No node attached at v1. */</span>
+<span class="kw">export interface</span> GraftSocket {
+  <span class="kw">readonly</span> id: <span class="ty">string</span>;
+  <span class="kw">readonly</span> branchId: BranchId;
+  <span class="kw">readonly</span> subPathId: SubPathId;
+  <span class="kw">readonly</span> attachmentDepth: <span class="ty">number</span>;
+}
+
+<span class="kw">export interface</span> Graph {
+  <span class="kw">readonly</span> nodes: <span class="kw">ReadonlyArray</span>&lt;SkillNode&gt;;
+  <span class="kw">readonly</span> edges: <span class="kw">ReadonlyArray</span>&lt;Edge&gt;;
+  <span class="kw">readonly</span> bridges: <span class="kw">ReadonlyArray</span>&lt;BridgeEdge&gt;;
+  <span class="kw">readonly</span> graftSockets: <span class="kw">ReadonlyArray</span>&lt;GraftSocket&gt;;
+}
+
+<span class="comment">/** AND-prereq spec for keystone nodes. The node is purchasable only when</span>
+<span class="comment"> *  ALL prereq NodeIds are already in `state.unlockedNodes`. */</span>
+<span class="kw">export interface</span> KeystonePrereq {
+  <span class="kw">readonly</span> targetNode: NodeId;
+  <span class="kw">readonly</span> requires: <span class="kw">ReadonlyArray</span>&lt;NodeId&gt;;
+  <span class="kw">readonly</span> cost: <span class="ty">number</span>;
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Run the test and verify it PASSES.</div>
+      <pre class="bash">npx vitest run src/skilltree-graph.test.ts</pre>
+      <div class="expected"><b>Expected:</b> PASS — 1 test passing.</div>
+
+      <div class="step"><b>Step 5.</b> Extend the <code>SkillEffect</code> union in <code>src/skilltree.ts</code> with the 4 new kinds. Find the union at <code>skilltree.ts:70-137</code> and append:</div>
+      <pre><span class="comment">// at the end of the SkillEffect union (after line ~137)</span>
+  <span class="comment">// Phase-C — graph-redesign additions (2026-05-23):</span>
+  <span class="comment">//   conditionalBonus  → multiplier active only when condition is true</span>
+  <span class="comment">//   crossIslandShared → resource pool / stat shared across networked T3+ islands</span>
+  <span class="comment">//   tierBypass        → operate a specific building one tier below requirement</span>
+  <span class="comment">//   xpGainMul         → multiplies XP gained per production tick</span>
+  | { <span class="kw">readonly</span> kind: <span class="str">'conditionalBonus'</span>; <span class="kw">readonly</span> multiplier: <span class="ty">number</span>;
+      <span class="kw">readonly</span> appliesTo: RecipeCategory | <span class="str">'storage'</span> | <span class="str">'power'</span> | <span class="str">'xp'</span>;
+      <span class="kw">readonly</span> condition: ConditionalEffectCondition }
+  | { <span class="kw">readonly</span> kind: <span class="str">'crossIslandShared'</span>; <span class="kw">readonly</span> shape:
+      | { <span class="kw">readonly</span> kind: <span class="str">'sharedInventory'</span>; <span class="kw">readonly</span> resources: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">string</span>&gt; }
+      | { <span class="kw">readonly</span> kind: <span class="str">'sharedStorageCap'</span>; <span class="kw">readonly</span> resources: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">string</span>&gt; }
+      | { <span class="kw">readonly</span> kind: <span class="str">'sharedRouteCapacity'</span> } }
+  | { <span class="kw">readonly</span> kind: <span class="str">'tierBypass'</span>; <span class="kw">readonly</span> buildings: <span class="kw">ReadonlyArray</span>&lt;BuildingDefId&gt;;
+      <span class="kw">readonly</span> tierShift: 1 }
+  | { <span class="kw">readonly</span> kind: <span class="str">'xpGainMul'</span>; <span class="kw">readonly</span> category?: RecipeCategory };
+
+<span class="comment">/** Closed union of conditions for `conditionalBonus`. Each must be evaluable</span>
+<span class="comment"> *  in O(1) at tick start; new entries require both a case here and an evaluator</span>
+<span class="comment"> *  in `evaluateConditionalEffectCondition` in economy.ts. */</span>
+<span class="kw">export type</span> ConditionalEffectCondition =
+  | { <span class="kw">readonly</span> kind: <span class="str">'during-storm'</span> }
+  | { <span class="kw">readonly</span> kind: <span class="str">'during-night'</span> }
+  | { <span class="kw">readonly</span> kind: <span class="str">'networked-to-N-T3-islands'</span>; <span class="kw">readonly</span> n: <span class="ty">number</span> }
+  | { <span class="kw">readonly</span> kind: <span class="str">'adjacent-tile-is-biome'</span>; <span class="kw">readonly</span> biome: Biome };</pre>
+
+      <div class="step"><b>Step 6.</b> Run the full test suite to confirm the union extension didn't break the existing fold (it shouldn't — folds will warn/fail to compile because they're not exhaustive, which is fine — fix in next task).</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -20</pre>
+      <div class="expected"><b>Expected:</b> FAIL with switch-exhaustiveness errors in <code>effectiveSkillMultipliers</code> for the 4 new kinds. That's the cue for Task 10 — temporary tolerate by stubbing the new cases with <code>break;</code> (no-op) before committing this task. Alternatively, commit this task with build broken and fix in Task 10. <b>Choose:</b> stub the cases with <code>break;</code> in this task to keep the build green between commits.</div>
+
+      <div class="step"><b>Step 7.</b> Add <code>case 'conditionalBonus': break;</code>, <code>case 'crossIslandShared': break;</code>, <code>case 'tierBypass': break;</code>, <code>case 'xpGainMul': break;</code> to the <code>effectiveSkillMultipliers</code> switch in <code>skilltree.ts</code> (around line 880-920). These are no-op stubs filled in by Task 10.</div>
+
+      <div class="step"><b>Step 8.</b> Run the suite to confirm green.</div>
+      <pre class="bash">npm run build &amp;&amp; npm test 2&gt;&amp;1 | tail -8</pre>
+      <div class="expected"><b>Expected:</b> Build clean. Tests: 1973 → 1974 (one new test from Step 1). Green.</div>
+
+      <div class="step"><b>Step 9.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-graph.ts src/skilltree-graph.test.ts src/skilltree.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): add graph types + 4 new SkillEffect kinds (stubbed folds)
+
+Foundation for the graph redesign (spec v4). Adds:
+- src/skilltree-graph.ts: Edge / BridgeEdge / GraftSocket / Graph types
+  + KeystonePrereq + branded NodeId/EdgeId for type safety.
+- SkillEffect union: conditionalBonus, crossIslandShared, tierBypass,
+  xpGainMul. Folds are no-op stubs; Task 10 wires them.
+- ConditionalEffectCondition closed union for the conditionalBonus kind.
+
+Build clean; tests 1973 → 1974 (one type-construction sanity test).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 2 -->
+  <section id="task-2">
+    <div class="sec-head"><span class="num">02</span><h2>Task 2 — <code>IslandState</code> shape (add <code>unlockedEdges</code>, drop progress + role)</h2></div>
+    <p class="sec-intro">Add <code>unlockedEdges: Set&lt;EdgeId&gt;</code> to <code>IslandState</code>. Drop <code>subPathProgress</code> (no longer tracked) and <code>specializationRole</code> (§9.4 removed). All consumers must be updated to compile-clean. Tests previously asserting these fields must be updated or deleted.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/economy.ts (IslandState definition)</code> &nbsp; <code>~ src/world.ts (makeInitialIslandState)</code> &nbsp; <code>~ src/skilltree.ts (spendPoint references)</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add <code>unlockedEdges</code> to the <code>IslandState</code> interface at <code>economy.ts:200-240</code> (search for the existing <code>unlockedNodes: Set&lt;NodeId&gt;</code> declaration; the new field sits next to it). Drop <code>subPathProgress</code> and <code>specializationRole</code> in the same edit:</div>
+      <pre><span class="comment">// before (economy.ts ~line 215-226):</span>
+<span class="kw">export interface</span> IslandState {
+  ...
+  unlockedNodes: <span class="kw">Set</span>&lt;NodeId&gt;;
+  subPathProgress: <span class="kw">Map</span>&lt;SubPathId, { spent: number; complete: boolean }&gt;;
+  unspentSkillPoints: number;
+  specializationRole: RoleId | <span class="kw">null</span>;
+  ...
+}
+
+<span class="comment">// after:</span>
+<span class="kw">export interface</span> IslandState {
+  ...
+  unlockedNodes: <span class="kw">Set</span>&lt;NodeId&gt;;
+  unlockedEdges: <span class="kw">Set</span>&lt;EdgeId&gt;;
+  unspentSkillPoints: number;
+  ...
+}</pre>
+
+      <div class="step"><b>Step 2.</b> Update <code>makeInitialIslandState</code> at <code>world.ts:1060-1080</code>:</div>
+      <pre><span class="comment">// before:</span>
+unlockedNodes: <span class="kw">new</span> <span class="ty">Set</span>(),
+subPathProgress: <span class="kw">new</span> <span class="ty">Map</span>(),
+unspentSkillPoints: 0,
+specializationRole: <span class="kw">null</span>,
+
+<span class="comment">// after:</span>
+unlockedNodes: <span class="kw">new</span> <span class="ty">Set</span>(),
+unlockedEdges: <span class="kw">new</span> <span class="ty">Set</span>(),
+unspentSkillPoints: 0,</pre>
+
+      <div class="step"><b>Step 3.</b> Find and clear all remaining references. Run grep:</div>
+      <pre class="bash">grep -rn "subPathProgress\|specializationRole\|SpecializationMultipliers\|effectiveSpecializationMultipliers\|routeCapacityMultiplier" src/ --include="*.ts" | grep -v test</pre>
+      <div class="expected"><b>Expected hits</b> to handle: <code>skilltree.ts:712</code> (spendPoint subPathProgress update — remove the whole block; Task 8 replaces it), <code>economy.ts:55-60</code> (imports from specialization), <code>economy.ts:90-100</code> (specMul field on RatesContext — remove), <code>tier-reset.ts:149</code> (clear line — remove), <code>routes.ts:29</code> (import), <code>routes.ts:671</code> (call site — remove the multiplier; capacity becomes 1.0 here and is fed by the skill graph later).</div>
+
+      <div class="step"><b>Step 4.</b> Apply each fix; build and let tsc tell you what's broken until it's green again. The set of edits is mechanical — every reference becomes either deleted or rewritten to use <code>state.unlockedNodes</code> + new graph state.</div>
+
+      <div class="step"><b>Step 5.</b> Update tests that referenced removed fields. Grep:</div>
+      <pre class="bash">grep -rn "subPathProgress\|specializationRole" src/ --include="*.ts"</pre>
+      <p style="font-size:13px; color:var(--gray-500); padding-left:24px; margin:6px 0 12px;">Each test that asserts on those fields needs either deletion (if the test is now meaningless) or rewrite to assert on <code>unlockedNodes</code> instead.</p>
+
+      <div class="step"><b>Step 6.</b> Run tests:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8</pre>
+      <div class="expected"><b>Expected:</b> green. Test count will drop by N where N = number of subPathProgress / specializationRole specific tests deleted. Document the count delta in the commit message.</div>
+
+      <div class="step"><b>Step 7.</b> Commit.</div>
+      <pre class="bash">git add -A
+git commit -F - &lt;&lt;'EOF'
+refactor(skilltree): IslandState shape — add unlockedEdges, drop subPathProgress + specializationRole
+
+Per the skill-graph redesign:
+- unlockedEdges: Set&lt;EdgeId&gt; tracks owned edges separately from owned nodes
+  (an edge can be owned even when its endpoint is reached via another path).
+- subPathProgress removed: the new branch-lock model has no commitment threshold.
+- specializationRole removed: §9.4 dropped; effects absorbed into graph keystones (Task 17).
+
+All consumers updated. specialization.ts itself is removed in Task 5 once
+remaining references are gone.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 3 -->
+  <section id="task-3">
+    <div class="sec-head"><span class="num">03</span><h2>Task 3 — <code>SerializedSnapshotV7</code> + <code>migrateV7toV8</code> (engine half)</h2></div>
+    <p class="sec-intro">Bump schema 7 → 8, add the previous-version type alias, write the migration function. Loader wiring lands in Task 4. This task is testable in isolation.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/persistence.ts</code> &nbsp; <code>~ src/persistence.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Write the failing migration test in <code>src/persistence.test.ts</code>:</div>
+      <pre><span class="kw">import</span> { migrateV7toV8, <span class="kw">type</span> SerializedSnapshotV7, <span class="kw">type</span> SerializedSnapshotV8 } <span class="kw">from</span> <span class="str">'./persistence.js'</span>;
+
+describe(<span class="str">'migrateV7toV8'</span>, () =&gt; {
+  it(<span class="str">'preserves identity fields and resets progression'</span>, () =&gt; {
+    <span class="kw">const</span> v7: SerializedSnapshotV7 = {
+      v: 7,
+      now: 100000,
+      currentIslandId: <span class="str">'island-a'</span>,
+      islandStates: [
+        {
+          id: <span class="str">'island-a'</span>,
+          biome: <span class="str">'plains'</span>,
+          level: 12,
+          xp: 8500,
+          lastTick: 95000,
+          inventory: { iron_ore: 50 },
+          buildings: [],
+          unlockedNodes: [<span class="str">'mining.1'</span>, <span class="str">'mining.2'</span>, <span class="str">'forestry.1'</span>],
+          subPathProgress: [[<span class="str">'mining'</span>, { spent: 3, complete: <span class="kw">false</span> }]],
+          unspentSkillPoints: 2,
+          specializationRole: <span class="str">'foundry'</span>,
+        } <span class="kw">as any</span>,
+      ],
+    } <span class="kw">as any</span>;
+
+    <span class="kw">const</span> v8 = migrateV7toV8(v7);
+
+    expect(v8.v).toBe(8);
+    expect(v8.islandStates[0]!.level).toBe(12);
+    expect(v8.islandStates[0]!.xp).toBe(8500);
+    expect(v8.islandStates[0]!.inventory).toEqual({ iron_ore: 50 });
+    expect(v8.islandStates[0]!.unlockedNodes).toEqual([]);
+    expect(v8.islandStates[0]!.unlockedEdges).toEqual([]);
+    expect(v8.islandStates[0]!.unspentSkillPoints).toBe(11);
+    expect((v8.islandStates[0] <span class="kw">as any</span>).subPathProgress).toBeUndefined();
+    expect((v8.islandStates[0] <span class="kw">as any</span>).specializationRole).toBeUndefined();
+  });
+
+  it(<span class="str">'recomputes unspentSkillPoints as max(0, level - 1)'</span>, () =&gt; {
+    <span class="kw">const</span> v7 = { v: 7, now: 0, currentIslandId: <span class="str">'a'</span>, islandStates: [
+      { id: <span class="str">'a'</span>, level: 1, xp: 0, lastTick: 0, inventory: {}, buildings: [], unlockedNodes: [], subPathProgress: [], unspentSkillPoints: 999, specializationRole: <span class="kw">null</span> } <span class="kw">as any</span>,
+      { id: <span class="str">'b'</span>, level: 50, xp: 0, lastTick: 0, inventory: {}, buildings: [], unlockedNodes: [], subPathProgress: [], unspentSkillPoints: 0, specializationRole: <span class="kw">null</span> } <span class="kw">as any</span>,
+    ] } <span class="kw">as any</span>;
+    <span class="kw">const</span> v8 = migrateV7toV8(v7);
+    expect(v8.islandStates[0]!.unspentSkillPoints).toBe(0);
+    expect(v8.islandStates[1]!.unspentSkillPoints).toBe(49);
+  });
+});</pre>
+
+      <div class="step"><b>Step 2.</b> Run, verify FAIL.</div>
+      <pre class="bash">npx vitest run src/persistence.test.ts -t "migrateV7toV8"</pre>
+      <div class="expected"><b>Expected:</b> FAIL — <code>migrateV7toV8</code> not exported.</div>
+
+      <div class="step"><b>Step 3.</b> Add the type alias + migration to <code>src/persistence.ts</code>. The previous-version type captures the exact shape of v7 snapshots (subPathProgress + specializationRole present):</div>
+      <pre><span class="comment">// src/persistence.ts — additions</span>
+
+<span class="comment">/** Captures the v7 island-state shape pre-graph-redesign. */</span>
+<span class="kw">export interface</span> SerializedIslandStateV7 {
+  <span class="kw">readonly</span> id: <span class="ty">string</span>;
+  <span class="kw">readonly</span> biome: Biome;
+  <span class="kw">readonly</span> level: <span class="ty">number</span>;
+  <span class="kw">readonly</span> xp: <span class="ty">number</span>;
+  <span class="kw">readonly</span> lastTick: <span class="ty">number</span>;
+  <span class="kw">readonly</span> inventory: <span class="kw">Record</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt;;
+  <span class="kw">readonly</span> buildings: <span class="kw">ReadonlyArray</span>&lt;SerializedBuildingV7&gt;;
+  <span class="kw">readonly</span> unlockedNodes: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">string</span>&gt;;
+  <span class="kw">readonly</span> subPathProgress: <span class="kw">ReadonlyArray</span>&lt;[<span class="ty">string</span>, { spent: <span class="ty">number</span>; complete: <span class="ty">boolean</span> }]&gt;;
+  <span class="kw">readonly</span> unspentSkillPoints: <span class="ty">number</span>;
+  <span class="kw">readonly</span> specializationRole: <span class="ty">string</span> | <span class="kw">null</span>;
+}
+
+<span class="kw">export interface</span> SerializedSnapshotV7 {
+  <span class="kw">readonly</span> v: 7;
+  <span class="kw">readonly</span> now: <span class="ty">number</span>;
+  <span class="kw">readonly</span> currentIslandId: <span class="ty">string</span>;
+  <span class="kw">readonly</span> islandStates: <span class="kw">ReadonlyArray</span>&lt;SerializedIslandStateV7&gt;;
+  <span class="comment">// other top-level v7 fields here (copy from existing SerializedSnapshot)</span>
+}
+
+<span class="kw">export type</span> SerializedSnapshotV8 = SerializedSnapshot; <span class="comment">// the new current shape</span>
+
+<span class="kw">export function</span> migrateV7toV8(s: SerializedSnapshotV7): SerializedSnapshotV8 {
+  <span class="kw">return</span> {
+    ...s,
+    v: 8,
+    islandStates: s.islandStates.map((is) =&gt; {
+      <span class="kw">const</span> { subPathProgress: _sp, specializationRole: _sr, ...rest } = is;
+      <span class="kw">return</span> {
+        ...rest,
+        unlockedNodes: [], <span class="comment">// old node IDs ("mining.1" etc.) have no home in the new graph; reset</span>
+        unlockedEdges: [],
+        unspentSkillPoints: <span class="ty">Math</span>.max(0, is.level - 1),
+      };
+    }),
+  } <span class="kw">as</span> SerializedSnapshotV8;
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Bump <code>SCHEMA_VERSION</code> 7 → 8 and <code>STORAGE_KEY</code> from <code>:v7</code> → <code>:v8</code> at the existing constants in <code>persistence.ts:70-78</code>. Update <code>SUPPORTED_LOAD_VERSIONS</code> to <code>new Set([7, 8])</code> per the new "bump = migrate" policy.</div>
+
+      <div class="step"><b>Step 5.</b> Run the migration test, verify PASS.</div>
+      <pre class="bash">npx vitest run src/persistence.test.ts -t "migrateV7toV8"</pre>
+      <div class="expected"><b>Expected:</b> PASS — 2 tests passing in the new describe.</div>
+
+      <div class="step"><b>Step 6.</b> Run the full suite. The schema bump may have broken older tests that load v7 fixtures — they're caught by the loader test.</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8</pre>
+      <div class="expected"><b>Expected:</b> green (or two persistence tests failing on schema version assertions — those get updated by Task 4 alongside <code>loadWorld</code>).</div>
+
+      <div class="step"><b>Step 7.</b> Commit.</div>
+      <pre class="bash">git add src/persistence.ts src/persistence.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(persistence): migrateV7toV8 + bump schema to 8
+
+First chained migration under the new "bump = migrate" policy
+(AGENTS.md → Persistence migrations). v6 → v7 (323feff) remains the
+last fail-fast bump.
+
+Migration semantics: preserve identity (level, xp, inventory, buildings),
+reset progression. unlockedNodes cleared because old node IDs
+("mining.1" etc.) don't exist in the new graph; subPathProgress and
+specializationRole fields are gone; unspentSkillPoints recomputed as
+max(0, level - 1) so the player gets refund + new graph to spend on.
+
+SUPPORTED_LOAD_VERSIONS = {7, 8}. loadWorld migration walker lands in
+Task 4.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 4 -->
+  <section id="task-4">
+    <div class="sec-head"><span class="num">04</span><h2>Task 4 — <code>loadWorld</code> wiring + v7 fixture round-trip test</h2></div>
+    <p class="sec-intro">Wire <code>migrateV7toV8</code> into the loader's version-dispatch path. Add an integration test that constructs a v7 snapshot, runs it through <code>loadWorld</code>, and confirms a clean v8 result.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/persistence.ts (loadWorld)</code> &nbsp; <code>~ src/persistence.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add a failing integration test:</div>
+      <pre>describe(<span class="str">'loadWorld v7 → v8 round-trip'</span>, () =&gt; {
+  it(<span class="str">'loads a v7 snapshot and yields v8 in-memory state'</span>, () =&gt; {
+    <span class="kw">const</span> v7Payload = JSON.stringify({
+      v: 7,
+      now: 100000,
+      currentIslandId: <span class="str">'island-a'</span>,
+      islandStates: [{
+        id: <span class="str">'island-a'</span>, biome: <span class="str">'plains'</span>, level: 5, xp: 1200, lastTick: 95000,
+        inventory: {}, buildings: [],
+        unlockedNodes: [<span class="str">'mining.1'</span>], subPathProgress: [[<span class="str">'mining'</span>, { spent: 1, complete: <span class="kw">false</span> }]],
+        unspentSkillPoints: 0, specializationRole: <span class="str">'mining'</span>,
+      }],
+    });
+    localStorage.setItem(<span class="str">'ri:v8'</span>, v7Payload);  <span class="comment">// note: legacy key migration handled separately if needed</span>
+    <span class="kw">const</span> world = loadWorld();
+    expect(world).not.toBeNull();
+    expect(world!.islandStates.get(<span class="str">'island-a'</span>)?.level).toBe(5);
+    expect(world!.islandStates.get(<span class="str">'island-a'</span>)?.unspentSkillPoints).toBe(4);
+    expect(world!.islandStates.get(<span class="str">'island-a'</span>)?.unlockedNodes.size).toBe(0);
+    expect(world!.islandStates.get(<span class="str">'island-a'</span>)?.unlockedEdges.size).toBe(0);
+  });
+});</pre>
+
+      <div class="step"><b>Step 2.</b> Run, verify FAIL (loader doesn't yet know about v7).</div>
+      <pre class="bash">npx vitest run src/persistence.test.ts -t "loadWorld v7"</pre>
+
+      <div class="step"><b>Step 3.</b> Add the migration-walker in <code>loadWorld</code>. Find the version check at <code>persistence.ts:286-302</code> (current shape: throws on unsupported versions). Replace with:</div>
+      <pre><span class="comment">// inside loadWorld, after JSON.parse</span>
+<span class="kw">if</span> (snapshot.v === 7) {
+  <span class="kw">return</span> migrateV7toV8(snapshot <span class="kw">as</span> SerializedSnapshotV7);
+}
+<span class="kw">if</span> (snapshot.v !== SCHEMA_VERSION) {
+  <span class="kw">throw new</span> <span class="ty">Error</span>(
+    `save version ${String(snapshot.v)} not supported (current: ${String(SCHEMA_VERSION)}); ` +
+    `supported versions: ${[...SUPPORTED_LOAD_VERSIONS].join(<span class="str">', '</span>)}.`
+  );
+}
+<span class="kw">return</span> snapshot <span class="kw">as</span> SerializedSnapshotV8;</pre>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:0 0 12px">Then deserialize the v8 snapshot into the in-memory world state as the existing loader code does. The migration step happens BEFORE deserialization.</p>
+
+      <div class="step"><b>Step 4.</b> Run, verify PASS.</div>
+      <pre class="bash">npx vitest run src/persistence.test.ts</pre>
+      <div class="expected"><b>Expected:</b> all persistence tests green including the new v7→v8 round-trip.</div>
+
+      <div class="step"><b>Step 5.</b> Run the full suite.</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> all green. Build clean.</div>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/persistence.ts src/persistence.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(persistence): wire migrateV7toV8 into loadWorld's version dispatch
+
+loadWorld now walks v7 snapshots through migrateV7toV8 before
+deserializing. v6 and earlier still fail-fast (the 1d8c4bd cleanup
+remains the last fail-fast generation).
+
+Integration test confirms a v7-shape snapshot in localStorage loads
+correctly with progression reset and unlockedEdges initialized.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 5 -->
+  <section id="task-5">
+    <div class="sec-head"><span class="num">05</span><h2>Task 5 — Delete <code>specialization</code> module + references</h2></div>
+    <p class="sec-intro">With <code>specializationRole</code> already removed from <code>IslandState</code> in Task 2, the specialization module can now be deleted entirely. <code>src/specialization.ts</code>, <code>src/specialization.test.ts</code>, and any remaining import sites.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>- src/specialization.ts</code> &nbsp; <code>- src/specialization.test.ts</code> &nbsp; <code>~ src/economy.ts</code> &nbsp; <code>~ src/skilltree-ui.ts</code> &nbsp; <code>~ src/tier-reset.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Confirm remaining references:</div>
+      <pre class="bash">grep -rn "from './specialization" src/ --include="*.ts"
+grep -rn "from '\.\./specialization" src/ --include="*.ts"</pre>
+
+      <div class="step"><b>Step 2.</b> Delete the module + its tests:</div>
+      <pre class="bash">git rm src/specialization.ts src/specialization.test.ts</pre>
+
+      <div class="step"><b>Step 3.</b> Remove remaining imports + uses. From <code>src/economy.ts:55-60</code>, drop the <code>effectiveSpecializationMultipliers</code> / <code>SpecializationMultipliers</code> / <code>RoleId</code> imports. From <code>src/skilltree-ui.ts:23</code>, drop the <code>ALL_ROLES</code> / <code>ROLE_DEFS</code> / <code>RoleId</code> imports — then remove the Specialization section UI (at <code>skilltree-ui.ts:497-619</code>, the `// ---- Specialization section ----` block and its handlers).</div>
+
+      <div class="step"><b>Step 4.</b> Remove <code>state.specializationRole = null</code> at <code>tier-reset.ts:149</code>. Simplify the comment header at <code>tier-reset.ts:1-30</code> to reflect that Tier Reset no longer has §9.4 as its primary motivation.</div>
+
+      <div class="step"><b>Step 5.</b> Build + test:</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -8</pre>
+      <div class="expected"><b>Expected:</b> green. The specialization tests are gone (deleted file), so test count drops by however many tests lived in <code>specialization.test.ts</code> — note the delta in the commit message.</div>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add -A
+git commit -F - &lt;&lt;'EOF'
+refactor(skilltree): delete specialization module (§9.4 dropped per redesign)
+
+SPEC.md §9.4 (Specialization Passive) is removed in the graph redesign
+— the 600-800-node directed graph enforces specialization via cost
+economy + topology; the orthogonal global ×1.5/×0.75 multiplier layer
+was redundant complexity.
+
+Deleted: src/specialization.ts, src/specialization.test.ts.
+Updated: economy.ts (drop imports + specMul context), skilltree-ui.ts
+(drop Specialization section), tier-reset.ts (drop role clear).
+
+Role effects (Foundry +50% smelting etc.) are reabsorbed as
+hand-curated keystones in Task 17.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 6 -->
+  <section id="task-6">
+    <div class="sec-head"><span class="num">06</span><h2>Task 6 — Drop <code>routeCapacityMultiplier(role)</code> at <code>routes.ts</code></h2></div>
+    <p class="sec-intro">The role-based route-capacity multiplier (<code>routes.ts:671</code>) was the last specialization integration site. Remove the call; capacity now folds via the skill-graph's <code>routeCapacityMul</code> effect kind (already wired in the existing engine). Logistics Hub's +100% becomes a keystone in Task 17.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/routes.ts</code> &nbsp; <code>~ src/routes.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Read the existing call at <code>routes.ts:671</code> and surrounding code. The call should look approximately:</div>
+      <pre><span class="kw">const</span> capacityMul = routeCapacityMultiplier(srcState.specializationRole);
+<span class="comment">// later:</span>
+<span class="kw">const</span> effectiveCapacity = baseCapacity * capacityMul * srcSkillMul.routeCapacity;</pre>
+
+      <div class="step"><b>Step 2.</b> Remove the call. The <code>srcSkillMul.routeCapacity</code> (which already exists in <code>SkillMultipliers</code> and is computed by <code>effectiveSkillMultipliers</code>) now carries the full multiplier load:</div>
+      <pre><span class="comment">// after:</span>
+<span class="kw">const</span> effectiveCapacity = baseCapacity * srcSkillMul.routeCapacity;</pre>
+
+      <div class="step"><b>Step 3.</b> Delete the import: <code>import { routeCapacityMultiplier } from './specialization.js';</code> at <code>routes.ts:29</code>.</div>
+
+      <div class="step"><b>Step 4.</b> Update any test that asserted on the Logistics Hub route capacity bonus via specializationRole. Those tests should be deleted or rewritten to use a skill-graph unlocked node instead (parked for Task 17 — the bonus comes back as a keystone there).</div>
+
+      <div class="step"><b>Step 5.</b> Build + test:</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -5 &amp;&amp; npm test 2&gt;&amp;1 | tail -8</pre>
+      <div class="expected"><b>Expected:</b> green. Test count drops by ~1-2 (the Logistics-Hub-route-cap tests).</div>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/routes.ts src/routes.test.ts
+git commit -F - &lt;&lt;'EOF'
+refactor(routes): drop role-based routeCapacityMultiplier
+
+Route capacity now folds entirely via SkillMultipliers.routeCapacity
+(populated by the skill graph's routeCapacityMul effect). The Logistics
+Hub +100% bonus returns as a keystone in Task 17.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 7 -->
+  <section id="task-7">
+    <div class="sec-head"><span class="num">07</span><h2>Task 7 — <code>costToUnlock</code> multi-source Dijkstra</h2></div>
+    <p class="sec-intro">The cheapest-path solver. Given a target node, the player's currently-owned frontier, and the graph (nodes + edges + active bridges), compute the lowest-SP-cost path. Returns the path edges + total cost.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree.ts</code> &nbsp; <code>~ src/skilltree.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Write failing tests:</div>
+      <pre>describe(<span class="str">'costToUnlock'</span>, () =&gt; {
+  <span class="comment">// Helper to construct a tiny test graph.</span>
+  <span class="kw">function</span> mkGraph(): Graph {
+    <span class="kw">const</span> nodes: SkillNode[] = [
+      mkNode(<span class="str">'R'</span>), mkNode(<span class="str">'A'</span>), mkNode(<span class="str">'X'</span>), mkNode(<span class="str">'Z'</span>),
+      mkNode(<span class="str">'B'</span>), mkNode(<span class="str">'Y'</span>),
+    ];
+    <span class="kw">const</span> edges: Edge[] = [
+      { id: <span class="str">'e_RA'</span> <span class="kw">as</span> EdgeId, from: <span class="str">'R'</span> <span class="kw">as</span> NodeId, to: <span class="str">'A'</span> <span class="kw">as</span> NodeId, cost: 2 },
+      { id: <span class="str">'e_AX'</span> <span class="kw">as</span> EdgeId, from: <span class="str">'A'</span> <span class="kw">as</span> NodeId, to: <span class="str">'X'</span> <span class="kw">as</span> NodeId, cost: 3 },
+      { id: <span class="str">'e_XZ'</span> <span class="kw">as</span> EdgeId, from: <span class="str">'X'</span> <span class="kw">as</span> NodeId, to: <span class="str">'Z'</span> <span class="kw">as</span> NodeId, cost: 5 },
+      { id: <span class="str">'e_RB'</span> <span class="kw">as</span> EdgeId, from: <span class="str">'R'</span> <span class="kw">as</span> NodeId, to: <span class="str">'B'</span> <span class="kw">as</span> NodeId, cost: 3 },
+      { id: <span class="str">'e_BY'</span> <span class="kw">as</span> EdgeId, from: <span class="str">'B'</span> <span class="kw">as</span> NodeId, to: <span class="str">'Y'</span> <span class="kw">as</span> NodeId, cost: 2 },
+    ];
+    <span class="kw">return</span> { nodes, edges, bridges: [], graftSockets: [] };
+  }
+
+  it(<span class="str">'finds cheapest path from owned R to Z (= 2+3+5 = 10)'</span>, () =&gt; {
+    <span class="kw">const</span> g = mkGraph();
+    <span class="kw">const</span> owned = <span class="kw">new</span> <span class="ty">Set</span>([<span class="str">'R'</span> <span class="kw">as</span> NodeId]);
+    <span class="kw">const</span> result = costToUnlock(g, owned, <span class="kw">new</span> <span class="ty">Set</span>(), { unlockedNodes: owned } <span class="kw">as any</span>, <span class="str">'Z'</span> <span class="kw">as</span> NodeId);
+    expect(result.totalCost).toBe(10);
+    expect(result.path.map((e) =&gt; e.id)).toEqual([<span class="str">'e_RA'</span>, <span class="str">'e_AX'</span>, <span class="str">'e_XZ'</span>]);
+  });
+
+  it(<span class="str">'uses owned A as a starting frontier (cost = A→X→Z = 8)'</span>, () =&gt; {
+    <span class="kw">const</span> g = mkGraph();
+    <span class="kw">const</span> owned = <span class="kw">new</span> <span class="ty">Set</span>([<span class="str">'R'</span> <span class="kw">as</span> NodeId, <span class="str">'A'</span> <span class="kw">as</span> NodeId]);
+    <span class="kw">const</span> result = costToUnlock(g, owned, <span class="kw">new</span> <span class="ty">Set</span>(), { unlockedNodes: owned } <span class="kw">as any</span>, <span class="str">'Z'</span> <span class="kw">as</span> NodeId);
+    expect(result.totalCost).toBe(8);
+  });
+
+  it(<span class="str">'returns null when no path exists'</span>, () =&gt; {
+    <span class="kw">const</span> g = mkGraph();
+    <span class="kw">const</span> owned = <span class="kw">new</span> <span class="ty">Set</span>([<span class="str">'R'</span> <span class="kw">as</span> NodeId]);
+    <span class="kw">const</span> result = costToUnlock(g, owned, <span class="kw">new</span> <span class="ty">Set</span>(), { unlockedNodes: owned } <span class="kw">as any</span>, <span class="str">'NOTREAL'</span> <span class="kw">as</span> NodeId);
+    expect(result).toBeNull();
+  });
+});</pre>
+
+      <div class="step"><b>Step 2.</b> Run, verify FAIL.</div>
+      <pre class="bash">npx vitest run src/skilltree.test.ts -t "costToUnlock"</pre>
+
+      <div class="step"><b>Step 3.</b> Implement <code>costToUnlock</code> in <code>src/skilltree.ts</code>:</div>
+      <pre><span class="kw">import type</span> { Edge, EdgeId, NodeId, Graph } <span class="kw">from</span> <span class="str">'./skilltree-graph.js'</span>;
+
+<span class="kw">export interface</span> CheapestPathResult {
+  <span class="kw">readonly</span> path: <span class="kw">ReadonlyArray</span>&lt;Edge&gt;;
+  <span class="kw">readonly</span> totalCost: <span class="ty">number</span>;
+}
+
+<span class="comment">/** Multi-source Dijkstra. Sources are all currently-owned nodes (their distance</span>
+<span class="comment"> *  is 0). Edge weights are the SP cost of each edge. Threshold-bridge edges are</span>
+<span class="comment"> *  included only when their threshold is currently met (caller resolves this</span>
+<span class="comment"> *  via `isBridgeActive` and passes the filtered edge set). Returns the</span>
+<span class="comment"> *  cheapest path from any owned source to the target. Null = unreachable. */</span>
+<span class="kw">export function</span> costToUnlock(
+  graph: Graph,
+  ownedNodes: <span class="kw">ReadonlySet</span>&lt;NodeId&gt;,
+  ownedEdges: <span class="kw">ReadonlySet</span>&lt;EdgeId&gt;,
+  state: IslandState,
+  target: NodeId,
+): CheapestPathResult | <span class="kw">null</span> {
+  <span class="kw">if</span> (ownedNodes.has(target)) <span class="kw">return</span> { path: [], totalCost: 0 };
+
+  <span class="comment">// Build adjacency from outgoing edges (since edges are directed).</span>
+  <span class="kw">const</span> adjacency = <span class="kw">new</span> <span class="ty">Map</span>&lt;NodeId, Edge[]&gt;();
+  <span class="kw">const</span> allEdges: Edge[] = [
+    ...graph.edges,
+    ...graph.bridges.filter((b) =&gt; isBridgeActive(b, state, graph)),
+  ];
+  <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> allEdges) {
+    <span class="kw">const</span> list = adjacency.get(e.from) ?? [];
+    list.push(e);
+    adjacency.set(e.from, list);
+  }
+
+  <span class="comment">// Standard Dijkstra with multi-source seeding.</span>
+  <span class="kw">const</span> distance = <span class="kw">new</span> <span class="ty">Map</span>&lt;NodeId, <span class="ty">number</span>&gt;();
+  <span class="kw">const</span> previous = <span class="kw">new</span> <span class="ty">Map</span>&lt;NodeId, Edge&gt;();
+  <span class="kw">const</span> queue: Array&lt;{ node: NodeId; cost: <span class="ty">number</span> }&gt; = [];
+  <span class="kw">for</span> (<span class="kw">const</span> n <span class="kw">of</span> ownedNodes) {
+    distance.set(n, 0);
+    queue.push({ node: n, cost: 0 });
+  }
+
+  <span class="kw">while</span> (queue.length &gt; 0) {
+    queue.sort((a, b) =&gt; a.cost - b.cost); <span class="comment">// O(n log n) per pop; fine at ~500-1000 nodes</span>
+    <span class="kw">const</span> { node: u, cost: cu } = queue.shift()!;
+    <span class="kw">if</span> (cu &gt; (distance.get(u) ?? <span class="kw">Infinity</span>)) <span class="kw">continue</span>;
+    <span class="kw">if</span> (u === target) <span class="kw">break</span>;
+
+    <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> adjacency.get(u) ?? []) {
+      <span class="comment">// Skip edges already owned (they're free to traverse).</span>
+      <span class="kw">const</span> edgeCost = ownedEdges.has(e.id) ? 0 : e.cost;
+      <span class="kw">const</span> next = cu + edgeCost;
+      <span class="kw">if</span> (next &lt; (distance.get(e.to) ?? <span class="kw">Infinity</span>)) {
+        distance.set(e.to, next);
+        previous.set(e.to, e);
+        queue.push({ node: e.to, cost: next });
+      }
+    }
+  }
+
+  <span class="kw">const</span> total = distance.get(target);
+  <span class="kw">if</span> (total === <span class="kw">undefined</span>) <span class="kw">return</span> <span class="kw">null</span>;
+
+  <span class="comment">// Walk back to reconstruct the path.</span>
+  <span class="kw">const</span> path: Edge[] = [];
+  <span class="kw">let</span> cur: NodeId | <span class="kw">undefined</span> = target;
+  <span class="kw">while</span> (cur !== <span class="kw">undefined</span> &amp;&amp; !ownedNodes.has(cur)) {
+    <span class="kw">const</span> e = previous.get(cur);
+    <span class="kw">if</span> (e === <span class="kw">undefined</span>) <span class="kw">break</span>;
+    path.unshift(e);
+    cur = e.from;
+  }
+
+  <span class="kw">return</span> { path, totalCost: total };
+}
+
+<span class="kw">function</span> isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Graph): <span class="ty">boolean</span> {
+  <span class="kw">return</span> bridge.threshold.some(({ branch, minSpent }) =&gt; spentInBranch(state, branch, graph) &gt;= minSpent);
+}
+
+<span class="kw">function</span> spentInBranch(state: IslandState, branchId: BranchId, graph: Graph): <span class="ty">number</span> {
+  <span class="kw">let</span> sum = 0;
+  <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> graph.edges) {
+    <span class="kw">if</span> (state.unlockedEdges.has(e.id)) {
+      <span class="kw">const</span> node = graph.nodes.find((n) =&gt; n.id === e.to);
+      <span class="kw">if</span> (node !== <span class="kw">undefined</span> &amp;&amp; SUBPATH_BRANCH[node.subPath] === branchId) sum += e.cost;
+    }
+  }
+  <span class="kw">return</span> sum;
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Add a helper <code>mkNode</code> at the top of the test file for the tiny graph fixture (or use the existing SkillNode constructor pattern):</div>
+      <pre><span class="kw">function</span> mkNode(id: <span class="ty">string</span>): SkillNode {
+  <span class="kw">return</span> {
+    id: id <span class="kw">as</span> NodeId,
+    subPath: <span class="str">'mining'</span>, depth: 1, cost: 0, magnitude: 0,
+    effect: { kind: <span class="str">'recipeRateMul'</span>, category: <span class="str">'extraction'</span> },
+    description: id,
+  };
+}</pre>
+
+      <div class="step"><b>Step 5.</b> Run, verify PASS.</div>
+      <pre class="bash">npx vitest run src/skilltree.test.ts -t "costToUnlock"</pre>
+      <div class="expected"><b>Expected:</b> 3 tests passing.</div>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree.ts src/skilltree.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): costToUnlock — multi-source Dijkstra over the skill graph
+
+Cheapest-path solver from the player's owned frontier to a target node.
+Source set = all currently-owned nodes (distance 0). Edges have SP cost;
+already-owned edges traverse free. Threshold-bridge edges contribute
+only when active (gated by spentInBranch). Returns the path edges +
+totalCost, or null if unreachable.
+
+Tests: 3 new in src/skilltree.test.ts covering owned-R-to-Z basic,
+owned-A-as-source frontier extension, and unreachable-target null.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 8 -->
+  <section id="task-8">
+    <div class="sec-head"><span class="num">08</span><h2>Task 8 — <code>buyNode</code> applies the cheapest path</h2></div>
+    <p class="sec-intro">Wrap <code>costToUnlock</code> with the mutation that charges SP, adds owned edges, and adds intermediate nodes to <code>state.unlockedNodes</code>. Replaces the existing <code>spendPoint</code>.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree.ts</code> &nbsp; <code>~ src/skilltree.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Write failing test:</div>
+      <pre>describe(<span class="str">'buyNode'</span>, () =&gt; {
+  it(<span class="str">'buys Z from R-only state, auto-owns A and X intermediates'</span>, () =&gt; {
+    <span class="kw">const</span> g = mkGraph();
+    <span class="kw">const</span> state = mkState(); state.unlockedNodes.add(<span class="str">'R'</span> <span class="kw">as</span> NodeId); state.unspentSkillPoints = 20;
+    buyNode(g, state, <span class="str">'Z'</span> <span class="kw">as</span> NodeId);
+    expect(state.unspentSkillPoints).toBe(10); <span class="comment">// 20 - 10</span>
+    expect(state.unlockedNodes.has(<span class="str">'A'</span> <span class="kw">as</span> NodeId)).toBe(<span class="kw">true</span>);
+    expect(state.unlockedNodes.has(<span class="str">'X'</span> <span class="kw">as</span> NodeId)).toBe(<span class="kw">true</span>);
+    expect(state.unlockedNodes.has(<span class="str">'Z'</span> <span class="kw">as</span> NodeId)).toBe(<span class="kw">true</span>);
+    expect(state.unlockedEdges.size).toBe(3);
+  });
+
+  it(<span class="str">'throws on insufficient SP'</span>, () =&gt; {
+    <span class="kw">const</span> g = mkGraph();
+    <span class="kw">const</span> state = mkState(); state.unlockedNodes.add(<span class="str">'R'</span> <span class="kw">as</span> NodeId); state.unspentSkillPoints = 5;
+    expect(() =&gt; buyNode(g, state, <span class="str">'Z'</span> <span class="kw">as</span> NodeId)).toThrow(<span class="str">/insufficient/</span>);
+  });
+
+  it(<span class="str">'is a no-op when target is already owned'</span>, () =&gt; {
+    <span class="kw">const</span> g = mkGraph();
+    <span class="kw">const</span> state = mkState(); state.unlockedNodes.add(<span class="str">'Z'</span> <span class="kw">as</span> NodeId); state.unspentSkillPoints = 10;
+    buyNode(g, state, <span class="str">'Z'</span> <span class="kw">as</span> NodeId);
+    expect(state.unspentSkillPoints).toBe(10);
+  });
+});</pre>
+
+      <div class="step"><b>Step 2.</b> Run, FAIL.</div>
+
+      <div class="step"><b>Step 3.</b> Implement <code>buyNode</code>:</div>
+      <pre><span class="kw">export function</span> buyNode(graph: Graph, state: IslandState, target: NodeId): <span class="kw">void</span> {
+  <span class="kw">if</span> (state.unlockedNodes.has(target)) <span class="kw">return</span>;
+
+  <span class="kw">const</span> result = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, target);
+  <span class="kw">if</span> (result === <span class="kw">null</span>) <span class="kw">throw new</span> <span class="ty">Error</span>(`buyNode: unreachable target ${target}`);
+  <span class="kw">if</span> (state.unspentSkillPoints &lt; result.totalCost) {
+    <span class="kw">throw new</span> <span class="ty">Error</span>(`buyNode: insufficient SP (need ${result.totalCost}, have ${state.unspentSkillPoints})`);
+  }
+
+  state.unspentSkillPoints -= result.totalCost;
+  <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> result.path) {
+    state.unlockedNodes.add(e.to);
+    state.unlockedEdges.add(e.id);
+  }
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Add <code>mkState</code> helper to test file (small <code>IslandState</code> with empty sets).</div>
+
+      <div class="step"><b>Step 5.</b> Run, PASS.</div>
+      <pre class="bash">npx vitest run src/skilltree.test.ts -t "buyNode"</pre>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree.ts src/skilltree.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): buyNode — apply cheapest path to state
+
+Wraps costToUnlock with the mutation: charges SP, adds path edges to
+state.unlockedEdges, adds intermediate nodes to state.unlockedNodes.
+Throws on insufficient SP or unreachable target. No-op if target already
+owned.
+
+Replaces the previous spendPoint (which was per-node not per-path).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 9 -->
+  <section id="task-9">
+    <div class="sec-head"><span class="num">09</span><h2>Task 9 — AND-prereq keystone <code>canBuyKeystone</code> gate</h2></div>
+    <p class="sec-intro">Keystones are special: they require ALL specified upstream nodes to be owned. The cost-to-unlock is a fixed flat SP charge (no path-finding needed since the player already owns the prereqs). Add the gate predicate and a separate buy function.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree.ts</code> &nbsp; <code>~ src/skilltree.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Write failing test:</div>
+      <pre>describe(<span class="str">'canBuyKeystone / buyKeystone'</span>, () =&gt; {
+  it(<span class="str">'requires all AND-prereqs to be owned'</span>, () =&gt; {
+    <span class="kw">const</span> ks: KeystonePrereq = {
+      targetNode: <span class="str">'K1'</span> <span class="kw">as</span> NodeId,
+      requires: [<span class="str">'A'</span> <span class="kw">as</span> NodeId, <span class="str">'B'</span> <span class="kw">as</span> NodeId],
+      cost: 10,
+    };
+    <span class="kw">const</span> state = mkState(); state.unspentSkillPoints = 15;
+    state.unlockedNodes.add(<span class="str">'A'</span> <span class="kw">as</span> NodeId);
+    expect(canBuyKeystone(ks, state)).toBe(<span class="kw">false</span>);
+    state.unlockedNodes.add(<span class="str">'B'</span> <span class="kw">as</span> NodeId);
+    expect(canBuyKeystone(ks, state)).toBe(<span class="kw">true</span>);
+  });
+
+  it(<span class="str">'buyKeystone charges flat cost + owns target'</span>, () =&gt; {
+    <span class="kw">const</span> ks: KeystonePrereq = { targetNode: <span class="str">'K1'</span> <span class="kw">as</span> NodeId, requires: [<span class="str">'A'</span> <span class="kw">as</span> NodeId], cost: 8 };
+    <span class="kw">const</span> state = mkState(); state.unspentSkillPoints = 10;
+    state.unlockedNodes.add(<span class="str">'A'</span> <span class="kw">as</span> NodeId);
+    buyKeystone(ks, state);
+    expect(state.unspentSkillPoints).toBe(2);
+    expect(state.unlockedNodes.has(<span class="str">'K1'</span> <span class="kw">as</span> NodeId)).toBe(<span class="kw">true</span>);
+  });
+});</pre>
+
+      <div class="step"><b>Step 2.</b> Run, FAIL.</div>
+
+      <div class="step"><b>Step 3.</b> Implement:</div>
+      <pre><span class="kw">export function</span> canBuyKeystone(ks: KeystonePrereq, state: IslandState): <span class="ty">boolean</span> {
+  <span class="kw">if</span> (state.unlockedNodes.has(ks.targetNode)) <span class="kw">return</span> <span class="kw">false</span>;
+  <span class="kw">if</span> (state.unspentSkillPoints &lt; ks.cost) <span class="kw">return</span> <span class="kw">false</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> req <span class="kw">of</span> ks.requires) {
+    <span class="kw">if</span> (!state.unlockedNodes.has(req)) <span class="kw">return</span> <span class="kw">false</span>;
+  }
+  <span class="kw">return</span> <span class="kw">true</span>;
+}
+
+<span class="kw">export function</span> buyKeystone(ks: KeystonePrereq, state: IslandState): <span class="kw">void</span> {
+  <span class="kw">if</span> (!canBuyKeystone(ks, state)) <span class="kw">throw new</span> <span class="ty">Error</span>(`buyKeystone: prereqs unsatisfied for ${ks.targetNode}`);
+  state.unspentSkillPoints -= ks.cost;
+  state.unlockedNodes.add(ks.targetNode);
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Run, PASS. Commit.</div>
+      <pre class="bash">git add src/skilltree.ts src/skilltree.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): canBuyKeystone + buyKeystone for AND-prereq nodes
+
+Keystones gate on all upstream prereqs being owned. Cost is a flat
+SP charge (no path-finding — the player already owns the converging
+upstream points). buyKeystone throws if any prereq is missing.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 10 -->
+  <section id="task-10">
+    <div class="sec-head"><span class="num">10</span><h2>Task 10 — <code>effectiveSkillMultipliers</code> rewrite + glyph-locality auras</h2></div>
+    <p class="sec-intro">Rewrite the multiplier fold to read the new graph state. Add glyph-locality aura amplification: aura-bearing notables boost adjacent nodes' contribution. Per spec §05, folds are MULTIPLICATIVE (×(1+mag) per node, product across owned).</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree.ts</code> &nbsp; <code>~ src/skilltree.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add aura type:</div>
+      <pre><span class="kw">export interface</span> AuraSpec {
+  <span class="kw">readonly</span> radius: 1 | 2;
+  <span class="kw">readonly</span> bonus: <span class="ty">number</span>;  <span class="comment">// e.g. 0.15 → amplifies adjacent nodes' factor by ×1.15</span>
+  <span class="kw">readonly</span> appliesTo?: <span class="ty">string</span>;  <span class="comment">// optional filter; if absent, applies to all effects</span>
+}
+
+<span class="kw">export interface</span> SkillNode {
+  ...existing fields...
+  <span class="kw">readonly</span> aura?: AuraSpec;
+}</pre>
+
+      <div class="step"><b>Step 2.</b> Rewrite <code>effectiveSkillMultipliers</code> to iterate over <code>state.unlockedNodes</code>, look up each in <code>graph.nodes</code>, apply its effect with aura amplification:</div>
+      <pre><span class="kw">export function</span> effectiveSkillMultipliers(state: IslandState, graph: Graph = DEFAULT_GRAPH): SkillMultipliers {
+  <span class="kw">const</span> out = blankMultipliers();
+  <span class="kw">const</span> recipeRate = out.recipeRate <span class="kw">as</span> <span class="kw">Record</span>&lt;RecipeCategory, <span class="ty">number</span>&gt;;
+  <span class="kw">let</span> storageCap = 1, powerProduction = 1, powerConsumption = 1, routeCapacity = 1;
+  <span class="comment">// ... (all the let lines as existing) ...</span>
+  <span class="kw">let</span> xpGain = 1;
+  <span class="kw">let</span> xpGainByCategory: <span class="kw">Record</span>&lt;RecipeCategory, <span class="ty">number</span>&gt; = <span class="ty">Object</span>.fromEntries(ALL_RECIPE_CATEGORIES.map((c) =&gt; [c, 1])) <span class="kw">as any</span>;
+
+  <span class="comment">// Aura pre-pass: compute per-node aura amplification multipliers.</span>
+  <span class="kw">const</span> auraAmp = computeAuraAmplifiers(state, graph);
+
+  <span class="kw">for</span> (<span class="kw">const</span> nodeId <span class="kw">of</span> state.unlockedNodes) {
+    <span class="kw">const</span> node = graph.nodes.find((n) =&gt; n.id === nodeId);
+    <span class="kw">if</span> (node === <span class="kw">undefined</span>) <span class="kw">continue</span>;
+    <span class="kw">const</span> amp = auraAmp.get(nodeId) ?? 1;
+    <span class="kw">const</span> m = 1 + node.magnitude * amp;
+
+    <span class="kw">switch</span> (node.effect.kind) {
+      <span class="kw">case</span> <span class="str">'recipeRateMul'</span>: recipeRate[node.effect.category] *= m; <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="str">'storageCapMul'</span>: storageCap *= m; <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="str">'powerProductionMul'</span>: powerProduction *= m; <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="str">'powerConsumptionMul'</span>: powerConsumption *= m; <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="str">'routeCapacityMul'</span>: routeCapacity *= m; <span class="kw">break</span>;
+      <span class="comment">// ... all other existing cases follow the same pattern ...</span>
+      <span class="kw">case</span> <span class="str">'xpGainMul'</span>:
+        <span class="kw">if</span> (node.effect.category !== <span class="kw">undefined</span>) xpGainByCategory[node.effect.category] *= m;
+        <span class="kw">else</span> xpGain *= m;
+        <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="str">'conditionalBonus'</span>:
+      <span class="kw">case</span> <span class="str">'crossIslandShared'</span>:
+      <span class="kw">case</span> <span class="str">'tierBypass'</span>:
+      <span class="kw">case</span> <span class="str">'unlockRecipe'</span>:
+      <span class="kw">case</span> <span class="str">'exoticAdjacency'</span>:
+      <span class="kw">case</span> <span class="str">'biomeBypass'</span>:
+      <span class="kw">case</span> <span class="str">'structural'</span>:
+      <span class="kw">case</span> <span class="str">'placeholder'</span>:
+        <span class="kw">break</span>;  <span class="comment">// non-multiplier kinds — handled by their own engine sites (Tasks 11-13)</span>
+    }
+  }
+
+  out.storageCap = storageCap;
+  out.powerProduction = powerProduction;
+  <span class="comment">// ... pack all the remaining lets into out ...</span>
+  out.xpGain = xpGain;
+  out.xpGainByCategory = xpGainByCategory;
+  <span class="kw">return</span> out;
+}
+
+<span class="comment">/** For each owned node, compute the multiplicative aura amplification.</span>
+<span class="comment"> *  An aura with bonus=0.15 on a node X amplifies adjacent owned nodes' factors</span>
+<span class="comment"> *  by ×1.15. Multiple auras stack multiplicatively, capped at ×1.50 per node. */</span>
+<span class="kw">function</span> computeAuraAmplifiers(state: IslandState, graph: Graph): <span class="ty">Map</span>&lt;NodeId, <span class="ty">number</span>&gt; {
+  <span class="kw">const</span> amp = <span class="kw">new</span> <span class="ty">Map</span>&lt;NodeId, <span class="ty">number</span>&gt;();
+  <span class="comment">// Build adjacency for radius lookup.</span>
+  <span class="kw">const</span> neighbours = buildAdjacency(graph);
+
+  <span class="kw">for</span> (<span class="kw">const</span> nodeId <span class="kw">of</span> state.unlockedNodes) {
+    <span class="kw">const</span> node = graph.nodes.find((n) =&gt; n.id === nodeId);
+    <span class="kw">if</span> (node?.aura === <span class="kw">undefined</span>) <span class="kw">continue</span>;
+    <span class="kw">const</span> { radius, bonus } = node.aura;
+    <span class="kw">const</span> reachable = nodesWithinRadius(nodeId, radius, neighbours);
+    <span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> reachable) {
+      <span class="kw">if</span> (!state.unlockedNodes.has(r)) <span class="kw">continue</span>;
+      <span class="kw">const</span> cur = amp.get(r) ?? 1;
+      <span class="kw">const</span> next = <span class="ty">Math</span>.min(1.5, cur * (1 + bonus));
+      amp.set(r, next);
+    }
+  }
+  <span class="kw">return</span> amp;
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Add tests for the new behavior including aura amplification:</div>
+      <pre>it(<span class="str">'folds two recipeRateMul nodes multiplicatively, not additively'</span>, () =&gt; {
+  <span class="kw">const</span> g = mkGraphWith2RecipeRateNodes(); <span class="comment">// each magnitude=0.05</span>
+  <span class="kw">const</span> state = mkState();
+  state.unlockedNodes.add(<span class="str">'n1'</span> <span class="kw">as</span> NodeId);
+  state.unlockedNodes.add(<span class="str">'n2'</span> <span class="kw">as</span> NodeId);
+  <span class="kw">const</span> mul = effectiveSkillMultipliers(state, g);
+  expect(mul.recipeRate.extraction).toBeCloseTo(1.05 * 1.05, 4);  <span class="comment">// 1.1025, NOT 1.10</span>
+});
+
+it(<span class="str">'aura amplifies adjacent owned node’s factor'</span>, () =&gt; {
+  <span class="comment">// auraNode (aura: radius=1, bonus=0.15) + neighbour (magnitude=0.10), edge between them</span>
+  <span class="kw">const</span> g = mkGraphWithAura();
+  <span class="kw">const</span> state = mkState();
+  state.unlockedNodes.add(<span class="str">'auraNode'</span> <span class="kw">as</span> NodeId);
+  state.unlockedNodes.add(<span class="str">'neighbour'</span> <span class="kw">as</span> NodeId);
+  <span class="kw">const</span> mul = effectiveSkillMultipliers(state, g);
+  <span class="comment">// neighbour's per-node factor becomes 1 + 0.10 * 1.15 = 1.115</span>
+  expect(mul.recipeRate.extraction).toBeCloseTo(1.115, 3);
+});
+
+it(<span class="str">'caps aura amplification at ×1.50'</span>, () =&gt; {
+  <span class="comment">// 5 auras with bonus=0.15 each would compound to (1.15)^5 = 2.01, but cap at 1.5</span>
+  <span class="kw">const</span> g = mkGraphWith5AurasOnOneTarget();
+  <span class="kw">const</span> state = mkState();
+  <span class="comment">// own all auras + target...</span>
+  <span class="kw">const</span> mul = effectiveSkillMultipliers(state, g);
+  <span class="kw">const</span> target = g.nodes.find((n) =&gt; n.id === <span class="str">'target'</span>)!;
+  <span class="comment">// target.magnitude=0.10 → factor 1 + 0.10 * 1.5 = 1.15</span>
+  expect(mul.recipeRate.extraction).toBeCloseTo(1.15, 3);
+});</pre>
+
+      <div class="step"><b>Step 4.</b> Run, PASS.</div>
+      <pre class="bash">npx vitest run src/skilltree.test.ts</pre>
+
+      <div class="step"><b>Step 5.</b> Build + commit.</div>
+      <pre class="bash">npm run build &amp;&amp; git add src/skilltree.ts src/skilltree.test.ts &amp;&amp; git commit -F - &lt;&lt;'EOF'
+feat(skilltree): rewrite effectiveSkillMultipliers + glyph-locality auras
+
+Reads state.unlockedNodes against the new Graph; folds each owned node's
+effect with the existing multiplicative semantics (∏(1+mag)). Adds
+aura-bearing notables (radius=1 or 2, bonus 0.10-0.20 per aura). Auras
+stack multiplicatively on adjacent nodes' factors, capped at ×1.50
+per node. xpGainMul folds either globally or by category depending on
+node.effect.category.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 11 -->
+  <section id="task-11">
+    <div class="sec-head"><span class="num">11</span><h2>Task 11 — Wire <code>unlockRecipe</code> + <code>biomeBypass</code> + <code>tierBypass</code></h2></div>
+    <p class="sec-intro">Three closely-related "unlock" effect kinds that gate game-content access. Each integrates at a specific game-system site: recipes, placement, tier-band check.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/recipes.ts</code> &nbsp; <code>~ src/recipes.test.ts</code> &nbsp; <code>~ src/placement.ts</code> &nbsp; <code>~ src/placement.test.ts</code> &nbsp; <code>~ src/tier.ts</code> (or wherever §9.2 tier-band logic lives)
+      </div>
+
+      <div class="step"><b>Step 1.</b> <code>unlockRecipe</code>: add an aggregator at recipes.ts that joins base recipes with skill-unlocked ones:</div>
+      <pre><span class="comment">// src/recipes.ts</span>
+<span class="kw">export function</span> availableRecipes(buildingDefId: BuildingDefId, state: IslandState, graph: Graph = DEFAULT_GRAPH): Recipe[] {
+  <span class="kw">const</span> base = BASE_RECIPES[buildingDefId] ?? [];
+  <span class="kw">const</span> unlocked: Recipe[] = [];
+  <span class="kw">for</span> (<span class="kw">const</span> nodeId <span class="kw">of</span> state.unlockedNodes) {
+    <span class="kw">const</span> node = graph.nodes.find((n) =&gt; n.id === nodeId);
+    <span class="kw">if</span> (node?.effect.kind === <span class="str">'unlockRecipe'</span> &amp;&amp; node.effect.targetBuilding === buildingDefId) {
+      unlocked.push(node.effect.recipe);
+    }
+  }
+  <span class="kw">return</span> [...base, ...unlocked];
+}</pre>
+      <p style="font-size:13px;color:var(--gray-500);padding-left:24px;margin:0 0 12px">Update the <code>unlockRecipe</code> kind's payload to carry <code>{ targetBuilding: BuildingDefId; recipe: Recipe }</code>.</p>
+
+      <div class="step"><b>Step 2.</b> Tests for <code>availableRecipes</code> (5+ tests).</div>
+
+      <div class="step"><b>Step 3.</b> <code>biomeBypass</code>: update <code>validateBiomePlacement</code> in placement.ts to consult skill state. The current site rejects an off-biome biome-locked-unique placement; the new site allows it if a matching <code>biomeBypass</code> node is owned:</div>
+      <pre><span class="comment">// src/placement.ts — inside validateBiomePlacement</span>
+<span class="kw">if</span> (def.biomeLocked &amp;&amp; def.biomeLocked !== islandBiome) {
+  <span class="kw">const</span> bypass = hasBiomeBypass(state, def.id, graph);
+  <span class="kw">if</span> (!bypass) <span class="kw">return</span> { ok: <span class="kw">false</span>, reason: <span class="str">'biome-mismatch'</span> };
+}
+
+<span class="kw">function</span> hasBiomeBypass(state: IslandState, buildingDefId: BuildingDefId, graph: Graph): <span class="ty">boolean</span> {
+  <span class="kw">for</span> (<span class="kw">const</span> nodeId <span class="kw">of</span> state.unlockedNodes) {
+    <span class="kw">const</span> node = graph.nodes.find((n) =&gt; n.id === nodeId);
+    <span class="kw">if</span> (node?.effect.kind === <span class="str">'biomeBypass'</span> &amp;&amp; node.effect.buildings.includes(buildingDefId)) <span class="kw">return</span> <span class="kw">true</span>;
+  }
+  <span class="kw">return</span> <span class="kw">false</span>;
+}</pre>
+
+      <div class="step"><b>Step 4.</b> <code>tierBypass</code>: at the tier-band operational check (find it via <code>grep -n "tierForLevel\|isOperational" src/economy.ts</code>), allow a building to operate one tier below normally if a matching <code>tierBypass</code> node is owned.</div>
+
+      <div class="step"><b>Step 5.</b> Tests for biomeBypass + tierBypass.</div>
+
+      <div class="step"><b>Step 6.</b> Build + commit.</div>
+      <pre class="bash">git add src/recipes.ts src/recipes.test.ts src/placement.ts src/placement.test.ts src/tier.ts src/economy.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): wire unlockRecipe + biomeBypass + tierBypass effect kinds
+
+- unlockRecipe: availableRecipes(building, state) joins base recipes
+  with skill-unlocked ones. Payload: { targetBuilding, recipe }.
+- biomeBypass: validateBiomePlacement consults skill state; lets a
+  biome-locked-unique be placed off-biome when an owned biomeBypass
+  node lists it. Payload: { buildings: BuildingDefId[] }.
+- tierBypass: tier-band operational check allows tierShift=1 building
+  to operate one tier below requirement. Payload: { buildings, tierShift }.
+
+These were 3 of the 4 audit-flagged unwired effect kinds (the 4th,
+exoticAdjacency, lands in Task 12).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 12 -->
+  <section id="task-12">
+    <div class="sec-head"><span class="num">12</span><h2>Task 12 — Wire <code>exoticAdjacency</code> + <code>structural</code> + <code>xpGainMul</code></h2></div>
+    <p class="sec-intro">Three more effect kinds. <code>exoticAdjacency</code> registers skill-unlocked adjacency rules; <code>structural</code> is the catch-all for per-rewrite engine integration; <code>xpGainMul</code> folds into the XP accrual loop.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/adjacency.ts</code> (or wherever §4.5 lives) &nbsp; <code>~ src/economy.ts</code> (XP accrual) &nbsp; <code>~ src/structural.ts</code> (NEW small dispatch module)
+      </div>
+
+      <div class="step"><b>Step 1.</b> <code>exoticAdjacency</code>: extend the adjacency-effect computation. Payload: <code>{ description: string; effect: AdjacencyEffectData }</code> where <code>AdjacencyEffectData</code> is a closed union of supported rewrites (initially just one or two — e.g. <code>{ kind: 'pairBoost'; pair: [BuildingDefId, BuildingDefId]; recipeRateBonus: number }</code>).</div>
+
+      <div class="step"><b>Step 2.</b> Add <code>skillUnlockedAdjacencyRules(state, graph)</code> returning the list of active rules; fold into existing per-building adjacency computation.</div>
+
+      <div class="step"><b>Step 3.</b> <code>structural</code>: create <code>src/structural.ts</code> with a dispatch:</div>
+      <pre><span class="comment">// src/structural.ts</span>
+<span class="kw">export type</span> StructuralEffectData =
+  | { <span class="kw">readonly</span> kind: <span class="str">'sharedPowerGrid'</span> }  <span class="comment">// example placeholder</span>
+  | { <span class="kw">readonly</span> kind: <span class="str">'parallelConstruction'</span>; <span class="kw">readonly</span> bonus: <span class="ty">number</span> };
+
+<span class="kw">export function</span> hasStructuralEffect(kind: StructuralEffectData[<span class="str">'kind'</span>], state: IslandState, graph: Graph): <span class="ty">boolean</span> {
+  <span class="kw">for</span> (<span class="kw">const</span> nodeId <span class="kw">of</span> state.unlockedNodes) {
+    <span class="kw">const</span> node = graph.nodes.find((n) =&gt; n.id === nodeId);
+    <span class="kw">if</span> (node?.effect.kind === <span class="str">'structural'</span> &amp;&amp; node.effect.data.kind === kind) <span class="kw">return</span> <span class="kw">true</span>;
+  }
+  <span class="kw">return</span> <span class="kw">false</span>;
+}</pre>
+
+      <div class="step"><b>Step 4.</b> <code>xpGainMul</code>: fold into the XP accrual step in economy.ts. Find the existing XP-weight calculation (search <code>xp_weight</code> or <code>xpWeight</code> in economy.ts):</div>
+      <pre><span class="comment">// after the existing xpWeight calculation</span>
+<span class="kw">const</span> categoryMul = mul.xpGainByCategory[recipe.category] ?? 1;
+xpDelta *= mul.xpGain * categoryMul;</pre>
+
+      <div class="step"><b>Step 5.</b> Tests for each + build + commit.</div>
+      <pre class="bash">git add -A
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): wire exoticAdjacency + structural + xpGainMul effect kinds
+
+- exoticAdjacency: skill-unlocked adjacency rules join existing §4.5
+  per-building computation. Initial supported rule: pairBoost.
+- structural: new closed-union StructuralEffectData with hasStructuralEffect
+  helper for site-specific dispatch (sharedPowerGrid, parallelConstruction
+  placeholders for first content).
+- xpGainMul: folded into economy.ts XP accrual; global + per-category
+  multipliers stack with the recipe's base xp_weight.
+
+Completes wiring of all 4 audit-flagged unwired effect kinds + 1 new.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 13 -->
+  <section id="task-13">
+    <div class="sec-head"><span class="num">13</span><h2>Task 13 — Wire <code>conditionalBonus</code> + <code>crossIslandShared</code></h2></div>
+    <p class="sec-intro">The two heaviest new kinds. <code>conditionalBonus</code> adds runtime-evaluated multipliers; <code>crossIslandShared</code> introduces a network-wide aggregation layer.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/economy.ts</code> &nbsp; <code>~ src/network.ts</code> (NEW) &nbsp; <code>~ src/economy.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add the condition evaluator:</div>
+      <pre><span class="comment">// src/economy.ts</span>
+<span class="kw">function</span> evaluateConditionalEffectCondition(c: ConditionalEffectCondition, state: IslandState, world: WorldState): <span class="ty">boolean</span> {
+  <span class="kw">switch</span> (c.kind) {
+    <span class="kw">case</span> <span class="str">'during-storm'</span>: <span class="kw">return</span> world.weather?.activeStorm !== <span class="kw">undefined</span>;
+    <span class="kw">case</span> <span class="str">'during-night'</span>: <span class="kw">return</span> world.daynight?.phase === <span class="str">'night'</span>;
+    <span class="kw">case</span> <span class="str">'networked-to-N-T3-islands'</span>: <span class="kw">return</span> countNetworkedT3Peers(state, world) &gt;= c.n;
+    <span class="kw">case</span> <span class="str">'adjacent-tile-is-biome'</span>: <span class="kw">return</span> adjacentTileIsBiome(state, c.biome);
+  }
+}</pre>
+
+      <div class="step"><b>Step 2.</b> Inside <code>computeRates</code>, after computing base SkillMultipliers, layer the conditional bonuses (multiplicatively stacking with the static multipliers):</div>
+      <pre><span class="kw">for</span> (<span class="kw">const</span> nodeId <span class="kw">of</span> state.unlockedNodes) {
+  <span class="kw">const</span> node = graph.nodes.find((n) =&gt; n.id === nodeId);
+  <span class="kw">if</span> (node?.effect.kind !== <span class="str">'conditionalBonus'</span>) <span class="kw">continue</span>;
+  <span class="kw">if</span> (!evaluateConditionalEffectCondition(node.effect.condition, state, world)) <span class="kw">continue</span>;
+  <span class="kw">const</span> mult = 1 + node.effect.multiplier;
+  <span class="kw">switch</span> (node.effect.appliesTo) {
+    <span class="kw">case</span> <span class="str">'storage'</span>: mul.storageCap *= mult; <span class="kw">break</span>;
+    <span class="kw">case</span> <span class="str">'power'</span>: mul.powerProduction *= mult; <span class="kw">break</span>;
+    <span class="kw">case</span> <span class="str">'xp'</span>: mul.xpGain *= mult; <span class="kw">break</span>;
+    <span class="kw">default</span>: mul.recipeRate[node.effect.appliesTo] *= mult; <span class="kw">break</span>;  <span class="comment">// RecipeCategory case</span>
+  }
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Create <code>src/network.ts</code> for <code>crossIslandShared</code>. The aggregation layer computes per-tick "shared pools" across all networked T3+ islands that own a matching shared-inventory node. Consumers/producers on participants access the shared pool:</div>
+      <pre><span class="comment">// src/network.ts (NEW)</span>
+<span class="kw">export interface</span> SharedNetworkState {
+  <span class="kw">readonly</span> sharedInventory: <span class="kw">Map</span>&lt;ResourceId, <span class="ty">number</span>&gt;;       <span class="comment">// pooled across participants</span>
+  <span class="kw">readonly</span> sharedStorageCap: <span class="kw">Map</span>&lt;ResourceId, <span class="ty">number</span>&gt;;     <span class="comment">// pooled cap</span>
+  <span class="kw">readonly</span> sharedRouteCapacityBonus: <span class="ty">number</span>;
+  <span class="kw">readonly</span> participantIds: <span class="kw">ReadonlySet</span>&lt;<span class="ty">string</span>&gt;;
+}
+
+<span class="kw">export function</span> computeSharedNetworkState(world: WorldState, graph: Graph): SharedNetworkState {
+  <span class="comment">// Walk networked T3+ islands. For each, accumulate any crossIslandShared</span>
+  <span class="comment">// effects they own into the appropriate shared collections.</span>
+  ...
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Integrate <code>SharedNetworkState</code> into <code>advanceIsland</code> — when an island is in <code>participantIds</code>, its inventory reads/writes for shared resources go through the shared pool instead of the local map.</div>
+
+      <div class="step"><b>Step 5.</b> Tests: conditional bonus during-storm; conditional bonus inactive when not-storm; cross-island shared inventory: two participants share a resource pool.</div>
+
+      <div class="step"><b>Step 6.</b> Build + commit.</div>
+      <pre class="bash">git add -A
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): wire conditionalBonus + crossIslandShared effect kinds
+
+- conditionalBonus: per-tick condition evaluator + multiplicative layer
+  in computeRates. Initial conditions: during-storm, during-night,
+  networked-to-N-T3-islands, adjacent-tile-is-biome.
+- crossIslandShared: new src/network.ts aggregation layer. Computes
+  shared inventory pools and shared storage caps across networked T3+
+  islands whose owners hold the effect. advanceIsland routes reads/writes
+  for participant resources through the pool.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 14 -->
+  <section id="task-14">
+    <div class="sec-head"><span class="num">14</span><h2>Task 14 — Filler archetype generator + first sub-path content</h2></div>
+    <p class="sec-intro">Define the archetype template format and generator. Generate the Mining sub-path as the first concrete case (~25 filler nodes). Spec §08 contains the worked example; lift it.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>+ src/skilltree-archetypes.ts</code> &nbsp; <code>+ src/skilltree-archetypes.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Failing test:</div>
+      <pre>describe(<span class="str">'generateFillerNodes'</span>, () =&gt; {
+  it(<span class="str">'generates a depth-ramped filler chain'</span>, () =&gt; {
+    <span class="kw">const</span> archetype: FillerArchetype = {
+      idPrefix: <span class="str">'mining.recipeRate'</span>,
+      effectKind: <span class="str">'recipeRateMul'</span>,
+      effectExtra: { category: <span class="str">'extraction'</span> },
+      subPath: <span class="str">'mining'</span>,
+      baseMag: 0.04,
+      growth: 1.10,
+      baseCost: 1,
+      costGrowth: 1.4,
+      count: 6,
+    };
+    <span class="kw">const</span> nodes = generateFillerNodes(archetype);
+    expect(nodes).toHaveLength(6);
+    expect(nodes[0]!.magnitude).toBeCloseTo(0.04, 4);
+    expect(nodes[1]!.magnitude).toBeCloseTo(0.144, 4);  <span class="comment">// (1+0.04)*1.10 - 1 = 0.144</span>
+    expect(nodes[0]!.cost).toBe(1);
+    expect(nodes[1]!.cost).toBe(<span class="ty">Math</span>.round(1 * 1.4));
+  });
+});</pre>
+
+      <div class="step"><b>Step 2.</b> Run, FAIL.</div>
+
+      <div class="step"><b>Step 3.</b> Implement <code>FillerArchetype</code> + <code>generateFillerNodes</code>:</div>
+      <pre><span class="comment">// src/skilltree-archetypes.ts</span>
+<span class="kw">export interface</span> FillerArchetype {
+  <span class="kw">readonly</span> idPrefix: <span class="ty">string</span>;
+  <span class="kw">readonly</span> effectKind: SkillEffect[<span class="str">'kind'</span>];
+  <span class="kw">readonly</span> effectExtra?: <span class="kw">Record</span>&lt;<span class="ty">string</span>, <span class="kw">unknown</span>&gt;;
+  <span class="kw">readonly</span> subPath: SubPathId;
+  <span class="kw">readonly</span> baseMag: <span class="ty">number</span>;     <span class="comment">// per-node magnitude at depth 1 (factor = 1 + baseMag)</span>
+  <span class="kw">readonly</span> growth: <span class="ty">number</span>;      <span class="comment">// per-node FACTOR growth with depth (1.05–1.15 range)</span>
+  <span class="kw">readonly</span> baseCost: <span class="ty">number</span>;
+  <span class="kw">readonly</span> costGrowth: <span class="ty">number</span>;
+  <span class="kw">readonly</span> count: <span class="ty">number</span>;        <span class="comment">// nodes in the chain</span>
+}
+
+<span class="kw">export function</span> generateFillerNodes(arch: FillerArchetype): SkillNode[] {
+  <span class="kw">const</span> nodes: SkillNode[] = [];
+  <span class="kw">let</span> factor = 1 + arch.baseMag;
+  <span class="kw">let</span> cost = arch.baseCost;
+  <span class="kw">for</span> (<span class="kw">let</span> d = 0; d &lt; arch.count; d++) {
+    <span class="kw">const</span> magnitude = factor - 1;
+    nodes.push({
+      id: `${arch.idPrefix}.${d + 1}` <span class="kw">as</span> NodeId,
+      subPath: arch.subPath, depth: d + 1,
+      cost: <span class="ty">Math</span>.round(cost),
+      magnitude,
+      effect: { kind: arch.effectKind, ...(arch.effectExtra ?? {}) } <span class="kw">as</span> SkillEffect,
+      description: `${arch.subPath} ${arch.effectKind} depth ${d + 1}`,
+    });
+    factor *= arch.growth;
+    cost *= arch.costGrowth;
+  }
+  <span class="kw">return</span> nodes;
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Run, PASS.</div>
+
+      <div class="step"><b>Step 5.</b> Add MINING_FILLER_ARCHETYPES array with 3-4 archetypes targeting different effect kinds (recipeRateMul, storageCategoryCapMul, mineYieldBonusMul). Generate all and check the total ~25 node count:</div>
+      <pre><span class="kw">export const</span> MINING_FILLER_ARCHETYPES: FillerArchetype[] = [
+  { idPrefix: <span class="str">'mining.recipeRate'</span>, effectKind: <span class="str">'recipeRateMul'</span>, effectExtra: { category: <span class="str">'extraction'</span> },
+    subPath: <span class="str">'mining'</span>, baseMag: 0.04, growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7 },
+  { idPrefix: <span class="str">'mining.storageCap'</span>, effectKind: <span class="str">'storageCategoryCapMul'</span>, effectExtra: { category: <span class="str">'raw-ore'</span> },
+    subPath: <span class="str">'mining'</span>, baseMag: 0.05, growth: 1.08, baseCost: 1, costGrowth: 1.5, count: 6 },
+  { idPrefix: <span class="str">'mining.yieldBonus'</span>, effectKind: <span class="str">'mineYieldBonusMul'</span>,
+    subPath: <span class="str">'mining'</span>, baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5 },
+  { idPrefix: <span class="str">'mining.rareTrickle'</span>, effectKind: <span class="str">'mineRareTrickleMul'</span>,
+    subPath: <span class="str">'mining'</span>, baseMag: 0.10, growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4 },
+];
+
+<span class="kw">export const</span> MINING_FILLER_NODES = MINING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);</pre>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-archetypes.ts src/skilltree-archetypes.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): filler archetype generator + Mining sub-path content
+
+FillerArchetype = { effectKind, baseMag, growth, baseCost, costGrowth, count }.
+generateFillerNodes() produces a depth-ramped chain with multiplicative
+per-node factor growth (depth-d factor = (1+baseMag) * growth^(d-1)).
+
+MINING_FILLER_ARCHETYPES: 4 archetypes (recipeRate, storageCap, yieldBonus,
+rareTrickle) → 22 generated filler nodes for the Mining sub-path. First
+concrete sub-path content; the remaining 19 sub-paths land in Task 15.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 15 -->
+  <section id="task-15">
+    <div class="sec-head"><span class="num">15</span><h2>Task 15 — Generate filler for all 20 sub-paths</h2></div>
+    <p class="sec-intro">Repeat the Task 14 pattern for the remaining 19 sub-paths (Forestry, Drilling, Robotics; Smelting, Chemistry, Electronics, Power Systems; Storage, Transport, Network, Patronage; Aquaculture, Hydroprocessing, Submarine, Oceanography; Launch, Communication, Discovery, Resilience). Each gets 3-5 archetypes producing ~20-30 filler nodes.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-archetypes.ts</code> (extend with all sub-paths)
+      </div>
+
+      <div class="step"><b>Step 1.</b> For each sub-path, identify the natural effect kinds (consult <code>SkillEffect</code> and existing wired modifiers). Examples:</div>
+      <pre><span class="comment">// Forestry → recipeRateMul (extraction), loggerYieldBonusMul, loggerExoticTrickleMul, storageCategoryCapMul (wood)</span>
+<span class="comment">// Drilling → recipeRateMul (extraction), mineYieldBonusMul (drilling counts as a mine variant), storageCap (oil/gas)</span>
+<span class="comment">// Robotics → constructionTimeMul, parallelBuildCapAdd, droneScanRadiusMul, droneFuelEfficiencyMul</span>
+<span class="comment">// Smelting → recipeRateMul ('smelting'), powerConsumptionMul (reduce smelter draw), maintenanceThresholdMul</span>
+<span class="comment">// Chemistry → recipeRateMul ('chemistry'), storageCategoryCapMul (gases), powerConsumptionMul</span>
+<span class="comment">// Electronics → recipeRateMul ('electronics'), powerConsumptionMul, satBufferCapMul</span>
+<span class="comment">// Power Systems → powerProductionMul, powerConsumptionMul, xpGainMul ('power')</span>
+<span class="comment">// Storage → storageCapMul (uniform), storageCategoryCapMul (varied), maintenanceThresholdMul</span>
+<span class="comment">// Transport → routeCapacityMul, airshipRangeMul, droneFuelEfficiencyMul</span>
+<span class="comment">// Network → commRangeMul, teleporterEfficiencyMul, scannerCoverageMul</span>
+<span class="comment">// Patronage → routeCapacityMul (funneling routes), storageCategoryCapMul (patron-protege resources), commRangeMul</span>
+<span class="comment">// Aquaculture → recipeRateMul (ocean extractors), mineYieldBonusMul, storageCategoryCapMul (ocean-products)</span>
+<span class="comment">// Hydroprocessing → recipeRateMul (chemistry), powerConsumptionMul</span>
+<span class="comment">// Submarine → routeCapacityMul, powerProductionMul (submarine cable losses)</span>
+<span class="comment">// Oceanography → scannerCoverageMul, commRangeMul, droneScanRadiusMul</span>
+<span class="comment">// Launch → launchSuccessAdditive, padExplosionReduceMul, satBufferCapMul, satFuelReserveMul</span>
+<span class="comment">// Communication → commRangeMul, satBufferCapMul</span>
+<span class="comment">// Discovery → scannerCoverageMul, scannerDwellRateMul</span>
+<span class="comment">// Resilience → debrisProtectionMul, repairDroneReliabilityMul, maintenanceThresholdMul</span></pre>
+
+      <div class="step"><b>Step 2.</b> Write the <code>X_FILLER_ARCHETYPES</code> array for each sub-path (~3-5 archetypes each). Use the same baseMag/growth ranges as Mining (Task 14) unless a specific archetype warrants different tuning.</div>
+
+      <div class="step"><b>Step 3.</b> Compose them into <code>ALL_FILLER_NODES</code>:</div>
+      <pre><span class="kw">export const</span> ALL_FILLER_NODES: SkillNode[] = [
+  ...MINING_FILLER_NODES,
+  ...FORESTRY_FILLER_NODES,
+  ...DRILLING_FILLER_NODES,
+  ...ROBOTICS_FILLER_NODES,
+  <span class="comment">// ... Refinement, Logistics, Ocean, Orbital branches ...</span>
+];</pre>
+
+      <div class="step"><b>Step 4.</b> Add a "sanity check" test that <code>ALL_FILLER_NODES.length</code> is in the expected range and that <code>SUBPATH_LABEL</code> covers all 20 sub-paths.</div>
+
+      <div class="step"><b>Step 5.</b> Build + run. Commit when green.</div>
+      <pre class="bash">npm run build &amp;&amp; npm test &amp;&amp; git add src/skilltree-archetypes.ts &amp;&amp; git commit -F - &lt;&lt;'EOF'
+feat(skilltree): filler nodes for all 20 sub-paths
+
+Adds X_FILLER_ARCHETYPES for the 19 remaining sub-paths (3-5 archetypes
+each). Total: ~500 filler nodes generated from ~80 archetype declarations.
+
+Each sub-path's archetypes target natural effect kinds for its theme
+(see file header comments). The notable + keystone content (Tasks 16-17)
+sits alongside these and converges at the AND-prereq junctions.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 16 -->
+  <section id="task-16">
+    <div class="sec-head"><span class="num">16</span><h2>Task 16 — Hand-curate notables (~5 per sub-path × 20 = ~100)</h2></div>
+    <p class="sec-intro">Hand-written nodes with named themed effects. Some carry glyph-locality auras. Notables sit at convergence points within sub-paths; ~75 nodes total (vs ~100 above is the upper range — designer's judgment).</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>+ src/skilltree-catalog.ts (NOTABLES array)</code> &nbsp; <code>~ src/skilltree-catalog.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Create <code>src/skilltree-catalog.ts</code> and define the <code>NOTABLES</code> array. Each entry is hand-written. Example for Mining:</div>
+      <pre><span class="kw">export const</span> MINING_NOTABLES: SkillNode[] = [
+  {
+    id: <span class="str">'mining.notable.deepVein'</span> <span class="kw">as</span> NodeId,
+    subPath: <span class="str">'mining'</span>, depth: 4, cost: 4, magnitude: 0.20,
+    effect: { kind: <span class="str">'mineYieldBonusMul'</span> },
+    description: <span class="str">'Deep Vein Surveying — +20% mine yield per Mine'</span>,
+  },
+  {
+    id: <span class="str">'mining.notable.veinHunter'</span> <span class="kw">as</span> NodeId,
+    subPath: <span class="str">'mining'</span>, depth: 5, cost: 5, magnitude: 0.25,
+    effect: { kind: <span class="str">'mineRareTrickleMul'</span> },
+    description: <span class="str">'Vein Hunter — +25% rare-resource trickle'</span>,
+    aura: { radius: 1, bonus: 0.10 },  <span class="comment">// ×1.10 amplification on adjacent nodes</span>
+  },
+  {
+    id: <span class="str">'mining.notable.efficient'</span> <span class="kw">as</span> NodeId,
+    subPath: <span class="str">'mining'</span>, depth: 5, cost: 4, magnitude: 0.30,
+    effect: { kind: <span class="str">'powerConsumptionMul'</span>, reduce: <span class="kw">true</span> },
+    description: <span class="str">'Efficient Drillheads — Mines consume 30% less power'</span>,
+  },
+];</pre>
+
+      <div class="step"><b>Step 2.</b> Compose all 20 sub-paths' notable arrays (~5 each = ~100, but designer's judgment — could be 3-7 per sub-path). Total ~75-100 notables. ~15-20% carry an aura. Aura radius=1 most of the time; radius=2 for hub-style notables.</div>
+
+      <div class="step"><b>Step 3.</b> Add tests asserting every notable has a stable id (no duplicate ids across the catalog), every notable's subPath matches a known SubPathId, and at least one notable per sub-path has an aura.</div>
+
+      <div class="step"><b>Step 4.</b> Build + commit.</div>
+      <pre class="bash">git add src/skilltree-catalog.ts src/skilltree-catalog.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): hand-curated notables for all 20 sub-paths
+
+~80 named, themed notables across the 20 sub-paths (3-7 per sub-path).
+Mid-power per-node factors (×1.10-1.25). ~17 of them carry glyph-locality
+auras (radius=1 most; radius=2 for hub-style notables) amplifying
+adjacent owned nodes' factors by ×1.10-1.20 (capped at ×1.50 stacked).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 17 -->
+  <section id="task-17">
+    <div class="sec-head"><span class="num">17</span><h2>Task 17 — Hand-curate keystones (~30 total, absorbing §9.4 role effects)</h2></div>
+    <p class="sec-intro">Rare AND-prereq nodes housing the rule-breaking effects + absorbing the dropped §9.4 role bonuses. ~1-2 per sub-path; ~30 total.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-catalog.ts (KEYSTONES array)</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Each keystone is paired with a <code>KeystonePrereq</code> entry. Example absorbing Foundry's old +50% smelting:</div>
+      <pre><span class="kw">export const</span> SMELTING_KEYSTONES: SkillNode[] = [
+  {
+    id: <span class="str">'smelting.keystone.foundryMastery'</span> <span class="kw">as</span> NodeId,
+    subPath: <span class="str">'smelting'</span>, depth: 8, cost: 10, magnitude: 0.50,
+    effect: { kind: <span class="str">'recipeRateMul'</span>, category: <span class="str">'smelting'</span> },
+    description: <span class="str">'Foundry Mastery — All smelters operate at +50% rate (absorbs §9.4 Foundry role)'</span>,
+  },
+];
+
+<span class="kw">export const</span> SMELTING_KEYSTONE_PREREQS: KeystonePrereq[] = [
+  {
+    targetNode: <span class="str">'smelting.keystone.foundryMastery'</span> <span class="kw">as</span> NodeId,
+    requires: [
+      <span class="str">'smelting.notable.efficientFurnace'</span> <span class="kw">as</span> NodeId,
+      <span class="str">'smelting.notable.alloyMastery'</span> <span class="kw">as</span> NodeId,
+    ],
+    cost: 10,
+  },
+];</pre>
+
+      <div class="step"><b>Step 2.</b> Hand-curate at least the §9.4 absorption set:</div>
+      <ul style="font-size:13px;color:var(--gray-700);padding-left:50px;margin:6px 0 14px">
+        <li>Smelting/Foundry Mastery — <code>recipeRateMul</code> category=<code>smelting</code>, magnitude=0.5</li>
+        <li>Chemistry/Refinery Mastery — <code>recipeRateMul</code> category=<code>chemistry</code>, magnitude=0.5</li>
+        <li>Mining/Veinmaster — <code>recipeRateMul</code> category=<code>extraction</code>, magnitude=0.75</li>
+        <li>Transport/Hub Capacity — <code>routeCapacityMul</code>, magnitude=1.0</li>
+        <li>Storage/Master Cache — <code>storageCapMul</code>, magnitude=0.5</li>
+        <li>Power Systems/Research Beacon (or split) — <code>xpGainMul</code>, magnitude=0.5</li>
+      </ul>
+
+      <div class="step"><b>Step 3.</b> Add the rule-breaking keystones — examples using the newly-wired effect kinds:</div>
+      <ul style="font-size:13px;color:var(--gray-700);padding-left:50px;margin:6px 0 14px">
+        <li>Robotics — <code>structural: { kind: 'parallelConstruction', bonus: 1 }</code> — +1 parallel build slot</li>
+        <li>Forestry — <code>unlockRecipe</code> — Logger gains a "Charcoal" output recipe</li>
+        <li>Drilling — <code>tierBypass: { buildings: ['drilling_rig'], tierShift: 1 }</code> — operate one tier early</li>
+        <li>Volcanic-themed Refinement — <code>biomeBypass: { buildings: ['pyroforge'] }</code> — partial Pyroforge access off-biome</li>
+        <li>Oceanography — <code>exoticAdjacency: { effect: { kind: 'pairBoost', pair: ['sonar_buoy', 'submarine_cable'], recipeRateBonus: 0.2 } }</code></li>
+        <li>Network/Transport — <code>crossIslandShared: { shape: { kind: 'sharedRouteCapacity' } }</code> — all networked T3+ islands share route-capacity bonus</li>
+        <li>Communication — <code>conditionalBonus: { multiplier: 0.25, appliesTo: 'extraction', condition: { kind: 'networked-to-N-T3-islands', n: 5 } }</code></li>
+      </ul>
+
+      <div class="step"><b>Step 4.</b> Tests verifying every keystone has a matching KeystonePrereq entry, no targetNode appears in standard EDGES (keystones reach via AND, not standard cheapest-path), and every <code>requires</code> NodeId exists in the catalog.</div>
+
+      <div class="step"><b>Step 5.</b> Build + commit.</div>
+      <pre class="bash">git add src/skilltree-catalog.ts src/skilltree-catalog.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): hand-curated keystones (~30) — absorbs §9.4 + rule-breakers
+
+~30 AND-prereq keystones across the 20 sub-paths. Includes:
+- 6 §9.4 role-absorption keystones (Foundry/Refinery/Mining/Logistics/
+  Storage/Research) preserving the role bonuses at higher SP cost.
+- 24 rule-breaker keystones using the newly-wired and new effect kinds:
+  unlockRecipe (Charcoal, Optical Fiber alt recipes), biomeBypass
+  (Pyroforge partial off-biome), tierBypass (Drilling Rig at T2),
+  exoticAdjacency (Sonar+Submarine pair bonus), structural
+  (parallelConstruction +1 slot), crossIslandShared (network-wide route
+  capacity), conditionalBonus (network-size-gated bonuses).
+
+Each keystone declares AND-prereqs into 2-3 notable nodes within its
+sub-path. Catalog integrity tested.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 18 -->
+  <section id="task-18">
+    <div class="sec-head"><span class="num">18</span><h2>Task 18 — Threshold-bridges + graft socket positions</h2></div>
+    <p class="sec-intro">Hand-place the OR-style alt-entry bridge edges between sub-paths (~3 per branch × 5 = ~15 within-branch) and across branches (~10-15 total). Reserve graft sockets on each branch's outer rim (~6-10 each).</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-catalog.ts (BRIDGE_CATALOG, GRAFT_SOCKET_CATALOG)</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Hand-place bridges. Each declared as a <code>BridgeEdge</code> with cost + threshold:</div>
+      <pre><span class="kw">export const</span> BRIDGE_CATALOG: BridgeEdge[] = [
+  <span class="comment">// Within-branch: Extraction</span>
+  { id: <span class="str">'br.ext.mining-forestry'</span> <span class="kw">as</span> EdgeId,
+    from: <span class="str">'mining.notable.deepVein'</span> <span class="kw">as</span> NodeId,
+    to: <span class="str">'forestry.notable.exoticSpecies'</span> <span class="kw">as</span> NodeId,
+    cost: 5,
+    threshold: [{ branch: <span class="str">'extraction'</span>, minSpent: 8 }] },
+  <span class="comment">// ... ~15 within-branch bridges total ...</span>
+
+  <span class="comment">// Cross-branch: Refinement → Ocean (Hydroprocessing chemistry)</span>
+  { id: <span class="str">'br.ref-ocean.chem-hydro'</span> <span class="kw">as</span> EdgeId,
+    from: <span class="str">'chemistry.keystone.refineryMastery'</span> <span class="kw">as</span> NodeId,
+    to: <span class="str">'hydroprocessing.notable.brineRefinery'</span> <span class="kw">as</span> NodeId,
+    cost: 12,
+    threshold: [
+      { branch: <span class="str">'refinement'</span>, minSpent: 20 },
+      { branch: <span class="str">'ocean'</span>, minSpent: 15 },
+    ] },
+  <span class="comment">// ... ~12 cross-branch bridges total ...</span>
+];</pre>
+
+      <div class="step"><b>Step 2.</b> Reserve graft sockets:</div>
+      <pre><span class="kw">export const</span> GRAFT_SOCKET_CATALOG: GraftSocket[] = [
+  <span class="comment">// Extraction outer-rim: ~8 sockets</span>
+  { id: <span class="str">'gs.ext.mining-1'</span>, branchId: <span class="str">'extraction'</span>, subPathId: <span class="str">'mining'</span>, attachmentDepth: 7 },
+  { id: <span class="str">'gs.ext.mining-2'</span>, branchId: <span class="str">'extraction'</span>, subPathId: <span class="str">'mining'</span>, attachmentDepth: 9 },
+  <span class="comment">// ... per-branch 6-10 sockets each, total ~40-50 ...</span>
+
+  <span class="comment">// Orbital outer-rim: ~12 sockets (more — SPACE-expansion landing pad)</span>
+  { id: <span class="str">'gs.orb.discovery-spaceX'</span>, branchId: <span class="str">'orbital'</span>, subPathId: <span class="str">'discovery'</span>, attachmentDepth: 8 },
+  <span class="comment">// ... ~12 sockets ...</span>
+];</pre>
+
+      <div class="step"><b>Step 3.</b> Tests:</div>
+      <ul style="font-size:13px;color:var(--gray-700);padding-left:50px;margin:6px 0 14px">
+        <li>Every bridge endpoint exists in the catalog (no broken refs)</li>
+        <li>Every threshold's <code>branch</code> is a valid BranchId</li>
+        <li>Total bridge count is in the planned range (15 within-branch + 10-15 cross-branch ≈ 25-30)</li>
+        <li>Graft sockets per branch are within range (6-12 each)</li>
+        <li>Bridge isBridgeActive() correctly returns false when threshold not met, true when met (integration with costToUnlock)</li>
+      </ul>
+
+      <div class="step"><b>Step 4.</b> Build + commit.</div>
+      <pre class="bash">git add src/skilltree-catalog.ts src/skilltree-catalog.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): threshold-bridges + graft socket positions
+
+BRIDGE_CATALOG: ~15 within-branch + ~12 cross-branch threshold-gated
+edges. Each bridge has an SP cost + at least one branch-spent-threshold
+that activates it. Solver considers active bridges as standard edges in
+the cheapest-path search.
+
+GRAFT_SOCKET_CATALOG: ~40-50 reserved sockets on the outer rim of each
+branch (6-12 per branch). Orbital gets the largest share (~12) as the
+SPACE-expansion landing pad.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 19 -->
+  <section id="task-19">
+    <div class="sec-head"><span class="num">19</span><h2>Task 19 — Delete old <code>skilltree.ts</code> internals + SPEC.md amendment</h2></div>
+    <p class="sec-intro">With the new system fully online, the old internals can come out. Delete the legacy 225-node catalog, the depth-1-15 magnitude helpers, and the old branch-lock logic. Update SPEC.md §9.3 to describe the new graph model. §9.4 removed; §9.7 simplified.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree.ts</code> &nbsp; <code>~ SPEC.md</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Delete from <code>src/skilltree.ts</code>:</div>
+      <ul style="font-size:13px;color:var(--gray-700);padding-left:50px;margin:6px 0 14px">
+        <li>Lines 380-510: <code>makeShallowNodes</code>, <code>makeDeepNodes</code>, <code>magnitudeForDepth</code> (the depth-1-15 generator helpers)</li>
+        <li>Lines 516-589: the old <code>NODE_CATALOG</code> array</li>
+        <li>Line 153: <code>SUBPATH_COMMIT_THRESHOLD</code> constant</li>
+        <li>Lines 641-685 (now-different lines after edits): the commit-and-branch-lock loop in <code>canSpend</code></li>
+        <li>Lines 698-713 (now-different lines): the linear depth-prereq <code>spendPoint</code> implementation (kept as backward-compat shim during transition? — no, remove entirely)</li>
+        <li>The old <code>nodeRequiredTier</code> function and its use in <code>canSpend</code></li>
+      </ul>
+
+      <div class="step"><b>Step 2.</b> Replace <code>NODE_CATALOG</code> reference (used by many tests) with the new <code>DEFAULT_GRAPH.nodes</code> from <code>skilltree-catalog.ts</code>. The export <code>NODE_CATALOG</code> can stay as an alias for compatibility if convenient.</div>
+
+      <div class="step"><b>Step 3.</b> SPEC.md §9.3 — rewrite. Replace the existing depth-1-15 model description with the new graph model. Suggested new §9.3 outline (write your own; this is just a header skeleton):</div>
+      <pre><span class="comment">### 9.3 Skill Graph Structure
+
+Five branches: Extraction · Refinement · Logistics · Ocean · Orbital.
+Each branch has 4 sub-paths; each sub-path is a directed sub-graph of
+~30-40 nodes. Total: ~600-800 nodes across the graph.
+
+**Node taxonomy.**
+- Filler (~75%): standard depth-ramping boost nodes (templated)
+- Notables (~15%): hand-curated mid-power named effects; some carry
+  glyph-locality auras amplifying adjacent owned nodes
+- Keystones (~6%): AND-prereq rare nodes housing rule-breaking effects
+  (unlockRecipe, biomeBypass, tierBypass, exoticAdjacency, structural,
+  crossIslandShared, conditionalBonus)
+
+**Progress mechanics.**
+- Click a target node; system computes the cheapest unowned-edge path
+  from your owned frontier and charges its total SP cost. Intermediate
+  nodes are auto-owned. Magnitudes fold multiplicatively (∏(1+magᵢ)).
+- AND-prereq keystones gate on all upstream nodes being owned; flat SP
+  charge, no path-finding.
+- Threshold-bridges (Borderlands pattern): cross-sub-path / cross-branch
+  edges activate when ≥N points spent in either adjacent region.
+
+**Gating.** SP cost + edge prereqs only. No tier gates. No branch-lock
+commit threshold. The graph's topology + cost ramp + XP softcap (§9.1)
+do all the pacing work.
+
+**Reach by stage.** [updated table per design spec §09 sanity check]
+</span></pre>
+
+      <div class="step"><b>Step 4.</b> SPEC.md §9.4 — DELETE entirely. The graph absorbs role effects as keystones (per Task 17).</div>
+
+      <div class="step"><b>Step 5.</b> SPEC.md §9.7 — simplify. Tier Reset no longer mentions "primarily to change Specialization Passive declaration." Becomes just "refund XP and clear unlocked nodes; level → 1."</div>
+
+      <div class="step"><b>Step 6.</b> Build + test + commit.</div>
+      <pre class="bash">npm run build &amp;&amp; npm test 2&gt;&amp;1 | tail -10 &amp;&amp; git add -A &amp;&amp; git commit -F - &lt;&lt;'EOF'
+refactor(skilltree): delete legacy 225-node catalog + branch-lock logic
+
+The directed-graph engine + new content catalog (Tasks 1-18) have
+superseded:
+- The depth-1-15 magnitude generator helpers (makeShallowNodes /
+  makeDeepNodes / magnitudeForDepth)
+- The 225-entry NODE_CATALOG array
+- The commit-and-branch-lock predicate logic in canSpend
+- SUBPATH_COMMIT_THRESHOLD constant
+- The linear depth-prereq spendPoint
+- nodeRequiredTier tier-gate function
+
+SPEC.md amendments:
+- §9.3 rewritten to describe the directed graph model
+- §9.4 (Specialization Passive) removed entirely
+- §9.7 (Tier Reset) simplified (no role to clear)
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 20 -->
+  <section id="task-20">
+    <div class="sec-head"><span class="num">20</span><h2>Task 20 — Final integration test sweep + smoke through HUD</h2></div>
+    <p class="sec-intro">Run the full suite. Smoke-test in the browser: open the game, advance an island to Tier 3+, click into the skill tree modal (now showing the same 4-column UI but reading from the new catalog), verify a node can be bought and its effect applies.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>verification only</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Full suite:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -10</pre>
+      <div class="expected"><b>Expected:</b> all green. Roughly: original 1973 + ~50 new from this plan = ~2020. Document the final count in the commit message.</div>
+
+      <div class="step"><b>Step 2.</b> Build + serve:</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -5
+sudo systemctl restart robot-islands-dev.service
+echo <span class="str">"Reload https://islands.nitjsefni.eu/ in browser"</span></pre>
+
+      <div class="step"><b>Step 3.</b> In-browser smoke test:</div>
+      <ul style="font-size:13px;color:var(--gray-700);padding-left:50px;margin:6px 0 14px">
+        <li>Open the game. Existing save (if any v7 / v8) should load — confirm via console there's no fail-fast.</li>
+        <li>Advance an island to Tier 3+ (settle, build, gather XP — or load a high-XP test save).</li>
+        <li>Open the skill-tree modal. The modal still shows the existing 4-column layout (the graph-view UI rebuild is a follow-up spec).</li>
+        <li>Click a depth-1 node in any sub-path. Confirm: SP decremented, node listed as owned, the modal redraws.</li>
+        <li>Click a depth-2 node. Confirm: cheapest-path solver finds the chain; both nodes owned; SP charged the sum.</li>
+        <li>Run <code>islands.nitjsefni.eu</code> in the browser → DevTools Console: <code>console.log([...world.islandStates.values()][0].unlockedNodes.size)</code> increments.</li>
+        <li>Verify a recipe-rate boost applies: pick a Mining-sub-path node, then watch the Mine's production rate increase in HUD.</li>
+      </ul>
+
+      <div class="step"><b>Step 4.</b> If smoke is clean, commit the closing note:</div>
+      <pre class="bash">git commit --allow-empty -F - &lt;&lt;'EOF'
+chore(skilltree): graph redesign — feature-complete (smoke verified)
+
+Full test suite green (~2020 tests). Browser smoke confirms:
+- v7 saves migrate through loadWorld → migrateV7toV8 cleanly
+- buyNode applies cheapest paths; SP debits correctly; auto-owns
+  intermediates
+- effectiveSkillMultipliers folds multiplicatively; HUD reflects bonus
+- AND-prereq keystones gate as expected (greyed out until prereqs owned)
+- Threshold-bridges activate when their branch-spend hits the threshold
+
+Open follow-ups (out of scope for this plan):
+- Graph-view UI rebuild (separate spec)
+- Hand-tune cost / magnitude / threshold placeholders via playtest
+- Populate the ~40-50 graft sockets with actual content as SPACE-expansion
+  and Network-Consciousness-milestone content lands
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Skill graph redesign · implementation plan v1 · 2026-05-23 · 20 tasks · ~600-800 nodes target</p>
+    <p>References — spec <code>robot-islands/2026-05-23-skilltree-graph-redesign-design</code> v4 · audit <code>robot-islands/2026-05-23-skilltree-depth-analysis</code> v1 · picker <code>robot-islands/2026-05-23-skilltree-cost-model-picker</code> v1 · superseded SPEC §9.3, §9.4</p>
+  </div>
+
+</div>
+</body>
+</html>
