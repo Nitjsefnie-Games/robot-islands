@@ -368,6 +368,8 @@ export function placeBuilding(
    *  segment via `oceanPlatformPausedReason`. Optional so non-ocean
    *  callers (test fixtures, land placement) can omit it without churn. */
   anchorIslandId?: string,
+  terrainTargetOverride?: import('./island.js').TerrainKind,
+  terrainShotRemainingMsOverride?: number,
 ): PlaceBuildingResult {
   const def = BUILDING_DEFS[defId];
   // §14 placement-cost gate. Re-checked here even though validatePlacement
@@ -443,6 +445,16 @@ export function placeBuilding(
     // every segment to credit the anchor's inventory and power pool
     // (`oceanPlatformPausedReason` in economy.ts).
     ...(anchorIslandId !== undefined ? { anchorIslandId } : {}),
+    // terrain_modifier v5 — thread the target + shot timer when the def
+    // opts in. The placement-ui (Task 3/5) supplies both overrides; a
+    // programmatic caller that omits them leaves the building inert
+    // (terrainShotRemainingMs === undefined → no shot resolution).
+    ...(def.terrainModifier === true
+      ? {
+          terrainTarget: terrainTargetOverride,
+          terrainShotRemainingMs: terrainShotRemainingMsOverride,
+        }
+      : {}),
     // §4.7 maintenance seeds. operatingMs starts at zero; placedAt and
     // maintainedAt mark the perf-clock moment the timer began.
     placedAt: nowMs,

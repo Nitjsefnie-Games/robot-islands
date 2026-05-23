@@ -586,6 +586,12 @@ export interface BuildingDef {
    *  / undefined ⇒ no terrain restriction (placement allowed on any ocean
    *  cell). Enforcement deferred to Task 8 (see `oceanPlacement` above). */
   readonly terrainReqs?: ReadonlyArray<OceanTerrain>;
+  /** terrain_modifier v5 — opt-in flag for the 16-tile brush placement preview
+   *  + the terrain-modifier-target-picker pre-placement modal. Defs with this
+   *  flag must declare a 2×2 footprint (SHAPES.square2); placement-ui (Task 3)
+   *  reads the flag to decide whether to paint the brush preview vs. the bare
+   *  footprint outline. Optional / undefined ≡ false for every other def. */
+  readonly terrainModifier?: boolean;
 }
 
 /** Read-only catalog. Keys = BuildingDefId; every defId MUST have an entry. */
@@ -1403,6 +1409,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 100 },
     placementCost: { steel: 50, gear: 20 },
     glyph: '◈',
+    terrainModifier: true,
   },
   // §8.5 T2 power: Cryogenic Generator (2x2, ice tile / arctic). Consumes
   // cryo_coolant as fuel. High output among T2 power options when an Arctic

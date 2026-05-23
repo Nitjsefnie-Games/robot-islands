@@ -103,6 +103,24 @@ export interface PlacedBuilding {
   toxicityExpiryMs?: number;
   /** True if the building's footprint no longer matches terrain after biome change. */
   invalid?: boolean;
+  /** terrain_modifier v5 — player's pick for the target TerrainKind, chosen
+   *  at placement-time via terrain-modifier-target-picker.ts (Task 5).
+   *  Meaningful ONLY for buildings whose def carries `terrainModifier: true`
+   *  (currently terrain_modifier). Persisted for the building's lifetime
+   *  — which is the SHOT_DURATION_MS window, since the modifier
+   *  self-destroys on shot completion (v5 lock
+   *  modifier_self_destroys_after_shot). Optional / undefined for every
+   *  other def. */
+  readonly terrainTarget?: import('./island.js').TerrainKind;
+  /** terrain_modifier v5 — single-shot animation countdown in ms. Set to
+   *  SHOT_DURATION_MS at placement; decremented every advanceIsland segment
+   *  by the segment duration; on the segment driving it to ≤ 0 the shot
+   *  resolves (Task 4): brush tiles get overrides written, the building is
+   *  removed from state.buildings, footprint freed. Missing/undefined ≡ "no
+   *  shot pending" (the modifier never got a target, never fires —
+   *  shouldn't happen in production but the field is optional for forward-
+   *  compat with legacy saves). */
+  terrainShotRemainingMs?: number;
   /** Player toggle (spec 2026-05-23-building-disable-design §02). When
    *  `true`, the building is functionally non-existent for the tick: no
    *  power flow, no recipe in/out, no gate provisioning, no buff
