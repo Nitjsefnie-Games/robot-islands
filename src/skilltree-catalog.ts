@@ -1,5 +1,6 @@
 import type { SkillNode, NodeId, BranchId } from './skilltree.js';
 import type { KeystonePrereq, BridgeEdge, GraftSocket } from './skilltree-graph.js';
+import { ALL_FILLER_NODES } from './skilltree-archetypes.js';
 
 // ---------------------------------------------------------------------------
 // Extraction branch
@@ -1298,5 +1299,5 @@ export const NOTABLES: SkillNode[] = [
   ...RESILIENCE_NOTABLES,
 ];
 
-/** Full catalog: notables + keystones */
-export const FULL_CATALOG: SkillNode[] = [...NOTABLES, ...KEYSTONES];
+/** Full catalog: filler nodes + notables + keystones */
+export const FULL_CATALOG: SkillNode[] = [...ALL_FILLER_NODES, ...NOTABLES, ...KEYSTONES];

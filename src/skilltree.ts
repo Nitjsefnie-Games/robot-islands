@@ -21,7 +21,12 @@ import { ALL_RECIPE_CATEGORIES } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
 import type { Biome } from './world.js';
 import type { Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
-import { FULL_CATALOG } from './skilltree-catalog.js';
+import {
+  BRIDGE_CATALOG,
+  FULL_CATALOG,
+  GRAFT_SOCKET_CATALOG,
+  KEYSTONE_PREREQS,
+} from './skilltree-catalog.js';
 
 export type BranchId = 'extraction' | 'refinement' | 'logistics' | 'orbital' | 'ocean';
 
@@ -414,12 +419,69 @@ export const NODE_CATALOG = FULL_CATALOG;
 
 const DEFAULT_CATALOG: Catalog = buildCatalog(NODE_CATALOG);
 
-/** Default skill graph — nodes from the live catalog with no edges. */
+// ---------------------------------------------------------------------------
+// Standard edges — filler chains + keystone AND-prereqs
+// ---------------------------------------------------------------------------
+
+function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
+  const edges: Edge[] = [];
+  let edgeCounter = 0;
+
+  // Group filler nodes by prefix (everything before the last dot).
+  // Only nodes whose last segment is numeric (depth index) are treated as
+  // filler-chain members; notables and keystones (non-numeric suffix) are
+  // skipped so they don't get erroneous edges to siblings.
+  const byPrefix = new Map<string, SkillNode[]>();
+  for (const n of nodes) {
+    const lastDot = n.id.lastIndexOf('.');
+    if (lastDot < 0) continue;
+    const lastSegment = n.id.slice(lastDot + 1);
+    if (!/^\d+$/.test(lastSegment)) continue; // skip notables / keystones
+    const prefix = n.id.slice(0, lastDot);
+    const arr = byPrefix.get(prefix) ?? [];
+    arr.push(n);
+    byPrefix.set(prefix, arr);
+  }
+
+  // Within each prefix, sort by depth and link depth-d → depth-d+1.
+  for (const [, arr] of byPrefix) {
+    arr.sort((a, b) => a.depth - b.depth);
+    for (let i = 1; i < arr.length; i++) {
+      const from = arr[i - 1]!;
+      const to = arr[i]!;
+      edges.push({
+        id: `edge.${from.id}.${to.id}.${edgeCounter++}` as EdgeId,
+        from: from.id as unknown as import('./skilltree-graph.js').NodeId,
+        to: to.id as unknown as import('./skilltree-graph.js').NodeId,
+        cost: to.cost,
+      });
+    }
+  }
+
+  // Keystone AND-prereqs: edge from each required node to target with mode 'and'.
+  for (const ks of KEYSTONE_PREREQS) {
+    for (const req of ks.requires) {
+      edges.push({
+        id: `edge.ks.${ks.targetNode}.${req}.${edgeCounter++}` as EdgeId,
+        from: req,
+        to: ks.targetNode,
+        cost: 0,
+        mode: 'and',
+      });
+    }
+  }
+
+  return edges;
+}
+
+export const STANDARD_EDGES: Edge[] = buildStandardEdges(NODE_CATALOG);
+
+/** Default skill graph — full catalog with generated edges + bridge catalog + graft sockets. */
 export const DEFAULT_GRAPH: Graph = {
   nodes: NODE_CATALOG,
-  edges: [],
-  bridges: [],
-  graftSockets: [],
+  edges: STANDARD_EDGES,
+  bridges: BRIDGE_CATALOG,
+  graftSockets: GRAFT_SOCKET_CATALOG,
 };
 
 /**
@@ -806,6 +868,9 @@ function computeAuraAmplifiers(state: IslandState, graph: Graph): Map<NodeId, nu
 function buildAdjacency(graph: Graph): Map<NodeId, NodeId[]> {
   const adj = new Map<NodeId, NodeId[]>();
   for (const e of graph.edges) {
+    // AND-prereq edges represent purchase gates, not spatial proximity.
+    // They do not participate in aura adjacency.
+    if (e.mode === 'and') continue;
     const from = e.from as NodeId;
     const to = e.to as NodeId;
     const fList = adj.get(from) ?? [];
@@ -978,14 +1043,41 @@ export function costToUnlock(
   return { path, totalCost: total };
 }
 
+/** True if `nodeId` has zero incoming edges in `graph`. Root nodes can be
+ *  purchased directly (no path required). */
+function isRootNode(graph: Graph, nodeId: NodeId): boolean {
+  for (const e of graph.edges) {
+    if (e.to === nodeId) return false;
+  }
+  return true;
+}
+
 /** Charge SP and mutate state to own the cheapest-path edges and nodes leading
  *  to `target`. Throws on unreachable target or insufficient SP. No-op if
- *  target is already owned. */
+ *  target is already owned.
+ *
+ *  Root nodes (no incoming edges) are purchased directly at their node cost. */
 export function buyNode(graph: Graph, state: IslandState, target: NodeId): void {
   if (state.unlockedNodes.has(target)) return;
 
   const result = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, target);
-  if (result === null) throw new Error(`buyNode: unreachable target ${target}`);
+  if (result === null) {
+    // Root-node fallback: no incoming edges → buy directly at node cost.
+    if (!isRootNode(graph, target)) {
+      throw new Error(`buyNode: unreachable target ${target}`);
+    }
+    const node = graph.nodes.find((n) => n.id === target);
+    if (!node) throw new Error(`buyNode: unknown target ${target}`);
+    if (state.unspentSkillPoints < node.cost) {
+      throw new Error(
+        `buyNode: insufficient SP (need ${node.cost}, have ${state.unspentSkillPoints})`,
+      );
+    }
+    state.unspentSkillPoints -= node.cost;
+    state.unlockedNodes.add(target);
+    return;
+  }
+
   if (state.unspentSkillPoints < result.totalCost) {
     throw new Error(
       `buyNode: insufficient SP (need ${result.totalCost}, have ${state.unspentSkillPoints})`,

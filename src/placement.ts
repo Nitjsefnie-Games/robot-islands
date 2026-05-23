@@ -43,6 +43,7 @@ import { tileInscribedInEllipse } from './island.js';
 import { footprintMatches } from './ocean-cell.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, hasBiomeBypass, effectiveTierShift, tierForLevel, DEFAULT_GRAPH } from './skilltree.js';
+import { hasStructuralEffect } from './structural.js';
 import type { Graph } from './skilltree-graph.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { candidateAnchors } from './anchor-picker.js';
@@ -325,9 +326,12 @@ export type PlaceBuildingResult =
   | { readonly ok: false; readonly reason: 'overlap' };
 
 /** §9.3 Robotics: how many concurrent under-construction slots this island
- *  has right now. Base 1 + Robotics `parallelBuildBonus` (additive). */
+ *  has right now. Base 1 + Robotics `parallelBuildBonus` (additive) +
+ *  structural keystone `parallelConstruction` (+1 when owned). */
 export function parallelBuildSlots(state: IslandState): number {
-  return 1 + Math.floor(effectiveSkillMultipliers(state).parallelBuildBonus);
+  const skillBonus = Math.floor(effectiveSkillMultipliers(state).parallelBuildBonus);
+  const structuralBonus = hasStructuralEffect('parallelConstruction', state, DEFAULT_GRAPH) ? 1 : 0;
+  return 1 + skillBonus + structuralBonus;
 }
 
 /** Count of currently-under-construction buildings on the island. */
