@@ -5,7 +5,6 @@ import {
   brushTilesAt,
   conversionCostForTarget,
   K_RARE_MULT,
-  NATURAL_PER_TILE_BASKET,
   NATURAL_TARGET_TERRAINS,
   PAYBACK_HORIZON_CYCLES,
   RARE_TARGET_INPUT,
@@ -43,10 +42,33 @@ describe('terrain-modifier — classification coverage', () => {
 });
 
 describe('terrain-modifier — conversionCostForTarget', () => {
-  it('natural targets cost NATURAL_PER_TILE_BASKET × 16', () => {
+  it('grass costs the blanket basket × 16', () => {
     const c = conversionCostForTarget('grass');
-    expect(c.stone).toBe((NATURAL_PER_TILE_BASKET.stone ?? 0) * 16);
-    expect(c.gear).toBe((NATURAL_PER_TILE_BASKET.gear ?? 0) * 16);
+    expect(c.stone).toBe(200 * 16);
+    expect(c.gear).toBe(100 * 16);
+  });
+
+  it('tree costs wood × 16 (own-resource per kind)', () => {
+    const c = conversionCostForTarget('tree');
+    expect(c.wood).toBe(500 * 16);
+  });
+
+  it('stone costs stone × 16 (self-cost)', () => {
+    const c = conversionCostForTarget('stone');
+    expect(c.stone).toBe(500 * 16);
+  });
+
+  it('magma_vent costs stone + coal × 16', () => {
+    const c = conversionCostForTarget('magma_vent');
+    expect(c.stone).toBe(300 * 16);
+    expect(c.coal).toBe(50 * 16);
+  });
+
+  it('every natural target has a cost row', () => {
+    for (const k of NATURAL_TARGET_TERRAINS) {
+      const c = conversionCostForTarget(k);
+      expect(Object.keys(c).length, `${k} has no cost entries`).toBeGreaterThan(0);
+    }
   });
 
   it('rare targets cost K × 1 × horizon × 16 of the input resource', () => {
