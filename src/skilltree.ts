@@ -688,21 +688,17 @@ export function canSpend(
       return { ok: false, reason: 'depth-prereq' };
     }
   }
-  // Branch lock (§9.3 "Sequential sub-path unlocking"): if any OTHER sub-path
-  // in the same branch is committed-but-incomplete, this purchase is blocked
-  // — unless the target is exactly that in-progress sub-path.
-  //
-  // With the full depth-1-15 catalog, buying depth-1 + depth-2 costs 3 points
-  // and commits the sub-path while leaving it incomplete. The branch lock
-  // therefore engages in normal play as soon as a player buys the first two
-  // nodes of any sub-path, preventing parallel work on sibling sub-paths
-  // until the committed one is fully completed.
+  // TODO(skill-graph Task 8): branch-lock semantics fully removed; replaced
+  // by graph edge prereqs in buyNode.
   return { ok: true };
 }
 
 /**
  * Apply a purchase. Caller must have verified `canSpend(state, nodeId).ok`.
  * Mutates `state.unspentSkillPoints` and `state.unlockedNodes`.
+ *
+ * TODO(skill-graph Task 8): replaced by buyNode; current implementation is
+ * transitional (no edge bookkeeping yet).
  */
 export function spendPoint(
   state: IslandState,
@@ -1038,10 +1034,9 @@ export function nodeById(id: NodeId): SkillNode | undefined {
  * the player opening the skill-tree modal.
  *
  * The rule is canSpend's: enough points, tier met, depth prereq satisfied,
- * sub-path not branch-locked, node not already owned. canSpend reads
- * unspentSkillPoints / unlockedNodes / level / subPathProgress only —
- * so an island with role declaration pending but zero spendable points
- * (or no ready nodes) is correctly false.
+ * node not already owned. canSpend reads unspentSkillPoints / unlockedNodes /
+ * level only — so an island with zero spendable points (or no ready nodes)
+ * is correctly false.
  */
 export function hasPickableSkill(state: IslandState): boolean {
   for (const node of NODE_CATALOG) {

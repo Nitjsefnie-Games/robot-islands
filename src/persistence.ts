@@ -58,6 +58,7 @@ import { _seedVehicleIdCounter } from './settlement.js';
 
 import type { VictoryCondition } from './endgame.js';
 import type { NodeId } from './skilltree.js';
+import type { EdgeId } from './skilltree-graph.js';
 import type { OceanCellSpec } from './ocean-cell.js';
 
 import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
@@ -94,8 +95,9 @@ export type SerializedIslandSpec = Omit<IslandSpec, 'terrainAt'>;
 
 /** IslandState with Set and Map fields converted to arrays for JSON. */
 export interface SerializedIslandState
-  extends Omit<IslandState, 'unlockedNodes'> {
+  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges'> {
   readonly unlockedNodes: ReadonlyArray<NodeId>;
+  readonly unlockedEdges: ReadonlyArray<EdgeId>;
 }
 
 /** One entry of the per-island state map. We avoid serializing a `Map`
@@ -145,7 +147,7 @@ export interface SerializedWorld {
    *  the blob diffs cleanly between saves (mirrors `revealedCells`). */
   readonly generatedCells?: ReadonlyArray<string>;
   /** Ocean-layer §2 — sparse ocean-terrain map as `[key, spec]` pairs
-   *  (Maps don't survive JSON; mirrors the `subPathProgress` idiom).
+   *  (Maps don't survive JSON; mirrors the `unlockedNodes` idiom).
    *  Sorted by key for deterministic blob output. */
   readonly oceanCells?: ReadonlyArray<readonly [string, OceanCellSpec]>;
   /** Ocean-layer §5 — depth-revealed cell keys as a sorted array
@@ -197,13 +199,12 @@ export function serializeWorld(
     const { terrainAt: _terrainAt, ...rest } = s;
     return rest;
   });
-
   const stateEntries: SerializedIslandStateEntry[] = [];
   for (const [id, state] of islandStates) {
     const serialized: SerializedIslandState = {
       ...state,
       unlockedNodes: [...state.unlockedNodes],
-
+      unlockedEdges: [...state.unlockedEdges],
     };
     stateEntries.push({ id, state: serialized });
   }
@@ -255,7 +256,7 @@ export function serializeWorld(
       // Sorted by cell key for deterministic blob output (mirror of
       // `revealedCells` / `generatedCells`). Maps don't survive
       // `JSON.stringify`, so the array-of-pairs idiom is the
-      // round-trip-safe shape (matches `SerializedIslandState.subPathProgress`).
+      // round-trip-safe shape (matches `SerializedIslandState.unlockedNodes`).
       oceanCells: [...world.oceanCells.entries()].sort((a, b) =>
         a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
       ),
@@ -420,7 +421,7 @@ export function deserializeWorld(
       funnelPending: { ...s.funnelPending },
       starterInventoryGrace: { ...s.starterInventoryGrace },
       unlockedNodes: new Set(s.unlockedNodes),
-
+      unlockedEdges: new Set(s.unlockedEdges ?? []),
       // §9.7 cooldown anchors. Both fields were minted in the saved
       // session's `performance.now()` domain (matching `lastTick`); apply
       // the same perfShift the drone/vehicle/repair-drone timestamps get,

@@ -24,9 +24,8 @@
 // Cleared by reset:
 //   - `level → 1`, `xp → 0`.
 //   - Spent skill points refunded as `unspentSkillPoints`, then
-//     `unlockedNodes` and `subPathProgress` cleared.
-//   - `specializationRole` and `declaredAt` cleared (back to undeclared
-//     Generalist).
+//     `unlockedNodes` and `unlockedEdges` cleared.
+//   - `declaredAt` cleared.
 //
 // 24-real-time-hour cooldown between resets on the same island
 // (placeholder per §9.7).

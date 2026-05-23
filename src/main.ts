@@ -1689,8 +1689,8 @@ async function main(): Promise<void> {
     // every per-island `computeRates` / `advanceIsland` call. The local
     // power helper inside `computeCableNetworkBalance` re-uses the same
     // per-island ctx the advance loop will use, so the gate decision is
-    // taken against the same modifiers / specMul / NC buff the integrator
-    // will see this frame.
+    // taken against the same modifiers / NC buff the integrator will see
+    // this frame.
     // §14.3 Mirror Sat: precompute per-island solar boost ONCE per tick.
     // Each populated island gets the aggregate of every locked mirror sat's
     // Lorentzian contribution to that island's centre. Cheap (O(sats ×

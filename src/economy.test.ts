@@ -1493,6 +1493,31 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
 });
 
 // -----------------------------------------------------------------------
+// NC buff integration
+// -----------------------------------------------------------------------
+
+describe('NC buff integration', () => {
+  it('NC buff +5% applies to T3+ island production but NOT to T1 island', () => {
+    // Mine 1/50s = 0.02/s. Over 100s: T1 = 2.0 units, T3 = 2.0 × 1.05 = 2.1. (rebalanced step #19)
+    const NC_BUFF = 1.05;
+    const t1 = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+      level: 1, // T1
+    });
+    const t3 = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+      level: 15, // T3
+    });
+    advanceIsland(t1, 100_000, { defs: POWER_FREE, ncBuff: 1 });
+    advanceIsland(t3, 100_000, { defs: POWER_FREE, ncBuff: NC_BUFF });
+    expect(t1.inventory.iron_ore).toBeCloseTo(5.88235294117647, 9);
+    expect(t3.inventory.iron_ore).toBeCloseTo(6.176470588235294, 9);
+  });
+});
+
+// -----------------------------------------------------------------------
 // §13 core-craft auto-flip
 // -----------------------------------------------------------------------
 

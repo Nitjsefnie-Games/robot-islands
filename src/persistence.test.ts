@@ -30,6 +30,7 @@ import {
 import type { VictoryCondition } from './endgame.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { ObjectiveId } from './tutorial.js';
+import type { EdgeId } from './skilltree-graph.js';
 
 import {
   SCHEMA_VERSION,
@@ -212,6 +213,22 @@ describe('serialize → JSON → deserialize round-trip', () => {
     expect(r.unlockedNodes.has('mining.2')).toBe(true);
     expect(r.unlockedNodes.has('storage.1')).toBe(true);
     expect(r.unlockedNodes.size).toBe(3);
+  });
+
+  it('restores unlockedEdges back to a Set with identical membership', () => {
+    const home = makeIslandState({
+      unlockedEdges: new Set(['e1' as EdgeId, 'e2' as EdgeId]),
+    });
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>([['home', home]]);
+    const snap = serializeWorld(world, states, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    const r = restored.get('home')!;
+    expect(r.unlockedEdges).toBeInstanceOf(Set);
+    expect(r.unlockedEdges.has('e1' as EdgeId)).toBe(true);
+    expect(r.unlockedEdges.has('e2' as EdgeId)).toBe(true);
+    expect(r.unlockedEdges.size).toBe(2);
   });
 
   it('rehydrates terrainAt to the same value terrainAtForBiome would return', () => {
