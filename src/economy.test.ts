@@ -37,6 +37,8 @@ import {
   xpForLevel,
   type DefCatalog,
   type IslandState,
+  evaluateConditionalEffectCondition,
+  layerConditionalBonuses,
 } from './economy.js';
 import { checkGates } from './adjacency.js';
 import { placeBuilding, validatePlacement } from './placement.js';
@@ -44,6 +46,8 @@ import { ALL_RESOURCES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
+import type { Graph } from './skilltree-graph.js';
+import { effectiveSkillMultipliers } from './skilltree.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
 import { islandInscribedAny } from './island.js';
@@ -3747,4 +3751,186 @@ describe('disabled provider fails downstream gates', () => {
     const gate = checkGates(coke, filtered, BUILDING_DEFS, false, undefined);
     expect(gate.effectiveMul).toBe(0);
   });
+});
+
+
+describe('conditionalBonus', () => {
+  it('evaluateConditionalEffectCondition — during-storm with no world → false', () => {
+    const state = makeState();
+    expect(evaluateConditionalEffectCondition({ kind: 'during-storm' }, state, undefined)).toBe(false);
+  });
+
+  it('evaluateConditionalEffectCondition — during-storm with activeStorm → true', () => {
+    const state = makeState();
+    const world = { weather: { activeStorm: 'storm1' } } as any;
+    expect(evaluateConditionalEffectCondition({ kind: 'during-storm' }, state, world)).toBe(true);
+  });
+
+  it('evaluateConditionalEffectCondition — during-night with no daynight → false', () => {
+    const state = makeState();
+    expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, undefined)).toBe(false);
+  });
+
+  it('evaluateConditionalEffectCondition — during-night when phase is night → true', () => {
+    const state = makeState();
+    const world = { daynight: { phase: 'night' } } as any;
+    expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, world)).toBe(true);
+  });
+
+  it('evaluateConditionalEffectCondition — networked-to-N-T3-islands with enough T3+ networked islands → true', () => {
+    const stateA = makeState({ level: 15 });
+    const stateB = makeState({ level: 15 });
+    const world = {
+      islands: [
+        { id: 'home', populated: true, cx: 0, cy: 0 } as any,
+        { id: 'b', populated: true, cx: 1, cy: 0 } as any,
+      ],
+      islandStates: new Map([
+        ['home', stateA],
+        ['b', stateB],
+      ]),
+      routes: [{ from: 'home', to: 'b' } as any],
+    } as any;
+    expect(evaluateConditionalEffectCondition({ kind: 'networked-to-N-T3-islands', n: 2 }, makeState(), world)).toBe(true);
+  });
+
+  it('evaluateConditionalEffectCondition — networked-to-N-T3-islands with insufficient T3+ islands → false', () => {
+    const stateA = makeState({ level: 15 });
+    const world = {
+      islands: [
+        { id: 'home', populated: true, cx: 0, cy: 0 } as any,
+        { id: 'b', populated: true, cx: 1, cy: 0 } as any,
+      ],
+      islandStates: new Map([
+        ['home', stateA],
+      ]),
+      routes: [{ from: 'home', to: 'b' } as any],
+    } as any;
+    expect(evaluateConditionalEffectCondition({ kind: 'networked-to-N-T3-islands', n: 2 }, makeState(), world)).toBe(false);
+  });
+
+  it('layerConditionalBonuses multiplies recipeRate when condition is true', () => {
+    const state = makeState({ unlockedNodes: new Set(['cond.1']) });
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'cond.1',
+          subPath: 'mining',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.5,
+          effect: { kind: 'conditionalBonus', multiplier: 0.5, appliesTo: 'extraction', condition: { kind: 'during-storm' } },
+          description: 'test',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    const mul = effectiveSkillMultipliers(state, graph);
+    expect(mul.recipeRate.extraction).toBe(1);
+    const world = { weather: { activeStorm: 'storm1' } } as any;
+    layerConditionalBonuses(mul, state, world, graph);
+    expect(mul.recipeRate.extraction).toBe(1.5);
+  });
+
+  it('layerConditionalBonuses leaves multiplier unchanged when condition is false', () => {
+    const state = makeState({ unlockedNodes: new Set(['cond.1']) });
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'cond.1',
+          subPath: 'mining',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.5,
+          effect: { kind: 'conditionalBonus', multiplier: 0.5, appliesTo: 'extraction', condition: { kind: 'during-storm' } },
+          description: 'test',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    const mul = effectiveSkillMultipliers(state, graph);
+    expect(mul.recipeRate.extraction).toBe(1);
+    layerConditionalBonuses(mul, state, undefined, graph);
+    expect(mul.recipeRate.extraction).toBe(1);
+  });
+
+  it('layerConditionalBonuses multiplies storageCap when appliesTo is storage', () => {
+    const state = makeState({ unlockedNodes: new Set(['cond.2']) });
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'cond.2',
+          subPath: 'storage',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.3,
+          effect: { kind: 'conditionalBonus', multiplier: 0.3, appliesTo: 'storage', condition: { kind: 'during-storm' } },
+          description: 'test',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    const mul = effectiveSkillMultipliers(state, graph);
+    expect(mul.storageCap).toBe(1);
+    const world = { weather: { activeStorm: 'storm1' } } as any;
+    layerConditionalBonuses(mul, state, world, graph);
+    expect(mul.storageCap).toBe(1.3);
+  });
+
+  it('layerConditionalBonuses multiplies powerProduction when appliesTo is power', () => {
+    const state = makeState({ unlockedNodes: new Set(['cond.3']) });
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'cond.3',
+          subPath: 'power_systems',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.2,
+          effect: { kind: 'conditionalBonus', multiplier: 0.2, appliesTo: 'power', condition: { kind: 'during-storm' } },
+          description: 'test',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    const mul = effectiveSkillMultipliers(state, graph);
+    expect(mul.powerProduction).toBe(1);
+    const world = { weather: { activeStorm: 'storm1' } } as any;
+    layerConditionalBonuses(mul, state, world, graph);
+    expect(mul.powerProduction).toBe(1.2);
+  });
+
+  it('layerConditionalBonuses multiplies xpGain when appliesTo is xp', () => {
+    const state = makeState({ unlockedNodes: new Set(['cond.4']) });
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'cond.4',
+          subPath: 'network',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.25,
+          effect: { kind: 'conditionalBonus', multiplier: 0.25, appliesTo: 'xp', condition: { kind: 'during-storm' } },
+          description: 'test',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    const mul = effectiveSkillMultipliers(state, graph);
+    expect(mul.xpGain).toBe(1);
+    const world = { weather: { activeStorm: 'storm1' } } as any;
+    layerConditionalBonuses(mul, state, world, graph);
+    expect(mul.xpGain).toBe(1.25);
+  });
+
 });
