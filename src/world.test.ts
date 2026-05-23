@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { computeVisionSources, type VisionSource } from './lighthouse.js';
 import {
+  attachTerrainAt,
   DEMO_ISLANDS_TEST_FIXTURE,
   findPopulatedIslandAt,
   islandRenderState,
@@ -16,6 +17,7 @@ import {
   VISION_PADDING_TILES,
   type IslandSpec,
 } from './world.js';
+import type { TerrainKind } from './island.js';
 import { ALL_RESOURCES } from './recipes.js';
 
 function makeSpec(over: Partial<IslandSpec>): IslandSpec {
@@ -552,3 +554,49 @@ describe('validateIslandName', () => {
   });
 });
 
+
+
+describe('attachTerrainAt — tileOverrides precedence', () => {
+  function makeSpec(overrides?: Record<string, TerrainKind>): IslandSpec {
+    return attachTerrainAt({
+      id: 'test-island',
+      name: 'test-island',
+      cx: 100,
+      cy: 100,
+      majorRadius: 10,
+      minorRadius: 10,
+      biome: 'plains',
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+      ...(overrides ? { tileOverrides: overrides } : {}),
+    });
+  }
+
+  it('returns the override kind when one is set', () => {
+    const spec = makeSpec({ '0,0': 'magma_vent' });
+    expect(spec.terrainAt?.(0, 0)).toBe('magma_vent');
+  });
+
+  it('falls through to the biome closure when no override matches', () => {
+    const spec = makeSpec({ '0,0': 'magma_vent' });
+    // (3, 3) was not overridden; biome closure decides.
+    const k = spec.terrainAt?.(3, 3);
+    expect(k).toBeDefined();
+    expect(k).not.toBe('magma_vent');
+  });
+
+  it('reads tileOverrides BY REFERENCE — insertion after closure-build is observed', () => {
+    const spec = makeSpec();
+    // `terrainAt` was bound before tileOverrides existed; insert and re-query.
+    spec.tileOverrides = { '5,5': 'uranium_vein' };
+    expect(spec.terrainAt?.(5, 5)).toBe('uranium_vein');
+  });
+
+  it('behaves identically to a legacy spec when tileOverrides is undefined', () => {
+    const legacy = makeSpec();
+    expect(legacy.tileOverrides).toBeUndefined();
+    expect(legacy.terrainAt?.(2, 2)).toBeDefined();
+  });
+});
