@@ -51,6 +51,7 @@ import {
   installDefaultBindings,
   makeRegistry,
 } from './input.js';
+import { resetUiLayout } from './window-manager.js';
 import { TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
 import { mountFeatureGlyphs, renderOcean, renderOceanFogOverlay } from './ocean.js';
@@ -438,6 +439,10 @@ async function main(): Promise<void> {
   // down). Stub here so KeyT presses don't silently drop while the UI is
   // still booting.
   defineAction(reg, 'rotate-placement', () => undefined);
+  // reset-ui-layout: clears persisted layout, restores zone-stack defaults.
+  // No bind() — pick was reset_surface: settings_only. The settings-ui
+  // button dispatches this action via dispatchAction(reg, 'reset-ui-layout').
+  defineAction(reg, 'reset-ui-layout', () => { resetUiLayout(); });
 
   // Map of "release" actions used to clear the held flag on keyup. The
   // action table itself is press-only; on keyup we resolve the binding and
