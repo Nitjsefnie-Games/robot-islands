@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recipe graph → floating panel + GATES column — implementation plan</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+      line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1120px; margin:0 auto; }
+    header.page-head { margin-bottom:48px; max-width:880px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box .meta-line { margin-top:8px; }
+    .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .callout { background:var(--white); border:1.5px solid var(--gray-300);
+      border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+      font-size:13.5px; color:var(--gray-500); margin-bottom:32px; max-width:880px; }
+    .callout code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .toc { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px;
+      padding:16px 20px; margin-bottom:48px; max-width:880px; }
+    .toc h3 { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); font-weight:600; margin-bottom:10px; }
+    .toc ol { list-style:none; counter-reset: toc; display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; }
+    @media (max-width:780px){ .toc ol{grid-template-columns:1fr;} }
+    .toc li { counter-increment: toc; padding-left:30px; position:relative; font-size:13.5px; }
+    .toc li::before { content: '§' counters(toc, '', decimal-leading-zero);
+      position:absolute; left:0; top:0; font-family:var(--mono); font-size:11px;
+      color:var(--gray-500); letter-spacing:0.04em; }
+    .toc a { color:var(--gray-700); text-decoration:none; border-bottom:1px dotted var(--gray-300); }
+    .toc a:hover { color:var(--slate); border-bottom-color:var(--clay); }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-head h2 code { font-family:var(--mono); font-size:21px; color:var(--clay); }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:860px; margin-bottom:28px; }
+    .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .summary .v.ok { color:var(--olive); }
+    .filetable { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .filetable .row { display:grid; grid-template-columns:280px 1fr; gap:0; }
+    @media (max-width:780px){ .filetable .row{grid-template-columns:1fr;} }
+    .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+    .filetable .cell { padding:13px 18px; font-size:13.5px; }
+    .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .filetable .cell code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .filetable .cell.desc code { color:var(--slate); }
+    .filetable .cell .new-tag { font-family:var(--mono); font-size:10px; color:var(--olive);
+      letter-spacing:0.06em; padding-left:6px; }
+    .task-card { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:24px 26px; }
+    .task-blurb { font-size:13.5px; color:var(--gray-500); margin-bottom:16px; max-width:880px; }
+    .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .deps-line { font-family:var(--mono); font-size:11px; color:var(--gray-500);
+      letter-spacing:0.04em; margin-bottom:14px; text-transform:uppercase; }
+    .deps-line b { color:var(--olive); font-weight:600; }
+    .files-block { background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:8px; padding:12px 16px; margin-bottom:22px; }
+    .files-block .ft { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .files-block ul { list-style:none; }
+    .files-block li { font-size:13px; color:var(--gray-700); padding:2px 0; }
+    .files-block li code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .files-block li .tag { font-family:var(--mono); font-size:10.5px; color:var(--gray-500); }
+    .steps { display:flex; flex-direction:column; gap:18px; }
+    .step { display:grid; grid-template-columns:22px 1fr; gap:0 12px; }
+    .step .box { width:16px; height:16px; border:1.5px solid var(--clay); border-radius:4px; margin-top:3px; }
+    .step .step-body { min-width:0; }
+    .step .step-title { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:6px; }
+    .step .step-text { font-size:13.5px; color:var(--gray-500); margin-bottom:10px; }
+    .step .step-text:last-child { margin-bottom:0; }
+    .step .step-text code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .step .step-text.cmd code { color:var(--olive); }
+    .code-block { margin:4px 0 12px; }
+    .code-block .file-label { font-family:var(--mono); font-size:11.5px; color:var(--gray-500); margin-bottom:6px; }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .cm { color:var(--gray-500); } .code .add { color:#8FA56E; } .code .del { color:#E08B7F; }
+    .code .kw { color:#C9B98A; }
+    .notes { display:flex; flex-direction:column; gap:14px; max-width:880px; }
+    .note { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive);
+      border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-500); }
+    .note.risk { border-left-color:#E08B7F; }
+    .note code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .note strong { color:var(--slate); font-weight:600; }
+    .picks-table { width:100%; border-collapse:collapse; background:var(--white);
+      border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden;
+      font-size:13px; }
+    .picks-table th, .picks-table td { text-align:left; padding:8px 14px;
+      border-bottom:1px solid var(--gray-300); }
+    .picks-table thead th { background:var(--gray-150); color:var(--gray-500);
+      font-family:var(--mono); font-size:11px; letter-spacing:0.05em; text-transform:uppercase; }
+    .picks-table tr:last-child td { border-bottom:none; }
+    .picks-table td.k { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .picks-table td.v { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .picks-table td.s { font-size:12.5px; color:var(--gray-500); }
+    footer.page-foot { margin-top:64px; padding-top:20px; border-top:1.5px solid var(--gray-300);
+      font-size:12px; color:var(--gray-500); font-family:var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Recipe graph → floating panel + GATES column — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Convert the recipe-graph window from a full-screen <code>mountModal</code> overlay (today blocks the HUD behind a dark scrim) into a draggable / resizable floating panel via <code>mountPanel(Zone.R, order: 3)</code>; then add a per-row GATES column rendering each recipe's prerequisites (tier / T5 / T6 / biome / tile / coastal / heat / adjacency) as inline monospace text coloured by met / pending / N/A status against the active island.</div>
+        <div class="meta-line"><strong>Architecture:</strong> Two independently-committable tasks. Task 1 (migration) rewrites the mount path in <code>src/graph-ui.ts</code> — builds a <code>.ri-panel</code> root with <code>.ri-panel__head</code> + close button, calls <code>mountPanel(panel, { id: 'recipe-graph-panel', zone: Zone.R, order: 3, minWidth: 480 })</code>, drops the modal-specific styling, and removes the <code>graphUi.hide()</code> call from the <code>dismiss-modal</code> Esc cascade at <code>src/main.ts:1379</code>. Task 2 (GATES column) extends <code>src/recipe-graph.ts</code> with a pure <code>gates: GateEntry[]</code> field on <code>RecipeTableRow</code>, widens the row grid to 5 columns in <code>graph-ui.ts</code>, renders gates as inline text with status-only colours, and threads <code>getState</code> through from <code>src/main.ts:1000</code> so the status repaints per-open. No CSS changes — every <code>.ri-panel*</code> rule the panel needs is already defined at <code>src/ui.css:86-175</code>.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, noUncheckedIndexedAccess, noUnusedLocals, noUnusedParameters), Vite 5, PixiJS 8 (not touched), vitest.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-23-recipe-graph-modal-gates-design.html</code> (v2) · <a href="https://docs.nitjsefni.eu/d/robot-islands/2026-05-23-recipe-graph-modal-gates-design" style="color:var(--olive)">docs-hub mirror</a> · all 11 picker defaults confirmed.</div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use <code>superpowers:subagent-driven-development</code> to land this plan task-by-task on master (no worktrees per global config). Each task is independently committable — build + tests must be green after that commit alone. The implementer is kimi-cli, so every commit message ends with the trailer <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code> (literal — syntactic, not stylistic).</div>
+
+    <div class="toc">
+      <h3>Contents</h3>
+      <ol>
+        <li><a href="#sec-files">File structure &amp; picks</a></li>
+        <li><a href="#sec-task1">Task 1 — modal → panel migration (<code>graph-ui.ts</code> + <code>main.ts</code>)</a></li>
+        <li><a href="#sec-task2">Task 2 — GATES column (<code>recipe-graph.ts</code> + <code>graph-ui.ts</code> + <code>main.ts</code>)</a></li>
+        <li><a href="#sec-notes">Notes, verification, dependencies</a></li>
+      </ol>
+    </div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">2</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">3</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v ok">0</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- 01 — File structure                                                -->
+    <!-- ================================================================= -->
+    <section id="sec-files">
+      <div class="sec-head"><span class="num">01</span><h2>File structure &amp; picks</h2></div>
+      <p class="sec-intro">Three files modified, none created. Task 1 lands the panel shell + Esc-cascade cleanup; Task 2 lands the new column + active-island status wiring. Order matters — Task 2's row grid assumes the panel exists, so Task 1 first.</p>
+
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/graph-ui.ts</code></div><div class="cell desc">Task 1: replace <code>mountModal</code> call (line 163) with a hand-built <code>.ri-panel</code> root + header + body + <code>mountPanel</code> call. Drop the <code>maxHeight: '70vh'</code> on the inner container. Search input stays at top of body. Task 2: insert a new gates cell into each row, widen the row grid from <code>'260px 1fr 1fr 60px'</code> to <code>'180px 150px 1fr 1fr 60px'</code>, add a <code>refreshGatesStatus()</code> pass that's called from <code>show()</code> / <code>toggle()</code>, extend the search haystack with gate strings, and accept a <code>{ getState }</code> option on <code>mountGraphUi</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/recipe-graph.ts</code></div><div class="cell desc">Task 2: add the <code>GateEntry</code> type (8-kind union) and a <code>readonly gates: ReadonlyArray&lt;GateEntry&gt;</code> field on <code>RecipeTableRow</code>. <code>buildRecipeTableRows</code> populates the array from <code>def.tier</code> (+ T5/T6 split), <code>def.requiredBiomes</code>, <code>def.requiredTile</code>, <code>def.coastal</code>, <code>def.requiresHeat</code>, and <code>def.gates</code>. Pure — no DOM, no <code>IslandState</code> import. Status is decided at render time in <code>graph-ui.ts</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/main.ts</code></div><div class="cell desc">Task 1: remove the <code>graphUi.hide()</code> line from the <code>dismiss-modal</code> action body at line 1379. Task 2: change the <code>mountGraphUi(document.body)</code> call at line 1000 to <code>mountGraphUi(document.body, { getState: activeState })</code>. The <code>toggle-graph</code> action body at 1001–1003 stays unchanged.</div></div>
+      </div>
+
+      <p class="sec-intro" style="margin-top:24px">Confirmed picks (all 11 at default) — applied verbatim throughout the plan steps:</p>
+      <table class="picks-table">
+        <thead><tr><th>Picker</th><th>Pick</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td class="k">scope_of_change</td><td class="v">convert_to_panel</td><td class="s">mountModal → mountPanel; drop scrim + blur + centred card.</td></tr>
+          <tr><td class="k">default_zone</td><td class="v">zone_r_order_3</td><td class="s">Right dock, order 3 (slots under Settlement).</td></tr>
+          <tr><td class="k">initial_size</td><td class="v">wide_default</td><td class="s">720×520 initial, minWidth 480, minHeight 320.</td></tr>
+          <tr><td class="k">close_button_semantics</td><td class="v">setvisible_false</td><td class="s">Header × calls <code>panelHandle.setVisible(false)</code>.</td></tr>
+          <tr><td class="k">escape_key_behaviour</td><td class="v">drop_from_cascade</td><td class="s">Remove <code>graphUi.hide()</code> from <code>dismiss-modal</code> action body (main.ts:1379).</td></tr>
+          <tr><td class="k">gates_column_placement</td><td class="v">after_building</td><td class="s">GATES inserted as the 2nd column, between BUILDING and INPUTS.</td></tr>
+          <tr><td class="k">gates_to_show</td><td class="v">all_with_status</td><td class="s">Every gate row carries met / pending / N/A colour against the active island.</td></tr>
+          <tr><td class="k">gates_render_shape</td><td class="v">inline_text</td><td class="s">Dot-separated monospace string; one <code>&lt;span&gt;</code> per gate.</td></tr>
+          <tr><td class="k">gates_palette</td><td class="v">status_only</td><td class="s">olive (met) · clay (pending) · gray (N/A). No new tokens.</td></tr>
+          <tr><td class="k">filter_behaviour</td><td class="v">keep_text_only</td><td class="s">Existing search input; haystack extended with gate strings.</td></tr>
+          <tr><td class="k">sort_order</td><td class="v">category_then_name</td><td class="s">No sort change — keep <code>recipe-graph.ts:64-70</code> as-is.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 02 — Task 1                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task1">
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: modal → panel migration (<code>graph-ui.ts</code> + <code>main.ts</code>)</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Replace the <code>mountModal</code> shell with a <code>.ri-panel</code> docked at <code>Zone.R, order: 3</code>. Inherit drag + resize + persistence automatically — <code>mountPanel</code> already calls <code>makePanelDraggable</code> for non-chrome panels (<code>src/ui-zones.ts:217</code>) and layout persists under <code>ri-ui-layout-v1</code> (<code>src/window-manager.ts</code>, shipped 28fe30d / 6c3ca65 / c9f1caa / aa11756 / 0bb1a4a). Drops the panel out of the Escape cascade. No CSS changes — every <code>.ri-panel*</code> rule already exists at <code>src/ui.css:86-175</code>. <strong>The GATES column is NOT in scope for this task</strong> — Task 2 lands it on top of the panel shell.</p>
+        <p class="deps-line">Dependencies: <b>none</b> — the draggable-windows feature is already on master.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/graph-ui.ts</code> <span class="tag">— replace <code>mountModal</code> call with <code>.ri-panel</code> + <code>mountPanel</code></span></li>
+            <li>Modify: <code>src/main.ts</code> <span class="tag">— drop <code>graphUi.hide()</code> from <code>dismiss-modal</code></span></li>
+          </ul>
+        </div>
+
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Swap imports in <code>src/graph-ui.ts</code></div>
+            <p class="step-text">Remove the <code>mountModal</code> import; pull in <code>mountPanel</code>, <code>Zone</code>, and the <code>PanelHandle</code> type from <code>./ui-zones.js</code> instead. Header at the top of the file:</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts (top of file)</div><div class="code"><pre><span class="cm">// Recipe-graph floating panel — render layer. Mounts via mountPanel into</span>
+<span class="cm">// Zone.R (order 3) alongside Drones / Routes / Settlement. Panel shell,</span>
+<span class="cm">// drag handle, resize grip, and localStorage persistence come from</span>
+<span class="cm">// ui-zones.ts + window-manager.ts; this module owns the body content.</span>
+
+import { buildRecipeTableRows, type RecipeTableRow } from './recipe-graph.js';
+<span class="del">import { mountModal, type ModalHandle } from './ui-modal.js';</span>
+<span class="add">import { mountPanel, Zone, type PanelHandle } from './ui-zones.js';</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Build the panel skeleton inside <code>mountGraphUi</code></div>
+            <p class="step-text">Replace the existing <code>mountModal(parentEl, …)</code> block at line 163 (and everything inside it) with a hand-built panel: a <code>.ri-panel</code> root, a <code>.ri-panel__head</code> drag handle that contains the title + a close <code>&lt;button&gt;</code>, and a <code>.ri-panel__body</code> body that wraps the existing <code>container</code> (search + sections). The X button calls <code>panelHandle.setVisible(false)</code> per Picker 03 default. <strong>Heads up</strong> — <code>mountPanel</code>'s <code>PanelMountOptions</code> exposes only <code>id / zone / order / minWidth / maxWidth</code> (see <code>src/ui-zones.ts:68-76</code>). There is no <code>initialSize</code> field — the 720×520 default goes on the panel element as inline style BEFORE the <code>mountPanel</code> call (mirrors the drones-ui pattern at <code>src/drones-ui.ts:162-176</code>).</p>
+            <p class="step-text">Also delete the existing <code>container.style.maxHeight = '70vh'</code> at line 36 — the panel itself owns vertical sizing now, and <code>'70vh'</code> would fight the user's resize.</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — at line 36 (drop the maxHeight line)</div><div class="code"><pre>  container.style.padding = '4px';
+<span class="del">  container.style.maxHeight = '70vh';</span>
+  container.style.overflow = 'auto';</pre></div></div>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — replace lines 163-172 (the entire mountModal block)</div><div class="code"><pre><span class="cm">// Panel root. ri-panel gives us the backdrop / border / blur; the inline</span>
+<span class="cm">// width/height seed the default footprint and are overridden by the</span>
+<span class="cm">// localStorage layout (ri-ui-layout-v1) once the user drags or resizes.</span>
+<span class="add">const panel = document.createElement('div');</span>
+<span class="add">panel.id = 'recipe-graph-panel';</span>
+<span class="add">panel.classList.add('ri-panel');</span>
+<span class="add">panel.style.width = '720px';</span>
+<span class="add">panel.style.height = '520px';</span>
+<span class="add">panel.style.minHeight = '320px';</span>
+<span class="add">panel.style.display = 'flex';</span>
+<span class="add">panel.style.flexDirection = 'column';</span>
+<span class="add">panel.style.overflow = 'hidden';</span>
+<span class="add">panel.style.pointerEvents = 'auto';</span>
+
+<span class="cm">// Header — .ri-panel__head doubles as the drag handle (window-manager.ts</span>
+<span class="cm">// resolves the handle via that class).</span>
+<span class="add">const head = document.createElement('div');</span>
+<span class="add">head.classList.add('ri-panel__head');</span>
+<span class="add">const headTitle = document.createElement('span');</span>
+<span class="add">headTitle.classList.add('ri-panel__title');</span>
+<span class="add">headTitle.textContent = 'RECIPE GRAPH';</span>
+<span class="add">const headSub = document.createElement('span');</span>
+<span class="add">headSub.classList.add('ri-panel__sub');</span>
+<span class="add">headSub.textContent = '/ §6 + §7';</span>
+<span class="add">const closeBtn = document.createElement('button');</span>
+<span class="add">closeBtn.textContent = '×';</span>
+<span class="add">closeBtn.classList.add('ri-modal__close');</span>
+<span class="add">closeBtn.setAttribute('aria-label', 'Close recipe graph');</span>
+<span class="add">closeBtn.style.cssText =</span>
+<span class="add">  'background:transparent;border:0;color:var(--ri-fg-3);' +</span>
+<span class="add">  'font-size:16px;line-height:1;cursor:pointer;padding:0 4px;';</span>
+<span class="add">closeBtn.addEventListener('click', () =&gt; panelHandle.setVisible(false));</span>
+<span class="add">head.appendChild(headTitle);</span>
+<span class="add">head.appendChild(headSub);</span>
+<span class="add">head.appendChild(closeBtn);</span>
+
+<span class="cm">// Body wraps the existing container (search + per-category sections).</span>
+<span class="cm">// flex: 1 1 auto so it fills the panel and scrolls the inner container.</span>
+<span class="add">const body = document.createElement('div');</span>
+<span class="add">body.classList.add('ri-panel__body');</span>
+<span class="add">body.style.flex = '1 1 auto';</span>
+<span class="add">body.style.display = 'flex';</span>
+<span class="add">body.style.flexDirection = 'column';</span>
+<span class="add">body.style.minHeight = '0';</span>
+<span class="add">body.appendChild(container);</span>
+
+<span class="add">panel.appendChild(head);</span>
+<span class="add">panel.appendChild(body);</span>
+<span class="add">parentEl.appendChild(panel);</span>
+
+<span class="add">const panelHandle: PanelHandle = mountPanel(panel, {</span>
+<span class="add">  id: 'recipe-graph-panel',</span>
+<span class="add">  zone: Zone.R,</span>
+<span class="add">  order: 3,</span>
+<span class="add">  minWidth: 480,</span>
+<span class="add">});</span>
+<span class="cm">// Same pattern as drones-ui:506 — hidden by default; toggle-graph reveals.</span>
+<span class="add">panelHandle.setVisible(false);</span></pre></div></div>
+            <p class="step-text">The <code>min-width: 720px</code> rule inside <code>container.style.minWidth</code> at line 35 is now an in-panel constraint (the row grid needs the horizontal room). Leave it — the panel's <code>minWidth: 480</code> in <code>mountPanel</code> opts is for the OUTER panel; the inner container scrolls horizontally if the user resizes below 720px. (Confirm under <code>npm run build</code> + visual smoke — see Step 7.)</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Rewrite the <code>GraphUi</code> return surface</div>
+            <p class="step-text">The wrapper exports the same four methods (<code>show</code> / <code>hide</code> / <code>toggle</code> / <code>isVisible</code>) but routes them through <code>panelHandle.setVisible</code> instead of the modal handle. <code>PanelHandle</code> doesn't expose <code>isVisible()</code> — track visibility in a local closure boolean (spec §03 implementation notes call this out).</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — replace the return block (was lines 174-195)</div><div class="code"><pre><span class="add">let visible = false;</span>
+<span class="add">return {</span>
+<span class="add">  show(): void {</span>
+<span class="add">    if (visible) return;</span>
+<span class="add">    visible = true;</span>
+<span class="add">    panelHandle.setVisible(true);</span>
+<span class="add">    setTimeout(() =&gt; search.focus(), 0);</span>
+<span class="add">  },</span>
+<span class="add">  hide(): void {</span>
+<span class="add">    if (!visible) return;</span>
+<span class="add">    visible = false;</span>
+<span class="add">    panelHandle.setVisible(false);</span>
+<span class="add">  },</span>
+<span class="add">  toggle(): boolean {</span>
+<span class="add">    if (visible) {</span>
+<span class="add">      visible = false;</span>
+<span class="add">      panelHandle.setVisible(false);</span>
+<span class="add">      return false;</span>
+<span class="add">    }</span>
+<span class="add">    visible = true;</span>
+<span class="add">    panelHandle.setVisible(true);</span>
+<span class="add">    setTimeout(() =&gt; search.focus(), 0);</span>
+<span class="add">    return true;</span>
+<span class="add">  },</span>
+<span class="add">  isVisible(): boolean {</span>
+<span class="add">    return visible;</span>
+<span class="add">  },</span>
+<span class="add">};</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Drop the recipe panel from the Esc cascade in <code>src/main.ts</code></div>
+            <p class="step-text">Locate the <code>dismiss-modal</code> action body at <code>src/main.ts:1370-1390</code> and delete the <code>graphUi.hide();</code> line at line 1379. The action body retains the seven other modal-hide calls (skill tree, buildings, construction, inventory, settings, orbital, placement) — only the recipe-graph entry goes. Per Picker 04 default (<code>drop_from_cascade</code>), the panel matches its right-dock siblings: Esc does not touch it.</p>
+            <div class="code-block"><div class="file-label">src/main.ts — at line 1370-1390 (the dismiss-modal action body)</div><div class="code"><pre>  defineAction(reg, 'dismiss-modal', () =&gt; {
+    skillTree.hide();
+    buildingsUi.hide();
+    constructionUi.hide();
+    inventoryUi.hide();
+    settingsUi.hide();
+<span class="del">    graphUi.hide();</span>
+    orbitalUi.hide();
+    placementUi.cancel();
+    if (inspector.isVisible()) {
+      inspector.close();
+      selectedSpec = null;
+      repaintSelection();
+    }
+  });</pre></div></div>
+            <p class="step-text">The <code>toggle-graph</code> action body at <code>src/main.ts:1001-1003</code> stays exactly as-is — <code>graphUi.toggle()</code> now flips <code>setVisible</code> on the panel rather than mounting/unmounting a modal, but the call site doesn't notice.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Type-check + build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: tsc clean (the only unused import after this task is the modal one — already removed in Step 1). Vite builds. No CSS changes, so no asset diff beyond the bundle hash.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Run the existing test suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: all existing tests pass. No new tests in this task — the change is in render-layer code that AGENTS.md flags as read-only against state and not unit-tested. The pure layer (<code>recipe-graph.ts</code>) is untouched in Task 1.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Visual smoke-test (browser)</div>
+            <p class="step-text">Per AGENTS.md "Dev server — serves built <code>dist/</code>" workflow: the systemd unit <code>robot-islands-dev.service</code> already runs <code>vite preview</code> on <code>:5173</code>; <code>npm run build</code> repopulates <code>dist/</code>, and the user reloads <code>https://islands.nitjsefni.eu/</code> manually. Use <code>mcp__daedalus__screenshot</code> to capture:</p>
+            <p class="step-text">(a) Hit <code>Y</code> — the panel opens docked under Settlement on the right edge.<br>
+            (b) The HUD remains visible behind / around it (no scrim, no <code>backdrop-filter</code>).<br>
+            (c) Drag the header — the panel detaches from the dock and persists its position after a reload.<br>
+            (d) Click the BR-corner grip — resize works.<br>
+            (e) Click the X — panel hides; <code>Y</code> reopens it at the saved rect.<br>
+            (f) Press Esc with the panel open — panel is NOT dismissed (matches Drones / Routes / Settlement).<br>
+            (g) Settings → Reset Window Layout — panel returns to its <code>Zone.R, order: 3</code> slot.</p>
+            <p class="step-text">Do NOT restart <code>robot-islands-dev.service</code> for code changes (AGENTS.md): only <code>npm run build</code> + reload.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/graph-ui.ts src/main.ts
+git commit -F /tmp/recipe-panel-task1-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/recipe-panel-task1-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(graph-ui): convert recipe graph from mountModal to mountPanel
+
+Recipe graph window was a full-screen modal with a dark scrim
+(ui.css backdrop-filter: blur(2px)) that blanked the rest of the HUD.
+Per the v2 design spec, demote it to a floating panel matching the
+Drones / Routes / Settlement family: docked at Zone.R, order 3,
+720x520 initial footprint, minWidth 480.
+
+Inherits drag + resize + persistence automatically from
+makePanelDraggable (window-manager.ts shipped earlier this session).
+Layout persists per-panel via localStorage ri-ui-layout-v1.
+
+Picks (spec v2):
+- scope_of_change=convert_to_panel
+- default_zone=zone_r_order_3
+- initial_size=wide_default (720x520, minWidth 480)
+- close_button_semantics=setvisible_false
+- escape_key_behaviour=drop_from_cascade
+
+The X close-button calls panelHandle.setVisible(false). Y hotkey
+toggle remains wired through dispatchAction; the toggle path now
+flips visibility rather than mount/unmount.
+
+Dropped graphUi.hide() from the dismiss-modal Escape cascade in
+main.ts -- floating panels are not modal and shouldn't respond to
+Esc (Drones / Routes / Settlement / Inspector all behave this way).
+
+No CSS changes -- .ri-panel, .ri-panel__head, .ri-resize, .ri-free
+all exist in ui.css for the four right-dock siblings. The seven
+other modals continue to use mountModal + .ri-modal-scrim.
+
+Refs docs/superpowers/specs/2026-05-23-recipe-graph-modal-gates-
+design.html v2 sections 02-04 + 06.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+            <p class="step-text">Scan the composed message for the <code>Co-Authored-By:</code> trailer before committing — the trailer is syntactic, not stylistic. Missing trailer = failed commit per global config.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 03 — Task 2                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task2">
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: GATES column (<code>recipe-graph.ts</code> + <code>graph-ui.ts</code> + <code>main.ts</code>)</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Add a 2nd column to the recipe-table row grid (after BUILDING, before INPUTS — Picker 05 default <code>after_building</code>). Each row's GATES cell renders the recipe's prerequisites as inline monospace text, dot-separated, with one <code>&lt;span&gt;</code> per gate coloured olive (met) / clay (pending) / gray (N/A). Status is recomputed against the active island on every <code>show()</code> / <code>toggle()</code> — cheap, no tick coupling. The pure layer (<code>recipe-graph.ts</code>) gains a static <code>gates</code> field on each row; <code>graph-ui.ts</code> owns the live colour pass and consults a <code>getState</code> getter threaded from <code>main.ts</code>.</p>
+        <p class="deps-line">Dependencies: <b>Task 1</b> (the panel shell must exist; row grid lives inside it).</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/recipe-graph.ts</code> <span class="tag">— add <code>GateEntry</code> + populate <code>gates</code> from <code>BUILDING_DEFS</code></span></li>
+            <li>Modify: <code>src/graph-ui.ts</code> <span class="tag">— 5-col grid, new gates cell, status repaint, extended haystack, <code>getState</code> option</span></li>
+            <li>Modify: <code>src/main.ts</code> <span class="tag">— pass <code>{ getState: activeState }</code> at mount</span></li>
+          </ul>
+        </div>
+
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Extend <code>RecipeTableRow</code> with the <code>gates</code> field</div>
+            <p class="step-text">Add the <code>GateEntry</code> type and a <code>readonly gates: ReadonlyArray&lt;GateEntry&gt;</code> field on <code>RecipeTableRow</code>. The 8-kind union maps 1:1 to the gate dimensions listed in spec §05.</p>
+            <div class="code-block"><div class="file-label">src/recipe-graph.ts — at the top of the file</div><div class="code"><pre>import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { RECIPES, type RecipeCategory, type ResourceId } from './recipes.js';
+
+export interface RecipeTableEntry {
+  readonly resource: ResourceId;
+  readonly n: number;
+}
+
+<span class="add">/** Per spec v2 section 05 — eight gate dimensions in the data.</span>
+<span class="add"> *  Status (met / pending / N/A) is decided at RENDER time against the</span>
+<span class="add"> *  active island; this layer is pure and stores only the requirement. */</span>
+<span class="add">export type GateKind =</span>
+<span class="add">  | 'tier'      <span class="cm">// def.tier (1-4) -- runtime: tierForLevel(state.level) &gt;= def.tier</span></span>
+<span class="add">  | 't5'        <span class="cm">// def.tier === 5 -- runtime: t5Unlocked(state)</span></span>
+<span class="add">  | 't6'        <span class="cm">// def.tier === 6 -- runtime: t6Unlocked(state, hasSpaceport)</span></span>
+<span class="add">  | 'biome'     <span class="cm">// def.requiredBiomes -- runtime: canPlaceOnIsland(def, spec)</span></span>
+<span class="add">  | 'tile'      <span class="cm">// def.requiredTile -- placement-time only (catalog row = N/A)</span></span>
+<span class="add">  | 'coastal'   <span class="cm">// def.coastal -- placement-time only (catalog row = N/A)</span></span>
+<span class="add">  | 'heat'      <span class="cm">// def.requiresHeat -- runtime adjacency (catalog row = N/A)</span></span>
+<span class="add">  | 'adjacency';<span class="cm">// def.gates[] -- runtime adjacency (catalog row = N/A)</span></span>
+
+<span class="add">export interface GateEntry {</span>
+<span class="add">  readonly kind: GateKind;</span>
+<span class="add">  <span class="cm">/** Display string (e.g. "L≥30", "biome=volcanic", "tile=ore|coal", "heat-src"). */</span></span>
+<span class="add">  readonly label: string;</span>
+<span class="add">}</span>
+
+export interface RecipeTableRow {
+  readonly category: RecipeCategory;
+  readonly recipeKey: string;
+  readonly buildingId: BuildingDefId;
+  readonly buildingLabel: string;
+  readonly tier: number;
+  readonly inputs: ReadonlyArray&lt;RecipeTableEntry&gt;;
+  readonly outputs: ReadonlyArray&lt;RecipeTableEntry&gt;;
+  readonly cycleSec: number;
+<span class="add">  readonly gates: ReadonlyArray&lt;GateEntry&gt;;</span>
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Populate <code>gates</code> in <code>buildRecipeTableRows</code></div>
+            <p class="step-text">Per row, walk the <code>BuildingDef</code> fields. Tier emits <code>'tier'</code> (or <code>'t5'</code> / <code>'t6'</code> when ≥5). Biome / tile / coastal / heat each emit their respective kind. <code>def.gates</code> array emits one <code>'adjacency'</code> entry per gate (label formatted from <code>matchType</code> + optional <code>defId</code> / <code>category</code>). Order is fixed: <code>tier → biome → tile → coastal → heat → adjacency</code> so the rendered row reads top-down by importance.</p>
+            <div class="code-block"><div class="file-label">src/recipe-graph.ts — inside buildRecipeTableRows, before rows.push</div><div class="code"><pre>const buildingId = ownerOf(recipeKey);
+const def = BUILDING_DEFS[buildingId];
+const buildingLabel = def?.displayName ?? buildingId;
+const tier = def?.tier ?? 0;
+
+<span class="add">const gates: GateEntry[] = [];</span>
+<span class="add">if (def) {</span>
+<span class="add">  <span class="cm">// Tier band — splits T5 / T6 into endgame kinds since their status</span></span>
+<span class="add">  <span class="cm">// predicates differ (need aiCoreCrafted / ascendantCoreCrafted flags).</span></span>
+<span class="add">  if (def.tier === 5) {</span>
+<span class="add">    gates.push({ kind: 't5', label: 'L≥50 · ai_core' });</span>
+<span class="add">  } else if (def.tier === 6) {</span>
+<span class="add">    <span class="cm">// Spaceport is exempt from the spaceport-placed half (chicken-and-egg)</span></span>
+<span class="add">    if (buildingId === 'spaceport') {</span>
+<span class="add">      gates.push({ kind: 't6', label: 'ascendant_core' });</span>
+<span class="add">    } else {</span>
+<span class="add">      gates.push({ kind: 't6', label: 'ascendant_core · spaceport' });</span>
+<span class="add">    }</span>
+<span class="add">  } else if (def.tier &gt; 1) {</span>
+<span class="add">    <span class="cm">// L≥6 / L≥11 / L≥16 / etc. — tierForLevel band edges (spec §9.2).</span></span>
+<span class="add">    const lvl = (def.tier - 1) * 5 + 1;</span>
+<span class="add">    gates.push({ kind: 'tier', label: `L≥${lvl}` });</span>
+<span class="add">  }</span>
+<span class="add">  if (def.requiredBiomes &amp;&amp; def.requiredBiomes.length &gt; 0) {</span>
+<span class="add">    gates.push({ kind: 'biome', label: `biome=${def.requiredBiomes.join('|')}` });</span>
+<span class="add">  }</span>
+<span class="add">  if (def.requiredTile &amp;&amp; def.requiredTile.length &gt; 0) {</span>
+<span class="add">    gates.push({ kind: 'tile', label: `tile=${def.requiredTile.join('|')}` });</span>
+<span class="add">  }</span>
+<span class="add">  if (def.coastal) {</span>
+<span class="add">    gates.push({ kind: 'coastal', label: 'coastal' });</span>
+<span class="add">  }</span>
+<span class="add">  if (def.requiresHeat) {</span>
+<span class="add">    gates.push({ kind: 'heat', label: 'heat-src' });</span>
+<span class="add">  }</span>
+<span class="add">  if (def.gates &amp;&amp; def.gates.length &gt; 0) {</span>
+<span class="add">    for (const g of def.gates) {</span>
+<span class="add">      let label: string;</span>
+<span class="add">      switch (g.matchType) {</span>
+<span class="add">        case 'def_id':       label = `adj=${g.defId ?? '?'}`; break;</span>
+<span class="add">        case 'same_category':label = `adj=${g.category ?? '?'}`; break;</span>
+<span class="add">        case 'heat_source':  label = 'adj=heat-src'; break;</span>
+<span class="add">        default:             label = `adj=${String(g.matchType)}`;</span>
+<span class="add">      }</span>
+<span class="add">      gates.push({ kind: 'adjacency', label });</span>
+<span class="add">    }</span>
+<span class="add">  }</span>
+<span class="add">}</span>
+
+rows.push({
+  category: recipe.category,
+  recipeKey,
+  buildingId,
+  buildingLabel,
+  tier,
+  inputs,
+  outputs,
+  cycleSec: recipe.cycleSec,
+<span class="add">  gates,</span>
+});</pre></div></div>
+            <p class="step-text">No <code>IslandState</code> import — this layer stays pure. The matchType union (<code>'def_id'</code> / <code>'same_category'</code> / <code>'heat_source'</code> per <code>adjacency.ts</code>) is exhaustive against the current GateRequirement type; the default branch is defensive against future additions.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Add <code>{ getState }</code> option to <code>mountGraphUi</code></div>
+            <p class="step-text">Status colour decisions need the active <code>IslandState</code> (level / aiCoreCrafted / ascendantCoreCrafted) and the active <code>IslandSpec</code> (biome / artificial). The skill-tree panel already follows this exact pattern at <code>src/main.ts:995</code> — pass a <code>{ getState: activeState }</code> getter. The IslandState type already exports from <code>./economy.js</code>.</p>
+            <p class="step-text">In <code>src/graph-ui.ts</code>, extend the function signature and pull in the type imports:</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — interface + signature</div><div class="code"><pre>import { buildRecipeTableRows, type GateEntry, type RecipeTableRow } from './recipe-graph.js';
+import { mountPanel, Zone, type PanelHandle } from './ui-zones.js';
+<span class="add">import type { IslandState } from './economy.js';</span>
+<span class="add">import type { IslandSpec } from './world.js';</span>
+<span class="add">import { tierForLevel, t5Unlocked, t6Unlocked } from './skilltree.js';</span>
+<span class="add">import { canPlaceOnIsland, BUILDING_DEFS } from './building-defs.js';</span>
+
+export interface GraphUi {
+  show(): void;
+  hide(): void;
+  toggle(): boolean;
+  isVisible(): boolean;
+}
+
+<span class="add">export interface MountGraphUiOptions {</span>
+<span class="add">  <span class="cm">/** Optional getter so the GATES column can repaint its met / pending /</span></span>
+<span class="add">   *  N/A colours against the currently-active island on each open. When</span></span>
+<span class="add">   *  omitted, every gate renders as N/A (gray) — degrades gracefully but</span></span>
+<span class="add">   *  the colour signal is lost. */</span>
+<span class="add">  readonly getState?: () =&gt; IslandState;</span>
+<span class="add">  readonly getSpec?: () =&gt; IslandSpec;</span>
+<span class="add">}</span>
+
+<span class="del">export function mountGraphUi(parentEl: HTMLElement): GraphUi {</span>
+<span class="add">export function mountGraphUi(</span>
+<span class="add">  parentEl: HTMLElement,</span>
+<span class="add">  opts: MountGraphUiOptions = {},</span>
+<span class="add">): GraphUi {</span></pre></div></div>
+            <p class="step-text">The <code>getSpec</code> getter is OPTIONAL for now — the biome status check needs it, and main.ts already exposes <code>activeSpec()</code> (line 941). Wire it in Step 5; for Step 3 the type is declared so the signature stabilizes.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Widen the row grid + add the gates cell</div>
+            <p class="step-text">Change <code>gridTemplateColumns</code> from <code>'260px 1fr 1fr 60px'</code> to <code>'180px 150px 1fr 1fr 60px'</code> (BUILDING shrinks 260→180; new GATES column gets 150px between BUILDING and INPUTS — Picker 05 <code>after_building</code>). Append a <code>gatesCell</code> div to each row immediately after the building cell.</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — per-row construction loop (around line 78-133)</div><div class="code"><pre>const rowEl = document.createElement('div');
+rowEl.style.display = 'grid';
+<span class="del">rowEl.style.gridTemplateColumns = '260px 1fr 1fr 60px';</span>
+<span class="add">rowEl.style.gridTemplateColumns = '180px 150px 1fr 1fr 60px';</span>
+rowEl.style.gap = '10px';
+
+<span class="cm">// ... bCell construction unchanged ...</span>
+
+<span class="add"><span class="cm">// GATES cell — inline text, dot-separated. Status colour is filled in</span></span>
+<span class="add"><span class="cm">// later by refreshGatesStatus() against the active island.</span></span>
+<span class="add">const gatesCell = document.createElement('div');</span>
+<span class="add">gatesCell.style.display = 'flex';</span>
+<span class="add">gatesCell.style.flexWrap = 'wrap';</span>
+<span class="add">gatesCell.style.gap = '0 6px';</span>
+<span class="add">gatesCell.style.alignItems = 'center';</span>
+<span class="add">gatesCell.style.lineHeight = '1.35';</span>
+<span class="add">const gateSpans: HTMLSpanElement[] = [];</span>
+<span class="add">if (row.gates.length === 0) {</span>
+<span class="add">  const dash = document.createElement('span');</span>
+<span class="add">  dash.textContent = '—';</span>
+<span class="add">  dash.style.color = '#5a7080';</span>
+<span class="add">  gatesCell.appendChild(dash);</span>
+<span class="add">} else {</span>
+<span class="add">  for (let gi = 0; gi &lt; row.gates.length; gi++) {</span>
+<span class="add">    const g = row.gates[gi]!;</span>
+<span class="add">    const span = document.createElement('span');</span>
+<span class="add">    span.textContent = g.label;</span>
+<span class="add">    span.dataset.gateKind = g.kind;</span>
+<span class="add">    gateSpans.push(span);</span>
+<span class="add">    gatesCell.appendChild(span);</span>
+<span class="add">    if (gi &lt; row.gates.length - 1) {</span>
+<span class="add">      const sep = document.createElement('span');</span>
+<span class="add">      sep.textContent = '·';</span>
+<span class="add">      sep.style.color = '#3a4452';</span>
+<span class="add">      gatesCell.appendChild(sep);</span>
+<span class="add">    }</span>
+<span class="add">  }</span>
+<span class="add">}</span>
+
+<span class="cm">// ... inCell, outCell, cycleCell unchanged ...</span>
+
+rowEl.appendChild(bCell);
+<span class="add">rowEl.appendChild(gatesCell);</span>
+rowEl.appendChild(inCell);
+rowEl.appendChild(outCell);
+rowEl.appendChild(cycleCell);
+container.appendChild(rowEl);</pre></div></div>
+            <p class="step-text">The <code>rowEls</code> SectionRef shape needs to carry the per-row <code>gateSpans + row.gates</code> so <code>refreshGatesStatus</code> (next step) can repaint them. Augment the <code>rowEls</code> push:</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — rowEls bookkeeping</div><div class="code"><pre>interface SectionRef {
+  readonly header: HTMLDivElement;
+  readonly rowEls: ReadonlyArray&lt;{
+    el: HTMLDivElement;
+    haystack: string;
+<span class="add">    gates: ReadonlyArray&lt;GateEntry&gt;;</span>
+<span class="add">    gateSpans: ReadonlyArray&lt;HTMLSpanElement&gt;;</span>
+  }&gt;;
+}
+<span class="cm">// ... at the rowEls.push call site ...</span>
+<span class="add">rowEls.push({ el: rowEl, haystack, gates: row.gates, gateSpans });</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Add <code>refreshGatesStatus()</code> + call from show / toggle</div>
+            <p class="step-text">A single function consults <code>getState()</code> / <code>getSpec()</code> (when provided) and walks every <code>gateSpan</code>, setting its colour to one of three values per Picker 08 (<code>status_only</code>):</p>
+            <ul style="margin:6px 0 10px 22px;font-size:13.5px;color:var(--gray-500)">
+              <li><code>#8FA56E</code> (olive / met) — gate is satisfied against the active state/spec.</li>
+              <li><code>#D97757</code> (clay / pending) — gate is unsatisfied (player can work toward it).</li>
+              <li><code>#5a7080</code> (gray / N/A) — placement-time gate that has no live "met / not met" answer for a catalog row (per Picker 06's listed N/A rule).</li>
+            </ul>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — inside mountGraphUi, after `sections` is populated</div><div class="code"><pre><span class="add">const STATUS_MET = '#8FA56E';</span>
+<span class="add">const STATUS_PENDING = '#D97757';</span>
+<span class="add">const STATUS_NA = '#5a7080';</span>
+
+<span class="add">function refreshGatesStatus(): void {</span>
+<span class="add">  const state = opts.getState ? opts.getState() : null;</span>
+<span class="add">  const spec  = opts.getSpec  ? opts.getSpec()  : null;</span>
+<span class="add">  <span class="cm">// Without either getter every gate falls through to N/A — degraded but safe.</span></span>
+<span class="add">  for (const section of sections) {</span>
+<span class="add">    for (const { gates, gateSpans } of section.rowEls) {</span>
+<span class="add">      for (let i = 0; i &lt; gates.length; i++) {</span>
+<span class="add">        const g = gates[i]!;</span>
+<span class="add">        const span = gateSpans[i]!;</span>
+<span class="add">        let status: 'met' | 'pending' | 'na' = 'na';</span>
+<span class="add">        switch (g.kind) {</span>
+<span class="add">          case 'tier': {</span>
+<span class="add">            <span class="cm">// label is "L≥N" — parse N defensively.</span></span>
+<span class="add">            if (state) {</span>
+<span class="add">              const m = /L≥(\d+)/.exec(g.label);</span>
+<span class="add">              const need = m ? Number(m[1]) : 0;</span>
+<span class="add">              status = state.level &gt;= need ? 'met' : 'pending';</span>
+<span class="add">            }</span>
+<span class="add">            break;</span>
+<span class="add">          }</span>
+<span class="add">          case 't5':</span>
+<span class="add">            if (state) {</span>
+<span class="add">              status = t5Unlocked(state) ? 'met' : 'pending';</span>
+<span class="add">            }</span>
+<span class="add">            break;</span>
+<span class="add">          case 't6':</span>
+<span class="add">            if (state) {</span>
+<span class="add">              <span class="cm">// hasSpaceport check is not exposed at this layer; t6Unlocked</span></span>
+<span class="add">              <span class="cm">// signature here is (state, hasSpaceport) -- pass false to fall</span></span>
+<span class="add">              <span class="cm">// back to ascendant_core-only check for Spaceport; the label</span></span>
+<span class="add">              <span class="cm">// itself shows the spaceport requirement separately so this is OK.</span></span>
+<span class="add">              status = t6Unlocked(state, false) ? 'met' : 'pending';</span>
+<span class="add">            }</span>
+<span class="add">            break;</span>
+<span class="add">          case 'biome':</span>
+<span class="add">            if (spec) {</span>
+<span class="add">              const def = BUILDING_DEFS[</span>
+<span class="add">                (function findDefIdFromHaystack(): string {</span>
+<span class="add">                  <span class="cm">// We don't have buildingId in scope here; instead look it up by</span></span>
+<span class="add">                  <span class="cm">// walking the parent row's data-* attribute set by the caller.</span></span>
+<span class="add">                  return span.closest('[data-row-building]')?.getAttribute('data-row-building') ?? '';</span>
+<span class="add">                })() as keyof typeof BUILDING_DEFS</span>
+<span class="add">              ];</span>
+<span class="add">              status = def &amp;&amp; canPlaceOnIsland(def, spec) ? 'met' : 'pending';</span>
+<span class="add">            }</span>
+<span class="add">            break;</span>
+<span class="add">          case 'tile':</span>
+<span class="add">          case 'coastal':</span>
+<span class="add">          case 'heat':</span>
+<span class="add">          case 'adjacency':</span>
+<span class="add">            <span class="cm">// Placement-time / runtime-adjacency predicates have no live answer</span></span>
+<span class="add">            <span class="cm">// for a catalog row (spec §05). Render as N/A.</span></span>
+<span class="add">            status = 'na';</span>
+<span class="add">            break;</span>
+<span class="add">        }</span>
+<span class="add">        span.style.color =</span>
+<span class="add">          status === 'met' ? STATUS_MET :</span>
+<span class="add">          status === 'pending' ? STATUS_PENDING :</span>
+<span class="add">          STATUS_NA;</span>
+<span class="add">      }</span>
+<span class="add">    }</span>
+<span class="add">  }</span>
+<span class="add">}</span>
+
+<span class="cm">// Avoid silent tierForLevel-vs-state.level drift: keep the use here even</span>
+<span class="cm">// though the L≥N check above is the canonical band edge (tierForLevel</span>
+<span class="cm">// would let us share the source of truth — but the regex form works for</span>
+<span class="cm">// the static labels we generated in recipe-graph.ts).</span>
+<span class="cm">// Note: import { tierForLevel } stays in case future tier kinds need it.</span></pre></div></div>
+            <p class="step-text">Stamp the <code>data-row-building</code> attribute on each <code>rowEl</code> during row construction so the biome lookup can find the building id:</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — inside the per-row construction</div><div class="code"><pre>const rowEl = document.createElement('div');
+<span class="add">rowEl.dataset.rowBuilding = row.buildingId;</span>
+rowEl.style.display = 'grid';</pre></div></div>
+            <p class="step-text">Call <code>refreshGatesStatus()</code> from <code>show()</code> and the truthy branch of <code>toggle()</code> so the colours sync to whichever island is active when the panel opens:</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — return surface</div><div class="code"><pre>show(): void {
+  if (visible) return;
+  visible = true;
+  panelHandle.setVisible(true);
+<span class="add">  refreshGatesStatus();</span>
+  setTimeout(() =&gt; search.focus(), 0);
+},
+<span class="cm">// ... toggle ...</span>
+toggle(): boolean {
+  if (visible) {
+    visible = false;
+    panelHandle.setVisible(false);
+    return false;
+  }
+  visible = true;
+  panelHandle.setVisible(true);
+<span class="add">  refreshGatesStatus();</span>
+  setTimeout(() =&gt; search.focus(), 0);
+  return true;
+},</pre></div></div>
+            <p class="step-text">Initial paint: call <code>refreshGatesStatus()</code> once right after the sections loop completes so the first open already has correct colours.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Extend the search haystack with gate strings</div>
+            <p class="step-text">Picker 09 default <code>keep_text_only</code> says: don't add filters, but make the existing text search hit the new column for free. Append <code>row.gates.map(g =&gt; g.label).join(' ')</code> to the haystack so typing <code>"volcanic"</code> or <code>"heat"</code> matches.</p>
+            <div class="code-block"><div class="file-label">src/graph-ui.ts — haystack construction</div><div class="code"><pre>const haystack = [
+  row.buildingLabel,
+  row.recipeKey,
+  row.category,
+  ...row.inputs.map((e) =&gt; e.resource),
+  ...row.outputs.map((e) =&gt; e.resource),
+<span class="add">  ...row.gates.map((g) =&gt; g.label),</span>
+]
+  .join(' ')
+  .toLowerCase();</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Pass <code>{ getState, getSpec }</code> from <code>src/main.ts</code></div>
+            <p class="step-text">At <code>src/main.ts:1000</code>, replace the single-arg call with the options-bag form. Both getters already exist on this scope (<code>activeState</code> at line 946, <code>activeSpec</code> at line 941) — the same pattern the skill-tree panel uses at line 995 and the buildings-ui panel at line 1014.</p>
+            <div class="code-block"><div class="file-label">src/main.ts — at line 1000</div><div class="code"><pre><span class="del">const graphUi = mountGraphUi(document.body);</span>
+<span class="add">const graphUi = mountGraphUi(document.body, {</span>
+<span class="add">  getState: activeState,</span>
+<span class="add">  getSpec: activeSpec,</span>
+<span class="add">});</span>
+defineAction(reg, 'toggle-graph', () =&gt; {
+  graphUi.toggle();
+});</pre></div></div>
+            <p class="step-text">No other call sites — <code>mountGraphUi</code> is referenced only from this line (verified via <code>grep -n mountGraphUi src/main.ts</code> → single match at line 73 import + 1000 call).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Type-check + build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: tsc clean under <code>strict</code> + <code>noUncheckedIndexedAccess</code> + <code>noUnusedLocals</code> + <code>noUnusedParameters</code>. The new imports (<code>tierForLevel</code>, <code>t5Unlocked</code>, <code>t6Unlocked</code>, <code>canPlaceOnIsland</code>, <code>BUILDING_DEFS</code>) all get used inside <code>refreshGatesStatus</code>; <code>IslandState</code> and <code>IslandSpec</code> are type-only imports.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 9: Run the test suite (existing + adjustments)</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: all existing tests pass. The pure <code>buildRecipeTableRows</code> function gains a <code>gates</code> field but doesn't currently have a unit test (verified — <code>recipe-graph.ts</code> has no sibling <code>recipe-graph.test.ts</code> file on master). If any existing test snapshots the row shape and fails on the new field, update the snapshot — but no shipped test does this; run the suite to confirm.</p>
+            <p class="step-text">If a regression appears, prefer adding minimal coverage at the seam: a vitest spec at <code>src/recipe-graph.test.ts</code> asserting (a) Mine has a single <code>tile</code> gate; (b) Pyroforge has tier + biome + heat gates in that order; (c) Spaceport has a <code>t6</code> gate without the spaceport-adjacency clause. Skip if the build+suite pass clean.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 10: Visual smoke-test (browser)</div>
+            <p class="step-text">After <code>npm run build</code> + reload of <code>https://islands.nitjsefni.eu/</code>:</p>
+            <p class="step-text">(a) Hit <code>Y</code> — panel opens with 5 columns: BUILDING · GATES · INPUTS · OUTPUTS · CYCLE.<br>
+            (b) Logger T1 / Mine T1 / Quarry T1 rows show <code>tile=tree</code> / <code>tile=ore|coal</code> / <code>tile=stone</code> in N/A gray.<br>
+            (c) Coke Oven T2 row shows <code>L≥6 · heat-src · adj=heat-src</code> with the L gate either olive (active island level ≥ 6) or clay.<br>
+            (d) Pyroforge T4 row shows <code>L≥16 · biome=volcanic · heat-src</code> with the biome gate olive only on a volcanic island.<br>
+            (e) Type <code>"volcanic"</code> in the search input — rows where <code>biome=volcanic</code> appears in gates show; others hide.<br>
+            (f) Switch active island (click another populated island) and reopen the panel — biome / tier statuses repaint.<br>
+            (g) Use <code>mcp__daedalus__screenshot</code> to capture the panel and confirm against the spec §00 picker mocks.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 11: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/recipe-graph.ts src/graph-ui.ts src/main.ts
+git commit -F /tmp/recipe-panel-task2-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/recipe-panel-task2-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(graph-ui): add GATES column to recipe-graph panel
+
+New 2nd column between BUILDING and INPUTS (Picker 05 default
+after_building) renders each recipe's prerequisites as inline
+monospace text, dot-separated, coloured by met / pending / N/A
+status against the active island.
+
+Pure layer:
+- recipe-graph.ts gains GateKind ('tier' | 't5' | 't6' | 'biome' |
+  'tile' | 'coastal' | 'heat' | 'adjacency') and a
+  readonly gates: ReadonlyArray&lt;GateEntry&gt; field on
+  RecipeTableRow.
+- buildRecipeTableRows populates the array from def.tier,
+  def.requiredBiomes, def.requiredTile, def.coastal,
+  def.requiresHeat, def.gates. No IslandState dep.
+
+Render layer:
+- graph-ui.ts widens the row grid to '180px 150px 1fr 1fr 60px'
+  and appends a gatesCell per row with one &lt;span&gt; per gate.
+- refreshGatesStatus() walks all spans on every show() / toggle()
+  and sets each span's colour to olive (met) / clay (pending) /
+  gray (N/A) — Picker 08 default status_only. Cheap one-pass,
+  no tick coupling.
+- Status sources: tierForLevel + t5Unlocked / t6Unlocked from
+  skilltree.ts; canPlaceOnIsland from building-defs.ts; tile /
+  coastal / heat / adjacency gates render N/A (placement-time
+  or runtime adjacency, no live catalog answer per spec §05).
+- Search haystack extended with row.gates labels so the existing
+  text input filters on gate strings too (Picker 09 default
+  keep_text_only).
+
+Wiring:
+- main.ts:1000 passes { getState: activeState, getSpec: activeSpec }
+  at mount. Same pattern the skill-tree and buildings panels use.
+
+Refs docs/superpowers/specs/2026-05-23-recipe-graph-modal-gates-
+design.html v2 sections 03 + 05.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+            <p class="step-text">Scan the composed message for the <code>Co-Authored-By:</code> trailer before <code>git commit</code> — global config treats the trailer as syntactic.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 04 — Notes                                                         -->
+    <!-- ================================================================= -->
+    <section id="sec-notes">
+      <div class="sec-head"><span class="num">04</span><h2>Notes, verification, dependencies</h2></div>
+      <div class="notes">
+
+        <div class="note"><strong>Dependency on the draggable-windows feature.</strong> Both tasks rely on commits <code>28fe30d</code>, <code>6c3ca65</code>, <code>c9f1caa</code>, <code>aa11756</code>, <code>0bb1a4a</code> shipped earlier this session: <code>mountPanel</code> internally calls <code>makePanelDraggable</code> for non-chrome panels (<code>src/ui-zones.ts:217</code>), <code>recipe-graph-panel</code> is not in <code>CHROME_PANEL_IDS</code> (verified — only <code>action-strip</code> and <code>island-bar</code> are), so drag + resize + persistence kick in automatically. Layout persists per-panel via <code>localStorage['ri-ui-layout-v1']</code> (<code>src/window-manager.ts</code>). Settings → Reset Window Layout calls <code>resetUiLayout()</code> → <code>restoreAllToZones()</code> and re-stacks the recipe panel at <code>Zone.R, order: 3</code> alongside Drones / Routes / Settlement.</div>
+
+        <div class="note"><strong>The <code>mountPanel</code> signature trap.</strong> Per <code>src/ui-zones.ts:68-76</code>, <code>PanelMountOptions</code> is <code>{ id, zone, order?, minWidth?, maxWidth? }</code>. There is NO <code>initialSize</code> / <code>initialWidth</code> / <code>height</code> field — the 720×520 default goes on the panel element as inline style BEFORE the <code>mountPanel</code> call (mirrors <code>src/drones-ui.ts:162-176</code>). The plan's Task 1 Step 2 spells this out.</div>
+
+        <div class="note"><strong>The Esc cascade entry is at <code>main.ts:1379</code>.</strong> The <code>dismiss-modal</code> action body is at lines 1370-1390; <code>graphUi.hide()</code> is the 6th of nine hide calls. Removing just that one line is the entire change per Picker 04 default — the action stays defined, the binding stays, the seven sibling modals still respond to Esc.</div>
+
+        <div class="note"><strong>Status refresh cadence: per-open, not per-tick.</strong> <code>refreshGatesStatus()</code> runs from <code>show()</code> and the truthy branch of <code>toggle()</code> only. The panel doesn't subscribe to the tick loop; if the player levels up while the panel is open, the colours don't update mid-session — they update on next reopen. This matches the existing behaviour: the modal already builds its row list once at mount and never repaints. If a follow-up wants live updates, hook into the level-up event source (not in scope here).</div>
+
+        <div class="note"><strong>The biome lookup needs the buildingId per row.</strong> <code>refreshGatesStatus</code> resolves it via <code>data-row-building</code> stamped on the row element (Task 2 Step 5). Alternative: thread <code>buildingId</code> directly through the <code>SectionRef.rowEls</code> shape — same outcome, more explicit. The plan picks the data-attr form because it's the minimum diff and the row element is already the closure parent.</div>
+
+        <div class="note"><strong>T6 status check elides the <code>hasSpaceport</code> half.</strong> <code>t6Unlocked(state, hasSpaceport)</code> needs to know whether the active island has a Spaceport placed. This isn't trivially available at the <code>graph-ui.ts</code> layer (would require iterating <code>state.buildings</code>). For Task 2's scope, the plan passes <code>false</code> and notes the limitation — pre-Spaceport, all non-Spaceport T6 rows render as pending against an island where the player HAS placed a Spaceport, which is a false negative the GATES column will display. Acceptable for ship: the label itself shows the requirement (<code>ascendant_core · spaceport</code>); the colour is the only thing that lies. Tighten in a follow-up by threading a <code>hasSpaceport</code> getter through <code>MountGraphUiOptions</code>.</div>
+
+        <div class="note risk"><strong>Risk: <code>container.style.minWidth = '720px'</code> still on the inner container.</strong> Task 1 keeps line 35's <code>container.style.minWidth = '720px'</code> because the 5-column row grid needs the horizontal room. If the user resizes the panel below ~520px wide, the inner container scrolls horizontally inside the panel body. This is a known trade-off (spec §00 Picker 02 "Heads up" explicitly notes the row gets tight at narrow widths). Verify under Task 1 Step 7 visual smoke-test by resizing the panel narrow — the scrollbar should appear inside <code>.ri-panel__body</code>, not overflow the panel border.</div>
+
+        <div class="note"><strong>Verification commands recap.</strong>
+          <br>Build: <code>npm run build</code> (tsc -b + vite build).
+          <br>Test: <code>npm test</code> (vitest run, all suites).
+          <br>Visual: <code>npm run build</code> → user reloads browser → <code>mcp__daedalus__screenshot</code>. Do NOT restart <code>robot-islands-dev.service</code> (per AGENTS.md; only restart when <code>vite.config.ts</code> or <code>package.json</code> changes).
+          <br>Per-file targeted test: <code>npx vitest run src/recipe-graph.test.ts</code> if a test file is added in Task 2 Step 9.</div>
+
+        <div class="note"><strong>Commit trailer reminder.</strong> Both Task 1 Step 8 and Task 2 Step 11 include the literal trailer <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code> — the implementer is the kimi subagent, so the trailer carries kimi's name (not Claude's). Global config treats a missing trailer as a failed commit, not an aesthetic issue.</div>
+
+        <div class="note"><strong>What's deliberately NOT in this plan.</strong> All spec §07 "Out of scope" items: Mermaid-style visual graph view; runtime status for tile / coastal / heat / adjacency gates without a placement; click-to-build / click-to-locate from a row; sortable column headers; persisting search text across sessions; a sister "MODS" multiplier column. The Reset Window Layout interaction is already wired by the existing window-manager / settings-ui code and needs no work in this plan.</div>
+
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      <p>Implementation plan · robot-islands · generated 2026-05-23 · spec v2 · picks=all-default · 2 tasks · 3 files · kimi-cli implementer · related to <code>src/graph-ui.ts</code>, <code>src/recipe-graph.ts</code>, <code>src/main.ts</code>, <code>src/ui-zones.ts</code>, <code>src/window-manager.ts</code>, <code>src/building-defs.ts</code>, <code>src/skilltree.ts</code>, <code>src/ui.css</code> (reference only).</p>
+    </footer>
+
+  </div>
+</body>
+</html>
