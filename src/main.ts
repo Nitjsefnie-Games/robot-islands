@@ -1990,6 +1990,7 @@ async function main(): Promise<void> {
     // strictly need a per-frame call, but level-up while the panel is open
     // should be reflected in the points / xp counters live.
     skillTree.refresh();
+    skillGraph.refreshHud();
     buildingsUi.refresh();
     // Inventory panel — cheap when hidden (early-returns in refresh()).
     // Samples the active island's inventory through deps for its rolling
