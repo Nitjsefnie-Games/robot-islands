@@ -32,6 +32,7 @@ const REBUILD_MS = 2000;
 const AMBER = 0xe6b800;
 const RED = 0xff5040;
 const CONSTRUCTION_CYAN = 0x60c8e0;
+const DISABLED_RED = 0xE8624A;
 
 export interface BuildingAlertsHandle {
   readonly layer: Container;
@@ -109,6 +110,47 @@ export function mountBuildingAlertsOverlay(
               .lineTo(tlPx, tlPy)
               .fill({ color: CONSTRUCTION_CYAN });
           }
+        }
+
+        // §NEW disabled cue (p_visual_cue=low_alpha). 0.40-alpha fill +
+        // dashed red outline over the footprint. Painted after the
+        // construction tint (so a disabled-but-under-construction
+        // building, which UI flow forbids but a hand-edited save could
+        // produce, would show both) and before the maintenance dot (so
+        // the dot — which still reflects the frozen factor — surfaces
+        // on top).
+        if (b.disabled === true) {
+          const half = TILE_PX / 2;
+          const rx = (spec.cx + minTx) * TILE_PX - half;
+          const ry = (spec.cy + minTy) * TILE_PX - half;
+          const rw = (maxTx - minTx + 1) * TILE_PX;
+          const rh = (maxTy - minTy + 1) * TILE_PX;
+          // Dimming fill — keeps the sprite identifiable but reads as "off".
+          gfx.rect(rx, ry, rw, rh).fill({ color: 0x000000, alpha: 0.40 });
+          // Dashed red outline. PixiJS Graphics doesn't have a native
+          // stroke-dasharray; emit four segments along the perimeter,
+          // alternating drawn/skipped, to approximate the 4-3 dash pattern.
+          const DASH = 4;
+          const GAP = 3;
+          const drawDashedSegment = (x0: number, y0: number, x1: number, y1: number): void => {
+            const dx = x1 - x0;
+            const dy = y1 - y0;
+            const len = Math.hypot(dx, dy);
+            if (len === 0) return;
+            const ux = dx / len;
+            const uy = dy / len;
+            let t = 0;
+            while (t < len) {
+              const segEnd = Math.min(t + DASH, len);
+              gfx.moveTo(x0 + ux * t, y0 + uy * t).lineTo(x0 + ux * segEnd, y0 + uy * segEnd);
+              t = segEnd + GAP;
+            }
+          };
+          drawDashedSegment(rx, ry, rx + rw, ry);            // top
+          drawDashedSegment(rx + rw, ry, rx + rw, ry + rh);  // right
+          drawDashedSegment(rx + rw, ry + rh, rx, ry + rh);  // bottom
+          drawDashedSegment(rx, ry + rh, rx, ry);            // left
+          gfx.stroke({ color: DISABLED_RED, width: 1.5 });
         }
 
         // §4.7 maintenance badge — top-right corner dot. Only buildings
