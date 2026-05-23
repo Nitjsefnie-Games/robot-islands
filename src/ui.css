@@ -110,6 +110,70 @@ canvas { display: block; }
 .ri-panel__body { padding: 10px 12px; }
 .ri-panel__body--dense { padding: 6px 12px; }
 
+/* ── Draggable / resizable panels (window-manager) ────────────────────
+   These rules are dormant until window-manager.ts stamps
+   data-ri-drag-handle on a panel's header and appends a .ri-resize
+   child. The cursor and grip styling are visual-only: pointer
+   choreography lives in window-manager.ts. */
+
+/* Every recognised drag handle gets a grab cursor on hover. */
+.ri-panel__head,
+[data-ri-drag-handle] {
+  cursor: grab;
+  user-select: none;
+}
+
+/* While a drag is in progress, the body class is set by window-manager. */
+body.ri-dragging,
+body.ri-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* Children of the drag handle that should NOT inherit the grab cursor —
+   interactive widgets keep their own affordance. window-manager.ts also
+   guards the pointerdown event with target.closest() against these. */
+.ri-panel__head button,
+.ri-panel__head input,
+.ri-panel__head select,
+.ri-panel__head textarea,
+[data-ri-drag-handle] button,
+[data-ri-drag-handle] input,
+[data-ri-drag-handle] select,
+[data-ri-drag-handle] textarea {
+  cursor: pointer;
+}
+
+/* BR-corner resize grip. 14×14, three diagonal cyan stripes drawn via
+   layered linear-gradients (one stripe per gradient). nwse-resize cursor.
+   Positioned absolute so panels using ri-panel__body padding don't need
+   to know about it. window-manager.ts appends one to each free panel. */
+.ri-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  z-index: 1;
+  background:
+    linear-gradient(135deg, transparent 0 35%, var(--ri-accent) 35% 42%, transparent 42% 100%),
+    linear-gradient(135deg, transparent 0 55%, var(--ri-accent) 55% 62%, transparent 62% 100%),
+    linear-gradient(135deg, transparent 0 75%, var(--ri-accent) 75% 82%, transparent 82% 100%);
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+  pointer-events: auto;
+}
+.ri-resize:hover { opacity: 1; }
+
+/* Free-positioned panels need `position: fixed` (set by layoutZone) but
+   not any transform. layoutZone clears transform on non-TC zones; this
+   rule is the belt-and-braces guarantee for an ri-free panel. */
+.ri-panel.ri-free {
+  transform: none !important;
+  margin: 0;
+}
+
 /* ─── buttons ────────────────────────────────────────────────────────── */
 
 .ri-btn {
