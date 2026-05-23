@@ -1,0 +1,2051 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recipe graph → floating panel + GATES column — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gold:     #C8A040;
+      --violet:   #9C8FCC;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1080px; margin: 0 auto; }
+
+    /* header */
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 36px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* summary */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+    .summary .v.warn    { color: var(--gold); }
+
+    /* correction banner */
+    .correction {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--rust);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 40px;
+    }
+    .correction .f-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--rust);
+      margin-bottom: 8px;
+    }
+    .correction .f-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .correction .f-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .correction .f-body + .f-body { margin-top: 10px; }
+    .correction code { color: #C9B98A; }
+
+    /* decision banner */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--olive);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 48px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--olive);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 10px; }
+    .decision code { color: #C9B98A; }
+
+    /* sections */
+    section { margin-bottom: 56px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 820px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    p.body em { color: var(--gray-700); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+
+    /* table */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono  { font-family: var(--mono); font-size: 12.5px; color: #C9B98A; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .tbl td.olive { color: var(--olive); font-family: var(--mono); font-size: 12px; }
+    .tbl td.clay  { color: var(--clay);  font-family: var(--mono); font-size: 12px; }
+
+    /* compare */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* code blocks */
+    pre.code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: #C9B98A;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      margin: 8px 0 14px;
+    }
+    pre.code .ln { color: var(--gray-500); user-select: none; }
+
+    /* changes */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .change .what code { background: var(--gray-150); }
+
+    /* deferred */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    /* pickers */
+    .pickers {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+    .picker {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px 14px;
+      margin: 0;
+    }
+    .picker > legend {
+      padding: 0 8px;
+      margin-left: -4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--clay);
+    }
+    .picker .p-title {
+      font-family: var(--serif);
+      font-size: 17px;
+      color: var(--slate);
+      font-weight: 500;
+      margin-bottom: 4px;
+      letter-spacing: -0.005em;
+    }
+    .picker .p-intro {
+      font-size: 13px;
+      color: var(--gray-500);
+      margin-bottom: 14px;
+      max-width: 760px;
+    }
+    .picker .opts { display: flex; flex-direction: column; gap: 10px; }
+    .picker .opt {
+      display: block;
+      padding: 0;
+      border: 1.5px solid var(--gray-300);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease;
+      background: transparent;
+      overflow: hidden;
+      position: relative;
+    }
+    .picker .opt:hover { border-color: var(--gray-500); background: rgba(255,255,255,0.015); }
+    .picker .opt .o-mock {
+      display: block;
+      background: var(--ivory);
+      border-bottom: 1px solid var(--gray-300);
+      padding: 8px 10px;
+    }
+    .picker .opt .o-mock svg { display: block; width: 100%; height: auto; }
+    .picker .opt .o-body {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 4px 12px;
+      padding: 10px 12px 12px 10px;
+    }
+    .picker .opt input[type="radio"] {
+      grid-row: 1 / span 2;
+      grid-column: 1;
+      margin-top: 3px;
+      accent-color: var(--clay);
+      width: 14px; height: 14px;
+      cursor: pointer;
+    }
+    .picker .opt .o-label {
+      grid-row: 1; grid-column: 2;
+      font-size: 14px;
+      color: var(--slate);
+      font-weight: 600;
+    }
+    .picker .opt .o-rat {
+      grid-row: 2; grid-column: 2;
+      font-size: 12.5px;
+      color: var(--gray-500);
+      line-height: 1.5;
+    }
+    .picker .opt[data-default="true"] .o-label::after {
+      content: ' · default';
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--olive);
+      letter-spacing: 0.05em;
+      font-weight: 500;
+    }
+    .picker .opt:has(input[type="radio"]:checked) .o-label { color: var(--clay); }
+    .picker .opt:has(input[type="radio"]:checked) {
+      border-color: var(--clay);
+      background: rgba(217, 119, 87, 0.06);
+    }
+    .picker .opt:has(input[type="radio"]:checked) .o-mock {
+      border-bottom-color: rgba(217, 119, 87, 0.40);
+    }
+    .picker .p-current {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-top: 1px dashed var(--gray-300);
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--gray-500);
+    }
+    .picker .p-current b { color: var(--olive); font-weight: 600; }
+
+    /* selections */
+    .selections {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--olive);
+      border-radius: var(--radius);
+      padding: 22px 24px 20px;
+      margin-top: 56px;
+      max-width: 980px;
+    }
+    .selections .s-tag {
+      font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--olive); margin-bottom: 6px;
+    }
+    .selections .s-head {
+      font-family: var(--serif); font-size: 22px;
+      font-weight: 500; color: var(--slate);
+      margin-bottom: 10px; letter-spacing: -0.01em;
+    }
+    .selections .s-body {
+      font-size: 14px; color: var(--gray-700);
+      max-width: 760px; margin-bottom: 14px;
+    }
+    .selections .s-tools {
+      display: flex; gap: 10px; align-items: center;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .selections button.copy-btn {
+      font-family: var(--mono); font-size: 12px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 7px 14px; border-radius: 7px;
+      border: 1.5px solid var(--olive);
+      background: transparent; color: var(--olive);
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .selections button.copy-btn:hover { background: var(--olive); color: var(--ivory); }
+    .selections button.copy-btn.copied { background: var(--olive); color: var(--ivory); }
+    .selections .format-toggle {
+      display: inline-flex; gap: 0;
+      border: 1.5px solid var(--gray-300);
+      border-radius: 7px; overflow: hidden;
+    }
+    .selections .format-toggle button {
+      font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
+      text-transform: uppercase; padding: 6px 12px;
+      border: 0; background: transparent;
+      color: var(--gray-500); cursor: pointer;
+      transition: background 100ms, color 100ms;
+    }
+    .selections .format-toggle button.active { background: var(--oat); color: var(--slate); }
+    .selections .copy-status {
+      font-family: var(--mono); font-size: 11px;
+      color: var(--olive); letter-spacing: 0.04em;
+    }
+    .selections pre.payload {
+      font-family: var(--mono); font-size: 12.5px;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 8px; padding: 14px 18px; color: #C9B98A;
+      line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+      cursor: text; user-select: text;
+    }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px;
+      margin-top: 64px; padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+    .footer code { background: var(--gray-150); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands · HUD / Recipe graph · v2</div>
+      <h1>Recipe graph: convert from full-screen modal to a draggable floating panel, plus a new GATES column</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        <strong>v1 of this spec read the brief inverted &mdash; ignore it.</strong>
+        The current recipe-graph window is a full-screen modal with a dark
+        scrim that blanks the rest of the HUD; that is the <em>problem</em>,
+        not the goal. The user wants it to behave like the Drone Ops panel:
+        a draggable, resizable floating panel that sits alongside the rest
+        of the HUD, no scrim, no centred-card sizing. This benefits directly
+        from the draggable-windows feature shipped earlier in this session
+        (commits <code>28fe30d</code> through <code>0bb1a4a</code> &mdash;
+        <code>src/window-manager.ts</code> + <code>mountPanel</code> now
+        wires <code>makePanelDraggable</code> for non-chrome panels, with
+        localStorage persistence at <code>ri-ui-layout-v1</code>). Task (2)
+        &mdash; the new GATES column &mdash; is unaffected by the inversion
+        and its pickers carry over wholesale.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Pickers</div><div class="v accent">11</div></div>
+      <div class="cell"><div class="k">SVG mocks</div><div class="v">37</div></div>
+      <div class="cell"><div class="k">Files touched (defaults)</div><div class="v">3</div></div>
+      <div class="cell"><div class="k">v1 supersession</div><div class="v warn">premise inverted</div></div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- v1 correction banner                                                 -->
+    <!-- =================================================================== -->
+    <div class="correction">
+      <div class="f-tag">Correction · v1 was inverted</div>
+      <div class="f-head">v1 read "convert to a modal" literally. The brief meant the opposite: <em>get rid of</em> the modal.</div>
+      <div class="f-body">
+        v1 inspected <code>graph-ui.ts:163</code>, observed
+        <code>mountModal(parentEl, …)</code>, concluded the window was
+        already a modal, and reframed task (1) as a no-op. The user has
+        now clarified: the modal shell <em>is</em> the bug. Today the
+        window covers the HUD with a dark scrim
+        (<code>ui.css:534 backdrop-filter: blur(2px)</code>) and is
+        neither draggable nor resizable. The right move is the inverse
+        of v1's read &mdash; <code>mountModal</code> &rarr;
+        <code>mountPanel(Zone.R, …)</code>, matching the Drone Ops /
+        Routes / Settlement side-dock pattern.
+      </div>
+      <div class="f-body">
+        Practically every picker in v1 §01 / §02 is moot: modal-style
+        and modal-dismiss are deprecated by the migration. The GATES
+        column pickers from v1 §03&ndash;§08 carry over unchanged and
+        renumber here. Five new pickers cover the panel-migration
+        choices that the brief enumerates plus one the brief didn't
+        explicitly call out (Escape-key behaviour, see Picker 04).
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- Decision summary                                                     -->
+    <!-- =================================================================== -->
+    <div class="decision">
+      <div class="d-tag">Working decision (defaults)</div>
+      <div class="d-head">
+        Migrate <code>graph-ui.ts</code> from <code>mountModal</code> to
+        <code>mountPanel({ id: 'recipe-graph-panel', zone: Zone.R, order: 3 })</code>;
+        add a GATES column between BUILDING and INPUTS rendering inline
+        text with status-only colour against the active island.
+      </div>
+      <div class="d-body">
+        The right-edge dock (<code>Zone.R</code>) is the same zone Drone
+        Ops (<code>order: 0</code>), Routes (<code>order: 1</code>), and
+        Settlement (<code>order: 2</code>) already use. Recipe graph
+        slots at <code>order: 3</code>. The user explicitly named
+        Drone Ops as the reference; matching its zone keeps the family
+        coherent and the draggable-windows stack persists per-panel.
+      </div>
+      <div class="d-body">
+        Migration is essentially free: <code>mountPanel</code>
+        (<code>ui-zones.ts:217</code>) already calls
+        <code>makePanelDraggable</code> on every non-chrome panel and
+        layout persistence at <code>ri-ui-layout-v1</code> kicks in
+        automatically once the panel registers an <code>id</code>.
+        No <code>ui.css</code> change &mdash; the existing
+        <code>.ri-modal-scrim</code> / <code>.ri-modal</code> rules stay
+        for the seven sibling modals that still use them.
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- 00 — Open design choices                                             -->
+    <!-- =================================================================== -->
+    <section id="open-choices">
+      <div class="sec-head"><span class="num">00</span><h2>Open design choices &mdash; pick &amp; send back</h2></div>
+      <p class="sec-intro">Eleven radio pickers. The first five govern the
+        modal&rarr;panel migration; the last six govern the GATES column
+        (carried over from v1, unchanged except for renumber). Defaults
+        match the "working decision" above. Click any other option to
+        redirect &mdash; the <b>Selections</b> panel at the bottom updates
+        live and a copy button hands you the payload to paste back.</p>
+
+      <div class="pickers">
+
+        <!-- ============================================================== -->
+        <!-- PICKER 00 — scope of change (inversion confirmation)            -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="scope_of_change">
+          <legend>Picker 00</legend>
+          <div class="p-title">Scope of the modal&rarr;panel inversion</div>
+          <div class="p-intro">v1 misread "make it a modal" as the goal.
+            The user clarified: <em>get rid of</em> the modal shell, make it
+            a floating panel. This picker confirms or refines that.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="convert_to_panel" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floating panel docked at right, HUD visible">
+                  <rect x="0" y="0" width="320" height="110" fill="#0a0e14"/>
+                  <rect x="6" y="6" width="84" height="14" rx="3" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="12" y="15.5" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">Sapphire L23</text>
+                  <rect x="6" y="26" width="22" height="22" rx="3" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="13" y="40" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#7dd3e8">Y</text>
+                  <rect x="220" y="6" width="94" height="98" rx="4" fill="#11151c" stroke="#3a4452" stroke-width="0.8"/>
+                  <rect x="220" y="6" width="94" height="12" fill="#1a2330"/>
+                  <text x="226" y="14.5" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#7dd3e8" letter-spacing="0.10em">RECIPE GRAPH</text>
+                  <text x="304" y="14.5" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">×</text>
+                  <text x="226" y="28" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Mine T1 → 2 iron_ore</text>
+                  <text x="226" y="38" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Logger T1 → 1 wood</text>
+                  <text x="226" y="48" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Smelter T1 …</text>
+                  <text x="226" y="58" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Coke Oven T2 …</text>
+                  <path d="M306 100 L312 94 M308 102 L312 98" stroke="#7dd3e8" stroke-width="0.7" opacity="0.7"/>
+                  <text x="100" y="60" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">(HUD &amp; world still visible — no scrim)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="scope_of_change" value="convert_to_panel" checked>
+                <span class="o-label">Convert to a floating panel (<code>mountModal</code> &rarr; <code>mountPanel</code>)</span>
+                <span class="o-rat">What the brief asks for. Drops the scrim + backdrop blur + centred-card sizing; the panel docks into a <code>Zone.*</code> (see picker 01) and inherits drag + resize + persistence automatically from <code>makePanelDraggable</code>. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="keep_modal_draggable_inside">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Modal kept, scrim kept, draggable inside scrim">
+                  <rect x="0" y="0" width="320" height="110" fill="#0a0e14"/>
+                  <rect x="0" y="0" width="320" height="110" fill="rgba(7,9,13,0.6)"/>
+                  <rect x="40" y="14" width="240" height="82" rx="6" fill="#11151c" stroke="#3a4452"/>
+                  <rect x="40" y="14" width="240" height="14" fill="#1a2330"/>
+                  <text x="50" y="24" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#7dd3e8">RECIPE GRAPH</text>
+                  <text x="262" y="24" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">×</text>
+                  <text x="50" y="40" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#cfe1f5">…rows…</text>
+                  <text x="180" y="24" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#5a7080">↔ drag · ↕</text>
+                  <path d="M272 88 L278 82 M274 90 L278 86" stroke="#7dd3e8" stroke-width="0.6" opacity="0.7"/>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="scope_of_change" value="keep_modal_draggable_inside">
+                <span class="o-label">Keep the modal, make the modal card draggable within the scrim</span>
+                <span class="o-rat">Doesn't drop the scrim &mdash; the dark tint still blocks HUD readability. Defeats the user's stated goal. Listed for completeness; not recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="panel_with_modal_toggle">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Panel default; toolbar button toggles modal mode">
+                  <rect x="0" y="0" width="320" height="110" fill="#0a0e14"/>
+                  <rect x="220" y="6" width="94" height="98" rx="4" fill="#11151c" stroke="#3a4452" stroke-width="0.8"/>
+                  <rect x="220" y="6" width="94" height="12" fill="#1a2330"/>
+                  <text x="226" y="14.5" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#7dd3e8">RECIPE GRAPH</text>
+                  <rect x="284" y="8" width="10" height="8" rx="1.5" fill="none" stroke="#D97757" stroke-width="0.6"/>
+                  <text x="285" y="14.5" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#D97757">⤢</text>
+                  <text x="304" y="14.5" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">×</text>
+                  <text x="226" y="28" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">…rows…</text>
+                  <text x="6" y="100" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">(⤢ button promotes panel to a temporary modal full-screen view)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="scope_of_change" value="panel_with_modal_toggle">
+                <span class="o-label">Dual-mode &mdash; floating panel default, ⤢ toggles temporary full-screen modal</span>
+                <span class="o-rat">Panel by default; a small expand button promotes it into a modal view for a "give me the whole catalog in one glance" moment. Most flexible, most code. The dual mount path (mountPanel for the panel + ad-hoc fullscreen overlay for the expanded view) is a real maintenance cost.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="scope_of_change">convert_to_panel</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 01 — default zone                                         -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="default_zone">
+          <legend>Picker 01</legend>
+          <div class="p-title">Default zone (where the panel docks at first mount)</div>
+          <div class="p-intro">Once it's a <code>mountPanel</code> call, the
+            panel needs an initial zone before the player drags it elsewhere
+            (the drag promotes it to "free" and persists the rect). The four
+            existing side-dock panels are: Inspector (<code>Zone.L:0</code>),
+            Drones (<code>Zone.R:0</code>), Routes (<code>Zone.R:1</code>),
+            Settlement (<code>Zone.R:2</code>). Mocks show the recipe panel
+            (highlighted) docked into each zone, with sibling panels stacked.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="zone_r_order_3" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Zone.R, order 3 — matches Drone Ops">
+                  <rect x="0" y="0" width="320" height="130" fill="#0a0e14"/>
+                  <rect x="230" y="6" width="84" height="26" rx="3" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="236" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#7dd3e8">DRONES</text>
+                  <text x="236" y="22" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#6c7791">order 0</text>
+                  <rect x="230" y="36" width="84" height="22" rx="3" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="236" y="44" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#7dd3e8">ROUTES</text>
+                  <text x="236" y="52" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#6c7791">order 1</text>
+                  <rect x="230" y="62" width="84" height="22" rx="3" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="236" y="70" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#7dd3e8">SETTLEMENT</text>
+                  <text x="236" y="78" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#6c7791">order 2</text>
+                  <rect x="230" y="88" width="84" height="38" rx="3" fill="#231a14" stroke="#D97757" stroke-width="0.9"/>
+                  <text x="236" y="96" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#D97757">RECIPE GRAPH</text>
+                  <text x="236" y="104" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#D97757">order 3</text>
+                  <text x="236" y="116" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Mine T1 …</text>
+                  <text x="236" y="124" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Logger T1 …</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="default_zone" value="zone_r_order_3" checked>
+                <span class="o-label"><code>Zone.R</code>, <code>order: 3</code> &mdash; matches the Drone Ops family</span>
+                <span class="o-rat">Slots beneath Settlement in the existing right-edge dock. Coherent with the brief ("behave like the Drone Ops panel"); the four right-dock panels form one family. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="zone_br">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Zone.BR — bottom-right above HUD economy">
+                  <rect x="0" y="0" width="320" height="130" fill="#0a0e14"/>
+                  <rect x="232" y="106" width="82" height="20" rx="3" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="238" y="114" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#7dd3e8">HUD ECONOMY</text>
+                  <text x="238" y="121" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#6c7791">order 0</text>
+                  <rect x="200" y="60" width="114" height="42" rx="3" fill="#231a14" stroke="#D97757" stroke-width="0.9"/>
+                  <text x="206" y="68" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#D97757">RECIPE GRAPH</text>
+                  <text x="206" y="76" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#D97757">order 1 (above HUD)</text>
+                  <text x="206" y="88" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Mine T1 …</text>
+                  <text x="206" y="96" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Logger T1 …</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="default_zone" value="zone_br">
+                <span class="o-label"><code>Zone.BR</code>, above HUD economy</span>
+                <span class="o-rat">BR is the bottom-right stack (HUD economy lives there). Recipe panel would sit above it. Mismatches the "side dock" mental model the brief invoked; conflicts with the dense BR quadrant.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="zone_tr">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Zone.TR — top-right, below action strip">
+                  <rect x="0" y="0" width="320" height="130" fill="#0a0e14"/>
+                  <rect x="232" y="6" width="82" height="22" rx="3" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="238" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#7dd3e8">ACTION STRIP</text>
+                  <text x="238" y="22" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#6c7791">order 0 (chrome)</text>
+                  <rect x="200" y="32" width="114" height="62" rx="3" fill="#231a14" stroke="#D97757" stroke-width="0.9"/>
+                  <text x="206" y="40" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#D97757">RECIPE GRAPH</text>
+                  <text x="206" y="48" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#D97757">order 1</text>
+                  <text x="206" y="60" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Mine T1 …</text>
+                  <text x="206" y="68" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Logger T1 …</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="default_zone" value="zone_tr">
+                <span class="o-label"><code>Zone.TR</code>, below action strip</span>
+                <span class="o-rat">Top-right; only the action strip occupies TR today. Closer to the action-strip icon that opens it. Doesn't match the Drone Ops family; the player has to look up rather than at the same right-dock cluster.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="zone_l">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Zone.L — left edge, below Inspector">
+                  <rect x="0" y="0" width="320" height="130" fill="#0a0e14"/>
+                  <rect x="6" y="34" width="84" height="22" rx="3" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="12" y="42" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#7dd3e8">INSPECTOR</text>
+                  <text x="12" y="50" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#6c7791">order 0</text>
+                  <rect x="6" y="60" width="84" height="62" rx="3" fill="#231a14" stroke="#D97757" stroke-width="0.9"/>
+                  <text x="12" y="68" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#D97757">RECIPE GRAPH</text>
+                  <text x="12" y="76" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#D97757">order 1</text>
+                  <text x="12" y="88" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Mine T1 …</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="default_zone" value="zone_l">
+                <span class="o-label"><code>Zone.L</code>, below Inspector</span>
+                <span class="o-rat">Left edge, opposite the Drones/Routes/Settlement column. Splits the player's attention across both sides of the screen. Useful if right-dock crowding is a concern; loses Drone-Ops-family coherence.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="default_zone">zone_r_order_3</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 02 — Initial size + constraints                           -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="initial_size">
+          <legend>Picker 02</legend>
+          <div class="p-title">Initial size + min constraints</div>
+          <div class="p-intro">As a panel rather than a centred 960px modal,
+            the recipe window needs a default footprint. <code>mountPanel</code>
+            accepts <code>minWidth</code> / <code>maxWidth</code>;
+            <code>makePanelDraggable</code> defaults <code>minWidth: 200</code>
+            and <code>minHeight: 120</code> but is happy with anything passed
+            in. After the first drag/resize the saved layout overrides
+            (<code>ri-ui-layout-v1</code>).
+            <em>Heads up:</em> if you also pick GATES placement = "2nd column"
+            in Picker 05 the row becomes 5 columns wide; the narrow default
+            below gets tight.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="wide_default" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Wide default — 720×520 initial, generous">
+                  <rect x="0" y="0" width="320" height="100" fill="#0a0e14"/>
+                  <rect x="120" y="6" width="190" height="86" rx="4" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <rect x="120" y="6" width="190" height="12" fill="#1a2330"/>
+                  <text x="126" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#7dd3e8">RECIPE GRAPH</text>
+                  <text x="298" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">×</text>
+                  <text x="126" y="28" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Mine T1 L≥1·tile=ore|coal — 2 iron_ore 17s</text>
+                  <text x="126" y="36" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Logger T1 L≥1·tile=tree — 1 wood 13s</text>
+                  <text x="126" y="44" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Coke Oven T2 L≥5·heat-src 2 coal→1 coke 24s</text>
+                  <text x="126" y="86" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#5a7080">720 × 520 · min 480 × 320</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="initial_size" value="wide_default" checked>
+                <span class="o-label">Wide &mdash; 720×520 initial, <code>minWidth: 480</code>, <code>minHeight: 320</code></span>
+                <span class="o-rat">Comfortable for the 4&rarr;5 column table even with GATES wedged between BUILDING and INPUTS. Slightly wider than Drone Ops (which is ~320 wide) so the row fits without wrap. Recommended pairing with picker 05 = <code>after_building</code>.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="narrow_table_default">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Narrow default — 480×450, compacts at width">
+                  <rect x="0" y="0" width="320" height="100" fill="#0a0e14"/>
+                  <rect x="190" y="6" width="124" height="86" rx="4" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <rect x="190" y="6" width="124" height="12" fill="#1a2330"/>
+                  <text x="196" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#7dd3e8">RECIPE GRAPH</text>
+                  <text x="302" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">×</text>
+                  <text x="196" y="28" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Mine T1</text>
+                  <text x="196" y="35" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#8FA56E">L≥1·tile</text>
+                  <text x="196" y="42" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">→ 2 iron_ore · 17s</text>
+                  <text x="196" y="52" font-family="ui-monospace, Menlo, monospace" font-size="5.5" fill="#cfe1f5">Logger T1</text>
+                  <text x="196" y="59" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#8FA56E">L≥1·tile</text>
+                  <text x="196" y="66" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">→ 1 wood · 13s</text>
+                  <text x="196" y="86" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#5a7080">480 × 450 · min 320 × 240</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="initial_size" value="narrow_table_default">
+                <span class="o-label">Narrow &mdash; 480×450 initial, <code>minWidth: 320</code></span>
+                <span class="o-rat">Cell content collapses to two-line stacked rows under ~520px. Side-dock fit matches Drones/Routes more closely; GATES column has to either go inline or stack below the building label. Best paired with picker 05 = <code>after_outputs</code> or <code>rightmost</code>.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="match_drone_ops">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Match Drone Ops footprint exactly">
+                  <rect x="0" y="0" width="320" height="100" fill="#0a0e14"/>
+                  <rect x="222" y="6" width="92" height="86" rx="4" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <rect x="222" y="6" width="92" height="12" fill="#1a2330"/>
+                  <text x="228" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#7dd3e8">RECIPE GRAPH</text>
+                  <text x="302" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">×</text>
+                  <text x="228" y="28" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Mine T1</text>
+                  <text x="228" y="34" font-family="ui-monospace, Menlo, monospace" font-size="4.5" fill="#8FA56E">L≥1</text>
+                  <text x="228" y="40" font-family="ui-monospace, Menlo, monospace" font-size="4.5" fill="#cfe1f5">→ 2 iron_ore</text>
+                  <text x="228" y="46" font-family="ui-monospace, Menlo, monospace" font-size="4.5" fill="#9ab0c8">17s</text>
+                  <text x="228" y="56" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#cfe1f5">Logger T1</text>
+                  <text x="228" y="86" font-family="ui-monospace, Menlo, monospace" font-size="5" fill="#5a7080">~320 × 480 (drones-ui)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="initial_size" value="match_drone_ops">
+                <span class="o-label">Match Drone Ops &mdash; <code>~320 × 480</code>, no explicit min</span>
+                <span class="o-rat">Inherits Drone Ops' visual rhythm exactly. Cost: with five columns the table almost certainly wraps; player has to resize on first open. Most "side-dock-y" but least readable as a catalog.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="initial_size">wide_default</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 03 — Close-button semantics                                -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="close_button_semantics">
+          <legend>Picker 03</legend>
+          <div class="p-title">Close-button semantics (header X)</div>
+          <div class="p-intro">The current modal X dismisses fully via
+            <code>handle.hide()</code> &rarr; <code>scrim.style.display = 'none'</code>.
+            For a panel via <code>mountPanel</code> the equivalent is
+            <code>panelHandle.setVisible(false)</code>, which hides the
+            element <em>and</em> removes it from the zone stack (siblings
+            re-flow up). Pickers differ in what "close" means for a free
+            (dragged) panel.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="setvisible_false" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Close = setVisible(false), layout persists">
+                  <rect x="0" y="0" width="320" height="60" fill="#0a0e14"/>
+                  <rect x="6" y="6" width="160" height="48" rx="4" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <rect x="6" y="6" width="160" height="12" fill="#1a2330"/>
+                  <text x="12" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#7dd3e8">RECIPE GRAPH</text>
+                  <rect x="152" y="8" width="10" height="8" rx="1.5" fill="none" stroke="#D97757" stroke-width="0.6"/>
+                  <text x="153.5" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#D97757">×</text>
+                  <text x="180" y="22" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">→ setVisible(false)</text>
+                  <text x="180" y="32" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">layout persists in ri-ui-layout-v1</text>
+                  <text x="180" y="42" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">Y / re-open restores position + size</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="close_button_semantics" value="setvisible_false" checked>
+                <span class="o-label"><code>panelHandle.setVisible(false)</code> &mdash; matches every other panel</span>
+                <span class="o-rat">Same semantics Drones / Routes / Settlement / Inspector all use. Layout already persists via <code>ri-ui-layout-v1</code> &mdash; the next <code>Y</code> press restores position + size unchanged. Lowest cognitive load. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="destroy_unmount">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Close = destroy(), full unmount + remount on next open">
+                  <rect x="0" y="0" width="320" height="60" fill="#0a0e14"/>
+                  <rect x="6" y="6" width="160" height="48" rx="4" fill="#11151c" stroke="#3a4452" stroke-width="0.7" stroke-dasharray="3 2"/>
+                  <text x="12" y="20" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#5a7080">(unmounted)</text>
+                  <text x="180" y="22" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#E08B7F">→ handle.destroy()</text>
+                  <text x="180" y="32" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">DOM tree removed</text>
+                  <text x="180" y="42" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">re-mount on next Y press</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="close_button_semantics" value="destroy_unmount">
+                <span class="o-label"><code>panelHandle.destroy()</code> &mdash; full unmount, fresh DOM next open</span>
+                <span class="o-rat">Each open rebuilds the row list. Re-runs <code>buildRecipeTableRows</code>; saved layout in localStorage still applies because the id is fixed. Cost: lost search text + scroll position between opens. Not recommended unless rebuild is somehow desirable (e.g. catalog changes mid-session).</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="collapse_to_header">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Close button replaced by collapse arrow — body hides, header stays">
+                  <rect x="0" y="0" width="320" height="60" fill="#0a0e14"/>
+                  <rect x="6" y="6" width="160" height="14" rx="4" fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <text x="12" y="14.5" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#7dd3e8">RECIPE GRAPH</text>
+                  <text x="150" y="14.5" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">▸</text>
+                  <text x="180" y="14" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">▸ arrow expands</text>
+                  <text x="180" y="24" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">body height collapses to 0</text>
+                  <text x="180" y="34" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">panel stays in zone stack</text>
+                  <text x="180" y="44" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">no "close" affordance at all</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="close_button_semantics" value="collapse_to_header">
+                <span class="o-label">Replace X with a collapse arrow &mdash; body hides, header stays in stack</span>
+                <span class="o-rat">No close at all; expand/collapse like a disclosure widget. The header sits in the right-dock taking ~14px vertical even when "closed". Diverges from sibling panels (no other panel collapses). Useful if the user wants the panel always visible as a peek. Heavier conceptual change.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="close_button_semantics">setvisible_false</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 04 — Escape-key behaviour                                  -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="escape_key_behaviour">
+          <legend>Picker 04</legend>
+          <div class="p-title">Escape-key behaviour (brief didn't enumerate)</div>
+          <div class="p-intro">Today the recipe modal joins the
+            <code>dismiss-modal</code> Escape cascade at
+            <code>main.ts:1379</code> (<code>graphUi.hide()</code>). The
+            sibling side-dock panels (Drones, Routes, Settlement, Inspector)
+            do <em>not</em> respond to Escape &mdash; they're closed only by
+            their hotkey or close button. Picker decides the convention.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="drop_from_cascade" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Drop Esc from cascade — matches Drones / Routes">
+                  <rect x="0" y="0" width="320" height="50" fill="#0a0e14"/>
+                  <rect x="6" y="8" width="14" height="10" rx="2" fill="none" stroke="#5a7080" stroke-width="0.7"/>
+                  <text x="8" y="15.5" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">ESC</text>
+                  <text x="28" y="15.5" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#5a7080">inert for recipe-graph (same as Drones / Routes)</text>
+                  <rect x="6" y="26" width="10" height="10" rx="2" fill="none" stroke="#D97757" stroke-width="0.7"/>
+                  <text x="8" y="34" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#D97757">Y</text>
+                  <text x="22" y="34" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#D97757">toggles visibility</text>
+                  <rect x="180" y="26" width="10" height="10" rx="2" fill="none" stroke="#D97757" stroke-width="0.7"/>
+                  <text x="180" y="34" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#D97757">×</text>
+                  <text x="196" y="34" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#D97757">header X closes</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="escape_key_behaviour" value="drop_from_cascade" checked>
+                <span class="o-label">Drop from <code>dismiss-modal</code> &mdash; Esc no longer touches this panel</span>
+                <span class="o-rat">Matches every other right-dock panel; the player learns Esc = "dismiss the centred modal" and the floating panels stay where they are. Remove <code>graphUi.hide()</code> from <code>main.ts:1370-1390</code>. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="keep_esc_only_for_graph">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Keep Esc — only this panel responds to it">
+                  <rect x="0" y="0" width="320" height="50" fill="#0a0e14"/>
+                  <rect x="6" y="8" width="14" height="10" rx="2" fill="none" stroke="#D97757" stroke-width="0.7"/>
+                  <text x="8" y="15.5" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#D97757">ESC</text>
+                  <text x="28" y="15.5" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#D97757">closes recipe graph (uniquely)</text>
+                  <text x="28" y="28" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">Drones / Routes / Settlement: Esc still inert</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="escape_key_behaviour" value="keep_esc_only_for_graph">
+                <span class="o-label">Keep <code>graphUi.hide()</code> in the Esc cascade (panel responds to Esc, siblings don't)</span>
+                <span class="o-rat">One panel uniquely responds to Esc; everyone else doesn't. Asymmetry has to be justified by something (e.g. recipe graph is "modal-ish" while Drone Ops is "tool-ish"). Not recommended &mdash; the inversion's whole point is to demote the recipe graph to a peer of the dock siblings.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="esc_collapses">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Esc collapses to header (paired with picker 03 = collapse)">
+                  <rect x="0" y="0" width="320" height="50" fill="#0a0e14"/>
+                  <rect x="6" y="8" width="14" height="10" rx="2" fill="none" stroke="#D97757" stroke-width="0.7"/>
+                  <text x="8" y="15.5" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#D97757">ESC</text>
+                  <text x="28" y="15.5" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#D97757">collapses (paired with picker 03 collapse mode)</text>
+                  <text x="28" y="28" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">only meaningful if close = collapse-to-header</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="escape_key_behaviour" value="esc_collapses">
+                <span class="o-label">Esc collapses the panel (only meaningful if Picker 03 = <code>collapse_to_header</code>)</span>
+                <span class="o-rat">Bound only if Picker 03 selects the disclosure-widget mode. Otherwise this option is inert.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="escape_key_behaviour">drop_from_cascade</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 05 (carried from v1) — GATES placement                    -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="gates_column_placement">
+          <legend>Picker 05</legend>
+          <div class="p-title">GATES column placement (carried from v1)</div>
+          <div class="p-intro">The current row grid is
+            <code>260px 1fr 1fr 60px</code> &mdash; BUILDING &middot; INPUTS
+            &middot; OUTPUTS &middot; CYCLE. Where the new GATES column
+            sits. Each mock shows the same Mine T1 row in a different
+            layout. <em>Heads up:</em> at narrow panel widths (Picker 02 =
+            <code>narrow_table_default</code> or <code>match_drone_ops</code>),
+            the 5-column grid collapses to a stacked sub-row; that's a
+            render-shape concern (Picker 07).</div>
+          <div class="opts">
+
+            <label class="opt" data-value="after_building" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GATES after building, before inputs">
+                  <rect x="0" y="0" width="320" height="38" fill="#0a0e14"/>
+                  <text x="6" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">BUILDING</text>
+                  <text x="100" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">GATES</text>
+                  <text x="160" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">INPUTS</text>
+                  <text x="220" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">OUTPUTS</text>
+                  <text x="290" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">CYCLE</text>
+                  <line x1="0" y1="14" x2="320" y2="14" stroke="#243b52" stroke-width="0.4"/>
+                  <text x="6" y="26" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Mine T1</text>
+                  <text x="100" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">L≥1·tile=ore|coal</text>
+                  <text x="160" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#5a7080">—</text>
+                  <text x="220" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">2 iron_ore</text>
+                  <text x="290" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#9ab0c8">17s</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_column_placement" value="after_building" checked>
+                <span class="o-label">Between BUILDING and INPUTS (2nd column)</span>
+                <span class="o-rat">Gates read as "this building's prerequisites" &mdash; sit next to the building name, before the recipe IO. Strongest semantic grouping. Forces a 5-column grid (<code>180px 150px 1fr 1fr 60px</code> at the wide default). Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="leftmost">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GATES leftmost">
+                  <rect x="0" y="0" width="320" height="38" fill="#0a0e14"/>
+                  <text x="6" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">GATES</text>
+                  <text x="80" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">BUILDING</text>
+                  <text x="170" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">INPUTS</text>
+                  <text x="225" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">OUTPUTS</text>
+                  <text x="290" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">CYCLE</text>
+                  <line x1="0" y1="14" x2="320" y2="14" stroke="#243b52" stroke-width="0.4"/>
+                  <text x="6" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">L≥1·tile</text>
+                  <text x="80" y="26" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Mine T1</text>
+                  <text x="170" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#5a7080">—</text>
+                  <text x="225" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">2 iron_ore</text>
+                  <text x="290" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#9ab0c8">17s</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_column_placement" value="leftmost">
+                <span class="o-label">Leftmost (1st column)</span>
+                <span class="o-rat">"Gates first" — the player's eye lands on GATES before the building name. Useful if most rows are gated against the active island. BUILDING no longer anchors the row visually.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="after_outputs">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GATES between OUTPUTS and CYCLE">
+                  <rect x="0" y="0" width="320" height="38" fill="#0a0e14"/>
+                  <text x="6" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">BUILDING</text>
+                  <text x="100" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">INPUTS</text>
+                  <text x="160" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">OUTPUTS</text>
+                  <text x="220" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">GATES</text>
+                  <text x="290" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">CYCLE</text>
+                  <line x1="0" y1="14" x2="320" y2="14" stroke="#243b52" stroke-width="0.4"/>
+                  <text x="6" y="26" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Mine T1</text>
+                  <text x="100" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#5a7080">—</text>
+                  <text x="160" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">2 iron_ore</text>
+                  <text x="220" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">L≥1·tile</text>
+                  <text x="290" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#9ab0c8">17s</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_column_placement" value="after_outputs">
+                <span class="o-label">Between OUTPUTS and CYCLE</span>
+                <span class="o-rat">Side annotation after IO. Lowest visual weight. Useful at narrow widths.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="rightmost">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GATES rightmost">
+                  <rect x="0" y="0" width="320" height="38" fill="#0a0e14"/>
+                  <text x="6" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">BUILDING</text>
+                  <text x="100" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">INPUTS</text>
+                  <text x="160" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">OUTPUTS</text>
+                  <text x="220" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">CYCLE</text>
+                  <text x="270" y="10" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">GATES</text>
+                  <line x1="0" y1="14" x2="320" y2="14" stroke="#243b52" stroke-width="0.4"/>
+                  <text x="6" y="26" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Mine T1</text>
+                  <text x="100" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#5a7080">—</text>
+                  <text x="160" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">2 iron_ore</text>
+                  <text x="220" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#9ab0c8">17s</text>
+                  <text x="270" y="26" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">L≥1·tile</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_column_placement" value="rightmost">
+                <span class="o-label">Rightmost (after CYCLE)</span>
+                <span class="o-rat">Cycle stays adjacent to IO, gates trail. Risk: at narrow panel widths the gates column wraps onto a second line.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="gates_column_placement">after_building</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 06 — Which gates to render                                -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="gates_to_show">
+          <legend>Picker 06</legend>
+          <div class="p-title">Which gates to render in the cell (carried from v1)</div>
+          <div class="p-intro">Eight gate dimensions live in the data
+            (see §05 catalog). Showing all of them on every row makes the
+            cell dense; showing none misses the point.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="all_with_status" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 76" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="All gates with met/pending/locked colour status">
+                  <rect x="0" y="0" width="320" height="76" fill="#0a0e14"/>
+                  <text x="6" y="12" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Pyroforge T4</text>
+                  <text x="6" y="24" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">L≥30  ✓ met</text>
+                  <text x="6" y="36" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">biome=volcanic  ✓ met</text>
+                  <text x="6" y="48" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">heat-source  ◇ adj</text>
+                  <text x="6" y="60" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8F8D82">— (no T5 / T6)</text>
+                  <text x="170" y="12" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Spaceport T6</text>
+                  <text x="170" y="24" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">L≥50  ◇ L42</text>
+                  <text x="170" y="36" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">ascendant_core  ◇</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_to_show" value="all_with_status" checked>
+                <span class="o-label">All gates, each coloured by status (met / pending / locked / N/A)</span>
+                <span class="o-rat">Every gate that exists for the row, with olive = met, clay = pending, gray = N/A. Pairs with the panel's resizable scroll. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="only_blocking">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 76" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Only currently-blocking gates">
+                  <rect x="0" y="0" width="320" height="76" fill="#0a0e14"/>
+                  <text x="6" y="12" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Pyroforge T4</text>
+                  <text x="6" y="24" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">heat-source  ◇</text>
+                  <text x="6" y="42" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Spaceport T6</text>
+                  <text x="6" y="54" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">L≥50  ◇ L42</text>
+                  <text x="6" y="66" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">ascendant_core  ◇</text>
+                  <text x="200" y="12" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Mine T1</text>
+                  <text x="200" y="24" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#5a7080">(nothing blocked)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_to_show" value="only_blocking">
+                <span class="o-label">Only the gates the player has <em>not</em> met</span>
+                <span class="o-rat">Cell empty for ready-to-use rows. Best for "what's stopping me"; weaker for "what is this".</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="most_binding">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 76" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Single most-binding gate per row">
+                  <rect x="0" y="0" width="320" height="76" fill="#0a0e14"/>
+                  <text x="6" y="12" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Pyroforge T4</text>
+                  <text x="6" y="24" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">heat-source</text>
+                  <text x="6" y="42" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Spaceport T6</text>
+                  <text x="6" y="54" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">ascendant_core</text>
+                  <text x="200" y="12" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Mine T1</text>
+                  <text x="200" y="24" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">✓ ready</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_to_show" value="most_binding">
+                <span class="o-label">One line per row: the most-binding gate</span>
+                <span class="o-rat">Single inline chip per row. Needs a defined priority (T5/T6 &gt; tier &gt; biome &gt; tile &gt; heat &gt; …) which becomes a bug surface.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="all_no_status">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 76" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="All gates, no per-island status (catalog-only)">
+                  <rect x="0" y="0" width="320" height="76" fill="#0a0e14"/>
+                  <text x="6" y="12" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Pyroforge T4</text>
+                  <text x="6" y="24" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">L≥30 · biome=volcanic · heat-source</text>
+                  <text x="6" y="42" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#e0e6ed">Spaceport T6</text>
+                  <text x="6" y="54" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">L≥50 · ascendant_core</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_to_show" value="all_no_status">
+                <span class="o-label">All gates, no live status (catalog-only)</span>
+                <span class="o-rat">Pure function of <code>BUILDING_DEFS</code> + <code>RECIPES</code>; no <code>getState()</code> dep. Best if the panel is "the spec, browsable".</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="gates_to_show">all_with_status</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 07 — GATES render shape                                   -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="gates_render_shape">
+          <legend>Picker 07</legend>
+          <div class="p-title">GATES cell render shape (carried from v1)</div>
+          <div class="p-intro">Once the gate list per row is decided
+            (Picker 06), how is each gate drawn? Mocks all use the same
+            example: Pyroforge T4 (volcanic biome, heat-source-adjacent,
+            tier 4).</div>
+          <div class="opts">
+
+            <label class="opt" data-value="inline_text" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Inline text, dot-separated">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <text x="6" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#cfe1f5">L≥30 · biome=volcanic · heat-src</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_render_shape" value="inline_text" checked>
+                <span class="o-label">Inline monospace text, dot-separated</span>
+                <span class="o-rat">Matches the existing monospace aesthetic of the recipe table. Cheapest implementation &mdash; concat strings into a span. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="vertical_stack">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Vertical stacked lines per gate">
+                  <rect x="0" y="0" width="320" height="50" fill="#0a0e14"/>
+                  <text x="6" y="12" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#cfe1f5">L≥30</text>
+                  <text x="6" y="24" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#cfe1f5">biome=volcanic</text>
+                  <text x="6" y="36" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#cfe1f5">heat-source</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_render_shape" value="vertical_stack">
+                <span class="o-label">Vertical stacked lines per gate</span>
+                <span class="o-rat">One gate per line. Pairs cleanest with Picker 06 = <code>all_with_status</code> because each line can carry its own colour. Rows become taller. Best at wide widths.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="icon_row">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Icon row: one glyph per gate type">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <rect x="6" y="9" width="14" height="14" rx="2" fill="none" stroke="#D97757" stroke-width="0.8"/>
+                  <text x="9" y="19" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#D97757">T4</text>
+                  <circle cx="32" cy="16" r="6.5" fill="none" stroke="#C8A040" stroke-width="0.8"/>
+                  <text x="29" y="19" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#C8A040">vc</text>
+                  <path d="M50 22 Q47 17 50 13 Q53 9 51 6" fill="none" stroke="#E08B7F" stroke-width="0.9"/>
+                  <text x="58" y="19" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#6c7791">heat</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_render_shape" value="icon_row">
+                <span class="o-label">Icon row &mdash; one small glyph per gate type</span>
+                <span class="o-rat">Compact, visually distinctive, requires a glyph set with parameter-in-icon. Legibility risk at the 11px row.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="chip_summary">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Single summary chip, hover-expand">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <rect x="6" y="10" width="60" height="12" rx="6" fill="#252420" stroke="#D97757" stroke-width="0.7"/>
+                  <text x="11" y="18" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#D97757">3 gates ▾</text>
+                  <text x="74" y="19" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">(hover / click to expand inline)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_render_shape" value="chip_summary">
+                <span class="o-label">Single summary chip per row, expands on hover/click</span>
+                <span class="o-rat">"3 gates ▾" chip with a popover. Most compact; adds an interaction the player must discover. Keyboard-only users have a focus-cycling cost.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="gates_render_shape">inline_text</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 08 — Gate-type palette                                    -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="gates_palette">
+          <legend>Picker 08</legend>
+          <div class="p-title">Gate-type colour scheme (carried from v1)</div>
+          <div class="p-intro">Should gate type carry colour, or just gate
+            status? Each mock shows the same row with three different
+            gates: tier, biome, heat.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="status_only" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Status-only palette">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <text x="6" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#8FA56E">L≥30 ✓</text>
+                  <text x="60" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#8FA56E">biome=volcanic ✓</text>
+                  <text x="158" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#D97757">heat-src ◇</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_palette" value="status_only" checked>
+                <span class="o-label">Status-only: olive (met) · clay (pending) · gray (N/A)</span>
+                <span class="o-rat">Reuses the existing <code>--ri-warn</code> / olive / clay tokens; gate type carries no colour. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="type_palette">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Per-type palette">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <text x="6" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#D97757">L≥30</text>
+                  <text x="60" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#C8A040">biome=volcanic</text>
+                  <text x="158" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#E08B7F">heat-src</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_palette" value="type_palette">
+                <span class="o-label">Per-type: tier=clay, biome=gold, tile=olive, heat=rust, T5/T6=violet</span>
+                <span class="o-rat">Each gate type gets its own colour. Needs new tokens; another colour map for the player to learn.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="combined">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Combined: type for label, status for trailing icon">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <text x="6" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#D97757">L≥30</text>
+                  <text x="40" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#8FA56E">✓</text>
+                  <text x="60" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#C8A040">biome=volcanic</text>
+                  <text x="148" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#8FA56E">✓</text>
+                  <text x="168" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#E08B7F">heat-src</text>
+                  <text x="222" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#D97757">◇</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_palette" value="combined">
+                <span class="o-label">Combined: label colour by type, trailing glyph by status</span>
+                <span class="o-rat">Best-of-both. Highest info density; busiest rows.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="no_colour">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="No colour, plain monospace">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <text x="6" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#cfe1f5">L≥30 · biome=volcanic · heat-src</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="gates_palette" value="no_colour">
+                <span class="o-label">No colour, plain monospace</span>
+                <span class="o-rat">Pure text. Lowest implementation cost; loses the at-a-glance signal. Pairs naturally with Picker 06 = <code>only_blocking</code>.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="gates_palette">status_only</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 09 — Filter / search                                      -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="filter_behaviour">
+          <legend>Picker 09</legend>
+          <div class="p-title">Filter / search additions (carried from v1)</div>
+          <div class="p-intro">Today the modal has a text-search input
+            (<code>graph-ui.ts:41-53</code>). The GATES column unlocks
+            new useful filters &mdash; which to add?</div>
+          <div class="opts">
+
+            <label class="opt" data-value="keep_text_only" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Existing text search only">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <rect x="6" y="8" width="308" height="14" rx="2" fill="#101926" stroke="#3a6680"/>
+                  <text x="12" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">Search by building, resource, category…</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="filter_behaviour" value="keep_text_only" checked>
+                <span class="o-label">Keep the current text search only</span>
+                <span class="o-rat">Status quo &mdash; GATES strings extend the haystack for free. Lowest scope creep. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="add_locked_toggle">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 30" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Text + locked-only toggle">
+                  <rect x="0" y="0" width="320" height="30" fill="#0a0e14"/>
+                  <rect x="6" y="8" width="220" height="14" rx="2" fill="#101926" stroke="#3a6680"/>
+                  <text x="12" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">Search…</text>
+                  <rect x="232" y="8" width="82" height="14" rx="7" fill="#252420" stroke="#D97757"/>
+                  <text x="240" y="18" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#D97757">▣ locked only</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="filter_behaviour" value="add_locked_toggle">
+                <span class="o-label">Add a "show only currently-locked" toggle</span>
+                <span class="o-rat">Filters to rows with at least one pending gate against the active island. The "what should I work toward?" use case in one click. Needs Picker 06 ≠ <code>all_no_status</code>.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="add_gate_chips">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 36" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Text + filter-by-gate-type chip row">
+                  <rect x="0" y="0" width="320" height="36" fill="#0a0e14"/>
+                  <rect x="6" y="4" width="308" height="12" rx="2" fill="#101926" stroke="#3a6680"/>
+                  <text x="12" y="13" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">Search…</text>
+                  <rect x="6" y="20" width="36" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="12" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">tier</text>
+                  <rect x="46" y="20" width="42" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="52" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">biome</text>
+                  <rect x="92" y="20" width="38" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="98" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">tile</text>
+                  <rect x="134" y="20" width="40" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="140" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">heat</text>
+                  <rect x="178" y="20" width="46" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="184" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">T5/T6</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="filter_behaviour" value="add_gate_chips">
+                <span class="o-label">Add a filter-chip row (one chip per gate type)</span>
+                <span class="o-rat">Mirrors the buildings-ui filter pattern. Multi-select if needed. Heaviest scope. Best at wide panel widths.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="add_both">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 36" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Both: locked toggle + gate-type chips">
+                  <rect x="0" y="0" width="320" height="36" fill="#0a0e14"/>
+                  <rect x="6" y="4" width="216" height="12" rx="2" fill="#101926" stroke="#3a6680"/>
+                  <text x="12" y="13" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">Search…</text>
+                  <rect x="228" y="4" width="84" height="12" rx="6" fill="#252420" stroke="#D97757"/>
+                  <text x="235" y="13" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#D97757">locked only</text>
+                  <rect x="6" y="20" width="36" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="12" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">tier</text>
+                  <rect x="46" y="20" width="42" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="52" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">biome</text>
+                  <rect x="92" y="20" width="38" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="98" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">tile</text>
+                  <rect x="134" y="20" width="40" height="11" rx="5" fill="#252420" stroke="#3a4452"/>
+                  <text x="140" y="28" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#cfe1f5">heat</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="filter_behaviour" value="add_both">
+                <span class="o-label">Add both: locked toggle + gate-type chips</span>
+                <span class="o-rat">Belt-and-braces. Maximum filtering surface; the filter strip dominates the panel's vertical real estate.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="filter_behaviour">keep_text_only</b></div>
+        </fieldset>
+
+        <!-- ============================================================== -->
+        <!-- PICKER 10 — Sort                                                  -->
+        <!-- ============================================================== -->
+        <fieldset class="picker" data-key="sort_order">
+          <legend>Picker 10</legend>
+          <div class="p-title">Sort order (carried from v1)</div>
+          <div class="p-intro">Today rows sort by
+            <code>(category, buildingLabel, recipeKey)</code>
+            (<code>recipe-graph.ts:64-70</code>) and group headers
+            inject a <code>CATEGORY</code> divider.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="category_then_name" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sort: category then name (current)">
+                  <rect x="0" y="0" width="320" height="56" fill="#0a0e14"/>
+                  <text x="6" y="10" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">EXTRACTION</text>
+                  <text x="6" y="20" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">Logger T1 · Mine T1 · Quarry T1 · Well T1</text>
+                  <text x="6" y="32" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">SMELTING</text>
+                  <text x="6" y="42" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">Blast Furnace T3 · Coke Oven T2 · Smelter T1 …</text>
+                  <text x="6" y="52" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">(within category, A→Z by buildingLabel)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="sort_order" value="category_then_name" checked>
+                <span class="o-label">Category then name (current)</span>
+                <span class="o-rat">Status quo &mdash; matches the existing sort. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="locked_first">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Locked first within category">
+                  <rect x="0" y="0" width="320" height="56" fill="#0a0e14"/>
+                  <text x="6" y="10" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">EXTRACTION</text>
+                  <text x="6" y="20" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">◇ Helium-3 Extractor T4</text>
+                  <text x="6" y="28" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#D97757">◇ Pump Jack T3</text>
+                  <text x="6" y="36" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">✓ Logger T1</text>
+                  <text x="6" y="44" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#8FA56E">✓ Mine T1</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="sort_order" value="locked_first">
+                <span class="o-label">Locked first within each category</span>
+                <span class="o-rat">"What I can't have yet" sorts up. Row order changes per island and per session.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="tier_then_name">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sort by tier band">
+                  <rect x="0" y="0" width="320" height="56" fill="#0a0e14"/>
+                  <text x="6" y="10" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">TIER 1</text>
+                  <text x="6" y="20" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">Logger · Mine · Quarry · Sand Pit · Smelter · …</text>
+                  <text x="6" y="32" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">TIER 2</text>
+                  <text x="6" y="42" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">Coke Oven · Quartz Mine · Steel Mill · …</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="sort_order" value="tier_then_name">
+                <span class="o-label">Tier then name (replace category grouping)</span>
+                <span class="o-rat">Group by tier band rather than recipe category. Pairs naturally with the GATES column. Breaks the existing category mental model.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="output_resource">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sort by primary output resource">
+                  <rect x="0" y="0" width="320" height="56" fill="#0a0e14"/>
+                  <text x="6" y="10" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">→ ai_core</text>
+                  <text x="6" y="20" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">AI Assembly T4</text>
+                  <text x="6" y="32" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#7dd3e8">→ coal</text>
+                  <text x="6" y="42" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#cfe1f5">Mine (coal vein)</text>
+                  <text x="6" y="52" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#5a7080">(group by primary output resource name)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="sort_order" value="output_resource">
+                <span class="o-label">By primary output resource</span>
+                <span class="o-rat">"Where do I make X?" view. Useful for cargo-route planning; multi-output recipes need a primary-output rule.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="sort_order">category_then_name</b></div>
+        </fieldset>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 01 — Today's window                                                  -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Today's window &mdash; what the inversion replaces</h2></div>
+      <p class="sec-intro">All references are to commit
+        <code>267fa62</code>.</p>
+
+      <p class="body">The window is mounted at app boot from
+        <code>src/main.ts:1000-1003</code>:</p>
+<pre class="code"><span class="ln">1000</span>const graphUi = mountGraphUi(document.body);
+<span class="ln">1001</span>defineAction(reg, 'toggle-graph', () =&gt; {
+<span class="ln">1002</span>  graphUi.toggle();
+<span class="ln">1003</span>});</pre>
+
+      <p class="body"><code>mountGraphUi</code> currently calls
+        <code>mountModal</code> at <code>graph-ui.ts:163</code>, which
+        produces a centred card over a full-screen scrim:</p>
+
+<pre class="code"><span class="ln">163</span>const handle: ModalHandle = mountModal(parentEl, {
+<span class="ln">164</span>  title: 'RECIPE GRAPH',
+<span class="ln">165</span>  subtitle: '/ §6 + §7',
+<span class="ln">166</span>  onClose: () =&gt; handle.hide(),
+<span class="ln">167</span>  buildBody(body) {
+<span class="ln">168</span>    body.style.display = 'flex';
+<span class="ln">169</span>    body.style.flexDirection = 'column';
+<span class="ln">170</span>    body.appendChild(container);
+<span class="ln">171</span>  },
+<span class="ln">172</span>});</pre>
+
+      <p class="body">Body content: a sticky <code>&lt;input type="search"&gt;</code>
+        plus per-category section dividers and rows rendered as a 4-column
+        CSS grid (<code>graph-ui.ts:81</code>):</p>
+
+<pre class="code"><span class="ln">81</span>rowEl.style.gridTemplateColumns = '260px 1fr 1fr 60px';</pre>
+
+      <p class="body">The four columns today are:</p>
+      <ul style="margin: 4px 0 14px 24px; font-size: 14px;">
+        <li><strong>BUILDING</strong> (<code>260px</code>) &mdash; displayName + <code>T<i>n</i></code> chip + optional <code>(recipeKey)</code> note.</li>
+        <li><strong>INPUTS</strong> (<code>1fr</code>) &mdash; <code>"N resource, …"</code> or <code>—</code>.</li>
+        <li><strong>OUTPUTS</strong> (<code>1fr</code>) &mdash; same shape.</li>
+        <li><strong>CYCLE</strong> (<code>60px</code>) &mdash; <code>17s</code>, right-aligned.</li>
+      </ul>
+
+      <p class="body">Dismiss vectors today: scrim click
+        (<code>ui-modal.ts:97-99</code>), Escape via the shared
+        <code>dismiss-modal</code> action (<code>main.ts:1370-1390</code>),
+        header X (<code>ui-modal.ts:64-69</code>), <code>Y</code> hotkey
+        toggle (<code>input.ts:89</code>). The first two go away post-migration
+        (no scrim; Esc cascade no longer touches this panel per Picker 04
+        default).</p>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 02 — Before / after                                                  -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Before &harr; after</h2></div>
+      <p class="sec-intro">Two-column compare of the modal shell (today)
+        against the floating-panel shell (post-migration), under the
+        recommended defaults.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Today &mdash; modal (the problem)</div>
+          <div class="col-body"><ul>
+            <li>Mounted via <code>mountModal</code> at <code>graph-ui.ts:163</code>.</li>
+            <li>Full-screen scrim with <code>backdrop-filter: blur(2px)</code> (<code>ui.css:534</code>) blanks the rest of the HUD.</li>
+            <li>Centred card <code>min(960px, 92vw)</code>, <code>max-height: 86vh</code> (<code>ui.css:544-555</code>) &mdash; can't be moved out of the viewport centre.</li>
+            <li>Not draggable, not resizable. Player must dismiss the window to see the world underneath.</li>
+            <li>Joins the <code>dismiss-modal</code> Esc cascade at <code>main.ts:1379</code>.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">Post-migration &mdash; floating panel</div>
+          <div class="col-body"><ul>
+            <li>Mounted via <code>mountPanel({ id: 'recipe-graph-panel', zone: Zone.R, order: 3 })</code>.</li>
+            <li>No scrim. HUD remains fully interactive while the panel is open.</li>
+            <li>Initial 720×520 footprint (per Picker 02 default); player can drag the header to reposition and the BR grip to resize.</li>
+            <li>Layout persists per-panel via <code>ri-ui-layout-v1</code> in localStorage (<code>window-manager.ts:18</code>); <code>Reset Window Layout</code> in Settings reverts (<code>settings-ui.ts</code>).</li>
+            <li>Drops out of the Esc cascade. <code>Y</code> still toggles via the input registry.</li>
+            <li>Same family as Drone Ops / Routes / Settlement / Inspector.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 03 — Change inventory                                                -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Change inventory (under the recommended defaults)</h2></div>
+      <p class="sec-intro">Three files touched. Assumes every picker stays
+        at its default.</p>
+
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/graph-ui.ts</div>
+          <div class="what">
+            <span class="lead">Replace the <code>mountModal</code> body with a panel skeleton + <code>mountPanel</code>.</span>
+            Build a <code>.ri-panel</code> root with a <code>.ri-panel__head</code> (title + X close button) and a <code>.ri-panel__body</code> that wraps the existing <code>container</code> (search + rows). Replace <code>mountModal(parentEl, …)</code> with <code>mountPanel(panel, { id: 'recipe-graph-panel', zone: Zone.R, order: 3, minWidth: 480 })</code>. The close-button click calls <code>panelHandle.setVisible(false)</code>. Remove the <code>maxHeight: '70vh'</code> on <code>container</code> &mdash; the panel itself is now resizable and the body should fill it. Drop the <code>onClose</code> wiring that pointed at the modal handle.
+          </div>
+        </div>
+        <div class="change">
+          <div class="file">src/graph-ui.ts (row grid)</div>
+          <div class="what">
+            <span class="lead">Insert GATES as the 2nd column.</span>
+            Change <code>gridTemplateColumns</code> from <code>'260px 1fr 1fr 60px'</code> to <code>'180px 150px 1fr 1fr 60px'</code> (5-column grid). New <code>gatesCell</code> div per row renders <code>row.gates</code> as inline monospace text with status-colour classes (olive=met, clay=pending, gray=N/A). Extend the search haystack at <code>graph-ui.ts:135-144</code> with gate <code>kind</code> + parameter strings so text search hits gates too.
+          </div>
+        </div>
+        <div class="change">
+          <div class="file">src/recipe-graph.ts</div>
+          <div class="what">
+            <span class="lead">Add a pure <code>gates</code> field to <code>RecipeTableRow</code>.</span>
+            New type <code>GateEntry = { kind: 'tier'|'t5'|'t6'|'biome'|'tile'|'coastal'|'heat'|'adjacency'; param: string }</code>. <code>buildRecipeTableRows</code> populates <code>gates</code> from <code>def.tier</code>, <code>def.requiredBiomes</code>, <code>def.requiredTile</code>, <code>def.coastal</code>, <code>def.requiresHeat</code>, <code>def.gates</code>. Pure; no DOM; no <code>IslandState</code> dependency (status colour is decided at render time in <code>graph-ui.ts</code> using the active-island getter).
+          </div>
+        </div>
+        <div class="change">
+          <div class="file">src/main.ts</div>
+          <div class="what">
+            <span class="lead">Pass <code>{ getState: activeState }</code> at mount; drop graph from the Esc cascade.</span>
+            Line ~1000: <code>mountGraphUi(document.body, { getState: activeState })</code>. Line ~1379: remove <code>graphUi.hide()</code> from the <code>dismiss-modal</code> action body (the recipe panel is no longer a modal). Keep the <code>toggle-graph</code> action and the <code>Y</code> binding unchanged &mdash; <code>graphUi.toggle()</code> now flips <code>setVisible</code> on the panel handle instead of mounting/unmounting a modal.
+          </div>
+        </div>
+      </div>
+
+      <p class="body" style="margin-top: 14px;"><strong>No CSS changes.</strong>
+        The existing <code>.ri-modal-scrim</code> / <code>.ri-modal</code>
+        rules stay in <code>ui.css</code> for the seven sibling modals
+        that still use them &mdash; we're just no longer one of them.
+        <code>.ri-panel</code>, <code>.ri-panel__head</code>,
+        <code>.ri-resize</code>, <code>.ri-free</code> are all defined.
+        Persistence and resize wiring come along for free via
+        <code>mountPanel</code> &rarr; <code>makePanelDraggable</code>.</p>
+
+      <p class="body"><strong>Implementation notes the picker structure doesn't surface:</strong></p>
+      <ul style="margin: 0 0 0 24px; font-size: 14px;">
+        <li>The current sticky search input lives at the top of the modal body. Post-migration it can live in the panel header (alongside the X) or stay at the top of the panel body. I'd default to keeping it at the top of the body so the header chrome stays consistent with sibling panels.</li>
+        <li><code>GraphUi.toggle()</code> already tracks visibility internally; that pattern carries over &mdash; <code>PanelHandle</code> doesn't expose <code>isVisible()</code>, so the wrapper stays the same.</li>
+        <li><code>makePanelDraggable</code> resolves the drag handle via <code>.ri-panel__head</code> (see <code>window-manager.ts:347-352</code>). The new panel skeleton must use exactly that class on the header div.</li>
+        <li>First-mount placement: when <code>ri-ui-layout-v1</code> has no entry for <code>recipe-graph-panel</code> the panel stacks at <code>Zone.R, order: 3</code> beneath Settlement. Once dragged it becomes "free" (<code>setPanelFree(true)</code>) and the rect persists.</li>
+      </ul>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 04 — Side-dock panels reference                                      -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Reference &mdash; existing side-dock panels (the family)</h2></div>
+      <p class="sec-intro">Five panels already use <code>mountPanel</code>;
+        the recipe graph joins them. The "match Drone Ops" framing in the
+        brief points specifically at this row family.</p>
+      <table class="tbl">
+        <thead><tr><th>Module</th><th>Panel id</th><th>Zone</th><th>Order</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">inspector-ui.ts:1097</td><td class="slate">inspector-panel</td><td>Zone.L</td><td>0</td><td>Left-edge dock, building inspector.</td></tr>
+          <tr><td class="mono">drones-ui.ts:501</td><td class="slate">drones-panel</td><td>Zone.R</td><td>0</td><td>Brief's named reference.</td></tr>
+          <tr><td class="mono">routes-ui.ts:453</td><td class="slate">routes-panel</td><td>Zone.R</td><td>1</td><td>Cargo routes.</td></tr>
+          <tr><td class="mono">settlement-ui.ts:595</td><td class="slate">settlement-panel</td><td>Zone.R</td><td>2</td><td>Settlement / patron dispatch.</td></tr>
+          <tr><td class="mono"><span style="color: var(--olive)">graph-ui.ts (proposed)</span></td><td class="slate">recipe-graph-panel</td><td>Zone.R</td><td>3</td><td>This change.</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top: 18px;">All four right-dock panels
+        share: <code>mountPanel</code> &rarr; <code>makePanelDraggable</code>;
+        <code>panelHandle.setVisible(false)</code> for close; the
+        <code>.ri-panel__head</code> drag handle; the
+        <code>.ri-resize</code> BR grip; and persistence via
+        <code>ri-ui-layout-v1</code>. None of them respond to Escape.</p>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 05 — The eight gate dimensions                                       -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Reference &mdash; what "gates" a recipe</h2></div>
+      <p class="sec-intro">Carried over from v1 unchanged. Eight gate
+        dimensions in the data; pickers 06 / 07 / 08 govern how the column
+        packs them into a row cell.</p>
+      <table class="tbl">
+        <thead><tr><th>Gate</th><th>Source field</th><th>Read from</th><th>Spec §</th><th>Status check</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">Tier (level band)</td>
+            <td class="mono">def.tier (1-6)</td>
+            <td class="mono">building-defs.ts:475</td>
+            <td>§9.2</td>
+            <td class="olive"><code>tierForLevel(state.level) &gt;= def.tier</code> &mdash; skilltree.ts:225-231</td>
+          </tr>
+          <tr>
+            <td class="slate">T5 endgame access</td>
+            <td class="mono">def.tier === 5</td>
+            <td class="mono">building-defs.ts:4155</td>
+            <td>§13.1</td>
+            <td class="olive"><code>level &gt;= 50 &amp;&amp; state.aiCoreCrafted</code> &mdash; <code>t5Unlocked</code> at skilltree.ts:240</td>
+          </tr>
+          <tr>
+            <td class="slate">T6 endgame access</td>
+            <td class="mono">def.tier === 6</td>
+            <td class="mono">building-defs.ts:4148-4153</td>
+            <td>§14.1</td>
+            <td class="olive"><code>state.ascendantCoreCrafted &amp;&amp; hasSpaceport</code>; Spaceport itself exempt &mdash; <code>t6Unlocked</code> at skilltree.ts:264</td>
+          </tr>
+          <tr>
+            <td class="slate">Biome (volcanic / desert / …)</td>
+            <td class="mono">def.requiredBiomes</td>
+            <td class="mono">building-defs.ts:513</td>
+            <td>§9.5 / §15.1</td>
+            <td class="olive"><code>requiredBiomes.includes(spec.biome) &amp;&amp; !spec.artificial</code> &mdash; <code>canPlaceOnIsland</code> at building-defs.ts:4196</td>
+          </tr>
+          <tr>
+            <td class="slate">Tile (every footprint tile)</td>
+            <td class="mono">def.requiredTile</td>
+            <td class="mono">building-defs.ts:521</td>
+            <td>§4.3 / §8.1</td>
+            <td class="clay">Placement-time only &mdash; <code>validatePlacement</code> in <code>placement.ts</code>. Catalog renders the requirement; runtime status N/A without a placed footprint.</td>
+          </tr>
+          <tr>
+            <td class="slate">Coastal (≥1 water tile in footprint)</td>
+            <td class="mono">def.coastal</td>
+            <td class="mono">building-defs.ts:524</td>
+            <td>§8.8</td>
+            <td class="clay">Placement-time only.</td>
+          </tr>
+          <tr>
+            <td class="slate">Heat-source adjacency</td>
+            <td class="mono">def.requiresHeat</td>
+            <td class="mono">building-defs.ts:551</td>
+            <td>§5.2</td>
+            <td class="clay">Runtime adjacency check &mdash; <code>heat.ts</code>. Catalog mode shows the requirement only.</td>
+          </tr>
+          <tr>
+            <td class="slate">Adjacency gates (catalog / heat / def-id)</td>
+            <td class="mono">def.gates[]</td>
+            <td class="mono">building-defs.ts:559</td>
+            <td>§4.5</td>
+            <td class="clay">Runtime via <code>checkGates</code> in <code>adjacency.ts</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top: 18px;">
+        <strong>Notable non-gates.</strong>
+        <code>NODE_CATALOG</code> nodes apply multipliers (no recipe is locked behind a node);
+        <code>state.specializationRole</code> applies multipliers (no recipe is locked behind a declaration);
+        synthetic recipe variants (<code>mine_on_ore</code>, <code>steel_mill_from_scrap</code>) are runtime-selected
+        by <code>resolveRecipe</code> and already surface as separate rows.</p>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 06 — Deprecated pickers from v1                                      -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Deprecated from v1</h2></div>
+      <p class="sec-intro">Two pickers from v1 are moot post-inversion.
+        Listed so the reader can see what was reconciled.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">v1 Picker 01: modal style (compact / 960 / full-bleed)</div>
+          <div class="dd">Superseded. The panel migration means there is no modal card to style. Picker 02 (initial size) replaces the size dimension; picker 01 (default zone) replaces the placement dimension.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">v1 Picker 02: modal dismiss affordances (scrim / Esc / X)</div>
+          <div class="dd">Superseded. No scrim, so backdrop click is gone. Esc cascade behaviour is the new Picker 04 in v2; the X close-button semantics are the new Picker 03 in v2. No work was lost &mdash; the same dimensions of choice carry over under new names.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">v1 Picker 09: live-state coupling (active / best / picker)</div>
+          <div class="dd">Folded into the GATES-status decision (Picker 06). The default ("active island via <code>getState</code>") is implicit in the change inventory and not a meaningful fork given the panel-family convention.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 07 — Out of scope                                                    -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope / deferred</h2></div>
+      <p class="sec-intro">Things this spec deliberately does <em>not</em> decide.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Mermaid-style visual graph view</div>
+          <div class="dd">The window briefly was a Mermaid-rendered DAG (commit <code>649a7f3</code>) before being refactored to a searchable table (<code>fde23f4</code>). Reviving the graph view as a tab is out of scope.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Runtime status of tile / coastal / heat / adjacency gates without a placement</div>
+          <div class="dd">Four of the eight gate dimensions are placement-time predicates; they have no live "met / not met" answer for a catalog row. The GATES column renders the requirement only.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Click-to-build / click-to-locate from a row</div>
+          <div class="dd">A natural follow-up: clicking a row could route to the build catalog or to a placed instance. Pickers here are about static display.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Runtime sortable column headers</div>
+          <div class="dd">Picker 10 chooses one default. A full sort-by-any-column UX is a separate interaction surface.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Persisting search / filter text across sessions</div>
+          <div class="dd">Panel position/size persist via <code>ri-ui-layout-v1</code>; search input does not. Adding that is independent of (1) and (2).</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Showing skill-tree multiplier effects per row ("MODS" sister column)</div>
+          <div class="dd">Multipliers are per-recipe but not gates &mdash; they change rate, not availability. Sister column for a follow-up.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Reset Window Layout interaction</div>
+          <div class="dd"><code>resetUiLayout()</code> (Settings &rarr; Reset Window Layout) restores the recipe panel to its default zone slot alongside Drone Ops / Routes / Settlement. Covered by the existing window-manager wiring; no new work here.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- Selections                                                           -->
+    <!-- =================================================================== -->
+    <aside class="selections" id="selections-panel" aria-label="Your picks">
+      <div class="s-tag">Your picks &mdash; copy and send back</div>
+      <div class="s-head">Selections</div>
+      <div class="s-body">Click any radio in §00 to update this panel.
+        Hit <b>Copy</b> for the clipboard, or triple-click to select
+        manually. Paste back to confirm your final picks; I'll cut v3
+        if any picker changed from its default.</div>
+
+      <div class="s-tools">
+        <button type="button" class="copy-btn" id="copy-selections" aria-label="Copy selections to clipboard">Copy selections</button>
+        <div class="format-toggle" role="tablist" aria-label="Output format">
+          <button type="button" data-format="json" class="active" role="tab" aria-selected="true">JSON</button>
+          <button type="button" data-format="kv" role="tab" aria-selected="false">key: value</button>
+        </div>
+        <span class="copy-status" id="copy-status" aria-live="polite"></span>
+      </div>
+
+      <pre class="payload" id="selections-payload" tabindex="0">{}</pre>
+    </aside>
+
+    <div class="footer">
+      <p>Design spec · v2 generated 2026-05-23 (supersedes v1 of the same slug &mdash; v1 misread the brief, see correction banner at top) · related to <code>src/graph-ui.ts</code>, <code>src/recipe-graph.ts</code>, <code>src/ui-zones.ts</code>, <code>src/window-manager.ts</code>, <code>src/drones-ui.ts</code> (reference), <code>SPEC.md</code> §6 (resources), §7 (recipes), §9 (skill tree), §13 (T5), §14 (T6).</p>
+    </div>
+
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var KEYS = [
+        'scope_of_change',
+        'default_zone',
+        'initial_size',
+        'close_button_semantics',
+        'escape_key_behaviour',
+        'gates_column_placement',
+        'gates_to_show',
+        'gates_render_shape',
+        'gates_palette',
+        'filter_behaviour',
+        'sort_order'
+      ];
+
+      var payloadEl  = document.getElementById('selections-payload');
+      var copyBtn    = document.getElementById('copy-selections');
+      var statusEl   = document.getElementById('copy-status');
+      var formatBtns = document.querySelectorAll('.selections .format-toggle button');
+
+      var currentFormat = 'json';
+
+      function readSelections() {
+        var out = {};
+        for (var i = 0; i < KEYS.length; i++) {
+          var key = KEYS[i];
+          var checked = document.querySelector('input[type="radio"][name="' + key + '"]:checked');
+          out[key] = checked ? checked.value : null;
+        }
+        return out;
+      }
+
+      function render() {
+        var sel = readSelections();
+        for (var k in sel) {
+          if (!Object.prototype.hasOwnProperty.call(sel, k)) continue;
+          var b = document.querySelector('[data-current="' + k + '"]');
+          if (b) b.textContent = sel[k] === null ? '—' : sel[k];
+        }
+        var text;
+        if (currentFormat === 'json') {
+          text = JSON.stringify({
+            spec: 'robot-islands/2026-05-23-recipe-graph-modal-gates-design',
+            version: 'v2',
+            picks: sel
+          }, null, 2);
+        } else {
+          var lines = ['# Picks for robot-islands/2026-05-23-recipe-graph-modal-gates-design (v2)'];
+          for (var j = 0; j < KEYS.length; j++) {
+            var k2 = KEYS[j];
+            lines.push(k2 + ': ' + (sel[k2] === null ? '(none)' : sel[k2]));
+          }
+          text = lines.join('\n');
+        }
+        payloadEl.textContent = text;
+      }
+
+      var radios = document.querySelectorAll('.picker input[type="radio"]');
+      for (var i = 0; i < radios.length; i++) {
+        radios[i].addEventListener('change', render);
+      }
+
+      formatBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentFormat = btn.getAttribute('data-format');
+          formatBtns.forEach(function (b) {
+            var active = b === btn;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          render();
+        });
+      });
+
+      function showStatus(msg, ok) {
+        statusEl.textContent = msg;
+        statusEl.style.color = ok ? 'var(--olive)' : 'var(--rust)';
+        if (showStatus._t) clearTimeout(showStatus._t);
+        showStatus._t = setTimeout(function () { statusEl.textContent = ''; }, 2200);
+      }
+
+      copyBtn.addEventListener('click', function () {
+        var text = payloadEl.textContent;
+        var done = function (ok) {
+          if (ok) {
+            copyBtn.classList.add('copied');
+            copyBtn.textContent = 'Copied';
+            setTimeout(function () {
+              copyBtn.classList.remove('copied');
+              copyBtn.textContent = 'Copy selections';
+            }, 1600);
+            showStatus('copied ' + text.length + ' chars', true);
+          } else {
+            showStatus('copy failed — triple-click the block', false);
+          }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () { done(true); },
+            function () { done(false); }
+          );
+        } else {
+          var range = document.createRange();
+          range.selectNodeContents(payloadEl);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          done(false);
+        }
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>
