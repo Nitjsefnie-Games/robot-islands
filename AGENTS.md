@@ -80,6 +80,19 @@ Default bindings: WASD/Arrows pan, +/- zoom, H center-home, G toggle-grid.
 
 `tsconfig.json` has `strict`, `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`. New code must compile clean under these. Helpers like `inv()` and `cap()` in `economy.ts` exist to centralise the `?? 0` for indexed reads.
 
+### Persistence migrations — bump = migrate
+
+Every schema bump from v7 onward ships a `migrateV<N>(snapshot) → V<N+1> snapshot` function in `src/persistence.ts`. `loadWorld` walks the migration chain (`migrateV7 → migrateV8 → …`) to bring any supported snapshot up to current. `SUPPORTED_LOAD_VERSIONS` lists every version with a migration path to current.
+
+When you bump the schema:
+1. Add a `SerializedSnapshotV<N>` type alias capturing the previous shape (so the migration's input type is precise, not `any`).
+2. Add `migrateV<N>toV<N+1>(s: SerializedSnapshotV<N>): SerializedSnapshotV<N+1>` returning a structurally-valid next-version snapshot. Field defaults that preserve "old save still works" semantics belong here.
+3. Wire the migration into `loadWorld`'s version-dispatch path.
+4. Add `N` to `SUPPORTED_LOAD_VERSIONS`.
+5. Tests: v<N> fixture loads cleanly into v<N+1>; v<N+1> round-trips identity; any field defaults are exercised explicitly.
+
+The 1d8c4bd refactor that dropped legacy migrations was a **one-time pre-release cleanup**. v6 → v7 (commit `323feff`) was the last fail-fast bump under the old policy. From v7 → v8 onward: bump = migrate.
+
 ### One responsibility per file
 
 `island.ts` (geometry math) · `world.ts` (multi-island data + state factory) · `economy.ts` (tick loop) · `recipes.ts` (recipe + xp_weight tables) · `camera.ts` · `input.ts` · `ui.ts` (DOM button overlay) · `hud.ts` (DOM economy panel) · `ocean.ts` (vision/fog) · `grid.ts` (debug overlay) · `buildings.ts` (building data + rendering) · `main.ts` (PixiJS bootstrap + wiring).

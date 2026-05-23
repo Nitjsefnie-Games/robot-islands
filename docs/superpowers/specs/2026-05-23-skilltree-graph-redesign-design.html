@@ -240,7 +240,7 @@
         <tr><td>2</td><td>Branch lock is order-only — every island can eventually own every node.</td><td><b>Rejected as a defect.</b> Confirmed by user: every sub-path is INTENDED to be theoretically reachable (per SPEC §9.3:1054). The SP-cost ramp + XP softcap do the gating; the new design has no commit threshold, no sequential-sub-path lock, no tier gates at all — explicitly relying on cost+graph topology as the only friction.</td></tr>
         <tr><td>3</td><td>T6 is just bigger numbers (120/225 nodes are flat T6 ramp).</td><td>The 15-depth boost ramp inside each sub-path is replaced by a ~30-40 node directed sub-graph mixing filler with notables and keystones (§05). The "just bigger numbers" tax pays for the dense small nodes (PoE-style); flavour lives in the curated nodes between them.</td></tr>
         <tr><td>4</td><td>No cross-node synergies — effects fold independently in <code>effectiveSkillMultipliers</code>.</td><td><b>AND-prereq keystone nodes</b> are the synergy primitive: an effect activates only when 2-3 specific upstream nodes are all owned. Glyph-locality auras (§07) provide a second synergy layer: certain notables grant "+X% to adjacent nodes' effect."</td></tr>
-        <tr><td>5</td><td>Specialization roles are orthogonal to the tree.</td><td>Out of scope for this design — Specialization roles (SPEC §9.4) remain orthogonal multipliers. A future iteration could wire role-gated sub-trees per Picker 3 / PoE's ascendancy pattern. Documented as a follow-up in §11.</td></tr>
+        <tr><td>5</td><td>Specialization roles are orthogonal to the tree.</td><td><b>Cure: drop §9.4 entirely.</b> With a 600-800-node graph that already enforces specialization via cost-economy + topology (the nodes you buy ARE your playstyle), the orthogonal global ×1.5/×0.75 layer is redundant complexity. The useful effect magnitudes from each role get absorbed into specific skill-graph keystones (see §10 migration); the declarative role identity goes away (your playstyle is visible in your owned-node set).</td></tr>
         <tr><td>6</td><td>No per-node respec.</td><td><b>Deferred.</b> User's call: no per-node refund in this iteration; only existing Tier Reset (§9.7) clears choices. Lean-Last-Epoch policy can be added later.</td></tr>
         <tr><td>7</td><td>UI shows a list of 4 text columns, not a tree.</td><td>Addressed by the graph-view UI overhaul (separate concern; planned post-data-model). Out of scope for the data redesign; this spec's node/edge primitives are what the graph view will render.</td></tr>
         <tr><td>8</td><td>SkillEffect union accumulating 4 unwired kinds.</td><td>All 4 get wired as keystone payloads (defect 1). The union also gets 3 NEW kinds (<code>conditionalBonus</code>, <code>crossIslandShared</code>, <code>tierBypass</code>, §06).</td></tr>
@@ -465,12 +465,19 @@
     <div class="sec-head"><span class="num">05</span><h2>Node taxonomy — filler / notable / keystone</h2></div>
     <p class="sec-intro">PoE-proportion mix per sub-path (~25-40 nodes total per sub-path).</p>
 
+    <div class="callout warn">
+      <b>Folding semantics — MULTIPLICATIVE, not additive.</b><br>
+      Every node's <code>magnitude</code> is a <b>per-node factor</b> expressed as the bonus above 1 (e.g. <code>magnitude = 0.05</code> means the node grants a <b>×1.05 multiplier</b>, NOT "+5 percentage points to a running additive total"). The engine folds across all owned nodes for the same effect kind via <b>product</b>: <code>total = ∏ (1 + magᵢ)</code> over owned nodes. Owning two nodes each with <code>magnitude = 0.05</code> yields <code>1.05 × 1.05 = 1.1025</code>, not <code>1 + 0.05 + 0.05 = 1.10</code>. This matches the existing engine fold at <code>skilltree.ts:880-920</code> (<code>x *= m</code> per node).
+      <br><br>
+      Throughout this spec, any "+X%" shorthand should be read as "<b>per-node factor ×(1 + X/100)</b>", and any "growth ×Y" phrasing means the per-node FACTOR ramps geometrically with depth, NOT that the magnitude delta grows additively. When in doubt, write the multiplier (<code>×1.05</code>) and the magnitude (<code>magnitude = 0.05</code>) side-by-side.
+    </div>
+
     <table class="tbl">
       <thead><tr><th style="width:90px">Layer</th><th style="width:50px">%</th><th>Cost</th><th>Prereq</th><th>Source</th><th>Effect class</th></tr></thead>
       <tbody>
         <tr>
           <td><b style="color:#CFCCC2">Filler</b></td><td>~75%</td><td>1-3 SP edge</td><td>Single in-edge (standard chain)</td><td>Archetype-templated</td>
-          <td>Small multiplicative boosts (<code>recipeRateMul</code>, <code>storageCapMul</code>, <code>powerProductionMul</code>, etc.). Magnitudes grow geometrically with shortest-path depth.</td>
+          <td>Small multiplicative boosts (<code>recipeRateMul</code>, <code>storageCapMul</code>, <code>powerProductionMul</code>, etc.). Per-node factor grows geometrically with shortest-path depth — e.g. depth 1: <code>×1.04</code>, depth 4: <code>×1.16</code>, depth 7: <code>×1.42</code>. Folds multiplicatively (see callout above).</td>
         </tr>
         <tr>
           <td><b style="color:#E0B47F">Notable</b></td><td>~15%</td><td>3-5 SP edge</td><td>Single in-edge (often at a convergence point)</td><td>Hand-curated</td>
@@ -519,6 +526,19 @@
       <li><code>storageCategoryCapMul</code> (per-category), <code>constructionTimeMul</code>, <code>parallelBuildCapAdd</code>, <code>teleporterEfficiencyMul</code></li>
       <li><code>mineYieldBonusMul</code>, <code>mineRareTrickleMul</code>, <code>loggerYieldBonusMul</code>, <code>loggerExoticTrickleMul</code>, <code>droneScanRadiusMul</code>, <code>launchSuccessAdditive</code></li>
     </ul>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">Newly added effect kinds — XP gain <span class="badge new">NEW</span></h3>
+    <p>One more effect kind added because the §9.4 Research Beacon role (the only XP-multiplying source in the game today) is being absorbed into the graph (see §10):</p>
+    <table class="tbl">
+      <thead><tr><th class="mono" style="width:160px">Effect kind</th><th>Semantics &amp; payload</th><th>Engine integration</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">xpGainMul</td>
+          <td>Multiplies XP gained per production tick. Payload: <code>{ multiplier: number; category?: RecipeCategory }</code>. When <code>category</code> is set, only XP from that recipe-category's production is multiplied; when omitted, global. Conditional variants use <code>conditionalBonus</code> with an XP <code>appliesTo</code>.</td>
+          <td><code>economy.ts</code> XP-accrual step (inside <code>advanceIsland</code>): multiplier folds onto per-tier XP-weight at accrual time. Cheap; one extra factor in the existing XP calculation. Used as filler-class (small +5-10% sprinkled nodes) AND as notables (e.g. one Refinement-branch notable that absorbs Research Beacon's +50%).</td>
+        </tr>
+      </tbody>
+    </table>
 
     <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">Newly wired (4 kinds, previously declared but with zero catalog presence) <span class="badge wire">WIRE</span></h3>
     <table class="tbl">
@@ -612,13 +632,25 @@
 
     <h3 style="color:var(--ink);font-size:15.5px;font-weight:600">8.1 Filler templates</h3>
     <p>Each sub-path declares ~5-8 <b>filler archetypes</b>, where each archetype = <code>{ effectKind, baseMagnitude, magnitudeGrowth, baseCost, costGrowth, count }</code>. Examples:</p>
-    <pre><span class="comment">// Mining sub-path filler archetypes</span>
+    <pre><span class="comment">// Mining sub-path filler archetypes.</span>
+<span class="comment">// baseMag is the per-node magnitude at depth 1 (i.e. per-node factor = 1 + baseMag).</span>
+<span class="comment">// growth is the geometric FACTOR by which (1 + mag) ramps with depth — so the depth-d</span>
+<span class="comment">// per-node factor is (1 + baseMag) * growth^(d-1), giving each node a multiplier &gt; 1.</span>
+<span class="comment">// Engine fold: total = product of per-node factors across owned nodes.</span>
 [
-  { effectKind: <span class="str">'recipeRateMul'</span>, category: <span class="str">'extraction'</span>, baseMag: 0.04, growth: 1.45, baseCost: 1, costGrowth: 1.4, count: 6 },
-  { effectKind: <span class="str">'storageCategoryCapMul'</span>, category: <span class="str">'raw-ore'</span>, baseMag: 0.05, growth: 1.4, baseCost: 1, costGrowth: 1.5, count: 5 },
-  { effectKind: <span class="str">'mineYieldBonusMul'</span>, baseMag: 0.05, growth: 1.5, baseCost: 2, costGrowth: 1.6, count: 4 },
+  { effectKind: <span class="str">'recipeRateMul'</span>, category: <span class="str">'extraction'</span>, baseMag: 0.04, growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 6 },
+  { effectKind: <span class="str">'storageCategoryCapMul'</span>, category: <span class="str">'raw-ore'</span>, baseMag: 0.05, growth: 1.08, baseCost: 1, costGrowth: 1.5, count: 5 },
+  { effectKind: <span class="str">'mineYieldBonusMul'</span>, baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 4 },
   ...
-]</pre>
+]
+<span class="comment">// Worked example for the first row above (recipeRateMul, extraction):</span>
+<span class="comment">//   depth-1 node: factor = 1.04        (mag = 0.04)</span>
+<span class="comment">//   depth-2 node: factor = 1.04 * 1.10  ≈ 1.144   (mag ≈ 0.144)</span>
+<span class="comment">//   depth-3 node: factor ≈ 1.258   ...</span>
+<span class="comment">//   depth-6 node: factor ≈ 1.677   ...</span>
+<span class="comment">// Owning all 6 nodes in the chain:</span>
+<span class="comment">//   total = 1.04 * 1.144 * 1.258 * 1.384 * 1.522 * 1.677  ≈  5.41×  recipe rate</span>
+<span class="comment">// Owning only depths 1-3:  total = 1.04 * 1.144 * 1.258  ≈  1.50×</span></pre>
     <p>Generator function: <code>generateFillerNodes(archetypes, depths) → SkillNode[]</code>. Deterministic; the same archetypes always produce the same nodes. The output array is committed to the catalog (not regenerated at runtime) so designers can hand-edit specific nodes after generation if needed.</p>
 
     <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">8.2 Notable curation</h3>
@@ -648,16 +680,20 @@
         <tr><td>Bridge edge cost (cross-branch)</td><td class="mono">8-20 SP</td><td>Rare and expensive</td></tr>
         <tr><td>Threshold: within-branch bridge</td><td class="mono">5-10 points spent in source/destination sub-path</td><td>Per bridge; designer-tuned</td></tr>
         <tr><td>Threshold: cross-branch bridge</td><td class="mono">15-30 points spent in source or destination branch</td><td>Per bridge; reflects deeper investment requirement</td></tr>
-        <tr><td>Filler magnitude — base</td><td class="mono">+4-6%</td><td>Per filler effectKind, designer-tuned per archetype</td></tr>
-        <tr><td>Filler magnitude growth per depth</td><td class="mono">×1.4-1.5 geometric</td><td>So +5% / +7% / +10% / +14% / +20% / +28% / +39% over 7 depths</td></tr>
-        <tr><td>Notable magnitude</td><td class="mono">+10-25%</td><td>Per notable; mid-power</td></tr>
-        <tr><td>Keystone magnitude</td><td class="mono">special</td><td>Often non-numerical (unlock, bypass, structural); when numerical, +30-100%</td></tr>
+        <tr><td>Filler magnitude — base (per-node factor at depth 1)</td><td class="mono">×1.04-1.06</td><td>i.e. <code>baseMag = 0.04..0.06</code>; per filler effectKind, designer-tuned per archetype</td></tr>
+        <tr><td>Filler magnitude growth per depth (factor-of-factor)</td><td class="mono">×1.08-1.12</td><td>The <em>per-node</em> factor grows geometrically, NOT the cumulative product. Depth-d factor = (1 + baseMag) × growth^(d-1). Engine fold across owned nodes is multiplicative — total = ∏ factorᵢ.</td></tr>
+        <tr><td>Notable magnitude (per-node factor)</td><td class="mono">×1.10-1.25</td><td>i.e. <code>magnitude = 0.10..0.25</code>; mid-power named effects</td></tr>
+        <tr><td>Keystone magnitude (per-node factor when numerical)</td><td class="mono">×1.30-2.00</td><td><code>magnitude = 0.30..1.00</code>. Often non-numerical instead (unlock, bypass, structural payload — no magnitude folding involved).</td></tr>
         <tr><td>Aura radius (glyph-locality)</td><td class="mono">1-2 edges</td><td>Most are radius=1 (direct neighbours)</td></tr>
-        <tr><td>Aura bonus</td><td class="mono">+10-20% to adjacent nodes' effect</td><td>Stacking: additive within a node (multiple auras on one neighbour add together), capped at +50% total</td></tr>
+        <tr><td>Aura amplification (multiplies the adjacent node's per-node factor)</td><td class="mono">×1.10-1.20</td><td><b>Aura semantics:</b> an aura with <code>bonus = 0.15</code> turns an adjacent node's per-node factor F into F × 1.15. Multiple auras on the same neighbour STACK MULTIPLICATIVELY (∏(1+bonusⱼ)), capped at ×1.50 total aura amplification on any single node.</td></tr>
       </tbody>
     </table>
 
     <p style="font-size:13px;color:var(--muted);margin-top:8px"><b>SP-economy sanity check (PLACEHOLDER):</b> at ~1 SP/level baseline + xp-softcap past lvl 50, a level-100 island ends with ~100-200 SP. At average ~3-4 SP/edge in the graph, that's ~30-60 nodes owned out of ~600+. Mid-game islands own &lt;10% of the tree; very-late-game islands own ~20-30%; only insanely-long-grinded islands approach full mastery. Compares to PoE: a fresh lvl 90 character owns ~85-95 of ~1300 nodes (~7%). Our ratio is similar at lvl 100, more permissive at lvl 200+.</p>
+
+    <div class="callout">
+      <b>Multiplicative stacking sanity check.</b> A player who fully completes one sub-path's 6-node Mining ramp at the placeholders above gets <code>~5.4× extraction rate</code> on Mining recipes. Stacking with Forestry/Drilling/Robotics (each its own multiplicative chain on different RecipeCategory or per-building bonus) gives non-overlapping stacks. If sub-paths within a branch DID overlap (e.g. two sub-paths both granting <code>recipeRateMul</code> for the same category), totals would compound dangerously — design discipline: <b>each sub-path targets a distinct effect-kind+category pair where possible</b>, and only AND-keystones cross category lines. Test playtest: a level-100 fully-Mining-focused island should reach ~3-5× total extraction rate, not 50×.
+    </div>
   </section>
 
   <!-- ============================ 10 ============================ -->
@@ -667,6 +703,7 @@
     <p>Pre-release game; no real saves to preserve. Per the established discipline (commit <code>1d8c4bd</code>: dropped all migration paths, schema 5→6; <code>323feff</code>: schema 6→7 for tileOverrides), this redesign bumps schema <b>7 → 8</b> and uses a fail-fast loader.</p>
 
     <h3 style="color:var(--ink);font-size:15.5px;font-weight:600">10.1 Code to delete</h3>
+    <p><b>Skill tree internals (replaced):</b></p>
     <ul>
       <li><code>src/skilltree.ts:516-589</code> — the current <code>NODE_CATALOG</code> array (225 entries).</li>
       <li><code>src/skilltree.ts:380-510</code> approx — node-generation helpers tied to the old depth-1-15 model (<code>makeShallowNodes</code>, <code>makeDeepNodes</code>, magnitudeForDepth, etc.).</li>
@@ -675,6 +712,26 @@
       <li><code>src/skilltree.ts</code> tier-gating logic in <code>nodeRequiredTier</code> (used at <code>canSpend</code> line 655) — the new design has no tier gates.</li>
       <li><code>src/skilltree.ts:698-713</code> — the linear depth-prereq spend logic. New design uses graph-edge-prereq logic.</li>
       <li><code>IslandState.subPathProgress</code> tracking — replaced by <code>unlockedNodes</code> and <code>unlockedEdges</code> sets (the latter is new; needed because edges can be owned even when their endpoint is shared by multiple incoming edges).</li>
+    </ul>
+    <p><b>Specialization (§9.4) removed entirely (Finding #5 cure):</b></p>
+    <ul>
+      <li><code>src/specialization.ts</code> + <code>src/specialization.test.ts</code> — entire module deleted.</li>
+      <li><code>IslandState.specializationRole: RoleId | null</code> — field removed (schema bump 7→8 handles this).</li>
+      <li><code>effectiveSpecializationMultipliers</code> / <code>SpecializationMultipliers</code> / <code>specMul</code> uses in <code>economy.ts</code> — folded out; computeRates no longer touches specialization layer.</li>
+      <li><code>routeCapacityMultiplier(role)</code> in <code>routes.ts:671</code> — replaced by a graph keystone in Logistics/Transport sub-path with the existing wired <code>routeCapacityMul</code> effect.</li>
+      <li><code>skilltree-ui.ts</code> — Specialization section (cards, refreshSpecialization, declare/clear handlers) removed entirely.</li>
+      <li><code>tier-reset.ts:149</code> — <code>state.specializationRole = null</code> clear line removed; tier-reset.ts simplifies overall since the section "primarily to undo §9.4" no longer applies.</li>
+      <li><code>world.ts:1067-1070</code> — initial <code>specializationRole: null</code> dropped from <code>makeInitialIslandState</code>.</li>
+    </ul>
+    <p><b>Useful effects absorbed into the graph (don't lose them):</b></p>
+    <ul>
+      <li>Foundry's +50% smelting (×1.5) → Refinement/Smelting sub-path keystone with <code>recipeRateMul</code> category=<code>'smelting'</code>, magnitude=0.5.</li>
+      <li>Refinery's +50% chemistry (×1.5) → Refinement/Chemistry sub-path keystone with <code>recipeRateMul</code> category=<code>'chemistry'</code>, magnitude=0.5.</li>
+      <li>Mining's +75% extraction (×1.75) → Extraction/Mining sub-path keystone with <code>recipeRateMul</code> category=<code>'extraction'</code>, magnitude=0.75.</li>
+      <li>Logistics Hub's +100% route capacity (×2.0) → Logistics/Transport sub-path keystone with <code>routeCapacityMul</code>, magnitude=1.0.</li>
+      <li>Logistics Hub's +50% storage cap (×1.5) → Logistics/Storage sub-path keystone with <code>storageCapMul</code>, magnitude=0.5.</li>
+      <li>Research Beacon's +50% skill XP (×1.5) → one or more Refinement/Power Systems keystones (or distributed across branches) with new <code>xpGainMul</code> effect, magnitude=0.5.</li>
+      <li>The role's <em>penalty</em> side (-25% non-matching) does NOT carry over — penalties were a balance lever for the orthogonal layer; the graph naturally produces specialization-via-opportunity-cost.</li>
     </ul>
 
     <h3 style="margin-top:12px;color:var(--ink);font-size:15.5px;font-weight:600">10.2 Code to add</h3>
@@ -688,8 +745,40 @@
       <li>Engine integration for the 3 new effect kinds (<code>conditionalBonus</code> → economy.ts inner loop; <code>crossIslandShared</code> → network.ts new aggregation layer; <code>tierBypass</code> → tier.ts).</li>
     </ul>
 
-    <h3 style="margin-top:12px;color:var(--ink);font-size:15.5px;font-weight:600">10.3 Persistence</h3>
-    <p>Schema bumps 7 → 8. <code>IslandState.unlockedNodes: Set&lt;NodeId&gt;</code> stays (now holding graph node IDs). <code>IslandState.unlockedEdges: Set&lt;EdgeId&gt;</code> added. <code>IslandState.subPathProgress</code> removed (no longer tracked). <code>IslandState.unspentSkillPoints: number</code> stays. Loader fail-fasts on v7 and earlier; in-tree v7 saves are wiped per the established pattern.</p>
+    <h3 style="margin-top:12px;color:var(--ink);font-size:15.5px;font-weight:600">10.3 Persistence + migration</h3>
+    <p>Schema bumps 7 → 8. Shape changes:</p>
+    <ul>
+      <li>add <code>IslandState.unlockedEdges: Set&lt;EdgeId&gt;</code></li>
+      <li>repurpose <code>IslandState.unlockedNodes: Set&lt;NodeId&gt;</code> (now holding new graph node IDs)</li>
+      <li>remove <code>IslandState.subPathProgress</code></li>
+      <li>remove <code>IslandState.specializationRole</code> (per §9.4 drop)</li>
+      <li><code>IslandState.unspentSkillPoints: number</code> stays; recomputed on migration</li>
+    </ul>
+    <p>Per the project's <b>"bump = migrate"</b> persistence policy (see AGENTS.md → Persistence migrations), v7→v8 ships a <code>migrateV7toV8</code> function that loads pre-redesign saves and brings them up to v8. The migration's data-shape mapping is <b>"preserve identity, reset progression"</b> — old node IDs (<code>"mining.1"</code> etc.) don't exist in the new catalog, so unlocked-node state can't be carried forward; SP investment is refunded so the player can rebuild on the new graph:</p>
+    <pre><span class="comment">// src/persistence.ts</span>
+<span class="kw">export function</span> migrateV7toV8(s: SerializedSnapshotV7): SerializedSnapshotV8 {
+  <span class="kw">return</span> {
+    ...s,
+    v: 8,
+    islandStates: s.islandStates.map((is) =&gt; ({
+      ...is,
+      <span class="comment">// preserve: id, level, xp, lastTick, inventory, levelXp, biome, etc.</span>
+      <span class="comment">// drop the §9.4 specialization fields entirely</span>
+      specializationRole: <span class="kw">undefined</span>, <span class="comment">// dropped at the type level; just don't carry it through</span>
+      <span class="comment">// reset progression on the new graph</span>
+      unlockedNodes: [], <span class="comment">// empty Set serialized; old "mining.1" IDs have no home in the new graph</span>
+      unlockedEdges: [], <span class="comment">// new field</span>
+      subPathProgress: <span class="kw">undefined</span>, <span class="comment">// field removed</span>
+      <span class="comment">// refund SP: 1 SP per level minus level 1 baseline (configurable)</span>
+      unspentSkillPoints: Math.max(0, (is.level ?? 1) - 1),
+    })),
+  };
+}</pre>
+    <p><code>SUPPORTED_LOAD_VERSIONS</code> grows to <code>{ 7, 8 }</code>. <code>loadWorld</code> walks the migration chain: v7 saves → <code>migrateV7toV8</code> → v8 (current). v6 and earlier still fail-fast (the 1d8c4bd cleanup remains the last fail-fast bump; v7 → v8 is the FIRST chained-migration bump under the new policy).</p>
+
+    <div class="callout note">
+      <b>Migration tests required.</b> Add at least: (a) v7 fixture loads cleanly into v8; (b) specialization-having v7 islands lose their role without throwing; (c) unspentSkillPoints recomputes correctly across the level range; (d) v8 round-trips without modification. See AGENTS.md → Persistence migrations for the test pattern.
+    </div>
 
     <h3 style="margin-top:12px;color:var(--ink);font-size:15.5px;font-weight:600">10.4 SPEC.md amendment</h3>
     <p>§9.3 (Skill Tree Structure) gets rewritten to describe the new graph model. The 15-depth ramp text disappears. The cost(depth) and magnitude doubling formulas are replaced with edge-based cost + per-effect-kind magnitude declarations. Reach-by-stage tables (mid-game / late-game / very-late / extreme-late) are updated to reflect SP ratios over ~600-800 nodes.</p>
