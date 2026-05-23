@@ -36,7 +36,7 @@ describe('hasOperationalBuilding', () => {
   });
 
   it('skips disabled buildings (the field is the whole point — checked against future-Task-2)', () => {
-    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabled: true } as unknown as Parameters<typeof b>[0])];
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabled: true })];
     expect(hasOperationalBuilding(list, 'spaceport')).toBe(false);
   });
 
@@ -64,7 +64,7 @@ describe('isOperationalBuilding', () => {
   });
 
   it('returns false for disabled', () => {
-    expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport', disabled: true } as unknown as Parameters<typeof b>[0]))).toBe(false);
+    expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport', disabled: true }))).toBe(false);
   });
 });
 
@@ -89,5 +89,32 @@ describe('findOperationalBuilding', () => {
       b({ id: 'b', defId: 'spaceport' }),
     ];
     expect(findOperationalBuilding(list, 'spaceport')).toEqual(list[1]);
+  });
+
+  it('skips disabled buildings', () => {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabled: true })];
+    expect(findOperationalBuilding(list, 'spaceport')).toBeUndefined();
+  });
+});
+
+// The spec §05 verification row — disabled flag round-trips through
+// the persistence shallow spread without any explicit migration.
+describe('disable is lossless across save round-trip', () => {
+  it('a building with disabled === true survives JSON.parse(JSON.stringify(b))', () => {
+    const building: PlacedBuilding = {
+      id: 'test-1',
+      defId: 'workshop',
+      x: 0,
+      y: 0,
+      disabled: true,
+    };
+    const round = JSON.parse(JSON.stringify(building)) as PlacedBuilding;
+    expect(round.disabled).toBe(true);
+  });
+
+  it('a building with disabled === undefined round-trips as undefined', () => {
+    const building: PlacedBuilding = { id: 'test-2', defId: 'workshop', x: 0, y: 0 };
+    const round = JSON.parse(JSON.stringify(building)) as PlacedBuilding;
+    expect(round.disabled).toBeUndefined();
   });
 });
