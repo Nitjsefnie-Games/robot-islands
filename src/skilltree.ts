@@ -162,6 +162,12 @@ export type ConditionalEffectCondition =
   | { readonly kind: 'networked-to-N-T3-islands'; readonly n: number }
   | { readonly kind: 'adjacent-tile-is-biome'; readonly biome: Biome };
 
+export interface AuraSpec {
+  readonly radius: 1 | 2;
+  readonly bonus: number; // e.g. 0.15 → amplifies adjacent nodes' factor by ×1.15
+  readonly appliesTo?: string; // optional filter; absent = applies to all effects
+}
+
 export interface SkillNode {
   readonly id: NodeId;
   readonly subPath: SubPathId;
@@ -173,6 +179,7 @@ export interface SkillNode {
   readonly magnitude: number;
   readonly effect: SkillEffect;
   readonly description: string;
+  readonly aura?: AuraSpec;
 }
 
 /** Tier required to purchase a node at the given depth, per §9.3. */
@@ -659,6 +666,15 @@ function buildCatalog(nodes: ReadonlyArray<SkillNode>): Catalog {
 
 const DEFAULT_CATALOG: Catalog = buildCatalog(NODE_CATALOG);
 
+/** Default skill graph — nodes from NODE_CATALOG with no edges (legacy
+ *  flat-catalog mode until the graph-redesign wiring lands). */
+export const DEFAULT_GRAPH: Graph = {
+  nodes: NODE_CATALOG,
+  edges: [],
+  bridges: [],
+  graftSockets: [],
+};
+
 /**
  * Decide whether `state` can spend a skill point on `nodeId`. Pure: does not
  * mutate state. Test code may pass a custom catalog to exercise edge cases
@@ -786,6 +802,10 @@ export interface SkillMultipliers {
   /** Robotics tertiary axis — multiplies the scan radius of drones
    *  dispatched from this island. */
   readonly droneScanRadius: number;
+  /** Global XP gain multiplier (all categories). */
+  readonly xpGain: number;
+  /** Per-category XP gain multiplier. */
+  readonly xpGainByCategory: Record<RecipeCategory, number>;
 }
 
 function blankMultipliers(): SkillMultipliers {
@@ -819,6 +839,8 @@ function blankMultipliers(): SkillMultipliers {
     loggerYieldBonus: 1,
     loggerExoticTrickleRate: 0,
     droneScanRadius: 1,
+    xpGain: 1,
+    xpGainByCategory: Object.fromEntries(ALL_RECIPE_CATEGORIES.map((c) => [c, 1])) as Record<RecipeCategory, number>,
   };
 }
 
@@ -826,12 +848,14 @@ function blankMultipliers(): SkillMultipliers {
  * Fold every unlocked node's effect into a single `SkillMultipliers` bundle.
  * Multiple nodes targeting the same axis compose multiplicatively:
  *   mining.1 (+5%) × mining.2 (+10%) → 1.05 × 1.10 = 1.155×.
+ *
+ * Aura-bearing notables amplify adjacent owned nodes' factors.
  */
 export function effectiveSkillMultipliers(
   state: IslandState,
-  catalog: ReadonlyArray<SkillNode> = NODE_CATALOG,
+  graph: Graph = DEFAULT_GRAPH,
 ): SkillMultipliers {
-  const cat = catalog === NODE_CATALOG ? DEFAULT_CATALOG : buildCatalog(catalog);
+  const cat = graph.nodes === NODE_CATALOG ? DEFAULT_CATALOG : buildCatalog(graph.nodes);
   const out = blankMultipliers();
   // Mutate-in-place pattern; readonly types on the returned object describe
   // the consumer contract, not the local builder.
@@ -859,16 +883,23 @@ export function effectiveSkillMultipliers(
   let loggerYieldBonus = 1;
   let loggerExoticTrickleRate = 0;
   let droneScanRadius = 1;
+  let xpGain = 1;
   // Rare-trickle additive base rate per skill node. Continuous yield model
   // — at depth 1 each Mine produces an extra `RARE_TRICKLE_BASE × magnitude`
   // helium_3 per second; deeper nodes scale up via the magnitude ramp.
   const RARE_TRICKLE_BASE_PER_SEC = 0.001;
   const EXOTIC_TRICKLE_BASE_PER_SEC = 0.001;
   const storageCategoryCap = out.storageCategoryCap as Record<StorageCategory, number>;
+  const xpGainByCategory = { ...out.xpGainByCategory } as Record<RecipeCategory, number>;
+
+  // Aura pre-pass: compute per-node aura amplification multipliers.
+  const auraAmp = computeAuraAmplifiers(state, graph);
+
   for (const nodeId of state.unlockedNodes) {
     const node = cat.byId.get(nodeId);
     if (!node) continue;
-    const m = 1 + node.magnitude;
+    const amp = auraAmp.get(nodeId) ?? 1;
+    const m = 1 + node.magnitude * amp;
     switch (node.effect.kind) {
       case 'recipeRateMul': {
         const cur = recipeRate[node.effect.category] ?? 1;
@@ -954,26 +985,20 @@ export function effectiveSkillMultipliers(
       case 'droneScanRadiusMul':
         droneScanRadius *= m;
         break;
-      case 'placeholder':
-        break;
-      case 'unlockRecipe':
-        break;
-      case 'exoticAdjacency':
-        break;
-      case 'biomeBypass':
-        break;
-      case 'structural':
-        break;
-      case 'launchSuccessAdditive':
-        break;
-      case 'conditionalBonus':
-        break;
-      case 'crossIslandShared':
-        break;
-      case 'tierBypass':
-        break;
       case 'xpGainMul':
+        if (node.effect.category !== undefined) xpGainByCategory[node.effect.category] *= m;
+        else xpGain *= m;
         break;
+      case 'placeholder':
+      case 'unlockRecipe':
+      case 'exoticAdjacency':
+      case 'biomeBypass':
+      case 'structural':
+      case 'launchSuccessAdditive':
+      case 'conditionalBonus':
+      case 'crossIslandShared':
+      case 'tierBypass':
+        break; // non-multiplier kinds — handled by their own engine sites
     }
   }
   return {
@@ -1002,7 +1027,66 @@ export function effectiveSkillMultipliers(
     loggerYieldBonus,
     loggerExoticTrickleRate,
     droneScanRadius,
+    xpGain,
+    xpGainByCategory,
   };
+}
+
+/** For each owned node, compute the multiplicative aura amplification.
+ *  An aura with bonus=0.15 on a node X amplifies adjacent owned nodes' factors
+ *  by ×1.15. Multiple auras stack multiplicatively, capped at ×1.50 per node. */
+function computeAuraAmplifiers(state: IslandState, graph: Graph): Map<NodeId, number> {
+  const amp = new Map<NodeId, number>();
+  const neighbours = buildAdjacency(graph);
+
+  for (const nodeId of state.unlockedNodes) {
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    if (node?.aura === undefined) continue;
+    const { radius, bonus } = node.aura;
+    const reachable = nodesWithinRadius(nodeId, radius, neighbours);
+    for (const r of reachable) {
+      if (!state.unlockedNodes.has(r)) continue;
+      const cur = amp.get(r) ?? 1;
+      const next = Math.min(1.5, cur * (1 + bonus));
+      amp.set(r, next);
+    }
+  }
+  return amp;
+}
+
+function buildAdjacency(graph: Graph): Map<NodeId, NodeId[]> {
+  const adj = new Map<NodeId, NodeId[]>();
+  for (const e of graph.edges) {
+    const from = e.from as NodeId;
+    const to = e.to as NodeId;
+    const fList = adj.get(from) ?? [];
+    fList.push(to);
+    adj.set(from, fList);
+    const tList = adj.get(to) ?? [];
+    tList.push(from);
+    adj.set(to, tList);
+  }
+  return adj;
+}
+
+function nodesWithinRadius(start: NodeId, radius: number, adj: Map<NodeId, NodeId[]>): NodeId[] {
+  const result = new Set<NodeId>();
+  const visited = new Set<NodeId>([start]);
+  let frontier = [start];
+  for (let d = 0; d < radius; d++) {
+    const nextFrontier: NodeId[] = [];
+    for (const node of frontier) {
+      for (const nbr of adj.get(node) ?? []) {
+        if (!visited.has(nbr)) {
+          visited.add(nbr);
+          result.add(nbr);
+          nextFrontier.push(nbr);
+        }
+      }
+    }
+    frontier = nextFrontier;
+  }
+  return [...result];
 }
 
 /** §14.7 sum of Orbital `launch` sub-path additive bonuses for this island.
