@@ -493,7 +493,7 @@ export function placeBuilding(
     placedAt: nowMs,
     operatingMs: 0,
     maintainedAt: nowMs,
-    ...(construction > 0 ? { constructionRemainingMs: construction } : {}),
+    ...(construction > 0 && def.instantBuild !== true ? { constructionRemainingMs: construction } : {}),
   };
   spec.buildings.push(placed);
   // Bump storage caps per §4.6 categorized routing. Specialized buildings

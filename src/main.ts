@@ -1748,7 +1748,7 @@ async function main(): Promise<void> {
       const cableComponent = cableBalances.get(s.id);
       const geothermalActive = spec?.modifiers.includes('geothermal_active') === true;
       const inscribedFor = spec
-        ? (lx: number, ly: number) => islandInscribedAny(spec, spec.cx + lx, spec.cy + ly)
+        ? (lx: number, ly: number) => islandInscribedAny(spec, lx, ly)
         : () => false;
       advanceIsland(s, now, {
         modifierMul: modifierMulFor(s.id),
