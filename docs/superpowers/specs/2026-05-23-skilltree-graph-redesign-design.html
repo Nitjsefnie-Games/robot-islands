@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill graph — full redesign (PoE-density directed graph)</title>
+<style>
+  :root {
+    --bg: #1B1A17;
+    --panel: #25231F;
+    --panel2: #2F2C27;
+    --line: #3A3833;
+    --ink: #E9E6DC;
+    --ink2: #CFCCC2;
+    --muted: #8A877E;
+    --green: #8FA56E;
+    --tan: #E0B47F;
+    --rust: #D97757;
+    --slate: #7DD3E8;
+    --pink: #D38FCC;
+    --red: #E08B7F;
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+    padding: 48px 24px 120px;
+  }
+  .page { max-width: 1080px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 36px;
+    line-height: 1.15;
+    color: var(--ink);
+    margin-bottom: 14px;
+    letter-spacing: -0.01em;
+    max-width: 900px;
+  }
+  .lede {
+    font-size: 15.5px;
+    color: var(--ink2);
+    margin-bottom: 28px;
+    max-width: 800px;
+    line-height: 1.65;
+  }
+  .lede code { color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 13.5px; font-family: var(--mono); }
+
+  .context-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 36px;
+    font-size: 14px;
+    color: var(--ink2);
+  }
+  .context-box .label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 6px;
+  }
+  .context-box code { color: var(--tan); background: var(--panel2); padding: 1px 5px; border-radius: 3px; font-size: 12.5px; font-family: var(--mono); }
+
+  .toc {
+    background: var(--panel);
+    border-left: 3px solid var(--slate);
+    border-radius: 0 6px 6px 0;
+    padding: 14px 20px;
+    margin: 0 0 40px;
+    font-size: 13.5px;
+  }
+  .toc h3 {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .toc ol { list-style: none; column-count: 2; column-gap: 28px; }
+  .toc li { margin: 3px 0; }
+  .toc a { color: var(--ink2); text-decoration: none; }
+  .toc a:hover { color: var(--rust); }
+  .toc .num { color: var(--muted); font-family: var(--mono); margin-right: 8px; font-size: 12px; }
+
+  section { margin: 0 0 56px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin: 0 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .sec-head .num { font-family: var(--mono); font-size: 13px; color: var(--muted); font-weight: 600; }
+  .sec-head h2 { font-family: var(--serif); font-size: 24px; font-weight: 500; color: var(--ink); letter-spacing: -0.005em; }
+  .sec-intro { color: var(--ink2); margin: 0 0 18px; font-size: 14.5px; max-width: 800px; }
+
+  p { margin: 12px 0; font-size: 14.5px; color: var(--ink2); max-width: 820px; }
+  p code, li code, td code { color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 13px; font-family: var(--mono); }
+  ul, ol { margin: 8px 0 12px 24px; }
+  li { margin: 4px 0; font-size: 14.5px; color: var(--ink2); }
+  li b { color: var(--ink); }
+  strong, b { color: var(--ink); }
+
+  table.tbl {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px;
+    font-size: 13.5px;
+  }
+  table.tbl th, table.tbl td {
+    border: 1px solid var(--line);
+    padding: 8px 11px;
+    text-align: left;
+    vertical-align: top;
+    color: var(--ink2);
+  }
+  table.tbl th {
+    background: var(--panel);
+    color: var(--ink);
+    font-weight: 600;
+    font-size: 12.5px;
+  }
+  table.tbl td.mono, table.tbl th.mono { font-family: var(--mono); font-size: 12.5px; }
+
+  .callout {
+    background: var(--panel);
+    border-left: 3px solid var(--rust);
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+    color: var(--ink2);
+  }
+  .callout.note { border-left-color: var(--slate); }
+  .callout.warn { border-left-color: var(--red); }
+  .callout b { color: var(--ink); }
+
+  pre {
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 12px 0 16px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    line-height: 1.55;
+  }
+  pre .comment { color: var(--muted); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--green); }
+
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; }
+  .badge.locked { background: var(--green); color: var(--bg); }
+  .badge.placeholder { background: var(--tan); color: var(--bg); }
+  .badge.deferred { background: var(--muted); color: var(--bg); }
+  .badge.new { background: var(--rust); color: var(--bg); }
+  .badge.wire { background: var(--slate); color: var(--bg); }
+
+  svg.diagram {
+    display: block;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin: 10px 0 18px;
+    width: 100%;
+  }
+  svg.diagram text { font-family: var(--mono); fill: var(--ink2); font-size: 11px; }
+  svg.diagram text.title { fill: var(--ink); font-size: 12.5px; font-weight: 700; }
+  svg.diagram text.lbl { fill: var(--ink); font-size: 11px; font-weight: 600; }
+  svg.diagram text.cost { fill: var(--tan); font-size: 10.5px; font-weight: 700; }
+  svg.diagram circle.root { fill: var(--green); stroke: var(--ink); stroke-width: 1; }
+  svg.diagram circle.std { fill: var(--panel2); stroke: var(--muted); stroke-width: 0.8; }
+  svg.diagram circle.notable { fill: var(--tan); stroke: var(--ink); stroke-width: 0.8; }
+  svg.diagram circle.keystone { fill: var(--pink); stroke: var(--ink); stroke-width: 1.2; }
+  svg.diagram circle.socket { fill: none; stroke: var(--slate); stroke-width: 1.4; stroke-dasharray: 3 2; }
+  svg.diagram line { stroke: var(--line); stroke-width: 1; }
+  svg.diagram line.bridge { stroke: var(--slate); stroke-width: 1.2; stroke-dasharray: 3 2; }
+  svg.diagram line.and-prereq { stroke: var(--rust); stroke-width: 1.6; }
+
+  .footer { color: var(--muted); margin-top: 60px; font-size: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="eyebrow">Design spec · skilltree · graph redesign</div>
+  <h1>Skill graph — full redesign as a directed PoE-density graph</h1>
+  <p class="lede">
+    Throw out the current 225-node linear catalog and any code handling commitment, branch-lock, and tier-gates inside the skill tree. Replace with a directed graph in which standard boost nodes form depth-ramping templated chains, hand-curated <b>notable</b> nodes carry mid-power named effects, and rare <b>keystone</b> nodes gate rule-breaking unlocks behind AND-prereqs. The graph spans <b>5 branches × 4 sub-paths × ~30-40 nodes each</b> for ~600-800 total nodes, with cross-sub-path and cross-branch <b>threshold-bridges</b> activating soft progression gates without per-bridge prereq nodes.
+  </p>
+
+  <div class="context-box">
+    <span class="label">Authority</span>
+    Replaces and supersedes <code>SPEC.md §9.3</code> (Skill Tree Structure) for the current implementation. This design retains the spec's headline goals (per-island progression, branch-thematic structure, every node theoretically reachable, depth&nbsp;1-2 cheap and depth&nbsp;deepest game-warping) while overhauling the underlying mechanism from linear-chain-with-branch-lock to directed-graph-with-cost-paths. Audit verdict <code>2026-05-23-skilltree-depth-analysis</code> v1 (Findings 1-5, 7, 8) drives the redesign.
+  </div>
+
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#sec-01"><span class="num">01</span>Goal &amp; defects addressed</a></li>
+      <li><a href="#sec-02"><span class="num">02</span>Structural skeleton — 5×4</a></li>
+      <li><a href="#sec-03"><span class="num">03</span>Edges &amp; topology — mixed AND/OR</a></li>
+      <li><a href="#sec-04"><span class="num">04</span>Cost model — node-click + cheapest path</a></li>
+      <li><a href="#sec-05"><span class="num">05</span>Node taxonomy — filler / notable / keystone</a></li>
+      <li><a href="#sec-06"><span class="num">06</span>Effect kinds catalog</a></li>
+      <li><a href="#sec-07"><span class="num">07</span>PoE / D4 / LE patterns adopted</a></li>
+      <li><a href="#sec-08"><span class="num">08</span>Curation strategy — hybrid</a></li>
+      <li><a href="#sec-09"><span class="num">09</span>Numerical placeholders</a></li>
+      <li><a href="#sec-10"><span class="num">10</span>Migration &amp; persistence</a></li>
+      <li><a href="#sec-11"><span class="num">11</span>Open questions for the plan</a></li>
+    </ol>
+  </div>
+
+  <!-- ============================ 01 ============================ -->
+  <section id="sec-01">
+    <div class="sec-head"><span class="num">01</span><h2>Goal &amp; defects addressed</h2></div>
+    <p class="sec-intro">The audit <code>2026-05-23-skilltree-depth-analysis</code> identified 8 defects in the current 225-node tree. This redesign addresses the structural majority of them at the data-model level.</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:30px">#</th><th>Audit defect</th><th>How this design addresses it</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Zero <code>unlockRecipe</code> / <code>exoticAdjacency</code> / <code>biomeBypass</code> / <code>structural</code> nodes despite SPEC §9.3 promising depth-3 structural + depth-8 unique-effect unlocks.</td><td>The four unwired effect kinds become the canonical payload of <b>keystone</b> nodes (§05, §06). Wire them in the engine; populate the catalog with hand-curated keystones at AND-junctions.</td></tr>
+        <tr><td>2</td><td>Branch lock is order-only — every island can eventually own every node.</td><td><b>Rejected as a defect.</b> Confirmed by user: every sub-path is INTENDED to be theoretically reachable (per SPEC §9.3:1054). The SP-cost ramp + XP softcap do the gating; the new design has no commit threshold, no sequential-sub-path lock, no tier gates at all — explicitly relying on cost+graph topology as the only friction.</td></tr>
+        <tr><td>3</td><td>T6 is just bigger numbers (120/225 nodes are flat T6 ramp).</td><td>The 15-depth boost ramp inside each sub-path is replaced by a ~30-40 node directed sub-graph mixing filler with notables and keystones (§05). The "just bigger numbers" tax pays for the dense small nodes (PoE-style); flavour lives in the curated nodes between them.</td></tr>
+        <tr><td>4</td><td>No cross-node synergies — effects fold independently in <code>effectiveSkillMultipliers</code>.</td><td><b>AND-prereq keystone nodes</b> are the synergy primitive: an effect activates only when 2-3 specific upstream nodes are all owned. Glyph-locality auras (§07) provide a second synergy layer: certain notables grant "+X% to adjacent nodes' effect."</td></tr>
+        <tr><td>5</td><td>Specialization roles are orthogonal to the tree.</td><td>Out of scope for this design — Specialization roles (SPEC §9.4) remain orthogonal multipliers. A future iteration could wire role-gated sub-trees per Picker 3 / PoE's ascendancy pattern. Documented as a follow-up in §11.</td></tr>
+        <tr><td>6</td><td>No per-node respec.</td><td><b>Deferred.</b> User's call: no per-node refund in this iteration; only existing Tier Reset (§9.7) clears choices. Lean-Last-Epoch policy can be added later.</td></tr>
+        <tr><td>7</td><td>UI shows a list of 4 text columns, not a tree.</td><td>Addressed by the graph-view UI overhaul (separate concern; planned post-data-model). Out of scope for the data redesign; this spec's node/edge primitives are what the graph view will render.</td></tr>
+        <tr><td>8</td><td>SkillEffect union accumulating 4 unwired kinds.</td><td>All 4 get wired as keystone payloads (defect 1). The union also gets 3 NEW kinds (<code>conditionalBonus</code>, <code>crossIslandShared</code>, <code>tierBypass</code>, §06).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============================ 02 ============================ -->
+  <section id="sec-02">
+    <div class="sec-head"><span class="num">02</span><h2>Structural skeleton — 5 × 4</h2></div>
+    <p class="sec-intro">Five thematic branches, each containing four sub-paths. A 6th branch (<b>Space</b>) is left implicit — when SPACE-expansion content lands, it attaches via graft sockets on Orbital's outer rim and/or as a new branch slotted in. The data model is branch-count-agnostic.</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:90px">Branch</th><th>Sub-paths</th><th>Anchors (game systems)</th></tr></thead>
+      <tbody>
+        <tr><td><b>Extraction</b></td><td>Mining · Forestry · Drilling · Robotics</td><td>§6.1 raw materials, §8.1 extraction buildings, drone production efficiency (§11.5)</td></tr>
+        <tr><td><b>Refinement</b></td><td>Smelting · Chemistry · Electronics · Power&nbsp;Systems</td><td>§6.2-6.5 refined chains, §8.2 smelting, §8.5 power generation, §7.7 electronics</td></tr>
+        <tr><td><b>Logistics</b></td><td>Storage · Transport · Network · Patronage</td><td>§4.6 storage caps, §8.4 storage, §2.4 routes, §8.8 logistics buildings, §10 funneling (Patronage sub-path is new — no skill-tree presence today)</td></tr>
+        <tr><td><b>Ocean</b> <span class="badge new">NEW</span></td><td>Aquaculture · Hydroprocessing · Submarine · Oceanography</td><td>Ocean-layer §3 extractors (Task 8) · §3 processors (Task 9) · §4 submarine_cable routes · §5 Sonar Buoy (Task 6) + Scanner Sat ocean reveal (Task 7)</td></tr>
+        <tr><td><b>Orbital</b></td><td>Launch · Communication · Discovery · Resilience</td><td>§14.9 sub-paths; existing wired effects map onto these (launchSuccessAdditive, commRangeMul, scannerCoverageMul, debrisProtectionMul, etc.)</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:18px;color:var(--ink);font-size:16px;font-weight:600">Entry model — branch-roots, all owned at start</h3>
+    <p>An island owns the 5 <b>branch-root</b> nodes from level 1, free. The 4 sub-paths within a branch all radiate outward from their shared branch-root — i.e. the first depth-1 node of Mining, Forestry, Drilling, and Robotics each connect by an edge to the single Extraction root. This gives the player a clear "you are here" anchor per branch and makes the rare cross-branch bridges (which connect outer-rim nodes in different branches) feel like genuine departures from the home territory.</p>
+
+    <svg class="diagram" viewBox="0 0 800 280" height="280">
+      <text class="title" x="400" y="22" text-anchor="middle">Top-down view — 5 branch roots, sub-paths radiating outward</text>
+
+      <!-- 5 branch roots in a pentagon -->
+      <circle class="root" cx="400" cy="60" r="13"/>
+      <text class="lbl" x="400" y="45" text-anchor="middle">Extraction</text>
+
+      <circle class="root" cx="640" cy="130" r="13"/>
+      <text class="lbl" x="678" y="135" text-anchor="middle">Refinement</text>
+
+      <circle class="root" cx="560" cy="230" r="13"/>
+      <text class="lbl" x="580" y="252" text-anchor="middle">Logistics</text>
+
+      <circle class="root" cx="240" cy="230" r="13"/>
+      <text class="lbl" x="220" y="252" text-anchor="middle">Ocean</text>
+
+      <circle class="root" cx="160" cy="130" r="13"/>
+      <text class="lbl" x="122" y="135" text-anchor="middle">Orbital</text>
+
+      <!-- sub-path stubs (just hint) -->
+      <g opacity="0.6">
+        <line x1="400" y1="60" x2="370" y2="35"/>
+        <line x1="400" y1="60" x2="430" y2="35"/>
+        <line x1="400" y1="60" x2="380" y2="85"/>
+        <line x1="400" y1="60" x2="420" y2="85"/>
+        <line x1="640" y1="130" x2="660" y2="100"/>
+        <line x1="640" y1="130" x2="670" y2="125"/>
+        <line x1="640" y1="130" x2="660" y2="160"/>
+        <line x1="640" y1="130" x2="630" y2="160"/>
+        <line x1="560" y1="230" x2="590" y2="245"/>
+        <line x1="560" y1="230" x2="530" y2="250"/>
+        <line x1="560" y1="230" x2="550" y2="255"/>
+        <line x1="560" y1="230" x2="580" y2="260"/>
+        <line x1="240" y1="230" x2="210" y2="245"/>
+        <line x1="240" y1="230" x2="220" y2="260"/>
+        <line x1="240" y1="230" x2="270" y2="250"/>
+        <line x1="240" y1="230" x2="250" y2="255"/>
+        <line x1="160" y1="130" x2="130" y2="125"/>
+        <line x1="160" y1="130" x2="140" y2="100"/>
+        <line x1="160" y1="130" x2="140" y2="160"/>
+        <line x1="160" y1="130" x2="170" y2="160"/>
+      </g>
+
+      <!-- cross-branch bridges (rare) -->
+      <line class="bridge" x1="400" y1="60" x2="160" y2="130"/>
+      <line class="bridge" x1="640" y1="130" x2="560" y2="230"/>
+      <line class="bridge" x1="240" y1="230" x2="560" y2="230"/>
+      <line class="bridge" x1="240" y1="230" x2="160" y2="130"/>
+
+      <text x="280" y="100" font-size="9" fill="#7DD3E8" text-anchor="middle">cross-branch bridge (rare, threshold-gated)</text>
+    </svg>
+  </section>
+
+  <!-- ============================ 03 ============================ -->
+  <section id="sec-03">
+    <div class="sec-head"><span class="num">03</span><h2>Edges &amp; topology — mixed AND/OR semantics</h2></div>
+    <p class="sec-intro">Three edge regimes, designer-controlled per node.</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:130px">Edge regime</th><th>Where used</th><th>Player meaning</th></tr></thead>
+      <tbody>
+        <tr><td><b>Single in-edge</b></td><td>Filler and notable nodes. The vast majority.</td><td>"Buy the predecessor, then this is the next standard step." A directed-chain progression — but the chain branches, so each node may have several outgoing edges.</td></tr>
+        <tr><td><b>OR-prereq</b> (single edge from any of N sources)</td><td>Bridge endpoints (cross-sub-path within a branch, and cross-branch). The destination node accepts ANY one of N incoming edges.</td><td>"Reach this node by any of N routes. Take the cheapest from your current frontier." Alternate-entry semantics; the silent-cheapest-path solver naturally chooses.</td></tr>
+        <tr><td><b>AND-prereq</b> (all of N edges)</td><td>Keystone nodes. The destination requires ALL N incoming source nodes to be owned.</td><td>"This unlock demands genuine investment in 2-3 different upstream points." Synergy: the keystone's effect leverages the convergence of multiple prerequisites.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout note">
+      <b>Threshold-bridges (Borderlands-inspired)</b> are a parallel edge primitive, not a node type. A bridge edge has a normal SP cost AND a <code>threshold</code> attribute: "spend ≥ N points in the source branch OR ≥ M points in the destination branch to activate this edge." Until the threshold is met, the bridge is effectively unowned-and-unreachable; once met, it becomes part of the solver's graph and gets considered for cheapest-path. This lets entire branch-to-branch corridors open up softly as the player invests, without scattering "unlock-this-bridge" prereq nodes around.
+    </div>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">Internal sub-path topology</h3>
+    <p>Each sub-path is a directed sub-graph rooted at the branch-root. Standard nodes form roughly tree-like chains 4-7 levels deep with sibling branches at each level. Notables sit at junction points (often where two filler chains converge). Keystones sit at the deepest convergence points, requiring AND-prereqs across multiple notable predecessors. ~3-5 OR-bridges (within-branch, between sibling sub-paths) sprinkle the middle layers; cross-branch bridges hit deepest-tier nodes only.</p>
+
+    <svg class="diagram" viewBox="0 0 800 240" height="240">
+      <text class="title" x="400" y="20" text-anchor="middle">One sub-path internal topology (schematic, ~25-40 nodes)</text>
+
+      <!-- branch root -->
+      <circle class="root" cx="60" cy="120" r="10"/>
+      <text class="lbl" x="60" y="143" text-anchor="middle">branch-root</text>
+
+      <!-- depth 1-3 standard nodes spreading -->
+      <g>
+        <circle class="std" cx="140" cy="80" r="7"/>
+        <circle class="std" cx="140" cy="160" r="7"/>
+        <circle class="std" cx="210" cy="60" r="7"/>
+        <circle class="std" cx="210" cy="100" r="7"/>
+        <circle class="std" cx="210" cy="140" r="7"/>
+        <circle class="std" cx="210" cy="180" r="7"/>
+        <circle class="std" cx="290" cy="80" r="7"/>
+        <circle class="std" cx="290" cy="160" r="7"/>
+        <circle class="std" cx="290" cy="200" r="7"/>
+      </g>
+      <line x1="70" y1="115" x2="133" y2="85"/>
+      <line x1="70" y1="125" x2="133" y2="155"/>
+      <line x1="147" y1="78" x2="203" y2="62"/>
+      <line x1="147" y1="82" x2="203" y2="98"/>
+      <line x1="147" y1="158" x2="203" y2="142"/>
+      <line x1="147" y1="162" x2="203" y2="178"/>
+      <line x1="217" y1="60" x2="283" y2="78"/>
+      <line x1="217" y1="100" x2="283" y2="82"/>
+      <line x1="217" y1="140" x2="283" y2="158"/>
+      <line x1="217" y1="180" x2="283" y2="162"/>
+      <line x1="217" y1="180" x2="283" y2="198"/>
+
+      <!-- notables -->
+      <circle class="notable" cx="370" cy="80" r="9"/>
+      <circle class="notable" cx="370" cy="180" r="9"/>
+      <text class="lbl" x="370" y="62" text-anchor="middle">notable</text>
+      <text class="lbl" x="370" y="200" text-anchor="middle">notable</text>
+      <line x1="297" y1="80" x2="361" y2="80"/>
+      <line x1="297" y1="160" x2="361" y2="175"/>
+      <line x1="297" y1="200" x2="361" y2="185"/>
+
+      <!-- deep filler -->
+      <g>
+        <circle class="std" cx="450" cy="60" r="7"/>
+        <circle class="std" cx="450" cy="100" r="7"/>
+        <circle class="std" cx="450" cy="160" r="7"/>
+        <circle class="std" cx="450" cy="200" r="7"/>
+        <circle class="std" cx="520" cy="80" r="7"/>
+        <circle class="std" cx="520" cy="180" r="7"/>
+      </g>
+      <line x1="378" y1="78" x2="443" y2="62"/>
+      <line x1="378" y1="84" x2="443" y2="98"/>
+      <line x1="378" y1="178" x2="443" y2="162"/>
+      <line x1="378" y1="184" x2="443" y2="198"/>
+      <line x1="457" y1="62" x2="513" y2="78"/>
+      <line x1="457" y1="100" x2="513" y2="80"/>
+      <line x1="457" y1="160" x2="513" y2="178"/>
+      <line x1="457" y1="200" x2="513" y2="182"/>
+
+      <!-- second notable + keystone with AND-prereq -->
+      <circle class="notable" cx="600" cy="130" r="9"/>
+      <text class="lbl" x="600" y="113" text-anchor="middle">notable</text>
+      <line x1="528" y1="80" x2="592" y2="123"/>
+      <line x1="528" y1="180" x2="592" y2="137"/>
+
+      <circle class="keystone" cx="700" cy="130" r="12"/>
+      <text class="lbl" x="700" y="113" text-anchor="middle">keystone</text>
+      <text class="lbl" x="700" y="155" text-anchor="middle">(AND)</text>
+      <line class="and-prereq" x1="378" y1="80" x2="688" y2="125"/>
+      <line class="and-prereq" x1="608" y1="130" x2="688" y2="130"/>
+      <line class="and-prereq" x1="378" y1="180" x2="688" y2="135"/>
+
+      <!-- OR-bridge to sibling -->
+      <line class="bridge" x1="600" y1="130" x2="770" y2="60"/>
+      <text x="730" y="50" font-size="9" fill="#7DD3E8" text-anchor="middle">→ sibling</text>
+
+      <!-- graft socket -->
+      <circle class="socket" cx="760" cy="200" r="11"/>
+      <text x="760" y="225" text-anchor="middle" font-size="9" fill="#7DD3E8">graft socket</text>
+      <line class="bridge" x1="528" y1="180" x2="749" y2="200"/>
+
+    </svg>
+
+    <p style="font-size:13px;color:var(--muted);margin-top:-6px"><span style="display:inline-block;width:10px;height:10px;background:#8FA56E;border-radius:50%"></span> root &nbsp; <span style="display:inline-block;width:10px;height:10px;background:#2F2C27;border:1px solid #8A877E;border-radius:50%"></span> filler &nbsp; <span style="display:inline-block;width:10px;height:10px;background:#E0B47F;border-radius:50%"></span> notable &nbsp; <span style="display:inline-block;width:10px;height:10px;background:#D38FCC;border-radius:50%"></span> keystone (AND-prereq) &nbsp; <span style="display:inline-block;width:10px;height:10px;border:1.4px dashed #7DD3E8;border-radius:50%"></span> graft socket (PoE cluster jewel)</p>
+  </section>
+
+  <!-- ============================ 04 ============================ -->
+  <section id="sec-04">
+    <div class="sec-head"><span class="num">04</span><h2>Cost model — node-click + silent cheapest path</h2></div>
+
+    <p>Every edge carries an SP cost. Nodes themselves are free; ownership is implied by paying for any incoming edge. The player initiates a purchase by clicking an unowned <em>node</em>; the system finds the cheapest path of unowned edges from the player's current owned frontier to that node, charges the path's total edge-sum, and marks every intermediate node and edge along that path as owned.</p>
+
+    <pre><span class="comment">// pseudocode</span>
+<span class="kw">function</span> costToUnlock(target: NodeId, owned: Set&lt;NodeId&gt;, graph): { path: Edge[]; cost: number } {
+  <span class="comment">// Multi-source Dijkstra: roots are all currently-owned nodes;</span>
+  <span class="comment">// edge weight is each edge's SP cost; unowned-frontier-to-target.</span>
+  <span class="comment">// Threshold-bridges contribute their edge weight ONLY IF activated.</span>
+  <span class="kw">return</span> shortestPath(sources=owned, target, graph, ignoreEdgesViolatingThresholds(...));
+}
+
+<span class="kw">function</span> buyNode(target: NodeId, state: IslandState): <span class="kw">void</span> {
+  <span class="kw">const</span> { path, cost } = costToUnlock(target, state.unlockedNodes, graph);
+  <span class="kw">if</span> (state.unspentSkillPoints &lt; cost) <span class="kw">throw</span> <span class="str">'insufficient-points'</span>;
+  state.unspentSkillPoints -= cost;
+  <span class="kw">for</span> (<span class="kw">const</span> edge <span class="kw">of</span> path) state.unlockedNodes.add(edge.target);
+}</pre>
+
+    <p>The UI shows each unowned node's <b>cost-to-unlock</b> from the current state, updated live as the player accumulates nodes. Bridge edges show their threshold status (locked / unlocked-and-available).</p>
+
+    <div class="callout">
+      <b>Intermediate-effect activation.</b> When a path purchase auto-owns intermediate nodes, those nodes' effects activate immediately. Owned = active; there is no "owned-but-dormant" state. This keeps the semantics simple: cost = full commitment.
+    </div>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">AND-prereq purchases</h3>
+    <p>Keystone nodes can only be purchased when ALL of their incoming source nodes are already owned. The UI greys out keystones whose AND-prereqs aren't satisfied. Once satisfied, the keystone's own edge cost (paid at the convergence point — typically a fixed flat number, see <span class="badge placeholder">PLACEHOLDER §09</span>) is the unlock price; no path-finding needed since the player must already own the prereqs.</p>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">Threshold-bridge activation</h3>
+    <p>A bridge edge from sub-path A to sub-path B activates when <code>spentIn(branchOf(A)) ≥ threshold_A</code> OR <code>spentIn(branchOf(B)) ≥ threshold_B</code>. Computed at purchase-evaluation time (no eager re-scoring of all bridges per tick). The cost-to-unlock UI re-renders affected unowned nodes' costs when a threshold is crossed.</p>
+  </section>
+
+  <!-- ============================ 05 ============================ -->
+  <section id="sec-05">
+    <div class="sec-head"><span class="num">05</span><h2>Node taxonomy — filler / notable / keystone</h2></div>
+    <p class="sec-intro">PoE-proportion mix per sub-path (~25-40 nodes total per sub-path).</p>
+
+    <table class="tbl">
+      <thead><tr><th style="width:90px">Layer</th><th style="width:50px">%</th><th>Cost</th><th>Prereq</th><th>Source</th><th>Effect class</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b style="color:#CFCCC2">Filler</b></td><td>~75%</td><td>1-3 SP edge</td><td>Single in-edge (standard chain)</td><td>Archetype-templated</td>
+          <td>Small multiplicative boosts (<code>recipeRateMul</code>, <code>storageCapMul</code>, <code>powerProductionMul</code>, etc.). Magnitudes grow geometrically with shortest-path depth.</td>
+        </tr>
+        <tr>
+          <td><b style="color:#E0B47F">Notable</b></td><td>~15%</td><td>3-5 SP edge</td><td>Single in-edge (often at a convergence point)</td><td>Hand-curated</td>
+          <td>Named, themed, mid-power effects. The narrow wired modifiers (<code>mineYieldBonusMul</code>, <code>loggerExoticTrickleMul</code>, <code>droneFuelEfficiencyMul</code>, etc.) plus a subset of the new <code>conditionalBonus</code> nodes. Some notables carry glyph-locality auras (§07).</td>
+        </tr>
+        <tr>
+          <td><b style="color:#D38FCC">Keystone</b></td><td>~6%</td><td>5-15 SP edge</td><td><b>AND</b> (2-3 in-edges from notable nodes)</td><td>Hand-curated</td>
+          <td>Rule-breaking, build-shaping. House the 4 newly-wired effect kinds (<code>unlockRecipe</code>, <code>exoticAdjacency</code>, <code>biomeBypass</code>, <code>structural</code>) + the most impactful of the 3 new kinds (<code>tierBypass</code>, <code>crossIslandShared</code>).</td>
+        </tr>
+        <tr>
+          <td><b style="color:#7DD3E8">Bridge edge</b></td><td>—</td><td>3-10 SP (varies)</td><td>Threshold (Borderlands)</td><td>Hand-placed at design time</td>
+          <td>Not a node — an edge. Activates when spend ≥ N in the source or destination region. Used for cross-sub-path within branch and (rarely) cross-branch.</td>
+        </tr>
+        <tr>
+          <td><b style="color:#7DD3E8">Graft socket</b></td><td>—</td><td>(see §07)</td><td>Outer-rim position</td><td>Reserved at design time; payload added later</td>
+          <td>Not a node initially — a reserved attachment point. Late-game content (SPACE expansion, Network Consciousness milestone unlocks) attaches a 5-10 node sub-cluster to a socket.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:16px;color:var(--ink);font-size:15.5px;font-weight:600">Per sub-path budget — illustrative</h3>
+    <table class="tbl">
+      <thead><tr><th>Element</th><th class="mono">count</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Filler nodes</td><td class="mono">~22-28</td><td>Templated, geometric ramp</td></tr>
+        <tr><td>Notables</td><td class="mono">~4-6</td><td>Hand-curated</td></tr>
+        <tr><td>Keystones</td><td class="mono">~1-2</td><td>Hand-curated, AND-prereq, rare</td></tr>
+        <tr><td>OR-bridges to sibling sub-paths within branch</td><td class="mono">~2-4 edges</td><td>Threshold-gated</td></tr>
+        <tr><td>Graft sockets</td><td class="mono">~1-2 reserved</td><td>On the outer rim</td></tr>
+        <tr><td><b>Sub-path total nodes</b></td><td class="mono"><b>~27-36</b></td><td>×20 sub-paths = ~540-720 + 5 branch-roots ≈ <b>~600-800 nodes</b> total</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============================ 06 ============================ -->
+  <section id="sec-06">
+    <div class="sec-head"><span class="num">06</span><h2>Effect kinds catalog</h2></div>
+    <p class="sec-intro">All existing wired effect kinds carry over unchanged. The 4 audit-flagged unwired kinds get wired into the economy. 3 new kinds add design space.</p>
+
+    <h3 style="margin-top:8px;color:var(--ink);font-size:15.5px;font-weight:600">Existing wired (kept as-is)</h3>
+    <p>22 kinds in <code>SkillEffect</code> at <code>skilltree.ts:70-137</code> remain. Cataloged here for completeness:</p>
+    <ul>
+      <li><code>recipeRateMul</code> (by category), <code>storageCapMul</code>, <code>powerProductionMul</code>, <code>powerConsumptionMul</code></li>
+      <li><code>routeCapacityMul</code>, <code>commRangeMul</code>, <code>maintenanceThresholdMul</code>, <code>scannerCoverageMul</code>, <code>debrisProtectionMul</code></li>
+      <li><code>droneFuelEfficiencyMul</code>, <code>airshipRangeMul</code>, <code>padExplosionReduceMul</code>, <code>satBufferCapMul</code>, <code>scannerDwellRateMul</code>, <code>satFuelReserveMul</code>, <code>repairDroneReliabilityMul</code></li>
+      <li><code>storageCategoryCapMul</code> (per-category), <code>constructionTimeMul</code>, <code>parallelBuildCapAdd</code>, <code>teleporterEfficiencyMul</code></li>
+      <li><code>mineYieldBonusMul</code>, <code>mineRareTrickleMul</code>, <code>loggerYieldBonusMul</code>, <code>loggerExoticTrickleMul</code>, <code>droneScanRadiusMul</code>, <code>launchSuccessAdditive</code></li>
+    </ul>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">Newly wired (4 kinds, previously declared but with zero catalog presence) <span class="badge wire">WIRE</span></h3>
+    <table class="tbl">
+      <thead><tr><th class="mono" style="width:160px">Effect kind</th><th>Semantics</th><th>Engine integration</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">unlockRecipe</td>
+          <td>Adds a new recipe to a specific building (or to a class of buildings). The recipe becomes available when the node is owned; producing the recipe still requires the inputs.</td>
+          <td>Hook into recipe enumeration: <code>recipes.ts</code> exports an <code>availableRecipes(buildingDefId, skillState)</code> that joins the base set with skill-unlocked recipes.</td>
+        </tr>
+        <tr>
+          <td class="mono">exoticAdjacency</td>
+          <td>Adds a new adjacency rule (e.g. "Pyroforge + Cryo Lab adjacent → +50% Exotic Alloy"). Per-rule; payload is a structured description the engine must execute.</td>
+          <td><code>adjacency.ts</code> (or wherever §4.5 lives) gains a <code>skillUnlockedAdjacencyRules(skillState)</code> list folded into the per-building adjacency-effect computation.</td>
+        </tr>
+        <tr>
+          <td class="mono">biomeBypass</td>
+          <td>Allows a biome-locked unique (§9.5) to be placed on an off-biome island. Payload: <code>{ buildings: BuildingDefId[] }</code> — list of biome-uniques bypassed.</td>
+          <td><code>placement.ts</code> <code>validateBiomePlacement</code> consults skill state.<br><b>Balance note:</b> SPEC §9.5 wants players to colonize each biome. <code>biomeBypass</code> nodes should be RARE (1-2 per branch maximum) AND placed only deep in the graph (AND-keystone level). Their effect could also be partial — e.g. "may run Pyroforge on Plains but at 60% rate."</td>
+        </tr>
+        <tr>
+          <td class="mono">structural</td>
+          <td>Catch-all for rule-rewrites that don't fit other kinds. Payload: <code>{ description: string; effect: StructuralEffectData }</code> with a closed-union <code>StructuralEffectData</code> enumerating known rule-rewrites.</td>
+          <td><b>Implementation note:</b> avoid one giant runtime switch; each structural rewrite that ships gets its own typed payload variant (e.g. <code>structuralEffect.kind === 'sharedPowerGrid'</code> wired in <code>power.ts</code>; <code>structuralEffect.kind === 'parallelConstruction'</code> wired in <code>construction.ts</code>; etc).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">New effect kinds (3 added) <span class="badge new">NEW</span></h3>
+    <table class="tbl">
+      <thead><tr><th class="mono" style="width:160px">Effect kind</th><th>Semantics &amp; payload</th><th>Engine integration</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">conditionalBonus</td>
+          <td>Multiplier active only when a runtime condition is met. Payload: <code>{ multiplier: number; appliesTo: RecipeCategory | 'storage' | 'power' | …; condition: Condition }</code>. Conditions are a closed union: <code>during-storm</code> · <code>during-night</code> · <code>networked-to-N-T3-islands</code> · <code>adjacent-tile-is-biome-X</code> · etc.</td>
+          <td><code>economy.ts</code> computeRates inner loop evaluates the condition once per tick (cheap — most conditions are island-level booleans cached at tick start). Multiplier folds in alongside the unconditional multipliers.</td>
+        </tr>
+        <tr>
+          <td class="mono">crossIslandShared</td>
+          <td>Turns a resource type or stat into a network-wide shared property. Payload variants: <code>{ kind: 'sharedInventory'; resources: ResourceId[] }</code> · <code>{ kind: 'sharedStorageCap'; resources: ResourceId[] }</code> · <code>{ kind: 'sharedRouteCapacity' }</code> · etc.</td>
+          <td>Aggregation layer in <code>economy.ts</code> (or a new <code>network.ts</code>) computes per-tick the shared pool across all networked T3+ islands that own this skill. Producers and consumers on any participant island access the shared pool. Massive late-game logistics simplification; should be locked behind deep-AND keystones.</td>
+        </tr>
+        <tr>
+          <td class="mono">tierBypass</td>
+          <td>Operate a specific building one tier below its normal tier requirement. Payload: <code>{ buildings: BuildingDefId[]; tierShift: 1 }</code>. Tier shift &gt;1 is theoretically possible but not in v1.</td>
+          <td><code>tier.ts</code> (or wherever §9.2 tier-band logic lives) consults skill state when deciding whether a placed building is operational at the current island tier. Like <code>biomeBypass</code>, RARE and deep-AND. Pairs naturally with biomeBypass for "Pyroforge on Plains at T3 instead of T4" combos.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============================ 07 ============================ -->
+  <section id="sec-07">
+    <div class="sec-head"><span class="num">07</span><h2>PoE / D4 / LE patterns adopted</h2></div>
+    <p class="sec-intro">Three structural patterns borrowed from established skill-tree designs, each addressing a specific axis of "complex but navigable."</p>
+
+    <h3 style="color:var(--ink);font-size:15.5px;font-weight:600">7.1 Threshold-bridges (Borderlands 3)</h3>
+    <p>Bridges between regions (sub-paths within a branch, branches across the rim) are <b>edges</b> in the graph, not separate prereq nodes. Each bridge edge carries:</p>
+    <ul>
+      <li><code>cost: number</code> — SP cost like any edge</li>
+      <li><code>threshold: { branch: BranchId; minSpent: number } | { branch: BranchId; minSpent: number }[]</code> — activation condition (OR across listed thresholds)</li>
+    </ul>
+    <p>The cheapest-path solver considers a bridge edge ONLY when at least one of its thresholds is met. Below threshold, the edge is effectively absent from the graph. Removes per-bridge prereq-node clutter (PoE has explicit unlock nodes for cluster jewel sockets; we don't need to).</p>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">7.2 Graft sockets (PoE Cluster Jewels)</h3>
+    <p>Reserve <b>~6-12 graft sockets</b> on each branch's outer rim (the deepest layer of each sub-path). A graft socket is a <em>position</em> in the graph with a defined attachment point and no node attached yet. Late-game content adds nodes by attaching a 5-10 node sub-cluster to a specific socket.</p>
+    <p>Use cases:</p>
+    <ul>
+      <li><b>SPACE expansion content</b> — flagged by user as imminent; attaches modular content to Orbital's outer rim without rebalancing the core.</li>
+      <li><b>Network Consciousness milestones</b> (§9.6) — could unlock graft-cluster content tied to the milestone (e.g. 5-island milestone grafts a "Robotics breadth" cluster onto Robotics' rim).</li>
+      <li><b>Crafted T5 jewels</b> — late-game craft recipe outputs a "jewel" item that the player sockets into one of N graft positions, attaching a small chosen sub-cluster.</li>
+    </ul>
+    <p>Engine: a graft socket has <code>{ id, branchId, subPathId, attachmentDepth }</code>. When content attaches, a new node-and-edges sub-graph is appended; ownership and cost behave identically to hand-designed nodes.</p>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">7.3 Glyph-locality (Diablo 4 Paragon)</h3>
+    <p>Selected notable nodes carry an <b>aura effect</b>: their declared multiplier applies not just to their own boost, but also to all adjacent owned nodes' effects. Spatial layout becomes a real decision — clustered builds get an extra ~1.1×-1.2× multiplier on the cluster as a whole.</p>
+    <p>Mechanic:</p>
+    <ul>
+      <li>An aura-bearing notable declares <code>aura: { radius: 1 | 2; bonus: number; appliesTo: EffectKindFilter }</code>.</li>
+      <li>Radius = graph-edge distance (1 = direct neighbours; 2 = nodes within 2 edges).</li>
+      <li>At <code>effectiveSkillMultipliers</code> aggregation time, owned nodes' contribution is multiplied by Σ aura-bonuses from any aura-bearing notables within whose radius they sit.</li>
+      <li>Pairs naturally with the cheapest-path solver: building toward an aura notable inherently clusters your owned nodes near it, so the aura's payoff scales with depth.</li>
+    </ul>
+    <p>Use sparingly — maybe <b>10-20% of notables</b> are aura-bearing. The rest are flat named effects.</p>
+  </section>
+
+  <!-- ============================ 08 ============================ -->
+  <section id="sec-08">
+    <div class="sec-head"><span class="num">08</span><h2>Curation strategy — hybrid</h2></div>
+    <p class="sec-intro">Hand-design the ~105+ keystones + notables (the soul). Archetype-template the ~500+ filler via cost+magnitude formulas.</p>
+
+    <h3 style="color:var(--ink);font-size:15.5px;font-weight:600">8.1 Filler templates</h3>
+    <p>Each sub-path declares ~5-8 <b>filler archetypes</b>, where each archetype = <code>{ effectKind, baseMagnitude, magnitudeGrowth, baseCost, costGrowth, count }</code>. Examples:</p>
+    <pre><span class="comment">// Mining sub-path filler archetypes</span>
+[
+  { effectKind: <span class="str">'recipeRateMul'</span>, category: <span class="str">'extraction'</span>, baseMag: 0.04, growth: 1.45, baseCost: 1, costGrowth: 1.4, count: 6 },
+  { effectKind: <span class="str">'storageCategoryCapMul'</span>, category: <span class="str">'raw-ore'</span>, baseMag: 0.05, growth: 1.4, baseCost: 1, costGrowth: 1.5, count: 5 },
+  { effectKind: <span class="str">'mineYieldBonusMul'</span>, baseMag: 0.05, growth: 1.5, baseCost: 2, costGrowth: 1.6, count: 4 },
+  ...
+]</pre>
+    <p>Generator function: <code>generateFillerNodes(archetypes, depths) → SkillNode[]</code>. Deterministic; the same archetypes always produce the same nodes. The output array is committed to the catalog (not regenerated at runtime) so designers can hand-edit specific nodes after generation if needed.</p>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">8.2 Notable curation</h3>
+    <p>Each notable is hand-written with a unique name, themed description, and specific effect. Notables can use ANY effect kind including the new ones. ~5 notables per sub-path × 20 sub-paths = ~100 hand-written notables. Each notable's data is ~10 lines of TypeScript — total ~1000 LoC of curated content.</p>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">8.3 Keystone curation</h3>
+    <p>Each keystone is hand-written with extensive thought: payload effect (typically one of the 4 newly-wired + 3 new kinds), AND-prereq specification (which 2-3 notable predecessors must be owned), thematic name, and player-visible description. ~1.5 keystones per sub-path × 20 = ~30 hand-written keystones. Each is ~15-20 lines of TS — total ~500 LoC.</p>
+
+    <h3 style="margin-top:14px;color:var(--ink);font-size:15.5px;font-weight:600">8.4 Bridge &amp; socket curation</h3>
+    <p>Bridges are hand-placed at design time, not generated. ~3 bridges per sub-path × 20 = ~60 within-branch bridges, plus ~10-15 cross-branch bridges. ~75 bridges total. Each is a ~5-line declaration.</p>
+    <p>Graft sockets are similarly hand-placed: ~10 per branch × 5 = ~50 reserved sockets. Each is a ~3-line declaration with no payload attached at v1.</p>
+  </section>
+
+  <!-- ============================ 09 ============================ -->
+  <section id="sec-09">
+    <div class="sec-head"><span class="num">09</span><h2>Numerical placeholders</h2></div>
+    <p class="sec-intro">Specific magnitudes to refine after first-read. All <span class="badge placeholder">PLACEHOLDER</span> values below should be tuned against the SP-economy curve and playtested.</p>
+
+    <table class="tbl">
+      <thead><tr><th>Knob</th><th>Placeholder value</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Filler edge cost — base</td><td class="mono">1 SP</td><td>Cheapest filler edge near root</td></tr>
+        <tr><td>Filler edge cost — growth per depth-step</td><td class="mono">×1.4</td><td>So depth-1 edge = 1, depth-5 = ~4, depth-10 = ~21 SP</td></tr>
+        <tr><td>Notable edge cost</td><td class="mono">3-5 SP fixed</td><td>Designer assigns per notable</td></tr>
+        <tr><td>Keystone edge cost</td><td class="mono">5-15 SP fixed</td><td>Designer assigns per keystone; scaled to payoff strength</td></tr>
+        <tr><td>Bridge edge cost (within-branch)</td><td class="mono">3-8 SP</td><td>Cross-sub-path within branch</td></tr>
+        <tr><td>Bridge edge cost (cross-branch)</td><td class="mono">8-20 SP</td><td>Rare and expensive</td></tr>
+        <tr><td>Threshold: within-branch bridge</td><td class="mono">5-10 points spent in source/destination sub-path</td><td>Per bridge; designer-tuned</td></tr>
+        <tr><td>Threshold: cross-branch bridge</td><td class="mono">15-30 points spent in source or destination branch</td><td>Per bridge; reflects deeper investment requirement</td></tr>
+        <tr><td>Filler magnitude — base</td><td class="mono">+4-6%</td><td>Per filler effectKind, designer-tuned per archetype</td></tr>
+        <tr><td>Filler magnitude growth per depth</td><td class="mono">×1.4-1.5 geometric</td><td>So +5% / +7% / +10% / +14% / +20% / +28% / +39% over 7 depths</td></tr>
+        <tr><td>Notable magnitude</td><td class="mono">+10-25%</td><td>Per notable; mid-power</td></tr>
+        <tr><td>Keystone magnitude</td><td class="mono">special</td><td>Often non-numerical (unlock, bypass, structural); when numerical, +30-100%</td></tr>
+        <tr><td>Aura radius (glyph-locality)</td><td class="mono">1-2 edges</td><td>Most are radius=1 (direct neighbours)</td></tr>
+        <tr><td>Aura bonus</td><td class="mono">+10-20% to adjacent nodes' effect</td><td>Stacking: additive within a node (multiple auras on one neighbour add together), capped at +50% total</td></tr>
+      </tbody>
+    </table>
+
+    <p style="font-size:13px;color:var(--muted);margin-top:8px"><b>SP-economy sanity check (PLACEHOLDER):</b> at ~1 SP/level baseline + xp-softcap past lvl 50, a level-100 island ends with ~100-200 SP. At average ~3-4 SP/edge in the graph, that's ~30-60 nodes owned out of ~600+. Mid-game islands own &lt;10% of the tree; very-late-game islands own ~20-30%; only insanely-long-grinded islands approach full mastery. Compares to PoE: a fresh lvl 90 character owns ~85-95 of ~1300 nodes (~7%). Our ratio is similar at lvl 100, more permissive at lvl 200+.</p>
+  </section>
+
+  <!-- ============================ 10 ============================ -->
+  <section id="sec-10">
+    <div class="sec-head"><span class="num">10</span><h2>Migration &amp; persistence</h2></div>
+
+    <p>Pre-release game; no real saves to preserve. Per the established discipline (commit <code>1d8c4bd</code>: dropped all migration paths, schema 5→6; <code>323feff</code>: schema 6→7 for tileOverrides), this redesign bumps schema <b>7 → 8</b> and uses a fail-fast loader.</p>
+
+    <h3 style="color:var(--ink);font-size:15.5px;font-weight:600">10.1 Code to delete</h3>
+    <ul>
+      <li><code>src/skilltree.ts:516-589</code> — the current <code>NODE_CATALOG</code> array (225 entries).</li>
+      <li><code>src/skilltree.ts:380-510</code> approx — node-generation helpers tied to the old depth-1-15 model (<code>makeShallowNodes</code>, <code>makeDeepNodes</code>, magnitudeForDepth, etc.).</li>
+      <li><code>src/skilltree.ts:641-685</code> — commit-and-branch-lock predicate logic in <code>canSpend</code> (the <code>SUBPATH_COMMIT_THRESHOLD</code> check at line 680 and the branch-lock loop).</li>
+      <li><code>src/skilltree.ts:153</code> — <code>SUBPATH_COMMIT_THRESHOLD</code> constant.</li>
+      <li><code>src/skilltree.ts</code> tier-gating logic in <code>nodeRequiredTier</code> (used at <code>canSpend</code> line 655) — the new design has no tier gates.</li>
+      <li><code>src/skilltree.ts:698-713</code> — the linear depth-prereq spend logic. New design uses graph-edge-prereq logic.</li>
+      <li><code>IslandState.subPathProgress</code> tracking — replaced by <code>unlockedNodes</code> and <code>unlockedEdges</code> sets (the latter is new; needed because edges can be owned even when their endpoint is shared by multiple incoming edges).</li>
+    </ul>
+
+    <h3 style="margin-top:12px;color:var(--ink);font-size:15.5px;font-weight:600">10.2 Code to add</h3>
+    <ul>
+      <li>New <code>src/skilltree-graph.ts</code> module — the directed graph representation with nodes, edges, threshold definitions, AND-prereq, OR-prereq, and graft socket types. Pure (no PixiJS).</li>
+      <li>New <code>NODE_CATALOG</code> + <code>EDGE_CATALOG</code> + <code>BRIDGE_CATALOG</code> + <code>GRAFT_SOCKET_CATALOG</code> as the canonical content arrays. Hand-curated keystones/notables + generated filler nodes; explicit edge declarations including bridges and AND-edges.</li>
+      <li>New <code>costToUnlock(state, target, graph)</code> — multi-source Dijkstra-like cheapest-path over unowned-edge-subgraph; respects threshold-bridge activation and AND-prereq satisfaction.</li>
+      <li>New <code>buyNode(state, target)</code> — applies the cheapest path, adds intermediate nodes and edges to owned sets.</li>
+      <li>Rewritten <code>effectiveSkillMultipliers(state)</code> — fold over owned nodes producing the same <code>SkillMultipliers</code> shape, but now also applies glyph-locality auras (adjacency-based amplifier per-effect).</li>
+      <li>Engine integration for the 4 newly-wired effect kinds (<code>unlockRecipe</code> → recipes.ts; <code>exoticAdjacency</code> → adjacency.ts; <code>biomeBypass</code> → placement.ts; <code>structural</code> → per-rewrite per-module).</li>
+      <li>Engine integration for the 3 new effect kinds (<code>conditionalBonus</code> → economy.ts inner loop; <code>crossIslandShared</code> → network.ts new aggregation layer; <code>tierBypass</code> → tier.ts).</li>
+    </ul>
+
+    <h3 style="margin-top:12px;color:var(--ink);font-size:15.5px;font-weight:600">10.3 Persistence</h3>
+    <p>Schema bumps 7 → 8. <code>IslandState.unlockedNodes: Set&lt;NodeId&gt;</code> stays (now holding graph node IDs). <code>IslandState.unlockedEdges: Set&lt;EdgeId&gt;</code> added. <code>IslandState.subPathProgress</code> removed (no longer tracked). <code>IslandState.unspentSkillPoints: number</code> stays. Loader fail-fasts on v7 and earlier; in-tree v7 saves are wiped per the established pattern.</p>
+
+    <h3 style="margin-top:12px;color:var(--ink);font-size:15.5px;font-weight:600">10.4 SPEC.md amendment</h3>
+    <p>§9.3 (Skill Tree Structure) gets rewritten to describe the new graph model. The 15-depth ramp text disappears. The cost(depth) and magnitude doubling formulas are replaced with edge-based cost + per-effect-kind magnitude declarations. Reach-by-stage tables (mid-game / late-game / very-late / extreme-late) are updated to reflect SP ratios over ~600-800 nodes.</p>
+  </section>
+
+  <!-- ============================ 11 ============================ -->
+  <section id="sec-11">
+    <div class="sec-head"><span class="num">11</span><h2>Open questions for the plan</h2></div>
+    <p class="sec-intro">Questions to resolve when the implementation plan is written. None block writing the plan; the plan will surface them as decision points.</p>
+
+    <ol>
+      <li><b>How does the UI render ~600-800 nodes?</b> Graph view is the locked direction (audit Picker 8); concrete UI design is its own spec (probably <code>2026-05-23-skilltree-graphview-ui-design.html</code> as a follow-up).</li>
+      <li><b>Hex grid or freeform layout?</b> PoE1 is freeform; PoE2 shifted toward themed weapon-shaped constellations. Affects render code, not data model.</li>
+      <li><b>How does Specialization role (§9.4) reshape the graph?</b> Out of scope here. Could unlock a 5th sub-path per branch ("ascendancy" style) — designed in a separate spec.</li>
+      <li><b>Per-node respec?</b> Deferred; if added, becomes a paid action at T2/T3 resource cost (Last-Epoch-style), implemented as a new <code>refundNode</code> function that reverses cheapest-path purchases.</li>
+      <li><b>Aura stacking semantics with overlapping auras?</b> Placeholder: additive within a node, capped at +50%. Final value to playtest.</li>
+      <li><b>Graft socket attachment UI?</b> When a cluster jewel (or equivalent) is acquired, how does the player place it? Drag-to-socket vs auto-attach vs choice-prompt. Probably a UI spec follow-up.</li>
+      <li><b>Network Consciousness graft unlocks?</b> §9.6 milestones could unlock graft-cluster content. Specifies which milestones unlock which sockets. Design choice deferred.</li>
+      <li><b>Exact threshold values per bridge?</b> Tuning concern; placeholder ranges in §09. Playtest-driven.</li>
+      <li><b>How many cross-branch bridges to ship at v1?</b> ~10-15 hand-placed feels right; final count emerges from designing the keystones (cross-branch keystones tend to need bridges to reach across).</li>
+    </ol>
+
+    <div class="callout">
+      <b>Out of scope for THIS spec:</b> The full hand-written content of every keystone, notable, and bridge. The spec describes the data model and curation strategy; the catalog content itself gets authored in a separate "skilltree-content" task or set of tasks during implementation.
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Skilltree graph redesign · design spec v1 · 2026-05-23 · authored under <code>superpowers:brainstorming</code> · supersedes SPEC.md §9.3 for current implementation</p>
+    <p>References — audit <code>robot-islands/2026-05-23-skilltree-depth-analysis</code> v1 · picker <code>robot-islands/2026-05-23-skilltree-cost-model-picker</code> v1 · research digest (PoE / PoE2 / Last Epoch / D4 / Borderlands) compiled 2026-05-23</p>
+  </div>
+
+</div>
+</body>
+</html>
