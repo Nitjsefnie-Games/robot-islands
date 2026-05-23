@@ -24,6 +24,7 @@
 import { Container, Graphics } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { hasOperationalBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
@@ -59,7 +60,7 @@ export function dronePadCentre(
   spec: IslandSpec,
   state: IslandState,
 ): { x: number; y: number } | null {
-  const pad = state.buildings.find((b) => b.defId === 'dronepad');
+  const pad = state.buildings.find((b) => b.defId === 'dronepad' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true);
   if (!pad) return null;
   const def = BUILDING_DEFS[pad.defId as BuildingDefId];
   return {
@@ -862,7 +863,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // Active island must carry a Drone Pad to launch — otherwise the arm
     // button is gated. Same `defId` discipline the settlement panel uses
     // for shipyard/helipad.
-    const hasDronePad = originSpec.buildings.some((b) => b.defId === 'dronepad');
+    const hasDronePad = hasOperationalBuilding(originSpec.buildings, 'dronepad');
     const inFlight = deps.world.drones.some(
       (d) => d.fromIslandId === origin.id && (d.status === 'active' || d.status === undefined),
     );
@@ -884,7 +885,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     }
 
     // Pulse gating — Launch Tower + T4 + cryogenic_hydrogen
-    const hasLaunchTower = originSpec.buildings.some((b) => b.defId === 'launch_tower');
+    const hasLaunchTower = hasOperationalBuilding(originSpec.buildings, 'launch_tower');
     const tier = tierForLevel(origin.level);
     const t4Fuel = fuelForTier(4);
     const pulseFuel = inv(origin, t4Fuel);

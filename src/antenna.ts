@@ -49,6 +49,7 @@ export function computeSignalRanges(
   const out: SignalRange[] = [];
   for (const spec of populated) {
     for (const b of spec.buildings) {
+      if (b.invalid === true || (b.constructionRemainingMs ?? 0) > 0 || ((b as unknown) as { disabled?: boolean }).disabled === true) continue;
       const radius = ANTENNA_SIGNAL_RADII[b.defId];
       if (radius === undefined) continue;
       const def = BUILDING_DEFS[b.defId as BuildingDefId];

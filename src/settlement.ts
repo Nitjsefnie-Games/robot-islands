@@ -26,6 +26,7 @@
 
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
+import { hasOperationalBuilding } from './buildings.js';
 import type { BuildingDefId } from './building-defs.js';
 import { fuelForTier, RECIPES, type ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
@@ -171,14 +172,14 @@ export function tuningFor(kind: VehicleKind, tier: VehicleTier): VehicleTuning {
  *  list off the spec. */
 export function hasLaunchBuildingFor(origin: IslandSpec, kind: VehicleKind): boolean {
   const required = kind === 'ship' ? 'shipyard' : 'helipad';
-  return origin.buildings.some((b) => b.defId === required);
+  return hasOperationalBuilding(origin.buildings, required);
 }
 
 /** Whether `origin` can launch a Spacetime Anchor instant-settle — i.e. it
  *  has a `spacetime_anchor` building. The `anchor`-kind sibling of
  *  `hasLaunchBuildingFor`. */
 export function originCanAnchorSettle(origin: IslandSpec): boolean {
-  return origin.buildings.some((b) => b.defId === 'spacetime_anchor');
+  return hasOperationalBuilding(origin.buildings, 'spacetime_anchor');
 }
 
 export type SpacetimeSettleReason =
@@ -338,7 +339,7 @@ export function _nearestPatronHub(world: WorldState, targetId: string): IslandSp
 
   const hubs = world.islands.filter(spec => {
     const state = islandStates.get(spec.id);
-    return state && state.buildings.some(b => b.defId === 'patron_hub');
+    return state && hasOperationalBuilding(state.buildings, 'patron_hub');
   });
   if (hubs.length === 0) return null;
 

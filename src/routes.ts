@@ -35,7 +35,7 @@ import {
 } from './weather.js';
 import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
 import type { BuildingDefId } from './building-defs.js';
-import type { PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import { planCargo, type ViableEntry, type CargoDemand } from './route-cargo.js';
 import type { CargoMode, CargoEntry } from './route-cargo.js';
 import { ALL_RESOURCES } from './recipes.js';
@@ -862,7 +862,7 @@ export function eligibleTransportBuildings(
 /** Whether `island` has a Teleporter Pad — the destination-side gate for a
  *  `teleporter` route. */
 export function islandHasTeleporterPad(island: IslandSpec): boolean {
-  return island.buildings.some((b) => b.defId === 'teleporter_pad');
+  return hasOperationalBuilding(island.buildings, 'teleporter_pad');
 }
 
 /** Construct a route hosted by `building`. The building's def fixes the

@@ -34,7 +34,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import type { PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
@@ -672,7 +672,7 @@ export function computeRates(
   // beyond plain tier. `hasSpaceport` is precomputed once because the
   // pass-1 / pass-3 loops would otherwise scan `state.buildings` per
   // building.
-  const hasSpaceport = validBuildings.some((b) => b.defId === 'spaceport');
+  const hasSpaceport = hasOperationalBuilding(validBuildings, 'spaceport');
   function isBuildingActive(b: PlacedBuilding): boolean {
     return buildingUnlocked(
       state.level,

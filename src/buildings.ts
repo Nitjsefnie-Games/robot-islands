@@ -105,6 +105,30 @@ export interface PlacedBuilding {
   invalid?: boolean;
 }
 
+/** Returns true iff at least one placed building of `defId` in `buildings`
+ *  is operational: not invalid, not still under construction, not
+ *  player-disabled. Accepts both `state.buildings` and `spec.buildings`
+ *  (the arrays are aliased per `world.ts:1036`'s
+ *  `makeInitialIslandState`).
+ *
+ *  Consolidates the ~25 scattered `buildings.some(b => b.defId === '…')`
+ *  provider-scan call sites so adding a new "is this thing actually
+ *  available?" filter (e.g. §NEW disabled toggle) is a single-line edit
+ *  here instead of a fan-out across the tree. Pure. */
+export function hasOperationalBuilding(
+  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number }>,
+  defId: string,
+): boolean {
+  for (const b of buildings) {
+    if (b.defId !== defId) continue;
+    if (b.invalid === true) continue;
+    if ((b.constructionRemainingMs ?? 0) > 0) continue;
+    if (((b as unknown) as { disabled?: boolean }).disabled === true) continue;
+    return true;
+  }
+  return false;
+}
+
 export type ConvertToServitorResult =
   | { readonly ok: true; readonly cost: Partial<Record<ResourceId, number>> }
   | { readonly ok: false; readonly reason: 'building-not-found' | 'already-servitor' | 'insufficient-materials' };

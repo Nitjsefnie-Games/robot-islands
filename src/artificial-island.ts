@@ -32,6 +32,7 @@ import { tierForLevel } from './skilltree.js';
 import type { IslandState } from './economy.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { canPlaceOnIsland, type BuildingDef } from './building-defs.js';
+import { hasOperationalBuilding } from './buildings.js';
 
 // ---------------------------------------------------------------------------
 // Cost formula (§2.5 placeholder — "scales with size and biome")
@@ -148,7 +149,7 @@ export function validateConstruction(
   if (tier < 3) return { ok: false, reason: 'tier-too-low' };
 
   // Platform Constructor presence.
-  const hasPc = founderSpec.buildings.some((b) => b.defId === 'platform_constructor');
+  const hasPc = hasOperationalBuilding(founderSpec.buildings, 'platform_constructor');
   if (!hasPc) return { ok: false, reason: 'no-platform-constructor' };
 
   // Biome sanity check.

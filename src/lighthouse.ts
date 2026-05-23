@@ -86,6 +86,7 @@ export function computeVisionSources(
     //    defs. The merge-time coordinate shift means every building's
     //    (x, y) is already in the absorber's local frame.
     for (const b of spec.buildings) {
+      if (b.invalid === true || (b.constructionRemainingMs ?? 0) > 0 || ((b as unknown) as { disabled?: boolean }).disabled === true) continue;
       const radius = LIGHTHOUSE_VISION_RADII[b.defId];
       if (radius === undefined) continue;
       const def = BUILDING_DEFS[b.defId];

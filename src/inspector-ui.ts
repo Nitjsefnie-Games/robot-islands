@@ -34,7 +34,7 @@ import {
 import { gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, placementCostFor } from './placement.js';
-import { convertToServitor, type PlacedBuilding } from './buildings.js';
+import { convertToServitor, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { computeRates } from './economy.js';
 import {
@@ -1462,7 +1462,7 @@ export function mountInspectorUi(
     maintenanceSection.wrap.style.display = '';
 
     // §13.3 Convert to Eternal Servitor button paint.
-    const hasRealityForge = state.buildings.some((b) => b.defId === 'reality_forge');
+    const hasRealityForge = hasOperationalBuilding(state.buildings, 'reality_forge');
     if (building.eternalServitor !== true && hasRealityForge) {
       const recipe = MAINTENANCE_RECIPES[def.tier];
       const cost: Partial<Record<ResourceId, number>> = {};
