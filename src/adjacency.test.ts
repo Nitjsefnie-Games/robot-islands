@@ -336,3 +336,52 @@ describe('checkGates — §4.5 gating adjacency', () => {
     expect(computeBuffStack(focal, [focal], defs, [remoteSameId])).toBe(1);
   });
 });
+
+
+describe('exoticAdjacency — pairBoost', () => {
+  it('applies pairBoost when focal and neighbor match the pair', () => {
+    const focal: PlacedBuilding = { id: 'a', defId: 'smelter', x: 0, y: 0 };
+    const neighbor: PlacedBuilding = { id: 'b', defId: 'coal_gen', x: 2, y: 0 };
+    const rules = [{ pair: ['smelter', 'coal_gen'] as const, recipeRateBonus: 0.25 }];
+    expect(computeBuffStack(focal, [focal, neighbor], BUILDING_DEFS, undefined, rules)).toBeCloseTo(1.25, 9);
+  });
+
+  it('does not apply pairBoost without matching neighbor', () => {
+    const focal: PlacedBuilding = { id: 'a', defId: 'smelter', x: 0, y: 0 };
+    const neighbor: PlacedBuilding = { id: 'b', defId: 'workshop', x: 2, y: 0 };
+    const rules = [{ pair: ['smelter', 'coal_gen'] as const, recipeRateBonus: 0.25 }];
+    expect(computeBuffStack(focal, [focal, neighbor], BUILDING_DEFS, undefined, rules)).toBe(1);
+  });
+
+  it('stacks multiple exotic rules multiplicatively', () => {
+    const focal: PlacedBuilding = { id: 'a', defId: 'smelter', x: 0, y: 0 };
+    const neighbor1: PlacedBuilding = { id: 'b', defId: 'coal_gen', x: 2, y: 0 };
+    const neighbor2: PlacedBuilding = { id: 'c', defId: 'solar', x: 0, y: -1 };
+    const rules = [
+      { pair: ['smelter', 'coal_gen'] as const, recipeRateBonus: 0.25 },
+      { pair: ['smelter', 'solar'] as const, recipeRateBonus: 0.10 },
+    ];
+    expect(computeBuffStack(focal, [focal, neighbor1, neighbor2], BUILDING_DEFS, undefined, rules)).toBeCloseTo(1.25 * 1.10, 9);
+  });
+
+  it('works alongside native adjacencyBuffs', () => {
+    const defs = withBuffs('mine', [
+      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
+    ]);
+    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
+    const sameDefNeighbor: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 0 };
+    const exoticNeighbor: PlacedBuilding = { id: 'c', defId: 'coal_gen', x: 0, y: -2 };
+    const rules = [{ pair: ['mine', 'coal_gen'] as const, recipeRateBonus: 0.20 }];
+    // Native buff: same_def mine neighbor → 1.10
+    // Exotic buff: coal_gen neighbor → 1.20
+    // Total: 1.10 * 1.20 = 1.32
+    expect(computeBuffStack(focal, [focal, sameDefNeighbor, exoticNeighbor], defs, undefined, rules)).toBeCloseTo(1.32, 9);
+  });
+
+  it('applies pairBoost even when building has no native adjacencyBuffs', () => {
+    const focal: PlacedBuilding = { id: 'a', defId: 'dock', x: 0, y: 0 };
+    const neighbor: PlacedBuilding = { id: 'b', defId: 'coal_gen', x: 2, y: 0 };
+    const rules = [{ pair: ['dock', 'coal_gen'] as const, recipeRateBonus: 0.30 }];
+    expect(computeBuffStack(focal, [focal, neighbor], BUILDING_DEFS, undefined, rules)).toBeCloseTo(1.30, 9);
+  });
+});

@@ -69,6 +69,13 @@ export type NodeId = string;
  *   - `placeholder`: no economic effect in step 5; reserves the node slot
  *     for a future activation (construction speed, route capacity, etc.).
  */
+export type AdjacencyEffectData =
+  | { readonly kind: 'pairBoost'; readonly pair: readonly [BuildingDefId, BuildingDefId]; readonly recipeRateBonus: number };
+
+export type StructuralEffectData =
+  | { readonly kind: 'sharedPowerGrid' }
+  | { readonly kind: 'parallelConstruction'; readonly bonus: number };
+
 export type SkillEffect =
   | { readonly kind: 'recipeRateMul'; readonly category: RecipeCategory }
   | { readonly kind: 'storageCapMul' }
@@ -76,9 +83,9 @@ export type SkillEffect =
   | { readonly kind: 'powerConsumptionMul'; readonly reduce: true }
   | { readonly kind: 'placeholder' }
   | { readonly kind: 'unlockRecipe'; readonly targetBuilding: BuildingDefId; readonly recipe: Recipe }
-  | { readonly kind: 'exoticAdjacency'; readonly description: string }
+  | { readonly kind: 'exoticAdjacency'; readonly description: string; readonly effect: AdjacencyEffectData }
   | { readonly kind: 'biomeBypass'; readonly buildings: ReadonlyArray<BuildingDefId> }
-  | { readonly kind: 'structural'; readonly description: string }
+  | { readonly kind: 'structural'; readonly description: string; readonly data: StructuralEffectData }
   | { readonly kind: 'launchSuccessAdditive' }
   // Wired in the skill-tree-finishing pass — replaces the placeholder /
   // structural slots once the underlying mechanics shipped:
@@ -530,7 +537,7 @@ function makeOrbitalNodes(subPath: SubPathId): SkillNode[] {
         }
         break;
       default:
-        effect = { kind: 'structural', description: `${subPath} depth-${d} unlock` };
+        effect = { kind: 'structural', description: `${subPath} depth-${d} unlock`, data: { kind: 'sharedPowerGrid' } };
         descSuffix = `${SUBPATH_LABEL[subPath]} depth-${d} unlock`;
     }
     nodes.push({
@@ -1030,6 +1037,25 @@ export function effectiveSkillMultipliers(
     xpGain,
     xpGainByCategory,
   };
+}
+
+export interface ExoticAdjacencyRule {
+  readonly pair: readonly [BuildingDefId, BuildingDefId];
+  readonly recipeRateBonus: number;
+}
+
+export function skillUnlockedAdjacencyRules(
+  state: IslandState,
+  graph: Graph = DEFAULT_GRAPH,
+): ReadonlyArray<ExoticAdjacencyRule> {
+  const rules: ExoticAdjacencyRule[] = [];
+  for (const nodeId of state.unlockedNodes) {
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    if (node?.effect.kind === 'exoticAdjacency' && node.effect.effect.kind === 'pairBoost') {
+      rules.push({ pair: node.effect.effect.pair, recipeRateBonus: node.effect.effect.recipeRateBonus });
+    }
+  }
+  return rules;
 }
 
 /** For each owned node, compute the multiplicative aura amplification.

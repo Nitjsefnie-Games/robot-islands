@@ -2645,6 +2645,26 @@ describe('accrueXp funnel provenance §10.1', () => {
   });
 });
 
+describe('accrueXp xpGainMul', () => {
+  it('defaults xpGainMul to 1 → no change', () => {
+    const state = makeState();
+    accrueXp(state, { iron_ore: 5 }, {}, 1);
+    expect(state.xp).toBe(5 * XP_WEIGHT.iron_ore);
+  });
+
+  it('doubles XP when xpGainMul is 2', () => {
+    const state = makeState();
+    accrueXp(state, { iron_ore: 5 }, {}, 1, 1, 2);
+    expect(state.xp).toBe(5 * XP_WEIGHT.iron_ore * 2);
+  });
+
+  it('zeros XP when xpGainMul is 0', () => {
+    const state = makeState();
+    accrueXp(state, { iron_ore: 5 }, {}, 1, 1, 0);
+    expect(state.xp).toBe(0);
+  });
+});
+
 
 describe('extractor tile gating §8.1', () => {
   const makeSpecWithTerrain = (terrain: string) => ({

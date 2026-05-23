@@ -51,7 +51,7 @@ import {
 import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel } from './skilltree.js';
+import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules } from './skilltree.js';
 import type { EdgeId } from './skilltree-graph.js';
 
 /**
@@ -791,7 +791,8 @@ export function computeRates(
     // 4-neighbor footprint border. Captured here so pass 2's nominal-rate
     // sees the same factor and producer/consumer supply ratios stay correct.
     // Returns 1.0 when the def has no `adjacencyBuffs` or no matches.
-    const buffStack = computeBuffStack(b, validBuildings, defs);
+    const exoticRules = skillUnlockedAdjacencyRules(state);
+    const buffStack = computeBuffStack(b, validBuildings, defs, undefined, exoticRules);
     // §9.7 Tier Reset runtime gate: a building above the island's current
     // tier band is fully inactive — same shape as the heat / output stall,
     // baseRate=0 + skipped in the pass-3 power balance.
@@ -1306,6 +1307,7 @@ export function accrueXp(
   consumption: Partial<Record<ResourceId, number>>,
   dtSec: number,
   xpMul: number = 1,
+  xpGainMul: number = 1,
 ): void {
   let gain = 0;
   for (const r of Object.keys(production) as ResourceId[]) {
@@ -1339,7 +1341,7 @@ export function accrueXp(
   // Applied AFTER the funnel drain so funneled bonus XP also scales — the
   // spec is silent on the interaction but treating the role as a uniform
   // XP multiplier is the simpler invariant.
-  state.xp += gain * xpMul;
+  state.xp += gain * xpMul * xpGainMul;
 }
 
 /** Local constant for the funnel-drain math. Mirrors `FUNNELING_BONUS_PERCENT`
@@ -1606,7 +1608,8 @@ export function advanceIsland(
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps);
-      accrueXp(state, production, consumption, dtSec);
+      const xpGainMul = effectiveSkillMultipliers(state).xpGain;
+      accrueXp(state, production, consumption, dtSec, 1, xpGainMul);
       // §13.3 Singularity Battery — apply charge/discharge over the segment.
       if (rawBalance > 0 && maxCap > 0) {
         const chargeWs = rawBalance * dtSec;

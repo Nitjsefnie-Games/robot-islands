@@ -132,10 +132,13 @@ export function computeBuffStack(
   buildings: ReadonlyArray<PlacedBuilding>,
   defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
   crossIsland?: ReadonlyArray<PlacedBuilding>,
+  exoticRules?: ReadonlyArray<{ readonly pair: readonly [BuildingDefId, BuildingDefId]; readonly recipeRateBonus: number }>,
 ): number {
   const def = defs[b.defId];
   const buffs = def.adjacencyBuffs;
-  if (!buffs || buffs.length === 0) return 1;
+  const hasNativeBuffs = buffs && buffs.length > 0;
+  const hasExotic = exoticRules && exoticRules.length > 0;
+  if (!hasNativeBuffs && !hasExotic) return 1;
 
   const fp = footprintKeySet(b, defs);
   const border = borderTiles(fp);
@@ -166,14 +169,25 @@ export function computeBuffStack(
   }
 
   let stack = 1;
-  for (const entry of buffs) {
-    let count = 0;
-    for (const n of neighbors) {
-      if (neighborMatches(b, n, entry, defs)) count++;
+  if (hasNativeBuffs) {
+    for (const entry of buffs) {
+      let count = 0;
+      for (const n of neighbors) {
+        if (neighborMatches(b, n, entry, defs)) count++;
+      }
+      if (count <= 0) continue;
+      const effective = Math.min(count, entry.maxMatches);
+      stack *= 1 + (effective * entry.percentPerMatch) / 100;
     }
-    if (count <= 0) continue;
-    const effective = Math.min(count, entry.maxMatches);
-    stack *= 1 + (effective * entry.percentPerMatch) / 100;
+  }
+
+  if (exoticRules) {
+    for (const rule of exoticRules) {
+      if (b.defId === rule.pair[0]) {
+        const hasPair = neighbors.some((n) => n.defId === rule.pair[1]);
+        if (hasPair) stack *= 1 + rule.recipeRateBonus;
+      }
+    }
   }
   return stack;
 }
