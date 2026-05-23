@@ -103,6 +103,20 @@ export interface PlacedBuilding {
   toxicityExpiryMs?: number;
   /** True if the building's footprint no longer matches terrain after biome change. */
   invalid?: boolean;
+  /** Player toggle (spec 2026-05-23-building-disable-design §02). When
+   *  `true`, the building is functionally non-existent for the tick: no
+   *  power flow, no recipe in/out, no gate provisioning, no buff
+   *  adjacency, no `operatingMs` accrual, no drone / satellite / route
+   *  dispatch from it. Toggling either way is free and instantaneous —
+   *  no inventory / xp / construction-progress gain or loss. Disabling
+   *  triggers a one-way `drainRoutesForBuilding` (per
+   *  `p_routes_disabled_source=route_drains_and_removes`): re-enabling
+   *  the building does NOT restore drained routes; the player must
+   *  re-create them. Optional so legacy saves load as `false`
+   *  (enabled) by default — persistence round-trips the field through
+   *  the existing `{...b}` spread at `persistence.ts:329`; no schema
+   *  bump needed. */
+  disabled?: boolean;
 }
 
 /** Returns true iff at least one placed building of `defId` in `buildings`
