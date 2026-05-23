@@ -1,0 +1,2081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terrain Modifier — implementation plan</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+      line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1120px; margin:0 auto; }
+    header.page-head { margin-bottom:48px; max-width:880px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box .meta-line { margin-top:8px; }
+    .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .callout { background:var(--white); border:1.5px solid var(--gray-300);
+      border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+      font-size:13.5px; color:var(--gray-500); margin-bottom:32px; max-width:880px; }
+    .callout code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .toc { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px;
+      padding:16px 20px; margin-bottom:48px; max-width:880px; }
+    .toc h3 { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); font-weight:600; margin-bottom:10px; }
+    .toc ol { list-style:none; counter-reset: toc; display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; }
+    @media (max-width:780px){ .toc ol{grid-template-columns:1fr;} }
+    .toc li { counter-increment: toc; padding-left:30px; position:relative; font-size:13.5px; }
+    .toc li::before { content: '§' counters(toc, '', decimal-leading-zero);
+      position:absolute; left:0; top:0; font-family:var(--mono); font-size:11px;
+      color:var(--gray-500); letter-spacing:0.04em; }
+    .toc a { color:var(--gray-700); text-decoration:none; border-bottom:1px dotted var(--gray-300); }
+    .toc a:hover { color:var(--slate); border-bottom-color:var(--clay); }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-head h2 code { font-family:var(--mono); font-size:21px; color:var(--clay); }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:860px; margin-bottom:28px; }
+    .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .summary .v.ok { color:var(--olive); }
+    .filetable { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .filetable .row { display:grid; grid-template-columns:280px 1fr; gap:0; }
+    @media (max-width:780px){ .filetable .row{grid-template-columns:1fr;} }
+    .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+    .filetable .cell { padding:13px 18px; font-size:13.5px; }
+    .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .filetable .cell code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .filetable .cell.desc code { color:var(--slate); }
+    .filetable .cell .new-tag { font-family:var(--mono); font-size:10px; color:var(--olive);
+      letter-spacing:0.06em; padding-left:6px; }
+    .task-card { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:24px 26px; }
+    .task-blurb { font-size:13.5px; color:var(--gray-500); margin-bottom:16px; max-width:880px; }
+    .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .deps-line { font-family:var(--mono); font-size:11px; color:var(--gray-500);
+      letter-spacing:0.04em; margin-bottom:14px; text-transform:uppercase; }
+    .deps-line b { color:var(--olive); font-weight:600; }
+    .files-block { background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:8px; padding:12px 16px; margin-bottom:22px; }
+    .files-block .ft { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .files-block ul { list-style:none; }
+    .files-block li { font-size:13px; color:var(--gray-700); padding:2px 0; }
+    .files-block li code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .files-block li .tag { font-family:var(--mono); font-size:10.5px; color:var(--gray-500); }
+    .steps { display:flex; flex-direction:column; gap:18px; }
+    .step { display:grid; grid-template-columns:22px 1fr; gap:0 12px; }
+    .step .box { width:16px; height:16px; border:1.5px solid var(--clay); border-radius:4px; margin-top:3px; }
+    .step .step-body { min-width:0; }
+    .step .step-title { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:6px; }
+    .step .step-text { font-size:13.5px; color:var(--gray-500); margin-bottom:10px; }
+    .step .step-text:last-child { margin-bottom:0; }
+    .step .step-text code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .step .step-text.cmd code { color:var(--olive); }
+    .code-block { margin:4px 0 12px; }
+    .code-block .file-label { font-family:var(--mono); font-size:11.5px; color:var(--gray-500); margin-bottom:6px; }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .cm { color:var(--gray-500); } .code .add { color:#8FA56E; } .code .del { color:#E08B7F; }
+    .code .kw { color:#C9B98A; }
+    .notes { display:flex; flex-direction:column; gap:14px; max-width:880px; }
+    .note { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive);
+      border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-500); }
+    .note.risk { border-left-color:#E08B7F; }
+    .note code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .note strong { color:var(--slate); font-weight:600; }
+    .picks-table { width:100%; border-collapse:collapse; background:var(--white);
+      border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden;
+      font-size:13px; }
+    .picks-table th, .picks-table td { text-align:left; padding:8px 14px;
+      border-bottom:1px solid var(--gray-300); }
+    .picks-table thead th { background:var(--gray-150); color:var(--gray-500);
+      font-family:var(--mono); font-size:11px; letter-spacing:0.05em; text-transform:uppercase; }
+    .picks-table tr:last-child td { border-bottom:none; }
+    .picks-table td.k { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .picks-table td.v { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .picks-table td.s { font-size:12.5px; color:var(--gray-500); }
+    footer.page-foot { margin-top:64px; padding-top:20px; border-top:1.5px solid var(--gray-300);
+      font-size:12px; color:var(--gray-500); font-family:var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Terrain Modifier — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Wire the <code>terrain_modifier</code> catalog stub (<code>src/building-defs.ts:1395</code>) into a working <em>single-shot, self-destroying</em> mechanic: the player picks a target <code>TerrainKind</code> (any kind, including rare veins) at placement, fires one 16-tile shot (2&times;2 footprint + 12-tile ring) over a ~4&nbsp;s animated arc, and the modifier removes itself when the shot lands. The mechanic functions as a <em>duplication-with-investment</em>: rare-target shots cost a heavy stack of the corresponding resource so a manufactured vein only pays back over ≈ 90 cycles. Discovery-locked progression stays intact &mdash; a player who has never found a uranium vein has no uranium ore to pay the input cost.</div>
+        <div class="meta-line"><strong>Architecture:</strong> Five tasks, applied in order <code>1 → 2 → 3 → 5 → 4</code>. Task 1 adds the per-tile mutation primitive (<code>tileOverrides: Record&lt;"x,y", TerrainKind&gt;</code> on <code>IslandSpec</code>) and bumps persistence schema 6&rarr;7. Task 2 declares the placement-time fields (<code>terrainTarget: TerrainKind</code> + <code>terrainShotRemainingMs: number</code> on <code>PlacedBuilding</code>) plus the cost formula in a new pure module <code>src/terrain-modifier.ts</code>. Task 3 extends <code>placement-ui.ts</code> to paint the 16-tile brush preview and gate the placement on "all 16 tiles inside the ellipse + none occupied" (the <code>p2_invocation = shot_at_placement</code> reading: placement IS the shot). Task 5 hands the player a target-biome picker before placement (mirrors the cargo-label-picker pattern). Task 4 is the consumer of all the others: it ticks the shot counter inside <code>advanceIsland</code>, writes overrides + removes the modifier on hit-zero, re-invalidates buildings, and calls <code>rebuildWorldLayers()</code>. Independence note in §01.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, <code>noUncheckedIndexedAccess</code>, <code>noUnusedLocals</code>, <code>noUnusedParameters</code>), Vite 5, PixiJS 8 (overlay only), vitest.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-23-terrain-modifier-design.html</code> (v5) &middot; <a href="https://docs.nitjsefni.eu/d/robot-islands/2026-05-23-terrain-modifier-design" style="color:var(--olive)">docs-hub mirror</a> &middot; 29 pickers across 4 phases + 6 user locks resolved.</div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use <code>superpowers:subagent-driven-development</code> to land this plan task-by-task on master (no worktrees per global config). Each task is independently committable per §01 dependency-line conventions &mdash; build + tests must be green after that commit alone. Implementer is kimi-cli, so every commit message ends with the trailer <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code> (literal &mdash; syntactic, not stylistic; missing trailer = failed commit per global config).</div>
+
+    <div class="toc">
+      <h3>Contents</h3>
+      <ol>
+        <li><a href="#sec-files">File structure, picks &amp; dependency order</a></li>
+        <li><a href="#sec-task1">Task 1 &mdash; <code>tileOverrides</code> + schema 6&rarr;7</a></li>
+        <li><a href="#sec-task2">Task 2 &mdash; <code>terrainTarget</code> + cost formula (<code>terrain-modifier.ts</code>)</a></li>
+        <li><a href="#sec-task3">Task 3 &mdash; 16-tile brush preview in <code>placement-ui.ts</code></a></li>
+        <li><a href="#sec-task5">Task 5 &mdash; target-biome picker (mirrors cargo-label)</a></li>
+        <li><a href="#sec-task4">Task 4 &mdash; shot tick, override write, self-destroy, re-render</a></li>
+        <li><a href="#sec-notes">Notes, verification, deliberate departures</a></li>
+      </ol>
+    </div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">5</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">10</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v ok">2</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v">Medium</div></div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- 01 — File structure & picks                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-files">
+      <div class="sec-head"><span class="num">01</span><h2>File structure, picks &amp; dependency order</h2></div>
+      <p class="sec-intro">Five tasks, applied in the order <code>1 &rarr; 2 &rarr; 3 &rarr; 5 &rarr; 4</code>. Task 4 must be last &mdash; it is the consumer of every other task's surface. Tasks 1, 2, 3, and 5 are independently committable green (build + tests pass) by stubbing the shot path; Task 4 is the "feature lights up" commit that wires the consumers together. <strong>Naming locked once:</strong> the new per-instance fields are <code>terrainTarget</code> (the player's pick, mirrors <code>cargoLabel</code>'s shape) and <code>terrainShotRemainingMs</code> (the animation countdown). These names appear in every task; do NOT rename mid-plan.</p>
+
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/world.ts</code></div><div class="cell desc">Task 1: add <code>tileOverrides?: Record&lt;string, TerrainKind&gt;</code> to <code>IslandSpec</code>; update <code>attachTerrainAt</code> so the closure consults overrides BEFORE falling through to <code>terrainAtForBiome</code> (key format <code>`${x},${y}`</code>, island-local tile coords). Tests assert the precedence ordering and by-reference invariant.</div></div>
+        <div class="row"><div class="cell"><code>src/persistence.ts</code></div><div class="cell desc">Task 1: bump <code>SCHEMA_VERSION</code> 6&rarr;7 + <code>STORAGE_KEY</code> <code>:v6</code>&rarr;<code>:v7</code>. <code>SerializedIslandSpec</code> already inherits <code>tileOverrides</code> via <code>Omit&lt;IslandSpec, 'terrainAt'&gt;</code>; the <code>...s</code> spread in <code>serializeWorld</code> + <code>...s</code> in <code>deserializeWorld</code> already round-trip the field. Add an explicit test confirming the round-trip survives the new schema.</div></div>
+        <div class="row"><div class="cell"><code>src/buildings.ts</code></div><div class="cell desc">Task 2: add two mutable fields to <code>PlacedBuilding</code> &mdash; <code>terrainTarget?: TerrainKind</code> (player's pick at placement, persists for the building's lifetime &mdash; gone when the building self-destroys) and <code>terrainShotRemainingMs?: number</code> (single-shot countdown; missing/undefined ≡ "no shot pending"). Both optional for forward-compat.</div></div>
+        <div class="row"><div class="cell"><code>src/terrain-modifier.ts</code> <span class="new-tag">NEW</span></div><div class="cell desc">Task 2: pure module hosting <code>RARE_TARGET_TERRAINS: ReadonlySet&lt;TerrainKind&gt;</code>, <code>NATURAL_TARGET_TERRAINS: ReadonlySet&lt;TerrainKind&gt;</code>, cost constants (<code>K_RARE_MULT = 1.5</code>, <code>PAYBACK_HORIZON_CYCLES = 90</code>, <code>NATURAL_PER_TILE_BASKET = { stone: 5, gear: 2 }</code>, <code>SHOT_DURATION_MS = 4000</code>), the cost helpers <code>conversionCostForTarget(target: TerrainKind)</code> and <code>brushTilesAt(localX: number, localY: number): Array&lt;{x:number; y:number}&gt;</code>, and the shot-resolution helper <code>applyTileOverride(spec: IslandSpec, x: number, y: number, kind: TerrainKind): void</code> (mutates <code>spec.tileOverrides</code> in place, lazily creating the record). No PixiJS, no DOM. Imported by Tasks 3 / 4 / 5.</div></div>
+        <div class="row"><div class="cell"><code>src/terrain-modifier.test.ts</code> <span class="new-tag">NEW</span></div><div class="cell desc">Task 2: pure unit tests for the cost helpers (natural-basket scales linearly with 16 tiles; rare-target cost reflects the formula), <code>brushTilesAt</code> (returns 16 tiles centred on a 2&times;2 footprint), and <code>applyTileOverride</code> precedence (overrides win over biome closure). Mirrors <code>src/land-reclamation.test.ts</code>'s structure.</div></div>
+        <div class="row"><div class="cell"><code>src/building-defs.ts</code></div><div class="cell desc">Task 2: extend the <code>terrain_modifier</code> entry (line 1395) with a flag (<code>terrainModifier: true</code>) the placement-ui consults to enter brush-preview mode. <strong>Do not</strong> add new top-level <code>BuildingDef</code> fields beyond this flag &mdash; per-instance configuration lives on <code>PlacedBuilding.terrainTarget</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/placement-ui.ts</code></div><div class="cell desc">Task 3: when <code>activeDefId === 'terrain_modifier'</code>, paint the 16-tile brush (4 footprint tiles in OK-blue + 12-tile ring in cyan-dash) instead of the bare footprint outline. <code>attemptCommit</code> checks every brush tile is inside the union ellipse and not occupied (<code>p2_block_vs_brush = abort_if_any_occupied</code>); on success it routes through <code>placeBuilding</code> with the player-picked <code>terrainTarget</code> + an initialised <code>terrainShotRemainingMs = SHOT_DURATION_MS</code>. Task 5: extend the picker-deps slot to carry an optional <code>pickTerrainTarget</code> getter so the picker fires before placement arms (same epoch / stale-resolution pattern as <code>pickCargoLabel</code>).</div></div>
+        <div class="row"><div class="cell"><code>src/placement.ts</code></div><div class="cell desc">Tasks 2 + 3: extend the <code>placeBuilding</code> signature with optional <code>terrainTargetOverride?: TerrainKind</code> &amp; <code>terrainShotRemainingMsOverride?: number</code> (mirrors <code>cargoLabelOverride</code>); silently ignored for non-modifier defs. Task 3: extend <code>validatePlacement</code>'s footprint-overlap check to apply over the full 16-tile brush for <code>terrain_modifier</code> (not just the 4-tile footprint).</div></div>
+        <div class="row"><div class="cell"><code>src/terrain-modifier-target-picker.ts</code> <span class="new-tag">NEW</span></div><div class="cell desc">Task 5: pure DOM picker mirroring <code>cargo-label-picker.ts</code>. Lists every <code>TerrainKind</code> grouped (natural / rare-vein) with a cost preview rendered from <code>conversionCostForTarget</code> &times; 16 tiles. <code>pick()</code> resolves with a <code>TerrainKind</code> or <code>null</code> (cancel). Uses the same <code>mountModal</code> chrome.</div></div>
+        <div class="row"><div class="cell"><code>src/economy.ts</code></div><div class="cell desc">Task 4: inside <code>advanceIsland</code>, after the per-segment <code>applyRates</code> step, walk <code>state.buildings</code> looking for any <code>b.terrainShotRemainingMs &gt; 0</code>; decrement by the segment duration, and on the segment that drives the counter to ≤ 0 invoke the shot-resolution routine (write overrides + remove building) via a callback supplied by <code>main.ts</code>. The counter participates in the piecewise integration just like <code>constructionRemainingMs</code> does.</div></div>
+        <div class="row"><div class="cell"><code>src/main.ts</code></div><div class="cell desc">Task 4: provide the shot-resolution callback to <code>advanceIsland</code> via <code>RatesContext</code> (or a parallel hook); on fire, it walks the brush tiles, calls <code>applyTileOverride</code> per tile, removes the modifier from <code>state.buildings</code>, runs an invalidation pass (mirrors <code>universe-editor.ts:91-110</code>), and calls <code>rebuildWorldLayers()</code>. Task 5: wire the new picker (<code>mountTerrainModifierTargetPicker</code>) into the placement-ui deps slot.</div></div>
+        <div class="row"><div class="cell"><code>src/building-alerts-overlay.ts</code></div><div class="cell desc">Task 4: add a second arc-rendering branch &mdash; when <code>b.terrainShotRemainingMs &gt; 0</code>, paint the same cyan progress arc that <code>constructionRemainingMs</code> uses, with completed fraction <code>1 - remaining / SHOT_DURATION_MS</code>. Two arcs never co-exist on the same building (the modifier never enters construction mode), but the branches are mutually exclusive in code via an <code>else if</code>.</div></div>
+      </div>
+
+      <p class="sec-intro" style="margin-top:24px">Picks consumed verbatim from the v5 spec (all four phases + the six user locks):</p>
+      <table class="picks-table">
+        <thead><tr><th>Picker</th><th>Pick</th><th>Effect in this plan</th></tr></thead>
+        <tbody>
+          <tr><td class="k">mechanic_shape</td><td class="v">single_shot</td><td class="s">No per-tick passive loop. Tasks 3+4: placement IS the shot; the building self-destroys when the animation lands.</td></tr>
+          <tr><td class="k">conversion_target</td><td class="v">building_choice</td><td class="s">Task 5: the player picks the target <code>TerrainKind</code> at placement-time via the new picker; persists on <code>PlacedBuilding.terrainTarget</code>.</td></tr>
+          <tr><td class="k">source_restrictions</td><td class="v">all_tiles_including_water</td><td class="s">Task 3+4: no source-kind filter. Every one of the 16 brush tiles is overwritten regardless of its current kind, including ocean tiles inside the union ellipse.</td></tr>
+          <tr><td class="k">cost</td><td class="v">power_plus_resource</td><td class="s">Task 2: <code>placement.power.consumes</code> stays at 100&nbsp;W (drawn during the shot animation only per <code>p2_power_meaning = placement_cost_only</code>). Resource basket added as an UPFRONT payment in Task 3 (per <code>p2_animation_cost = upfront_cost</code>).</td></tr>
+          <tr><td class="k">reversibility</td><td class="v">reversible_via_modifier</td><td class="s">Task 1: <code>tileOverrides</code> stores only the current kind &mdash; no <code>originalType</code>, no history (v5 lock <code>no_revert_mechanic</code>). A "revert" is just another forward shot with the desired target.</td></tr>
+          <tr><td class="k">time_animation</td><td class="v">animated_N_seconds</td><td class="s">Task 4: <code>SHOT_DURATION_MS = 4000</code> threaded into <code>terrainShotRemainingMs</code> at placement; the cyan arc paints completion fraction every refresh.</td></tr>
+          <tr><td class="k">reclamation_integration</td><td class="v">independent</td><td class="s">No coupling code. Land Reclamation expands the ellipse; Terrain Modifier mutates per-tile.</td></tr>
+          <tr><td class="k">scope</td><td class="v">adjacent_only (= 16 tiles)</td><td class="s">Task 2's <code>brushTilesAt</code>: 4 footprint + 12 adjacent ring (v3 user lock <code>scope_is_16_tiles_footprint_plus_ring</code>).</td></tr>
+          <tr><td class="k">ui_surface</td><td class="v">map_click_mode</td><td class="s">Task 3 reinterpretation per <code>p2_invocation = shot_at_placement</code>: the placement preview IS the brush picker. No new map-click mode in <code>input.ts</code>.</td></tr>
+          <tr><td class="k">stacking</td><td class="v">stack_rate</td><td class="s">Task 4 reinterpreted per <code>p2_stack_meaning = stack_count</code>: N modifiers = N independent shots animating in parallel. <code>terrainShotRemainingMs</code> is per-building, no global gate.</td></tr>
+          <tr><td class="k">building_on_converted_tile</td><td class="v">block_if_occupied</td><td class="s">Task 3: <code>validatePlacement</code> abort-if-any-occupied across the full 16-tile brush (v2 lock <code>p2_block_vs_brush = abort_if_any_occupied</code>).</td></tr>
+          <tr><td class="k">p2_invocation</td><td class="v">shot_at_placement</td><td class="s">No deferred click. The placement commit triggers the shot directly.</td></tr>
+          <tr><td class="k">p2_stack_meaning</td><td class="v">stack_count</td><td class="s">Per-building counter; no global mutex.</td></tr>
+          <tr><td class="k">p2_power_meaning</td><td class="v">placement_cost_only</td><td class="s">Task 4: the building draws 100&nbsp;W while <code>terrainShotRemainingMs &gt; 0</code> and zero after; once self-destroyed there is no continuing draw.</td></tr>
+          <tr><td class="k">p2_revert_path</td><td class="v">place_second_modifier</td><td class="s">No revert code &mdash; every placement is a forward shot to whatever target the player picked.</td></tr>
+          <tr><td class="k">p2_adjacent_cap</td><td class="v">accept_16_tiles_footprint_plus_ring</td><td class="s">Task 2's brush formula returns exactly 16 tiles centred on the 2&times;2 footprint.</td></tr>
+          <tr><td class="k">p2_water_ellipse</td><td class="v">inside_ellipse_only</td><td class="s">Task 3 validates every brush tile is inside the union ellipse via <code>islandInscribedAny</code>. Out-of-ellipse tiles fall back to the <code>p3_ellipse_boundary</code> handling below.</td></tr>
+          <tr><td class="k">p2_animation_cost</td><td class="v">upfront_cost</td><td class="s">Task 3 deducts the full basket on placement-commit, not at shot-completion.</td></tr>
+          <tr><td class="k">p2_brush_target_mismatch</td><td class="v">full_brush_charge</td><td class="s">Task 2's <code>conversionCostForTarget(target)</code> &times; 16 ignores per-tile source kind; charge is target-only.</td></tr>
+          <tr><td class="k">p2_animation_surface</td><td class="v">building_arc</td><td class="s">Task 4 reuses <code>building-alerts-overlay.ts</code>'s cyan-arc render path for the shot countdown.</td></tr>
+          <tr><td class="k">p2_block_vs_brush</td><td class="v">abort_if_any_occupied</td><td class="s">Task 3 validates the full 16-tile brush &mdash; ANY occupied tile aborts placement.</td></tr>
+          <tr><td class="k">p3_ellipse_boundary</td><td class="v">skip_outside_full_charge</td><td class="s">Task 3+4: brush tiles outside the union ellipse are silently skipped at shot-resolution but charged for at placement time. No per-tile refund logic.</td></tr>
+          <tr><td class="k">p3_target_biome_restriction</td><td class="v">any_tile_including_veins</td><td class="s">Task 5's picker exposes every <code>TerrainKind</code> &mdash; natural and rare-vein &mdash; with cost differentiated via Task 2's formula.</td></tr>
+          <tr><td class="k">p3_overlap_simultaneous</td><td class="v">last_placed_wins</td><td class="s">Task 4: when two shots target overlapping tiles, the latter shot's <code>applyTileOverride</code> overwrites the former. No tie-break logic &mdash; key collision in the sparse record IS last-write-wins.</td></tr>
+          <tr><td class="k">p4_synthetic_vein_yield</td><td class="v">parity_with_natural</td><td class="s">Task 1's override path is consulted by the same <code>terrainAt</code> closure every extractor reads. A modifier-created <code>uranium_vein</code> tile is indistinguishable from a natural one to the extractor &mdash; no parallel "synthetic" code path.</td></tr>
+        </tbody>
+      </table>
+
+      <p class="sec-intro" style="margin-top:24px">User locks &mdash; cite where each lock manifests in code:</p>
+      <table class="picks-table">
+        <thead><tr><th>Lock (origin)</th><th>Code consequence</th></tr></thead>
+        <tbody>
+          <tr><td class="k">scope_is_16_tiles_footprint_plus_ring (v3)</td><td class="s">Task 2: <code>brushTilesAt(localX, localY)</code> emits exactly 4 + 12 tiles. Unit-tested.</td></tr>
+          <tr><td class="k">revert_only_via_second_modifier (v3)</td><td class="s">No "revert" code path. Tasks 3+4 know only the forward-shot path.</td></tr>
+          <tr><td class="k">rare_target_costs_rare_resource (v4)</td><td class="s">Task 2: <code>conversionCostForTarget(rare)</code> emits a heavy stack of the corresponding resource scaled by <code>K_RARE_MULT * PAYBACK_HORIZON_CYCLES</code>.</td></tr>
+          <tr><td class="k">modifier_self_destroys_after_shot (v5)</td><td class="s">Task 4: on counter hit-zero, the building is removed from <code>state.buildings</code> entirely. Footprint freed.</td></tr>
+          <tr><td class="k">no_revert_mechanic (v5)</td><td class="s">Task 1: <code>tileOverrides</code> stores only the current kind. No <code>originalType</code>, no history.</td></tr>
+          <tr><td class="k">synthetic_vein_yield_is_parity_with_natural (v5)</td><td class="s">Task 1: override-aware closure means every extractor reads the manufactured kind via the same code path as a natural kind. No yield-multiplier branch anywhere.</td></tr>
+        </tbody>
+      </table>
+
+      <p class="sec-intro" style="margin-top:24px">Dependency graph &mdash; commit order and what unlocks what:</p>
+      <table class="picks-table">
+        <thead><tr><th>Task</th><th>Depends on</th><th>Independent commit possible?</th></tr></thead>
+        <tbody>
+          <tr><td class="k">1. tileOverrides + schema 6&rarr;7</td><td class="v">&mdash;</td><td class="s">Yes &mdash; purely additive on the data model; no consumer of the override path yet. Build + tests green.</td></tr>
+          <tr><td class="k">2. terrainTarget + cost formula</td><td class="v">Task 1 (for the override-aware closure used in Task 2's unit tests)</td><td class="s">Yes &mdash; declares fields + helpers; <code>terrain_modifier</code> still plays as a stub.</td></tr>
+          <tr><td class="k">3. placement-ui brush preview</td><td class="v">Tasks 1+2 (uses the brush helper + target field)</td><td class="s">Yes &mdash; the placement commits a modifier with <code>terrainShotRemainingMs</code> set, but Task 4's tick code doesn't exist yet so the counter never decrements; the modifier sits inert with a frozen 4&nbsp;s arc. Build + tests still green; visual smoke shows the inert mod.</td></tr>
+          <tr><td class="k">5. target-biome picker</td><td class="v">Task 2 (cost helper for cost preview)</td><td class="s">Yes &mdash; the picker resolves before placement arms; if Task 3 hasn't widened <code>placement-ui</code> the picker is still wired and the resolved target writes through. Land before Task 4.</td></tr>
+          <tr><td class="k">4. shot tick + self-destroy + re-render</td><td class="v">Tasks 1+2+3+5</td><td class="s">Yes &mdash; this is the "feature lights up" commit. Everything before this was scaffolding the consumers expect.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 02 — Task 1                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task1">
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: <code>tileOverrides</code> data path + persistence schema 6&rarr;7</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Add a per-tile mutation primitive to <code>IslandSpec</code> &mdash; a sparse <code>Record&lt;"x,y", TerrainKind&gt;</code> keyed in island-local tile coords. The <code>attachTerrainAt</code> closure consults this map BEFORE falling through to <code>terrainAtForBiome</code>; the by-reference capture invariant continues to hold (the closure reads <code>spec.tileOverrides</code> live, so mid-session mutations are observed on the next call). Persistence already round-trips the field via the <code>SerializedIslandSpec = Omit&lt;IslandSpec, 'terrainAt'&gt;</code> pattern &mdash; we explicitly verify the round-trip with a new test. <strong>Schema bump:</strong> the task is additive, but per the plan brief we bump <code>SCHEMA_VERSION</code> 6&rarr;7 and <code>STORAGE_KEY</code> <code>:v6</code>&rarr;<code>:v7</code> &mdash; this overrides the spec §04 "no bump required" note (deliberate departure called out in §07 Notes).</p>
+        <p class="deps-line">Dependencies: <b>none</b> &mdash; purely additive.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/world.ts</code> <span class="tag">&mdash; add <code>tileOverrides</code> field + override-aware closure</span></li>
+            <li>Modify: <code>src/persistence.ts</code> <span class="tag">&mdash; <code>SCHEMA_VERSION</code> 6&rarr;7 + <code>STORAGE_KEY</code> bump</span></li>
+            <li>Modify: <code>src/world.test.ts</code> (or <code>src/biomes.test.ts</code>) <span class="tag">&mdash; override-precedence + by-reference test</span></li>
+            <li>Modify: <code>src/persistence.test.ts</code> <span class="tag">&mdash; round-trip a non-empty <code>tileOverrides</code></span></li>
+          </ul>
+        </div>
+
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add the <code>tileOverrides</code> field to <code>IslandSpec</code></div>
+            <p class="step-text">Insert immediately after the <code>terrainAt</code> field at <code>src/world.ts:156</code>. Optional so legacy specs (and freshly-generated ones with no conversions yet) load with an undefined field; the closure treats undefined as "empty map" via a single <code>?? null</code>.</p>
+            <div class="code-block"><div class="file-label">src/world.ts &mdash; immediately after the terrainAt declaration (line 156)</div><div class="code"><pre>  <span class="cm">/** Terrain function in island-local coords. Defaults to grass everywhere. */</span>
+  readonly terrainAt?: (x: number, y: number) =&gt; TerrainKind;
+<span class="add">  /** §03 design-spec terrain_modifier: sparse per-tile overrides written by</span>
+<span class="add">   *  the modifier's shot. Key format `${x},${y}` in island-local tile</span>
+<span class="add">   *  coords (mirrors the discovery-cell key shape). Stores only the</span>
+<span class="add">   *  CURRENT kind &mdash; no `originalType`, no history (v5 lock</span>
+<span class="add">   *  `no_revert_mechanic`). `attachTerrainAt`'s closure consults this</span>
+<span class="add">   *  BEFORE falling through to `terrainAtForBiome`; precedence is</span>
+<span class="add">   *  overrides-then-biome. Mutable &mdash; the modifier's shot inserts a</span>
+<span class="add">   *  key per converted tile; `last_placed_wins` per the v5 picker means</span>
+<span class="add">   *  later writes silently overwrite earlier ones. Optional for forward-</span>
+<span class="add">   *  compat: legacy saves (schema 6) load with the field undefined and</span>
+<span class="add">   *  the closure behaves identically to today. */</span>
+<span class="add">  tileOverrides?: Record&lt;string, TerrainKind&gt;;</span></pre></div></div>
+            <p class="step-text">Field is <em>mutable</em> (not <code>readonly</code>) because Task 4's shot resolution writes new keys in place. The pattern matches <code>spec.modifiers</code> (mutable for Universe Editor's re-roll) and <code>spec.buildings</code> (mutable for placement) &mdash; we are not introducing a new mutability axis on <code>IslandSpec</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Teach <code>attachTerrainAt</code> to consult overrides first</div>
+            <p class="step-text">Wrap the existing biome-closure body so the override lookup happens first. The closure still captures <code>spec</code> BY REFERENCE so a mid-session insertion into <code>spec.tileOverrides</code> is observed on the very next call (matches the WARNING block in the existing JSDoc). Do NOT switch to <code>spec.tileOverrides ?? {}</code> at capture time &mdash; that would freeze the reference to an empty literal and overrides would never be seen.</p>
+            <div class="code-block"><div class="file-label">src/world.ts &mdash; replace the inner closure body at lines 256-262</div><div class="code"><pre>export function attachTerrainAt&lt;B extends Omit&lt;IslandSpec, 'terrainAt'&gt;&gt;(base: B): IslandSpec {
+  const spec = { ...base } as IslandSpec;
+  (spec as { terrainAt: (x: number, y: number) =&gt; TerrainKind }).terrainAt = (
+    x,
+    y,
+  ) =&gt; {
+<span class="add">    <span class="cm">// terrain_modifier §03 — overrides take precedence over the biome</span></span>
+<span class="add">    <span class="cm">// closure. Read `spec.tileOverrides` LIVE (not captured at closure-</span></span>
+<span class="add">    <span class="cm">// build time) so a shot landing mid-session is observed on the next</span></span>
+<span class="add">    <span class="cm">// call; matches the by-reference invariant for `spec.biome` / radii.</span></span>
+<span class="add">    const overrides = spec.tileOverrides;</span>
+<span class="add">    if (overrides !== undefined) {</span>
+<span class="add">      const k = overrides[`${x},${y}`];</span>
+<span class="add">      if (k !== undefined) return k;</span>
+<span class="add">    }</span>
+    return terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =&gt;
+      islandInscribedAny(spec, px, py),
+    );
+<span class="add">  };</span>
+<span class="del">    terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =&gt;</span>
+<span class="del">      islandInscribedAny(spec, px, py),</span>
+<span class="del">    );</span>
+  return spec;
+}</pre></div></div>
+            <p class="step-text">The trailing <code>;</code> on the old single-expression arrow function is replaced by the new block-body brace. <code>noUncheckedIndexedAccess</code> means the <code>overrides[key]</code> read returns <code>TerrainKind | undefined</code> &mdash; the explicit <code>if (k !== undefined)</code> check is required (an empty string is not a valid <code>TerrainKind</code>, so a truthy-check would be wrong; explicit-undefined is safe).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Bump persistence schema 6&rarr;7</div>
+            <p class="step-text">Two literals change in <code>src/persistence.ts</code>: <code>STORAGE_KEY</code> at line 70 (the IDB key suffix) and <code>SCHEMA_VERSION</code> at line 78 (the <code>v</code> stamp on every save). The <code>SerializedIslandSpec = Omit&lt;IslandSpec, 'terrainAt'&gt;</code> type already inherits the new <code>tileOverrides</code> field; the <code>...rest</code> spread on save and the <code>...s</code> spread on rehydration both round-trip the field with zero new code (the field is JSON-safe by construction &mdash; a record of string-keyed string values).</p>
+            <div class="code-block"><div class="file-label">src/persistence.ts &mdash; lines 70 + 78</div><div class="code"><pre><span class="del">export const STORAGE_KEY = 'robot-islands:save:v6';</span>
+<span class="add">export const STORAGE_KEY = 'robot-islands:save:v7';</span>
+
+<span class="cm">// ... unchanged comment ...</span>
+
+<span class="del">export const SCHEMA_VERSION = 6 as const;</span>
+<span class="add">export const SCHEMA_VERSION = 7 as const;</span></pre></div></div>
+            <p class="step-text">Migration-paths-removed discipline holds &mdash; <code>deserializeWorld</code> already throws on a <code>snapshot.v !== SCHEMA_VERSION</code> mismatch (line 297), so old v6 saves are rejected at load and the caller falls back to a fresh world. This is the same pattern commit <code>1d8c4bd</code> established at the 5&rarr;6 bump.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Add override-precedence + by-reference tests</div>
+            <p class="step-text">Append to <code>src/world.test.ts</code> (the file that already hosts <code>attachTerrainAt</code> tests). The first case verifies override-then-biome precedence on a fresh spec; the second verifies the by-reference invariant by inserting a key AFTER closure-build and asserting the closure observes it. The third covers the <code>undefined</code> default (no overrides field set = closure behaves identically to schema-6 specs).</p>
+            <div class="code-block"><div class="file-label">src/world.test.ts &mdash; append at end of file</div><div class="code"><pre>import { describe, expect, it } from 'vitest';
+import { attachTerrainAt, type IslandSpec } from './world.js';
+import type { TerrainKind } from './island.js';
+
+describe('attachTerrainAt &mdash; tileOverrides precedence', () =&gt; {
+  function makeSpec(overrides?: Record&lt;string, TerrainKind&gt;): IslandSpec {
+    return attachTerrainAt({
+      id: 'test-island',
+      cx: 100,
+      cy: 100,
+      majorRadius: 10,
+      minorRadius: 10,
+      biome: 'plains',
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+      ...(overrides ? { tileOverrides: overrides } : {}),
+    });
+  }
+
+  it('returns the override kind when one is set', () =&gt; {
+    const spec = makeSpec({ '0,0': 'magma_vent' });
+    expect(spec.terrainAt?.(0, 0)).toBe('magma_vent');
+  });
+
+  it('falls through to the biome closure when no override matches', () =&gt; {
+    const spec = makeSpec({ '0,0': 'magma_vent' });
+    <span class="cm">// (3, 3) was not overridden; biome closure decides.</span>
+    const k = spec.terrainAt?.(3, 3);
+    expect(k).toBeDefined();
+    expect(k).not.toBe('magma_vent');
+  });
+
+  it('reads tileOverrides BY REFERENCE &mdash; insertion after closure-build is observed', () =&gt; {
+    const spec = makeSpec();
+    <span class="cm">// `terrainAt` was bound before tileOverrides existed; insert and re-query.</span>
+    spec.tileOverrides = { '5,5': 'uranium_vein' };
+    expect(spec.terrainAt?.(5, 5)).toBe('uranium_vein');
+  });
+
+  it('behaves identically to a legacy spec when tileOverrides is undefined', () =&gt; {
+    const legacy = makeSpec();
+    expect(legacy.tileOverrides).toBeUndefined();
+    expect(legacy.terrainAt?.(2, 2)).toBeDefined();
+  });
+});</pre></div></div>
+            <p class="step-text">The existing <code>biomes.test.ts</code> closure-by-reference test (referenced from the WARNING block in <code>world.ts:246-251</code>) remains green &mdash; the new <code>if (overrides !== undefined)</code> guard is purely additive in front of the existing closure body.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Add a persistence round-trip test for <code>tileOverrides</code></div>
+            <p class="step-text">Append to <code>src/persistence.test.ts</code>. The test serializes a world containing one island with a non-empty <code>tileOverrides</code>, deserializes, and asserts the field round-trips intact (key order is not guaranteed by <code>Record</code>; assert key-by-key).</p>
+            <div class="code-block"><div class="file-label">src/persistence.test.ts &mdash; append a new describe block</div><div class="code"><pre>describe('persistence &mdash; tileOverrides round-trip (schema 7)', () =&gt; {
+  it('survives serializeWorld &rarr; deserializeWorld unchanged', () =&gt; {
+    const world = makeInitialWorld(); <span class="cm">// existing test fixture</span>
+    const homeSpec = world.islands.find((s) =&gt; s.id === 'home');
+    expect(homeSpec).toBeDefined();
+    (homeSpec as IslandSpec).tileOverrides = {
+      '1,1': 'magma_vent',
+      '-3,4': 'uranium_vein',
+    };
+    const states = new Map&lt;string, IslandState&gt;();
+    states.set('home', makeInitialIslandState(homeSpec!, 0));
+    const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
+    expect(snap.v).toBe(7);
+    const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
+    const rh = rehydrated.islands.find((s) =&gt; s.id === 'home');
+    expect(rh?.tileOverrides).toEqual({
+      '1,1': 'magma_vent',
+      '-3,4': 'uranium_vein',
+    });
+    <span class="cm">// And the closure observes them.</span>
+    expect(rh?.terrainAt?.(1, 1)).toBe('magma_vent');
+    expect(rh?.terrainAt?.(-3, 4)).toBe('uranium_vein');
+  });
+});</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Type-check + build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: tsc clean (the closure body became multi-line but the type is unchanged; <code>noUncheckedIndexedAccess</code> handled by the explicit-undefined check). Vite builds. No CSS changes.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Run the test suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: all existing tests pass + the four new tests in Step 4 + one new test in Step 5. The persistence-round-trip suite gains one case; the closure-by-reference invariant test in <code>biomes.test.ts</code> still passes (we only added a guard in front of the existing fall-through).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/world.ts src/persistence.ts src/world.test.ts src/persistence.test.ts
+git commit -F /tmp/terrain-modifier-task1-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/terrain-modifier-task1-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(terrain): add tileOverrides per-island sparse map (schema 7)
+
+Per the terrain_modifier v5 spec, terrain-modifier needs a per-tile
+mutation primitive. IslandSpec gains an optional
+`tileOverrides?: Record&lt;`${x},${y}`, TerrainKind&gt;` field;
+attachTerrainAt's closure consults the map before falling through
+to terrainAtForBiome. By-reference invariant preserved &mdash; a
+mid-session insertion is observed on the next terrainAt() call.
+
+Persistence schema 6 -&gt; 7 (STORAGE_KEY :v6 -&gt; :v7,
+SCHEMA_VERSION 6 -&gt; 7). The SerializedIslandSpec type already
+inherits the new field via Omit&lt;IslandSpec, 'terrainAt'&gt;;
+serialize/deserialize round-trip with zero new code. Old v6 saves
+are rejected at load (migration paths removed pre-release per
+commit 1d8c4bd).
+
+This task is purely additive &mdash; no consumer of tileOverrides
+exists yet; the modifier still plays as a catalog stub. Task 2
+adds the cost helpers + per-instance terrainTarget field; Task 4
+wires the shot.
+
+Tests:
+- world.test.ts: 4 cases covering override precedence,
+  by-reference observability, biome-closure fall-through, and
+  legacy (undefined) parity.
+- persistence.test.ts: round-trip a non-empty overrides map
+  through serializeWorld + deserializeWorld at v=7.
+
+Refs docs/superpowers/specs/2026-05-23-terrain-modifier-design.html
+sections 01 + 04 + Task-1 of docs/superpowers/plans/
+2026-05-23-terrain-modifier.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+            <p class="step-text">Scan the composed message for the <code>Co-Authored-By:</code> trailer before <code>git commit</code> &mdash; missing trailer = failed commit per global config.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 03 — Task 2                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task2">
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: <code>terrainTarget</code> field + cost formula (<code>terrain-modifier.ts</code>)</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Declare every pure surface Tasks 3, 4, and 5 will consume: the two per-instance fields on <code>PlacedBuilding</code> (<code>terrainTarget</code>, <code>terrainShotRemainingMs</code>), a new pure module <code>src/terrain-modifier.ts</code> housing the cost formula (the duplication-glitch framing per spec §04: <code>cost(rare_target) = K &times; natural_extraction_rate &times; payback_horizon</code> with <code>K = 1.5</code>, <code>payback_horizon = 90</code>), the rare-vs-natural target classification (<code>RARE_TARGET_TERRAINS</code> / <code>NATURAL_TARGET_TERRAINS</code>), the brush geometry helper (<code>brushTilesAt</code> returns 4 footprint + 12 ring = 16 tiles), the override-write primitive (<code>applyTileOverride</code> &mdash; lazily creates <code>spec.tileOverrides</code>), and the shot-duration constant (<code>SHOT_DURATION_MS = 4000</code>). One companion test file. The <code>terrain_modifier</code> def gets one new boolean flag (<code>terrainModifier: true</code>) the placement-ui keys off; <code>placeBuilding</code> accepts the matching overrides to thread <code>terrainTarget</code> + <code>terrainShotRemainingMs</code> through.</p>
+        <p class="deps-line">Dependencies: <b>Task 1</b> (the override-aware closure is asserted by Task 2's helper tests).</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Create: <code>src/terrain-modifier.ts</code> <span class="tag">&mdash; pure module: cost, brush geometry, override write</span></li>
+            <li>Create: <code>src/terrain-modifier.test.ts</code> <span class="tag">&mdash; unit tests for cost / brush / override</span></li>
+            <li>Modify: <code>src/buildings.ts</code> <span class="tag">&mdash; <code>terrainTarget</code> + <code>terrainShotRemainingMs</code> on <code>PlacedBuilding</code></span></li>
+            <li>Modify: <code>src/building-defs.ts</code> <span class="tag">&mdash; <code>terrainModifier: true</code> flag on the <code>terrain_modifier</code> entry + on the <code>BuildingDef</code> type</span></li>
+            <li>Modify: <code>src/placement.ts</code> <span class="tag">&mdash; thread the two overrides through <code>placeBuilding</code></span></li>
+          </ul>
+        </div>
+
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Create <code>src/terrain-modifier.ts</code></div>
+            <p class="step-text">Pure module. No PixiJS, no DOM. Exports the cost constants, classification sets, brush geometry, cost-for-target helper, and override-write primitive. Imports <code>TerrainKind</code> from <code>./island.js</code>, <code>ResourceId</code> from <code>./recipes.js</code>, and <code>IslandSpec</code> from <code>./world.js</code>. The rare-vs-natural split mirrors spec §04: natural = the <em>biome defaults</em> (grass, sand, stone, water, tree, ice, magma_vent); rare = everything ending in <code>_vein</code> / <code>_pit</code> / <code>_deposit</code> / <code>_well</code> / <code>_seep</code> plus <code>ore</code> / <code>coal</code> / <code>limestone</code>.</p>
+            <div class="code-block"><div class="file-label">src/terrain-modifier.ts &mdash; entire new file</div><div class="code"><pre><span class="cm">// terrain_modifier (v5 spec) — pure helpers.</span>
+<span class="cm">//</span>
+<span class="cm">// This module is the SINGLE source of truth for:</span>
+<span class="cm">//   - the cost formula (spec §04 duplication-glitch framing)</span>
+<span class="cm">//   - the rare-vs-natural target classification</span>
+<span class="cm">//   - the 16-tile brush geometry (4 footprint + 12 ring)</span>
+<span class="cm">//   - the SHOT_DURATION_MS animation budget</span>
+<span class="cm">//   - the applyTileOverride primitive (mutates spec.tileOverrides)</span>
+<span class="cm">//</span>
+<span class="cm">// Tasks 3 (placement-ui brush preview), 4 (shot tick + resolution),</span>
+<span class="cm">// and 5 (target-biome picker) all import from here. Keep this file</span>
+<span class="cm">// pure — no rendering, no IslandState mutation. The shot-resolution</span>
+<span class="cm">// helper consumes a spec + the tile to set; everything else (removing</span>
+<span class="cm">// the building, invalidation pass, rebuildWorldLayers) is Task 4's</span>
+<span class="cm">// orchestration in main.ts.</span>
+
+import type { TerrainKind } from './island.js';
+import type { ResourceId } from './recipes.js';
+import type { IslandSpec } from './world.js';
+
+<span class="cm">// ---------------------------------------------------------------------------</span>
+<span class="cm">// Constants — Appendix-A placeholders per spec §04. Tunable post-first-play.</span>
+<span class="cm">// ---------------------------------------------------------------------------</span>
+
+<span class="cm">/** Animation duration of the shot in ms. Reused by Task 4's tick (decrements</span>
+<span class="cm"> *  in advanceIsland) and the building-arc render (progress fraction). */</span>
+export const SHOT_DURATION_MS = 4000;
+
+<span class="cm">/** Multiplier `K` in the rare-target cost formula. K = 1.5 means a manufactured</span>
+<span class="cm"> *  vein never net-produces its input at break-even for at least 90 cycles. */</span>
+export const K_RARE_MULT = 1.5;
+
+<span class="cm">/** Payback horizon in production cycles for the rare-target cost. Cycle =</span>
+<span class="cm"> *  one production tick of the natural extractor on a natural tile of the</span>
+<span class="cm"> *  target kind. 90 cycles ≈ 30-60 min of real play depending on the recipe's</span>
+<span class="cm"> *  cycleSec. */</span>
+export const PAYBACK_HORIZON_CYCLES = 90;
+
+<span class="cm">/** Per-tile basket for natural-target shots. Applied 16× (one per brush tile)</span>
+<span class="cm"> *  at placement-commit per p2_animation_cost = upfront_cost. Spec §04 placeholder. */</span>
+export const NATURAL_PER_TILE_BASKET: Readonly&lt;Partial&lt;Record&lt;ResourceId, number&gt;&gt;&gt; = {
+  stone: 5,
+  gear: 2,
+};
+
+<span class="cm">// ---------------------------------------------------------------------------</span>
+<span class="cm">// Target classification</span>
+<span class="cm">// ---------------------------------------------------------------------------</span>
+
+<span class="cm">/** "Natural" targets — the biome-default kinds. Cost = NATURAL_PER_TILE_BASKET × 16. */</span>
+export const NATURAL_TARGET_TERRAINS: ReadonlySet&lt;TerrainKind&gt; = new Set&lt;TerrainKind&gt;([
+  'grass',
+  'sand',
+  'stone',
+  'water',
+  'tree',
+  'ice',
+  'magma_vent',
+]);
+
+<span class="cm">/** "Rare" targets — geological-resource kinds. Cost scales by the formula. The</span>
+<span class="cm"> *  union of this set + NATURAL_TARGET_TERRAINS covers every TerrainKind today</span>
+<span class="cm"> *  (the test in terrain-modifier.test.ts asserts coverage so a new kind added</span>
+<span class="cm"> *  to TerrainKind without a classification fails CI loudly). */</span>
+export const RARE_TARGET_TERRAINS: ReadonlySet&lt;TerrainKind&gt; = new Set&lt;TerrainKind&gt;([
+  'ore',
+  'coal',
+  'oil_well',
+  'gas_seep',
+  'helium_vent',
+  'limestone',
+  'clay_pit',
+  'sulfur_vein',
+  'phosphate_deposit',
+  'graphite_vein',
+  'copper_vein',
+  'tin_vein',
+  'lead_vein',
+  'bauxite_vein',
+  'manganese_vein',
+  'zinc_vein',
+  'chromium_vein',
+  'nickel_vein',
+  'tungsten_vein',
+  'mercury_pit',
+  'diamond_vein',
+  'lithium_vein',
+  'uranium_vein',
+]);
+
+<span class="cm">// ---------------------------------------------------------------------------</span>
+<span class="cm">// Rare-target → input resource mapping</span>
+<span class="cm">// ---------------------------------------------------------------------------</span>
+
+<span class="cm">/** For each rare-vein terrain, the ResourceId the player must pay to manufacture</span>
+<span class="cm"> *  one such tile. The rule per v4 lock (`rare_target_costs_rare_resource`):</span>
+<span class="cm"> *  "targets in the rare-vein set cost a heavy stack of the corresponding</span>
+<span class="cm"> *  resource". The mapping is "the ResourceId the building-defs.ts extractor</span>
+<span class="cm"> *  bound to this tile via `requiredTile` actually produces in recipes.ts".</span>
+<span class="cm"> *  Verified 2026-05-23 against building-defs.ts and recipes.ts — one row per</span>
+<span class="cm"> *  TerrainKind in RARE_TARGET_TERRAINS, cross-checked extractor defId →</span>
+<span class="cm"> *  recipe outputs (single-output extractors only; every rare extractor in</span>
+<span class="cm"> *  the current catalog has exactly one output). */</span>
+export const RARE_TARGET_INPUT: Readonly&lt;Record&lt;string, ResourceId&gt;&gt; = {
+  ore: 'iron_ore',          <span class="cm">// mine / deep_mine → iron_ore</span>
+  coal: 'coal',             <span class="cm">// mine (mine_on_coal recipe) → coal</span>
+  oil_well: 'crude_oil',    <span class="cm">// pump_jack → crude_oil</span>
+  gas_seep: 'natural_gas',  <span class="cm">// gas_extractor → natural_gas</span>
+  helium_vent: 'helium_3',  <span class="cm">// drilling_rig → helium_3</span>
+  limestone: 'limestone',   <span class="cm">// limestone_quarry → limestone</span>
+  clay_pit: 'clay',         <span class="cm">// clay_pit_extractor → clay</span>
+  sulfur_vein: 'sulfur',    <span class="cm">// sulfur_mine → sulfur</span>
+  phosphate_deposit: 'phosphate',  <span class="cm">// phosphate_mine → phosphate</span>
+  graphite_vein: 'graphite',       <span class="cm">// graphite_mine → graphite</span>
+  copper_vein: 'copper_ore',       <span class="cm">// copper_mine → copper_ore</span>
+  tin_vein: 'tin_ore',             <span class="cm">// tin_mine → tin_ore</span>
+  lead_vein: 'lead_ore',           <span class="cm">// lead_mine → lead_ore</span>
+  bauxite_vein: 'bauxite',         <span class="cm">// bauxite_mine → bauxite</span>
+  manganese_vein: 'manganese_ore', <span class="cm">// manganese_mine → manganese_ore</span>
+  zinc_vein: 'zinc_ore',           <span class="cm">// zinc_mine → zinc_ore</span>
+  chromium_vein: 'chromium_ore',   <span class="cm">// chromium_mine → chromium_ore</span>
+  nickel_vein: 'nickel_ore',       <span class="cm">// nickel_mine → nickel_ore</span>
+  tungsten_vein: 'tungsten_ore',   <span class="cm">// tungsten_mine → tungsten_ore</span>
+  mercury_pit: 'mercury',          <span class="cm">// mercury_well → mercury</span>
+  diamond_vein: 'diamond_ore',     <span class="cm">// diamond_quarry → diamond_ore</span>
+  lithium_vein: 'lithium',         <span class="cm">// lithium_extractor → lithium</span>
+  uranium_vein: 'uranium_ore',     <span class="cm">// uranium_mine → uranium_ore</span>
+};
+
+<span class="cm">// ---------------------------------------------------------------------------</span>
+<span class="cm">// Cost helpers</span>
+<span class="cm">// ---------------------------------------------------------------------------</span>
+
+<span class="cm">/** Per-cycle extraction rate of the natural extractor on a natural tile of</span>
+<span class="cm"> *  `target`. Placeholder = 1 unit/cycle for every rare kind; a follow-up tuning</span>
+<span class="cm"> *  pass can wire this against the actual recipe table. The cost formula is</span>
+<span class="cm"> *  `cost = K × rate × horizon`, so a placeholder of 1 yields a flat</span>
+<span class="cm"> *  `1.5 × 1 × 90 = 135` units of the corresponding input resource. */</span>
+function naturalExtractionRate(_target: TerrainKind): number {
+  return 1;
+}
+
+<span class="cm">/** Total cost (basket) for a single shot at `target`. The shot covers 16</span>
+<span class="cm"> *  brush tiles; the cost is "16 × per-tile" for natural targets and "K × rate</span>
+<span class="cm"> *  × horizon × 16" of the corresponding rare resource for rare targets per</span>
+<span class="cm"> *  p2_brush_target_mismatch = full_brush_charge. */</span>
+export function conversionCostForTarget(
+  target: TerrainKind,
+): Partial&lt;Record&lt;ResourceId, number&gt;&gt; {
+  if (NATURAL_TARGET_TERRAINS.has(target)) {
+    const out: Partial&lt;Record&lt;ResourceId, number&gt;&gt; = {};
+    for (const [r, n] of Object.entries(NATURAL_PER_TILE_BASKET)) {
+      out[r as ResourceId] = (n ?? 0) * 16;
+    }
+    return out;
+  }
+  if (RARE_TARGET_TERRAINS.has(target)) {
+    const input = RARE_TARGET_INPUT[target];
+    if (input === undefined) {
+      <span class="cm">// Defense-in-depth: a TerrainKind in RARE_TARGET_TERRAINS without an</span>
+      <span class="cm">// RARE_TARGET_INPUT row is a classification bug. The test in</span>
+      <span class="cm">// terrain-modifier.test.ts asserts every rare kind has a mapping.</span>
+      return {};
+    }
+    const perTile = K_RARE_MULT * naturalExtractionRate(target) * PAYBACK_HORIZON_CYCLES;
+    return { [input]: Math.ceil(perTile * 16) };
+  }
+  <span class="cm">// Unclassified kind — return an empty basket. The coverage test catches this.</span>
+  return {};
+}
+
+<span class="cm">// ---------------------------------------------------------------------------</span>
+<span class="cm">// Brush geometry</span>
+<span class="cm">// ---------------------------------------------------------------------------</span>
+
+<span class="cm">/** The 16-tile brush footprint per the v3 user lock</span>
+<span class="cm"> *  (`scope_is_16_tiles_footprint_plus_ring`). The terrain_modifier's footprint</span>
+<span class="cm"> *  is SHAPES.square2 anchored at (anchorX, anchorY), covering tiles</span>
+<span class="cm"> *  (anchorX, anchorY) / (anchorX+1, anchorY) / (anchorX, anchorY+1) /</span>
+<span class="cm"> *  (anchorX+1, anchorY+1). The "ring" is the 12 tiles directly adjacent to</span>
+<span class="cm"> *  the 2×2 block (the outer rim of the 4×4 square that contains the footprint</span>
+<span class="cm"> *  + ring). Coords are island-local (the same domain as PlacedBuilding.x/y). */</span>
+export function brushTilesAt(anchorX: number, anchorY: number): Array&lt;{ x: number; y: number }&gt; {
+  const tiles: Array&lt;{ x: number; y: number }&gt; = [];
+  <span class="cm">// 4×4 block centred on the 2×2 footprint = the union of footprint + ring.</span>
+  for (let dy = -1; dy &lt;= 2; dy++) {
+    for (let dx = -1; dx &lt;= 2; dx++) {
+      tiles.push({ x: anchorX + dx, y: anchorY + dy });
+    }
+  }
+  return tiles; <span class="cm">// 16 tiles, guaranteed by the loop bounds.</span>
+}
+
+<span class="cm">// ---------------------------------------------------------------------------</span>
+<span class="cm">// Override write — mutates spec in place</span>
+<span class="cm">// ---------------------------------------------------------------------------</span>
+
+<span class="cm">/** Write a single tile override onto `spec.tileOverrides`. Creates the record</span>
+<span class="cm"> *  lazily if absent. Key format `${x},${y}` in island-local coords, matching</span>
+<span class="cm"> *  the format the attachTerrainAt closure (Task 1) reads. last-write-wins:</span>
+<span class="cm"> *  the second modifier whose brush covers an already-overridden tile silently</span>
+<span class="cm"> *  replaces the prior kind (p3_overlap_simultaneous = last_placed_wins). */</span>
+export function applyTileOverride(
+  spec: IslandSpec,
+  x: number,
+  y: number,
+  kind: TerrainKind,
+): void {
+  if (spec.tileOverrides === undefined) {
+    spec.tileOverrides = {};
+  }
+  spec.tileOverrides[`${x},${y}`] = kind;
+}</pre></div></div>
+            <p class="step-text">The file is intentionally short (~120 lines of code excluding comments) &mdash; the pure layer should not grow beyond declarations, helpers, and the override-write primitive. Anything orchestration-shaped (the per-tile loop on shot resolution, the building-removal pass, the <code>rebuildWorldLayers</code> call) lives in Task 4 inside <code>main.ts</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Create <code>src/terrain-modifier.test.ts</code></div>
+            <p class="step-text">Mirrors the structure of <code>src/land-reclamation.test.ts</code>. Five describe blocks: (1) classification-coverage (every <code>TerrainKind</code> belongs to exactly one set); (2) <code>conversionCostForTarget</code> shape for natural and rare targets; (3) <code>brushTilesAt</code> returns 16 tiles centred correctly; (4) <code>applyTileOverride</code> creates the record lazily and overwrites on second write; (5) integration with Task 1's closure (override-write &rarr; closure observes via <code>terrainAt</code>).</p>
+            <div class="code-block"><div class="file-label">src/terrain-modifier.test.ts &mdash; new file</div><div class="code"><pre>import { describe, expect, it } from 'vitest';
+import { attachTerrainAt, type IslandSpec } from './world.js';
+import {
+  applyTileOverride,
+  brushTilesAt,
+  conversionCostForTarget,
+  K_RARE_MULT,
+  NATURAL_PER_TILE_BASKET,
+  NATURAL_TARGET_TERRAINS,
+  PAYBACK_HORIZON_CYCLES,
+  RARE_TARGET_INPUT,
+  RARE_TARGET_TERRAINS,
+  SHOT_DURATION_MS,
+} from './terrain-modifier.js';
+import type { TerrainKind } from './island.js';
+
+const ALL_KINDS: TerrainKind[] = [
+  'grass', 'stone', 'ore', 'coal', 'water', 'tree', 'sand', 'ice', 'magma_vent',
+  'oil_well', 'gas_seep', 'helium_vent', 'limestone', 'clay_pit', 'sulfur_vein',
+  'phosphate_deposit', 'graphite_vein', 'copper_vein', 'tin_vein', 'lead_vein',
+  'bauxite_vein', 'manganese_vein', 'zinc_vein', 'chromium_vein', 'nickel_vein',
+  'tungsten_vein', 'mercury_pit', 'diamond_vein', 'lithium_vein', 'uranium_vein',
+];
+
+describe('terrain-modifier &mdash; classification coverage', () =&gt; {
+  it('every TerrainKind belongs to exactly one of NATURAL or RARE', () =&gt; {
+    for (const k of ALL_KINDS) {
+      const inNat = NATURAL_TARGET_TERRAINS.has(k);
+      const inRare = RARE_TARGET_TERRAINS.has(k);
+      expect(inNat || inRare, `kind ${k} unclassified`).toBe(true);
+      expect(inNat &amp;&amp; inRare, `kind ${k} double-classified`).toBe(false);
+    }
+  });
+
+  it('every rare kind has a RARE_TARGET_INPUT row', () =&gt; {
+    for (const k of RARE_TARGET_TERRAINS) {
+      expect(RARE_TARGET_INPUT[k], `rare ${k} missing input mapping`).toBeDefined();
+    }
+  });
+});
+
+describe('terrain-modifier &mdash; conversionCostForTarget', () =&gt; {
+  it('natural targets cost NATURAL_PER_TILE_BASKET × 16', () =&gt; {
+    const c = conversionCostForTarget('grass');
+    expect(c.stone).toBe((NATURAL_PER_TILE_BASKET.stone ?? 0) * 16);
+    expect(c.gear).toBe((NATURAL_PER_TILE_BASKET.gear ?? 0) * 16);
+  });
+
+  it('rare targets cost K × 1 × horizon × 16 of the input resource', () =&gt; {
+    const c = conversionCostForTarget('uranium_vein');
+    const expected = Math.ceil(K_RARE_MULT * 1 * PAYBACK_HORIZON_CYCLES * 16);
+    expect(c.uranium_ore).toBe(expected);
+  });
+
+  it('different rare targets bill different resources', () =&gt; {
+    const cu = conversionCostForTarget('copper_vein');
+    const li = conversionCostForTarget('lithium_vein');
+    expect(cu.copper_ore).toBeGreaterThan(0);
+    expect(li.lithium_ore).toBeGreaterThan(0);
+    expect(cu.lithium_ore).toBeUndefined();
+  });
+});
+
+describe('terrain-modifier &mdash; brushTilesAt', () =&gt; {
+  it('returns exactly 16 tiles', () =&gt; {
+    const tiles = brushTilesAt(0, 0);
+    expect(tiles.length).toBe(16);
+  });
+
+  it('covers a 4×4 region centred on the 2×2 footprint', () =&gt; {
+    const tiles = brushTilesAt(5, 7);
+    const xs = tiles.map((t) =&gt; t.x);
+    const ys = tiles.map((t) =&gt; t.y);
+    expect(Math.min(...xs)).toBe(4);
+    expect(Math.max(...xs)).toBe(7);
+    expect(Math.min(...ys)).toBe(6);
+    expect(Math.max(...ys)).toBe(9);
+  });
+});
+
+describe('terrain-modifier &mdash; applyTileOverride', () =&gt; {
+  function makeSpec(): IslandSpec {
+    return attachTerrainAt({
+      id: 'test', cx: 0, cy: 0, majorRadius: 10, minorRadius: 10,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+  }
+
+  it('creates spec.tileOverrides lazily on first write', () =&gt; {
+    const spec = makeSpec();
+    expect(spec.tileOverrides).toBeUndefined();
+    applyTileOverride(spec, 1, 2, 'magma_vent');
+    expect(spec.tileOverrides).toEqual({ '1,2': 'magma_vent' });
+  });
+
+  it('last-write-wins on key collision', () =&gt; {
+    const spec = makeSpec();
+    applyTileOverride(spec, 0, 0, 'water');
+    applyTileOverride(spec, 0, 0, 'uranium_vein');
+    expect(spec.tileOverrides?.['0,0']).toBe('uranium_vein');
+  });
+
+  it('write is observed by the override-aware closure (Task 1 integration)', () =&gt; {
+    const spec = makeSpec();
+    applyTileOverride(spec, 3, 3, 'diamond_vein');
+    expect(spec.terrainAt?.(3, 3)).toBe('diamond_vein');
+  });
+});
+
+describe('terrain-modifier &mdash; constants sanity', () =&gt; {
+  it('SHOT_DURATION_MS is a positive ms value', () =&gt; {
+    expect(SHOT_DURATION_MS).toBeGreaterThan(0);
+  });
+});</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Add <code>terrainTarget</code> + <code>terrainShotRemainingMs</code> to <code>PlacedBuilding</code></div>
+            <p class="step-text">Insert at the end of the existing field set in <code>src/buildings.ts</code> (around line 105, after the existing <code>invalid?: boolean</code>). Both mutable + optional &mdash; matches the pattern of <code>cargoLabel</code> (mutable, optional, written at placement) and <code>constructionRemainingMs</code> (mutable, optional, decremented in the economy tick).</p>
+            <div class="code-block"><div class="file-label">src/buildings.ts &mdash; immediately after the `invalid?: boolean` field (around line 105)</div><div class="code"><pre>  <span class="cm">/** True if the building's footprint no longer matches terrain after biome change. */</span>
+  invalid?: boolean;
+<span class="add">  /** terrain_modifier v5 — player's pick for the target TerrainKind, chosen</span>
+<span class="add">   *  at placement-time via terrain-modifier-target-picker.ts (Task 5).</span>
+<span class="add">   *  Meaningful ONLY for buildings whose def carries `terrainModifier: true`</span>
+<span class="add">   *  (currently terrain_modifier). Persisted for the building's lifetime</span>
+<span class="add">   *  &mdash; which is the SHOT_DURATION_MS window, since the modifier</span>
+<span class="add">   *  self-destroys on shot completion (v5 lock</span>
+<span class="add">   *  modifier_self_destroys_after_shot). Optional / undefined for every</span>
+<span class="add">   *  other def. */</span>
+<span class="add">  readonly terrainTarget?: import('./island.js').TerrainKind;</span>
+<span class="add">  /** terrain_modifier v5 — single-shot animation countdown in ms. Set to</span>
+<span class="add">   *  SHOT_DURATION_MS at placement; decremented every advanceIsland segment</span>
+<span class="add">   *  by the segment duration; on the segment driving it to ≤ 0 the shot</span>
+<span class="add">   *  resolves (Task 4): brush tiles get overrides written, the building is</span>
+<span class="add">   *  removed from state.buildings, footprint freed. Missing/undefined ≡ "no</span>
+<span class="add">   *  shot pending" (the modifier never got a target, never fires &mdash;</span>
+<span class="add">   *  shouldn't happen in production but the field is optional for forward-</span>
+<span class="add">   *  compat with legacy saves). */</span>
+<span class="add">  terrainShotRemainingMs?: number;</span>
+}</pre></div></div>
+            <p class="step-text"><code>terrainTarget</code> is <code>readonly</code> &mdash; the player picks once at placement and the field is never reassigned (the building is destroyed before another value would be relevant). <code>terrainShotRemainingMs</code> is mutable because the integrator writes to it every segment.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Add the <code>terrainModifier</code> flag to <code>BuildingDef</code> + the def entry</div>
+            <p class="step-text">A single boolean lets the placement-ui (Task 3) and the picker wiring (Task 5) detect this def category cleanly. Add to the <code>BuildingDef</code> type (the same file, near other type-level flags like <code>oceanPlacement</code>), then set it on the <code>terrain_modifier</code> entry.</p>
+            <div class="code-block"><div class="file-label">src/building-defs.ts &mdash; in the BuildingDef type</div><div class="code"><pre>  <span class="cm">// ... existing flags ...</span>
+<span class="add">  /** terrain_modifier v5 — opt-in flag for the 16-tile brush placement preview</span>
+<span class="add">   *  + the terrain-modifier-target-picker pre-placement modal. Defs with this</span>
+<span class="add">   *  flag must declare a 2×2 footprint (SHAPES.square2); placement-ui (Task 3)</span>
+<span class="add">   *  reads the flag to decide whether to paint the brush preview vs. the bare</span>
+<span class="add">   *  footprint outline. Optional / undefined ≡ false for every other def. */</span>
+<span class="add">  readonly terrainModifier?: boolean;</span></pre></div></div>
+            <div class="code-block"><div class="file-label">src/building-defs.ts &mdash; at the terrain_modifier entry (line 1395)</div><div class="code"><pre>  terrain_modifier: {
+    id: 'terrain_modifier',
+    displayName: 'Terrain Modifier',
+    category: 'special',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x804040,
+    stroke: 0x200810,
+    power: { consumes: 100 },
+    placementCost: { steel: 50, gear: 20 },
+    glyph: '◈',
+<span class="add">    terrainModifier: true,</span>
+  },</pre></div></div>
+            <p class="step-text">No recipe row is added &mdash; the modifier doesn't <em>produce</em> resources, it consumes a basket once at placement. The catalog UI already lists the building under category <code>special</code>; nothing else changes in the def metadata.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Extend <code>placeBuilding</code> with the two new overrides</div>
+            <p class="step-text">Mirrors the <code>cargoLabelOverride</code> pattern at <code>src/placement.ts:362</code>. The signature gains two optional trailing params; the body sets the matching fields on the freshly-minted <code>PlacedBuilding</code> when the def has <code>terrainModifier: true</code>. For every other def the overrides are silently ignored, matching how <code>cargoLabelOverride</code> is silently dropped for non-generic-storage defs.</p>
+            <div class="code-block"><div class="file-label">src/placement.ts &mdash; signature (line 339)</div><div class="code"><pre>export function placeBuilding(
+  spec: IslandSpec,
+  state: IslandState,
+  defId: BuildingDefId,
+  localX: number,
+  localY: number,
+  rotation: Rotation,
+  mintId: () =&gt; string,
+  nowMs?: number,
+  cargoLabelOverride?: ResourceId,
+  anchorIslandId?: string,
+<span class="add">  terrainTargetOverride?: import('./island.js').TerrainKind,</span>
+<span class="add">  terrainShotRemainingMsOverride?: number,</span>
+): PlaceBuildingResult {</pre></div></div>
+            <p class="step-text">In the body, after the existing <code>cargoLabel</code> wiring, attach the modifier fields when the def opts in:</p>
+            <div class="code-block"><div class="file-label">src/placement.ts &mdash; inside placeBuilding, where the building literal is constructed</div><div class="code"><pre>  const building: PlacedBuilding = {
+    id: mintId(),
+    defId,
+    x: localX,
+    y: localY,
+    rotation,
+    <span class="cm">// ... existing cargoLabel / anchorIslandId / placedAt etc. wiring ...</span>
+<span class="add">    ...(def.terrainModifier === true</span>
+<span class="add">      ? {</span>
+<span class="add">          terrainTarget: terrainTargetOverride,</span>
+<span class="add">          terrainShotRemainingMs: terrainShotRemainingMsOverride,</span>
+<span class="add">        }</span>
+<span class="add">      : {}),</span>
+  };</pre></div></div>
+            <p class="step-text">The conditional spread mirrors how <code>cargoLabel</code> is conditionally attached (lines 405-410). When the placement-ui doesn't supply <code>terrainTargetOverride</code> (Task 5 hasn't landed yet, or the caller is a non-UI path), the building gets the field present-but-undefined &mdash; identical to the legacy save shape. The economy tick (Task 4) treats <code>terrainShotRemainingMs === undefined</code> as "no shot pending" so the building sits inert; this is the intentional degenerate state for partial commits.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Type-check + build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: tsc clean. The new <code>terrain-modifier.ts</code> compiles with strict mode (the explicit-undefined checks on indexed access satisfy <code>noUncheckedIndexedAccess</code>). Vite builds. No CSS changes.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Run the test suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: all existing tests pass + ~12 new cases in <code>terrain-modifier.test.ts</code>. The classification-coverage test in particular catches "TerrainKind grows but the new kind isn't classified" &mdash; a forward-looking guard.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/terrain-modifier.ts src/terrain-modifier.test.ts src/buildings.ts src/building-defs.ts src/placement.ts
+git commit -F /tmp/terrain-modifier-task2-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/terrain-modifier-task2-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(terrain-modifier): add cost formula + per-instance terrainTarget
+
+Per the v5 design spec (duplication-glitch framing), introduce the
+pure cost / brush / override-write surface for terrain_modifier:
+
+- New module src/terrain-modifier.ts
+  - SHOT_DURATION_MS = 4000
+  - K_RARE_MULT = 1.5, PAYBACK_HORIZON_CYCLES = 90 (spec §04
+    Appendix-A placeholders)
+  - NATURAL_PER_TILE_BASKET = { stone: 5, gear: 2 } per tile × 16
+  - NATURAL_TARGET_TERRAINS / RARE_TARGET_TERRAINS classification
+  - RARE_TARGET_INPUT mapping (rare vein -&gt; corresponding resource)
+  - conversionCostForTarget(target): full-shot basket per
+    p2_brush_target_mismatch = full_brush_charge
+  - brushTilesAt(anchor): 16 tiles (2×2 footprint + 12-tile ring)
+    per v3 lock scope_is_16_tiles_footprint_plus_ring
+  - applyTileOverride(spec, x, y, kind): mutates spec.tileOverrides
+    in place; last-write-wins per p3_overlap_simultaneous
+
+- PlacedBuilding gains two optional fields:
+  - terrainTarget?: TerrainKind  (player's pick, persists for the
+    building's lifetime which is the SHOT_DURATION_MS window)
+  - terrainShotRemainingMs?: number  (single-shot countdown,
+    decremented by the economy tick in Task 4)
+
+- BuildingDef gains a terrainModifier?: boolean flag; set true on
+  the terrain_modifier def entry. placement-ui (Task 3) and the
+  target picker (Task 5) key off the flag.
+
+- placeBuilding gains two trailing optional overrides
+  (terrainTargetOverride, terrainShotRemainingMsOverride) mirroring
+  the cargoLabelOverride pattern.
+
+Building still plays as a catalog stub &mdash; no placement-ui
+brush preview yet (Task 3), no target picker (Task 5), no shot
+resolution (Task 4). All consumer surface is declared, none of it
+fires; the build is green, tests are green.
+
+Tests: src/terrain-modifier.test.ts covers classification
+coverage, cost-formula shape (natural + rare), brush geometry,
+override write lazy-creation + last-write-wins, and the
+end-to-end integration with Task 1's override-aware closure.
+
+Refs docs/superpowers/specs/2026-05-23-terrain-modifier-design.html
+sections 03 + 04 + Task-2 of docs/superpowers/plans/
+2026-05-23-terrain-modifier.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+            <p class="step-text">Trailer check before commit.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 04 — Task 3                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task3">
+      <div class="sec-head"><span class="num">04</span><h2>Task 3: 16-tile brush preview + abort-if-occupied in <code>placement-ui.ts</code></h2></div>
+      <div class="task-card">
+        <p class="task-blurb">When the player arms <code>terrain_modifier</code>, the placement preview paints the full 16-tile brush (4 footprint tiles in standard OK-blue + 12 ring tiles in cyan-dash) so the player can see exactly which tiles will convert. <code>attemptCommit</code> validates the full brush &mdash; any tile outside the union ellipse fails with the standard <code>tile-out-of-bounds</code> reason, ANY occupied tile aborts placement (<code>p2_block_vs_brush = abort_if_any_occupied</code>). <strong>The placement IS the shot:</strong> on successful commit, <code>placeBuilding</code> is called with <code>terrainTarget</code> (from the picker resolved earlier &mdash; or undefined for now, Task 5 wires that) and <code>terrainShotRemainingMs = SHOT_DURATION_MS</code>, kicking off the animated countdown. No new map-click mode in <code>input.ts</code> &mdash; the placement-ui IS the brush picker per <code>p2_invocation = shot_at_placement</code>.</p>
+        <p class="deps-line">Dependencies: <b>Tasks 1+2</b> &mdash; uses <code>brushTilesAt</code>, <code>SHOT_DURATION_MS</code>, the <code>def.terrainModifier</code> flag, and the new <code>placeBuilding</code> overrides.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/placement-ui.ts</code> <span class="tag">&mdash; brush preview branch + commit routing</span></li>
+            <li>Modify: <code>src/placement.ts</code> <span class="tag">&mdash; <code>validatePlacement</code> checks brush tiles for occupancy + ellipse</span></li>
+            <li>Modify: <code>src/placement.test.ts</code> <span class="tag">&mdash; new cases for brush-overlap abort + out-of-ellipse handling</span></li>
+            <li>Modify: <code>src/placement-ui.test.ts</code> <span class="tag">&mdash; smoke-test the brush-aware commit path</span></li>
+          </ul>
+        </div>
+
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Extend <code>validatePlacement</code> to walk the brush for <code>terrainModifier</code> defs</div>
+            <p class="step-text">The default <code>validatePlacement</code> already walks <code>footprintTiles(def.footprint, ...)</code> for the standard footprint-overlap and tile-requirement checks. For <code>terrainModifier</code> defs, the occupancy check needs to consider the FULL 16-tile brush, not just the 4-tile footprint &mdash; otherwise the player could place a modifier whose ring covers an existing Mine and silently overwrite the ore vein under it. The ellipse check uses the same <code>islandInscribedAny</code> probe.</p>
+            <div class="code-block"><div class="file-label">src/placement.ts &mdash; inside validatePlacement, after the existing footprint-overlap loop</div><div class="code"><pre>  <span class="cm">// ... existing footprint-overlap + tile-requirement checks ...</span>
+
+<span class="add">  <span class="cm">// terrain_modifier v5: the brush is 16 tiles (2×2 footprint + 12 ring).</span></span>
+<span class="add">  <span class="cm">// Per p2_block_vs_brush = abort_if_any_occupied, ANY occupied tile in the</span></span>
+<span class="add">  <span class="cm">// brush aborts placement &mdash; not just the 4 footprint tiles. Per</span></span>
+<span class="add">  <span class="cm">// p2_water_ellipse = inside_ellipse_only, every brush tile must lie</span></span>
+<span class="add">  <span class="cm">// inside the island's union ellipse (out-of-ellipse tiles do NOT abort</span></span>
+<span class="add">  <span class="cm">// placement &mdash; they are SKIPPED at shot resolution per</span></span>
+<span class="add">  <span class="cm">// p3_ellipse_boundary = skip_outside_full_charge &mdash; but at least the</span></span>
+<span class="add">  <span class="cm">// 4 footprint tiles must be inside, that's the standard footprint</span></span>
+<span class="add">  <span class="cm">// constraint and already enforced above).</span></span>
+<span class="add">  if (def.terrainModifier === true) {</span>
+<span class="add">    const brush = brushTilesAt(localX, localY);</span>
+<span class="add">    <span class="cm">// Build a set of occupied tile keys from all existing buildings on the</span></span>
+<span class="add">    <span class="cm">// island. Mirrors the footprint-overlap loop above but indexes once for</span></span>
+<span class="add">    <span class="cm">// the O(brush × existing) lookup to drop to O(brush + existing).</span></span>
+<span class="add">    const occupied = new Set&lt;string&gt;();</span>
+<span class="add">    for (const b of state.buildings) {</span>
+<span class="add">      const bdef = BUILDING_DEFS[b.defId];</span>
+<span class="add">      const btiles = footprintTiles(</span>
+<span class="add">        bdef.footprint, b.x, b.y, (b.rotation ?? 0) as Rotation,</span>
+<span class="add">      );</span>
+<span class="add">      for (const t of btiles) occupied.add(`${t.x},${t.y}`);</span>
+<span class="add">    }</span>
+<span class="add">    for (const t of brush) {</span>
+<span class="add">      if (occupied.has(`${t.x},${t.y}`)) {</span>
+<span class="add">        return { ok: false, reason: 'overlap' };</span>
+<span class="add">      }</span>
+<span class="add">    }</span>
+<span class="add">    <span class="cm">// Note: out-of-ellipse brush tiles are intentionally NOT rejected here.</span></span>
+<span class="add">    <span class="cm">// Spec p3_ellipse_boundary = skip_outside_full_charge: those tiles are</span></span>
+<span class="add">    <span class="cm">// charged for but silently skipped at shot resolution (Task 4).</span></span>
+<span class="add">  }</span></pre></div></div>
+            <p class="step-text">Add the corresponding imports at the top of <code>placement.ts</code>:</p>
+            <div class="code-block"><div class="file-label">src/placement.ts &mdash; new imports at top</div><div class="code"><pre><span class="add">import { brushTilesAt } from './terrain-modifier.js';</span></pre></div></div>
+            <p class="step-text">The <code>'overlap'</code> reason already exists in the <code>PlacementReason</code> union; reusing it keeps the surface unchanged. The placement-ui status label paints "OVERLAP" identically for footprint-overlap and brush-overlap, which is acceptable &mdash; the player sees a brush highlighted in WARN color and the answer is "the ring is hitting something."</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Paint the 16-tile brush preview in <code>placement-ui.ts</code></div>
+            <p class="step-text">Inside <code>paintOutlineAndLabel</code>, after the existing single-footprint-rect paint, add a brush-aware branch. The standard outline stays for non-modifier defs; the brush branch overdraws when the def has <code>terrainModifier: true</code>. Per-tile color: footprint tiles in OK-blue (matching the existing <code>OK_COLOR</code> when valid, <code>WARN_COLOR</code> when overlapping), ring tiles in a dimmer cyan (alpha 0.35) so the player visually distinguishes footprint-vs-ring.</p>
+            <div class="code-block"><div class="file-label">src/placement-ui.ts &mdash; inside paintOutlineAndLabel, after the existing footprint loop</div><div class="code"><pre>  <span class="cm">// ... existing footprint outline + label ...</span>
+
+<span class="add">  <span class="cm">// terrain_modifier v5 brush preview &mdash; overdraw the 12-tile ring with</span></span>
+<span class="add">  <span class="cm">// a dimmer cyan so the player sees the FULL 16-tile shot scope. Footprint</span></span>
+<span class="add">  <span class="cm">// is already painted by the loop above; the ring is the union of the 4×4</span></span>
+<span class="add">  <span class="cm">// brush block minus the 2×2 footprint.</span></span>
+<span class="add">  if (def.terrainModifier === true) {</span>
+<span class="add">    const brush = brushTilesAt(localX, localY);</span>
+<span class="add">    const footKeys = new Set(tiles.map((t) =&gt; `${t.x},${t.y}`));</span>
+<span class="add">    for (const t of brush) {</span>
+<span class="add">      const key = `${t.x},${t.y}`;</span>
+<span class="add">      if (footKeys.has(key)) continue; <span class="cm">// already drawn by footprint loop</span></span>
+<span class="add">      const tileWx = (targetSpec.cx + t.x) * TILE_PX - TILE_PX / 2;</span>
+<span class="add">      const tileWy = (targetSpec.cy + t.y) * TILE_PX - TILE_PX / 2;</span>
+<span class="add">      outlineGfx</span>
+<span class="add">        .rect(tileWx, tileWy, TILE_PX, TILE_PX)</span>
+<span class="add">        .stroke({ width: 1, color, alpha: 0.6 })</span>
+<span class="add">        .fill({ color, alpha: 0.10 });</span>
+<span class="add">    }</span>
+<span class="add">    <span class="cm">// Annotate the label tail with the player's chosen target (when set) so</span></span>
+<span class="add">    <span class="cm">// the brush + label form one coherent preview.</span></span>
+<span class="add">    if (activeTerrainTarget !== undefined) {</span>
+<span class="add">      labelText.text = labelText.text + `  ·  &rarr; ${activeTerrainTarget.toUpperCase()}`;</span>
+<span class="add">    }</span>
+<span class="add">  }</span></pre></div></div>
+            <p class="step-text">Imports + module-state additions at the top of the file:</p>
+            <div class="code-block"><div class="file-label">src/placement-ui.ts &mdash; imports + state inside mountPlacementUi</div><div class="code"><pre><span class="add">import { brushTilesAt, SHOT_DURATION_MS } from './terrain-modifier.js';</span>
+<span class="add">import type { TerrainKind } from './island.js';</span>
+
+<span class="cm">// ... inside mountPlacementUi, alongside activeCargoLabel ...</span>
+<span class="add">  <span class="cm">/** terrain_modifier v5 — target TerrainKind picked at picker-time. Undefined</span></span>
+<span class="add">   *  for non-modifier defs and during the pending window before</span>
+<span class="add">   *  pickTerrainTarget resolves. Threaded into placeBuilding on commit. */</span>
+<span class="add">  let activeTerrainTarget: TerrainKind | undefined = undefined;</span></pre></div></div>
+            <p class="step-text">The <code>color</code> variable used for the ring stroke is the same <code>OK_COLOR</code> / <code>WARN_COLOR</code> the footprint loop computes; the inside the branch refers to the local binding (already in scope inside <code>paintOutlineAndLabel</code>).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Route the commit through the modifier overrides</div>
+            <p class="step-text">Inside <code>attemptCommit</code>, the land-path branch already calls <code>placeBuilding</code> with the existing override slots. Add the two modifier override args when <code>def.terrainModifier === true</code>:</p>
+            <div class="code-block"><div class="file-label">src/placement-ui.ts &mdash; inside attemptCommit's land branch (around line 677)</div><div class="code"><pre>    <span class="cm">// ... existing validatePlacement / cost re-check ...</span>
+    const result = placeBuilding(
+      targetSpec,
+      targetState,
+      activeDefId,
+      localX,
+      localY,
+      rotation,
+      () =&gt; placedIdFor(localX, localY),
+      undefined,
+      activeCargoLabel,
+<span class="add">      undefined, <span class="cm">// anchorIslandId &mdash; land path, never set</span></span>
+<span class="add">      def.terrainModifier === true ? activeTerrainTarget : undefined,</span>
+<span class="add">      def.terrainModifier === true ? SHOT_DURATION_MS : undefined,</span>
+    );
+    if (!result.ok) return { ok: false, reason: result.reason };
+    cancel();
+    deps.onPlaced();
+    return { ok: true };
+  }</pre></div></div>
+            <p class="step-text">The existing <code>placeBuilding</code> call passed 9 args (last being <code>activeCargoLabel</code>); the new call adds the <code>anchorIslandId = undefined</code> arg explicitly (it sat at position 10 unset before but Task 2 added the two modifier override slots at positions 11 + 12, so we must pass <code>undefined</code> for 10 to skip past it). When the player armed a non-modifier def, both modifier args pass <code>undefined</code> and the placement behaves exactly as before.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Reset <code>activeTerrainTarget</code> in <code>begin</code> / <code>cancel</code></div>
+            <p class="step-text">Mirror the <code>activeCargoLabel</code> reset pattern so re-arming a non-modifier def can't leak a stale target into a future modifier placement.</p>
+            <div class="code-block"><div class="file-label">src/placement-ui.ts &mdash; inside begin() and cancel()</div><div class="code"><pre>  function begin(defId: BuildingDefId): void {
+    <span class="cm">// ... existing setup ...</span>
+    rotation = 0;
+    cursorSeen = false;
+    activeCargoLabel = undefined;
+<span class="add">    activeTerrainTarget = undefined;</span>
+    <span class="cm">// ... existing pickCargoLabel branch ...</span>
+  }
+
+  function cancel(): void {
+    beginEpoch++;
+    if (!active) return;
+    active = false;
+    activeDefId = null;
+    activeCargoLabel = undefined;
+<span class="add">    activeTerrainTarget = undefined;</span>
+    rotation = 0;
+    previewLayer.visible = false;
+    statusLayer.visible = false;
+  }</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Add the placement test cases</div>
+            <p class="step-text">Extend <code>src/placement.test.ts</code> with three scenarios: (1) a clean 16-tile brush over empty terrain commits successfully; (2) an existing building under any ring tile aborts placement with <code>reason: 'overlap'</code>; (3) the rectangle <code>brushTilesAt</code> emits is exactly 16 entries centred on the anchor.</p>
+            <div class="code-block"><div class="file-label">src/placement.test.ts &mdash; append a new describe block</div><div class="code"><pre>describe('placement &mdash; terrain_modifier brush', () =&gt; {
+  function makeSpec(): IslandSpec {
+    return attachTerrainAt({
+      id: 'test', cx: 0, cy: 0, majorRadius: 20, minorRadius: 20,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+  }
+
+  it('accepts a clean 16-tile brush over empty terrain', () =&gt; {
+    const spec = makeSpec();
+    const state = makeInitialIslandState(spec, 0);
+    state.inventory.steel = 100; state.inventory.gear = 100;
+    const v = validatePlacement(spec, state, 'terrain_modifier', 0, 0, 0);
+    expect(v.ok).toBe(true);
+  });
+
+  it('aborts when an existing building sits under a ring tile', () =&gt; {
+    const spec = makeSpec();
+    const state = makeInitialIslandState(spec, 0);
+    <span class="cm">// Place a 1×1 building at (-1, -1) &mdash; a ring tile of a modifier at (0,0).</span>
+    state.buildings.push({
+      id: 'b1', defId: 'workshop', x: -1, y: -1, rotation: 0,
+    });
+    state.inventory.steel = 100; state.inventory.gear = 100;
+    const v = validatePlacement(spec, state, 'terrain_modifier', 0, 0, 0);
+    expect(v.ok).toBe(false);
+    if (!v.ok) expect(v.reason).toBe('overlap');
+  });
+
+  it('does NOT abort when a brush tile lies outside the ellipse', () =&gt; {
+    <span class="cm">// A very small island where the ring spills off the edge.</span>
+    const spec = attachTerrainAt({
+      id: 'tiny', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    state.inventory.steel = 100; state.inventory.gear = 100;
+    const v = validatePlacement(spec, state, 'terrain_modifier', 0, 0, 0);
+    <span class="cm">// Tile-out-of-bounds reasons may apply from the standard footprint check,</span>
+    <span class="cm">// but if the 2×2 footprint itself fits the ellipse, the brush should not</span>
+    <span class="cm">// itself fail validation just because the RING exceeds &mdash; out-of-ellipse</span>
+    <span class="cm">// ring tiles are skipped at shot time, not rejected at placement.</span>
+    <span class="cm">// Adjust the assertion to whichever your test fixture produces; the</span>
+    <span class="cm">// invariant is: this is NOT an 'overlap' failure.</span>
+    if (!v.ok) expect(v.reason).not.toBe('overlap');
+  });
+});</pre></div></div>
+            <p class="step-text">For the placement-ui side, the existing <code>placement-ui.test.ts</code> already has a headless fixture pattern; add one case that arms <code>terrain_modifier</code> via <code>begin</code>, commits, and asserts the resulting <code>PlacedBuilding</code> carries <code>terrainShotRemainingMs = SHOT_DURATION_MS</code> (target may be undefined since Task 5's picker isn't yet wired).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Type-check + build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: tsc clean. <code>activeTerrainTarget</code> is correctly typed <code>TerrainKind | undefined</code>; the conditional spread + <code>def.terrainModifier === true</code> narrow correctly. No new CSS.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Test + visual smoke</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: all existing tests + the three new <code>placement.test.ts</code> cases + the one new <code>placement-ui.test.ts</code> case pass.</p>
+            <p class="step-text">Per AGENTS.md "Dev server" workflow: <code>npm run build</code> repopulates <code>dist/</code>, reload <code>https://islands.nitjsefni.eu/</code>. Use <code>mcp__daedalus__screenshot</code> to verify:</p>
+            <p class="step-text">(a) Open the Buildings panel, select Terrain Modifier &mdash; the cursor enters placement mode.<br>
+            (b) The 16-tile brush (2&times;2 solid + 12-tile ring) paints under the cursor and tracks mouse movement.<br>
+            (c) Move the cursor so the ring overlaps an existing building &mdash; the brush turns WARN red.<br>
+            (d) Click on clean terrain &mdash; the modifier places, the building appears, and (because Task 4 isn't landed yet) it just sits there with an undefined countdown; the building will look static but is a valid placement.<br>
+            (e) Confirm no console errors, no broken textures.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/placement.ts src/placement-ui.ts src/placement.test.ts src/placement-ui.test.ts
+git commit -F /tmp/terrain-modifier-task3-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/terrain-modifier-task3-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(placement-ui): terrain_modifier 16-tile brush preview
+
+Per the v5 design spec (p2_invocation = shot_at_placement), the
+placement preview IS the brush picker for terrain_modifier. When
+the player arms terrain_modifier:
+
+- The cursor paints the full 16-tile brush (2x2 footprint + 12-tile
+  ring) so the player sees the exact shot scope.
+- validatePlacement walks the FULL brush (not just the footprint)
+  for occupancy checks per p2_block_vs_brush =
+  abort_if_any_occupied. Any existing building under any ring tile
+  aborts placement with reason: 'overlap'.
+- Per p3_ellipse_boundary = skip_outside_full_charge, out-of-
+  ellipse brush tiles do NOT abort placement (they are skipped at
+  shot resolution in Task 4; the player is still charged for them).
+- On commit, placeBuilding is called with terrainTarget (from
+  Task 5's picker; undefined for now) and terrainShotRemainingMs
+  = SHOT_DURATION_MS (= 4000), kicking off the countdown.
+
+The shot itself doesn't fire yet &mdash; Task 4 wires the tick.
+Currently a committed modifier sits inert with a stale countdown
+field; once Task 4 lands the countdown decrements every segment.
+
+Tests: 3 new placement.test.ts cases (clean brush, ring-overlap
+abort, out-of-ellipse permitted) + 1 placement-ui.test.ts case
+asserting the committed PlacedBuilding carries the modifier
+overrides.
+
+Refs docs/superpowers/specs/2026-05-23-terrain-modifier-design.html
+phase-2 + phase-3 pickers + Task-3 of docs/superpowers/plans/
+2026-05-23-terrain-modifier.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 05 — Task 5                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task5">
+      <div class="sec-head"><span class="num">05</span><h2>Task 5: target-biome picker (<code>terrain-modifier-target-picker.ts</code>)</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Before the placement-ui arms the brush, the player must pick the target <code>TerrainKind</code>. Mirrors the cargo-label-picker pattern exactly: a new <code>mountTerrainModifierTargetPicker(parent)</code> factory returns a handle with a <code>pick()</code> method that resolves with a <code>TerrainKind</code> or <code>null</code> (cancel). The modal lists every kind (natural and rare-vein) grouped by category with a live cost preview rendered from <code>conversionCostForTarget</code> &mdash; players see "5 stone + 2 gear per tile (80 stone + 32 gear total)" for natural targets and "135 uranium_ore (rare)" for rare targets before committing. Wires into <code>placement-ui</code>'s deps slot so <code>begin('terrain_modifier')</code> opens the picker first; on resolve the picker's pick writes through to <code>activeTerrainTarget</code> and the placement arms with the brush preview.</p>
+        <p class="deps-line">Dependencies: <b>Task 2</b> (the cost helper drives the preview) &middot; <b>Task 3</b> not strictly required (the field is already declared by Task 3; Task 5 could land before 3 if necessary).</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Create: <code>src/terrain-modifier-target-picker.ts</code> <span class="tag">&mdash; DOM modal mirroring <code>cargo-label-picker.ts</code></span></li>
+            <li>Modify: <code>src/placement-ui.ts</code> <span class="tag">&mdash; <code>pickTerrainTarget</code> deps slot + async open in <code>begin()</code></span></li>
+            <li>Modify: <code>src/main.ts</code> <span class="tag">&mdash; mount the picker, wire it into placement-ui deps</span></li>
+          </ul>
+        </div>
+
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Create <code>src/terrain-modifier-target-picker.ts</code></div>
+            <p class="step-text">A near-clone of <code>src/cargo-label-picker.ts</code> with the resource list swapped for the <code>TerrainKind</code> set and the cost preview shown next to each option. Uses the shared <code>mountModal</code> chrome. Group order: Natural (grass, sand, stone, water, tree, ice, magma_vent), then Rare-vein (alphabetical within group). The picker handle exposes only <code>pick()</code>; the previously-pending resolution is squashed to <code>null</code> on a fresh call (same supersede pattern as cargo-label).</p>
+            <div class="code-block"><div class="file-label">src/terrain-modifier-target-picker.ts &mdash; new file</div><div class="code"><pre><span class="cm">// §03 terrain_modifier (v5 spec) — placement-time target-biome picker. Opened</span>
+<span class="cm">// BEFORE the placement-ui arms the brush; the resolved TerrainKind threads</span>
+<span class="cm">// into PlacedBuilding.terrainTarget on commit. Mirrors cargo-label-picker.ts</span>
+<span class="cm">// (placement-time generic-storage label picker): same modal chrome, same</span>
+<span class="cm">// promise-supersede pattern, same Escape/scrim cancel semantics.</span>
+
+import {
+  conversionCostForTarget,
+  NATURAL_TARGET_TERRAINS,
+  RARE_TARGET_TERRAINS,
+  RARE_TARGET_INPUT,
+} from './terrain-modifier.js';
+import type { TerrainKind } from './island.js';
+import type { ResourceId } from './recipes.js';
+import { mountModal, type ModalHandle } from './ui-modal.js';
+
+export interface TerrainTargetPickerHandle {
+  <span class="cm">/** Open the picker. Resolves with the player's TerrainKind pick or null on</span>
+  <span class="cm"> *  cancel. Mirrors CargoLabelPickerHandle.pick semantics: a previously-</span>
+  <span class="cm"> *  pending promise gets resolved as null before the fresh modal opens. */</span>
+  pick(): Promise&lt;TerrainKind | null&gt;;
+}
+
+const NATURAL_ORDER: TerrainKind[] = [
+  'grass', 'sand', 'stone', 'water', 'tree', 'ice', 'magma_vent',
+];
+
+function rareSortedList(): TerrainKind[] {
+  return Array.from(RARE_TARGET_TERRAINS).sort((a, b) =&gt; (a &lt; b ? -1 : a &gt; b ? 1 : 0));
+}
+
+function formatBasket(basket: Partial&lt;Record&lt;ResourceId, number&gt;&gt;): string {
+  const entries = Object.entries(basket).filter(([, n]) =&gt; (n ?? 0) &gt; 0);
+  if (entries.length === 0) return '(free)';
+  return entries.map(([r, n]) =&gt; `${n} ${r}`).join(' + ');
+}
+
+export function mountTerrainModifierTargetPicker(
+  parentEl: HTMLElement,
+): TerrainTargetPickerHandle {
+  let pending: ((value: TerrainKind | null) =&gt; void) | null = null;
+  let selected: TerrainKind = 'grass';
+
+  function resolveWith(value: TerrainKind | null): void {
+    if (pending) {
+      pending(value);
+      pending = null;
+    }
+    handle.hide();
+  }
+
+  function cancel(): void {
+    resolveWith(null);
+  }
+
+  const buttonByKind = new Map&lt;TerrainKind, HTMLButtonElement&gt;();
+
+  function makeRow(kind: TerrainKind): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText =
+      'display:flex;justify-content:space-between;align-items:center;' +
+      'width:100%;padding:8px 12px;margin:2px 0;border-radius:6px;' +
+      'border:1px solid var(--ri-border);background:transparent;' +
+      'color:var(--ri-fg-1);cursor:pointer;font-family:ui-monospace,monospace;';
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = kind.toUpperCase();
+    const costSpan = document.createElement('span');
+    costSpan.textContent = formatBasket(conversionCostForTarget(kind));
+    costSpan.style.color = NATURAL_TARGET_TERRAINS.has(kind)
+      ? 'var(--ri-fg-3)'
+      : 'var(--ri-clay)';
+    btn.appendChild(nameSpan);
+    btn.appendChild(costSpan);
+    btn.addEventListener('click', () =&gt; resolveWith(kind));
+    btn.addEventListener('mouseenter', () =&gt; { selected = kind; });
+    buttonByKind.set(kind, btn);
+    return btn;
+  }
+
+  const body = document.createElement('div');
+  body.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding:10px 12px;max-height:60vh;overflow:auto;';
+
+  const natHead = document.createElement('div');
+  natHead.textContent = 'NATURAL TARGETS';
+  natHead.style.cssText = 'font-family:ui-monospace,monospace;font-size:11px;letter-spacing:0.06em;color:var(--ri-fg-3);';
+  body.appendChild(natHead);
+  for (const k of NATURAL_ORDER) body.appendChild(makeRow(k));
+
+  const rareHead = document.createElement('div');
+  rareHead.textContent = 'RARE VEINS &mdash; cost scales by K × rate × 90';
+  rareHead.style.cssText = 'font-family:ui-monospace,monospace;font-size:11px;letter-spacing:0.06em;color:var(--ri-clay);margin-top:6px;';
+  body.appendChild(rareHead);
+  for (const k of rareSortedList()) body.appendChild(makeRow(k));
+
+  const handle: ModalHandle = mountModal(parentEl, {
+    id: 'terrain-modifier-target-picker',
+    title: 'TERRAIN MODIFIER &mdash; pick target',
+    body,
+    onClose: cancel,
+  });
+  handle.hide();
+
+  function onKeydown(e: KeyboardEvent): void {
+    if (!handle.isVisible()) return;
+    if (e.key === 'Escape') { e.preventDefault(); cancel(); return; }
+    if (e.key === 'Enter') { e.preventDefault(); resolveWith(selected); return; }
+  }
+  document.addEventListener('keydown', onKeydown, true);
+
+  return {
+    pick(): Promise&lt;TerrainKind | null&gt; {
+      if (pending) { pending(null); pending = null; }
+      selected = 'grass';
+      return new Promise&lt;TerrainKind | null&gt;((resolve) =&gt; {
+        pending = resolve;
+        handle.show();
+      });
+    },
+  };
+}
+</pre></div></div>
+            <p class="step-text">The exact <code>mountModal</code> option shape comes from <code>cargo-label-picker.ts</code>'s call &mdash; cross-check the field names there before committing. The <code>RARE_TARGET_INPUT</code> import is reserved for a future "show me which resource this costs" tooltip; not strictly needed in the first cut but the consumer is small and surfaced via <code>formatBasket</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Add a <code>pickTerrainTarget</code> deps slot in <code>placement-ui.ts</code></div>
+            <p class="step-text">Extend <code>PlacementUiDeps</code> with an optional <code>pickTerrainTarget?: () =&gt; Promise&lt;TerrainKind | null&gt;</code>. Inside <code>begin()</code>, when the def has <code>terrainModifier: true</code> and the dep is wired, open the picker BEFORE arming the brush (same async pattern as the existing <code>pickCargoLabel</code> generic-storage branch).</p>
+            <div class="code-block"><div class="file-label">src/placement-ui.ts &mdash; PlacementUiDeps interface</div><div class="code"><pre>export interface PlacementUiDeps {
+  <span class="cm">// ... existing deps ...</span>
+  pickCargoLabel?: () =&gt; Promise&lt;ResourceId | null&gt;;
+<span class="add">  pickTerrainTarget?: () =&gt; Promise&lt;TerrainKind | null&gt;;</span>
+  pickAnchor?: (cands: ReadonlyArray&lt;string&gt;) =&gt; Promise&lt;string | null&gt;;
+  <span class="cm">// ... rest ...</span>
+}</pre></div></div>
+            <p class="step-text">Inside <code>begin()</code>, BEFORE the existing <code>isGeneric &amp;&amp; deps.pickCargoLabel</code> branch (or, equivalently, as a parallel branch &mdash; the two are mutually exclusive since no def is both generic-storage AND <code>terrainModifier</code>), insert:</p>
+            <div class="code-block"><div class="file-label">src/placement-ui.ts &mdash; inside begin() before the isGeneric branch</div><div class="code"><pre>  function begin(defId: BuildingDefId): void {
+    const def = BUILDING_DEFS[defId];
+    const isGeneric = def.storage?.category === 'generic';
+<span class="add">    const isTerrainModifier = def.terrainModifier === true;</span>
+    const epoch = ++beginEpoch;
+    rotation = 0;
+    cursorSeen = false;
+    activeCargoLabel = undefined;
+    activeTerrainTarget = undefined;
+
+<span class="add">    if (isTerrainModifier &amp;&amp; deps.pickTerrainTarget) {</span>
+<span class="add">      active = false;</span>
+<span class="add">      activeDefId = null;</span>
+<span class="add">      previewLayer.visible = false;</span>
+<span class="add">      statusLayer.visible = false;</span>
+<span class="add">      deps.pickTerrainTarget().then((picked) =&gt; {</span>
+<span class="add">        if (epoch !== beginEpoch) return; <span class="cm">// stale</span></span>
+<span class="add">        if (picked === null) return; <span class="cm">// player cancelled; placement aborts</span></span>
+<span class="add">        active = true;</span>
+<span class="add">        activeDefId = defId;</span>
+<span class="add">        activeTerrainTarget = picked;</span>
+<span class="add">        paintOutlineAndLabel();</span>
+<span class="add">      });</span>
+<span class="add">      return;</span>
+<span class="add">    }</span>
+
+    if (isGeneric &amp;&amp; deps.pickCargoLabel) {
+      <span class="cm">// ... existing cargo-label branch unchanged ...</span>
+    }
+
+    <span class="cm">// ... non-generic, non-modifier &mdash; arm immediately ...</span>
+    active = true;
+    activeDefId = defId;
+    paintOutlineAndLabel();
+  }</pre></div></div>
+            <p class="step-text">If <code>deps.pickTerrainTarget</code> is unwired (test fixtures, headless), the modifier is armed with <code>activeTerrainTarget = undefined</code> and the player can place but no target was chosen; Task 4's shot will see <code>terrainTarget === undefined</code> and short-circuit the conversion (no overrides written, but the building still self-destroys to keep semantics consistent). In production main.ts always wires the picker, so the headless case is test-only.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Mount the picker in <code>main.ts</code> and wire into placement-ui deps</div>
+            <p class="step-text">Locate the existing <code>mountCargoLabelPicker(document.body)</code> call (around the mount block that creates UI singletons) and add a sibling line for the terrain target picker. Then thread the handle into the <code>placementUi</code> deps object.</p>
+            <div class="code-block"><div class="file-label">src/main.ts &mdash; alongside cargoLabelPicker mount + deps wiring</div><div class="code"><pre><span class="add">import { mountTerrainModifierTargetPicker } from './terrain-modifier-target-picker.js';</span>
+
+<span class="cm">// ... at the picker-mount site ...</span>
+const cargoLabelPicker = mountCargoLabelPicker(document.body);
+<span class="add">const terrainTargetPicker = mountTerrainModifierTargetPicker(document.body);</span>
+
+<span class="cm">// ... at the placementUi factory call ...</span>
+const placementUi = mountPlacementUi({
+  <span class="cm">// ... existing deps ...</span>
+  pickCargoLabel: () =&gt; cargoLabelPicker.pick(),
+<span class="add">  pickTerrainTarget: () =&gt; terrainTargetPicker.pick(),</span>
+  <span class="cm">// ... rest of deps ...</span>
+});</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Type-check + build + test</div>
+            <p class="step-text cmd">Run: <code>npm run build &amp;&amp; npm test</code></p>
+            <p class="step-text">Expected: tsc clean, all existing tests pass. There are no new dedicated tests for the picker (the cargo-label-picker doesn't have one either &mdash; the modal pattern is exercised via integration in placement-ui). Visual smoke: open Buildings &rarr; Terrain Modifier; the picker modal appears with both groups; clicking a kind closes the modal and the brush preview arms with the chosen target shown in the label tail.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/terrain-modifier-target-picker.ts src/placement-ui.ts src/main.ts
+git commit -F /tmp/terrain-modifier-task5-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/terrain-modifier-task5-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(terrain-modifier): placement-time target-biome picker
+
+Per the v5 design spec (conversion_target = building_choice +
+p3_target_biome_restriction = any_tile_including_veins), when the
+player arms terrain_modifier the placement flow opens a modal
+listing every TerrainKind grouped Natural / Rare-vein, each with
+a live cost preview rendered from conversionCostForTarget.
+
+Pattern mirrors cargo-label-picker.ts (placement-time generic-
+storage picker):
+- mountTerrainModifierTargetPicker(parent) returns
+  { pick(): Promise&lt;TerrainKind | null&gt; }
+- placement-ui's begin() opens the picker BEFORE arming the brush
+- player's pick threads through PlacedBuilding.terrainTarget on
+  commit; cancel aborts placement entirely (no building created)
+
+Wiring: main.ts mounts the picker alongside cargoLabelPicker and
+passes a pickTerrainTarget getter into the placementUi deps slot.
+Headless tests with no picker dep arm with terrainTarget =
+undefined (treated as no-op at shot time by Task 4).
+
+Refs docs/superpowers/specs/2026-05-23-terrain-modifier-design.html
+phase-1 conversion_target + phase-3 target_biome_restriction +
+Task-5 of docs/superpowers/plans/2026-05-23-terrain-modifier.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 06 — Task 4                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task4">
+      <div class="sec-head"><span class="num">06</span><h2>Task 4: shot tick + override write + self-destroy + re-render</h2></div>
+      <div class="task-card">
+        <p class="task-blurb"><strong>The feature lights up here.</strong> The <code>terrainShotRemainingMs</code> counter participates in <code>advanceIsland</code>'s piecewise integration the same way <code>constructionRemainingMs</code> does &mdash; bounding segment ends so the counter never overshoots zero. When a segment drives the counter to ≤ 0, the shot resolves: walk the 16 brush tiles, skip out-of-ellipse tiles (per <code>p3_ellipse_boundary = skip_outside_full_charge</code>), call <code>applyTileOverride</code> for the rest with the building's <code>terrainTarget</code>, remove the modifier from <code>state.buildings</code>, run the standard invalidation pass (mirror <code>universe-editor.ts:91-110</code>) so any building whose <code>requiredTile</code> is now violated gets <code>invalid = true</code>, and finally trigger <code>rebuildWorldLayers</code> via a callback supplied by main.ts. The cyan arc in <code>building-alerts-overlay.ts</code> paints the countdown so the player sees the shot landing.</p>
+        <p class="deps-line">Dependencies: <b>Tasks 1+2+3+5</b>. This is the consumer of every other task's surface.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/economy.ts</code> <span class="tag">&mdash; tick the counter inside <code>advanceIsland</code>; bound segments by the next shot-end</span></li>
+            <li>Modify: <code>src/main.ts</code> <span class="tag">&mdash; supply the shot-resolution callback; rebuild on fire</span></li>
+            <li>Modify: <code>src/building-alerts-overlay.ts</code> <span class="tag">&mdash; second arc branch for <code>terrainShotRemainingMs</code></span></li>
+            <li>Modify: <code>src/terrain-modifier.ts</code> <span class="tag">&mdash; add <code>resolveShot</code> helper</span></li>
+            <li>Modify: <code>src/terrain-modifier.test.ts</code> <span class="tag">&mdash; tests for <code>resolveShot</code></span></li>
+            <li>Modify: <code>src/economy.test.ts</code> <span class="tag">&mdash; tick + fire integration test</span></li>
+          </ul>
+        </div>
+
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add a <code>resolveShot</code> helper in <code>terrain-modifier.ts</code></div>
+            <p class="step-text">The mutation logic of "walk brush + skip out-of-ellipse + write overrides + remove modifier + invalidate dependents" is small but has enough moving parts that hoisting it to the pure module keeps Task 4's integration in <code>economy.ts</code> + <code>main.ts</code> mechanical. The helper takes the spec, the state, the modifier building, and the inscribed-tile predicate (passed in so the pure module doesn't import <code>world.ts</code>'s ellipse code directly).</p>
+            <div class="code-block"><div class="file-label">src/terrain-modifier.ts &mdash; append resolveShot</div><div class="code"><pre><span class="cm">// ---------------------------------------------------------------------------</span>
+<span class="cm">// Shot resolution — Task 4's pure mutation primitive</span>
+<span class="cm">// ---------------------------------------------------------------------------</span>
+
+import type { IslandState } from './economy.js';
+import { BUILDING_DEFS } from './building-defs.js';
+import { footprintTiles, type Rotation } from './shape-mask.js';
+import type { PlacedBuilding } from './buildings.js';
+
+<span class="cm">/** Resolve a terrain_modifier shot: write tile overrides for every brush</span>
+<span class="cm"> *  tile inside the ellipse, remove the modifier from state.buildings, and</span>
+<span class="cm"> *  re-run the requiredTile invalidation pass against every other building</span>
+<span class="cm"> *  on the island.</span>
+<span class="cm"> *</span>
+<span class="cm"> *  `inscribed` is the island-local "is tile inside the union ellipse?"</span>
+<span class="cm"> *  predicate (typically `(x,y) =&gt; islandInscribedAny(spec, x+spec.cx, y+spec.cy)`).</span>
+<span class="cm"> *  Tiles outside the predicate are SKIPPED, not refunded &mdash; spec</span>
+<span class="cm"> *  p3_ellipse_boundary = skip_outside_full_charge.</span>
+<span class="cm"> *</span>
+<span class="cm"> *  Returns the count of (a) tiles actually written and (b) buildings newly</span>
+<span class="cm"> *  marked invalid, mostly for testing and for the main.ts callback to log. */</span>
+export function resolveShot(
+  spec: IslandSpec,
+  state: IslandState,
+  modifier: PlacedBuilding,
+  inscribed: (localX: number, localY: number) =&gt; boolean,
+): { tilesWritten: number; buildingsInvalidated: number } {
+  let tilesWritten = 0;
+  if (modifier.terrainTarget !== undefined) {
+    const brush = brushTilesAt(modifier.x, modifier.y);
+    for (const t of brush) {
+      if (!inscribed(t.x, t.y)) continue;
+      applyTileOverride(spec, t.x, t.y, modifier.terrainTarget);
+      tilesWritten += 1;
+    }
+  }
+  <span class="cm">// Remove the modifier from state.buildings. The same array is shared by</span>
+  <span class="cm">// reference with spec.buildings (see makeInitialIslandState); splicing on</span>
+  <span class="cm">// either reflects on both.</span>
+  const idx = state.buildings.findIndex((b) =&gt; b.id === modifier.id);
+  if (idx !== -1) state.buildings.splice(idx, 1);
+  <span class="cm">// Invalidation pass &mdash; mirror universe-editor.ts:91-110.</span>
+  let buildingsInvalidated = 0;
+  const terrainAt = spec.terrainAt;
+  if (terrainAt !== undefined) {
+    for (const b of state.buildings) {
+      const def = BUILDING_DEFS[b.defId];
+      if (!def.requiredTile || def.requiredTile.length === 0) continue;
+      const rotation = (b.rotation ?? 0) as Rotation;
+      const ftiles = footprintTiles(def.footprint, b.x, b.y, rotation);
+      let allMatch = true;
+      for (const ft of ftiles) {
+        if (!def.requiredTile.includes(terrainAt(ft.x, ft.y))) { allMatch = false; break; }
+      }
+      const wasInvalid = b.invalid === true;
+      (b as { invalid?: boolean }).invalid = !allMatch;
+      if (!allMatch &amp;&amp; !wasInvalid) buildingsInvalidated += 1;
+    }
+  }
+  return { tilesWritten, buildingsInvalidated };
+}</pre></div></div>
+            <p class="step-text">The helper is pure-ish &mdash; it mutates the passed-in spec / state / building but performs no I/O, no DOM, no PixiJS. Tests in Task 4 Step 5 cover it directly.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Tick the counter in <code>advanceIsland</code></div>
+            <p class="step-text">The counter must participate in the piecewise integrator so a 24-hour offline catch-up fires the shot at the correct simulated moment. Inside the main segment loop in <code>advanceIsland</code> (around <code>economy.ts:1513-1620</code>), compute <code>nextShotMs</code> &mdash; the smallest <code>t + b.terrainShotRemainingMs</code> across all buildings with a positive counter &mdash; and clamp <code>segEndMs</code> by it (the way <code>nextPhaseMs</code>, <code>nextAccelMs</code> etc. are clamped). After the segment integrates, walk modifiers again, decrement <code>terrainShotRemainingMs</code> by the segment duration, and fire <code>resolveShot</code> on any whose counter reached ≤ 0.</p>
+            <div class="code-block"><div class="file-label">src/economy.ts &mdash; inside advanceIsland, near the other segment clamps</div><div class="code"><pre>    <span class="cm">// ... existing nextEventMs / nextPhaseMs / nextSolarMs / nextAccelMs / nextBatteryMs / nextRotationMs ...</span>
+
+<span class="add">    <span class="cm">// terrain_modifier v5 — segment-end clamp by the soonest pending shot.</span></span>
+<span class="add">    <span class="cm">// Without this, a 30s segment containing a 4s shot would integrate past</span></span>
+<span class="add">    <span class="cm">// fire-time and ResolveShot would land at the wrong simulated moment.</span></span>
+<span class="add">    let nextShotMs = Infinity;</span>
+<span class="add">    for (const b of state.buildings) {</span>
+<span class="add">      const rem = b.terrainShotRemainingMs;</span>
+<span class="add">      if (rem !== undefined &amp;&amp; rem &gt; 0) {</span>
+<span class="add">        const fireT = t + rem;</span>
+<span class="add">        if (fireT &lt; nextShotMs) nextShotMs = fireT;</span>
+<span class="add">      }</span>
+<span class="add">    }</span>
+
+    const segEndMs = Math.min(
+      nextEventMs, nextPhaseMs, nextSolarMs, nextAccelMs,
+      nextBatteryMs, nextRotationMs,
+<span class="add">      nextShotMs,</span>
+      nowMs,
+    );
+    const dtSec = (segEndMs - t) / 1000;
+    <span class="cm">// ... existing applyRates / accrueXp / battery / etc. ...</span>
+
+<span class="add">    <span class="cm">// terrain_modifier v5 — decrement and fire. After the segment integrates,</span></span>
+<span class="add">    <span class="cm">// every modifier's counter loses (segEndMs - t) ms. Counters that reach</span></span>
+<span class="add">    <span class="cm">// ≤ 0 fire the shot. We collect fires and dispatch after the loop because</span></span>
+<span class="add">    <span class="cm">// resolveShot mutates state.buildings (splicing the modifier out).</span></span>
+<span class="add">    if (dtSec &gt; 0 &amp;&amp; ctx?.onTerrainShotFire) {</span>
+<span class="add">      const dtMs = dtSec * 1000;</span>
+<span class="add">      const toFire: string[] = [];</span>
+<span class="add">      for (const b of state.buildings) {</span>
+<span class="add">        const rem = b.terrainShotRemainingMs;</span>
+<span class="add">        if (rem === undefined) continue;</span>
+<span class="add">        const next = rem - dtMs;</span>
+<span class="add">        (b as { terrainShotRemainingMs?: number }).terrainShotRemainingMs = Math.max(0, next);</span>
+<span class="add">        if (next &lt;= 0) toFire.push(b.id);</span>
+<span class="add">      }</span>
+<span class="add">      for (const id of toFire) ctx.onTerrainShotFire(id);</span>
+<span class="add">    }</span></pre></div></div>
+            <p class="step-text">Extend <code>RatesContext</code> with the optional callback:</p>
+            <div class="code-block"><div class="file-label">src/economy.ts &mdash; RatesContext interface</div><div class="code"><pre>export interface RatesContext {
+  <span class="cm">// ... existing fields ...</span>
+<span class="add">  <span class="cm">/** terrain_modifier v5 callback — invoked once per modifier whose shot</span></span>
+<span class="add">   *  countdown reached ≤ 0 in the current segment. Receives the building's</span>
+<span class="add">   *  id; the caller (main.ts) is expected to dispatch resolveShot + a</span>
+<span class="add">   *  rebuildWorldLayers() call. The callback fires INSIDE advanceIsland so</span>
+<span class="add">   *  multi-segment catch-up resolves shots in simulated-time order. */</span>
+<span class="add">  readonly onTerrainShotFire?: (buildingId: string) =&gt; void;</span>
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Wire the callback in <code>main.ts</code></div>
+            <p class="step-text">Wherever <code>advanceIsland</code> is called (the main ticker loop), pass an <code>onTerrainShotFire</code> that looks up the building, runs <code>resolveShot</code>, and triggers <code>rebuildWorldLayers</code>. The callback fires INSIDE <code>advanceIsland</code> &mdash; so the lookup must be against the same <code>state.buildings</code> array that the tick is mutating. Defer the <code>rebuildWorldLayers</code> call to AFTER <code>advanceIsland</code> returns to avoid mid-tick PixiJS work.</p>
+            <div class="code-block"><div class="file-label">src/main.ts &mdash; inside the ticker, where advanceIsland is invoked</div><div class="code"><pre><span class="add">import { resolveShot } from './terrain-modifier.js';</span>
+<span class="add">import { islandInscribedAny } from './world.js';</span>
+
+<span class="cm">// ... inside the ticker loop, for each island ...</span>
+<span class="add">let needRebuild = false;</span>
+<span class="add">const inscribedFor = (s: typeof spec) =&gt;</span>
+<span class="add">  (lx: number, ly: number) =&gt; islandInscribedAny(s, s.cx + lx, s.cy + ly);</span>
+
+advanceIsland(state, performanceNow, {
+  <span class="cm">// ... existing ctx fields ...</span>
+<span class="add">  onTerrainShotFire: (buildingId) =&gt; {</span>
+<span class="add">    const modifier = state.buildings.find((b) =&gt; b.id === buildingId);</span>
+<span class="add">    if (!modifier) return;</span>
+<span class="add">    resolveShot(spec, state, modifier, inscribedFor(spec));</span>
+<span class="add">    needRebuild = true;</span>
+<span class="add">  },</span>
+}, wallClockNowMs);
+
+<span class="add">if (needRebuild) rebuildWorldLayers();</span></pre></div></div>
+            <p class="step-text">If <code>islandInscribedAny</code> isn't already exported from <code>world.ts</code>, add an export keyword next to its declaration; it already exists per the closure body in <code>attachTerrainAt</code> (line 261). The <code>(lx, ly) =&gt; islandInscribedAny(spec, spec.cx + lx, spec.cy + ly)</code> shape converts local tile coords (the domain Task 2's <code>brushTilesAt</code> emits) into world tile coords (the domain the ellipse predicate expects).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Add the second arc branch in <code>building-alerts-overlay.ts</code></div>
+            <p class="step-text">Beneath the existing <code>constructionRemainingMs</code> arc paint (around line 80), add a parallel branch for <code>terrainShotRemainingMs</code>. The two are mutually exclusive (a modifier never enters construction mode) so an <code>else if</code> avoids both ever painting on the same building.</p>
+            <div class="code-block"><div class="file-label">src/building-alerts-overlay.ts &mdash; replace the construction arc block</div><div class="code"><pre>        const remaining = b.constructionRemainingMs ?? 0;
+        if (remaining &gt; 0) {
+          <span class="cm">// ... existing cyan-arc paint for construction ...</span>
+<span class="add">        } else if ((b.terrainShotRemainingMs ?? 0) &gt; 0) {</span>
+<span class="add">          <span class="cm">// terrain_modifier v5 — same cyan arc, base = SHOT_DURATION_MS.</span></span>
+<span class="add">          const remShot = b.terrainShotRemainingMs ?? 0;</span>
+<span class="add">          const base = SHOT_DURATION_MS;</span>
+<span class="add">          const completed = Math.max(0, Math.min(1, 1 - remShot / base));</span>
+<span class="add">          const half = TILE_PX / 2;</span>
+<span class="add">          const rx = (spec.cx + minTx) * TILE_PX - half;</span>
+<span class="add">          const ry = (spec.cy + minTy) * TILE_PX - half;</span>
+<span class="add">          const rw = (maxTx - minTx + 1) * TILE_PX;</span>
+<span class="add">          const rh = (maxTy - minTy + 1) * TILE_PX;</span>
+<span class="add">          gfx.rect(rx, ry, rw, rh).fill({ color: CONSTRUCTION_CYAN, alpha: 0.18 });</span>
+<span class="add">          const tlPx = (spec.cx + minTx) * TILE_PX - half;</span>
+<span class="add">          const tlPy = (spec.cy + minTy) * TILE_PX - half;</span>
+<span class="add">          const radius = 5;</span>
+<span class="add">          gfx.circle(tlPx, tlPy, radius + 1).fill({ color: 0x000000, alpha: 0.7 });</span>
+<span class="add">          gfx.circle(tlPx, tlPy, radius).fill({ color: 0x103040 });</span>
+<span class="add">          if (completed &gt; 0) {</span>
+<span class="add">            const start = -Math.PI / 2;</span>
+<span class="add">            const end = start + completed * Math.PI * 2;</span>
+<span class="add">            gfx</span>
+<span class="add">              .moveTo(tlPx, tlPy)</span>
+<span class="add">              .arc(tlPx, tlPy, radius - 1, start, end)</span>
+<span class="add">              .lineTo(tlPx, tlPy)</span>
+<span class="add">              .fill({ color: CONSTRUCTION_CYAN });</span>
+<span class="add">          }</span>
+        }</pre></div></div>
+            <p class="step-text">Import <code>SHOT_DURATION_MS</code> at the top of the file:</p>
+            <div class="code-block"><div class="file-label">src/building-alerts-overlay.ts &mdash; new import</div><div class="code"><pre><span class="add">import { SHOT_DURATION_MS } from './terrain-modifier.js';</span></pre></div></div>
+            <p class="step-text">The alpha is dimmer than the construction tint (0.18 vs 0.28) so a glance-distinction between "building under construction" and "shot animating" is visible &mdash; not strictly per-spec but useful in practice. Adjust on visual smoke if it reads wrong.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Tests &mdash; <code>resolveShot</code> + tick integration</div>
+            <p class="step-text">Two test surfaces. (a) <code>terrain-modifier.test.ts</code> gains direct unit tests for <code>resolveShot</code>: tiles inside the ellipse are written, out-of-ellipse tiles are skipped, the modifier is spliced out of <code>state.buildings</code>, and a Mine sitting on a now-overridden non-ore tile gets <code>invalid = true</code>. (b) <code>economy.test.ts</code> gets an integration test that advances time across the <code>SHOT_DURATION_MS</code> boundary and asserts the callback fires + the modifier is gone.</p>
+            <div class="code-block"><div class="file-label">src/terrain-modifier.test.ts &mdash; append resolveShot tests</div><div class="code"><pre>describe('terrain-modifier &mdash; resolveShot', () =&gt; {
+  function inscribedAlways(): (x: number, y: number) =&gt; boolean {
+    return () =&gt; true;
+  }
+
+  it('writes overrides for every brush tile inside the predicate', () =&gt; {
+    const spec = attachTerrainAt({
+      id: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    const modifier: PlacedBuilding = {
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'uranium_vein', terrainShotRemainingMs: 0,
+    };
+    state.buildings.push(modifier);
+    const result = resolveShot(spec, state, modifier, inscribedAlways());
+    expect(result.tilesWritten).toBe(16);
+    expect(Object.keys(spec.tileOverrides ?? {}).length).toBe(16);
+    expect(state.buildings.find((b) =&gt; b.id === 'm1')).toBeUndefined();
+  });
+
+  it('skips out-of-ellipse tiles (full charge already paid, no refund)', () =&gt; {
+    const spec = attachTerrainAt({
+      id: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    const modifier: PlacedBuilding = {
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'grass', terrainShotRemainingMs: 0,
+    };
+    state.buildings.push(modifier);
+    <span class="cm">// Predicate accepts only y &gt;= 0 tiles &mdash; chops off the top row (4 tiles).</span>
+    const inscribed = (_x: number, y: number): boolean =&gt; y &gt;= 0;
+    const result = resolveShot(spec, state, modifier, inscribed);
+    expect(result.tilesWritten).toBe(12);
+  });
+
+  it('marks a Mine invalid when the override breaks requiredTile', () =&gt; {
+    <span class="cm">// Pre-build an island where tile (5, 5) is `ore` and a Mine sits on it.</span>
+    <span class="cm">// After resolveShot converts the brush around (5, 5) to grass, the Mine</span>
+    <span class="cm">// should be invalidated.</span>
+    <span class="cm">// (Test scaffolding here would clone the land-reclamation.test.ts</span>
+    <span class="cm">//  fixture pattern; assertions on result.buildingsInvalidated &gt;= 1.)</span>
+  });
+});</pre></div></div>
+            <div class="code-block"><div class="file-label">src/economy.test.ts &mdash; tick integration</div><div class="code"><pre>describe('advanceIsland &mdash; terrain_modifier shot tick', () =&gt; {
+  it('fires onTerrainShotFire when the countdown reaches zero', () =&gt; {
+    const spec = attachTerrainAt({
+      id: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    state.buildings.push({
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'grass', terrainShotRemainingMs: SHOT_DURATION_MS,
+    });
+    const fires: string[] = [];
+    advanceIsland(state, SHOT_DURATION_MS + 100, {
+      onTerrainShotFire: (id) =&gt; fires.push(id),
+    });
+    expect(fires).toEqual(['m1']);
+  });
+
+  it('does NOT fire mid-segment (counter still positive)', () =&gt; {
+    const spec = attachTerrainAt({
+      id: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
+      biome: 'plains', populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const state = makeInitialIslandState(spec, 0);
+    state.buildings.push({
+      id: 'm1', defId: 'terrain_modifier', x: 0, y: 0, rotation: 0,
+      terrainTarget: 'grass', terrainShotRemainingMs: SHOT_DURATION_MS,
+    });
+    const fires: string[] = [];
+    advanceIsland(state, SHOT_DURATION_MS / 2, {
+      onTerrainShotFire: (id) =&gt; fires.push(id),
+    });
+    expect(fires).toEqual([]);
+    const survivor = state.buildings.find((b) =&gt; b.id === 'm1');
+    expect(survivor?.terrainShotRemainingMs).toBeGreaterThan(0);
+    expect(survivor?.terrainShotRemainingMs).toBeLessThan(SHOT_DURATION_MS);
+  });
+});</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Type-check + build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: tsc clean. The new <code>onTerrainShotFire</code> ctx field is optional so existing callers don't need updating. The <code>resolveShot</code> mutation casts are localised to the helper. Vite builds.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Run the test suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: all existing tests pass + the new <code>resolveShot</code> cases + the two new <code>economy.test.ts</code> tick-fire cases.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Visual smoke-test (the feature working end-to-end)</div>
+            <p class="step-text">Per AGENTS.md: <code>npm run build</code> + reload <code>https://islands.nitjsefni.eu/</code>. Use <code>mcp__daedalus__screenshot</code>:</p>
+            <p class="step-text">(a) Open Buildings &rarr; Terrain Modifier &mdash; the target-biome picker opens; pick <code>uranium_vein</code> (rare).<br>
+            (b) The placement preview shows the 16-tile brush; commit on a clean patch of grass.<br>
+            (c) The modifier appears with the cyan-arc countdown sweeping clockwise over ~4&nbsp;s.<br>
+            (d) Arc completes &mdash; the modifier disappears, 16 tiles in the brush region are now uranium_vein (yellow-green color), and the footprint is freed for placement of, say, a uranium extractor.<br>
+            (e) Place a second modifier whose brush ring covers an existing Mine sitting on natural ore &mdash; placement is BLOCKED (the standard overlap path).<br>
+            (f) Place a third modifier whose brush exits the island ellipse &mdash; placement is allowed; on fire only the inside-ellipse tiles convert and the off-island ring tiles are silently skipped.<br>
+            (g) Save the game (Settings &rarr; Save), reload &mdash; the overrides round-trip (verify a previously-converted uranium tile is still uranium_vein after reload).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 9: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/economy.ts src/main.ts src/building-alerts-overlay.ts src/terrain-modifier.ts src/terrain-modifier.test.ts src/economy.test.ts
+git commit -F /tmp/terrain-modifier-task4-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/terrain-modifier-task4-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(terrain-modifier): shot tick + self-destroy + re-render
+
+The terrain_modifier mechanic lights up. The single-shot
+countdown ticks inside advanceIsland's piecewise integrator;
+on hit-zero, the shot resolves (per v5 spec):
+
+- walk the 16-tile brush
+- skip out-of-ellipse tiles (p3_ellipse_boundary =
+  skip_outside_full_charge)
+- write tileOverrides for each remaining tile to the player's
+  picked TerrainKind
+- splice the modifier out of state.buildings (v5 lock
+  modifier_self_destroys_after_shot)
+- re-run the requiredTile invalidation pass so dependents
+  whose footprint kind was overwritten get b.invalid = true
+- trigger rebuildWorldLayers() so renderIsland picks up the
+  new overrides via the closure
+
+Segment-end clamping by nextShotMs ensures a multi-segment
+offline catchup fires shots in simulated-time order (matches
+how nextPhaseMs / nextAccelMs / nextBatteryMs work).
+
+building-alerts-overlay.ts gains a second arc branch keyed off
+terrainShotRemainingMs; the cyan arc sweeps over SHOT_DURATION_MS
+mirroring the construction arc.
+
+Tests:
+- terrain-modifier.test.ts: resolveShot direct unit tests for
+  brush write, out-of-ellipse skip, modifier removal, dependent
+  invalidation.
+- economy.test.ts: integration test asserting the tick callback
+  fires on countdown completion and does NOT fire mid-segment.
+
+This is the consumer of Tasks 1+2+3+5 &mdash; with this commit
+the feature is end-to-end playable.
+
+Refs docs/superpowers/specs/2026-05-23-terrain-modifier-design.html
+sections 04 + 05 + Task-4 of docs/superpowers/plans/
+2026-05-23-terrain-modifier.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+            <p class="step-text">Trailer check before commit.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 07 — Notes                                                          -->
+    <!-- ================================================================= -->
+    <section id="sec-notes">
+      <div class="sec-head"><span class="num">07</span><h2>Notes, verification, deliberate departures</h2></div>
+      <div class="notes">
+
+        <div class="note">
+          <strong>Deliberate departure from spec §04 &mdash; schema bump.</strong> Spec §04 ("Persistence schema bump") explicitly states the additive optional field does NOT require a save-version bump. This plan bumps anyway (<code>SCHEMA_VERSION 6 &rarr; 7</code>, <code>STORAGE_KEY :v6 &rarr; :v7</code>) per the user's directive in the plan brief: "this feature adds new persistent state, so it bumps schema to 7." Migration paths were dropped in commit <code>1d8c4bd</code>, so v6 saves load as a fresh world &mdash; consistent with the pre-release policy. Document this as a known break for any tester loading a save from before this commit.
+        </div>
+
+        <div class="note">
+          <strong>Player progression framing &mdash; discovery-locked.</strong> Spec callout "Player progression framing": resources stay discovery-locked at first contact. Terrain Modifier <em>amplifies what you have</em>, it doesn't <em>create what you don't</em>. A player who has never found a uranium vein cannot manufacture one because they have no <code>uranium_ore</code> to pay the input. The cost formula (<code>K &times; rate &times; horizon = 1.5 &times; 1 &times; 90 = 135</code> per tile &times; 16 tiles = ~2160 input units per shot for a placeholder rate of 1/cycle) enforces this: net-negative for at least ~90 cycles of extraction. Discovery loop and exploration loop remain intact.
+        </div>
+
+        <div class="note">
+          <strong>Duplication-glitch framing.</strong> Spec §04 frames the mechanic as a deliberate <em>duplication-with-investment</em>: pay a big upfront stack of resource X, manufacture an X-vein tile, place an X-extractor on it, and recover X at the natural rate until it net-exceeds the input. A duplication glitch with the numbers turned the other way &mdash; massive upfront, slow payback. Worth surfacing in the catalog tooltip post-Task 4 if a follow-up "explain the building" UI lands; out of scope for this plan but called out as documentation hook.
+        </div>
+
+        <div class="note">
+          <strong>By-reference invariant &mdash; do NOT regress.</strong> <code>attachTerrainAt</code>'s closure must read <code>spec.tileOverrides</code> LIVE on every call. The WARNING comment at <code>world.ts:246-251</code> and the existing closure-by-reference test in <code>biomes.test.ts</code> are load-bearing. If a future refactor switches to <code>const overrides = spec.tileOverrides ?? {}</code> at closure-build time, every shot stops being observed and the feature silently breaks. Task 1's Step 4 adds a test specifically targeting this regression.
+        </div>
+
+        <div class="note">
+          <strong>Re-render path is implicit through the closure.</strong> Spec §04 says "no render-layer changes needed" because <code>renderIsland</code> reads tiles through <code>spec.terrainAt</code> on every <code>rebuildWorldLayers()</code> call and the override-aware closure picks up the new value automatically. Task 4's <code>main.ts</code> change is just a single <code>rebuildWorldLayers()</code> call after the callback fires &mdash; no new render code, no special-case for overrides. This is the load-bearing reason Task 6 from the brief was folded into Task 4: the "trigger re-render" step is one line.
+        </div>
+
+        <div class="note">
+          <strong>Hover-tooltip wording stays minimal.</strong> The existing <code>hover-tooltip.ts</code> reads <code>spec.terrainAt(x, y)</code>, so converted tiles report their new kind automatically. Per v5 lock <code>no_revert_mechanic</code>, the engine does NOT remember the original kind; there is no <code>(was: tree)</code> annotation to surface. A "what was this originally?" UI would have to re-derive at hover time by calling <code>terrainAtForBiome(biome, id, x, y, inscribed)</code> directly and comparing against the override &mdash; cheap, no new state, but out of scope here.
+        </div>
+
+        <div class="note">
+          <strong>Test coverage matrix.</strong> Task 1: 4 cases in <code>world.test.ts</code> + 1 case in <code>persistence.test.ts</code> = 5 cases. Task 2: ~12 cases in <code>terrain-modifier.test.ts</code> (classification, cost, brush, override write, integration with Task 1's closure). Task 3: 3 cases in <code>placement.test.ts</code> + 1 case in <code>placement-ui.test.ts</code> = 4 cases. Task 5: no new tests (the modal pattern is exercised via integration). Task 4: 3 more <code>terrain-modifier.test.ts</code> cases for <code>resolveShot</code> + 2 <code>economy.test.ts</code> cases for the tick = 5 cases. Total new cases across all tasks: ~26. Each task's commit must be green at <code>npm test</code> on its own.
+        </div>
+
+        <div class="note">
+          <strong>Independence of each commit.</strong> Tasks 1, 2, 3, and 5 each commit green (build + tests pass) by stubbing the unimplemented consumer surface &mdash; the modifier sits inert across Tasks 1-3, the picker opens but the shot doesn't fire across Tasks 1-5, and only Task 4 wires the consumer-of-consumers. There is no task that <em>cannot</em> be independently committed in this plan. The dependency order <code>1 &rarr; 2 &rarr; 3 &rarr; 5 &rarr; 4</code> reflects what each consumer needs; out-of-order landing (e.g., Task 5 before Task 3) is technically permissible but the feature only fully lights up on Task 4.
+        </div>
+
+        <div class="note risk">
+          <strong>Risk &mdash; performance of <code>rebuildWorldLayers</code> on every shot.</strong> Each shot triggers a full per-island rebuild (every tile sprite re-emitted). Spec §05 calls this acceptable, citing Universe Editor's biome-flip which does the same on radius-14 islands (~600 tiles). Modifier shots tend to fire one-at-a-time so the overhead is bounded. If profiling reveals a hotspot (e.g., a player chains modifiers on a giant §3.6-merged island), the mitigation is a per-tile sprite invalidation path &mdash; out of scope for this plan but flagged.
+        </div>
+
+        <div class="note risk">
+          <strong>Risk &mdash; save-blob growth on a paint-heavy player.</strong> Each override entry is ~20 bytes of JSON. A player who fires 1000 shots = 16000 overrides = ~320&nbsp;KB. Unlikely to hit; mitigated by the existing IDB-backed persistence. If save blobs grow to MB scale a follow-up could compact the record into a packed format (e.g., RLE-encode contiguous runs of the same kind), but no action needed in this plan.
+        </div>
+
+        <div class="note risk">
+          <strong>Risk &mdash; closure-capture regression.</strong> If a future refactor swaps <code>attachTerrainAt</code>'s by-reference closure for a snapshot, the override read becomes stale and the feature silently fails. Mitigated by the explicit by-reference test added in Task 1 Step 4 + the existing closure-by-reference test in <code>biomes.test.ts</code>.
+        </div>
+
+        <div class="note risk">
+          <strong>Risk &mdash; resource trivialisation.</strong> The user's lock <code>any_tile_including_veins</code> + <code>all_tiles_including_water</code> means a player can paint any tile into any rare resource, including over an existing rare vein. Mitigated by the v4 lock <code>rare_target_costs_rare_resource</code> &mdash; manufacturing diamond_vein costs the player ~2160 <code>diamond_ore</code> (the verified <code>RARE_TARGET_INPUT['diamond_vein']</code> binding). A player who has never <em>found</em> diamond_ore has no diamond_ore to spend; discovery-locked progression intact.
+        </div>
+
+        <div class="note">
+          <strong>Verification checklist before declaring done.</strong>
+          <ul style="margin-top:6px; margin-left:22px; font-size:13px;">
+            <li><code>npm run build</code> exits 0 after each task commit.</li>
+            <li><code>npm test</code> exits 0 after each task commit.</li>
+            <li>Visual smoke (Task 3): brush preview paints; overlap blocks placement.</li>
+            <li>Visual smoke (Task 5): picker opens before placement; cost preview correct for natural &amp; rare targets.</li>
+            <li>Visual smoke (Task 4): countdown arc visible; modifier disappears at zero; converted tiles show the target color; save+reload preserves overrides.</li>
+            <li>Trailer check: every commit message ends with <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>. Scan composed message BEFORE <code>git commit</code> per global config &mdash; missing trailer = failed commit.</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      docs-hub slug: robot-islands/2026-05-23-terrain-modifier-plan &middot; spec source: docs/superpowers/specs/2026-05-23-terrain-modifier-design.html (v5) &middot; consumes 29 pickers + 6 user locks &middot; 5 tasks &middot; 10 files touched &middot; 2 new files.
+    </footer>
+
+  </div>
+</body>
+</html>
