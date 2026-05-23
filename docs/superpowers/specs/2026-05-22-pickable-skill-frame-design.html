@@ -1,0 +1,1841 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pickable-skill yellow frame on the HUD island selectbar — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+
+      /* In-app token mirror, for the SVG mocks */
+      --ri-warn: #f5a742;
+      --ri-accent: #7dd3e8;
+      --ri-fg-1: #e6ecf5;
+      --ri-fg-3: #6c7791;
+      --ri-fg-4: #4a5365;
+      --ri-panel: #0e1116;
+      --ri-border-strong: #3a4452;
+      --ri-success: #7dd3a0;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1080px; margin: 0 auto; }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 36px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ---------- summary strip ---------- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 48px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 760px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 52px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 24px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 760px;
+      margin-bottom: 22px;
+    }
+    p.body { font-size: 14.5px; max-width: 800px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre.code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: #C9B98A;
+      overflow-x: auto;
+      line-height: 1.55;
+      max-width: 980px;
+      margin-bottom: 14px;
+    }
+    pre.code .com { color: var(--gray-500); font-style: italic; }
+    pre.code .kw  { color: #E08B7F; }
+    pre.code .fn  { color: #B6CC96; }
+    pre.code .str { color: #C9B98A; }
+
+    /* ---------- mock chrome — the actual visuals ---------- */
+    .mock-frame {
+      background: #07090d;
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 28px 22px 22px;
+      position: relative;
+      overflow: hidden;
+    }
+    .mock-frame .mock-label {
+      position: absolute;
+      top: 8px;
+      left: 14px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+    }
+    .mocks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 820px) { .mocks { grid-template-columns: 1fr; } }
+    .mock-caption {
+      font-size: 13px;
+      color: var(--gray-500);
+      margin-top: 8px;
+      max-width: 760px;
+    }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* ---------- state-matrix table with inline mini-mocks ---------- */
+    .matrix {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    .matrix th, .matrix td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: middle;
+    }
+    .matrix th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      text-align: left;
+    }
+    .matrix td.slate { color: var(--slate); font-weight: 600; }
+    .matrix tr:last-child td { border-bottom: none; }
+    .matrix .pill {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .matrix .pill.on  { background: #4A3A1C; color: #F5D6A8; }
+    .matrix .pill.off { background: #2D2D2D; color: var(--gray-500); }
+
+    /* ---------- comparison ("X vs Y") cards ---------- */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- checklist ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 800px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- risk table ---------- */
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    /* ---------- deferred / out-of-scope cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+
+    /* ---------- pickers — interactive choice fieldsets ---------- */
+    .pickers {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+    .picker {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px 14px;
+      margin: 0;
+    }
+    .picker > legend {
+      padding: 0 8px;
+      margin-left: -4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--clay);
+    }
+    .picker .p-title {
+      font-family: var(--serif);
+      font-size: 17px;
+      color: var(--slate);
+      font-weight: 500;
+      margin-bottom: 4px;
+      letter-spacing: -0.005em;
+    }
+    .picker .p-intro {
+      font-size: 13px;
+      color: var(--gray-500);
+      margin-bottom: 14px;
+      max-width: 720px;
+    }
+    .picker .opts { display: flex; flex-direction: column; gap: 10px; }
+    .picker .opt {
+      display: block;
+      padding: 0;
+      border: 1.5px solid var(--gray-300);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease;
+      background: transparent;
+      overflow: hidden;
+      position: relative;
+    }
+    .picker .opt:hover { border-color: var(--gray-500); background: rgba(255,255,255,0.015); }
+    .picker .opt .o-mock {
+      display: block;
+      background: var(--ivory);
+      border-bottom: 1px solid var(--gray-300);
+      padding: 8px 10px;
+    }
+    .picker .opt .o-mock svg { display: block; width: 100%; height: auto; }
+    .picker .opt .o-mock--text {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      text-align: center;
+      padding: 16px 10px;
+    }
+    .picker .opt .o-body {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 4px 12px;
+      padding: 10px 12px 12px 10px;
+    }
+    .picker .opt input[type="radio"] {
+      grid-row: 1 / span 2;
+      grid-column: 1;
+      margin-top: 3px;
+      accent-color: var(--clay);
+      width: 14px; height: 14px;
+      cursor: pointer;
+    }
+    .picker .opt .o-label {
+      grid-row: 1; grid-column: 2;
+      font-size: 14px;
+      color: var(--slate);
+      font-weight: 600;
+    }
+    .picker .opt .o-rat {
+      grid-row: 2; grid-column: 2;
+      font-size: 12.5px;
+      color: var(--gray-500);
+      line-height: 1.5;
+    }
+    .picker .opt[data-default="true"] .o-label::after {
+      content: ' · default';
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--olive);
+      letter-spacing: 0.05em;
+      font-weight: 500;
+    }
+    .picker .opt:has(input[type="radio"]:checked) .o-label { color: var(--clay); }
+    .picker .opt:has(input[type="radio"]:checked) {
+      border-color: var(--clay);
+      background: rgba(217, 119, 87, 0.06);
+    }
+    .picker .opt:has(input[type="radio"]:checked) .o-mock {
+      border-bottom-color: rgba(217, 119, 87, 0.40);
+    }
+    .picker .p-current {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-top: 1px dashed var(--gray-300);
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--gray-500);
+    }
+    .picker .p-current b {
+      color: var(--olive);
+      font-weight: 600;
+    }
+
+    /* ---------- selections callout ---------- */
+    .selections {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--olive);
+      border-radius: var(--radius);
+      padding: 22px 24px 20px;
+      margin-top: 56px;
+      max-width: 980px;
+    }
+    .selections .s-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--olive);
+      margin-bottom: 6px;
+    }
+    .selections .s-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .selections .s-body {
+      font-size: 14px;
+      color: var(--gray-700);
+      max-width: 720px;
+      margin-bottom: 14px;
+    }
+    .selections .s-tools {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .selections button.copy-btn {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 7px 14px;
+      border-radius: 7px;
+      border: 1.5px solid var(--olive);
+      background: transparent;
+      color: var(--olive);
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .selections button.copy-btn:hover {
+      background: var(--olive);
+      color: var(--ivory);
+    }
+    .selections button.copy-btn.copied {
+      background: var(--olive);
+      color: var(--ivory);
+    }
+    .selections .format-toggle {
+      display: inline-flex;
+      gap: 0;
+      border: 1.5px solid var(--gray-300);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .selections .format-toggle button {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      border: 0;
+      background: transparent;
+      color: var(--gray-500);
+      cursor: pointer;
+      transition: background 100ms, color 100ms;
+    }
+    .selections .format-toggle button.active {
+      background: var(--oat);
+      color: var(--slate);
+    }
+    .selections .copy-status {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--olive);
+      letter-spacing: 0.04em;
+    }
+    .selections pre.payload {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: #C9B98A;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+      cursor: text;
+      user-select: text;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands · HUD / Skill tree · v3 (visual pickers)</div>
+      <h1>Pickable-skill yellow frame on the HUD island selectbar</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        The top-HUD island selectbar (<code>mountIslandBar</code> in
+        <code>src/hud.ts:235</code>) currently surfaces per-island power tone
+        but offers no across-the-world cue when a player has skill points
+        ready to spend somewhere. With multi-island save lengths now reaching
+        T3+ and the per-island skill tree (§9.3) holding 225 nodes,
+        unspent points routinely accumulate on the island the player isn't
+        looking at. This spec defines a single global "something to claim"
+        glow that wraps the island-bar panel when any populated island has
+        at least one skill-tree node it could buy right now &mdash; reusing
+        the existing <code>canSpend</code> predicate, the existing
+        <code>--ri-warn</code> theme token, and the existing per-frame
+        refresh path.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Scope</div><div class="v accent">3 files</div></div>
+      <div class="cell"><div class="k">New helpers</div><div class="v">2 pure fns</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+      <div class="cell"><div class="k">Touches game logic?</div><div class="v ok">No</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">
+        Wrap the <code>#island-bar</code> panel in a yellow outer glow (CSS
+        <code>box-shadow</code>) whenever
+        <code>NODE_CATALOG.some(n =&gt; canSpend(state, n.id).ok)</code> is
+        true for any populated island.
+      </div>
+      <div class="d-body">
+        Reuse the existing <code>canSpend</code> predicate at
+        <code>src/skilltree.ts:641&ndash;685</code> &mdash; it already
+        encodes the full pickable rule (cost, tier, depth prereq, branch
+        lock). Walking the catalog with an early-exit makes the check
+        trivial; a memoized cache key (level, points, unlocked-size,
+        sub-path-progress hash) is reserved as a fallback if measurement
+        ever shows it.
+      </div>
+      <div class="d-body">
+        Differentiate from the existing per-trigger
+        <code>data-tone=&quot;warn&quot;</code> power-low yellow by using
+        an outer <em>glow</em> (soft <code>box-shadow</code>) on the
+        <code>.ri-panel.topbar</code> wrapper, not a flat border &mdash;
+        same colour, different visual register, on a different DOM element
+        (parent of the trigger). The two signals can co-occur without
+        merging.
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- 00 — Open design choices: interactive pickers                        -->
+    <!-- =================================================================== -->
+    <section id="open-choices">
+      <div class="sec-head"><span class="num">00</span><h2>Open design choices — pick &amp; send back</h2></div>
+      <p class="sec-intro">Each fieldset below is a design call I had to
+        make. Defaults reflect the prose elsewhere in the spec
+        (visual mocks, change inventory, etc.). Click any other option to
+        redirect — the <b>Selections</b> panel at the bottom of the page
+        updates live, and a copy button hands you the payload to paste
+        back. Changing a picker here does not edit the prose in §01-§11;
+        treat the prose as illustrating the <em>defaults</em>. The implementer
+        will reconcile with your final picks before touching code.</p>
+
+      <div class="pickers">
+
+        <fieldset class="picker" data-key="indicator_placement">
+          <legend>Picker 01</legend>
+          <div class="p-title">Yellow indicator placement</div>
+          <div class="p-intro">Where the global "something pickable somewhere"
+            cue lives in the DOM. Different placements have different
+            collision profiles with the existing
+            <code>data-tone=&quot;warn&quot;</code> power-low border on
+            <code>.ri-island-trigger</code> (<code>ui.css:280</code>).
+            All four mocks show the same three-island bar; only the
+            decoration differs.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="panel_glow" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bar with outer panel glow">
+                  <defs>
+                    <filter id="p1a-glow" x="-20%" y="-60%" width="140%" height="220%">
+                      <feGaussianBlur in="SourceGraphic" stdDeviation="2.4"/>
+                    </filter>
+                  </defs>
+                  <!-- glow halo -->
+                  <rect x="9" y="14" width="302" height="36" rx="7"
+                        fill="none" stroke="#f5a742" stroke-width="2"
+                        opacity="0.95" filter="url(#p1a-glow)"/>
+                  <rect x="9" y="14" width="302" height="36" rx="7"
+                        fill="none" stroke="#f5a742" stroke-width="1.8" opacity="0.95"/>
+                  <!-- panel -->
+                  <rect x="12" y="16" width="296" height="32" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <!-- trigger pill (default neutral border) -->
+                  <rect x="22" y="24" width="98" height="16" rx="8"
+                        fill="none" stroke="#2a3240" stroke-width="1"/>
+                  <circle cx="32" cy="32" r="2.5" fill="#7dd3a0"/>
+                  <text x="40" y="34" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#e6ecf5">North Reach</text>
+                  <text x="100" y="34" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">L12</text>
+                  <text x="115" y="34" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">▾</text>
+                  <text x="160" y="34" font-family="system-ui, sans-serif" font-size="8.5" fill="#6c7791">Day 42% · solar 0.9×</text>
+                  <text x="252" y="34" font-family="system-ui, sans-serif" font-size="8.5" fill="#6c7791">Saved 3s</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="indicator_placement" value="panel_glow" checked>
+                <span class="o-label">Outer glow on <code>.ri-panel.topbar</code></span>
+                <span class="o-rat">Soft <code>box-shadow</code> on the panel container, two DOM layers out from the trigger pill. Different element + different visual register (soft glow vs. flat rim) lets power-warn and pickable coexist without merging. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="trigger_tone">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bar with yellow trigger pill border, no glow">
+                  <!-- panel (no glow) -->
+                  <rect x="12" y="16" width="296" height="32" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <!-- trigger pill — yellow flat border (mirrors existing data-tone="warn") -->
+                  <rect x="22" y="24" width="98" height="16" rx="8"
+                        fill="none" stroke="#f5a742" stroke-width="1.5"/>
+                  <circle cx="32" cy="32" r="2.5" fill="#7dd3a0"/>
+                  <text x="40" y="34" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#e6ecf5">North Reach</text>
+                  <text x="100" y="34" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">L12</text>
+                  <text x="115" y="34" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">▾</text>
+                  <text x="160" y="34" font-family="system-ui, sans-serif" font-size="8.5" fill="#6c7791">Day 42% · solar 0.9×</text>
+                  <text x="252" y="34" font-family="system-ui, sans-serif" font-size="8.5" fill="#6c7791">Saved 3s</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="indicator_placement" value="trigger_tone">
+                <span class="o-label">Reuse <code>data-tone="warn"</code> on <code>.ri-island-trigger</code></span>
+                <span class="o-rat">Same mechanism the existing power-low warning uses. Cheapest implementation. Caveat: power-low brownout and pickable-skill now visually identical on the trigger pill; the meaning has to be inferred from context.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="both">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bar with both panel glow and yellow trigger border">
+                  <defs>
+                    <filter id="p1c-glow" x="-20%" y="-60%" width="140%" height="220%">
+                      <feGaussianBlur in="SourceGraphic" stdDeviation="2.4"/>
+                    </filter>
+                  </defs>
+                  <rect x="9" y="14" width="302" height="36" rx="7"
+                        fill="none" stroke="#f5a742" stroke-width="2"
+                        opacity="0.95" filter="url(#p1c-glow)"/>
+                  <rect x="9" y="14" width="302" height="36" rx="7"
+                        fill="none" stroke="#f5a742" stroke-width="1.8" opacity="0.95"/>
+                  <rect x="12" y="16" width="296" height="32" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <rect x="22" y="24" width="98" height="16" rx="8"
+                        fill="none" stroke="#f5a742" stroke-width="1.5"/>
+                  <circle cx="32" cy="32" r="2.5" fill="#7dd3a0"/>
+                  <text x="40" y="34" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#e6ecf5">North Reach</text>
+                  <text x="100" y="34" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">L12</text>
+                  <text x="115" y="34" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">▾</text>
+                  <text x="160" y="34" font-family="system-ui, sans-serif" font-size="8.5" fill="#6c7791">Day 42% · solar 0.9×</text>
+                  <text x="252" y="34" font-family="system-ui, sans-serif" font-size="8.5" fill="#6c7791">Saved 3s</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="indicator_placement" value="both">
+                <span class="o-label">Both panel glow AND trigger tone</span>
+                <span class="o-rat">Belt-and-braces. Cue is impossible to miss but the trigger collision with power-low returns. Best paired with picker 02 set to "left dot override" so the per-island dot disambiguates.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="dot_only">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bar with no global cue; pickable signal only inside the dropdown row">
+                  <!-- panel -->
+                  <rect x="12" y="16" width="296" height="32" rx="6"
+                        fill="#0e1116" stroke="#3a4452" stroke-width="1"/>
+                  <!-- trigger pill -->
+                  <rect x="22" y="24" width="98" height="16" rx="8"
+                        fill="none" stroke="#2a3240" stroke-width="1"/>
+                  <circle cx="32" cy="32" r="2.5" fill="#7dd3a0"/>
+                  <text x="40" y="34" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#e6ecf5">North Reach</text>
+                  <text x="100" y="34" font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#6c7791">L12</text>
+                  <text x="115" y="34" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">▾</text>
+                  <text x="160" y="34" font-family="system-ui, sans-serif" font-size="8.5" fill="#6c7791">Day 42% · solar 0.9×</text>
+                  <text x="252" y="34" font-family="system-ui, sans-serif" font-size="8.5" fill="#6c7791">Saved 3s</text>
+                  <!-- annotation: the dot lives inside the dropdown row, shown opened below -->
+                  <rect x="22" y="52" width="98" height="10" rx="3"
+                        fill="#11151c" stroke="#3a4452" stroke-width="0.7"/>
+                  <circle cx="29" cy="57" r="1.6" fill="#7dd3a0"/>
+                  <text x="34" y="59.5" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#e6ecf5">North Reach</text>
+                  <circle cx="114" cy="57" r="1.8" fill="#f5a742"/>
+                  <text x="125" y="58" font-family="ui-monospace, Menlo, monospace" font-size="6.5" fill="#6c7791">↑ dot in dropdown row only</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="indicator_placement" value="dot_only">
+                <span class="o-label">No bar-level indicator — per-island dot only</span>
+                <span class="o-rat">Most conservative; the player must open the dropdown to see the cue. Loses the "you have something to claim somewhere" glance value that motivated the spec.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="indicator_placement">panel_glow</b></div>
+        </fieldset>
+
+        <fieldset class="picker" data-key="per_island_dot">
+          <legend>Picker 02</legend>
+          <div class="p-title">Per-island indicator inside the dropdown</div>
+          <div class="p-intro">How each <code>.ri-island-opt</code> row signals
+            "this island is the source." Each row already has a left-side
+            <code>.ri-dot</code> for power tone
+            (<code>hud.ts:307</code>, <code>ui.css:255</code>). Mocks show
+            the row in the "BOTH power-low AND pickable" case so the
+            collision is visible.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="right_dot" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 280 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Row with left power-tone dot and new right-side pickable dot">
+                  <rect x="8" y="6" width="264" height="28" rx="5"
+                        fill="#11151c" stroke="#3a4452" stroke-width="0.8"/>
+                  <!-- left dot — power tone (yellow because power-low here) -->
+                  <circle cx="20" cy="20" r="3" fill="#f5a742"/>
+                  <text x="32" y="23" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#e6ecf5">Sapphire Atoll</text>
+                  <text x="208" y="23" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#6c7791">L15</text>
+                  <!-- NEW right-side pickable dot -->
+                  <circle cx="258" cy="20" r="3.2" fill="#f5a742" opacity="0.95"/>
+                  <!-- annotation arrows -->
+                  <text x="20" y="38.5" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#6c7791" text-anchor="middle">power tone</text>
+                  <text x="258" y="38.5" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#6c7791" text-anchor="middle">pickable (new)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="per_island_dot" value="right_dot" checked>
+                <span class="o-label">New right-side <code>.ri-dot--pickable</code></span>
+                <span class="o-rat">Adds a second dot opposite the existing power-tone dot. Row can carry both signals unambiguously. Adds one DOM node per row + one CSS rule. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="left_override">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 280 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Row where the left dot is painted yellow, overriding power tone when both fire">
+                  <rect x="8" y="6" width="264" height="28" rx="5"
+                        fill="#11151c" stroke="#3a4452" stroke-width="0.8"/>
+                  <!-- left dot — yellow, overriding power-tone -->
+                  <circle cx="20" cy="20" r="3.2" fill="#f5a742"/>
+                  <!-- subtle dashed ring hinting at the override -->
+                  <circle cx="20" cy="20" r="5.5" fill="none" stroke="#f5a742" stroke-width="0.6" stroke-dasharray="1.2 1.2" opacity="0.55"/>
+                  <text x="32" y="23" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#e6ecf5">Sapphire Atoll</text>
+                  <text x="208" y="23" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#6c7791">L15</text>
+                  <!-- no right dot -->
+                  <text x="20" y="38.5" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#6c7791" text-anchor="middle">pickable wins · power hidden</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="per_island_dot" value="left_override">
+                <span class="o-label">Override the existing left dot to yellow when both fire</span>
+                <span class="o-rat">No new DOM. Trades information: when an island is BOTH power-low AND has a pickable skill, only one shows. Priority rule needed (pickable wins? power wins?). Simplest visual; loses signal.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="none">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 280 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Row with only the existing power-tone dot, no pickable indicator">
+                  <rect x="8" y="6" width="264" height="28" rx="5"
+                        fill="#11151c" stroke="#3a4452" stroke-width="0.8"/>
+                  <!-- left dot — power tone (yellow because power-low) -->
+                  <circle cx="20" cy="20" r="3" fill="#f5a742"/>
+                  <text x="32" y="23" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#e6ecf5">Sapphire Atoll</text>
+                  <text x="208" y="23" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#6c7791">L15</text>
+                  <!-- explicit "no dot" placeholder -->
+                  <circle cx="258" cy="20" r="3.2" fill="none" stroke="#3a4452" stroke-width="0.8" stroke-dasharray="1.5 1.5"/>
+                  <text x="258" y="38.5" font-family="ui-monospace, Menlo, monospace" font-size="6" fill="#6c7791" text-anchor="middle">(no pickable dot)</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="per_island_dot" value="none">
+                <span class="o-label">No per-island dot</span>
+                <span class="o-rat">Global frame only. Player opens the skill-tree modal on each island to find the source. Smallest change but worst affordance — defeats the point if picker 01 is also set to <code>dot_only</code>.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="per_island_dot">right_dot</b></div>
+        </fieldset>
+
+        <fieldset class="picker" data-key="predicate_scope">
+          <legend>Picker 03</legend>
+          <div class="p-title">Which islands the walker scans</div>
+          <div class="p-intro">The bar itself filters to
+            <code>i.populated</code> at <code>hud.ts:328</code>; the
+            predicate's scope must at minimum match. Wider scope shows
+            cues for islands the player can't currently switch to from
+            the bar. Each mock shows the same 6-island archipelago —
+            filled circles = populated, outlined = discovered, faint
+            dashed = undiscovered. Yellow halos overlay the islands
+            the walker would actually visit.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="populated" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Archipelago with yellow halos only on populated islands">
+                  <!-- ocean tint -->
+                  <rect x="0" y="0" width="320" height="120" fill="#0a141c"/>
+                  <!-- archipelago: 2 populated, 2 discovered, 2 undiscovered -->
+                  <!-- populated (filled) -->
+                  <circle cx="64" cy="44" r="13" fill="#8FA56E" opacity="0.85"/>
+                  <circle cx="220" cy="80" r="15" fill="#8FA56E" opacity="0.85"/>
+                  <!-- discovered (outlined) -->
+                  <circle cx="148" cy="36" r="11" fill="none" stroke="#3a4452" stroke-width="1.5"/>
+                  <circle cx="118" cy="86" r="12" fill="none" stroke="#3a4452" stroke-width="1.5"/>
+                  <!-- undiscovered (faint dashed) -->
+                  <circle cx="262" cy="34" r="10" fill="none" stroke="#2a3240" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+                  <circle cx="288" cy="86" r="9" fill="none" stroke="#2a3240" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+                  <!-- halos: populated only -->
+                  <circle cx="64" cy="44" r="19" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="220" cy="80" r="21" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <!-- legend strip -->
+                  <text x="10" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#8FA56E">● populated</text>
+                  <text x="90" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#6c7791">○ discovered</text>
+                  <text x="178" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#4a5365">⋯ undiscovered</text>
+                  <text x="262" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#f5a742">halo = scanned</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="predicate_scope" value="populated" checked>
+                <span class="o-label">Populated only</span>
+                <span class="o-rat">Matches the bar's own filter. Every island that lights a dot is selectable from the dropdown. No phantom cues. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="populated_plus_discovered">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Archipelago with halos on populated and discovered islands">
+                  <rect x="0" y="0" width="320" height="120" fill="#0a141c"/>
+                  <circle cx="64" cy="44" r="13" fill="#8FA56E" opacity="0.85"/>
+                  <circle cx="220" cy="80" r="15" fill="#8FA56E" opacity="0.85"/>
+                  <circle cx="148" cy="36" r="11" fill="none" stroke="#3a4452" stroke-width="1.5"/>
+                  <circle cx="118" cy="86" r="12" fill="none" stroke="#3a4452" stroke-width="1.5"/>
+                  <circle cx="262" cy="34" r="10" fill="none" stroke="#2a3240" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+                  <circle cx="288" cy="86" r="9" fill="none" stroke="#2a3240" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+                  <!-- halos: populated + discovered -->
+                  <circle cx="64" cy="44" r="19" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="220" cy="80" r="21" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="148" cy="36" r="17" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="118" cy="86" r="18" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <text x="10" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#8FA56E">● populated</text>
+                  <text x="90" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#6c7791">○ discovered</text>
+                  <text x="178" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#4a5365">⋯ undiscovered</text>
+                  <text x="262" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#f5a742">halo = scanned</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="predicate_scope" value="populated_plus_discovered">
+                <span class="o-label">Populated + discovered</span>
+                <span class="o-rat">Catches discovered-but-unsettled islands. But: such islands have no <code>IslandState</code> in <code>world.islandStates</code> (states are created at settlement), so this option is effectively a no-op until §12 settlement flow seeds a state earlier. Picking this is a request to also change state seeding.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="all">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Archipelago with halos on every island, including undiscovered">
+                  <rect x="0" y="0" width="320" height="120" fill="#0a141c"/>
+                  <circle cx="64" cy="44" r="13" fill="#8FA56E" opacity="0.85"/>
+                  <circle cx="220" cy="80" r="15" fill="#8FA56E" opacity="0.85"/>
+                  <circle cx="148" cy="36" r="11" fill="none" stroke="#3a4452" stroke-width="1.5"/>
+                  <circle cx="118" cy="86" r="12" fill="none" stroke="#3a4452" stroke-width="1.5"/>
+                  <circle cx="262" cy="34" r="10" fill="none" stroke="#2a3240" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+                  <circle cx="288" cy="86" r="9" fill="none" stroke="#2a3240" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+                  <!-- halos: every island -->
+                  <circle cx="64" cy="44" r="19" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="220" cy="80" r="21" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="148" cy="36" r="17" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="118" cy="86" r="18" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="262" cy="34" r="16" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <circle cx="288" cy="86" r="15" fill="none" stroke="#f5a742" stroke-width="2" opacity="0.9"/>
+                  <text x="10" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#8FA56E">● populated</text>
+                  <text x="90" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#6c7791">○ discovered</text>
+                  <text x="178" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#4a5365">⋯ undiscovered</text>
+                  <text x="262" y="112" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#f5a742">halo = scanned</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="predicate_scope" value="all">
+                <span class="o-label">Every island, including undiscovered</span>
+                <span class="o-rat">Same caveat as above plus: leaks information about unscouted islands. Spoils §11 telemetry / fog of war. Strongly discouraged.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="predicate_scope">populated</b></div>
+        </fieldset>
+
+        <fieldset class="picker" data-key="memoization">
+          <legend>Picker 04</legend>
+          <div class="p-title">Memoization strategy <span style="font-family:var(--mono);font-size:10.5px;color:var(--gray-500);letter-spacing:0.05em;">· conceptual — small dataflow icon per option, no mockup</span></div>
+          <div class="p-intro">Per-frame cost is N_islands × 225 nodes ×
+            <code>canSpend</code>. Early-exit is fast in the common case
+            (something pickable) but worst case (nothing pickable, many
+            islands) is ~20×225×~10 = ~45k cheap Set/Map lookups per frame.</div>
+          <div class="opts">
+
+            <label class="opt" data-value="none" data-default="true">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dataflow: every frame computes the predicate freshly">
+                  <rect x="0" y="0" width="320" height="56" fill="#0a141c"/>
+                  <!-- frame boxes -->
+                  <g font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#e6ecf5">
+                    <rect x="14" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/>
+                    <text x="32" y="31" text-anchor="middle">frame</text>
+                    <rect x="64" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/>
+                    <text x="82" y="31" text-anchor="middle">frame</text>
+                    <rect x="114" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/>
+                    <text x="132" y="31" text-anchor="middle">frame</text>
+                    <rect x="164" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/>
+                    <text x="182" y="31" text-anchor="middle">frame</text>
+                    <rect x="214" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/>
+                    <text x="232" y="31" text-anchor="middle">frame</text>
+                  </g>
+                  <!-- arrows down to walks -->
+                  <g stroke="#f5a742" stroke-width="1.2" fill="none">
+                    <line x1="32" y1="40" x2="32" y2="48"/><line x1="82" y1="40" x2="82" y2="48"/>
+                    <line x1="132" y1="40" x2="132" y2="48"/><line x1="182" y1="40" x2="182" y2="48"/>
+                    <line x1="232" y1="40" x2="232" y2="48"/>
+                  </g>
+                  <text x="32" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">walk</text>
+                  <text x="82" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">walk</text>
+                  <text x="132" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">walk</text>
+                  <text x="182" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">walk</text>
+                  <text x="232" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">walk</text>
+                  <text x="276" y="31" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">…</text>
+                  <text x="296" y="31" font-family="ui-monospace, Menlo, monospace" font-size="8" fill="#6c7791">60/s</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="memoization" value="none" checked>
+                <span class="o-label">No memoization — per-frame walk</span>
+                <span class="o-rat">Simplest. Predicate is pure; per-frame call is ~&lt;0.5ms on modern hardware. Add a memo only if measurement shows it. Recommended.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="per_island">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dataflow: cached per island, recomputes only on state change">
+                  <rect x="0" y="0" width="320" height="56" fill="#0a141c"/>
+                  <g font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#e6ecf5">
+                    <rect x="14" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="32" y="31" text-anchor="middle">frame</text>
+                    <rect x="64" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="82" y="31" text-anchor="middle">frame</text>
+                    <rect x="114" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="132" y="31" text-anchor="middle">frame</text>
+                    <rect x="164" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="182" y="31" text-anchor="middle">frame</text>
+                    <rect x="214" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="232" y="31" text-anchor="middle">frame</text>
+                  </g>
+                  <!-- only the first frame walks; others hit cache -->
+                  <g stroke="#f5a742" stroke-width="1.2" fill="none">
+                    <line x1="32" y1="40" x2="32" y2="48"/>
+                  </g>
+                  <text x="32" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">walk</text>
+                  <g stroke="#3a4452" stroke-width="0.8" stroke-dasharray="1.5 1.5" fill="none">
+                    <line x1="82" y1="40" x2="82" y2="48"/>
+                    <line x1="132" y1="40" x2="132" y2="48"/>
+                    <line x1="182" y1="40" x2="182" y2="48"/>
+                  </g>
+                  <text x="82" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#6c7791" text-anchor="middle">cache</text>
+                  <text x="132" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#6c7791" text-anchor="middle">cache</text>
+                  <text x="182" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#6c7791" text-anchor="middle">cache</text>
+                  <!-- spend event invalidates -->
+                  <line x1="232" y1="40" x2="232" y2="48" stroke="#f5a742" stroke-width="1.2"/>
+                  <text x="232" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">walk†</text>
+                  <text x="276" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#6c7791">† on point/lvl Δ</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="memoization" value="per_island">
+                <span class="o-label">Per-island cache, invalidated on point/level change</span>
+                <span class="o-rat">Cache <code>hasPickableSkill(state)</code> on the state itself under a key like <code>(level, unspentSkillPoints, unlockedNodes.size, subPathProgress.serialized)</code>. Recomputes on level-up, spend, or reset. Extra code; trivial speedup over none.</span>
+              </span>
+            </label>
+
+            <label class="opt" data-value="world_level">
+              <span class="o-mock" aria-hidden="true">
+                <svg viewBox="0 0 320 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dataflow: world-level memo with a dirty flag set at write sites">
+                  <rect x="0" y="0" width="320" height="56" fill="#0a141c"/>
+                  <g font-family="ui-monospace, Menlo, monospace" font-size="9" fill="#e6ecf5">
+                    <rect x="14" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="32" y="31" text-anchor="middle">frame</text>
+                    <rect x="64" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="82" y="31" text-anchor="middle">frame</text>
+                    <rect x="114" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="132" y="31" text-anchor="middle">frame</text>
+                    <rect x="164" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="182" y="31" text-anchor="middle">frame</text>
+                    <rect x="214" y="18" width="36" height="20" rx="3" fill="none" stroke="#3a4452"/><text x="232" y="31" text-anchor="middle">frame</text>
+                  </g>
+                  <!-- shared world cache box -->
+                  <rect x="260" y="14" width="52" height="28" rx="3" fill="#1B1A17" stroke="#8FA56E" stroke-width="1.2"/>
+                  <text x="286" y="26" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#8FA56E" text-anchor="middle">world</text>
+                  <text x="286" y="36" font-family="ui-monospace, Menlo, monospace" font-size="7.5" fill="#8FA56E" text-anchor="middle">memo</text>
+                  <!-- all frames hit cache (dashed) except a few that trigger walk -->
+                  <g stroke="#3a4452" stroke-width="0.8" stroke-dasharray="1.5 1.5" fill="none">
+                    <line x1="50" y1="28" x2="260" y2="28"/>
+                  </g>
+                  <line x1="32" y1="40" x2="32" y2="48" stroke="#f5a742" stroke-width="1.2"/>
+                  <text x="32" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">dirty→walk</text>
+                  <line x1="232" y1="40" x2="232" y2="48" stroke="#f5a742" stroke-width="1.2"/>
+                  <text x="232" y="55" font-family="ui-monospace, Menlo, monospace" font-size="7" fill="#f5a742" text-anchor="middle">dirty→walk</text>
+                </svg>
+              </span>
+              <span class="o-body">
+                <input type="radio" name="memoization" value="world_level">
+                <span class="o-label">World-level memo with dirty flag</span>
+                <span class="o-rat">Set <code>world.pickableDirty = true</code> at the same call sites that grant or spend points. Walker re-runs only when dirty. Most complex; introduces a new world-level mutable field. Justified only if profiling shows the walk dominates.</span>
+              </span>
+            </label>
+
+          </div>
+          <div class="p-current">Current: <b data-current="memoization">none</b></div>
+        </fieldset>
+
+      </div>
+
+      <p class="body" style="margin-top:6px">If you want to add a fifth
+        picker (frame style — flat 2px outline, soft glow, animated pulse,
+        etc.), say so when you send back the picks and I'll add it in v3.
+        Pulse is deferred in §11; "flat outline vs. soft glow" is
+        currently a phrasing assumption inside picker 01's <em>panel_glow</em>
+        option.</p>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 01 — Visual: before / after                                          -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Visual contract: before vs. after</h2></div>
+      <p class="sec-intro">Both mocks show the same three-island save at
+        the same instant; only the predicate result differs. The frame is
+        a soft <code>box-shadow</code> on the panel container, never a
+        flat border on the trigger pill.</p>
+
+      <div class="mocks">
+        <div class="mock-frame">
+          <div class="mock-label">Before — no pickable skills anywhere</div>
+          <!-- Bar without frame -->
+          <svg viewBox="0 0 480 110" width="100%" height="110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HUD top bar without the pickable-skill frame">
+            <!-- panel background -->
+            <rect x="20" y="22" width="440" height="38" rx="6"
+                  fill="var(--ri-panel)" stroke="var(--ri-border-strong)" stroke-width="1"/>
+            <!-- trigger pill -->
+            <rect x="32" y="32" width="120" height="18" rx="9"
+                  fill="none" stroke="#2a3240" stroke-width="1"/>
+            <!-- power-ok dot -->
+            <circle cx="44" cy="41" r="3" fill="var(--ri-success)"/>
+            <text x="54" y="44" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-1)">North Reach</text>
+            <text x="125" y="44" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-3)">L12</text>
+            <text x="145" y="44" font-family="var(--mono)" font-size="9" fill="var(--ri-fg-3)">▾</text>
+            <!-- phase text -->
+            <text x="200" y="44" font-family="var(--sans)" font-size="10" fill="var(--ri-fg-3)">Day 42% · solar 0.9×</text>
+            <!-- saved indicator -->
+            <text x="370" y="44" font-family="var(--sans)" font-size="10" fill="var(--ri-fg-3)">Saved 3s ago</text>
+            <!-- caption -->
+            <text x="20" y="85" font-family="var(--mono)" font-size="10" fill="var(--gray-500)">anyIslandHasPickableSkill(world) === false</text>
+            <text x="20" y="100" font-family="var(--mono)" font-size="10" fill="var(--gray-500)">panel: no extra outline · trigger pill carries its usual power-tone border only</text>
+          </svg>
+        </div>
+
+        <div class="mock-frame">
+          <div class="mock-label">After — one island has an unspent point + ready node</div>
+          <svg viewBox="0 0 480 110" width="100%" height="110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HUD top bar with the pickable-skill yellow glow">
+            <defs>
+              <filter id="warn-glow" x="-20%" y="-50%" width="140%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            <!-- outer glow halo -->
+            <rect x="17" y="19" width="446" height="44" rx="8"
+                  fill="none" stroke="var(--ri-warn)" stroke-width="2"
+                  opacity="0.95" filter="url(#warn-glow)"/>
+            <!-- panel background -->
+            <rect x="20" y="22" width="440" height="38" rx="6"
+                  fill="var(--ri-panel)" stroke="var(--ri-border-strong)" stroke-width="1"/>
+            <!-- trigger pill — unchanged -->
+            <rect x="32" y="32" width="120" height="18" rx="9"
+                  fill="none" stroke="#2a3240" stroke-width="1"/>
+            <circle cx="44" cy="41" r="3" fill="var(--ri-success)"/>
+            <text x="54" y="44" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-1)">North Reach</text>
+            <text x="125" y="44" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-3)">L12</text>
+            <text x="145" y="44" font-family="var(--mono)" font-size="9" fill="var(--ri-fg-3)">▾</text>
+            <!-- inline per-island dot inside the dropdown — not visible while collapsed -->
+            <text x="200" y="44" font-family="var(--sans)" font-size="10" fill="var(--ri-fg-3)">Day 42% · solar 0.9×</text>
+            <text x="370" y="44" font-family="var(--sans)" font-size="10" fill="var(--ri-fg-3)">Saved 3s ago</text>
+            <!-- caption -->
+            <text x="20" y="85" font-family="var(--mono)" font-size="10" fill="var(--gray-500)">anyIslandHasPickableSkill(world) === true  →  panel.classList.add('has-pickable')</text>
+            <text x="20" y="100" font-family="var(--mono)" font-size="10" fill="var(--gray-500)">box-shadow: 0 0 0 2px var(--ri-warn), 0 0 12px rgba(245,167,66,0.45)</text>
+          </svg>
+        </div>
+      </div>
+      <p class="mock-caption">The glow lives on the panel container, two
+        DOM layers out from the trigger pill. The trigger's own
+        <code>data-tone=&quot;warn&quot;</code> power-low border (a flat
+        thin rim on the inner pill) remains independently visible and is
+        visually distinct from the outer glow.</p>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 02 — Per-island dot: dropdown view                                   -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Per-island dot inside the dropdown</h2></div>
+      <p class="sec-intro">When the dropdown opens, each option row carries
+        a second small dot (right side of the row) lit yellow if THAT
+        island has a pickable skill. Lets the player tell which island
+        the panel-level alert is about without leaving the bar.</p>
+
+      <div class="mock-frame">
+        <div class="mock-label">Dropdown open · two of three islands have pickable skills</div>
+        <svg viewBox="0 0 480 220" width="100%" height="220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dropdown showing per-island pickable dots">
+          <defs>
+            <filter id="warn-glow2" x="-20%" y="-50%" width="140%" height="200%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+          <!-- outer glow on bar -->
+          <rect x="17" y="19" width="446" height="44" rx="8"
+                fill="none" stroke="var(--ri-warn)" stroke-width="2"
+                opacity="0.95" filter="url(#warn-glow2)"/>
+          <!-- panel -->
+          <rect x="20" y="22" width="440" height="38" rx="6"
+                fill="var(--ri-panel)" stroke="var(--ri-border-strong)" stroke-width="1"/>
+          <!-- trigger -->
+          <rect x="32" y="32" width="120" height="18" rx="9"
+                fill="rgba(125,211,232,0.12)" stroke="rgba(125,211,232,0.40)" stroke-width="1"/>
+          <circle cx="44" cy="41" r="3" fill="var(--ri-success)"/>
+          <text x="54" y="44" font-family="var(--mono)" font-size="10" fill="var(--ri-accent)">North Reach</text>
+          <text x="125" y="44" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-3)">L12</text>
+          <text x="145" y="44" font-family="var(--mono)" font-size="9" fill="var(--ri-accent)" transform="rotate(180 145 41)">▾</text>
+
+          <!-- popup -->
+          <rect x="29" y="68" width="170" height="120" rx="8"
+                fill="#11151c" stroke="var(--ri-border-strong)" stroke-width="1"/>
+          <!-- row 1: active North Reach, pickable -->
+          <rect x="33" y="72" width="162" height="32" rx="5" fill="rgba(125,211,232,0.12)"/>
+          <circle cx="44" cy="88" r="3" fill="var(--ri-success)"/>
+          <text x="54" y="92" font-family="var(--mono)" font-size="10" fill="var(--ri-accent)">North Reach</text>
+          <text x="142" y="92" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-3)">L12</text>
+          <!-- pickable dot -->
+          <circle cx="186" cy="88" r="3.5" fill="var(--ri-warn)" opacity="0.95"/>
+          <!-- row 2: Pyrite Ridge, NOT pickable -->
+          <circle cx="44" cy="116" r="3" fill="var(--ri-success)"/>
+          <text x="54" y="120" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-1)">Pyrite Ridge</text>
+          <text x="142" y="120" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-3)">L8</text>
+          <!-- no pickable dot -->
+          <!-- row 3: Sapphire Atoll, pickable + power warn -->
+          <circle cx="44" cy="148" r="3" fill="var(--ri-warn)"/>
+          <text x="54" y="152" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-1)">Sapphire Atoll</text>
+          <text x="142" y="152" font-family="var(--mono)" font-size="10" fill="var(--ri-fg-3)">L15</text>
+          <circle cx="186" cy="148" r="3.5" fill="var(--ri-warn)" opacity="0.95"/>
+
+          <!-- annotations -->
+          <line x1="200" y1="88" x2="252" y2="60" stroke="var(--gray-500)" stroke-width="0.5"/>
+          <text x="255" y="58" font-family="var(--mono)" font-size="9.5" fill="var(--gray-500)">pickable dot — right side, after L-tag</text>
+          <line x1="44" y1="148" x2="252" y2="120" stroke="var(--gray-500)" stroke-width="0.5"/>
+          <text x="255" y="118" font-family="var(--mono)" font-size="9.5" fill="var(--gray-500)">left dot = power tone (unchanged)</text>
+          <text x="255" y="135" font-family="var(--mono)" font-size="9.5" fill="var(--gray-500)">right dot = pickable (new)</text>
+          <text x="255" y="172" font-family="var(--mono)" font-size="9.5" fill="var(--gray-500)">a row can carry both without ambiguity</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 03 — State matrix                                                    -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>State matrix — when the frame appears</h2></div>
+      <p class="sec-intro">Four cross-cutting per-island states; the frame
+        is driven solely by whether <code>hasPickableSkill</code> is true
+        for at least one populated island. Declaration state is incidental.</p>
+
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>unspentSkillPoints</th>
+            <th>specializationRole / declaredAt</th>
+            <th>Ready skill-tree node exists?</th>
+            <th>Frame</th>
+            <th>Per-island dot</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="slate">A · idle</td>
+            <td><code>0</code></td>
+            <td>declared or null — irrelevant</td>
+            <td>n/a (no points)</td>
+            <td><span class="pill off">off</span></td>
+            <td><span class="pill off">off</span></td>
+          </tr>
+          <tr>
+            <td class="slate">B · declaration pending only</td>
+            <td><code>0</code></td>
+            <td><code>specializationRole === null</code> at T3+</td>
+            <td>n/a (no points)</td>
+            <td><span class="pill off">off</span></td>
+            <td><span class="pill off">off</span></td>
+          </tr>
+          <tr>
+            <td class="slate">C · pickable skill</td>
+            <td><code>&gt; 0</code></td>
+            <td>any</td>
+            <td>yes — some <code>canSpend(state, n.id).ok</code></td>
+            <td><span class="pill on">ON</span></td>
+            <td><span class="pill on">ON (that island)</span></td>
+          </tr>
+          <tr>
+            <td class="slate">D · both</td>
+            <td><code>&gt; 0</code></td>
+            <td><code>specializationRole === null</code> at T3+</td>
+            <td>yes</td>
+            <td><span class="pill on">ON</span></td>
+            <td><span class="pill on">ON (that island)</span></td>
+          </tr>
+          <tr>
+            <td class="slate">E · points but nothing buyable</td>
+            <td><code>&gt; 0</code></td>
+            <td>any</td>
+            <td>no — tier-locked / depth-prereq / branch-locked / fully owned</td>
+            <td><span class="pill off">off</span></td>
+            <td><span class="pill off">off</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top:18px"><strong>Property the design
+        gets for free.</strong> <code>canSpend(state, nodeId)</code>
+        (<code>src/skilltree.ts:641&ndash;685</code>) reads only
+        <code>unlockedNodes</code>, <code>unspentSkillPoints</code>,
+        <code>level</code>, and <code>subPathProgress</code>. It does NOT
+        read <code>specializationRole</code> or <code>declaredAt</code>.
+        Row B (declaration pending alone) therefore cannot flip the
+        predicate — no extra exclusion logic is needed. Row D (both
+        signals) lights the frame for the skill point only; the awaiting-
+        declaration cue already exists inside the skill-tree modal at
+        <code>src/skilltree-ui.ts:786</code>
+        (<code>'◇ AWAITING DECLARATION'</code>) and is unchanged.</p>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 04 — What we found vs. what we'll do                                 -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Existing surface vs. additions</h2></div>
+      <p class="sec-intro">What already exists in the codebase, vs. what
+        this spec adds on top.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Already there — reuse, don't duplicate</div>
+          <div class="col-body"><ul>
+            <li><code>canSpend(state, nodeId)</code> — full pickable rule, <code>src/skilltree.ts:641&ndash;685</code>.</li>
+            <li><code>NODE_CATALOG</code> — 225-node array, <code>src/skilltree.ts:516</code>.</li>
+            <li><code>mountIslandBar</code> renders one panel per frame; refresh path <code>main.ts:1920</code>.</li>
+            <li><code>--ri-warn</code> = <code>#f5a742</code> theme token, <code>src/ui.css:36</code>.</li>
+            <li>Per-island <code>.ri-dot</code> already carries power tone (left of name), <code>src/hud.ts:307</code>.</li>
+            <li><code>.ri-island-trigger[data-tone="warn"]</code> already paints the trigger's border yellow on power-low, <code>src/ui.css:280</code>.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">New — pure additions, no rule reinvention</div>
+          <div class="col-body"><ul>
+            <li><code>hasPickableSkill(state)</code> in <code>src/skilltree.ts</code> — early-exit <code>NODE_CATALOG.some(...)</code> over <code>canSpend</code>.</li>
+            <li><code>anyIslandHasPickableSkill(world)</code> — walks <code>world.islands.filter(i =&gt; i.populated)</code> via <code>world.islandStates</code>.</li>
+            <li>Panel class toggle <code>.has-pickable</code> on <code>#island-bar</code>, set inside <code>mountIslandBar</code>'s <code>update</code>.</li>
+            <li>CSS rule <code>.ri-panel.topbar.has-pickable { box-shadow: ... }</code> in <code>src/ui.css</code>.</li>
+            <li>Per-option right-side <code>.ri-dot.ri-dot--pickable</code>, only present on rows where the predicate is true.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 05 — Change inventory                                                -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Three files, two pure helpers, one CSS rule,
+        one DOM-write hook inside the existing per-frame bar update.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/skilltree.ts (≈line 1020)</div>
+          <div class="what"><span class="lead">Add pure helper
+            <code>hasPickableSkill(state: IslandState): boolean</code>.</span>
+            Returns <code>NODE_CATALOG.some(n =&gt; canSpend(state, n.id).ok)</code>
+            with early exit on the first ok. Reuses the existing
+            <code>canSpend</code>; declaration state is read-free by
+            construction. Export from the module alongside
+            <code>canSpend</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/hud.ts (≈line 235, inside mountIslandBar)</div>
+          <div class="what"><span class="lead">Compute predicate per frame
+            and toggle <code>.has-pickable</code> on the panel.</span>
+            Inside the existing <code>update(activeId, islandPower, saveAgeSec)</code>:
+            walk <code>world.islands.filter(i =&gt; i.populated)</code>,
+            look up <code>world.islandStates?.get(spec.id)</code>, and
+            call <code>hasPickableSkill</code>. Set
+            <code>bar.classList.toggle('has-pickable', anyPickable)</code>.
+            For each option, set
+            <code>opt.dataset.pickable = pickable ? 'true' : 'false'</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/hud.ts (inside buildOption, ≈line 302)</div>
+          <div class="what"><span class="lead">Add a right-side pickable
+            dot to each option.</span> Create a second
+            <code>&lt;span class="ri-dot ri-dot--pickable"&gt;</code> appended
+            after the level tag. CSS controls visibility via
+            <code>opt[data-pickable="true"] .ri-dot--pickable</code>.
+            Default <code>data-pickable="false"</code> at construction;
+            update flips it per-frame inside the existing
+            <code>for (const spec of populated)</code> loop at
+            <code>hud.ts:344</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/ui.css (append after the island-selector block, ≈line 322)</div>
+          <div class="what"><span class="lead">Two rules:</span>
+            <code>.ri-panel.topbar.has-pickable { box-shadow: 0 0 0 2px var(--ri-warn), 0 0 12px rgba(245,167,66,0.45), var(--ri-shadow-panel); }</code>
+            and
+            <code>.ri-island-opt[data-pickable="true"] .ri-dot--pickable { background: var(--ri-warn); }</code>
+            plus a default
+            <code>.ri-dot--pickable { display: none; }</code>
+            so the dot only appears when explicitly enabled.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 06 — The predicate, in code                                          -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>The two helpers, in code</h2></div>
+      <p class="sec-intro">Both helpers are pure, no PixiJS, no DOM —
+        same architectural layer as the rest of <code>skilltree.ts</code>.
+        The walker lives in <code>hud.ts</code> only because it depends
+        on <code>WorldState</code>; if reused later it can move down
+        into a shared module.</p>
+
+      <pre class="code"><span class="com">// src/skilltree.ts — append near the existing canSpend / nodeById exports.</span>
+
+<span class="com">/**
+ * True if `state` has at least one skill-tree node it can buy right now.
+ * Composition: NODE_CATALOG.some(canSpend.ok) with early exit. Used by
+ * the HUD island-bar to surface a global "claim available" cue without
+ * the player opening the skill-tree modal.
+ *
+ * The rule is canSpend's: enough points, tier met, depth prereq satisfied,
+ * sub-path not branch-locked, node not already owned. canSpend reads
+ * unspentSkillPoints / unlockedNodes / level / subPathProgress only —
+ * so an island with role declaration pending but zero spendable points
+ * (or no ready nodes) is correctly false.
+ */</span>
+<span class="kw">export function</span> <span class="fn">hasPickableSkill</span>(state: IslandState): <span class="kw">boolean</span> {
+  <span class="kw">for</span> (<span class="kw">const</span> node <span class="kw">of</span> NODE_CATALOG) {
+    <span class="kw">if</span> (canSpend(state, node.id).ok) <span class="kw">return true</span>;
+  }
+  <span class="kw">return false</span>;
+}
+</pre>
+
+      <pre class="code"><span class="com">// src/hud.ts — inside mountIslandBar's update(), after the per-option
+// loop that already runs for each populated island.</span>
+
+<span class="kw">let</span> anyPickable = <span class="kw">false</span>;
+<span class="kw">for</span> (<span class="kw">const</span> spec <span class="kw">of</span> populated) {
+  <span class="kw">const</span> state = world.islandStates?.get(spec.id);
+  <span class="kw">if</span> (!state) <span class="kw">continue</span>;
+  <span class="kw">const</span> pickable = hasPickableSkill(state);
+  <span class="kw">const</span> opt = optMap.get(spec.id);
+  <span class="kw">if</span> (opt) opt.dataset.pickable = pickable ? <span class="str">'true'</span> : <span class="str">'false'</span>;
+  <span class="kw">if</span> (pickable) anyPickable = <span class="kw">true</span>;
+}
+bar.classList.toggle(<span class="str">'has-pickable'</span>, anyPickable);
+</pre>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 07 — Reference: file:line citations                                  -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Reference — anchors for the implementer</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Anchor</th><th>File</th><th>Line</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">mountIslandBar</td><td>src/hud.ts</td><td>235</td><td>Builds <code>#island-bar</code>, applies <code>.ri-panel.topbar</code>, mounts in Zone.TC.</td></tr>
+          <tr><td class="slate">bar.classList</td><td>src/hud.ts</td><td>240</td><td>Class list to extend with <code>has-pickable</code>.</td></tr>
+          <tr><td class="slate">buildOption</td><td>src/hud.ts</td><td>302</td><td>Per-island row; gains the second right-side dot.</td></tr>
+          <tr><td class="slate">per-frame loop</td><td>src/hud.ts</td><td>344</td><td>Already iterates populated islands; pickable check folds in here.</td></tr>
+          <tr><td class="slate">islandBar.update call</td><td>src/main.ts</td><td>1920</td><td>Per-frame; no extra wiring needed.</td></tr>
+          <tr><td class="slate">canSpend</td><td>src/skilltree.ts</td><td>641&ndash;685</td><td>The full pickable rule. Reuse, do not duplicate.</td></tr>
+          <tr><td class="slate">NODE_CATALOG</td><td>src/skilltree.ts</td><td>516</td><td>225 nodes; iteration target.</td></tr>
+          <tr><td class="slate">unspentSkillPoints</td><td>src/economy.ts</td><td>208</td><td>IslandState field consumed by canSpend.</td></tr>
+          <tr><td class="slate">specializationRole / declaredAt</td><td>src/economy.ts</td><td>232, 237</td><td>NOT read by canSpend — declaration exclusion is automatic.</td></tr>
+          <tr><td class="slate">--ri-warn token</td><td>src/ui.css</td><td>36</td><td><code>#f5a742</code> — the established yellow.</td></tr>
+          <tr><td class="slate">data-tone=&quot;warn&quot; on trigger</td><td>src/ui.css</td><td>280</td><td>Existing power-low border on the trigger pill — different element, different visual register.</td></tr>
+          <tr><td class="slate">.ri-island-pop</td><td>src/ui.css</td><td>291</td><td>Dropdown container — unchanged.</td></tr>
+          <tr><td class="slate">.ri-island-opt</td><td>src/ui.css</td><td>308</td><td>Per-island option row — gains the right-side <code>.ri-dot--pickable</code> via dataset toggle.</td></tr>
+          <tr><td class="slate">home is populated</td><td>src/world.ts</td><td>581</td><td><code>makeHomeIslandSpec().populated = true</code> — single-island save still triggers the frame normally.</td></tr>
+          <tr><td class="slate">'AWAITING DECLARATION'</td><td>src/skilltree-ui.ts</td><td>786</td><td>Existing declaration cue (inside the skill-tree modal, not the HUD bar) — this spec does NOT touch it.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 08 — Edge cases                                                      -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Edge cases</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Case</th><th>Predicate</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Brand-new world, only home</td><td><code>false</code></td><td>L1, 0 points, no buyable node; frame off.</td></tr>
+          <tr><td class="slate">Home L5 with 3 unspent points</td><td><code>true</code></td><td>Tier 2 reached, several depth-1 nodes pass canSpend; frame on.</td></tr>
+          <tr><td class="slate">Island fully maxed (all 225 owned)</td><td><code>false</code></td><td>Every node fails canSpend with <code>already-unlocked</code>; predicate is false even if more points later arrive — they have nothing to buy.</td></tr>
+          <tr><td class="slate">Points present, branch-locked everywhere</td><td><code>false</code></td><td>canSpend returns <code>branch-locked</code>; predicate is false. Player must finish the committed sub-path before the frame can re-light.</td></tr>
+          <tr><td class="slate">Declaration pending only, 0 points</td><td><code>false</code></td><td>No spendable point; canSpend short-circuits on <code>insufficient-points</code>. Frame stays off; the modal's own AWAITING DECLARATION caption is unaffected.</td></tr>
+          <tr><td class="slate">Declaration pending AND 1 point ready</td><td><code>true</code></td><td>Point drives the frame; declaration is incidental. Player can spend on a skill node without declaring (or vice versa).</td></tr>
+          <tr><td class="slate">Power-low AND pickable on same island</td><td><code>true</code></td><td>Trigger's inner pill stays warn-bordered (power); panel gains the outer glow (pickable). Two signals coexist on different DOM layers.</td></tr>
+          <tr><td class="slate">Discovered-but-unpopulated island has 0-state</td><td>n/a</td><td>Walker filters to <code>populated</code> islands, matching the bar's own filter at <code>hud.ts:328</code>. Undiscovered/unpopulated never contribute.</td></tr>
+          <tr><td class="slate">Spent the last pickable point mid-frame</td><td>flips next frame</td><td>Per-frame refresh (<code>main.ts:1920</code>) catches the new state on the next tick. No event wiring needed.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 09 — Verification                                                    -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">09</span><h2>Verification</h2></div>
+      <p class="sec-intro">Vitest covers the predicate; the visual contract
+        is verified against the live build via the Daedalus screenshot
+        path.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Unit — true case.</strong> Construct a fresh L1 IslandState, manually set <code>unspentSkillPoints = 1</code>. <code>hasPickableSkill(state)</code> returns true (mining.1 is buyable).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Unit — empty case.</strong> L1, 0 points. <code>hasPickableSkill</code> returns false.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Unit — branch-locked case.</strong> Commit one sub-path partially (3 points spent, sub-path not complete), then award one spare point. Two sub-cases: (a) the committed sub-path's next-depth node is buyable at the current tier → <code>hasPickableSkill</code> is true (player can still progress the committed sub-path); (b) the committed sub-path's next-depth node is tier-locked AND every sibling in the same branch is therefore branch-locked AND no other branch has a buyable node → <code>hasPickableSkill</code> is false. Asserts the walker composes with canSpend's branch-lock semantics, not a separately-coded version of them.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Unit — declaration-only case.</strong> L15 (T3), <code>specializationRole = null</code>, <code>unspentSkillPoints = 0</code>, every node already owned. <code>hasPickableSkill</code> returns false. Confirms declaration alone never flips the predicate.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Unit — world walker.</strong> 3-island world; only the middle island has pickable. The walker returns true. Set that middle island's points to 0 → walker returns false.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Build.</strong> <code>npm run build</code> passes strict + noUnusedLocals.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Visual — frame on.</strong> Boot, level home to L5, take a level-up. Browser tab reload after <code>npm run build</code> → daedalus screenshot of the top-HUD shows the yellow outer glow on <code>#island-bar</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Visual — frame off after spend.</strong> Open the skill tree, spend every point until none remain spendable. Reload tab → screenshot shows the glow gone, trigger pill still in its prior power-tone state.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Visual — coexistence.</strong> Force a brownout on the active island (e.g. disable power buildings) AND retain a pickable skill. Screenshot shows trigger pill with yellow border (power-warn) AND panel with yellow glow (pickable) — visually distinguishable.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Visual — per-island dot.</strong> 3-island save, two with pickables. Open the dropdown via the bar's trigger; daedalus screenshot shows yellow right-side dot only on the two pickable rows.</div></div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 10 — Risks                                                           -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">10</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Yellow-on-yellow collision</strong> with the trigger pill's existing <code>data-tone="warn"</code> power-low border (<code>ui.css:280</code>). If a player has a power brownout AND a pickable skill, two yellow signals appear at once.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Different DOM elements (panel vs. inner trigger pill), different visual register (outer soft glow vs. inner flat 1-px rim), different scale (panel-width vs. pill-width). Acceptable: the two signals semantically reinforce ("this island needs your attention for two reasons"). Mitigation if playtest reads them as merged: bump the glow to <code>0 0 0 2px var(--ri-warn)</code> + larger blur, or swap the inner trigger border to a different colour token. Do NOT introduce a new colour without a follow-up theme review.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Per-frame predicate cost grows with island count × 225 nodes × <code>canSpend</code> (which itself loops sub-path nodes for the depth-prereq check). Worst case at 20 islands × no pickable: ~20 × 225 × ~10 = ~45k checks/frame.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Early-exit on the first ok-true makes the common (something pickable) case cheap. The worst case (nothing pickable, max islands) is still &lt;1ms on modern hardware against simple Set/Map lookups. If measurement ever shows it, memoize on the tuple (level, unspentSkillPoints, unlockedNodes.size, subPathProgressSerialized) per island — invalidates only on a level-up, spend, or reset.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A player who has fully maxed every island sees the frame disappear permanently. Could read as "the feature is broken."</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Expected behaviour — there's nothing to claim. The skill-tree modal already shows "complete" sub-paths via the existing <code>◉ complete</code> caption (<code>skilltree-ui.ts:934</code>). No mitigation needed.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The right-side per-island dot competes for space inside <code>.ri-island-opt</code>, which uses <code>flex: 1</code> on the name and a level tag (<code>hud.ts:308&ndash;314</code>). Long island names may push the dot off-screen on narrow viewports.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Dot is the last child after the level tag and inherits flex's natural ordering; the level tag already uses <code>ri-mono ri-muted</code> in a fixed slot. CSS: <code>.ri-dot--pickable { flex-shrink: 0; margin-left: 4px; }</code>. If extreme names overflow, the existing dropdown is already <code>min-width: 100%</code> on a flex column (<code>ui.css:291</code>) so the row grows; no truncation regression.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A second, future "needs-attention" signal (route deficit, building stalled) wants the same outer-glow real estate.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The class is named <code>has-pickable</code>, not <code>has-attention</code>. Future signals add their own class (e.g. <code>.has-stall</code>) and pick a different colour token (<code>--ri-danger</code> for stalls). Composition is per-CSS-rule; no design lock-in.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 11 — Out of scope                                                    -->
+    <!-- =================================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">11</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Explicitly deferred. Named so the reader knows
+        it was considered.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Animation / pulse</div>
+          <div class="dd">A pulsing animation on the glow would make it more attention-grabbing, but pulses are already the danger-tone signal (<code>.ri-dot[data-tone="danger"]</code> pulses at <code>ui.css:256</code>). Keep pickable a steady soft glow; reserve pulse for danger semantics.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Click-the-frame-to-jump shortcut</div>
+          <div class="dd">Making the frame itself clickable to auto-jump to the offending island and open the skill tree would be a nice affordance, but blurs the line between status indicator and control. The per-island dot already points to the source; the user can click that row. Defer until playtest shows the two-click flow is friction.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Hover tooltip on the frame</div>
+          <div class="dd">A tooltip listing which islands and which nodes are pickable. Useful but expensive to render every hover-frame at scale. The dropdown already discloses which islands; opening the skill tree per-island discloses which nodes. Defer.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Aggregating &quot;awaiting declaration&quot; into the same frame</div>
+          <div class="dd">The task explicitly excludes declaration. The existing in-modal <code>'◇ AWAITING DECLARATION'</code> cue at <code>skilltree-ui.ts:786</code> is sufficient. A separate top-HUD declaration cue could be added later but is a different design problem (declaration is one-way per §9.4; pickable skills are reversible via Tier Reset). Don't conflate.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Persisting "I've seen this" dismissal</div>
+          <div class="dd">Some players will leave points unspent on purpose (saving for a future tier). A "dismiss this alert" affordance would silence the frame until next level-up. Not worth the persistence churn until playtest shows the always-on glow is nagging rather than informing.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Memoization of the predicate</div>
+          <div class="dd">The early-exit walker is cheap enough in the common case that memoization would be optimising before measuring. Code is in the spec's risks section for when/if needed; not in scope for the initial implementation.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- Selections — copy & send back                                        -->
+    <!-- =================================================================== -->
+    <aside class="selections" id="selections-panel" aria-label="Your picks">
+      <div class="s-tag">Your picks — copy and send back</div>
+      <div class="s-head">Selections</div>
+      <div class="s-body">Click any radio above to update this panel.
+        Hit <b>Copy</b> to put the payload on your clipboard, or
+        triple-click the block to select it manually. Paste back to
+        confirm your final design picks; I'll reconcile the prose and
+        cut v3 if anything changed.</div>
+
+      <div class="s-tools">
+        <button type="button" class="copy-btn" id="copy-selections" aria-label="Copy selections to clipboard">Copy selections</button>
+        <div class="format-toggle" role="tablist" aria-label="Output format">
+          <button type="button" data-format="json" class="active" role="tab" aria-selected="true">JSON</button>
+          <button type="button" data-format="kv" role="tab" aria-selected="false">key: value</button>
+        </div>
+        <span class="copy-status" id="copy-status" aria-live="polite"></span>
+      </div>
+
+      <pre class="payload" id="selections-payload" tabindex="0">{}</pre>
+    </aside>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-05-22 · last revised 2026-05-23 · v3 adds inline-SVG visual mocks to every picker option · related to <code>SPEC.md</code> §9.3 (skill tree) and §9.4 (specialization).</p>
+    </div>
+
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // Keys must match the fieldsets' data-key attributes / radio name attributes.
+      var KEYS = ['indicator_placement', 'per_island_dot', 'predicate_scope', 'memoization'];
+
+      var payloadEl = document.getElementById('selections-payload');
+      var copyBtn   = document.getElementById('copy-selections');
+      var statusEl  = document.getElementById('copy-status');
+      var formatBtns = document.querySelectorAll('.selections .format-toggle button');
+
+      var currentFormat = 'json';
+
+      function readSelections() {
+        var out = {};
+        for (var i = 0; i < KEYS.length; i++) {
+          var key = KEYS[i];
+          var checked = document.querySelector('input[type="radio"][name="' + key + '"]:checked');
+          out[key] = checked ? checked.value : null;
+        }
+        return out;
+      }
+
+      function render() {
+        var sel = readSelections();
+
+        // Update each picker's "Current: <b>" readout.
+        for (var k in sel) {
+          if (!Object.prototype.hasOwnProperty.call(sel, k)) continue;
+          var b = document.querySelector('[data-current="' + k + '"]');
+          if (b) b.textContent = sel[k] === null ? '—' : sel[k];
+        }
+
+        // Render payload.
+        var text;
+        if (currentFormat === 'json') {
+          text = JSON.stringify({
+            spec: 'robot-islands/2026-05-22-pickable-skill-frame-design',
+            version: 'v3',
+            picks: sel
+          }, null, 2);
+        } else {
+          var lines = [
+            '# Picks for robot-islands/2026-05-22-pickable-skill-frame-design (v3)'
+          ];
+          for (var j = 0; j < KEYS.length; j++) {
+            var key2 = KEYS[j];
+            lines.push(key2 + ': ' + (sel[key2] === null ? '(none)' : sel[key2]));
+          }
+          text = lines.join('\n');
+        }
+        payloadEl.textContent = text;
+      }
+
+      // Wire all radios.
+      var radios = document.querySelectorAll('.picker input[type="radio"]');
+      for (var i = 0; i < radios.length; i++) {
+        radios[i].addEventListener('change', render);
+      }
+
+      // Format toggle.
+      formatBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentFormat = btn.getAttribute('data-format');
+          formatBtns.forEach(function (b) {
+            var active = b === btn;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          render();
+        });
+      });
+
+      // Copy.
+      function showStatus(msg, ok) {
+        statusEl.textContent = msg;
+        statusEl.style.color = ok ? 'var(--olive)' : 'var(--rust)';
+        if (showStatus._t) clearTimeout(showStatus._t);
+        showStatus._t = setTimeout(function () {
+          statusEl.textContent = '';
+        }, 2200);
+      }
+
+      copyBtn.addEventListener('click', function () {
+        var text = payloadEl.textContent;
+        var done = function (ok) {
+          if (ok) {
+            copyBtn.classList.add('copied');
+            copyBtn.textContent = 'Copied';
+            setTimeout(function () {
+              copyBtn.classList.remove('copied');
+              copyBtn.textContent = 'Copy selections';
+            }, 1600);
+            showStatus('copied ' + text.length + ' chars', true);
+          } else {
+            showStatus('copy failed — triple-click the block', false);
+          }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () { done(true); },
+            function () { done(false); }
+          );
+        } else {
+          // Fallback: select the payload so the user can Cmd/Ctrl-C.
+          var range = document.createRange();
+          range.selectNodeContents(payloadEl);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          done(false);
+        }
+      });
+
+      // Initial render.
+      render();
+    })();
+  </script>
+</body>
+</html>
