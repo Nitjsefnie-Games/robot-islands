@@ -51,7 +51,7 @@ import {
 import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId } from './skilltree.js';
+import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel } from './skilltree.js';
 import type { EdgeId } from './skilltree-graph.js';
 
 /**
@@ -663,13 +663,19 @@ export function computeRates(
   // building.
   const hasSpaceport = hasOperationalBuilding(validBuildings, 'spaceport');
   function isBuildingActive(b: PlacedBuilding): boolean {
-    return buildingUnlocked(
+    const def = BUILDING_DEFS[b.defId];
+    const tierShift = effectiveTierShift(state, b.defId);
+    let unlocked = buildingUnlocked(
       state.level,
       b.defId,
       state.aiCoreCrafted,
       state.ascendantCoreCrafted,
       hasSpaceport,
     );
+    if (!unlocked && tierShift > 0 && def.tier <= 4) {
+      unlocked = tierForLevel(state.level) >= def.tier - tierShift;
+    }
+    return unlocked;
   }
   interface Tentative {
     readonly building: PlacedBuilding;
