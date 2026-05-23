@@ -1376,7 +1376,6 @@ async function main(): Promise<void> {
     // gets assigned before this action ever fires (panel-toggle happens
     // through user input, not synchronously during bootstrap).
     settingsUi.hide();
-    graphUi.hide();
     orbitalUi.hide();
     placementUi.cancel();
     // §4 inspector: Escape also closes the inspector + clears the
