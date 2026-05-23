@@ -28,6 +28,7 @@ import type { RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
 import type { Biome } from './world.js';
+import type { Edge, EdgeId, Graph, BridgeEdge } from './skilltree-graph.js';
 
 export type BranchId = 'extraction' | 'refinement' | 'logistics' | 'orbital';
 
@@ -1043,4 +1044,94 @@ export function hasPickableSkill(state: IslandState): boolean {
     if (canSpend(state, node.id).ok) return true;
   }
   return false;
+}
+
+/** Result of `costToUnlock` — the cheapest edge path to a target node. */
+export interface CheapestPathResult {
+  readonly path: ReadonlyArray<Edge>;
+  readonly totalCost: number;
+}
+
+/** Multi-source Dijkstra. Sources are all currently-owned nodes (their distance
+ *  is 0). Edge weights are the SP cost of each edge. Threshold-bridge edges are
+ *  included only when their threshold is currently met (caller resolves this
+ *  via `isBridgeActive` and passes the filtered edge set). Returns the
+ *  cheapest path from any owned source to the target. Null = unreachable. */
+export function costToUnlock(
+  graph: Graph,
+  ownedNodes: ReadonlySet<NodeId>,
+  ownedEdges: ReadonlySet<EdgeId>,
+  state: IslandState,
+  target: NodeId,
+): CheapestPathResult | null {
+  if (ownedNodes.has(target)) return { path: [], totalCost: 0 };
+
+  // Build adjacency from outgoing edges (since edges are directed).
+  const adjacency = new Map<NodeId, Edge[]>();
+  const allEdges: Edge[] = [
+    ...graph.edges,
+    ...graph.bridges.filter((b) => isBridgeActive(b, state, graph)),
+  ];
+  for (const e of allEdges) {
+    const list = adjacency.get(e.from as NodeId) ?? [];
+    list.push(e);
+    adjacency.set(e.from as NodeId, list);
+  }
+
+  // Standard Dijkstra with multi-source seeding.
+  const distance = new Map<NodeId, number>();
+  const previous = new Map<NodeId, Edge>();
+  const queue: Array<{ node: NodeId; cost: number }> = [];
+  for (const n of ownedNodes) {
+    distance.set(n, 0);
+    queue.push({ node: n, cost: 0 });
+  }
+
+  while (queue.length > 0) {
+    queue.sort((a, b) => a.cost - b.cost); // O(n log n) per pop; fine at ~500-1000 nodes
+    const { node: u, cost: cu } = queue.shift()!;
+    if (cu > (distance.get(u) ?? Infinity)) continue;
+    if (u === target) break;
+
+    for (const e of adjacency.get(u) ?? []) {
+      // Skip edges already owned (they're free to traverse).
+      const edgeCost = ownedEdges.has(e.id) ? 0 : e.cost;
+      const next = cu + edgeCost;
+      if (next < (distance.get(e.to as NodeId) ?? Infinity)) {
+        distance.set(e.to as NodeId, next);
+        previous.set(e.to as NodeId, e);
+        queue.push({ node: e.to as NodeId, cost: next });
+      }
+    }
+  }
+
+  const total = distance.get(target);
+  if (total === undefined) return null;
+
+  // Walk back to reconstruct the path.
+  const path: Edge[] = [];
+  let cur: NodeId | undefined = target;
+  while (cur !== undefined && !ownedNodes.has(cur)) {
+    const e = previous.get(cur);
+    if (e === undefined) break;
+    path.unshift(e);
+    cur = e.from as NodeId;
+  }
+
+  return { path, totalCost: total };
+}
+
+function isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Graph): boolean {
+  return bridge.threshold.some(({ branch, minSpent }) => spentInBranch(state, branch, graph) >= minSpent);
+}
+
+function spentInBranch(state: IslandState, branchId: BranchId, graph: Graph): number {
+  let sum = 0;
+  for (const e of graph.edges) {
+    if (state.unlockedEdges.has(e.id as EdgeId)) {
+      const node = graph.nodes.find((n) => n.id === e.to);
+      if (node !== undefined && SUBPATH_BRANCH[node.subPath] === branchId) sum += e.cost;
+    }
+  }
+  return sum;
 }
