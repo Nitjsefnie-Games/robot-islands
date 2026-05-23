@@ -81,9 +81,8 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     level: 1,
     unspentSkillPoints: 0,
     unlockedNodes: new Set(),
-    subPathProgress: new Map(),
+    unlockedEdges: new Set(),
     funnelPending: emptyFunnel(),
-    specializationRole: null,
     declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
@@ -139,22 +138,6 @@ describe('serializeWorld', () => {
     expect(new Set(entry.state.unlockedNodes)).toEqual(new Set(['mining.1', 'storage.2']));
   });
 
-  it('converts subPathProgress (Map) to a list of entries', () => {
-    const home = makeIslandState({
-      subPathProgress: new Map([
-        ['mining', { spent: 3, complete: false }],
-        ['storage', { spent: 5, complete: true }],
-      ]),
-    });
-    const world = makeInitialWorld(0);
-    const states = new Map<string, IslandState>([['home', home]]);
-    const snap = serializeWorld(world, states, 0);
-    const entry = snap.islandStates[0]!;
-    expect(Array.isArray(entry.state.subPathProgress)).toBe(true);
-    const restored = new Map(entry.state.subPathProgress);
-    expect(restored.get('mining')).toEqual({ spent: 3, complete: false });
-    expect(restored.get('storage')).toEqual({ spent: 5, complete: true });
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -229,25 +212,6 @@ describe('serialize → JSON → deserialize round-trip', () => {
     expect(r.unlockedNodes.has('mining.2')).toBe(true);
     expect(r.unlockedNodes.has('storage.1')).toBe(true);
     expect(r.unlockedNodes.size).toBe(3);
-  });
-
-  it('restores subPathProgress back to a Map with identical entries', () => {
-    const home = makeIslandState({
-      subPathProgress: new Map([
-        ['mining', { spent: 4, complete: false }],
-        ['transport', { spent: 5, complete: true }],
-      ]),
-    });
-    const world = makeInitialWorld(0);
-    const states = new Map<string, IslandState>([['home', home]]);
-    const snap = serializeWorld(world, states, 0);
-    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    const { islandStates: restored } = deserializeWorld(json, 0, 0);
-    const r = restored.get('home')!;
-    expect(r.subPathProgress).toBeInstanceOf(Map);
-    expect(r.subPathProgress.get('mining')).toEqual({ spent: 4, complete: false });
-    expect(r.subPathProgress.get('transport')).toEqual({ spent: 5, complete: true });
-    expect(r.subPathProgress.size).toBe(2);
   });
 
   it('rehydrates terrainAt to the same value terrainAtForBiome would return', () => {
@@ -1126,31 +1090,6 @@ describe('IslandState Time Lock state round-trip', () => {
 });
 
 // ---------------------------------------------------------------------------
-// IslandState specializationRole round-trip
-// ---------------------------------------------------------------------------
-
-describe('IslandState specializationRole round-trip', () => {
-  it('preserves a non-null specializationRole', () => {
-    const home = makeIslandState({ specializationRole: 'research_beacon' });
-    const world = makeInitialWorld(0);
-    const states = new Map<string, IslandState>([['home', home]]);
-    const snap = serializeWorld(world, states, 0, 0);
-    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    const { islandStates: restored } = deserializeWorld(json, 0, 0);
-    expect(restored.get('home')!.specializationRole).toBe('research_beacon');
-  });
-
-  it('preserves null specializationRole', () => {
-    const home = makeIslandState({ specializationRole: null });
-    const world = makeInitialWorld(0);
-    const states = new Map<string, IslandState>([['home', home]]);
-    const snap = serializeWorld(world, states, 0, 0);
-    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    const { islandStates: restored } = deserializeWorld(json, 0, 0);
-    expect(restored.get('home')!.specializationRole).toBeNull();
-  });
-});
-
 // ---------------------------------------------------------------------------
 // PlacedBuilding flags round-trip
 // ---------------------------------------------------------------------------

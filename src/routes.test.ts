@@ -59,9 +59,8 @@ function makeState(id: string, over: Partial<IslandState> = {}): IslandState {
     level: 1,
     unspentSkillPoints: 0,
     unlockedNodes: new Set(),
-    subPathProgress: new Map(),
+    unlockedEdges: new Set(),
     funnelPending: blankFunnel(),
-    specializationRole: null,
     declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
@@ -97,17 +96,6 @@ function makeIslandSpec(id: string, cx: number, cy: number): IslandSpec {
     buildings: [],
     modifiers: [],
   };
-}
-
-function makeTwoIslandWorld(): { world: WorldState; states: Map<string, IslandState> } {
-  const src = makeState('island-a');
-  const dst = makeState('island-b');
-  const world = makeWorld();
-  const states = new Map([
-    ['island-a', src],
-    ['island-b', dst],
-  ]);
-  return { world, states };
 }
 
 function findCellWithWeather(
@@ -463,30 +451,6 @@ describe('tickRoutes — instant transit (T4 teleporter equivalent)', () => {
   });
 });
 
-
-describe('§9.4 logistics hub route capacity doubling', () => {
-  it('doubles capacity for routes from a logistics_hub island', () => {
-    const { world, states } = makeTwoIslandWorld();
-    const fromState = states.get('island-a')!;
-    fromState.specializationRole = 'logistics_hub';
-    world.routes.push(cargoRoute('island-a', 'island-b', 'stone', [], 1, 10));
-    fromState.inventory.stone = 100;
-    const result = dispatchAttempt(world, states, 0, 1);
-    expect(result.length).toBe(1);
-    expect(result[0]!.amount).toBe(2); // 1 * 2 (doubled)
-  });
-
-  it('keeps base capacity for non-logistics-hub origin', () => {
-    const { world, states } = makeTwoIslandWorld();
-    const fromState = states.get('island-a')!;
-    fromState.specializationRole = null; // generalist
-    world.routes.push(cargoRoute('island-a', 'island-b', 'stone', [], 1, 10));
-    fromState.inventory.stone = 100;
-    const result = dispatchAttempt(world, states, 0, 1);
-    expect(result.length).toBe(1);
-    expect(result[0]!.amount).toBe(1); // base capacity
-  });
-});
 
 
 describe('routeCapacityMultiplierForWeather', () => {

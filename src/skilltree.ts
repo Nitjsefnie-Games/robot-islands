@@ -697,28 +697,12 @@ export function canSpend(
   // therefore engages in normal play as soon as a player buys the first two
   // nodes of any sub-path, preventing parallel work on sibling sub-paths
   // until the committed one is fully completed.
-  const targetBranch = SUBPATH_BRANCH[node.subPath];
-  for (const [sp, progress] of state.subPathProgress) {
-    if (sp === node.subPath) continue;
-    if (SUBPATH_BRANCH[sp] !== targetBranch) continue;
-    if (progress.complete) continue;
-    if (progress.spent >= SUBPATH_COMMIT_THRESHOLD) {
-      return { ok: false, reason: 'branch-locked' };
-    }
-  }
   return { ok: true };
 }
 
 /**
  * Apply a purchase. Caller must have verified `canSpend(state, nodeId).ok`.
- * Mutates `state.unspentSkillPoints`, `state.unlockedNodes`, and
- * `state.subPathProgress`.
- *
- * Sub-path completion semantics: a sub-path is `complete` when every node in
- * the catalog belonging to that sub-path has been unlocked. With the full
- * depth-1-15 catalog, "complete" means all 15 nodes owned. A sub-path that
- * was "complete" at one node-catalog version may revert to "in-progress" if
- * new nodes are added — that's by design.
+ * Mutates `state.unspentSkillPoints` and `state.unlockedNodes`.
  */
 export function spendPoint(
   state: IslandState,
@@ -730,11 +714,6 @@ export function spendPoint(
   if (!node) throw new Error(`spendPoint: unknown node ${nodeId}`);
   state.unspentSkillPoints -= node.cost;
   state.unlockedNodes.add(nodeId);
-  const sub = cat.bySubPath.get(node.subPath) ?? [];
-  const prev = state.subPathProgress.get(node.subPath) ?? { spent: 0, complete: false };
-  const nextSpent = prev.spent + node.cost;
-  const allOwned = sub.every((n) => state.unlockedNodes.has(n.id));
-  state.subPathProgress.set(node.subPath, { spent: nextSpent, complete: allOwned });
 }
 
 // ---------------------------------------------------------------------------

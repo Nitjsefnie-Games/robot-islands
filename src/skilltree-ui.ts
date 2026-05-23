@@ -20,7 +20,7 @@ import {
   type SubPathId,
 } from './skilltree.js';
 import { type IslandState, xpForLevel } from './economy.js';
-import { ALL_ROLES, ROLE_DEFS, type RoleId } from './specialization.js';
+
 import {
   TIER_RESET_COOLDOWN_MS,
   canTierReset,
@@ -44,12 +44,8 @@ export interface SkillTreeUi {
   isVisible(): boolean;
 }
 
-/** Optional hooks for the skill-tree panel. Step 10 adds `onDeclareRole`,
- *  invoked after the panel mutates `state.specializationRole` so callers
- *  can run additional bookkeeping (e.g., bumping a "declared role X"
- *  notification). The mutation happens inside the panel regardless. */
 export interface SkillTreeUiOptions {
-  readonly onDeclareRole?: (role: RoleId) => void;
+  /** No hooks currently; reserved for future use. */
 }
 
 /** Active-island getter injected at mount. The panel reads the active
@@ -71,7 +67,7 @@ interface NodeRowRef {
 export function mountSkillTreeUi(
   parentEl: HTMLElement,
   deps: SkillTreeUiDeps,
-  options: SkillTreeUiOptions = {},
+  _options: SkillTreeUiOptions = {},
 ): SkillTreeUi {
   const getState = (): IslandState => deps.getState();
   const nodeRefs = new Map<string, NodeRowRef>();
@@ -88,22 +84,10 @@ export function mountSkillTreeUi(
   tierVal.classList.add('ri-mono');
   const pointsVal = document.createElement('span');
   pointsVal.classList.add('ri-mono');
-  const captionStatus = document.createElement('span');
-  const cardGrid = document.createElement('div');
   const tierResetDetail = document.createElement('span');
   const tierResetBtn = document.createElement('button');
 
-  interface CardRef {
-    readonly card: HTMLDivElement;
-    readonly topBorder: HTMLDivElement;
-    readonly glyph: HTMLSpanElement;
-    readonly tierChip: HTMLSpanElement;
-    readonly nameEl: HTMLSpanElement;
-    readonly datasheetEl: HTMLDivElement;
-    readonly footerBtn: HTMLButtonElement;
-    readonly activeStamp: HTMLSpanElement;
-  }
-  const cardRefs = new Map<RoleId, CardRef>();
+
 
   function nodeRow(node: SkillNode, branch: BranchId): HTMLDivElement {
     const row = document.createElement('div');
@@ -213,239 +197,6 @@ export function mountSkillTreeUi(
     return row;
   }
 
-  // ---------------------------------------------------------------------------
-  // Specialization helpers
-  // ---------------------------------------------------------------------------
-
-  const ROLE_GLYPHS: Readonly<Record<RoleId, string>> = {
-    foundry: '▣',
-    refinery: '◇',
-    mining: '▽',
-    logistics_hub: '⇄',
-    research_beacon: '⊙',
-  };
-  const ROLE_CARD_NAMES: Readonly<Record<RoleId, string>> = {
-    foundry: 'FOUNDRY',
-    refinery: 'REFINERY',
-    mining: 'MINING',
-    logistics_hub: 'LOGISTICS HUB',
-    research_beacon: 'RESEARCH BEACON',
-  };
-
-  function buildDatasheetRows(id: RoleId): HTMLDivElement {
-    const wrap = document.createElement('div');
-    wrap.style.display = 'flex';
-    wrap.style.flexDirection = 'column';
-    wrap.style.gap = '3px';
-
-    function row(label: string, valueSpan: HTMLElement): HTMLDivElement {
-      const r = document.createElement('div');
-      r.style.display = 'flex';
-      r.style.justifyContent = 'space-between';
-      r.style.alignItems = 'baseline';
-      r.style.gap = '6px';
-      const l = document.createElement('span');
-      l.textContent = label;
-      l.style.color = 'var(--ri-fg-3)';
-      l.style.fontSize = '10px';
-      l.style.letterSpacing = '0.06em';
-      l.style.textTransform = 'uppercase';
-      r.appendChild(l);
-      r.appendChild(valueSpan);
-      return r;
-    }
-
-    function valueSpan(text: string, colorVar: string): HTMLSpanElement {
-      const s = document.createElement('span');
-      s.textContent = text;
-      s.style.color = colorVar;
-      s.style.fontSize = '11px';
-      s.style.fontWeight = '600';
-      s.style.fontVariantNumeric = 'tabular-nums';
-      return s;
-    }
-
-    const MIN = '−';
-
-    switch (id) {
-      case 'foundry':
-        wrap.appendChild(row('SMELTING', valueSpan('+50%', 'var(--ri-accent)')));
-        wrap.appendChild(row('OTHERS', valueSpan(`${MIN}25%`, 'var(--ri-warn)')));
-        break;
-      case 'refinery':
-        wrap.appendChild(row('CHEMISTRY', valueSpan('+50%', 'var(--ri-accent)')));
-        wrap.appendChild(row('OTHERS', valueSpan(`${MIN}25%`, 'var(--ri-warn)')));
-        break;
-      case 'mining':
-        wrap.appendChild(row('EXTRACTION', valueSpan('+75%', 'var(--ri-accent)')));
-        wrap.appendChild(row('OTHERS', valueSpan(`${MIN}50%`, 'var(--ri-warn)')));
-        break;
-      case 'logistics_hub':
-        wrap.appendChild(row('ROUTE CAP', valueSpan('+100% · STG +50%', 'var(--ri-accent)')));
-        wrap.appendChild(row('PRODUCTION', valueSpan(`${MIN}25%`, 'var(--ri-warn)')));
-        break;
-      case 'research_beacon': {
-        const mixed = document.createElement('span');
-        mixed.style.fontSize = '11px';
-        mixed.style.fontWeight = '600';
-        mixed.style.fontVariantNumeric = 'tabular-nums';
-        const xpPart = document.createElement('span');
-        xpPart.textContent = '+50%';
-        xpPart.style.color = 'var(--ri-accent)';
-        const sep = document.createElement('span');
-        sep.textContent = ' · RECIPES ';
-        sep.style.color = 'var(--ri-fg-3)';
-        const recipePart = document.createElement('span');
-        recipePart.textContent = `${MIN}25%`;
-        recipePart.style.color = 'var(--ri-warn)';
-        mixed.appendChild(xpPart);
-        mixed.appendChild(sep);
-        mixed.appendChild(recipePart);
-        wrap.appendChild(row('XP', mixed));
-        break;
-      }
-      default: {
-        const _exhaustive: never = id;
-        void _exhaustive;
-        break;
-      }
-    }
-    return wrap;
-  }
-
-  const ROLE_CONFIRM_SUMMARY: Readonly<Record<RoleId, string>> = {
-    foundry: '+50% smelting recipe rate, ×0.75 on all other production.',
-    refinery: '+50% chemistry recipe rate, ×0.75 on all other production.',
-    mining: '+75% extraction recipe rate, ×0.50 on all other production.',
-    logistics_hub:
-      '+100% route capacity, +50% storage caps, ×0.75 on all production.',
-    research_beacon: '+50% skill XP on this island, ×0.75 on all recipe rates.',
-  };
-
-  function buildCard(id: RoleId): void {
-    const def = ROLE_DEFS[id];
-    const card = document.createElement('div');
-    card.style.background = 'var(--ri-panel)';
-    card.style.padding = '10px 9px 9px';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.gap = '8px';
-    card.style.position = 'relative';
-    card.style.transition = 'opacity 100ms ease, background 100ms ease';
-
-    const topBorder = document.createElement('div');
-    topBorder.style.position = 'absolute';
-    topBorder.style.top = '0';
-    topBorder.style.left = '0';
-    topBorder.style.right = '0';
-    topBorder.style.height = '2px';
-    topBorder.style.background = 'var(--ri-fg-4)';
-    card.appendChild(topBorder);
-
-    const glyphRow = document.createElement('div');
-    glyphRow.style.display = 'flex';
-    glyphRow.style.alignItems = 'center';
-    glyphRow.style.justifyContent = 'space-between';
-    glyphRow.style.gap = '6px';
-
-    const glyph = document.createElement('span');
-    glyph.textContent = ROLE_GLYPHS[id];
-    glyph.style.color = 'var(--ri-fg-1)';
-    glyph.style.fontSize = '16px';
-    glyph.style.fontFamily = 'var(--ri-font-mono)';
-    glyph.style.fontVariantNumeric = 'tabular-nums';
-    glyph.style.lineHeight = '1';
-
-    const tierChip = document.createElement('span');
-    tierChip.textContent = `T${def.tierRequirement}`;
-    tierChip.style.color = 'var(--ri-fg-3)';
-    tierChip.style.fontSize = '9.5px';
-    tierChip.style.letterSpacing = '0.08em';
-    tierChip.style.border = '1px solid var(--ri-fg-4)';
-    tierChip.style.padding = '0 4px';
-    tierChip.style.borderRadius = '2px';
-    tierChip.style.lineHeight = '1.3';
-
-    glyphRow.appendChild(glyph);
-    glyphRow.appendChild(tierChip);
-    card.appendChild(glyphRow);
-
-    const nameEl = document.createElement('span');
-    nameEl.textContent = ROLE_CARD_NAMES[id];
-    nameEl.style.color = 'var(--ri-fg-1)';
-    nameEl.style.fontSize = '12px';
-    nameEl.style.fontWeight = '600';
-    nameEl.style.letterSpacing = '0.03em';
-    nameEl.style.textTransform = 'uppercase';
-    card.appendChild(nameEl);
-
-    const datasheetEl = buildDatasheetRows(id);
-    card.appendChild(datasheetEl);
-
-    const footerBtn = document.createElement('button');
-    footerBtn.className = 'ri-btn';
-    footerBtn.style.width = '100%';
-    footerBtn.style.marginTop = 'auto';
-    footerBtn.style.cursor = 'not-allowed';
-    footerBtn.style.opacity = '0.5';
-    footerBtn.addEventListener('click', () => {
-      const state = getState();
-      const role = state.specializationRole;
-      if (role !== null) return;
-      if (tierForLevel(state.level) < def.tierRequirement) return;
-      const proceed = window.confirm(
-        `DECLARE ${ROLE_DEFS[id].displayName.toUpperCase()} ROLE\n\n` +
-          `${ROLE_CONFIRM_SUMMARY[id]}\n\n` +
-          'This commitment can only be reversed via Tier Reset (§9.7).\nProceed?',
-      );
-      if (!proceed) return;
-      state.specializationRole = id;
-      state.declaredAt = performance.now();
-      options.onDeclareRole?.(id);
-      refresh();
-      footerBtn.blur();
-    });
-    card.addEventListener('mouseenter', () => {
-      const state = getState();
-      if (state.specializationRole !== null) return;
-      if (tierForLevel(state.level) < def.tierRequirement) return;
-      card.style.background = 'rgba(245, 167, 66, 0.06)';
-    });
-    card.addEventListener('mouseleave', () => {
-      refreshSpecialization();
-    });
-    card.appendChild(footerBtn);
-
-    const activeStamp = document.createElement('span');
-    activeStamp.textContent = '● ACTIVE';
-    activeStamp.style.position = 'absolute';
-    activeStamp.style.top = '6px';
-    activeStamp.style.right = '8px';
-    activeStamp.style.color = 'var(--ri-accent)';
-    activeStamp.style.fontSize = '9px';
-    activeStamp.style.letterSpacing = '0.10em';
-    activeStamp.style.border = '1px solid var(--ri-border-accent)';
-    activeStamp.style.padding = '1px 4px';
-    activeStamp.style.borderRadius = '2px';
-    activeStamp.style.display = 'none';
-    card.appendChild(activeStamp);
-
-    cardGrid.appendChild(card);
-    cardRefs.set(id, {
-      card,
-      topBorder,
-      glyph,
-      tierChip,
-      nameEl,
-      datasheetEl,
-      footerBtn,
-      activeStamp,
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Mount modal
-  // ---------------------------------------------------------------------------
 
   const handle = mountModal(parentEl, {
     title: 'SKILL TREE',
@@ -494,55 +245,14 @@ export function mountSkillTreeUi(
       statsStrip.appendChild(statBlock('UNSPENT', pointsVal));
       body.appendChild(statsStrip);
 
-      // ---- Specialization section -------------------------------------------
-      const specSection = document.createElement('div');
-      specSection.style.display = 'flex';
-      specSection.style.flexDirection = 'column';
-      specSection.style.gap = '10px';
-      specSection.style.padding = '12px 0 14px';
-      specSection.style.borderTop = '1px solid var(--ri-rule)';
-      specSection.style.borderBottom = '1px solid var(--ri-border-strong)';
-
-      const captionRow = document.createElement('div');
-      captionRow.style.display = 'flex';
-      captionRow.style.alignItems = 'baseline';
-      captionRow.style.justifyContent = 'space-between';
-      captionRow.style.gap = '12px';
-
-      const captionLeft = document.createElement('span');
-      captionLeft.textContent = 'SPECIALIZATION';
-      captionLeft.className = 'ri-caps';
-      captionLeft.style.color = 'var(--ri-accent)';
-      captionLeft.style.fontSize = '11px';
-      captionLeft.style.letterSpacing = '0.22em';
-
-      const captionSubtitle = document.createElement('span');
-      captionSubtitle.textContent = '§9.4 / role declaration';
-      captionSubtitle.className = 'ri-muted';
-      captionSubtitle.style.fontSize = '10px';
-      captionSubtitle.style.letterSpacing = '0.12em';
-      captionSubtitle.style.textTransform = 'uppercase';
-      captionSubtitle.style.flex = '1 1 auto';
-      captionSubtitle.style.paddingLeft = '14px';
-
-      captionStatus.style.fontSize = '11px';
-      captionStatus.style.fontWeight = '600';
-      captionStatus.style.letterSpacing = '0.10em';
-      captionStatus.style.textTransform = 'uppercase';
-      captionStatus.style.flex = '0 0 auto';
-
-      captionRow.appendChild(captionLeft);
-      captionRow.appendChild(captionSubtitle);
-      captionRow.appendChild(captionStatus);
-      specSection.appendChild(captionRow);
-
-      cardGrid.style.display = 'grid';
-      cardGrid.style.gridTemplateColumns = 'repeat(5, 1fr)';
-      cardGrid.style.gap = '1px';
-      cardGrid.style.background = 'var(--ri-border-strong)';
-      specSection.appendChild(cardGrid);
-
-      for (const id of ALL_ROLES) buildCard(id);
+      // ---- Tier reset section -----------------------------------------------
+      const tierSection = document.createElement('div');
+      tierSection.style.display = 'flex';
+      tierSection.style.flexDirection = 'column';
+      tierSection.style.gap = '10px';
+      tierSection.style.padding = '12px 0 14px';
+      tierSection.style.borderTop = '1px solid var(--ri-rule)';
+      tierSection.style.borderBottom = '1px solid var(--ri-border-strong)';
 
       // Tier-reset row
       const tierResetRow = document.createElement('div');
@@ -594,7 +304,7 @@ export function mountSkillTreeUi(
           'TIER RESET (§9.7)\n\n' +
             `Cost: ${cost.steel} steel, ${cost.gear} gear\n\n` +
             'Reverts this island to Tier 1.\n' +
-            'Clears: level, XP, skill points, specialization role, sub-path commitments.\n' +
+            'Clears: level, XP, skill points, graph unlocks.\n' +
             'Preserves: buildings, inventory (minus cost), storage caps, modifiers.\n\n' +
             'T2+ buildings remain placed but stall until the island re-climbs.\n' +
             '24-hour cooldown before another reset on this island.\n\n' +
@@ -619,9 +329,9 @@ export function mountSkillTreeUi(
 
       tierResetRow.appendChild(tierResetLeft);
       tierResetRow.appendChild(tierResetBtn);
-      specSection.appendChild(tierResetRow);
+      tierSection.appendChild(tierResetRow);
 
-      body.appendChild(specSection);
+      body.appendChild(tierSection);
 
       // ---- Branch columns ---------------------------------------------------
       const branchGrid = document.createElement('div');
@@ -769,101 +479,6 @@ export function mountSkillTreeUi(
     }
   }
 
-  function refreshSpecialization(): void {
-    const state = getState();
-    const declared: RoleId | null = state.specializationRole;
-    const tier = tierForLevel(state.level);
-    const unlocked = tier >= 3;
-
-    if (!unlocked && declared === null) {
-      captionStatus.textContent = '◯ REQUIRES TIER 3';
-      captionStatus.style.color = 'var(--ri-fg-4)';
-    } else if (declared !== null) {
-      const name = ROLE_DEFS[declared].displayName.toUpperCase();
-      captionStatus.textContent = `● ROLE ACTIVE: ${name}`;
-      captionStatus.style.color = 'var(--ri-accent)';
-    } else {
-      captionStatus.textContent = '◇ AWAITING DECLARATION';
-      captionStatus.style.color = 'var(--ri-warn)';
-    }
-
-    for (const id of ALL_ROLES) {
-      const ref = cardRefs.get(id);
-      if (!ref) continue;
-      const isActive = declared === id;
-      const isOtherDeclared = declared !== null && declared !== id;
-      if (isActive) {
-        ref.card.style.background = 'rgba(125, 211, 232, 0.05)';
-        ref.card.style.opacity = '1';
-        ref.topBorder.style.background = 'var(--ri-accent)';
-        ref.topBorder.style.height = '2px';
-        ref.glyph.style.color = 'var(--ri-accent)';
-        ref.glyph.style.textShadow = '0 0 6px rgba(125, 211, 232, 0.4)';
-        ref.tierChip.style.color = 'var(--ri-accent)';
-        ref.tierChip.style.borderColor = 'var(--ri-accent)';
-        ref.nameEl.style.color = 'var(--ri-fg-1)';
-        ref.datasheetEl.style.opacity = '1';
-        ref.footerBtn.textContent = '● ACTIVE';
-        ref.footerBtn.style.color = 'var(--ri-accent)';
-        ref.footerBtn.style.borderColor = 'var(--ri-accent)';
-        ref.footerBtn.style.cursor = 'default';
-        ref.footerBtn.style.opacity = '1';
-        ref.activeStamp.style.display = 'inline-block';
-      } else if (isOtherDeclared) {
-        ref.card.style.background = 'var(--ri-panel)';
-        ref.card.style.opacity = '0.4';
-        ref.topBorder.style.background = 'var(--ri-fg-4)';
-        ref.topBorder.style.height = '1px';
-        ref.glyph.style.color = 'var(--ri-fg-4)';
-        ref.glyph.style.textShadow = 'none';
-        ref.tierChip.style.color = 'var(--ri-fg-4)';
-        ref.tierChip.style.borderColor = 'var(--ri-fg-4)';
-        ref.nameEl.style.color = 'var(--ri-fg-4)';
-        ref.datasheetEl.style.opacity = '1';
-        ref.footerBtn.textContent = 'LOCKED · ROLE SET';
-        ref.footerBtn.style.color = 'var(--ri-fg-4)';
-        ref.footerBtn.style.borderColor = 'var(--ri-fg-4)';
-        ref.footerBtn.style.cursor = 'not-allowed';
-        ref.footerBtn.style.opacity = '0.6';
-        ref.activeStamp.style.display = 'none';
-      } else if (unlocked) {
-        ref.card.style.background = 'var(--ri-panel)';
-        ref.card.style.opacity = '1';
-        ref.topBorder.style.background = 'var(--ri-warn)';
-        ref.topBorder.style.height = '2px';
-        ref.glyph.style.color = 'var(--ri-fg-1)';
-        ref.glyph.style.textShadow = 'none';
-        ref.tierChip.style.color = 'var(--ri-fg-3)';
-        ref.tierChip.style.borderColor = 'var(--ri-fg-4)';
-        ref.nameEl.style.color = 'var(--ri-fg-1)';
-        ref.datasheetEl.style.opacity = '1';
-        ref.footerBtn.textContent = '▶ DECLARE';
-        ref.footerBtn.style.color = 'var(--ri-warn)';
-        ref.footerBtn.style.borderColor = 'var(--ri-warn)';
-        ref.footerBtn.style.cursor = 'pointer';
-        ref.footerBtn.style.opacity = '1';
-        ref.activeStamp.style.display = 'none';
-      } else {
-        ref.card.style.background = 'var(--ri-panel)';
-        ref.card.style.opacity = '0.55';
-        ref.topBorder.style.background = 'var(--ri-fg-4)';
-        ref.topBorder.style.height = '2px';
-        ref.glyph.style.color = 'var(--ri-fg-4)';
-        ref.glyph.style.textShadow = 'none';
-        ref.tierChip.style.color = 'var(--ri-fg-4)';
-        ref.tierChip.style.borderColor = 'var(--ri-fg-4)';
-        ref.nameEl.style.color = 'var(--ri-fg-3)';
-        ref.datasheetEl.style.opacity = '0.8';
-        ref.footerBtn.textContent = 'LOCKED · T3';
-        ref.footerBtn.style.color = 'var(--ri-fg-4)';
-        ref.footerBtn.style.borderColor = 'var(--ri-fg-4)';
-        ref.footerBtn.style.cursor = 'not-allowed';
-        ref.footerBtn.style.opacity = '0.5';
-        ref.activeStamp.style.display = 'none';
-      }
-    }
-  }
-
   function refreshTierReset(): void {
     const state = getState();
     const now = performance.now();
@@ -916,7 +531,6 @@ export function mountSkillTreeUi(
     tierVal.textContent = `T${tierForLevel(state.level)}`;
     pointsVal.textContent = String(state.unspentSkillPoints);
 
-    refreshSpecialization();
     refreshTierReset();
 
     for (const node of NODE_CATALOG) {
@@ -929,29 +543,17 @@ export function mountSkillTreeUi(
       for (const sp of BRANCH_SUBPATHS[branch]) {
         const subEl = subStatusRefs.get(sp);
         if (!subEl) continue;
-        const prog = state.subPathProgress.get(sp);
-        if (prog?.complete) {
+        const subNodes = NODE_CATALOG.filter((n) => n.subPath === sp);
+        const owned = subNodes.filter((n) => state.unlockedNodes.has(n.id)).length;
+        if (owned === subNodes.length && subNodes.length > 0) {
           subEl.textContent = '◉ complete';
           subEl.style.color = 'var(--ri-accent)';
-        } else if (prog && prog.spent >= 3) {
-          subEl.textContent = '◐ committed';
-          subEl.style.color = 'var(--ri-warn)';
-        } else if (prog && prog.spent > 0) {
-          subEl.textContent = `◑ ${prog.spent} pt`;
+        } else if (owned > 0) {
+          subEl.textContent = `◑ ${owned}/${subNodes.length}`;
           subEl.style.color = 'var(--ri-fg-3)';
         } else {
-          // 0 spent — but if a sibling in this branch is committed-but-
-          // not-complete, the whole sub-path is branch-locked. Surface that
-          // distinctly so the player doesn't waste clicks discovering it.
-          const probeNode = NODE_CATALOG.find((n) => n.subPath === sp);
-          const probe = probeNode ? canSpend(state, probeNode.id) : null;
-          if (probe && !probe.ok && probe.reason === 'branch-locked') {
-            subEl.textContent = '⊘ blocked';
-            subEl.style.color = 'var(--ri-danger)';
-          } else {
-            subEl.textContent = '◇ open';
-            subEl.style.color = 'var(--ri-fg-4)';
-          }
+          subEl.textContent = '◇ open';
+          subEl.style.color = 'var(--ri-fg-4)';
         }
       }
     }

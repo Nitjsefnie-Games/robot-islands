@@ -14,10 +14,9 @@
 //      rehydrate via `terrainAtForBiome(spec.biome, spec.id, x, y)` on load —
 //      the same factory `world.ts` uses to build the demo set.
 //
-//   2. `IslandState.unlockedNodes` is a `Set<NodeId>` and `subPathProgress`
-//      is a `Map<SubPathId, …>`. Both stringify as `{}` by default. We
-//      convert to/from array form explicitly so the round-trip preserves
-//      membership and ordering.
+//   2. `IslandState.unlockedNodes` is a `Set<NodeId>`. Sets stringify as `{}`
+//      by default. We convert to/from array form explicitly so the round-trip
+//      preserves membership and ordering.
 //
 //   3. Module-level id counters in `drones.ts` and `routes.ts` reset on
 //      page load. After restoring, the loader seeds those counters past
@@ -58,7 +57,7 @@ import { _seedVehicleIdCounter } from './settlement.js';
 
 
 import type { VictoryCondition } from './endgame.js';
-import type { NodeId, SubPathId } from './skilltree.js';
+import type { NodeId } from './skilltree.js';
 import type { OceanCellSpec } from './ocean-cell.js';
 
 import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
@@ -95,11 +94,8 @@ export type SerializedIslandSpec = Omit<IslandSpec, 'terrainAt'>;
 
 /** IslandState with Set and Map fields converted to arrays for JSON. */
 export interface SerializedIslandState
-  extends Omit<IslandState, 'unlockedNodes' | 'subPathProgress'> {
+  extends Omit<IslandState, 'unlockedNodes'> {
   readonly unlockedNodes: ReadonlyArray<NodeId>;
-  readonly subPathProgress: ReadonlyArray<
-    readonly [SubPathId, { readonly spent: number; readonly complete: boolean }]
-  >;
 }
 
 /** One entry of the per-island state map. We avoid serializing a `Map`
@@ -207,7 +203,7 @@ export function serializeWorld(
     const serialized: SerializedIslandState = {
       ...state,
       unlockedNodes: [...state.unlockedNodes],
-      subPathProgress: [...state.subPathProgress.entries()],
+
     };
     stateEntries.push({ id, state: serialized });
   }
@@ -424,7 +420,7 @@ export function deserializeWorld(
       funnelPending: { ...s.funnelPending },
       starterInventoryGrace: { ...s.starterInventoryGrace },
       unlockedNodes: new Set(s.unlockedNodes),
-      subPathProgress: new Map(s.subPathProgress),
+
       // §9.7 cooldown anchors. Both fields were minted in the saved
       // session's `performance.now()` domain (matching `lastTick`); apply
       // the same perfShift the drone/vehicle/repair-drone timestamps get,

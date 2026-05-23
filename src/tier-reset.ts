@@ -118,8 +118,7 @@ export function canTierReset(state: IslandState, nowMs: number): TierResetResult
  *   1. Deduct cost.
  *   2. Refund spent skill points (sum `node.cost` for every
  *      `unlockedNodes` entry) into `unspentSkillPoints`.
- *   3. Clear `unlockedNodes`, `subPathProgress`, `specializationRole`,
- *      `declaredAt`.
+ *   3. Clear `unlockedNodes`, `unlockedEdges`, `declaredAt`.
  *   4. Reset `level → 1`, `xp → 0`.
  *   5. Stamp `lastResetAt = nowMs` for the cooldown.
  *
@@ -145,8 +144,7 @@ export function executeTierReset(state: IslandState, nowMs: number): void {
   }
   state.unspentSkillPoints += refund;
   state.unlockedNodes.clear();
-  state.subPathProgress.clear();
-  state.specializationRole = null;
+  state.unlockedEdges.clear();
   state.declaredAt = null;
   state.level = 1;
   state.xp = 0;

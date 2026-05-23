@@ -54,9 +54,8 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     level: 1,
     unspentSkillPoints: 0,
     unlockedNodes: new Set(),
-    subPathProgress: new Map(),
+    unlockedEdges: new Set(),
     funnelPending: emptyFunnel(),
-    specializationRole: null,
     declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
@@ -188,7 +187,7 @@ describe('executeTierReset — clears progression', () => {
     executeTierReset(state, 1_000);
     expect(state.unspentSkillPoints).toBe(unspentBeforeReset + refundExpected);
     expect(state.unlockedNodes.size).toBe(0);
-    expect(state.subPathProgress.size).toBe(0);
+    expect(state.unlockedEdges.size).toBe(0);
   });
 
   it('refunds the exact brief example: 10 unspent + 5 spent → 15 unspent', () => {
@@ -209,18 +208,16 @@ describe('executeTierReset — clears progression', () => {
     executeTierReset(state, 1_000);
     expect(state.unspentSkillPoints).toBe(12 + 5);
     expect(state.unlockedNodes.size).toBe(0);
-    expect(state.subPathProgress.size).toBe(0);
+    expect(state.unlockedEdges.size).toBe(0);
   });
 
-  it('clears specializationRole and declaredAt', () => {
+  it('clears declaredAt', () => {
     const state = makeState({
       level: 15,
-      specializationRole: 'foundry',
       declaredAt: 12345,
     });
     fund(state);
     executeTierReset(state, 1_000);
-    expect(state.specializationRole).toBe(null);
     expect(state.declaredAt).toBe(null);
   });
 

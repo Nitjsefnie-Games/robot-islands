@@ -26,7 +26,6 @@ import {
 import { makeSeededRng } from './rng.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
-import { routeCapacityMultiplier } from './specialization.js';
 import {
   routeCapacityMultiplierForWeather,
   rasterizeRouteCells,
@@ -668,11 +667,10 @@ function dispatchPhase(
     if (route.draining) continue; // soft-deleted: stop new dispatch, let in-flight finish.
     const srcState = states.get(route.from);
     if (!srcState) continue;
-    const capacityMul = routeCapacityMultiplier(srcState.specializationRole);
-    // Transport sub-path skill bonus — multiplicative with the spec role
-    // multiplier. Read on the SOURCE island (where dispatch decisions get
-    // made and the player invests skill points). Reading per-route per-tick
-    // is fine because effectiveSkillMultipliers is a cheap Map fold.
+    // Transport sub-path skill bonus — read on the SOURCE island (where
+    // dispatch decisions get made and the player invests skill points).
+    // Reading per-route per-tick is fine because effectiveSkillMultipliers
+    // is a cheap Map fold.
     const skillCapMul = effectiveSkillMultipliers(srcState).routeCapacity;
 
     // §2.6 weather capacity modulation
@@ -695,7 +693,7 @@ function dispatchPhase(
     const airshipMul = route.type === 'airship'
       ? effectiveSkillMultipliers(srcState).airshipRange
       : 1;
-    const capDemand = route.capacityPerSec * capacityMul * skillCapMul * airshipMul * weatherMul * elapsedSec;
+    const capDemand = route.capacityPerSec * skillCapMul * airshipMul * weatherMul * elapsedSec;
     const crossedCells =
       fromSpec && toSpec
         ? rasterizeRouteCells(
