@@ -47,6 +47,7 @@ import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { candidateAnchors } from './anchor-picker.js';
 import { isOceanTile, type IslandSpec, type WorldState } from './world.js';
 import { CELL_SIZE_TILES } from './constants.js';
+import { brushTilesAt } from './terrain-modifier.js';
 
 /** Fallback cargo label for a freshly-placed generic-storage building (Crate,
  *  Warehouse) when the caller of `placeBuilding` does NOT supply an explicit
@@ -245,6 +246,38 @@ export function validatePlacement(
       return { ok: false, reason: 'tile-requirement-not-met' };
     }
   }
+  // terrain_modifier v5: the brush is 16 tiles (2×2 footprint + 12 ring).
+  // Per p2_block_vs_brush = abort_if_any_occupied, ANY occupied tile in the
+  // brush aborts placement — not just the 4 footprint tiles. Per
+  // p2_water_ellipse = inside_ellipse_only, every brush tile must lie
+  // inside the island's union ellipse (out-of-ellipse tiles do NOT abort
+  // placement — they are SKIPPED at shot resolution per
+  // p3_ellipse_boundary = skip_outside_full_charge — but at least the
+  // 4 footprint tiles must be inside, that's the standard footprint
+  // constraint and already enforced above).
+  if (def.terrainModifier === true) {
+    const brush = brushTilesAt(anchorX, anchorY);
+    // Build a set of occupied tile keys from all existing buildings on the
+    // island. Mirrors the footprint-overlap loop above but indexes once for
+    // the O(brush × existing) lookup to drop to O(brush + existing).
+    const occupied = new Set<string>();
+    for (const b of state.buildings) {
+      const bdef = BUILDING_DEFS[b.defId];
+      const btiles = footprintTiles(
+        bdef.footprint, b.x, b.y, (b.rotation ?? 0) as Rotation,
+      );
+      for (const t of btiles) occupied.add(`${t.x},${t.y}`);
+    }
+    for (const t of brush) {
+      if (occupied.has(`${t.x},${t.y}`)) {
+        return { ok: false, reason: 'overlap' };
+      }
+    }
+    // Note: out-of-ellipse brush tiles are intentionally NOT rejected here.
+    // Spec p3_ellipse_boundary = skip_outside_full_charge: those tiles are
+    // charged for but silently skipped at shot resolution (Task 4).
+  }
+
   // §14 placement-cost gate. Computed LAST so the geometry/biome/tier
   // reasons take priority — if the cursor is out of bounds, "out of bounds"
   // is more actionable to surface than "you also can't afford this".

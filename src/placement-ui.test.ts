@@ -339,3 +339,29 @@ describe('§4 placement-ui ocean branch', () => {
     expect(r.reason).toBeUndefined();
   });
 });
+
+
+describe('terrain_modifier placement-ui brush commit', () => {
+  it('commits a terrain_modifier with terrainShotRemainingMs = SHOT_DURATION_MS', async () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.steel = 100;
+    state.inventory.gear = 100;
+    const ui = mountPlacementUi({
+      getTargetSpec: () => spec,
+      getTargetState: () => state,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {},
+    });
+    ui.begin('terrain_modifier');
+    // Synchronously armed — terrain_modifier is not generic storage.
+    expect(ui.isActive()).toBe(true);
+    const r = ui.attemptCommit();
+    expect(r.ok).toBe(true);
+    expect(spec.buildings).toHaveLength(1);
+    const placed = spec.buildings[0]!;
+    expect(placed.defId).toBe('terrain_modifier');
+    expect(placed.terrainShotRemainingMs).toBe(4000);
+    expect(placed.terrainTarget).toBeUndefined();
+  });
+});
