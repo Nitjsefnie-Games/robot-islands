@@ -614,7 +614,7 @@ export function computeRates(
   // (constructionRemainingMs > 0) are ALSO filtered out — they consume
   // neither power nor recipe inputs, contribute zero output, and are
   // invisible to adjacency-buff scans until they finish.
-  const validBuildings = state.buildings.filter((b) => !b.invalid && isOperational(b));
+  const validBuildings = state.buildings.filter((b) => !b.invalid && isOperational(b) && b.disabled !== true);
   // §2.7 day-night cycle. `nowMs` defaults to `state.lastTick` so existing
   // callers (and tests) that don't pass an explicit time see the multiplier
   // for the state's own clock. The integrator in `advanceIsland` passes the
@@ -1634,6 +1634,10 @@ export function advanceIsland(
           tickConstruction(b, dtMs);
           continue;
         }
+        // §NEW building-disable: player-disabled buildings freeze in place —
+        // no operatingMs accrual, no maintenance degradation. Re-enable
+        // resumes accrual at the frozen operatingMs value.
+        if (b.disabled === true) continue;
         // §4.7 maintenance interpretation: skip accrual for buildings
         // with no productive recipe outputs. The maintenanceFactor is
         // only multiplied into recipe `effectiveRate`; a building whose

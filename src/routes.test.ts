@@ -1578,6 +1578,14 @@ describe('drainRoutesForBuilding', () => {
     expect(drainRoutesForBuilding(world, 'nope')).toBe(0);
     expect(r1.draining).toBeUndefined();
   });
+
+  it('drains a route when its source building is disabled', () => {
+    const r1 = cargoRoute('a', 'b', 'iron_ore');
+    r1.sourceBuildingId = 'b1';
+    const world = makeWorld([r1]);
+    drainRoutesForBuilding(world, 'b1');
+    expect(r1.draining).toBe(true);
+  });
 });
 
 
