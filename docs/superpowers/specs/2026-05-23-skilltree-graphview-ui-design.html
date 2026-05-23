@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Skill graph — graph-view UI design</title>
+<style>
+  :root { --bg:#1B1A17; --panel:#25231F; --line:#3A3833; --ink:#E9E6DC; --ink2:#CFCCC2; --muted:#8A877E;
+    --green:#8FA56E; --tan:#E0B47F; --rust:#D97757; --slate:#7DD3E8; --pink:#D38FCC; --red:#E08B7F;
+    --serif: ui-serif, Georgia, serif; --mono: ui-monospace, Menlo, monospace; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.6;
+    padding: 48px 24px 120px; }
+  .page { max-width: 1080px; margin: 0 auto; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 32px; color: var(--ink); margin-bottom: 12px; }
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 12px; }
+  .lede { font-size: 14.5px; color: var(--ink2); margin-bottom: 28px; max-width: 800px; }
+  .lede code { color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 13px; font-family: var(--mono); }
+  section { margin-bottom: 36px; }
+  .sec-head { display: flex; gap: 12px; align-items: baseline; padding-bottom: 6px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  .sec-head .num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .sec-head h2 { font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--ink); }
+  p { margin: 10px 0; color: var(--ink2); max-width: 820px; font-size: 14px; }
+  ul { margin: 6px 0 12px 24px; }
+  li { color: var(--ink2); font-size: 14px; }
+  code { font-family: var(--mono); font-size: 12.5px; color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; }
+  b { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; color: var(--ink2); }
+  th { background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 600; }
+  .callout { background: var(--panel); border-left: 3px solid var(--slate); border-radius: 0 6px 6px 0; padding: 12px 16px; margin: 12px 0; font-size: 13.5px; color: var(--ink2); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="eyebrow">Design spec · skilltree · graph-view UI · 2026-05-23</div>
+<h1>Skill graph — graph-view UI design</h1>
+<p class="lede">
+  Replace the existing 4-column text-list rendering in <code>src/skilltree-ui.ts</code> with a PixiJS-rendered, full-page, algorithmically-laid-out node graph. Renders the ~494 nodes (~384 filler + 80 notables + 30 keystones) + ~700 edges + 27 threshold-bridges + 44 graft sockets as a pannable/zoomable canvas. Click-to-buy via the existing <code>buyNode</code> / <code>buyKeystone</code> engine surface.
+</p>
+
+<div class="callout">
+  <b>Locked decisions (chat-brainstorm):</b> algorithmic layout · PixiJS rendering · full-page overlay (not a draggable panel).
+</div>
+
+<section>
+<div class="sec-head"><span class="num">01</span><h2>Layout — algorithmic, deterministic seed</h2></div>
+<p>Layout computed once at app boot, cached in memory. Recomputed only if catalog changes. NOT recomputed per-frame.</p>
+<p><b>Algorithm:</b> two-stage. Stage A places branch-roots in a regular pentagon (5 branches → 5 positions evenly distributed on a circle of radius <code>R = 600</code> world-px). Stage B runs a Fruchterman-Reingold-style force-directed simulation on each sub-path's internal sub-graph, anchored to its branch-root. ~200 iterations is enough for ~500 nodes to settle. Connected sub-paths within a branch are positioned along a radial arc emanating from the branch-root.</p>
+<p><b>Determinism:</b> seed the simulation with a fixed RNG (e.g. mulberry32 with seed = hash of catalog node-count). Layout is reproducible across reloads — players see the same graph every time.</p>
+<p><b>Manual overrides:</b> the catalog can optionally specify <code>{x: number, y: number}</code> per node. Stage B's simulation uses those as fixed-position anchors. v1 doesn't ship any overrides; designer can pin specific keystones later if force-directed mis-places them.</p>
+<p><b>Cross-sub-path and cross-branch bridges</b> render as long edges connecting nodes that aren't in the same sub-graph cluster. Force-directed pulls them slightly toward each other but the branch-root anchoring keeps clusters separated.</p>
+<p><b>Implementation:</b> place algorithm in a new module <code>src/skilltree-layout.ts</code>. Pure (no PixiJS). Returns <code>Map&lt;NodeId, {x, y}&gt;</code>. Tested with a small fixture graph + snapshot assertion on node positions.</p>
+</section>
+
+<section>
+<div class="sec-head"><span class="num">02</span><h2>Rendering — PixiJS canvas, full-page overlay</h2></div>
+<p>Full-screen overlay covering the entire viewport (above the HUD z-layer). Dismissible via Esc or a corner X button. Replaces the existing skill-tree modal entirely.</p>
+<p><b>Mount point:</b> new <code>src/skilltree-graphview.ts</code> mounts a PixiJS <code>Application</code> at full window size. Inherits the existing pure-render separation (this file is render-layer; consumes layout from <code>skilltree-layout.ts</code> and state from <code>economy.ts</code> / <code>skilltree.ts</code>).</p>
+
+<p><b>Visual encoding:</b></p>
+<table>
+  <thead><tr><th>Element</th><th>Visual</th></tr></thead>
+  <tbody>
+    <tr><td>Filler node (standard)</td><td>Circle, radius 6px, fill <code>--panel2</code>, stroke <code>--muted</code>.</td></tr>
+    <tr><td>Notable node</td><td>Circle, radius 9px, fill <code>--tan</code>, stroke <code>--ink</code>. Aura-bearing notables get an additional pulsing ring at the aura radius (radius=1 ≈ 24px, radius=2 ≈ 48px).</td></tr>
+    <tr><td>Keystone node</td><td>Hexagon, radius 12px, fill <code>--pink</code>, stroke <code>--ink</code>. Locked (AND-prereqs unsatisfied): fill desaturated grey + lock icon.</td></tr>
+    <tr><td>Branch root</td><td>Circle, radius 13px, fill <code>--green</code>, stroke <code>--ink</code>, branch label below.</td></tr>
+    <tr><td>Graft socket</td><td>Empty dashed-circle, radius 11px, stroke <code>--slate</code> dashed.</td></tr>
+    <tr><td>Standard edge (single in-edge)</td><td>Straight line, stroke <code>--line</code>, 1px. Owned: stroke <code>--rust</code>, 1.6px.</td></tr>
+    <tr><td>AND-prereq edge</td><td>Stroke <code>--rust</code>, 1.6px solid (active when target satisfiable).</td></tr>
+    <tr><td>OR-bridge / cross-sub-path</td><td>Stroke <code>--slate</code>, 1.4px dashed.</td></tr>
+    <tr><td>Threshold-bridge (inactive)</td><td>Stroke <code>--muted</code>, 1px dashed at 30% opacity.</td></tr>
+    <tr><td>Threshold-bridge (active)</td><td>Stroke <code>--slate</code>, 1.4px dashed, full opacity.</td></tr>
+    <tr><td>Owned node</td><td>Fill brightened to <code>--green</code>; outline 1.5px.</td></tr>
+    <tr><td>Unaffordable node (cost > unspent SP)</td><td>Outline opacity 0.4.</td></tr>
+  </tbody>
+</table>
+
+<p><b>Layering (PixiJS Containers):</b> background → edges → bridges (inactive) → bridges (active) → nodes → labels → tooltip. Each layer is one Container so z-order is deterministic.</p>
+
+<p><b>Performance budget:</b> ~500 nodes × ~700 edges × ~30 bridges = ~1230 Graphics primitives. PixiJS 8 batches these into <10 draw calls. Target 60 fps idle; <16ms per frame on hover-redraw.</p>
+</section>
+
+<section>
+<div class="sec-head"><span class="num">03</span><h2>Interaction</h2></div>
+
+<p><b>Pan:</b> click + drag empty area. Moves the world container.</p>
+<p><b>Zoom:</b> mouse wheel. Logarithmic (1.1× per notch). Min 0.3×, max 3×. Centers on cursor.</p>
+<p><b>Click node:</b> if affordable + unowned + (keystone ⇒ prereqs satisfied), purchase via <code>buyNode</code> / <code>buyKeystone</code>. Confirm dialog if cost &gt; 20 SP (configurable threshold). On purchase, refresh the canvas (re-color affected nodes/edges); the layout doesn't recompute.</p>
+<p><b>Hover node:</b> tooltip with name, description, cost-to-unlock (live computed from <code>costToUnlock</code> for non-keystones; flat cost for keystones), aura ring (if applicable), highlight all incoming/outgoing edges in <code>--rust</code>. For aura-bearing notables, also highlight all nodes within the aura radius.</p>
+<p><b>Hover edge:</b> tooltip showing cost (for paid edges) or threshold status (for bridges). No interaction beyond that.</p>
+<p><b>Dismissible:</b> Esc key, X button in top-right, or click outside the canvas (the latter may interfere with pan — gate behind a modifier? Esc is the safe primary).</p>
+<p><b>HUD shows:</b> top-left: <code>Unspent SP: N</code> + <code>Owned: N/494</code>. Top-right: filter chips (Show: filler / notables / keystones / bridges / sockets — all checked by default). Bottom-center: legend strip.</p>
+</section>
+
+<section>
+<div class="sec-head"><span class="num">04</span><h2>Files</h2></div>
+<table>
+  <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>src/skilltree-layout.ts</code></td><td>NEW (pure)</td><td>Force-directed layout algorithm + deterministic seed. Returns Map&lt;NodeId, {x,y}&gt;.</td></tr>
+    <tr><td><code>src/skilltree-graphview.ts</code></td><td>NEW (render-layer)</td><td>PixiJS Application mount + scene graph + pan/zoom + click/hover handlers + tooltip.</td></tr>
+    <tr><td><code>src/skilltree-ui.ts</code></td><td>MODIFY</td><td>Replace the 4-column list with a "Open Skill Graph" button that mounts <code>skilltree-graphview</code>. The old list rendering goes away.</td></tr>
+    <tr><td><code>src/main.ts</code></td><td>MODIFY</td><td>Register the action that opens the graph view; wire ESC dismiss.</td></tr>
+    <tr><td><code>src/ui.css</code></td><td>MODIFY</td><td>Full-page overlay styles (z-index, dim background).</td></tr>
+    <tr><td><code>SPEC.md</code></td><td>MODIFY</td><td>§9.3 amendment noting the graph-view UI is the canonical rendering (the v1 list was transitional).</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<div class="sec-head"><span class="num">05</span><h2>Out of scope (deferred)</h2></div>
+<ul>
+  <li><b>Manual override coords</b> in the catalog — v1 ships pure force-directed.</li>
+  <li><b>Build planner</b> (Picker 8 option C: side-panel "save build, compare two builds") — v2 spec.</li>
+  <li><b>Graft socket attachment UI</b> — sockets render as empty placeholders; attaching cluster jewels to them is a separate feature.</li>
+  <li><b>Mobile/touch interaction</b> — desktop only at v1.</li>
+  <li><b>Search / filter beyond chip toggles</b> — no text search box at v1.</li>
+</ul>
+</section>
+
+<section>
+<div class="sec-head"><span class="num">06</span><h2>Open questions for the plan</h2></div>
+<ul>
+  <li>Force-directed iteration count + spring/repulsion constants — needs playtesting. Start with k_repulsion=8000, k_spring=0.1, 200 iters.</li>
+  <li>How to handle node-label overlap at zoomed-out levels? Show labels only above 1× zoom; below that show only branch-root labels.</li>
+  <li>Should the "Open Skill Graph" button also act as a back-compat fallback to the old list view? Probably no — clean replacement.</li>
+  <li>Test strategy: layout has snapshot tests (deterministic seed); rendering layer doesn't unit-test the PixiJS scene; manual browser smoke in T20-equivalent.</li>
+</ul>
+</section>
+
+<div style="margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)">
+  Graph-view UI design v1 · 2026-05-23 · references: spec <code>robot-islands/2026-05-23-skilltree-graph-redesign-design</code> v4 (§11 follow-up gate) · picker <code>robot-islands/2026-05-23-skilltree-cost-model-picker</code> · existing recipe-graph panel at <code>2376a22..6ef7dae</code> for PixiJS modal pattern reference.
+</div>
+
+</div>
+</body>
+</html>
