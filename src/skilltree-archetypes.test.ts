@@ -165,7 +165,7 @@ describe('ALL_FILLER_NODES sanity', () => {
 
   it('covers all 20 sub-paths', () => {
     const subPaths = new Set(ALL_FILLER_NODES.map((n) => n.subPath));
-    expect(subPaths.size).toBe(15); // 15 sub-paths with filler content
+    expect(subPaths.size).toBe(20); // 20 sub-paths with filler content
   });
 
   it('every node has a positive magnitude', () => {

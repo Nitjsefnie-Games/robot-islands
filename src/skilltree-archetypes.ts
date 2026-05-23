@@ -341,6 +341,96 @@ export const RESILIENCE_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const RESILIENCE_FILLER_NODES = RESILIENCE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 // ---------------------------------------------------------------------------
+// Ocean branch (new — spec-locked 5×4=20 sub-paths)
+// ---------------------------------------------------------------------------
+
+export const PATRONAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
+  {
+    idPrefix: 'patronage.recipeRate', effectKind: 'recipeRateMul',
+    effectExtra: { category: 'extraction' }, subPath: 'patronage',
+    baseMag: 0.04, growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
+  },
+  {
+    idPrefix: 'patronage.storageCap', effectKind: 'storageCategoryCapMul',
+    effectExtra: { category: 'rare' }, subPath: 'patronage',
+    baseMag: 0.05, growth: 1.08, baseCost: 1, costGrowth: 1.5, count: 6,
+  },
+  {
+    idPrefix: 'patronage.commRange', effectKind: 'commRangeMul',
+    subPath: 'patronage', baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
+  },
+];
+export const PATRONAGE_FILLER_NODES = PATRONAGE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
+
+export const AQUACULTURE_FILLER_ARCHETYPES: FillerArchetype[] = [
+  {
+    idPrefix: 'aquaculture.recipeRate', effectKind: 'recipeRateMul',
+    effectExtra: { category: 'extraction' }, subPath: 'aquaculture',
+    baseMag: 0.04, growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
+  },
+  {
+    idPrefix: 'aquaculture.yieldBonus', effectKind: 'mineYieldBonusMul',
+    subPath: 'aquaculture', baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
+  },
+  {
+    idPrefix: 'aquaculture.storageCap', effectKind: 'storageCategoryCapMul',
+    effectExtra: { category: 'dry_goods' }, subPath: 'aquaculture',
+    baseMag: 0.05, growth: 1.08, baseCost: 1, costGrowth: 1.5, count: 6,
+  },
+];
+export const AQUACULTURE_FILLER_NODES = AQUACULTURE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
+
+export const HYDROPROCESSING_FILLER_ARCHETYPES: FillerArchetype[] = [
+  {
+    idPrefix: 'hydroprocessing.recipeRate', effectKind: 'recipeRateMul',
+    effectExtra: { category: 'chemistry' }, subPath: 'hydroprocessing',
+    baseMag: 0.04, growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
+  },
+  {
+    idPrefix: 'hydroprocessing.powerConsumption', effectKind: 'powerConsumptionMul',
+    effectExtra: { reduce: true }, subPath: 'hydroprocessing',
+    baseMag: 0.05, growth: 1.08, baseCost: 2, costGrowth: 1.5, count: 6,
+  },
+  {
+    idPrefix: 'hydroprocessing.storageCap', effectKind: 'storageCapMul',
+    subPath: 'hydroprocessing', baseMag: 0.05, growth: 1.08, baseCost: 1, costGrowth: 1.5, count: 5,
+  },
+];
+export const HYDROPROCESSING_FILLER_NODES = HYDROPROCESSING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
+
+export const SUBMARINE_FILLER_ARCHETYPES: FillerArchetype[] = [
+  {
+    idPrefix: 'submarine.routeCapacity', effectKind: 'routeCapacityMul',
+    subPath: 'submarine', baseMag: 0.05, growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
+  },
+  {
+    idPrefix: 'submarine.powerProduction', effectKind: 'powerProductionMul',
+    subPath: 'submarine', baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
+  },
+  {
+    idPrefix: 'submarine.airshipRange', effectKind: 'airshipRangeMul',
+    subPath: 'submarine', baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
+  },
+];
+export const SUBMARINE_FILLER_NODES = SUBMARINE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
+
+export const OCEANOGRAPHY_FILLER_ARCHETYPES: FillerArchetype[] = [
+  {
+    idPrefix: 'oceanography.scannerCoverage', effectKind: 'scannerCoverageMul',
+    subPath: 'oceanography', baseMag: 0.05, growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
+  },
+  {
+    idPrefix: 'oceanography.commRange', effectKind: 'commRangeMul',
+    subPath: 'oceanography', baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
+  },
+  {
+    idPrefix: 'oceanography.droneScan', effectKind: 'droneScanRadiusMul',
+    subPath: 'oceanography', baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
+  },
+];
+export const OCEANOGRAPHY_FILLER_NODES = OCEANOGRAPHY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
+
+// ---------------------------------------------------------------------------
 // Aggregate
 // ---------------------------------------------------------------------------
 
@@ -360,4 +450,9 @@ export const ALL_FILLER_NODES: SkillNode[] = [
   ...COMMUNICATION_FILLER_NODES,
   ...DISCOVERY_FILLER_NODES,
   ...RESILIENCE_FILLER_NODES,
+  ...PATRONAGE_FILLER_NODES,
+  ...AQUACULTURE_FILLER_NODES,
+  ...HYDROPROCESSING_FILLER_NODES,
+  ...SUBMARINE_FILLER_NODES,
+  ...OCEANOGRAPHY_FILLER_NODES,
 ];
