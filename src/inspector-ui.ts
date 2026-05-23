@@ -34,7 +34,7 @@ import {
 import { gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, placementCostFor } from './placement.js';
-import { convertToServitor, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import { convertToServitor, hasOperationalBuilding, isOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { computeRates } from './economy.js';
 import {
@@ -1369,7 +1369,7 @@ export function mountInspectorUi(
         gateSection.body.removeChild(gateSection.body.firstChild);
       }
       for (const gate of def.gates) {
-        const satisfied = gateSatisfied(building, gate, state.buildings.filter((b) => !b.invalid), BUILDING_DEFS);
+        const satisfied = gateSatisfied(building, gate, state.buildings.filter(isOperationalBuilding), BUILDING_DEFS);
         const pill = document.createElement('span');
         pill.textContent = gateLabel(gate);
         styled(pill, [
