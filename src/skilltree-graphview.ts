@@ -100,6 +100,61 @@ export function mountSkillGraphView(
 
   parentEl.appendChild(overlay);
 
+  const camera = { tx: 0, ty: 0, zoom: 1 };
+  const ZOOM_MIN = 0.3, ZOOM_MAX = 3;
+
+  function applyCamera(): void {
+    if (!world) return;
+    world.scale.set(camera.zoom);
+    // world's origin is the centre of canvasWrap (set in ensureApp); pan
+    // translates the centred origin.
+    world.position.set(
+      canvasWrap.clientWidth / 2 + camera.tx,
+      canvasWrap.clientHeight / 2 + camera.ty,
+    );
+  }
+
+  let dragging = false;
+  let dragLastX = 0, dragLastY = 0;
+  canvasWrap.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    dragging = true;
+    dragLastX = ev.clientX;
+    dragLastY = ev.clientY;
+    (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
+  });
+  canvasWrap.addEventListener('pointermove', (ev) => {
+    if (!dragging) return;
+    camera.tx += ev.clientX - dragLastX;
+    camera.ty += ev.clientY - dragLastY;
+    dragLastX = ev.clientX;
+    dragLastY = ev.clientY;
+    applyCamera();
+  });
+  canvasWrap.addEventListener('pointerup', () => { dragging = false; });
+  canvasWrap.addEventListener('pointerleave', () => { dragging = false; });
+
+  canvasWrap.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const rect = canvasWrap.getBoundingClientRect();
+    const cx = ev.clientX - rect.left;
+    const cy = ev.clientY - rect.top;
+    // Convert cursor screen-px to world-px BEFORE zoom change.
+    const originX = canvasWrap.clientWidth / 2 + camera.tx;
+    const originY = canvasWrap.clientHeight / 2 + camera.ty;
+    const worldX = (cx - originX) / camera.zoom;
+    const worldY = (cy - originY) / camera.zoom;
+
+    const factor = ev.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, camera.zoom * factor));
+    camera.zoom = next;
+
+    // Adjust pan so the world point under the cursor stays fixed.
+    camera.tx = cx - canvasWrap.clientWidth / 2 - worldX * camera.zoom;
+    camera.ty = cy - canvasWrap.clientHeight / 2 - worldY * camera.zoom;
+    applyCamera();
+  }, { passive: false });
+
   // Lazy PixiJS Application — create on first show, keep across toggles.
   // Lives inside the overlay, NOT the world canvas. resizeTo the wrap so
   // it tracks viewport changes.
@@ -140,17 +195,19 @@ export function mountSkillGraphView(
 
     app = a;
     world = w;
+    applyCamera();
   }
 
   function show(): void {
     if (visible) return;
     visible = true;
     overlay.hidden = false;
-    void ensureApp().then(() => refresh());
+    void ensureApp().then(() => { applyCamera(); refresh(); });
   }
   function hide(): void {
     if (!visible) return;
     visible = false;
+    camera.tx = 0; camera.ty = 0; camera.zoom = 1; applyCamera();
     overlay.hidden = true;
   }
   function toggle(): boolean {
