@@ -14,6 +14,7 @@ import {
   type BuildingCategory,
   type BuildingDefId,
 } from './building-defs.js';
+import { hasOperationalBuilding } from './buildings.js';
 import { BIOME_DEFS } from './biomes.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import type { IslandState } from './economy.js';
@@ -207,7 +208,7 @@ export function mountBuildingsUi(
         card.addEventListener('click', () => {
           const st = getState();
           const sp = getSpec();
-          const hasSp = sp.buildings.some((b) => b.defId === 'spaceport');
+          const hasSp = hasOperationalBuilding(sp.buildings, 'spaceport');
           if (
             !buildingUnlocked(
               st.level,
@@ -254,7 +255,7 @@ export function mountBuildingsUi(
     spec: IslandSpec,
   ): string {
     const def = BUILDING_DEFS[defId];
-    const hasSpaceport = spec.buildings.some((b) => b.defId === 'spaceport');
+    const hasSpaceport = hasOperationalBuilding(spec.buildings, 'spaceport');
     if (
       def.tier === 5 &&
       tierForLevel(state.level) >= 5 &&
@@ -277,7 +278,7 @@ export function mountBuildingsUi(
     const def = BUILDING_DEFS[defId];
     const state = getState();
     const spec = getSpec();
-    const hasSpaceport = spec.buildings.some((b) => b.defId === 'spaceport');
+    const hasSpaceport = hasOperationalBuilding(spec.buildings, 'spaceport');
     const unlocked = buildingUnlocked(
       state.level,
       defId,

@@ -24,6 +24,7 @@
 // modifiers are lost without compensation (per §13.3 "real cost").
 
 import { BUILDING_DEFS } from './building-defs.js';
+import { hasOperationalBuilding } from './buildings.js';
 import { rerollModifiers } from './biomes.js';
 import type { ResourceId } from './recipes.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
@@ -68,7 +69,7 @@ export function editIslandBiome(
   if (!state) return { ok: false, reason: 'no-state' };
   if (!KNOWN_BIOMES.has(newBiome)) return { ok: false, reason: 'invalid-biome' };
   if (spec.biome === newBiome) return { ok: false, reason: 'same-biome' };
-  if (!state.buildings.some((b) => b.defId === 'universe_editor' && !b.invalid)) {
+  if (!hasOperationalBuilding(state.buildings, 'universe_editor')) {
     return { ok: false, reason: 'no-universe-editor' };
   }
   for (const [r, need] of Object.entries(UNIVERSE_EDITOR_COST)) {

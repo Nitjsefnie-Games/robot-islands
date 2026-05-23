@@ -3,7 +3,7 @@
 // No PixiJS, no DOM. Activation mutates WorldState in place (sets
 // latticeActive + latticeNodeIslands) but does not touch economy state.
 
-import type { PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import { LATTICE_ACTIVATION_THRESHOLD } from './constants.js';
 import { networkedIslandIds } from './network-consciousness.js';
 import type { ResourceId } from './recipes.js';
@@ -25,7 +25,7 @@ function isT5Mastered(world: WorldState, islandId: string): boolean {
 
 /** Does the island have at least one valid Lattice Node? */
 function hasLatticeNode(spec: WorldState['islands'][number]): boolean {
-  return spec.buildings.some((b) => b.defId === 'lattice_node' && !b.invalid);
+  return hasOperationalBuilding(spec.buildings, 'lattice_node');
 }
 
 /**

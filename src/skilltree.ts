@@ -22,6 +22,7 @@
 // them.
 
 import type { BuildingDefId } from './building-defs.js';
+import { hasOperationalBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import type { RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
@@ -266,7 +267,7 @@ export function t6Unlocked(
   spec: { buildings: ReadonlyArray<{ defId: string }> },
 ): boolean {
   if (!state.ascendantCoreCrafted) return false;
-  return spec.buildings.some((b) => b.defId === 'spaceport');
+  return hasOperationalBuilding(spec.buildings, 'spaceport');
 }
 
 /** Tier required to purchase a node at the given depth per §9.3. */

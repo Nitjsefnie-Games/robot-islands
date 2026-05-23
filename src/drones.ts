@@ -17,6 +17,7 @@
 
 import { computeSignalRanges, pointInSignalRange } from './antenna.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { hasOperationalBuilding } from './buildings.js';
 import { cellCenterTile, corridorCells, islandCells, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
@@ -163,7 +164,7 @@ export function firePulse(
   nowMs: number,
 ): PulseResult {
   // Gate 1: origin must have a launch_tower placed.
-  if (!origin.buildings.some((b) => b.defId === 'launch_tower')) {
+  if (!hasOperationalBuilding(origin.buildings, 'launch_tower')) {
     return { ok: false, reason: 'no-launch-tower', discoveredIslandIds: [] };
   }
   // Gate 2: origin must be tier 4 or higher (Launch Tower is T4).
@@ -422,7 +423,7 @@ export function dispatchDrone(
   let spawnY = originY;
   const originSpec = world.islands.find((i) => i.id === origin.id);
   if (originSpec) {
-    const dronepad = origin.buildings.find((b) => b.defId === 'dronepad');
+    const dronepad = origin.buildings.find((b) => b.defId === 'dronepad' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true);
     if (dronepad) {
       const dpDef = BUILDING_DEFS[dronepad.defId as BuildingDefId];
       spawnX = originSpec.cx + dronepad.x + shapeWidth(dpDef.footprint) / 2;

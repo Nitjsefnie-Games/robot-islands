@@ -9,6 +9,7 @@ import { ANTENNA_SIGNAL_RADII } from './antenna.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { CELL_SIZE_TILES, cellKey, parseCellKey, tileToCell } from './discovery.js';
 import { inv } from './economy.js';
+import { hasOperationalBuilding } from './buildings.js';
 import { makeSeededRng } from './rng.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, launchSuccessBonus } from './skilltree.js';
@@ -217,7 +218,7 @@ export function launchSatellite(
   const state = world.islandStates?.get(spaceportIslandId);
   const spec = world.islands.find((i) => i.id === spaceportIslandId);
   if (!state || !spec) return { ok: false, reason: 'no-island' };
-  if (!state.buildings.some((b) => b.defId === 'spaceport')) {
+  if (!hasOperationalBuilding(state.buildings, 'spaceport')) {
     return { ok: false, reason: 'no-spaceport' };
   }
   if (!state.ascendantCoreCrafted) {
@@ -239,7 +240,7 @@ export function launchSatellite(
   }
 
   // Spaceport reference (also re-used for the failure path's tier-revert).
-  const spaceport = state.buildings.find((b) => b.defId === 'spaceport')!;
+  const spaceport = state.buildings.find((b) => b.defId === 'spaceport' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true)!;
 
   // Spawn position = Spaceport footprint centre. Same idiom Antenna /
   // Lighthouse use for "where this building emits from": world-tile coords
@@ -357,14 +358,14 @@ export function launchSatellite(
 
 export function groundStationCommRange(world: WorldState, islandId: string): number {
   const state = world.islandStates?.get(islandId);
-  const sp = state?.buildings.find((b) => b.defId === 'spaceport');
+  const sp = state?.buildings.find((b) => b.defId === 'spaceport' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true);
   const tier = sp?.tier ?? 1;
   let base = tier === 1 ? 200 : tier === 2 ? 300 : 400;
   // §14.2: T6 Antenna doubles as a satellite dish — if present on the
   // launching island, the antenna's signal radius adds to the
   // ground-station comm range. Multiple T6 antennas don't stack (single
   // dish boost per island).
-  if (state?.buildings.some((b) => b.defId === 'antenna_t6')) {
+  if (state && hasOperationalBuilding(state.buildings, 'antenna_t6')) {
     base += ANTENNA_SIGNAL_RADII['antenna_t6'] ?? 0;
   }
   // Network + Orbital-Communication sub-paths multiplicatively boost ground-
@@ -397,7 +398,7 @@ export function buildCommGraph(world: WorldState): Map<string, Set<string>> {
   for (const spec of world.islands) {
     if (!spec.populated) continue;
     const state = world.islandStates?.get(spec.id);
-    if (!state?.buildings.some((b) => b.defId === 'spaceport')) continue;
+    if (!state || !hasOperationalBuilding(state.buildings, 'spaceport')) continue;
     nodes.push({
       id: spec.id,
       x: spec.cx,
@@ -430,7 +431,7 @@ function spaceportNodes(world: WorldState): Set<string> {
   for (const spec of world.islands) {
     if (!spec.populated) continue;
     const state = world.islandStates?.get(spec.id);
-    if (state?.buildings.some((b) => b.defId === 'spaceport')) out.add(spec.id);
+    if (state && hasOperationalBuilding(state.buildings, 'spaceport')) out.add(spec.id);
   }
   return out;
 }
@@ -522,7 +523,7 @@ export function connectedSatellites(world: WorldState): Satellite[] {
   for (const spec of world.islands) {
     if (!spec.populated) continue;
     const state = world.islandStates?.get(spec.id);
-    if (state?.buildings.some((b) => b.defId === 'spaceport')) {
+    if (state && hasOperationalBuilding(state.buildings, 'spaceport')) {
       connected.add(spec.id);
       queue.push(spec.id);
     }
@@ -557,7 +558,7 @@ export function debrisDetectionRangeForIsland(
 ): number {
   const state = world.islandStates?.get(islandId);
   if (!state) return 0;
-  if (!state.buildings.some((b) => b.defId === 'orbital_tracking_station')) {
+  if (!hasOperationalBuilding(state.buildings, 'orbital_tracking_station')) {
     return 0;
   }
   return ORBITAL_TRACKING_DETECTION_RADIUS_TILES;
@@ -595,7 +596,7 @@ export function dispatchRepairDrone(
 
   const state = world.islandStates?.get(spaceportIslandId);
   if (!state) return { ok: false, reason: 'no-island' };
-  if (!state.buildings.some((b) => b.defId === 'spaceport')) {
+  if (!hasOperationalBuilding(state.buildings, 'spaceport')) {
     return { ok: false, reason: 'no-spaceport' };
   }
   if (!state.ascendantCoreCrafted) {
@@ -1021,7 +1022,7 @@ export function upgradeSpaceport(
 ): { ok: true } | { ok: false; reason: string } {
   const state = world.islandStates?.get(islandId);
   if (!state) return { ok: false, reason: 'no-island' };
-  const sp = state.buildings.find(b => b.defId === 'spaceport');
+  const sp = state.buildings.find((b) => b.defId === 'spaceport' && !b.invalid && (b.constructionRemainingMs ?? 0) <= 0 && ((b as unknown) as { disabled?: boolean }).disabled !== true);
   if (!sp) return { ok: false, reason: 'no-spaceport' };
   const currentTier = sp.tier ?? 1;
   if (currentTier >= 3) return { ok: false, reason: 'max-tier' };
