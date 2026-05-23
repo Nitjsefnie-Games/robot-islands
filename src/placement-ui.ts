@@ -51,6 +51,14 @@ import { brushTilesAt, SHOT_DURATION_MS } from './terrain-modifier.js';
  *  fake that resolves synchronously / synthetically. */
 export type PickCargoLabel = () => Promise<ResourceId | null>;
 
+/** terrain_modifier v5 — placement-time target TerrainKind picker. Invoked
+ *  by `begin()` when the selected def is a terrainModifier; the returned
+ *  promise resolves with the player's chosen TerrainKind or `null` if
+ *  cancelled. Optional on `PlacementUiDeps` — when omitted, terrainModifier
+ *  placements arm with no target (Task 4 treats undefined terrainTarget as
+ *  no-op at shot time). */
+export type PickTerrainTarget = () => Promise<TerrainKind | null>;
+
 /** §4 ocean-layer picker dep (Task 10): opens the anchor picker modal with
  *  the supplied candidate list and resolves to the chosen island id, or
  *  `null` if the player cancelled. Production callers wire
@@ -150,6 +158,12 @@ export interface PlacementUiDeps {
    *  cancellation (no commit) so headless test fixtures can place ocean
    *  defs only via direct `placeBuilding` calls. */
   pickAnchor?: PickAnchor;
+  /** terrain_modifier v5 — target-biome picker. Invoked by `begin()` when the
+   *  selected def carries `terrainModifier: true`; the returned promise
+   *  resolves with the player's chosen TerrainKind or `null` if cancelled.
+   *  Optional — when omitted, terrainModifier placements arm with
+   *  `activeTerrainTarget = undefined` (Task 4 short-circuits the shot). */
+  pickTerrainTarget?: PickTerrainTarget;
 }
 
 // ---------------------------------------------------------------------------
@@ -508,6 +522,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
   function begin(defId: BuildingDefId): void {
     const def = BUILDING_DEFS[defId];
     const isGeneric = def.storage?.category === 'generic';
+    const isTerrainModifier = def.terrainModifier === true;
     const epoch = ++beginEpoch;
     // Reset transient state regardless of picker path so a re-arm during
     // a pending picker doesn't carry over the previous cursor state.
@@ -515,6 +530,27 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     cursorSeen = false;
     activeCargoLabel = undefined;
     activeTerrainTarget = undefined;
+    // terrain_modifier v5: target-biome picker BEFORE arming the brush.
+    // While the picker is open `active` stays false so canvas mousedown /
+    // commit handlers no-op. On resolve:
+    //   - null → cancelled, do not arm placement.
+    //   - TerrainKind → arm placement with that target.
+    // The picker dep is optional — when unset we arm with no target.
+    if (isTerrainModifier && deps.pickTerrainTarget) {
+      active = false;
+      activeDefId = null;
+      previewLayer.visible = false;
+      statusLayer.visible = false;
+      deps.pickTerrainTarget().then((picked) => {
+        if (epoch !== beginEpoch) return; // stale
+        if (picked === null) return; // player cancelled; placement aborts
+        active = true;
+        activeDefId = defId;
+        activeTerrainTarget = picked;
+        paintOutlineAndLabel();
+      });
+      return;
+    }
     // §4.6: generic-storage defs ask the picker BEFORE entering placement
     // mode. While the picker is open `active` stays false so canvas
     // mousedown / commit handlers no-op (the picker modal also intercepts
@@ -547,7 +583,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       });
       return;
     }
-    // Non-generic def (or generic def with no picker dep) — arm immediately.
+    // Non-generic, non-modifier def — arm immediately.
     active = true;
     activeDefId = defId;
     paintOutlineAndLabel();
