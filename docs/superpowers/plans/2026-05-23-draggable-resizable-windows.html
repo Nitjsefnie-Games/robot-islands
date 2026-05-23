@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draggable + resizable + persisted HUD windows — implementation plan</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+      line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1120px; margin:0 auto; }
+    header.page-head { margin-bottom:48px; max-width:880px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box .meta-line { margin-top:8px; }
+    .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .callout { background:var(--white); border:1.5px solid var(--gray-300);
+      border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+      font-size:13.5px; color:var(--gray-500); margin-bottom:32px; max-width:880px; }
+    .callout code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .toc { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px;
+      padding:16px 20px; margin-bottom:48px; max-width:880px; }
+    .toc h3 { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); font-weight:600; margin-bottom:10px; }
+    .toc ol { list-style:none; counter-reset: toc; display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; }
+    @media (max-width:780px){ .toc ol{grid-template-columns:1fr;} }
+    .toc li { counter-increment: toc; padding-left:30px; position:relative; font-size:13.5px; }
+    .toc li::before { content: '§' counters(toc, '', decimal-leading-zero);
+      position:absolute; left:0; top:0; font-family:var(--mono); font-size:11px;
+      color:var(--gray-500); letter-spacing:0.04em; }
+    .toc a { color:var(--gray-700); text-decoration:none; border-bottom:1px dotted var(--gray-300); }
+    .toc a:hover { color:var(--slate); border-bottom-color:var(--clay); }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-head h2 code { font-family:var(--mono); font-size:21px; color:var(--clay); }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:860px; margin-bottom:28px; }
+    .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .summary .v.ok { color:var(--olive); }
+    .filetable { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .filetable .row { display:grid; grid-template-columns:280px 1fr; gap:0; }
+    @media (max-width:780px){ .filetable .row{grid-template-columns:1fr;} }
+    .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+    .filetable .cell { padding:13px 18px; font-size:13.5px; }
+    .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .filetable .cell code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .filetable .cell.desc code { color:var(--slate); }
+    .filetable .cell .new-tag { font-family:var(--mono); font-size:10px; color:var(--olive);
+      letter-spacing:0.06em; padding-left:6px; }
+    .task-card { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:24px 26px; }
+    .task-blurb { font-size:13.5px; color:var(--gray-500); margin-bottom:16px; max-width:880px; }
+    .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .deps-line { font-family:var(--mono); font-size:11px; color:var(--gray-500);
+      letter-spacing:0.04em; margin-bottom:14px; text-transform:uppercase; }
+    .deps-line b { color:var(--olive); font-weight:600; }
+    .files-block { background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:8px; padding:12px 16px; margin-bottom:22px; }
+    .files-block .ft { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .files-block ul { list-style:none; }
+    .files-block li { font-size:13px; color:var(--gray-700); padding:2px 0; }
+    .files-block li code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .files-block li .tag { font-family:var(--mono); font-size:10.5px; color:var(--gray-500); }
+    .steps { display:flex; flex-direction:column; gap:18px; }
+    .step { display:grid; grid-template-columns:22px 1fr; gap:0 12px; }
+    .step .box { width:16px; height:16px; border:1.5px solid var(--clay); border-radius:4px; margin-top:3px; }
+    .step .step-body { min-width:0; }
+    .step .step-title { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:6px; }
+    .step .step-text { font-size:13.5px; color:var(--gray-500); margin-bottom:10px; }
+    .step .step-text:last-child { margin-bottom:0; }
+    .step .step-text code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .step .step-text.cmd code { color:var(--olive); }
+    .code-block { margin:4px 0 12px; }
+    .code-block .file-label { font-family:var(--mono); font-size:11.5px; color:var(--gray-500); margin-bottom:6px; }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .cm { color:var(--gray-500); } .code .add { color:#8FA56E; } .code .del { color:#E08B7F; }
+    .code .kw { color:#C9B98A; }
+    .notes { display:flex; flex-direction:column; gap:14px; max-width:880px; }
+    .note { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive);
+      border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-500); }
+    .note.risk { border-left-color:#E08B7F; }
+    .note code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .note strong { color:var(--slate); font-weight:600; }
+    footer.page-foot { margin-top:64px; padding-top:20px; border-top:1.5px solid var(--gray-300);
+      font-size:12px; color:var(--gray-500); font-family:var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Draggable + resizable + persisted HUD windows — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Let the player drag any floating HUD panel by its header, resize it via a BR-corner grip, raise it on click, and persist the layout in <code>localStorage['ri-ui-layout-v1']</code> across reloads. Modals and chrome (action-strip, island-bar) stay anchored. Existing zone-stack behaviour is the fallback when no entry is saved.</div>
+        <div class="meta-line"><strong>Architecture:</strong> New module <code>src/window-manager.ts</code> owns the pure persistence helpers (<code>clampToViewport</code>, <code>parseLayoutBlob</code>, blob read/write) and the impure <code>makePanelDraggable(el, id, opts)</code> body. <code>src/ui-zones.ts</code> gains a <code>free</code> flag on <code>PanelRecord</code> so <code>layoutZone</code> skips windows the user has dragged. <code>mountPanel</code>'s public API is unchanged — it calls <code>makePanelDraggable</code> internally per spec §05. Settings panel gains a Reset Layout button that dispatches the (newly-registered) <code>reset-ui-layout</code> action.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, noUncheckedIndexedAccess, noUnusedLocals, noUnusedParameters), Vite 5, PixiJS 8 (not touched here), vitest.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-23-draggable-resizable-windows-design.html</code> (v1) — picks applied: <code>drag_handle=header</code>, <code>resize_affordance=br_corner</code>, <code>persistence_target=local_per_browser</code>, <code>off_screen_policy=clamp</code>, <code>z_order=last_interacted</code>, <code>reset_surface=settings_only</code>, <code>scope=non_modal_blocklist</code>.</div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use <code>superpowers:subagent-driven-development</code> to implement this plan task-by-task on master (no worktrees per global config). Steps use checkbox (<code>- [ ]</code>) syntax for tracking; each task ends with a build + tests + commit pair so it is independently landable. Commits use the <strong>Kimi</strong> co-author trailer (the implementer is kimi-cli, not Claude).</div>
+
+    <div class="toc">
+      <h3>Contents</h3>
+      <ol>
+        <li><a href="#sec-files">File structure</a></li>
+        <li><a href="#sec-task1">Task 1 — pure helpers in <code>window-manager.ts</code> + tests</a></li>
+        <li><a href="#sec-task2">Task 2 — <code>PanelRecord.free</code> in <code>ui-zones.ts</code></a></li>
+        <li><a href="#sec-task3">Task 3 — CSS (<code>.ri-resize</code> grip, drag-handle cursor)</a></li>
+        <li><a href="#sec-task4">Task 4 — <code>makePanelDraggable</code> body + <code>mountPanel</code> hook</a></li>
+        <li><a href="#sec-task5">Task 5 — Settings Reset Layout button + action wiring</a></li>
+        <li><a href="#sec-notes">Notes, verification, risks</a></li>
+      </ol>
+    </div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">5</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">6</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v ok">2</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- 01 — File structure                                                -->
+    <!-- ================================================================= -->
+    <section id="sec-files">
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">Two new files, four modified. Tasks are ordered so each task is independently committable: Tasks 1–3 are additive (pure helpers, dormant flag, CSS rules with no JS triggering them yet); Task 4 wires them up live; Task 5 adds the reset surface.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/window-manager.ts</code><span class="new-tag">(new)</span></div><div class="cell desc">Exports <code>LAYOUT_STORAGE_KEY</code>, <code>CHROME_PANEL_IDS</code>, <code>PanelLayout</code>, <code>UiLayoutBlob</code>, <code>MakeDraggableOptions</code>; pure helpers <code>clampToViewport</code> + <code>parseLayoutBlob</code> + <code>readBlob</code> / <code>writeBlob</code>; impure <code>makePanelDraggable</code> + <code>resetUiLayout</code>. Pure DOM + localStorage; no PixiJS, no IDB. Task 1 lands the pure half; Task 4 lands the impure half.</div></div>
+        <div class="row"><div class="cell"><code>src/window-manager.test.ts</code><span class="new-tag">(new)</span></div><div class="cell desc">Vitest suite covering the pure helpers: <code>clampToViewport</code> over five viewport scenarios, <code>parseLayoutBlob</code> over malformed/wrong-version inputs, <code>readBlob</code>/<code>writeBlob</code> round-trip via a stubbed <code>localStorage</code>. Task 1.</div></div>
+        <div class="row"><div class="cell"><code>src/ui-zones.ts</code></div><div class="cell desc">Augment <code>PanelRecord</code> with <code>free: boolean</code>; filter <code>rec.free</code> records from <code>layoutZone</code>'s cursor stack; export <code>setPanelFree(id, free)</code> + <code>restoreAllToZones()</code> helpers; suppress ResizeObserver callbacks while a panel has <code>dataset.riActiveMutation === '1'</code>. Task 2.</div></div>
+        <div class="row"><div class="cell"><code>src/ui.css</code></div><div class="cell desc">New <code>.ri-resize</code> grip rules (14×14 BR-anchored, three diagonal cyan stripes via gradient), <code>.ri-panel__head</code> gets <code>cursor: grab</code>, attribute-selector cousin <code>[data-ri-drag-handle]</code> for stamped headers, <code>.ri-panel.ri-free</code> for free-positioned overrides. Task 3.</div></div>
+        <div class="row"><div class="cell"><code>src/ui-zones.ts</code> (mountPanel)</div><div class="cell desc">After <code>scheduleLayout()</code> in <code>mountPanel</code>, call <code>makePanelDraggable(el, opts.id, { minWidth: opts.minWidth, minHeight: opts.minHeight })</code>. The helper checks <code>CHROME_PANEL_IDS</code> internally and no-ops for chrome. Task 4.</div></div>
+        <div class="row"><div class="cell"><code>src/main.ts</code></div><div class="cell desc">Add a single <code>defineAction(reg, 'reset-ui-layout', resetUiLayout)</code> line next to the other <code>defineAction</code> wiring (~line 440). No <code>bind</code> call — the pick was <code>reset_surface: settings_only</code>. Task 5.</div></div>
+        <div class="row"><div class="cell"><code>src/settings-ui.ts</code></div><div class="cell desc">Add a "UI LAYOUT" section above the SAVE section with one button <code>Reset Window Layout</code> that confirms then <code>dispatchAction(deps.reg, 'reset-ui-layout')</code>. Routes through the input registry per AGENTS.md "every key goes through the registry; UI buttons reuse the same dispatcher". Task 5.</div></div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 02 — Task 1                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task1">
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: pure helpers in <code>window-manager.ts</code> + tests</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Pure layer first. <code>clampToViewport</code> and <code>parseLayoutBlob</code> are testable without a DOM. The blob read/write functions touch <code>localStorage</code> but tolerate its absence (jsdom provides one; node test env doesn't). The impure <code>makePanelDraggable</code> body is added in Task 4 — this task lands a module skeleton that exports the surface but throws <code>"not implemented yet"</code> from <code>makePanelDraggable</code> / <code>resetUiLayout</code> so callers added later compile against the right signature.</p>
+        <p class="deps-line">Dependencies: <b>none</b> — additive, no callers yet.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Create: <code>src/window-manager.ts</code> <span class="tag">— module skeleton + pure helpers</span></li>
+            <li>Create: <code>src/window-manager.test.ts</code> <span class="tag">— vitest suite, pure-only</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing tests first (TDD)</div>
+            <p class="step-text">Create <code>src/window-manager.test.ts</code> with the full suite below. Vitest's jsdom env provides <code>localStorage</code>; the round-trip test exercises it directly. The malformed-JSON test covers the <code>parseLayoutBlob(null)</code> path that <code>readBlob</code> goes through when storage is empty.</p>
+            <div class="code-block"><div class="file-label">src/window-manager.test.ts</div><div class="code"><pre>import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  clampToViewport,
+  parseLayoutBlob,
+  readBlob,
+  writeBlob,
+  emptyBlob,
+  LAYOUT_STORAGE_KEY,
+  type UiLayoutBlob,
+} from './window-manager.js';
+
+describe('clampToViewport', () =&gt; {
+  const vp = { w: 1100, h: 620 };
+  const minVisible = 80;
+
+  it('rect entirely inside the viewport is unchanged', () =&gt; {
+    const r = { x: 100, y: 100, w: 300, h: 200 };
+    expect(clampToViewport(r, vp, minVisible)).toEqual(r);
+  });
+
+  it('rect off the right edge is pulled left so minVisible of its width stays on-screen', () =&gt; {
+    const r = { x: 1300, y: 200, w: 300, h: 200 };
+    const out = clampToViewport(r, vp, minVisible);
+    <span class="cm">// x must be &lt;= vp.w - minVisible (so &ge;80px of header is visible).</span>
+    expect(out.x).toBeLessThanOrEqual(vp.w - minVisible);
+    expect(out.y).toBe(200);
+    expect(out.w).toBe(300);
+    expect(out.h).toBe(200);
+  });
+
+  it('rect off the bottom edge is pulled up so header band stays reachable', () =&gt; {
+    const r = { x: 200, y: 700, w: 300, h: 200 };
+    const out = clampToViewport(r, vp, minVisible);
+    <span class="cm">// y must be such that y + 22 (header band) &lt;= vp.h — i.e. y &lt;= vp.h - 22.</span>
+    expect(out.y).toBeLessThanOrEqual(vp.h - 22);
+  });
+
+  it('rect with negative x is pulled to 0 (or up to width-minVisible)', () =&gt; {
+    const r = { x: -200, y: 50, w: 300, h: 200 };
+    const out = clampToViewport(r, vp, minVisible);
+    <span class="cm">// At minimum, x must be &gt;= minVisible - r.w (so right edge clears minVisible).</span>
+    expect(out.x).toBeGreaterThanOrEqual(minVisible - r.w);
+  });
+
+  it('rect larger than viewport is capped to fit with gutter', () =&gt; {
+    const r = { x: 0, y: 0, w: 2000, h: 1500 };
+    const out = clampToViewport(r, vp, minVisible);
+    expect(out.w).toBeLessThanOrEqual(vp.w);
+    expect(out.h).toBeLessThanOrEqual(vp.h);
+  });
+});
+
+describe('parseLayoutBlob', () =&gt; {
+  it('returns null for non-object input', () =&gt; {
+    expect(parseLayoutBlob(null)).toBeNull();
+    expect(parseLayoutBlob(42)).toBeNull();
+    expect(parseLayoutBlob('hi')).toBeNull();
+    expect(parseLayoutBlob([])).toBeNull();
+  });
+
+  it('returns null when v is missing or wrong', () =&gt; {
+    expect(parseLayoutBlob({ panels: {}, globalZCounter: 0 })).toBeNull();
+    expect(parseLayoutBlob({ v: 2, panels: {}, globalZCounter: 0 })).toBeNull();
+  });
+
+  it('returns null when panels field is malformed', () =&gt; {
+    expect(parseLayoutBlob({ v: 1, panels: 'oops', globalZCounter: 0 })).toBeNull();
+    expect(parseLayoutBlob({ v: 1, panels: [], globalZCounter: 0 })).toBeNull();
+  });
+
+  it('drops malformed panel entries but keeps valid ones', () =&gt; {
+    const raw = {
+      v: 1,
+      panels: {
+        good: { x: 10, y: 20, w: 300, h: 200, zRank: 5 },
+        bad_missing_y: { x: 10, w: 300, h: 200, zRank: 5 },
+        bad_wrong_type: { x: 'no', y: 0, w: 0, h: 0, zRank: 0 },
+      },
+      globalZCounter: 5,
+    };
+    const out = parseLayoutBlob(raw);
+    expect(out).not.toBeNull();
+    expect(out!.panels.good).toEqual({ x: 10, y: 20, w: 300, h: 200, zRank: 5 });
+    expect(out!.panels.bad_missing_y).toBeUndefined();
+    expect(out!.panels.bad_wrong_type).toBeUndefined();
+    expect(out!.globalZCounter).toBe(5);
+  });
+
+  it('coerces non-finite globalZCounter to 0', () =&gt; {
+    const out = parseLayoutBlob({ v: 1, panels: {}, globalZCounter: NaN });
+    expect(out).not.toBeNull();
+    expect(out!.globalZCounter).toBe(0);
+  });
+});
+
+describe('readBlob / writeBlob round-trip', () =&gt; {
+  beforeEach(() =&gt; {
+    localStorage.clear();
+  });
+
+  it('writeBlob then readBlob returns equivalent data', () =&gt; {
+    const blob: UiLayoutBlob = {
+      v: 1,
+      panels: { 'hud-economy': { x: 50, y: 60, w: 300, h: 200, zRank: 1 } },
+      globalZCounter: 1,
+    };
+    writeBlob(blob);
+    expect(readBlob()).toEqual(blob);
+  });
+
+  it('readBlob returns emptyBlob() when storage is empty', () =&gt; {
+    expect(readBlob()).toEqual(emptyBlob());
+  });
+
+  it('readBlob returns emptyBlob() when stored JSON is malformed', () =&gt; {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, '{not json');
+    expect(readBlob()).toEqual(emptyBlob());
+  });
+
+  it('readBlob returns emptyBlob() when stored blob has wrong v', () =&gt; {
+    localStorage.setItem(
+      LAYOUT_STORAGE_KEY,
+      JSON.stringify({ v: 99, panels: {}, globalZCounter: 0 }),
+    );
+    expect(readBlob()).toEqual(emptyBlob());
+  });
+
+  it('writeBlob does not throw when localStorage.setItem throws (quota / disabled)', () =&gt; {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = () =&gt; {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    };
+    try {
+      expect(() =&gt; writeBlob(emptyBlob())).not.toThrow();
+    } finally {
+      Storage.prototype.setItem = original;
+    }
+  });
+});</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Run the tests, confirm they fail</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/window-manager.test.ts</code></p>
+            <p class="step-text">Expected: FAIL — <code>Cannot find module './window-manager.js'</code>. That's the confirmation; we haven't created the module yet.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Create <code>src/window-manager.ts</code> with the pure helpers + impure stubs</div>
+            <p class="step-text">Drop the file in full below. The impure surface (<code>makePanelDraggable</code> / <code>resetUiLayout</code>) is stubbed so Task 4 / Task 5 can import the right signature without a circular landing dependency on this task. The stubs throw a clear error if called accidentally — they're not silent no-ops.</p>
+            <div class="code-block"><div class="file-label">src/window-manager.ts</div><div class="code"><pre><span class="cm">// Augments floating panels mounted via `ui-zones.mountPanel` with:</span>
+<span class="cm">//   - header-drag to free-position</span>
+<span class="cm">//   - bottom-right grip to resize</span>
+<span class="cm">//   - per-browser persistence to localStorage (key: ri-ui-layout-v1)</span>
+<span class="cm">//   - click-to-front z-order via a global rank counter</span>
+<span class="cm">//</span>
+<span class="cm">// Chrome panels (action-strip, island-bar) are skipped via CHROME_PANEL_IDS.</span>
+<span class="cm">// Modals don't go through mountPanel at all so they're naturally out.</span>
+<span class="cm">//</span>
+<span class="cm">// This file lands in two passes:</span>
+<span class="cm">//   Task 1 (this commit) — types, pure helpers, blob I/O. Impure body stubbed.</span>
+<span class="cm">//   Task 4               — makePanelDraggable / resetUiLayout bodies.</span>
+
+<span class="cm">/** localStorage key. Bump the trailing `:v1` when changing PanelLayout shape. */</span>
+export const LAYOUT_STORAGE_KEY = 'ri-ui-layout-v1';
+
+<span class="cm">/** Panels in this set are skipped by makePanelDraggable — they remain</span>
+<span class="cm"> *  zone-anchored chrome. `island-bar` also uses `transform: translateX(-50%)`</span>
+<span class="cm"> *  for centring which any drag would have to clear; safer to leave anchored. */</span>
+export const CHROME_PANEL_IDS: ReadonlySet&lt;string&gt; = new Set([
+  'action-strip',
+  'island-bar',
+]);
+
+export interface PanelLayout {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+  readonly zRank: number;
+}
+
+export interface UiLayoutBlob {
+  readonly v: 1;
+  readonly panels: Readonly&lt;Record&lt;string, PanelLayout&gt;&gt;;
+  readonly globalZCounter: number;
+}
+
+export interface MakeDraggableOptions {
+  <span class="cm">/** Minimum width in px the user can resize to. Default 200. */</span>
+  readonly minWidth?: number;
+  <span class="cm">/** Minimum height in px the user can resize to. Default 120. */</span>
+  readonly minHeight?: number;
+}
+
+<span class="cm">/** Construct a fresh empty layout blob. */</span>
+export function emptyBlob(): UiLayoutBlob {
+  return { v: 1, panels: {}, globalZCounter: 0 };
+}
+
+<span class="cm">/** Pure: validate a JSON-parsed blob shape. Returns null on shape mismatch</span>
+<span class="cm"> *  so the caller falls back to an empty layout (mirrors persistence.ts'</span>
+<span class="cm"> *  isValidSaveSnapshot pattern). Drops malformed panel entries silently. */</span>
+export function parseLayoutBlob(raw: unknown): UiLayoutBlob | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const obj = raw as Record&lt;string, unknown&gt;;
+  if (obj.v !== 1) return null;
+  if (typeof obj.panels !== 'object' || obj.panels === null || Array.isArray(obj.panels)) {
+    return null;
+  }
+  const rawPanels = obj.panels as Record&lt;string, unknown&gt;;
+  const panels: Record&lt;string, PanelLayout&gt; = {};
+  for (const id of Object.keys(rawPanels)) {
+    const p = rawPanels[id];
+    if (p === null || typeof p !== 'object' || Array.isArray(p)) continue;
+    const pp = p as Record&lt;string, unknown&gt;;
+    const x = pp.x, y = pp.y, w = pp.w, h = pp.h, zRank = pp.zRank;
+    if (
+      typeof x !== 'number' || !Number.isFinite(x) ||
+      typeof y !== 'number' || !Number.isFinite(y) ||
+      typeof w !== 'number' || !Number.isFinite(w) || w &lt;= 0 ||
+      typeof h !== 'number' || !Number.isFinite(h) || h &lt;= 0 ||
+      typeof zRank !== 'number' || !Number.isFinite(zRank)
+    ) continue;
+    panels[id] = { x, y, w, h, zRank };
+  }
+  const gz = obj.globalZCounter;
+  const globalZCounter =
+    typeof gz === 'number' &amp;&amp; Number.isFinite(gz) ? gz : 0;
+  return { v: 1, panels, globalZCounter };
+}
+
+<span class="cm">/** Read the layout blob from localStorage. Returns emptyBlob() if storage</span>
+<span class="cm"> *  is unavailable, the key is unset, the JSON is malformed, or the parsed</span>
+<span class="cm"> *  shape fails validation. Never throws. */</span>
+export function readBlob(): UiLayoutBlob {
+  try {
+    if (typeof localStorage === 'undefined') return emptyBlob();
+    const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (raw === null) return emptyBlob();
+    const parsed: unknown = JSON.parse(raw);
+    return parseLayoutBlob(parsed) ?? emptyBlob();
+  } catch {
+    return emptyBlob();
+  }
+}
+
+<span class="cm">/** Write the layout blob to localStorage. Swallows quota / disabled-storage</span>
+<span class="cm"> *  errors with a console.warn — layout still works for the session, only</span>
+<span class="cm"> *  persistence is lost. Mirrors persistence.ts' save-fallthrough pattern. */</span>
+export function writeBlob(blob: UiLayoutBlob): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(blob));
+  } catch (err) {
+    console.warn('[robot-islands] ui-layout writeBlob failed:', err);
+  }
+}
+
+<span class="cm">/** Pure: clamp a rectangle so a `minVisible`-px slice of its header is</span>
+<span class="cm"> *  inside the viewport. Width/height are capped to viewport (minus the</span>
+<span class="cm"> *  same minVisible margin). Exported for unit tests; called internally</span>
+<span class="cm"> *  on load + on window.resize. */</span>
+export function clampToViewport(
+  rect: { x: number; y: number; w: number; h: number },
+  viewport: { w: number; h: number },
+  minVisible: number = 80,
+): { x: number; y: number; w: number; h: number } {
+  const HEADER_BAND = 22; <span class="cm">// header height that MUST stay reachable</span>
+  const w = Math.max(1, Math.min(rect.w, viewport.w));
+  const h = Math.max(1, Math.min(rect.h, viewport.h));
+  <span class="cm">// x in [minVisible - w, vp.w - minVisible] keeps minVisible of the panel</span>
+  <span class="cm">// width on-screen at all times.</span>
+  const minX = minVisible - w;
+  const maxX = viewport.w - minVisible;
+  const x = Math.max(minX, Math.min(rect.x, maxX));
+  <span class="cm">// y must keep the header band reachable: y in [0, vp.h - HEADER_BAND].</span>
+  const minY = 0;
+  const maxY = Math.max(0, viewport.h - HEADER_BAND);
+  const y = Math.max(minY, Math.min(rect.y, maxY));
+  return { x, y, w, h };
+}
+
+<span class="cm">// ─── Impure surface — bodies land in Task 4 ────────────────────────────</span>
+
+<span class="cm">/** Augment `panel` with drag + resize + persistence. Idempotent: a second</span>
+<span class="cm"> *  call on the same panel id is a no-op. Called from `mountPanel` after</span>
+<span class="cm"> *  the panel is in the DOM and registered with the zone manager.</span>
+<span class="cm"> *  Body added in Task 4 — this throw guards against accidental Task 1-only</span>
+<span class="cm"> *  builds shipping with no drag behaviour. */</span>
+export function makePanelDraggable(
+  _panel: HTMLElement,
+  _id: string,
+  _opts?: MakeDraggableOptions,
+): void {
+  throw new Error(
+    '[window-manager] makePanelDraggable not yet implemented (Task 4)',
+  );
+}
+
+<span class="cm">/** Clear every persisted layout entry; restore zone-stack defaults for</span>
+<span class="cm"> *  every floating panel. Triggered by the `reset-ui-layout` input action</span>
+<span class="cm"> *  and the Settings UI button. Body added in Task 4. */</span>
+export function resetUiLayout(): void {
+  throw new Error(
+    '[window-manager] resetUiLayout not yet implemented (Task 4)',
+  );
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Run the tests, confirm they pass</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/window-manager.test.ts</code></p>
+            <p class="step-text">Expected: PASS — all blocks green. <code>clampToViewport</code> · 5 tests, <code>parseLayoutBlob</code> · 5 tests, <code>readBlob</code>/<code>writeBlob</code> · 5 tests = 15 tests.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Build, then run the full suite</div>
+            <p class="step-text cmd">Run: <code>npm run build &amp;&amp; npm test</code></p>
+            <p class="step-text">Expected: tsc clean (no unused locals; the leading-underscore arg names suppress <code>noUnusedParameters</code>); vite builds; vitest suite green including pre-existing tests.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/window-manager.ts src/window-manager.test.ts
+git commit -F /tmp/wm-task1-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/wm-task1-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(window-manager): pure helpers + types skeleton
+
+New module src/window-manager.ts. This commit lands the pure half:
+LAYOUT_STORAGE_KEY, CHROME_PANEL_IDS, PanelLayout / UiLayoutBlob /
+MakeDraggableOptions types, clampToViewport (clamps rect so a min-
+visible slice of the header stays in viewport), parseLayoutBlob
+(drops malformed panel entries; rejects wrong-version blobs),
+readBlob / writeBlob (localStorage I/O with quota-error swallowing),
+and emptyBlob factory. The impure surface (makePanelDraggable,
+resetUiLayout) is stubbed to throw — bodies land in Task 4 once
+the ui-zones PanelRecord.free integration is in.
+
+15 new vitest cases cover the pure helpers end-to-end.
+
+Refs spec docs/superpowers/specs/2026-05-23-draggable-resizable-
+windows-design.html §05-§06.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 03 — Task 2                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task2">
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: <code>PanelRecord.free</code> + <code>setPanelFree</code> in <code>ui-zones.ts</code></h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Extend the zone manager's panel record with a <code>free</code> flag. Free panels are skipped when <code>layoutZone</code> computes its stacking cursor (their siblings re-flow to fill the gap) and have their inline anchors left alone. The ResizeObserver callback gains a dataset gate so user-driven resizes don't trigger a re-stack mid-drag. No JS sets <code>free=true</code> yet — that arrives in Task 4. Until then this is a dormant no-op: every record stays <code>free: false</code>, and <code>layoutZone</code> behaves byte-for-byte as it does today.</p>
+        <p class="deps-line">Dependencies: <b>none</b> — additive, dormant until Task 4 calls <code>setPanelFree</code>.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/ui-zones.ts</code> <span class="tag">— PanelRecord field, layout filter, RO gate, two new exports</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add <code>free</code> to <code>PanelRecord</code></div>
+            <p class="step-text">In <code>src/ui-zones.ts</code> at the existing <code>PanelRecord</code> interface (lines 87–93), add the field:</p>
+            <div class="code-block"><div class="file-label">src/ui-zones.ts — interface at ~line 87</div><div class="code"><pre>interface PanelRecord {
+  readonly el: HTMLElement;
+  readonly id: string;
+  readonly zone: ZoneId;
+  readonly order: number;
+  visible: boolean;
+<span class="add">  /** True iff the window-manager has placed this panel at a free</span>
+<span class="add">   *  (x, y, w, h) position from the persisted layout. layoutZone skips</span>
+<span class="add">   *  free panels in the cursor stack — sibling panels in the same zone</span>
+<span class="add">   *  re-flow to fill the gap. Flipped via setPanelFree from</span>
+<span class="add">   *  window-manager.ts. */</span>
+<span class="add">  free: boolean;</span>
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Default <code>free: false</code> in <code>mountPanel</code></div>
+            <p class="step-text">In the <code>const rec: PanelRecord = { … }</code> literal at <code>mountPanel</code> (~line 185), add <code>free: false</code>:</p>
+            <div class="code-block"><div class="file-label">src/ui-zones.ts — mountPanel at ~line 185</div><div class="code"><pre>  const rec: PanelRecord = {
+    el, id: opts.id, zone: opts.zone,
+    order: opts.order ?? 0, visible: true,
+<span class="add">    free: false,</span>
+  };
+  records.set(opts.id, rec);</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Filter free panels out of the layout cursor</div>
+            <p class="step-text">In the inner loop of <code>layout()</code> (~line 109), add the filter alongside the existing <code>visible</code> check:</p>
+            <div class="code-block"><div class="file-label">src/ui-zones.ts — layout() at ~line 107</div><div class="code"><pre>function layout(): void {
+  const buckets = new Map&lt;ZoneId, PanelRecord[]&gt;();
+  for (const rec of records.values()) {
+    if (!rec.visible) continue;
+<span class="add">    if (rec.free) continue; <span class="cm">// owned by window-manager, not the stack</span></span>
+    let arr = buckets.get(rec.zone);
+    if (!arr) { arr = []; buckets.set(rec.zone, arr); }
+    arr.push(rec);
+  }
+  for (const [zone, arr] of buckets) {
+    arr.sort((a, b) =&gt; a.order - b.order || (a.id &lt; b.id ? -1 : 1));
+    layoutZone(zone, arr);
+  }
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Suppress the ResizeObserver while a panel is actively mutated</div>
+            <p class="step-text">In <code>mountPanel</code>, the existing RO at line 193 fires <code>scheduleLayout()</code> unconditionally. While a user drag/resize is in flight, the panel's inline <code>style.width</code>/<code>height</code> writes will trigger the RO — which would then call <code>layoutZone</code> and reset the player's inline <code>style.left/top</code>. The window-manager sets <code>dataset.riActiveMutation = '1'</code> on pointerdown and clears it on pointerup; this gate skips the RO callback while that flag is set.</p>
+            <div class="code-block"><div class="file-label">src/ui-zones.ts — mountPanel at ~line 193</div><div class="code"><pre>  <span class="cm">// Re-layout whenever the panel's intrinsic size changes (text content,</span>
+  <span class="cm">// collapsed sections, etc.). Cheap — only the panel's zone gets re-stacked.</span>
+<span class="del">  const ro = new ResizeObserver(() =&gt; scheduleLayout());</span>
+<span class="add">  const ro = new ResizeObserver(() =&gt; {</span>
+<span class="add">    <span class="cm">// Window-manager sets riActiveMutation during user drag/resize. Bailing</span></span>
+<span class="add">    <span class="cm">// here prevents the zone re-stack from fighting the user's pointer.</span></span>
+<span class="add">    if (el.dataset.riActiveMutation === '1') return;</span>
+<span class="add">    <span class="cm">// Free panels are owned by window-manager — their size changes shouldn't</span></span>
+<span class="add">    <span class="cm">// re-stack the zone either.</span></span>
+<span class="add">    if (rec.free) return;</span>
+<span class="add">    scheduleLayout();</span>
+<span class="add">  });</span>
+  ro.observe(el);</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Export <code>setPanelFree</code> + <code>restoreAllToZones</code></div>
+            <p class="step-text">At the bottom of <code>src/ui-zones.ts</code> (after <code>requestZoneLayout</code> at line 226), append two helpers. <code>setPanelFree</code> lets the window-manager flip the bit on first drag; <code>restoreAllToZones</code> is called by <code>resetUiLayout</code> to flip every panel back to zone-anchored and clear inline anchors so <code>layoutZone</code> can re-stack from scratch.</p>
+            <div class="code-block"><div class="file-label">src/ui-zones.ts — appended after line 228</div><div class="code"><pre><span class="cm">/** Flip a registered panel's `free` flag. When true, layoutZone skips it</span>
+<span class="cm"> *  and the window-manager owns its inline left/top/width/height. When</span>
+<span class="cm"> *  flipped back to false, the next scheduleLayout() pass will re-stack</span>
+<span class="cm"> *  the panel into its zone. Called by window-manager.ts. */</span>
+export function setPanelFree(id: string, free: boolean): void {
+  const rec = records.get(id);
+  if (!rec) return;
+  if (rec.free === free) return;
+  rec.free = free;
+  scheduleLayout();
+}
+
+<span class="cm">/** Clear every panel's `free` flag and wipe the inline left/top/width/</span>
+<span class="cm"> *  height/z-index/transform that the window-manager may have set; then</span>
+<span class="cm"> *  request a re-stack. Called by resetUiLayout(). The transform clear</span>
+<span class="cm"> *  is defensive — TC chrome panels use translateX(-50%) and we never</span>
+<span class="cm"> *  set it free, but if a future change starts setting non-chrome panels</span>
+<span class="cm"> *  with transforms we want this to be the canonical reset. */</span>
+export function restoreAllToZones(): void {
+  for (const rec of records.values()) {
+    rec.free = false;
+    const s = rec.el.style;
+    <span class="cm">// Leave dataset.riActiveMutation alone; pointer handlers clear it.</span>
+    s.left = s.top = s.width = s.height = s.zIndex = '';
+    <span class="cm">// Preserve TC's translateX(-50%) — that's set by layoutZone itself</span>
+    <span class="cm">// on the next pass, so blanking it here is safe. Other zones don't</span>
+    <span class="cm">// use transform.</span>
+    s.transform = '';
+    rec.el.classList.remove('ri-free');
+  }
+  scheduleLayout();
+}
+
+<span class="cm">/** Internal accessor for window-manager: needs the live record map to</span>
+<span class="cm"> *  enumerate all panels for cross-panel z-rank rewriting. Returning a</span>
+<span class="cm"> *  read-only view keeps the contract one-way: callers can read, the</span>
+<span class="cm"> *  zone manager owns mutation. */</span>
+export function panelRecordIds(): readonly string[] {
+  return Array.from(records.keys());
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Build + run tests</div>
+            <p class="step-text cmd">Run: <code>npm run build &amp;&amp; npm test</code></p>
+            <p class="step-text">Expected: tsc clean. No pre-existing test for <code>ui-zones.ts</code> directly; the integration is exercised by the visible behaviour of every <code>*-ui.ts</code> that calls <code>mountPanel</code>. The dormant flag should not change any rendered output yet — every panel still sits in its zone with <code>free: false</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/ui-zones.ts
+git commit -F /tmp/wm-task2-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/wm-task2-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(ui-zones): PanelRecord.free flag + setPanelFree / restoreAllToZones
+
+PanelRecord gains a `free: boolean` field (default false). layoutZone
+skips free records from the cursor stack — sibling panels in the same
+zone re-flow to fill the gap. The ResizeObserver callback gains two
+gates: it bails when the panel has dataset.riActiveMutation === '1'
+(user drag/resize in flight, set by window-manager), and it bails when
+rec.free is true (window-manager owns the size in that case).
+
+Two new exports — setPanelFree(id, free) and restoreAllToZones() —
+are the window-manager's hooks into the zone state. Plus
+panelRecordIds() so the manager can enumerate the focus pool.
+
+This commit is dormant: no JS calls setPanelFree(_, true) yet, so
+every panel still sits in its zone with free=false and layoutZone
+behaves byte-for-byte as before. The drag wiring lands in Task 4.
+
+Refs spec docs/superpowers/specs/2026-05-23-draggable-resizable-
+windows-design.html §02 (zone-manager handshake) and §05.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 04 — Task 3                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task3">
+      <div class="sec-head"><span class="num">04</span><h2>Task 3: CSS — drag-handle cursor, resize grip, free overrides</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Pure CSS. Adds <code>cursor: grab</code> to <code>.ri-panel__head</code> and to the attribute-selector cousin <code>[data-ri-drag-handle]</code> (the latter so the four stamped-header side docks pick up the cursor change once Task 4 stamps the attribute). Adds the <code>.ri-resize</code> 14×14 BR-corner grip styled with a linear-gradient stripe pattern. Adds <code>.ri-panel.ri-free</code> overrides so free-positioned panels don't inherit any zone-set <code>transform</code>. None of these rules are <em>triggered</em> until Task 4 attaches the JS — this commit is dormant.</p>
+        <p class="deps-line">Dependencies: <b>none</b> — pure CSS, additive.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/ui.css</code> <span class="tag">— append drag/resize/free rules after the .ri-panel block</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add the drag-handle cursor + free-state overrides</div>
+            <p class="step-text">In <code>src/ui.css</code> immediately after the existing <code>.ri-panel__body--dense</code> rule (~line 111), insert:</p>
+            <div class="code-block"><div class="file-label">src/ui.css — appended after line 111</div><div class="code"><pre><span class="cm">/* ── Draggable / resizable panels (window-manager) ────────────────────</span>
+<span class="cm">   These rules are dormant until window-manager.ts stamps</span>
+<span class="cm">   data-ri-drag-handle on a panel's header and appends a .ri-resize</span>
+<span class="cm">   child. The cursor and grip styling are visual-only: pointer</span>
+<span class="cm">   choreography lives in window-manager.ts. */</span>
+
+<span class="cm">/* Every recognised drag handle gets a grab cursor on hover. */</span>
+.ri-panel__head,
+[data-ri-drag-handle] {
+  cursor: grab;
+  user-select: none;
+}
+
+<span class="cm">/* While a drag is in progress, the body class is set by window-manager. */</span>
+body.ri-dragging,
+body.ri-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+<span class="cm">/* Children of the drag handle that should NOT inherit the grab cursor —</span>
+<span class="cm">   interactive widgets keep their own affordance. window-manager.ts also</span>
+<span class="cm">   guards the pointerdown event with target.closest() against these. */</span>
+.ri-panel__head button,
+.ri-panel__head input,
+.ri-panel__head select,
+.ri-panel__head textarea,
+[data-ri-drag-handle] button,
+[data-ri-drag-handle] input,
+[data-ri-drag-handle] select,
+[data-ri-drag-handle] textarea {
+  cursor: pointer;
+}
+
+<span class="cm">/* BR-corner resize grip. 14×14, three diagonal cyan stripes drawn via</span>
+<span class="cm">   layered linear-gradients (one stripe per gradient). nwse-resize cursor.</span>
+<span class="cm">   Positioned absolute so panels using ri-panel__body padding don't need</span>
+<span class="cm">   to know about it. window-manager.ts appends one to each free panel. */</span>
+.ri-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  z-index: 1;
+  background:
+    linear-gradient(135deg, transparent 0 35%, var(--ri-accent) 35% 42%, transparent 42% 100%),
+    linear-gradient(135deg, transparent 0 55%, var(--ri-accent) 55% 62%, transparent 62% 100%),
+    linear-gradient(135deg, transparent 0 75%, var(--ri-accent) 75% 82%, transparent 82% 100%);
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+  pointer-events: auto;
+}
+.ri-resize:hover { opacity: 1; }
+
+<span class="cm">/* Free-positioned panels need `position: fixed` (set by layoutZone) but</span>
+<span class="cm">   not any transform. layoutZone clears transform on non-TC zones; this</span>
+<span class="cm">   rule is the belt-and-braces guarantee for an ri-free panel. */</span>
+.ri-panel.ri-free {
+  transform: none !important;
+  margin: 0;
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Build, then preview-reload in the browser</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS clean (CSS is not type-checked; <code>tsc -b</code> is the bar here, and a CSS-only change won't fail it). The dev service serves <code>dist/</code> — reload <code>https://islands.nitjsefni.eu/</code>. Visual check: every panel still looks the same. Hovering the HUD economy header should NOT yet show a grab cursor on stamped headers (inspector / drones / routes / settlement) because those don't carry <code>data-ri-drag-handle</code> yet — only <code>.ri-panel__head</code> matches, which is the HUD economy alone. The HUD economy header WILL show the grab cursor as a free bonus; that's expected.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Run the full test suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: PASS — full suite green. CSS-only change; no functional path touched.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/ui.css
+git commit -F /tmp/wm-task3-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/wm-task3-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(ui): drag-handle cursor + .ri-resize grip + .ri-free overrides
+
+CSS-only additions: .ri-panel__head and [data-ri-drag-handle] get
+cursor: grab on hover and user-select: none. body.ri-dragging
+swaps to cursor: grabbing during a live drag. A .ri-resize 14×14
+BR-corner grip is drawn from three layered linear-gradient stripes
+in the accent cyan; opacity ramps on hover. .ri-panel.ri-free
+clears transform and margin so free panels don't inherit any zone-
+set centring.
+
+Dormant until window-manager.ts (Task 4) stamps data-ri-drag-handle
+on stamped headers and appends .ri-resize children. The HUD economy
+panel — which already has .ri-panel__head — will pick up the grab
+cursor immediately as a free side-effect; that's expected.
+
+Refs spec docs/superpowers/specs/2026-05-23-draggable-resizable-
+windows-design.html §02 (resize affordance) and §05.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 05 — Task 4                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task4">
+      <div class="sec-head"><span class="num">05</span><h2>Task 4: <code>makePanelDraggable</code> body + <code>mountPanel</code> hook</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Live wiring. Replace the Task 1 stubs with full bodies for <code>makePanelDraggable</code> and <code>resetUiLayout</code>. The drag handler uses event delegation on the panel itself, so panels whose <code>.ri-panel__head</code> is appended AFTER <code>mountPanel</code> runs (hud-economy mounts first then appends head) still work — <code>pointerdown</code> resolves the handle lazily via <code>event.target.closest()</code>. Wire <code>mountPanel</code> to call <code>makePanelDraggable</code> after registration. The function self-skips chrome panels via <code>CHROME_PANEL_IDS</code>.</p>
+        <p class="deps-line">Dependencies: <b>Task 1</b> (module + types), <b>Task 2</b> (<code>setPanelFree</code>, <code>restoreAllToZones</code>, <code>panelRecordIds</code> exports), <b>Task 3</b> (CSS).</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/window-manager.ts</code> <span class="tag">— replace stubs with live bodies; add module-level state</span></li>
+            <li>Modify: <code>src/ui-zones.ts</code> <span class="tag">— mountPanel calls makePanelDraggable after scheduleLayout</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Replace the stubs with module-level state + live bodies</div>
+            <p class="step-text">In <code>src/window-manager.ts</code>, replace the two stubbed exports (and their imports) with the full implementation below. Add the new imports at the top.</p>
+            <div class="code-block"><div class="file-label">src/window-manager.ts — top of file, imports</div><div class="code"><pre><span class="cm">// Existing file header preserved; replace the closing two stub exports</span>
+<span class="cm">// with the implementation below. The new module-level imports go at the</span>
+<span class="cm">// top of the file, alongside the existing exports.</span>
+import { setPanelFree, panelRecordIds, restoreAllToZones } from './ui-zones.js';
+import { Z } from './ui-tokens.js';</pre></div></div>
+            <p class="step-text">Then delete the two <code>throw new Error(...)</code> stubs at the bottom and replace with this full block (note: <code>MakeDraggableOptions</code>, the pure helpers, and <code>readBlob</code>/<code>writeBlob</code> from Task 1 are reused unchanged):</p>
+            <div class="code-block"><div class="file-label">src/window-manager.ts — replace the stub bottom half</div><div class="code"><pre><span class="cm">// ─── Module-level state ────────────────────────────────────────────────</span>
+
+<span class="cm">/** In-memory mirror of the localStorage blob. Read once on first</span>
+<span class="cm"> *  makePanelDraggable; written through to localStorage with a debounce. */</span>
+let blob: UiLayoutBlob = readBlob();
+
+<span class="cm">/** Set of panel ids the manager has already wired — idempotency guard. */</span>
+const wiredPanels = new Set&lt;string&gt;();
+
+<span class="cm">/** Debounce token for writeBlob. ~250ms keeps a fast drag to one write. */</span>
+let writeTimer: number | null = null;
+function scheduleWriteBlob(): void {
+  if (writeTimer !== null) return;
+  writeTimer = window.setTimeout(() =&gt; {
+    writeTimer = null;
+    writeBlob(blob);
+  }, 250);
+}
+
+<span class="cm">/** Mutate the in-memory blob immutably and schedule a write. */</span>
+function updatePanelLayout(id: string, patch: Partial&lt;PanelLayout&gt;): void {
+  const prev = blob.panels[id] ?? { x: 0, y: 0, w: 0, h: 0, zRank: 0 };
+  const next: PanelLayout = {
+    x: patch.x ?? prev.x,
+    y: patch.y ?? prev.y,
+    w: patch.w ?? prev.w,
+    h: patch.h ?? prev.h,
+    zRank: patch.zRank ?? prev.zRank,
+  };
+  blob = {
+    v: 1,
+    panels: { ...blob.panels, [id]: next },
+    globalZCounter: blob.globalZCounter,
+  };
+  scheduleWriteBlob();
+}
+
+function bumpGlobalZ(): number {
+  blob = { ...blob, globalZCounter: blob.globalZCounter + 1 };
+  scheduleWriteBlob();
+  return blob.globalZCounter;
+}
+
+<span class="cm">// Track every wired panel's id → element so click-to-front can iterate</span>
+<span class="cm">// the focus pool and rewrite z-indexes across panels. Chrome panels are</span>
+<span class="cm">// NOT in this map.</span>
+const wiredEls = new Map&lt;string, HTMLElement&gt;();
+
+function recomputeZIndexes(): void {
+  <span class="cm">// Sort all wired panels by their zRank ascending; assign z-index in</span>
+  <span class="cm">// [Z.panel, Z.panel + 19]. Modulo-20 keeps z-index bounded even after</span>
+  <span class="cm">// thousands of focus events.</span>
+  const ids = Array.from(wiredEls.keys());
+  ids.sort((a, b) =&gt; (blob.panels[a]?.zRank ?? 0) - (blob.panels[b]?.zRank ?? 0));
+  for (let i = 0; i &lt; ids.length; i++) {
+    const id = ids[i]!;
+    const el = wiredEls.get(id)!;
+    el.style.zIndex = String(Z.panel + (i % 20));
+  }
+}
+
+<span class="cm">// ─── Public: makePanelDraggable ────────────────────────────────────────</span>
+
+export function makePanelDraggable(
+  panel: HTMLElement,
+  id: string,
+  opts?: MakeDraggableOptions,
+): void {
+  if (CHROME_PANEL_IDS.has(id)) return;
+  if (wiredPanels.has(id)) return;
+  wiredPanels.add(id);
+  wiredEls.set(id, panel);
+
+  const minWidth = opts?.minWidth ?? 200;
+  const minHeight = opts?.minHeight ?? 120;
+
+  <span class="cm">// 1) Append the .ri-resize grip (CSS-styled in Task 3).</span>
+  let grip = panel.querySelector&lt;HTMLDivElement&gt;(':scope &gt; .ri-resize');
+  if (!grip) {
+    grip = document.createElement('div');
+    grip.className = 'ri-resize';
+    grip.setAttribute('role', 'button');
+    grip.setAttribute('aria-label', 'Resize panel');
+    panel.appendChild(grip);
+  }
+  <span class="cm">// 2) Apply any saved layout for this id immediately.</span>
+  const saved = blob.panels[id];
+  if (saved) applySavedLayout(panel, id, saved);
+
+  <span class="cm">// 3) Click-to-front: capturing pointerdown anywhere in the panel</span>
+  <span class="cm">// (not the grip, which has its own handler that also bumps z).</span>
+  panel.addEventListener('pointerdown', (e) =&gt; {
+    bringToFront(id);
+    <span class="cm">// Don't preventDefault — inner buttons / inputs need their event.</span>
+  }, true);
+
+  <span class="cm">// 4) Drag: resolve handle lazily so panels that build their header AFTER</span>
+  <span class="cm">// mount (e.g. hud-economy in hud.ts) still work. data-ri-drag-handle is</span>
+  <span class="cm">// stamped onto the resolved handle so the CSS cursor rule picks it up.</span>
+  panel.addEventListener('pointerdown', (e) =&gt; {
+    if (!isPrimaryPointer(e)) return;
+    const target = e.target as Element | null;
+    if (!target) return;
+    <span class="cm">// Ignore clicks on interactive children OR the resize grip.</span>
+    if (target.closest('button, input, select, textarea, [draggable="true"], .ri-resize')) return;
+    const handle = resolveDragHandle(panel);
+    if (!handle) return;
+    if (!handle.contains(target)) return;
+
+    handle.setAttribute('data-ri-drag-handle', '');
+    e.preventDefault();
+
+    const rect = panel.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const startLeft = rect.left, startTop = rect.top;
+    panel.setPointerCapture(e.pointerId);
+    document.body.classList.add('ri-dragging');
+    panel.dataset.riActiveMutation = '1';
+
+    <span class="cm">// First drag promotes a zone-anchored panel to free-positioned.</span>
+    promoteToFree(panel, id, rect);
+
+    const move = (ev: PointerEvent): void =&gt; {
+      const x = startLeft + (ev.clientX - startX);
+      const y = startTop + (ev.clientY - startY);
+      const clamped = clampToViewport(
+        { x, y, w: rect.width, h: rect.height },
+        { w: window.innerWidth, h: window.innerHeight },
+      );
+      panel.style.left = clamped.x + 'px';
+      panel.style.top = clamped.y + 'px';
+    };
+    const up = (ev: PointerEvent): void =&gt; {
+      panel.removeEventListener('pointermove', move);
+      panel.removeEventListener('pointerup', up);
+      panel.removeEventListener('pointercancel', up);
+      document.body.classList.remove('ri-dragging');
+      delete panel.dataset.riActiveMutation;
+      try { panel.releasePointerCapture(ev.pointerId); } catch { <span class="cm">/* already released */</span> }
+      const after = panel.getBoundingClientRect();
+      updatePanelLayout(id, { x: after.left, y: after.top });
+    };
+    panel.addEventListener('pointermove', move);
+    panel.addEventListener('pointerup', up);
+    panel.addEventListener('pointercancel', up);
+  });
+
+  <span class="cm">// 5) Resize via the BR grip.</span>
+  grip.addEventListener('pointerdown', (e) =&gt; {
+    if (!isPrimaryPointer(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = panel.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const startW = rect.width, startH = rect.height;
+    grip!.setPointerCapture(e.pointerId);
+    panel.dataset.riActiveMutation = '1';
+    promoteToFree(panel, id, rect);
+    <span class="cm">// Bring to front on resize-start too.</span>
+    bringToFront(id);
+
+    const move = (ev: PointerEvent): void =&gt; {
+      const w = Math.max(minWidth, startW + (ev.clientX - startX));
+      const h = Math.max(minHeight, startH + (ev.clientY - startY));
+      const clamped = clampToViewport(
+        { x: rect.left, y: rect.top, w, h },
+        { w: window.innerWidth, h: window.innerHeight },
+      );
+      panel.style.width = clamped.w + 'px';
+      panel.style.height = clamped.h + 'px';
+    };
+    const up = (ev: PointerEvent): void =&gt; {
+      grip!.removeEventListener('pointermove', move);
+      grip!.removeEventListener('pointerup', up);
+      grip!.removeEventListener('pointercancel', up);
+      delete panel.dataset.riActiveMutation;
+      try { grip!.releasePointerCapture(ev.pointerId); } catch { <span class="cm">/* already */</span> }
+      const after = panel.getBoundingClientRect();
+      updatePanelLayout(id, { w: after.width, h: after.height });
+    };
+    grip!.addEventListener('pointermove', move);
+    grip!.addEventListener('pointerup', up);
+    grip!.addEventListener('pointercancel', up);
+  });
+
+  <span class="cm">// 6) If we wired with a saved layout, recompute z-indexes so the saved</span>
+  <span class="cm">// zRank takes effect immediately.</span>
+  if (saved) recomputeZIndexes();
+}
+
+function isPrimaryPointer(e: PointerEvent): boolean {
+  return e.isPrimary &amp;&amp; (e.pointerType === 'mouse' || e.pointerType === 'pen' || e.pointerType === 'touch');
+}
+
+function resolveDragHandle(panel: HTMLElement): HTMLElement | null {
+  <span class="cm">// Prefer the explicit .ri-panel__head used by hud.ts; fall back to any</span>
+  <span class="cm">// element already stamped data-ri-drag-handle; fall back to the panel's</span>
+  <span class="cm">// first child (the stamped header inspector-ui / drones-ui / routes-ui</span>
+  <span class="cm">// / settlement-ui all create as the first appendChild).</span>
+  const cls = panel.querySelector&lt;HTMLElement&gt;(':scope &gt; .ri-panel__head');
+  if (cls) return cls;
+  const tagged = panel.querySelector&lt;HTMLElement&gt;(':scope &gt; [data-ri-drag-handle]');
+  if (tagged) return tagged;
+  const first = panel.firstElementChild;
+  return first instanceof HTMLElement ? first : null;
+}
+
+function applySavedLayout(panel: HTMLElement, id: string, layout: PanelLayout): void {
+  const clamped = clampToViewport(
+    { x: layout.x, y: layout.y, w: layout.w, h: layout.h },
+    { w: window.innerWidth, h: window.innerHeight },
+  );
+  panel.style.position = 'fixed';
+  panel.style.left = clamped.x + 'px';
+  panel.style.top = clamped.y + 'px';
+  panel.style.right = '';
+  panel.style.bottom = '';
+  panel.style.width = clamped.w + 'px';
+  panel.style.height = clamped.h + 'px';
+  panel.style.transform = '';
+  panel.classList.add('ri-free');
+  setPanelFree(id, true);
+}
+
+function promoteToFree(panel: HTMLElement, id: string, rect: DOMRect): void {
+  if (panel.classList.contains('ri-free')) return;
+  panel.style.position = 'fixed';
+  panel.style.left = rect.left + 'px';
+  panel.style.top = rect.top + 'px';
+  panel.style.right = '';
+  panel.style.bottom = '';
+  panel.style.width = rect.width + 'px';
+  panel.style.height = rect.height + 'px';
+  panel.style.transform = '';
+  panel.classList.add('ri-free');
+  setPanelFree(id, true);
+  updatePanelLayout(id, {
+    x: rect.left, y: rect.top, w: rect.width, h: rect.height,
+  });
+}
+
+function bringToFront(id: string): void {
+  if (!wiredEls.has(id)) return;
+  const z = bumpGlobalZ();
+  updatePanelLayout(id, { zRank: z });
+  recomputeZIndexes();
+}
+
+<span class="cm">// ─── Public: resetUiLayout ─────────────────────────────────────────────</span>
+
+export function resetUiLayout(): void {
+  blob = emptyBlob();
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(LAYOUT_STORAGE_KEY);
+    }
+  } catch { <span class="cm">/* storage unavailable — in-memory clear still applies */</span> }
+  <span class="cm">// Reset every wired panel's inline state. ui-zones.ts owns the actual</span>
+  <span class="cm">// re-stack via restoreAllToZones.</span>
+  for (const el of wiredEls.values()) {
+    el.classList.remove('ri-free');
+    el.style.left = el.style.top = el.style.width = el.style.height = el.style.zIndex = '';
+  }
+  restoreAllToZones();
+}
+
+<span class="cm">// ─── Window resize: re-clamp every free panel ──────────────────────────</span>
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', () =&gt; {
+    for (const id of panelRecordIds()) {
+      const el = wiredEls.get(id);
+      const layout = blob.panels[id];
+      if (!el || !layout) continue;
+      const clamped = clampToViewport(
+        { x: layout.x, y: layout.y, w: layout.w, h: layout.h },
+        { w: window.innerWidth, h: window.innerHeight },
+      );
+      el.style.left = clamped.x + 'px';
+      el.style.top = clamped.y + 'px';
+      el.style.width = clamped.w + 'px';
+      el.style.height = clamped.h + 'px';
+      if (clamped.x !== layout.x || clamped.y !== layout.y ||
+          clamped.w !== layout.w || clamped.h !== layout.h) {
+        updatePanelLayout(id, clamped);
+      }
+    }
+  });
+}</pre></div></div>
+            <p class="step-text">Note: <code>updatePanelLayout</code>'s payload here is a full <code>{x,y,w,h}</code> bundle — it does NOT carry <code>zRank</code> so the existing <code>zRank</code> stays put (the <code>?? prev.zRank</code> branch keeps it). The function signature accepts a <code>Partial&lt;PanelLayout&gt;</code>, so passing the four-field object is type-safe.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Wire <code>mountPanel</code> to call <code>makePanelDraggable</code></div>
+            <p class="step-text">In <code>src/ui-zones.ts</code>, add the import at the top and the call inside <code>mountPanel</code> after <code>scheduleLayout()</code>. The call is unconditional — chrome ids self-skip inside <code>makePanelDraggable</code>.</p>
+            <div class="code-block"><div class="file-label">src/ui-zones.ts — top imports + mountPanel body</div><div class="code"><pre><span class="cm">// At the top, alongside the existing import from './ui-tokens.js':</span>
+<span class="add">import { makePanelDraggable } from './window-manager.js';</span>
+
+<span class="cm">// In mountPanel, immediately after the existing scheduleLayout() call</span>
+<span class="cm">// (currently at line 196):</span>
+  scheduleLayout();
+<span class="add">  <span class="cm">// Hook the window-manager. The helper skips chrome panels via</span></span>
+<span class="add">  <span class="cm">// CHROME_PANEL_IDS, so passing every mountPanel caller through it is</span></span>
+<span class="add">  <span class="cm">// safe — chrome panels stay anchored and never gain drag affordances.</span></span>
+<span class="add">  makePanelDraggable(el, opts.id, {</span>
+<span class="add">    minWidth: opts.minWidth,</span>
+<span class="add">  });</span></pre></div></div>
+            <p class="step-text">Note the option pass-through: the spec §05 narrative says <code>{ minWidth: opts.minWidth, maxWidth: opts.maxWidth }</code>; spec §06 type declares <code>{ minWidth, minHeight }</code>. We follow §06: <code>maxWidth</code> is already applied as a CSS bound by <code>mountPanel</code> itself (<code>el.style.maxWidth = …</code> at line 183), and the resize floor is conceptually different from the CSS cap, so the parameter shouldn't be conflated. <code>minHeight</code> is not currently in <code>PanelMountOptions</code>; defaulting to 120 in <code>makePanelDraggable</code> is the right move until a future spec adds it.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Tag stamped headers with <code>data-ri-drag-handle</code></div>
+            <p class="step-text">The stamped headers in <code>inspector-ui.ts</code>, <code>drones-ui.ts</code>, <code>routes-ui.ts</code>, <code>settlement-ui.ts</code> aren't classed <code>ri-panel__head</code>, so the CSS cursor wouldn't pick them up. Easier path: let <code>resolveDragHandle</code> (which already handles this via the <code>firstElementChild</code> fallback) <em>also</em> stamp the attribute on first successful resolve. The pointerdown handler already does <code>handle.setAttribute('data-ri-drag-handle', '')</code> — that's enough to make the cursor change next hover.</p>
+            <p class="step-text">No <code>*-ui.ts</code> file change required. The attribute stamps itself on first drag interaction. Verify in the live UI that the cursor only changes after the first click; if that feels jarring (it shouldn't — first drag is the moment the user discovers the affordance), a follow-up could stamp it preemptively from inside <code>makePanelDraggable</code> using <code>resolveDragHandle</code> at wire-time. Note that for inspector / drones / routes / settlement panels mount AFTER appending the header, so <code>resolveDragHandle</code> would already find the firstElementChild at wire-time. Add the preemptive stamp:</p>
+            <div class="code-block"><div class="file-label">src/window-manager.ts — inside makePanelDraggable, between steps (1) and (2)</div><div class="code"><pre>  <span class="cm">// Preemptive handle stamp so the cursor:grab CSS rule applies before</span>
+  <span class="cm">// the user clicks. For hud-economy this is a no-op at wire-time (head</span>
+  <span class="cm">// is appended after mount); the lazy resolve in the pointerdown handler</span>
+  <span class="cm">// catches it on first click. For the four side docks, the head is the</span>
+  <span class="cm">// firstElementChild at wire-time, so this stamps it now.</span>
+  const handle0 = resolveDragHandle(panel);
+  if (handle0 &amp;&amp; !handle0.classList.contains('ri-panel__head')) {
+    handle0.setAttribute('data-ri-drag-handle', '');
+  }</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Build + run the unit tests</div>
+            <p class="step-text cmd">Run: <code>npm run build &amp;&amp; npm test</code></p>
+            <p class="step-text">Expected: tsc clean. The 15 pure-helper tests from Task 1 still pass; no new unit tests added (DOM choreography is verified by browser smoke). If tsc complains about unused params on the original Task-1 stubs, that's fine — those have been replaced now.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Live smoke-test in the browser</div>
+            <p class="step-text">Per AGENTS.md preview-server doctrine: <code>npm run build</code> is enough — do NOT restart <code>robot-islands-dev.service</code>. Reload <code>https://islands.nitjsefni.eu/</code> in the user's open tab. Use <code>mcp__daedalus__screenshot</code> against the active tab to verify each case below.</p>
+            <ul style="font-size:13.5px; color:var(--gray-500); padding-left:18px;">
+              <li>Hover the HUD economy header — cursor becomes <code>grab</code>.</li>
+              <li>Drag the HUD economy panel from BR to centre. Release. <code>localStorage.getItem('ri-ui-layout-v1')</code> should now contain a <code>panels['hud-economy']</code> entry.</li>
+              <li>Hover the inspector / drones / routes / settlement stamped header — cursor becomes <code>grab</code>.</li>
+              <li>The BR <code>.ri-resize</code> grip is visible on any free-positioned panel. Drag it; the panel resizes; release; the stored <code>w</code>/<code>h</code> updates.</li>
+              <li>Reload the page; the dragged panel re-appears at the saved position.</li>
+              <li>Click a back-most panel of two overlapping panels; it comes to the front. Reload; same z-order persists.</li>
+              <li>Click the <code>×</code> close button on a docked side panel; the panel closes without starting a drag.</li>
+              <li><code>action-strip</code> (TR icon column) hover does NOT show a grab cursor; trying to drag does nothing.</li>
+              <li><code>island-bar</code> (TC) hover does NOT show a grab cursor; same.</li>
+              <li>Inside <code>routes-panel</code>, the cargo-row HTML5 drag-drop reordering still works.</li>
+              <li>Opening the inventory modal (key <kbd>I</kbd>) covers any free panel even at max z-rank.</li>
+            </ul>
+            <p class="step-text">If any smoke case fails, fix-and-rebuild before moving on. Don't carry a broken behaviour across the commit boundary.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/window-manager.ts src/ui-zones.ts
+git commit -F /tmp/wm-task4-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/wm-task4-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(window-manager): live drag + resize + persistence + click-to-front
+
+Replaces the Task 1 stubs with full bodies for makePanelDraggable and
+resetUiLayout. mountPanel calls makePanelDraggable after registration;
+chrome panels (action-strip, island-bar) self-skip via CHROME_PANEL_IDS.
+
+Behaviour:
+  - pointerdown on .ri-panel__head OR the stamped-header firstElementChild
+    starts a drag (handle resolved lazily so hud.ts's mount-then-append
+    order works). Interactive children (button/input/select/textarea/
+    [draggable]) and the .ri-resize grip are skipped via target.closest.
+  - pointerdown on .ri-resize starts a resize, clamped to minWidth=200,
+    minHeight=120 (or whatever opts pass in).
+  - Any pointerdown anywhere in the panel bumps the global Z counter
+    and rewrites every wired panel's z-index across [Z.panel, Z.panel+19].
+  - First drag/resize sets the panel free (setPanelFree(id, true));
+    ui-zones' layoutZone skips it; siblings re-flow.
+  - All commits debounced 250ms to one localStorage write.
+  - window.resize re-clamps every free panel against the new viewport.
+
+Refs spec §02 / §03 / §04 / §05 / §06.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 06 — Task 5                                                        -->
+    <!-- ================================================================= -->
+    <section id="sec-task5">
+      <div class="sec-head"><span class="num">06</span><h2>Task 5: Settings Reset Layout button + action wiring</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Pick was <code>reset_surface: settings_only</code> — Settings panel button, no keybinding. Per AGENTS.md "every key goes through the registry; UI buttons reuse the same dispatcher", the button still flows through the input registry: <code>main.ts</code> calls <code>defineAction(reg, 'reset-ui-layout', resetUiLayout)</code> with NO matching <code>bind()</code>, and <code>settings-ui.ts</code> dispatches the action via <code>dispatchAction(deps.reg, 'reset-ui-layout')</code>.</p>
+        <p class="deps-line">Dependencies: <b>Task 4</b> (live <code>resetUiLayout</code> body).</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/main.ts</code> <span class="tag">— defineAction wiring for reset-ui-layout</span></li>
+            <li>Modify: <code>src/settings-ui.ts</code> <span class="tag">— add UI LAYOUT section + Reset button</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Wire the action in <code>main.ts</code></div>
+            <p class="step-text">In <code>src/main.ts</code>, add the import at the top alongside the other module imports, and add a <code>defineAction</code> call next to the other early <code>defineAction</code> wiring around line 440 (where <code>rotate-placement</code> is defined as a no-op stub; the real handler can be registered here directly since <code>resetUiLayout</code> is a side-effect-only function).</p>
+            <div class="code-block"><div class="file-label">src/main.ts — imports + defineAction call</div><div class="code"><pre><span class="cm">// At the top, alongside the existing module imports:</span>
+<span class="add">import { resetUiLayout } from './window-manager.js';</span>
+
+<span class="cm">// In the early defineAction block around line 440 (immediately after the</span>
+<span class="cm">// existing defineAction(reg, 'rotate-placement', …) line):</span>
+<span class="add">  <span class="cm">// reset-ui-layout: clears persisted layout, restores zone-stack defaults.</span></span>
+<span class="add">  <span class="cm">// No bind() — pick was reset_surface: settings_only. The settings-ui</span></span>
+<span class="add">  <span class="cm">// button dispatches this action via dispatchAction(reg, 'reset-ui-layout').</span></span>
+<span class="add">  defineAction(reg, 'reset-ui-layout', () =&gt; { resetUiLayout(); });</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Add the UI LAYOUT section to <code>settings-ui.ts</code></div>
+            <p class="step-text">In <code>src/settings-ui.ts</code>, add the <code>dispatchAction</code> import to the existing input.ts import block at the top, then insert a new UI LAYOUT section in <code>buildBody</code> immediately AFTER <code>body.appendChild(kbSection)</code> at line 253 (i.e. between the KEYBINDINGS and SAVE sections). The section follows the same heading / button pattern as the existing sections.</p>
+            <div class="code-block"><div class="file-label">src/settings-ui.ts — top imports</div><div class="code"><pre><span class="cm">// Extend the existing import from './input.js' to include dispatchAction.</span>
+<span class="cm">// If the import already has multiple names, append; otherwise add the line.</span>
+<span class="add">import { dispatchAction, /* … existing names … */ } from './input.js';</span></pre></div></div>
+            <div class="code-block"><div class="file-label">src/settings-ui.ts — inside buildBody, after line 253 (body.appendChild(kbSection))</div><div class="code"><pre>      body.appendChild(kbSection);
+
+<span class="add">      <span class="cm">// ---- UI Layout section (window-manager) -----------------------------</span></span>
+<span class="add">      const uiSection = document.createElement('div');</span>
+<span class="add">      uiSection.style.display = 'flex';</span>
+<span class="add">      uiSection.style.flexDirection = 'column';</span>
+<span class="add">      uiSection.style.gap = '6px';</span>
+<span class="add"></span>
+<span class="add">      const uiHeading = document.createElement('div');</span>
+<span class="add">      uiHeading.style.display = 'flex';</span>
+<span class="add">      uiHeading.style.alignItems = 'baseline';</span>
+<span class="add">      uiHeading.style.justifyContent = 'space-between';</span>
+<span class="add">      uiHeading.style.paddingBottom = '4px';</span>
+<span class="add">      uiHeading.style.borderBottom = '1px solid var(--ri-rule)';</span>
+<span class="add"></span>
+<span class="add">      const uiHeadingLabel = document.createElement('span');</span>
+<span class="add">      uiHeadingLabel.textContent = 'UI LAYOUT';</span>
+<span class="add">      uiHeadingLabel.className = 'ri-caps';</span>
+<span class="add">      uiHeadingLabel.style.color = 'var(--ri-accent)';</span>
+<span class="add">      uiHeading.appendChild(uiHeadingLabel);</span>
+<span class="add"></span>
+<span class="add">      const uiHeadingHint = document.createElement('span');</span>
+<span class="add">      uiHeadingHint.textContent = 'drag headers · resize from bottom-right';</span>
+<span class="add">      uiHeadingHint.className = 'ri-muted';</span>
+<span class="add">      uiHeadingHint.style.fontSize = '9.5px';</span>
+<span class="add">      uiHeadingHint.style.letterSpacing = '0.1em';</span>
+<span class="add">      uiHeadingHint.style.textTransform = 'uppercase';</span>
+<span class="add">      uiHeading.appendChild(uiHeadingHint);</span>
+<span class="add"></span>
+<span class="add">      uiSection.appendChild(uiHeading);</span>
+<span class="add"></span>
+<span class="add">      const uiResetRow = document.createElement('div');</span>
+<span class="add">      uiResetRow.style.display = 'flex';</span>
+<span class="add">      uiResetRow.style.justifyContent = 'flex-end';</span>
+<span class="add">      uiResetRow.style.paddingTop = '4px';</span>
+<span class="add">      const uiResetBtn = makeButton('Reset Window Layout', () =&gt; {</span>
+<span class="add">        if (!window.confirm('Reset every panel to its default position and size?')) return;</span>
+<span class="add">        dispatchAction(deps.reg, 'reset-ui-layout');</span>
+<span class="add">      });</span>
+<span class="add">      uiResetRow.appendChild(uiResetBtn);</span>
+<span class="add">      uiSection.appendChild(uiResetRow);</span>
+<span class="add"></span>
+<span class="add">      const uiNote = document.createElement('div');</span>
+<span class="add">      uiNote.textContent =</span>
+<span class="add">        'Window positions and sizes are saved per-browser (localStorage). Resetting clears all saved layouts and restores the default docked positions.';</span>
+<span class="add">      uiNote.className = 'ri-muted';</span>
+<span class="add">      uiNote.style.fontSize = '10px';</span>
+<span class="add">      uiNote.style.lineHeight = '1.4';</span>
+<span class="add">      uiNote.style.paddingTop = '4px';</span>
+<span class="add">      uiNote.style.fontStyle = 'italic';</span>
+<span class="add">      uiSection.appendChild(uiNote);</span>
+<span class="add"></span>
+<span class="add">      body.appendChild(uiSection);</span>
+
+      <span class="cm">// ---- Save section ----------------------------------------------------</span>
+      <span class="cm">// (existing — unchanged)</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Build + run tests</div>
+            <p class="step-text cmd">Run: <code>npm run build &amp;&amp; npm test</code></p>
+            <p class="step-text">Expected: tsc clean. Full suite green (no new tests; the path is exercised by browser smoke).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Live smoke-test the reset</div>
+            <p class="step-text">After <code>npm run build</code>, reload <code>https://islands.nitjsefni.eu/</code>. Drag the HUD economy panel to centre, resize it, drag the inspector / drones panels. Open Settings (key <kbd>S</kbd>); scroll to UI LAYOUT; click Reset Window Layout; confirm the prompt. Every panel should snap back to its zone-default. <code>localStorage.getItem('ri-ui-layout-v1')</code> should be <code>null</code>. Reload — defaults persist (because nothing's saved now).</p>
+            <p class="step-text">Take a daedalus screenshot of the Settings modal showing the new UI LAYOUT section as the canonical visual confirmation.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/main.ts src/settings-ui.ts
+git commit -F /tmp/wm-task5-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/wm-task5-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(settings): Reset Window Layout button + reset-ui-layout action
+
+Adds a new UI LAYOUT section to the Settings modal between
+KEYBINDINGS and SAVE, with a single 'Reset Window Layout' button.
+The button calls dispatchAction(deps.reg, 'reset-ui-layout'),
+which routes through the input registry to a defineAction handler
+in main.ts that invokes window-manager's resetUiLayout(). Per
+AGENTS.md: every key (and button) goes through the registry —
+no second code path.
+
+No keybinding — pick was reset_surface: settings_only. The
+Settings modal is itself centred (not zone-stacked), so it's
+always reachable even if every floating panel is misplaced.
+
+Refs spec §03 (reset lifecycle) and §05.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- 07 — Notes / verification / risks                                  -->
+    <!-- ================================================================= -->
+    <section id="sec-notes">
+      <div class="sec-head"><span class="num">07</span><h2>Notes, verification, risks</h2></div>
+      <p class="sec-intro">Cross-cutting concerns that don't belong to one task. The post-implementation verification checklist mirrors spec §07; risks track spec §08 plus the implementation-specific surprises this plan surfaced.</p>
+      <div class="notes">
+
+        <div class="note"><strong>Verification checklist (full suite, run after Task 5 commit).</strong> Each item is a manual check via the live preview tab + <code>mcp__daedalus__screenshot</code>. Fresh-load smoke: clear localStorage, reload; every floating panel sits in its zone-default. Drag HUD economy BR→centre; reload; panel re-opens at centre. Resize grip: drag the BR grip down to minWidth=200/minHeight=120; reload; size persists. Off-screen recovery: drag panel to (1500, 1500); resize viewport to 1100×600; reload; panel header is visible inside viewport. Click-to-front: overlap drones + inspector; click back panel; it comes forward; reload; z-order persists. Reset via Settings: open S, UI LAYOUT, Reset; panels snap back; localStorage key gone. Modal still wins: at maximum z, key I opens Inventory and covers everything; closing leaves dock z intact. Chrome unaffected: action-strip + island-bar cursors stay default. Inner interactions: routes-panel cargo HTML5 drag still works; close × on docked panel doesn't start a drag.</div>
+
+        <div class="note"><strong>Header-mount-order asymmetry (Task 4 design call).</strong> <code>hud.ts:480</code> calls <code>mountPanel</code> BEFORE appending the <code>.ri-panel__head</code> child (line 491). The four side docks (inspector / drones / routes / settlement) append the header THEN call <code>mountPanel</code>. <code>makePanelDraggable</code> handles both by resolving the handle lazily inside the <code>pointerdown</code> handler via <code>resolveDragHandle</code>, AND by attempting a preemptive resolve at wire-time for the side docks. The HUD economy gets its <code>data-ri-drag-handle</code> stamped on first pointerdown — slight cursor lag on the very first hover after page load is acceptable.</div>
+
+        <div class="note"><strong>Pure / render separation preserved.</strong> The <code>window-manager.ts</code> module touches only DOM + localStorage; no PixiJS imports. The pure helpers (<code>clampToViewport</code>, <code>parseLayoutBlob</code>, <code>readBlob</code>/<code>writeBlob</code>, <code>emptyBlob</code>) are testable in isolation. <code>ui-zones.ts</code> stays render-layer-adjacent (DOM only). No <code>economy.ts</code> / <code>recipes.ts</code> / <code>camera.ts</code> file is touched.</div>
+
+        <div class="note risk"><strong>YELLOW RISK — spec §05 vs §06 signature ambiguity.</strong> Spec §05 says <code>makePanelDraggable(el, opts.id, { minWidth: opts.minWidth, maxWidth: opts.maxWidth })</code> at the mountPanel callsite, but the §06 type declares <code>MakeDraggableOptions = { minWidth?, minHeight?, handle? }</code> (no <code>maxWidth</code>; the <code>handle</code> override field is also absent from §05's call). The plan picks §06's type (cleaner: <code>maxWidth</code> is a CSS-bound mountPanel already applies; <code>minHeight</code> is the matching resize floor; the <code>handle</code> override is never exercised in v1 so we drop it from the implementation). If a reviewer prefers §05's literal call, the diff is one line in <code>mountPanel</code> + adding <code>maxWidth?</code> to the type. Flagged as YELLOW because the prose vs type contradiction is in the spec, not the codebase.</div>
+
+        <div class="note"><strong>ResizeObserver loop risk — addressed in Task 2.</strong> The existing ResizeObserver in <code>mountPanel</code> would fight a user-resize without a gate; Task 2 adds two gates: <code>dataset.riActiveMutation === '1'</code> (set by <code>makePanelDraggable</code>'s pointerdown, cleared on pointerup) and <code>rec.free === true</code>. The former handles the during-drag case; the latter handles the after-release case (a free panel's intrinsic-size change shouldn't trigger a zone re-stack).</div>
+
+        <div class="note"><strong>Inner interaction safety.</strong> <code>routes-ui</code>'s cargo-row HTML5 drag-drop (<code>draggable="true"</code>) and every close button (<code>×</code>) live inside the drag handle's tree. The pointerdown handler bails on <code>target.closest('button, input, select, textarea, [draggable="true"], .ri-resize')</code> — that's the same selector the spec §08 risk row prescribes. The verification step exercises both paths.</div>
+
+        <div class="note"><strong>Touch handling — minimal but correct for v1.</strong> The <code>isPrimaryPointer</code> gate accepts mouse + pen + primary touch and rejects secondary touch pointers (the second finger of a pinch). Multi-touch drag-resize is out of scope per spec §09.</div>
+
+        <div class="note"><strong>localStorage quota / disabled-storage tolerance.</strong> <code>writeBlob</code> wraps <code>localStorage.setItem</code> in try/catch with a <code>console.warn</code> — layout still works for the session, only persistence is lost. The <code>readBlob</code> path tolerates malformed JSON, wrong-version blobs, and complete absence of <code>localStorage</code> by returning <code>emptyBlob()</code>. Tested in Task 1.</div>
+
+        <div class="note"><strong>Chrome blocklist drives the chrome exemption.</strong> <code>CHROME_PANEL_IDS = { 'action-strip', 'island-bar' }</code>. To extend the in-scope set later, remove the id; for <code>island-bar</code>, also clear the <code>transform: translateX(-50%)</code> that <code>layoutZone</code> sets on TC panels — the <code>.ri-panel.ri-free</code> rule (<code>transform: none !important</code>) already handles that.</div>
+
+        <div class="note"><strong>One responsibility per file (AGENTS.md).</strong> <code>window-manager.ts</code> is the only new module; it bundles drag + resize + persistence + z-order because those four concerns are tightly coupled around a single <code>UiLayoutBlob</code>. Splitting them would create a four-file mesh with shared module-level state — the spec §06 sketch settles on one module for the same reason.</div>
+
+        <div class="note"><strong>Performance.</strong> Pointermove fires at pointer-rate (typically 60-1000 Hz). The inline style writes are direct (no rAF debounce); browsers batch into the next frame. <code>writeBlob</code> is debounced 250ms so a fast drag commits one localStorage write. <code>recomputeZIndexes</code> iterates ~5 wired panels — trivial. No new allocations per frame.</div>
+
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands · implementation plan · 2026-05-23 · spec: docs/superpowers/specs/2026-05-23-draggable-resizable-windows-design.html
+    </footer>
+
+  </div>
+</body>
+</html>
