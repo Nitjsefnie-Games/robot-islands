@@ -851,7 +851,6 @@ export function computeRates(
       (skillMul.recipeRate[recipe.category] ?? 1) *
       (modifierMul.recipeRateByCategory[recipe.category] ?? 1) *
       modifierMul.globalRecipeRate *
-
       ncBuff;
     const isT5Extractor =
       b.defId === 'aetheric_conduit' ||
@@ -887,7 +886,6 @@ export function computeRates(
       (skillMul.recipeRate[te.recipe.category] ?? 1) *
       (modifierMul.recipeRateByCategory[te.recipe.category] ?? 1) *
       modifierMul.globalRecipeRate *
-
       ncBuff;
     // §4.5: soft-gate effectiveMul scales nominalRate so inputAvail's
     // demand calculation matches actual consumption under the gate.

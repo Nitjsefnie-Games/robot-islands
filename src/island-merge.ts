@@ -90,7 +90,7 @@ export function islandRefundedPoints(state: IslandState): number {
  *      A.inv[r] + B.inv[r])`. Overflow is silently dropped.
  *   4. Absorbed's spent-and-unspent skill points refund as unspent on
  *      absorber (the player can freely re-spec via the existing skill UI).
- *      `unlockedNodes` and `subPathProgress` on absorbed are discarded.
+ *      `unlockedNodes` and `unlockedEdges` on absorbed are discarded.
  *   5. Absorbed's level and XP are discarded; absorber's are preserved.
  *   6. Routes targeting absorbed redirect to absorber (`route.to = A.id`);
  *      routes leaving absorbed redirect (`route.from = A.id`). Routes
@@ -106,9 +106,8 @@ export function islandRefundedPoints(state: IslandState): number {
  * `absorber` carries the new geometry and any later `islandsOverlap` test
  * sees the union footprint.
  *
- * `absorber.modifiers`, `absorber.specializationRole`, `absorber.name`, and
- * every other field stay as-is — only the geometry, buildings, inventory,
- * and skill-point fields update.
+ * `absorber.modifiers`, `absorber.name`, and every other field stay as-is
+ * — only the geometry, buildings, inventory, and skill-point fields update.
  *
  * Note on building coordinates: by SPEC §3.6 reasoning, two buildings can't
  * collide because the offset is non-zero. We don't verify this — the
@@ -179,8 +178,8 @@ export function performMerge(
   }
 
   // 4. Skill-point refund. Sum unspent + spent on absorbed, add to
-  //    absorber's unspent. Absorbed's unlock set and subPathProgress
-  //    are discarded along with the rest of its state.
+  //    absorber's unspent. Absorbed's unlock set and edge set are
+  //    discarded along with the rest of its state.
   if (absorberState && absorbedState) {
     absorberState.unspentSkillPoints += islandRefundedPoints(absorbedState);
   }
