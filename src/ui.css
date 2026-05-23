@@ -35,7 +35,29 @@
 .ri-skillgraph-overlay .ri-skillgraph-close:hover {
   background: rgba(217, 119, 87, 0.20);
   border-color: var(--ri-accent);
-}/* Robot Islands — global UI stylesheet.
+}
+.ri-skillgraph-hud {
+  position: absolute; inset: 0; pointer-events: none; z-index: 3;
+  font-family: var(--ri-mono, ui-monospace, monospace); font-size: 12px;
+}
+.ri-skillgraph-hud > * { pointer-events: auto; }
+.ri-skillgraph-hud .hud-tl { position: absolute; top: 18px; left: 18px;
+  background: rgba(37, 36, 32, 0.85); border: 1px solid #3A3833;
+  padding: 8px 12px; color: #E9E6DC; line-height: 1.5; }
+.ri-skillgraph-hud .hud-tr { position: absolute; top: 18px; right: 130px;
+  display: flex; gap: 6px; }
+.ri-skillgraph-hud .chip {
+  background: rgba(37, 36, 32, 0.85); border: 1px solid #3A3833;
+  color: #CFCCC2; padding: 4px 10px; cursor: pointer; user-select: none;
+}
+.ri-skillgraph-hud .chip[data-on="true"] { color: #E9E6DC; border-color: #D97757; }
+.ri-skillgraph-hud .hud-bc { position: absolute; bottom: 14px; left: 50%;
+  transform: translateX(-50%); background: rgba(37, 36, 32, 0.85);
+  border: 1px solid #3A3833; padding: 6px 14px; color: #8A877E;
+  display: flex; gap: 16px; }
+.ri-skillgraph-hud .legend-item { display: flex; align-items: center; gap: 6px; }
+.ri-skillgraph-hud .swatch { width: 12px; height: 12px; border: 1px solid #3A3833; }
+/* Robot Islands — global UI stylesheet.
  *
  * Imported once from `main.ts`:  import './ui.css';
  *

@@ -27,6 +27,8 @@ export interface SkillGraphView {
   isVisible(): boolean;
   /** Repaint state-dependent visuals. Cheap to call frequently; no-op while hidden. */
   refresh(): void;
+  /** Cheap HUD-only update (counters). No-op while hidden. */
+  refreshHud(): void;
 }
 
 export interface SkillGraphViewDeps {
@@ -92,7 +94,9 @@ interface SceneLayers {
   bridgesInactive: Container;
   bridgesActive: Container;
   highlight: Container;
+  roots: Container;
   nodes: Container;
+  sockets: Container;
   labels: Container;
 }
 
@@ -107,6 +111,60 @@ export function mountSkillGraphView(
   const canvasWrap = document.createElement('div');
   canvasWrap.className = 'ri-skillgraph-canvas';
   overlay.appendChild(canvasWrap);
+
+  const hud = document.createElement('div');
+  hud.className = 'ri-skillgraph-hud';
+
+  const tl = document.createElement('div'); tl.className = 'hud-tl';
+  const spLine = document.createElement('div');
+  const ownedLine = document.createElement('div');
+  tl.appendChild(spLine); tl.appendChild(ownedLine);
+  hud.appendChild(tl);
+
+  const tr = document.createElement('div'); tr.className = 'hud-tr';
+  const CHIPS: ReadonlyArray<{ key: 'filler'|'notable'|'keystone'|'bridge'|'socket'; label: string }> = [
+    { key: 'filler',   label: 'Filler'   },
+    { key: 'notable',  label: 'Notables' },
+    { key: 'keystone', label: 'Keystones' },
+    { key: 'bridge',   label: 'Bridges'  },
+    { key: 'socket',   label: 'Sockets'  },
+  ];
+  const filterOn: Record<string, boolean> = {
+    filler: true, notable: true, keystone: true, bridge: true, socket: true,
+  };
+  for (const c of CHIPS) {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.dataset.on = 'true';
+    btn.textContent = c.label;
+    btn.addEventListener('click', () => {
+      filterOn[c.key] = !filterOn[c.key];
+      btn.dataset.on = filterOn[c.key] ? 'true' : 'false';
+      applyFilters();
+    });
+    tr.appendChild(btn);
+  }
+  hud.appendChild(tr);
+
+  const bc = document.createElement('div'); bc.className = 'hud-bc';
+  const legend: ReadonlyArray<{ color: string; label: string }> = [
+    { color: '#8FA56E', label: 'Owned' },
+    { color: '#E0B47F', label: 'Notable' },
+    { color: '#D38FCC', label: 'Keystone' },
+    { color: '#D97757', label: 'Owned edge / AND' },
+    { color: '#7DD3E8', label: 'Active bridge / socket' },
+  ];
+  for (const l of legend) {
+    const it = document.createElement('div'); it.className = 'legend-item';
+    const sw = document.createElement('div'); sw.className = 'swatch'; sw.style.background = l.color;
+    it.appendChild(sw);
+    const sp = document.createElement('span'); sp.textContent = l.label;
+    it.appendChild(sp);
+    bc.appendChild(it);
+  }
+  hud.appendChild(bc);
+
+  overlay.appendChild(hud);
 
   const tooltip = document.createElement('div');
   tooltip.className = 'ri-skillgraph-tooltip';
@@ -219,10 +277,12 @@ export function mountSkillGraphView(
     const bridgesInactive = new Container(); bridgesInactive.label = 'bridges-inactive';
     const bridgesActive = new Container();   bridgesActive.label = 'bridges-active';
     const highlight = new Container();       highlight.label = 'highlight';
+    const roots = new Container();           roots.label = 'roots';
     const nodes = new Container();          nodes.label = 'nodes';
+    const sockets = new Container();         sockets.label = 'sockets';
     const labels = new Container();         labels.label = 'labels';
-    w.addChild(edges, bridgesInactive, bridgesActive, highlight, nodes, labels);
-    layers = { edges, bridgesInactive, bridgesActive, highlight, nodes, labels };
+    w.addChild(edges, bridgesInactive, bridgesActive, highlight, roots, nodes, sockets, labels);
+    layers = { edges, bridgesInactive, bridgesActive, highlight, roots, nodes, sockets, labels };
 
     layout = computeSkillGraphLayout(DEFAULT_GRAPH);
     drawNodes();
@@ -344,7 +404,9 @@ export function mountSkillGraphView(
 
   function drawNodes(): void {
     if (!layers || !layout) return;
+    layers.roots.removeChildren();
     layers.nodes.removeChildren();
+    layers.sockets.removeChildren();
     layers.labels.removeChildren();
 
     const state = deps.getState();
@@ -353,7 +415,7 @@ export function mountSkillGraphView(
     for (const [branch, p] of layout.branchRoots) {
       const g = new Graphics();
       g.circle(p.x, p.y, 13).fill(COLOR.rootFill).stroke({ color: COLOR.rootStroke, width: 2 });
-      layers.nodes.addChild(g);
+      layers.roots.addChild(g);
       const t = new Text({
         text: BRANCH_LABEL[branch as BranchId],
         style: new TextStyle({
@@ -372,6 +434,7 @@ export function mountSkillGraphView(
       if (!p) continue;
       const g = new Graphics();
       const kind = classifyNode(String(n.id));
+      if (!filterOn[kind]) continue;
 
       const owned = state.unlockedNodes.has(n.id as unknown as GNodeId);
       const ks = KEYSTONE_BY_TARGET.get(String(n.id));
@@ -428,7 +491,7 @@ export function mountSkillGraphView(
         g.lineTo(p.x + r * Math.cos(a1), p.y + r * Math.sin(a1));
       }
       g.stroke({ color: COLOR.socketStroke, width: 1.5 });
-      layers.nodes.addChild(g);
+      layers.sockets.addChild(g);
     }
   }
 
@@ -491,12 +554,30 @@ export function mountSkillGraphView(
     layers.bridgesActive.addChild(gActive);
   }
 
+  function applyFilters(): void {
+    if (!layers) return;
+    const allNodesOff = !filterOn.filler && !filterOn.notable && !filterOn.keystone;
+    layers.nodes.visible = !allNodesOff;
+    layers.bridgesInactive.visible = !!filterOn.bridge;
+    layers.bridgesActive.visible = !!filterOn.bridge;
+    layers.sockets.visible = !!filterOn.socket;
+    drawNodes();
+  }
+
+  function refreshHud(): void {
+    if (!visible) return;
+    const state = deps.getState();
+    spLine.textContent = `Unspent SP: ${state.unspentSkillPoints}`;
+    ownedLine.textContent = `Owned: ${state.unlockedNodes.size} / ${DEFAULT_GRAPH.nodes.length}`;
+  }
+
   function refresh(): void {
     if (!visible || !app || !world || !layers) return;
     const state = deps.getState();
     drawEdges(state);
     drawNodes();
+    refreshHud();
   }
 
-  return { el: overlay, show, hide, toggle, isVisible, refresh };
+  return { el: overlay, show, hide, toggle, isVisible, refresh, refreshHud };
 }
