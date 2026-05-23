@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Per-building enable/disable toggle — implementation plan</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+      line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1120px; margin:0 auto; }
+    header.page-head { margin-bottom:48px; max-width:860px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box .meta-line { margin-top:8px; }
+    .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .callout { background:var(--white); border:1.5px solid var(--gray-300);
+      border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+      font-size:13.5px; color:var(--gray-500); margin-bottom:48px; max-width:860px; }
+    .callout code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-head h2 code { font-family:var(--mono); font-size:21px; color:var(--clay); }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:780px; margin-bottom:28px; }
+    .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .filetable { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .filetable .row { display:grid; grid-template-columns:280px 1fr; gap:0; }
+    @media (max-width:780px){ .filetable .row{grid-template-columns:1fr;} }
+    .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+    .filetable .cell { padding:13px 18px; font-size:13.5px; }
+    .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .filetable .cell code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .filetable .cell.desc code { color:var(--slate); }
+    .task-card { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:24px 26px; }
+    .task-blurb { font-size:13.5px; color:var(--gray-500); margin-bottom:16px; max-width:780px; }
+    .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .files-block { background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:8px; padding:12px 16px; margin-bottom:22px; }
+    .files-block .ft { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .files-block ul { list-style:none; }
+    .files-block li { font-size:13px; color:var(--gray-700); padding:2px 0; }
+    .files-block li code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .files-block li .tag { font-family:var(--mono); font-size:10.5px; color:var(--gray-500); }
+    .steps { display:flex; flex-direction:column; gap:18px; }
+    .step { display:grid; grid-template-columns:22px 1fr; gap:0 12px; }
+    .step .box { width:16px; height:16px; border:1.5px solid var(--clay); border-radius:4px; margin-top:3px; }
+    .step .step-body { min-width:0; }
+    .step .step-title { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:6px; }
+    .step .step-text { font-size:13.5px; color:var(--gray-500); margin-bottom:10px; }
+    .step .step-text:last-child { margin-bottom:0; }
+    .step .step-text code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .step .step-text.cmd code { color:var(--olive); }
+    .step ul.bullets { list-style:none; margin:0 0 10px; }
+    .step ul.bullets li { font-size:13.5px; color:var(--gray-500); padding:2px 0 2px 16px; position:relative; }
+    .step ul.bullets li::before { content:'–'; position:absolute; left:0; color:var(--clay); }
+    .step ul.bullets li code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .code-block { margin:4px 0 12px; }
+    .code-block .file-label { font-family:var(--mono); font-size:11.5px; color:var(--gray-500); margin-bottom:6px; }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .cm { color:var(--gray-500); } .code .add { color:#8FA56E; } .code .del { color:#E08B7F; }
+    .notes { display:flex; flex-direction:column; gap:14px; max-width:880px; }
+    .note { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive);
+      border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-500); }
+    .note.warn { border-left-color:#E08B7F; }
+    .note code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .note strong { color:var(--slate); font-weight:600; }
+    footer.page-foot { margin-top:64px; padding-top:20px; border-top:1.5px solid var(--gray-300);
+      font-size:12px; color:var(--gray-500); font-family:var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands</div>
+      <h1>Per-building enable/disable toggle — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Add a per-building <code>disabled?: boolean</code> flag toggled from the inspector. A disabled building is functionally non-existent — no power flow, no recipe in/out, no gate provisioning, no maintenance accrual, no drone/satellite/route dispatch from it. Toggling is free, instant, lossless; disabling does trigger route drain (one-way) per the picks.</div>
+        <div class="meta-line"><strong>Architecture:</strong> One chokepoint at <code>economy.ts:617</code> covers power, recipes, gates, heat, and buff adjacency in a single line. A second site at <code>economy.ts:1627</code> freezes <code>operatingMs</code>. A shared <code>hasOperationalBuilding(buildings, defId)</code> helper replaces ~25 scattered provider-scan call sites so disable, invalid, and operational checks all stay in lock-step. Render-side cue (0.40 alpha + dashed red outline) lives in <code>building-alerts-overlay.ts</code>, mirroring the construction-tint precedent. New inspector button in <code>inspector-ui.ts</code> matches the <code>convertBtn</code> styling stamp; DOM-disabled while the target is under construction.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, noUncheckedIndexedAccess, noUnusedLocals, noUnusedParameters), Vite 5, PixiJS 8, vitest.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-23-building-disable-design.html</code> (research §01, change inventory §04, verification §05). Picks locked: <code>p_ui_surface=inspector_panel_button</code>, <code>p_visual_cue=low_alpha</code>, <code>p_routes_pending_inbound=deliver_anyway</code>, <code>p_routes_disabled_source=route_drains_and_removes</code>, <code>p_owned_subordinates=complete_then_block</code>, <code>p_constructed_disable=no_finish_first</code>, <code>p_gate_provisioning=disabled_does_not_provide_gates</code>, <code>p_convert_while_disabled=allow</code>, <code>p_hotkey_binding=via_input_registry_unbound</code>.</div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use <code>superpowers:subagent-driven-development</code> (recommended) or <code>superpowers:executing-plans</code> to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking. Each task is independently committable; the suite stays green at every commit boundary.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">4</div></div>
+      <div class="cell"><div class="k">Files modified</div><div class="v">~14</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v">0</div></div>
+      <div class="cell"><div class="k">Spec ref</div><div class="v">§04 / §05</div></div>
+    </div>
+
+    <section id="files">
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">Task order: helper first (behaviour-preserving refactor, all sites still return the same answers since no building is yet disabled-able), then the data-shape field, then the engine wiring + route drain, then the UI surface + visual cue. Each task lands as its own commit with a green build.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/buildings.ts</code></div><div class="cell desc">Task 1: export <code>hasOperationalBuilding(buildings, defId)</code> pure helper (and the underlying <code>isOperational</code> check is already in <code>economy.ts</code>; this helper composes them). Task 2: add <code>disabled?: boolean</code> to <code>PlacedBuilding</code> with docstring.</div></div>
+        <div class="row"><div class="cell"><code>src/economy.ts</code></div><div class="cell desc">Task 1: re-export / use <code>hasOperationalBuilding</code> at line 675 (spaceport precheck) where the same pattern applies. Task 3: append <code>&amp;&amp; !b.disabled</code> to the <code>validBuildings</code> filter at line 617; insert <code>if (b.disabled) continue;</code> between the construction skip (line 1635) and the no-recipe skip (line 1649) in the maintenance loop.</div></div>
+        <div class="row"><div class="cell"><code>src/antenna.ts</code>, <code>src/lighthouse.ts</code>, <code>src/lattice.ts</code>, <code>src/orbital.ts</code>, <code>src/drones.ts</code>, <code>src/drones-ui.ts</code>, <code>src/inspector-ui.ts</code>, <code>src/buildings-ui.ts</code>, <code>src/settlement.ts</code>, <code>src/skilltree.ts</code>, <code>src/artificial-island.ts</code>, <code>src/routes.ts</code>, <code>src/universe-editor.ts</code></div><div class="cell desc">Task 1: each scattered <code>buildings.some((b) =&gt; b.defId === '…' &amp;&amp; !b.invalid)</code> / <code>find</code> swaps to <code>hasOperationalBuilding(buildings, '…')</code>. Behaviour-preserving because <code>disabled</code> doesn't yet exist; with Task 2/3 in play, disabled buildings drop out of every check together.</div></div>
+        <div class="row"><div class="cell"><code>src/main.ts</code></div><div class="cell desc">Task 4: register <code>defineAction(reg, 'toggle-building-disable', …)</code>. No <code>bind(reg, …)</code> per <code>p_hotkey_binding=via_input_registry_unbound</code>. Inspector deps grow an <code>onToggleDisabled(target)</code> callback that flips the flag, drains routes on false→true, and triggers a world-layer rebuild.</div></div>
+        <div class="row"><div class="cell"><code>src/inspector-ui.ts</code></div><div class="cell desc">Task 4: new <code>disableBtn</code> in <code>maintenanceSection.body</code> immediately after <code>convertBtn</code> (after line 892). Same <code>styled(...)</code> stamp as <code>convertBtn</code>, with rust-leaning border colour. Label flips <code>Disable ↔ Enable</code> in <code>paint()</code> based on <code>target.building.disabled</code>. DOM-disabled while <code>(target.building.constructionRemainingMs ?? 0) &gt; 0</code> per <code>p_constructed_disable=no_finish_first</code>. New deps field <code>onToggleDisabled(target)</code>.</div></div>
+        <div class="row"><div class="cell"><code>src/building-alerts-overlay.ts</code></div><div class="cell desc">Task 4: paint a 0.40-alpha bounding-box rect + dashed red outline over the building's footprint when <code>b.disabled === true</code>. Mirrors the construction-tint block at lines 82&ndash;111. Added after the construction block and before the maintenance dot so the dot still surfaces (maintenance accrual is frozen but the last-known factor stays painted).</div></div>
+        <div class="row"><div class="cell"><code>src/buildings.test.ts</code> (or new <code>src/disable.test.ts</code>)</div><div class="cell desc">Task 2: <code>hasOperationalBuilding</code> unit tests. Task 3: economy-tick tests for the four spec §05 cases (power balance, operatingMs freeze, gate failure downstream, save round-trip).</div></div>
+      </div>
+    </section>
+
+    <section id="task-1">
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: pre-refactor — <code>hasOperationalBuilding</code> helper + sweep all provider scans</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Behaviour-preserving consolidation. The codebase has ~25 sites that ask "does this island have a built / non-invalid X?" via <code>buildings.some((b) =&gt; b.defId === '…' &amp;&amp; !b.invalid)</code> or similar. They DRIFT — some include <code>!b.invalid</code>, some don't; none check construction. Adding a shared helper makes the Task 3 <code>!b.disabled</code> addition a single-line change instead of 25.</p>
+        <p class="task-blurb"><strong>Key architectural note:</strong> in <code>world.ts:1036</code> <code>makeInitialIslandState</code> assigns <code>buildings: spec.buildings</code> — the array is shared by reference, so <code>state.buildings === spec.buildings</code> at runtime. The helper takes a <code>ReadonlyArray&lt;PlacedBuilding&gt;</code> so both <code>state.buildings</code> and <code>spec.buildings</code> call sites use the same function.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/buildings.ts</code> <span class="tag">— add helper + tests</span></li>
+            <li>Modify: ~12 provider-scan files (antenna, lighthouse, lattice, orbital, drones, drones-ui, inspector-ui, buildings-ui, settlement, skilltree, artificial-island, routes, universe-editor, economy)</li>
+            <li>Modify: <code>src/buildings.test.ts</code> (or new <code>src/disable.test.ts</code>)</li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write failing tests for <code>hasOperationalBuilding</code></div>
+            <p class="step-text">Append to <code>src/buildings.test.ts</code> (create the file if it doesn't exist; the codebase already follows the <code>module.ts</code> / <code>module.test.ts</code> convention).</p>
+            <div class="code-block"><div class="code"><pre>import { describe, it, expect } from 'vitest';
+import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
+
+function b(over: Partial&lt;PlacedBuilding&gt; &amp; { id: string; defId: PlacedBuilding['defId'] }): PlacedBuilding {
+  return { x: 0, y: 0, ...over };
+}
+
+describe('hasOperationalBuilding', () =&gt; {
+  it('returns false for an empty list', () =&gt; {
+    expect(hasOperationalBuilding([], 'spaceport')).toBe(false);
+  });
+
+  it('returns true when a matching, non-invalid, fully-constructed building exists', () =&gt; {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport' })];
+    expect(hasOperationalBuilding(list, 'spaceport')).toBe(true);
+  });
+
+  it('ignores buildings of a different defId', () =&gt; {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'workshop' })];
+    expect(hasOperationalBuilding(list, 'spaceport')).toBe(false);
+  });
+
+  it('skips invalid buildings', () =&gt; {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', invalid: true })];
+    expect(hasOperationalBuilding(list, 'spaceport')).toBe(false);
+  });
+
+  it('skips buildings still under construction', () =&gt; {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', constructionRemainingMs: 1000 })];
+    expect(hasOperationalBuilding(list, 'spaceport')).toBe(false);
+  });
+
+  it('skips disabled buildings (the field is the whole point — checked against future-Task-2)', () =&gt; {
+    <span class="cm">// Asserts the predicate already filters on b.disabled even before</span>
+    <span class="cm">// PlacedBuilding.disabled lands in Task 2. The field is an extra string</span>
+    <span class="cm">// key per TS structural typing, so we cast through unknown.</span>
+    const list: PlacedBuilding[] = [
+      ({ id: 'a', defId: 'spaceport', x: 0, y: 0, disabled: true } as unknown) as PlacedBuilding,
+    ];
+    expect(hasOperationalBuilding(list, 'spaceport')).toBe(false);
+  });
+
+  it('returns true when at least one of several candidates is operational', () =&gt; {
+    const list: PlacedBuilding[] = [
+      b({ id: 'a', defId: 'spaceport', invalid: true }),
+      b({ id: 'b', defId: 'spaceport', constructionRemainingMs: 5000 }),
+      b({ id: 'c', defId: 'spaceport' }),
+    ];
+    expect(hasOperationalBuilding(list, 'spaceport')).toBe(true);
+  });
+});</pre></div></div>
+            <p class="step-text">Run <code>npx vitest run src/buildings.test.ts</code>. Expected: FAIL — <code>hasOperationalBuilding is not exported</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Implement <code>hasOperationalBuilding</code> in <code>src/buildings.ts</code></div>
+            <p class="step-text">Append to <code>src/buildings.ts</code> (after the <code>PlacedBuilding</code> interface declaration, before <code>renderBuildings</code>). The helper bakes in the union of the three runtime filters and the future <code>disabled</code> filter so all call sites share one predicate.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">/** Returns true iff at least one placed building of `defId` in `buildings`</span>
+<span class="cm"> *  is operational: not invalid, not still under construction, not</span>
+<span class="cm"> *  player-disabled. Accepts both `state.buildings` and `spec.buildings`</span>
+<span class="cm"> *  (the arrays are aliased per `world.ts:1036`'s</span>
+<span class="cm"> *  `makeInitialIslandState`).</span>
+<span class="cm"> *</span>
+<span class="cm"> *  Consolidates the ~25 scattered `buildings.some(b =&gt; b.defId === '…')`</span>
+<span class="cm"> *  provider-scan call sites so adding a new "is this thing actually</span>
+<span class="cm"> *  available?" filter (e.g. §NEW disabled toggle) is a single-line edit</span>
+<span class="cm"> *  here instead of a fan-out across the tree. Pure. */</span>
+export function hasOperationalBuilding(
+  buildings: ReadonlyArray&lt;PlacedBuilding&gt;,
+  defId: BuildingDefId,
+): boolean {
+  for (const b of buildings) {
+    if (b.defId !== defId) continue;
+    if (b.invalid === true) continue;
+    if ((b.constructionRemainingMs ?? 0) &gt; 0) continue;
+    if (b.disabled === true) continue;
+    return true;
+  }
+  return false;
+}</pre></div></div>
+            <p class="step-text">The <code>b.disabled === true</code> branch references a field that doesn't yet exist on <code>PlacedBuilding</code> in this commit — that's fine: TypeScript structural typing accepts any property access; <code>b.disabled</code> returns <code>undefined</code> for all current placements, and <code>undefined === true</code> is <code>false</code>. Task 2 adds the field officially. (If <code>tsc</code> objects with strict, fall back to <code>((b as unknown) as { disabled?: boolean }).disabled === true</code> until Task 2 lands.)</p>
+            <p class="step-text">Run <code>npx vitest run src/buildings.test.ts</code>. Expected: PASS — all seven tests green.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Sweep the provider-scan call sites</div>
+            <p class="step-text">For each site below, replace the <code>buildings.some(...)</code> / <code>buildings.find(...) !== undefined</code> idiom with <code>hasOperationalBuilding(buildings, '…')</code>. Add the import where missing.</p>
+            <ul class="bullets">
+              <li><code>src/economy.ts:675</code> — <code>const hasSpaceport = validBuildings.some((b) =&gt; b.defId === 'spaceport');</code> → <code>const hasSpaceport = hasOperationalBuilding(validBuildings, 'spaceport');</code> (idempotent: <code>validBuildings</code> is already filtered, but the call is consistent with all other sites and survives Task 3's filter change).</li>
+              <li><code>src/antenna.ts:51</code> — leave the <code>spec.buildings</code> iteration as-is (this is a multi-result loop, not a presence check); add a single <code>if (b.invalid === true || (b.constructionRemainingMs ?? 0) &gt; 0 || b.disabled === true) continue;</code> guard inside the loop before the <code>ANTENNA_SIGNAL_RADII[b.defId]</code> lookup.</li>
+              <li><code>src/lighthouse.ts:89</code> — same pattern: add the same guard inside the per-building loop.</li>
+              <li><code>src/lattice.ts:28</code> — <code>spec.buildings.some((b) =&gt; b.defId === 'lattice_node' &amp;&amp; !b.invalid)</code> → <code>hasOperationalBuilding(spec.buildings, 'lattice_node')</code>.</li>
+              <li><code>src/orbital.ts</code> (lines 220, 242, 360, 367, 400, 433, 525, 560, 598, 1024) — each <code>state.buildings.some((b) =&gt; b.defId === 'spaceport')</code> / <code>'antenna_t6'</code> / <code>'orbital_tracking_station'</code> → <code>hasOperationalBuilding(state.buildings, '…')</code>. The <code>.find(...)</code> variants at 242/360/1024 stay <code>find</code> when the code subsequently uses the returned building object — but guard against the returned building being non-operational by re-checking the same predicate on the result, or change to <code>find</code> with the inline guard <code>(b) =&gt; b.defId === '…' &amp;&amp; !b.invalid &amp;&amp; (b.constructionRemainingMs ?? 0) === 0 &amp;&amp; b.disabled !== true</code>.</li>
+              <li><code>src/drones.ts:166</code> — <code>origin.buildings.some((b) =&gt; b.defId === 'launch_tower')</code> → <code>hasOperationalBuilding(origin.buildings, 'launch_tower')</code>.</li>
+              <li><code>src/drones.ts:425</code> — <code>const dronepad = origin.buildings.find((b) =&gt; b.defId === 'dronepad')</code> → keep <code>find</code> but inline the predicate so it returns only operational dronepads (per the picker <code>p_owned_subordinates=complete_then_block</code>, dispatching a new drone from a disabled pad must fail).</li>
+              <li><code>src/drones-ui.ts:62, 865, 887</code> — same pattern; the <code>state.buildings.find((b) =&gt; b.defId === 'dronepad')</code> at line 62 keeps <code>find</code> with the inline operational predicate; the <code>some</code> sites swap to <code>hasOperationalBuilding</code>.</li>
+              <li><code>src/inspector-ui.ts:1465</code> — <code>state.buildings.some((b) =&gt; b.defId === 'reality_forge')</code> → <code>hasOperationalBuilding(state.buildings, 'reality_forge')</code>.</li>
+              <li><code>src/buildings-ui.ts:210, 257, 280</code> — <code>spec.buildings.some((b) =&gt; b.defId === 'spaceport')</code> (with or without an existing <code>!b.invalid</code>) → <code>hasOperationalBuilding(spec.buildings, 'spaceport')</code>.</li>
+              <li><code>src/settlement.ts:174, 181, 341</code> — <code>origin.buildings.some(...)</code> / <code>state.buildings.some(...)</code> → <code>hasOperationalBuilding(...)</code> with the appropriate defId.</li>
+              <li><code>src/skilltree.ts:269</code> — <code>spec.buildings.some((b) =&gt; b.defId === 'spaceport')</code> → <code>hasOperationalBuilding(spec.buildings, 'spaceport')</code>.</li>
+              <li><code>src/artificial-island.ts:151</code> — <code>founderSpec.buildings.some((b) =&gt; b.defId === 'platform_constructor')</code> → <code>hasOperationalBuilding(founderSpec.buildings, 'platform_constructor')</code>.</li>
+              <li><code>src/routes.ts:865</code> — <code>island.buildings.some((b) =&gt; b.defId === 'teleporter_pad')</code> → <code>hasOperationalBuilding(island.buildings, 'teleporter_pad')</code>.</li>
+              <li><code>src/universe-editor.ts:71</code> — <code>state.buildings.some((b) =&gt; b.defId === 'universe_editor' &amp;&amp; !b.invalid)</code> → <code>hasOperationalBuilding(state.buildings, 'universe_editor')</code>.</li>
+              <li><code>src/tutorial.ts</code> — DO NOT touch these. The tutorial-flag checks at lines 75&ndash;145 want "has the player ever placed one?" — including under-construction or disabled. Leave them as raw <code>buildings.some((b) =&gt; b.defId === '…')</code>.</li>
+            </ul>
+            <p class="step-text">After each batch, run <code>npm run build</code> to catch missed imports.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Build + run the full suite</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: PASS clean across all 80+ test files. Task 1 is behaviour-preserving — no building is yet disabled-able, so every call site returns the same boolean it did before. If a test that previously passed now fails, the sweep introduced a regression — likely a swapped argument order or a missed <code>!b.invalid</code> at a site that used a slightly different predicate. Bisect the offending file.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/buildings.ts src/buildings.test.ts src/economy.ts src/antenna.ts \
+        src/lighthouse.ts src/lattice.ts src/orbital.ts src/drones.ts \
+        src/drones-ui.ts src/inspector-ui.ts src/buildings-ui.ts \
+        src/settlement.ts src/skilltree.ts src/artificial-island.ts \
+        src/routes.ts src/universe-editor.ts
+git commit -F /tmp/disable-task1-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/disable-task1-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>refactor(buildings): hasOperationalBuilding helper for provider scans
+
+Consolidates ~25 scattered `buildings.some(b =&gt; b.defId === '…')` call
+sites behind one helper that filters out invalid + under-construction +
+(future) disabled buildings together. Behaviour-preserving — every call
+site returns the same boolean it did before, since no building is yet
+disabled-able. Prepares the chokepoint for the per-building disable
+toggle (next commits).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section id="task-2">
+      <div class="sec-head"><span class="num">03</span><h2>Task 2: add <code>disabled?: boolean</code> to <code>PlacedBuilding</code></h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Pure data-shape change. Adds the field to the interface alongside the other per-instance mutables (<code>cargoLabel</code>, <code>paused</code>, <code>eternalServitor</code>, <code>toxicityExpiryMs</code>, <code>invalid</code>). No call sites mutate it yet — additive, dormant. Persistence round-trips via the existing <code>{...b}</code> spread at <code>persistence.ts:329</code>; no schema bump, no migration.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/buildings.ts</code> <span class="tag">— add field to PlacedBuilding</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add the field to <code>PlacedBuilding</code></div>
+            <p class="step-text">Insert immediately after the <code>invalid?: boolean</code> field (currently line 105). Docstring mirrors the existing mutable-field convention.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">  /** True if the building's footprint no longer matches terrain after biome change. */</span>
+  invalid?: boolean;
+<span class="add">  /** Player toggle (spec 2026-05-23-building-disable-design §02). When</span>
+<span class="add">   *  `true`, the building is functionally non-existent for the tick: no</span>
+<span class="add">   *  power flow, no recipe in/out, no gate provisioning, no buff</span>
+<span class="add">   *  adjacency, no `operatingMs` accrual, no drone / satellite / route</span>
+<span class="add">   *  dispatch from it. Toggling either way is free and instantaneous —</span>
+<span class="add">   *  no inventory / xp / construction-progress gain or loss. Disabling</span>
+<span class="add">   *  triggers a one-way `drainRoutesForBuilding` (per</span>
+<span class="add">   *  `p_routes_disabled_source=route_drains_and_removes`): re-enabling</span>
+<span class="add">   *  the building does NOT restore drained routes; the player must</span>
+<span class="add">   *  re-create them. Optional so legacy saves load as `false`</span>
+<span class="add">   *  (enabled) by default — persistence round-trips the field through</span>
+<span class="add">   *  the existing `{...b}` spread at `persistence.ts:329`; no schema</span>
+<span class="add">   *  bump needed. */</span>
+<span class="add">  disabled?: boolean;</span>
+}</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Drop any temporary <code>unknown</code> cast in <code>hasOperationalBuilding</code></div>
+            <p class="step-text">If Task 1's Step 2 used the <code>((b as unknown) as { disabled?: boolean }).disabled === true</code> escape hatch, replace with plain <code>b.disabled === true</code> now that the field is declared.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Add a save round-trip test</div>
+            <p class="step-text">Append to <code>src/buildings.test.ts</code> — the test name is lifted verbatim from spec §05 for greppability.</p>
+            <div class="code-block"><div class="code"><pre>import { describe, it, expect } from 'vitest';
+
+<span class="cm">// The spec §05 verification row — disabled flag round-trips through</span>
+<span class="cm">// the persistence shallow spread without any explicit migration.</span>
+describe('disable is lossless across save round-trip', () =&gt; {
+  it('a building with disabled === true survives JSON.parse(JSON.stringify(b))', () =&gt; {
+    const b: PlacedBuilding = {
+      id: 'test-1',
+      defId: 'workshop',
+      x: 0,
+      y: 0,
+      disabled: true,
+    };
+    const round = JSON.parse(JSON.stringify(b)) as PlacedBuilding;
+    expect(round.disabled).toBe(true);
+  });
+
+  it('a building with disabled === undefined round-trips as undefined', () =&gt; {
+    const b: PlacedBuilding = { id: 'test-2', defId: 'workshop', x: 0, y: 0 };
+    const round = JSON.parse(JSON.stringify(b)) as PlacedBuilding;
+    expect(round.disabled).toBeUndefined();
+  });
+});</pre></div></div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/buildings.test.ts</code> &mdash; expected PASS.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Build + commit</div>
+            <p class="step-text cmd">Run: <code>npm run build</code> — expected PASS clean.</p>
+            <div class="code-block"><div class="code"><pre>git add src/buildings.ts src/buildings.test.ts
+git commit -F /tmp/disable-task2-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/disable-task2-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(buildings): add PlacedBuilding.disabled field
+
+Optional boolean. Default-undefined means "enabled" — legacy saves
+load unchanged, persistence round-trips via the existing `{...b}` spread
+in persistence.ts. No engine site mutates it yet (next commit wires
+economy + maintenance + routes). The hasOperationalBuilding helper
+from the previous commit already returns false for any
+b.disabled === true, so this field is fully live as a filter even
+before the UI lands.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section id="task-3">
+      <div class="sec-head"><span class="num">04</span><h2>Task 3: wire <code>disabled</code> into the economy, maintenance, and route lifecycle</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">The engine half of the feature. Two raw chokepoint edits in <code>economy.ts</code>, plus the route-source drain mechanism the picker picked (<code>route_drains_and_removes</code>). After this task, <code>b.disabled = true</code> on any building immediately halts production, gate provisioning, power flow, heat assignment, buff adjacency, and maintenance accrual for that building. New routes / drones / satellites can't dispatch from it; existing in-flight cargo and drones still complete (per <code>p_routes_pending_inbound=deliver_anyway</code> and <code>p_owned_subordinates=complete_then_block</code>).</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/economy.ts</code> <span class="tag">— chokepoint + maintenance accrual</span></li>
+            <li>Modify: <code>src/economy.test.ts</code> <span class="tag">— spec §05 economy tests</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Write the failing engine tests (TDD)</div>
+            <p class="step-text">Test names are lifted verbatim from spec §05 so the implementer + reviewer can grep them. Append to <code>src/economy.test.ts</code>.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// All four test names match the spec §05 verification table exactly.</span>
+
+describe('disabled building contributes 0 to power balance', () =&gt; {
+  it('a disabled smelter draws no power', () =&gt; {
+    <span class="cm">// Use the same test scaffolding pattern other economy tests use.</span>
+    <span class="cm">// Build a 1-island state with a solar + a smelter; set smelter</span>
+    <span class="cm">// disabled=true; advance one short tick.</span>
+    const state = makeTestState({
+      buildings: [
+        { id: 'solar', defId: 'solar', x: 0, y: 0 },
+        { id: 'sm', defId: 'smelter', x: 4, y: 0, disabled: true },
+      ],
+      <span class="cm">// seed iron_ore so the smelter would otherwise consume power</span>
+      inventory: { iron_ore: 100, coal: 100 },
+    });
+    advanceIsland(state, /* nowMs */ 1000, BUILDING_DEFS);
+    <span class="cm">// computeRates returns 0 powerConsumed for the disabled smelter.</span>
+    const rates = computeRates(state, BUILDING_DEFS);
+    const smRate = rates.byBuilding.find((r) =&gt; r.id === 'sm');
+    expect(smRate?.powerConsumed ?? 0).toBe(0);
+  });
+});
+
+describe('disabled building does not accrue operatingMs', () =&gt; {
+  it('operatingMs stays at its pre-disable value across a 1h advance', () =&gt; {
+    const state = makeTestState({
+      buildings: [{ id: 'm', defId: 'mine', x: 0, y: 0, disabled: true, operatingMs: 5000 }],
+      inventory: {},
+    });
+    advanceIsland(state, /* nowMs */ 3600 * 1000, BUILDING_DEFS);
+    const m = state.buildings.find((b) =&gt; b.id === 'm')!;
+    expect(m.operatingMs ?? 0).toBe(5000);
+  });
+});
+
+describe('disabled provider fails downstream gates', () =&gt; {
+  it('a smelter requiring adj workshop stalls when the workshop is disabled', () =&gt; {
+    <span class="cm">// Reuse the existing gate-adjacency fixture style; the key assertion</span>
+    <span class="cm">// is that checkGates returns effectiveMul === 0 for the smelter when</span>
+    <span class="cm">// its only adjacent workshop has disabled === true.</span>
+    const validBuildings = [
+      { id: 'w', defId: 'workshop', x: 0, y: 0, disabled: true } as PlacedBuilding,
+      { id: 'sm', defId: 'smelter', x: 4, y: 0 } as PlacedBuilding,
+    ];
+    <span class="cm">// validBuildings is what economy.ts:617 produces; the test passes</span>
+    <span class="cm">// the already-filtered list to checkGates the same way computeRates does.</span>
+    const filtered = validBuildings.filter((b) =&gt; !b.invalid &amp;&amp; !b.disabled);
+    const smelter = validBuildings[1]!;
+    const gate = checkGates(smelter, filtered, BUILDING_DEFS, false, undefined);
+    expect(gate.effectiveMul).toBe(0);
+  });
+});</pre></div></div>
+            <p class="step-text">If <code>makeTestState</code> doesn't exist as a helper, follow the pattern in <code>economy.test.ts</code> for constructing an <code>IslandState</code> manually (the file has many examples; extract the construction into a local helper for these tests).</p>
+            <p class="step-text cmd">Run: <code>npx vitest run src/economy.test.ts -t "disabled"</code> — expected FAIL on the first two; the third may already pass because of Task 1's filter (the supplied <code>filtered</code> list excludes disabled).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Append <code>&amp;&amp; !b.disabled</code> to the chokepoint filter at <code>economy.ts:617</code></div>
+            <p class="step-text">One-line change. Covers heat assignment (line 665), gate provisioning (847, 973, 1017), recipe pass-1/2/3/4 (702, 952, 1014, 1127, 1138), power balance, buff adjacency (799), and the spaceport-aware <code>buildingUnlocked</code> precheck (675).</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// economy.ts:617 — before:</span>
+<span class="del">  const validBuildings = state.buildings.filter((b) =&gt; !b.invalid &amp;&amp; isOperational(b));</span>
+<span class="cm">// economy.ts:617 — after:</span>
+<span class="add">  const validBuildings = state.buildings.filter((b) =&gt; !b.invalid &amp;&amp; isOperational(b) &amp;&amp; b.disabled !== true);</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Insert <code>if (b.disabled) continue;</code> in the maintenance-accrual loop</div>
+            <p class="step-text">The second engine site. Placement matters: the new <code>continue</code> goes BETWEEN the construction skip (lines 1632&ndash;1636) and the no-recipe skip (line 1649). A disabled-but-under-construction building hits the construction skip first and never reaches the disabled-continue — that's fine because the construction skip ticks down <code>constructionRemainingMs</code>, and per <code>p_constructed_disable=no_finish_first</code> the inspector button is DOM-disabled while construction is in progress, so this branch is unreachable in practice. Defence-in-depth: a future hand-edited save with <code>disabled=true</code> AND <code>constructionRemainingMs &gt; 0</code> still progresses construction normally; the disable bit only kicks in once construction completes.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// economy.ts:~1632, inside the `for (const b of state.buildings)` loop:</span>
+        const wasUnderConstruction = (b.constructionRemainingMs ?? 0) &gt; 0;
+        if (wasUnderConstruction) {
+          tickConstruction(b, dtMs);
+          continue;
+        }
+<span class="add">        <span class="cm">// Player-disabled buildings freeze in place — no operatingMs accrual,</span></span>
+<span class="add">        <span class="cm">// no maintenance degradation. Matches the §NEW user-spec line</span></span>
+<span class="add">        <span class="cm">// "no maintenance accrual" and the picker</span></span>
+<span class="add">        <span class="cm">// p_constructed_disable=no_finish_first (which means the construction</span></span>
+<span class="add">        <span class="cm">// branch above is unreachable under normal UI flow). Re-enable</span></span>
+<span class="add">        <span class="cm">// resumes accrual at the frozen operatingMs value — the factor stays</span></span>
+<span class="add">        <span class="cm">// at its last value rather than resetting.</span></span>
+<span class="add">        if (b.disabled === true) continue;</span>
+        <span class="cm">// §4.7 maintenance interpretation: skip accrual for buildings</span>
+        <span class="cm">// with no productive recipe outputs. The maintenanceFactor is</span>
+        const recipe = resolveRecipe(BUILDING_DEFS[b.defId], b, ctx?.terrainAt);</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Verify routes / drones / orbital already inherit the right behaviour</div>
+            <p class="step-text">No new engine code is required for the in-flight-completes / new-launches-blocked semantics, because Task 1's helper sweep already updated the relevant launch / dispatch checks:</p>
+            <ul class="bullets">
+              <li>New drone dispatch from a Drone Pad: <code>drones.ts:425</code>'s <code>find</code> now requires the pad be operational → disabled pad returns <code>undefined</code> → no dispatch.</li>
+              <li>New satellite launch from a Spaceport: <code>orbital.ts:220, 400, 598</code> presence checks now go through <code>hasOperationalBuilding</code> → disabled spaceport invisible to launch path.</li>
+              <li>New route-batch dispatch: routes pull from island inventory; the disabled source building stops contributing to inventory (it's filtered out of <code>validBuildings</code>) so the route naturally starves on its next pickup tick. The <code>route_drains_and_removes</code> handshake (next step) accelerates the wind-down explicitly so the player gets the "this route is dying" feedback right away.</li>
+              <li>Existing in-flight cargo / drones / satellites: untouched. They reference their source by id in <code>route.inFlight</code> / drone <code>expectedReturnTime</code> / satellite state; none of those paths re-check the source building's <code>disabled</code> state. They land normally.</li>
+            </ul>
+            <p class="step-text">No code change in this step — it's a verification checkpoint. Confirm by reading each call site in the listed files and ensuring the <code>hasOperationalBuilding</code> swap from Task 1 is in place. If any site still uses raw <code>buildings.some(...) &amp;&amp; !b.invalid</code>, fix it here.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Run the spec §05 tests + the full suite</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/economy.test.ts -t "disabled"</code> — expected PASS on all three new tests.</p>
+            <p class="step-text cmd">Run: <code>npm test</code> — expected PASS clean across the suite. The chokepoint edit is small enough that no other test should regress; if one does, it's likely a fixture that constructs a building with <code>disabled: true</code> by accident, or a test that relied on a quirk of the old filter — investigate before suppressing.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Build + commit</div>
+            <p class="step-text cmd">Run: <code>npm run build</code> — expected PASS clean.</p>
+            <div class="code-block"><div class="code"><pre>git add src/economy.ts src/economy.test.ts
+git commit -F /tmp/disable-task3-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/disable-task3-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(economy): respect PlacedBuilding.disabled in the tick + maintenance loop
+
+Two edits:
+  - economy.ts:617 — `&amp;&amp; b.disabled !== true` joins the validBuildings
+    filter, which is the single line every economy pass (rates, gates,
+    power, heat, buffs, adjacency) iterates. A disabled building is
+    invisible to every downstream check in one stroke.
+  - economy.ts:~1640 — `if (b.disabled) continue;` between the
+    construction skip and the no-recipe skip in the maintenance loop.
+    Freezes operatingMs while disabled; re-enable resumes at the
+    frozen value.
+
+Drones / satellites / routes inherit the right semantics for free
+through the Task 1 hasOperationalBuilding sweep: new launches from a
+disabled owner fail; in-flight subordinates complete normally because
+they don't re-check the source-building's disabled state mid-flight.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section id="task-4">
+      <div class="sec-head"><span class="num">05</span><h2>Task 4: inspector button + visual cue + action registration + route drain wiring</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">The UI half. Adds the <code>Disable</code>/<code>Enable</code> button to the inspector (matching the <code>convertBtn</code> styling stamp from <code>inspector-ui.ts:857</code>), paints the disabled cue (0.40 alpha + dashed red outline) in <code>building-alerts-overlay.ts</code> mirroring the construction-tint block at lines 82&ndash;111, and registers the <code>toggle-building-disable</code> action in <code>main.ts</code> via <code>defineAction</code> (without a key binding, per <code>p_hotkey_binding=via_input_registry_unbound</code>). The action handler also calls <code>drainRoutesForBuilding</code> on the false→true transition per <code>p_routes_disabled_source=route_drains_and_removes</code>.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/inspector-ui.ts</code> <span class="tag">— new disableBtn + onToggleDisabled dep + paint() label logic</span></li>
+            <li>Modify: <code>src/main.ts</code> <span class="tag">— register action, supply onToggleDisabled callback</span></li>
+            <li>Modify: <code>src/building-alerts-overlay.ts</code> <span class="tag">— disabled visual cue block</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Extend <code>InspectorDeps</code> with <code>onToggleDisabled</code></div>
+            <p class="step-text">Add to the <code>InspectorDeps</code> interface in <code>src/inspector-ui.ts</code> (currently around line 172). Mirrors the <code>onDemolish</code> signature.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// inspector-ui.ts — extend InspectorDeps:</span>
+  onDemolish(target: InspectorTarget): void;
+<span class="add">  /** Toggle target.building.disabled. Called from the new disableBtn.</span>
+<span class="add">   *  main.ts flips the flag, drains routes on the false→true</span>
+<span class="add">   *  transition (per p_routes_disabled_source=route_drains_and_removes</span>
+<span class="add">   *  — drained routes are NOT restored on re-enable), and triggers a</span>
+<span class="add">   *  world-layer rebuild so the alerts-overlay re-paints the cue. */</span>
+<span class="add">  onToggleDisabled(target: InspectorTarget): void;</span>
+  /** §3.4 Land Reclamation: …</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Add the <code>disableBtn</code> in <code>inspector-ui.ts</code></div>
+            <p class="step-text">Insert immediately after the <code>maintenanceSection.body.appendChild(convertBtn);</code> at line 892. The button uses the same <code>styled(...)</code> stamp as <code>convertBtn</code> with one colour swap — rust-leaning border (<code>--ri-warn</code> or a literal rust hex) instead of accent-cyan — so it reads as the destructive-ish action it is.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// inspector-ui.ts — after maintenanceSection.body.appendChild(convertBtn);</span>
+
+  <span class="cm">// §NEW per-building disable toggle (spec 2026-05-23-building-disable).</span>
+  <span class="cm">// Mirrors convertBtn styling; label flips Disable ↔ Enable in paint().</span>
+  <span class="cm">// DOM-disabled while target.building.constructionRemainingMs &gt; 0 per</span>
+  <span class="cm">// p_constructed_disable=no_finish_first.</span>
+  const disableBtn = document.createElement('button');
+  styled(
+    disableBtn,
+    [
+      'background: transparent',
+      `color: ${'var(--ri-warn)'}`,
+      `border: 1px solid ${'var(--ri-warn-dim, #b85a4a)'}`,
+      'padding: 4px 8px',
+      'cursor: pointer',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+      'letter-spacing: 0.08em',
+      'text-transform: uppercase',
+      'border-radius: 2px',
+      'transition: background 80ms ease, border-color 80ms ease',
+      'text-align: left',
+      'margin-top: 4px',
+    ].join(';'),
+  );
+  disableBtn.addEventListener('mouseenter', () =&gt; {
+    if (disableBtn.disabled) return;
+    disableBtn.style.background = 'rgba(232, 98, 74, 0.10)';
+    disableBtn.style.borderColor = 'var(--ri-warn)';
+  });
+  disableBtn.addEventListener('mouseleave', () =&gt; {
+    disableBtn.style.background = 'transparent';
+    disableBtn.style.borderColor = disableBtn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-warn-dim, #b85a4a)';
+  });
+  disableBtn.addEventListener('click', () =&gt; {
+    if (!target) return;
+    if ((target.building.constructionRemainingMs ?? 0) &gt; 0) return; <span class="cm">// guard: no-op while constructing</span>
+    deps.onToggleDisabled(target);
+    paint();
+  });
+  maintenanceSection.body.appendChild(disableBtn);</pre></div></div>
+            <p class="step-text">If <code>--ri-warn</code> isn't defined in <code>ui.css</code>, fall back to the literal hex <code>#E8624A</code> for <code>color</code> and <code>#b85a4a</code> for the dim border — matches the spec's <code>--disable-red</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Wire label-flip + construction-disabled state into <code>paint()</code></div>
+            <p class="step-text">In the <code>paint()</code> function (currently around <code>inspector-ui.ts:1191</code>), update <code>disableBtn</code>'s text and DOM <code>disabled</code> attribute based on the target. Insert near the <code>convertBtn</code> label / visibility logic — search for <code>convertBtn.style.display</code> or <code>convertBtn.textContent</code> in <code>paint()</code> and place the new lines next to them so all per-button per-paint logic stays grouped.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// inside paint(), after the convertBtn updates:</span>
+    const isUnderConstruction = (target.building.constructionRemainingMs ?? 0) &gt; 0;
+    const isDisabled = target.building.disabled === true;
+    disableBtn.textContent = isDisabled ? 'Enable' : 'Disable';
+    disableBtn.disabled = isUnderConstruction;
+    disableBtn.style.opacity = isUnderConstruction ? '0.45' : '1';
+    disableBtn.title = isUnderConstruction
+      ? 'Cannot disable while under construction — wait for the build to finish.'
+      : (isDisabled
+          ? 'Resume operation. Free. Drained routes are not restored.'
+          : 'Stop production / power / gates. Drains routes owned by this building. Free; reversible.');</pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Register the action + supply the <code>onToggleDisabled</code> callback in <code>main.ts</code></div>
+            <p class="step-text">Two changes in <code>main.ts</code>: (a) a <code>defineAction</code> call alongside the existing actions, and (b) wiring <code>onToggleDisabled</code> into the <code>mountInspectorUi</code> deps block (near the <code>onDemolish</code> callback at ~line 1225).</p>
+            <p class="step-text">First, the deps wiring — insert in the deps block:</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// main.ts — inside the deps object passed to mountInspectorUi,</span>
+<span class="cm">// after the onDemolish handler:</span>
+    onToggleDisabled: (target: InspectorTarget) =&gt; {
+      const b = target.building;
+      const wasDisabled = b.disabled === true;
+      b.disabled = !wasDisabled;
+      <span class="cm">// p_routes_disabled_source=route_drains_and_removes: on the</span>
+      <span class="cm">// false→true transition, soft-delete every route owned by this</span>
+      <span class="cm">// building. In-flight cargo finishes (tickRoutes prunes the route</span>
+      <span class="cm">// once inFlight.length === 0), and re-enabling the building does NOT</span>
+      <span class="cm">// restore the routes — the player must reconfigure them. Same</span>
+      <span class="cm">// behaviour as demolish (main.ts:1230).</span>
+      if (!wasDisabled) {
+        drainRoutesForBuilding(worldState, b.id);
+      }
+      <span class="cm">// Rebuild world layers so building-alerts-overlay re-paints the cue.</span>
+      rebuildWorldLayers();
+      inspector.refresh();
+    },</pre></div></div>
+            <p class="step-text">Second, define the action via the input registry. Find the existing <code>defineAction</code> block (search for <code>defineAction(reg,</code>) and add the new action there. The handler dispatches through the inspector when a building is selected:</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// main.ts — alongside the other defineAction calls:</span>
+defineAction(reg, 'toggle-building-disable', () =&gt; {
+  const selectedId = inspector.getSelectedBuildingId();
+  if (selectedId === null) return;
+  <span class="cm">// Resolve the current InspectorTarget. The inspector exposes the</span>
+  <span class="cm">// selected building's id; we walk islandStates to rebuild the target.</span>
+  for (const [, state] of worldState.islandStates ?? new Map()) {
+    const building = state.buildings.find((b) =&gt; b.id === selectedId);
+    if (building === undefined) continue;
+    const spec = worldState.islands.find((i) =&gt; i.id === state.id);
+    if (spec === undefined) continue;
+    if ((building.constructionRemainingMs ?? 0) &gt; 0) return; <span class="cm">// no-op while constructing</span>
+    <span class="cm">// Reuse the same toggle logic the button uses:</span>
+    const wasDisabled = building.disabled === true;
+    building.disabled = !wasDisabled;
+    if (!wasDisabled) drainRoutesForBuilding(worldState, building.id);
+    rebuildWorldLayers();
+    inspector.refresh();
+    return;
+  }
+});</pre></div></div>
+            <p class="step-text">No <code>bind(reg, '…', 'toggle-building-disable')</code> call per <code>p_hotkey_binding=via_input_registry_unbound</code> — the action is defined and discoverable through the registry but lacks a default key. Players who want a hotkey can add a <code>bind</code> entry in a future settings UI.</p>
+            <p class="step-text">If <code>worldState.islandStates</code> is structured differently from a <code>Map&lt;string, IslandState&gt;</code>, adjust the walk to match the actual shape — the goal is to find the <code>PlacedBuilding</code> by id across all islands. The inspector's <code>getSelectedBuildingId()</code> already abstracts the selection state; the action just needs the building.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Paint the disabled cue in <code>building-alerts-overlay.ts</code></div>
+            <p class="step-text">Insert a new branch in the per-building rebuild loop, after the construction block (currently lines 82&ndash;111) and BEFORE the maintenance-dot block at line 114. The cue is a 0.40-alpha fill of the bounding-box rect plus a dashed red outline — mirrors the construction-tint precedent so the player reads it as the same kind of overlay.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// building-alerts-overlay.ts — near the top, alongside CONSTRUCTION_CYAN:</span>
+<span class="add">const DISABLED_RED = 0xE8624A;</span>
+
+<span class="cm">// inside rebuild(), inside the for-loop over state.buildings, AFTER</span>
+<span class="cm">// the `if (remaining &gt; 0) { ... }` construction block (~line 112) and</span>
+<span class="cm">// BEFORE `const factor = maintenanceFactor(b, def);` at line 118:</span>
+
+<span class="add">        <span class="cm">// §NEW disabled cue (p_visual_cue=low_alpha). 0.40-alpha fill +</span></span>
+<span class="add">        <span class="cm">// dashed red outline over the footprint. Painted after the</span></span>
+<span class="add">        <span class="cm">// construction tint (so a disabled-but-under-construction</span></span>
+<span class="add">        <span class="cm">// building, which UI flow forbids but a hand-edited save could</span></span>
+<span class="add">        <span class="cm">// produce, would show both) and before the maintenance dot (so</span></span>
+<span class="add">        <span class="cm">// the dot — which still reflects the frozen factor — surfaces</span></span>
+<span class="add">        <span class="cm">// on top).</span></span>
+<span class="add">        if (b.disabled === true) {</span>
+<span class="add">          const half = TILE_PX / 2;</span>
+<span class="add">          const rx = (spec.cx + minTx) * TILE_PX - half;</span>
+<span class="add">          const ry = (spec.cy + minTy) * TILE_PX - half;</span>
+<span class="add">          const rw = (maxTx - minTx + 1) * TILE_PX;</span>
+<span class="add">          const rh = (maxTy - minTy + 1) * TILE_PX;</span>
+<span class="add">          <span class="cm">// Dimming fill — keeps the sprite identifiable but reads as "off".</span></span>
+<span class="add">          gfx.rect(rx, ry, rw, rh).fill({ color: 0x000000, alpha: 0.40 });</span>
+<span class="add">          <span class="cm">// Dashed red outline. PixiJS Graphics doesn't have a native</span></span>
+<span class="add">          <span class="cm">// stroke-dasharray; emit four segments along the perimeter,</span></span>
+<span class="add">          <span class="cm">// alternating drawn/skipped, to approximate the 4-3 dash pattern.</span></span>
+<span class="add">          const DASH = 4;</span>
+<span class="add">          const GAP = 3;</span>
+<span class="add">          const drawDashedSegment = (x0: number, y0: number, x1: number, y1: number): void =&gt; {</span>
+<span class="add">            const dx = x1 - x0;</span>
+<span class="add">            const dy = y1 - y0;</span>
+<span class="add">            const len = Math.hypot(dx, dy);</span>
+<span class="add">            if (len === 0) return;</span>
+<span class="add">            const ux = dx / len;</span>
+<span class="add">            const uy = dy / len;</span>
+<span class="add">            let t = 0;</span>
+<span class="add">            while (t &lt; len) {</span>
+<span class="add">              const segEnd = Math.min(t + DASH, len);</span>
+<span class="add">              gfx.moveTo(x0 + ux * t, y0 + uy * t).lineTo(x0 + ux * segEnd, y0 + uy * segEnd);</span>
+<span class="add">              t = segEnd + GAP;</span>
+<span class="add">            }</span>
+<span class="add">          };</span>
+<span class="add">          drawDashedSegment(rx, ry, rx + rw, ry);            <span class="cm">// top</span></span>
+<span class="add">          drawDashedSegment(rx + rw, ry, rx + rw, ry + rh);  <span class="cm">// right</span></span>
+<span class="add">          drawDashedSegment(rx + rw, ry + rh, rx, ry + rh);  <span class="cm">// bottom</span></span>
+<span class="add">          drawDashedSegment(rx, ry + rh, rx, ry);            <span class="cm">// left</span></span>
+<span class="add">          gfx.stroke({ color: DISABLED_RED, width: 1.5 });</span>
+<span class="add">        }</span></pre></div></div>
+            <p class="step-text">If PixiJS 8's Graphics API exposes a <code>strokeStyle.dashArray</code> or similar in the project's currently-installed version, swap the manual dashed-segment emission for that — the manual emission is the safe-fallback when the dash API is unavailable. The footprint extents (<code>minTx</code>, <code>maxTx</code>, <code>minTy</code>, <code>maxTy</code>) are already computed at the top of the loop body (lines 63&ndash;72) and in scope.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Invalidate the alerts overlay on toggle</div>
+            <p class="step-text">The overlay throttles itself to <code>REBUILD_MS = 2000</code>. The <code>BuildingAlertsHandle.invalidate()</code> method exists for exactly this case. In <code>main.ts</code>'s <code>onToggleDisabled</code> callback, after the <code>rebuildWorldLayers()</code> call, also call <code>buildingAlertsOverlay.invalidate()</code> so the cue paints on the next frame instead of waiting up to 2s.</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// main.ts — inside onToggleDisabled, after rebuildWorldLayers():</span>
+<span class="add">      buildingAlertsOverlay.invalidate();</span></pre></div></div>
+            <p class="step-text">If <code>buildingAlertsOverlay</code> is named differently in <code>main.ts</code> (e.g. <code>alertsOverlay</code>), use whichever name the <code>mountBuildingAlertsOverlay</code> call returned. The same <code>invalidate()</code> call also belongs in the <code>defineAction</code> handler from Step 4.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Build + run the full suite</div>
+            <p class="step-text cmd">Run: <code>npm run build</code> — expected PASS clean.</p>
+            <p class="step-text cmd">Run: <code>npm test</code> — expected PASS clean. The UI changes don't have direct unit tests (the inspector layer is render-tier per <code>AGENTS.md</code>'s pure-vs-render split); correctness rides on Tasks 1&ndash;3's unit tests plus the manual smoke below.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Manual smoke-test in the browser</div>
+            <p class="step-text">The dev service serves <code>dist/</code>. After <code>npm run build</code>, reload <code>https://islands.nitjsefni.eu/</code>. Do NOT restart <code>robot-islands-dev.service</code>.</p>
+            <ul class="bullets">
+              <li>Select a Workshop. Inspector shows a <strong>Disable</strong> button between Convert and the maintenance footer.</li>
+              <li>Click <strong>Disable</strong>. Sprite drops to 0.40 alpha with a dashed red rectangle around its footprint. Button label flips to <strong>Enable</strong>. Any downstream Smelter requiring an adjacent Workshop stalls (HUD rate goes to 0).</li>
+              <li>If a route was owned by that Workshop (e.g. a transport bus), the route enters draining state — the routes UI should show it winding down.</li>
+              <li>Click <strong>Enable</strong>. Sprite returns to full alpha, dashed outline gone. Smelter resumes producing. The drained route does NOT come back (per <code>route_drains_and_removes</code>).</li>
+              <li>Place a building, observe the <strong>Disable</strong> button is DOM-disabled (greyed, 0.45 opacity) and shows the "Cannot disable while under construction" tooltip. Wait for construction to finish; the button enables.</li>
+              <li>Refresh the page after disabling a building. The disabled state survives the save round-trip — sprite still 0.40 alpha + dashed, button still says <strong>Enable</strong>.</li>
+            </ul>
+            <p class="step-text">Capture screenshots via <code>mcp__daedalus__screenshot</code> against the active tab for each step — the standard verification path per <code>AGENTS.md</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 9: Commit</div>
+            <div class="code-block"><div class="code"><pre>git add src/inspector-ui.ts src/main.ts src/building-alerts-overlay.ts
+git commit -F /tmp/disable-task4-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/disable-task4-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(inspector): per-building Disable/Enable button + visual cue
+
+Adds a Disable/Enable toggle in the inspector body between Convert
+and the maintenance footer. Same styled() stamp as convertBtn with
+a rust-leaning border. Label flips on the target's b.disabled.
+DOM-disabled while constructionRemainingMs &gt; 0
+(p_constructed_disable=no_finish_first).
+
+Toggle handler (in main.ts) flips b.disabled, calls
+drainRoutesForBuilding on the false→true transition
+(p_routes_disabled_source=route_drains_and_removes — drained routes
+are NOT restored on re-enable), rebuilds world layers, and
+invalidates the alerts overlay.
+
+Visual cue (building-alerts-overlay.ts): 0.40-alpha black fill +
+dashed red outline over the footprint (p_visual_cue=low_alpha).
+Mirrors the construction-tint block layout.
+
+Action defined via input.ts registry as toggle-building-disable, no
+default binding (p_hotkey_binding=via_input_registry_unbound) — a
+future settings UI can let the player wire a key.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div></div>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section id="notes">
+      <div class="sec-head"><span class="num">06</span><h2>Notes</h2></div>
+      <div class="notes">
+        <div class="note"><strong>Chokepoint discovery — the single line that does everything.</strong> The spec found that <code>economy.ts:617</code>'s <code>validBuildings</code> filter feeds every downstream pass inside <code>computeRates</code>: heat assignment (665), gate provisioning (847, 973, 1017), recipe passes 1/2/3/4 (702, 952, 1014, 1127, 1138), power balance (950&ndash;1011), buff adjacency (799), the spaceport precheck (675). Appending <code>&amp;&amp; b.disabled !== true</code> there is the entire engine change for five of the six user-spec runtime bullets. The sixth bullet (no maintenance accrual) needs a second site at <code>economy.ts:~1640</code>. Two lines of economy code, plus the helper sweep, do the whole thing.</div>
+        <div class="note"><strong>Scattered-provider-sites refactor — Task 1 justification.</strong> 25+ sites across 14 files ask "does this island have a built X?" via slight variations of <code>buildings.some(b =&gt; b.defId === '…')</code>. Some include <code>!b.invalid</code>, some don't, none check construction. Without the Task 1 sweep, Task 3's <code>!b.disabled</code> would have to thread through all 25 sites individually — a guaranteed-incomplete pass that leaks bugs ("disabled spaceport still unlocks T6 in the buildings UI"). Task 1 makes the future "what does operational mean?" question always answer through one function — the sole entry point for the disabled filter.</div>
+        <div class="note"><strong><code>state.buildings === spec.buildings</code> — array aliasing.</strong> <code>makeInitialIslandState</code> at <code>world.ts:1036</code> assigns the spec's <code>buildings</code> array directly to the new state (no clone). Mutating a building through <code>state.buildings[i]</code> is the same as mutating <code>spec.buildings[i]</code>. The helper takes <code>ReadonlyArray&lt;PlacedBuilding&gt;</code> so both call patterns hit the same predicate. Inspector mutation via <code>target.building.disabled = !target.building.disabled</code> is therefore visible to all of <code>economy.ts</code>, <code>antenna.ts</code> (which iterates <code>spec.buildings</code>), and persistence (which serializes <code>s.buildings.map(b =&gt; ({...b, ...}))</code>) — no extra propagation step.</div>
+        <div class="note"><strong><code>complete_then_block</code> interpretation.</strong> In-flight drones / satellites / route cargo do NOT re-check their source building's <code>disabled</code> state mid-flight — they reference the source by id in their own structures (<code>route.inFlight</code>, drone <code>expectedReturnTime</code>, satellite state). Their completion paths land cargo / return drones / deliver satellite outputs normally. Only the <em>dispatch</em> path (which calls <code>hasOperationalBuilding</code> through Task 1) is blocked while the owner is disabled. The result: a player who disables a Drone Pad with three drones in flight watches the drones return and idle on the pad; new launches are blocked until re-enable. This mirrors <code>p_routes_pending_inbound=deliver_anyway</code> exactly — both pickers agreed that pre-dispatched work completes.</div>
+        <div class="note warn"><strong>The route-drain handshake — the one place "lossless" breaks.</strong> Per <code>p_routes_disabled_source=route_drains_and_removes</code>, disabling a route-owner triggers <code>drainRoutesForBuilding(world, building.id)</code> — the same call demolish makes. Routes wind down (in-flight cargo lands, then the route is pruned by <code>tickRoutes</code>). <strong>Re-enabling the building does NOT restore the routes.</strong> This is the single asymmetry in an otherwise-symmetric toggle. The button's <code>title</code> tooltip surfaces this explicitly ("Drains routes owned by this building. Free; reversible — but drained routes are not restored.") to avoid the player learning by surprise.</div>
+        <div class="note"><strong>Construction guard is UI-only (defence-in-depth).</strong> Per <code>p_constructed_disable=no_finish_first</code>: the engine never wraps <code>tickConstruction</code> in a disabled-guard, because the UI prevents the toggle while construction is in progress (DOM <code>disabled</code> attribute + early-return in both the button click handler and the action handler). Construction proceeds normally on any disabled-but-under-construction building (which only arises through hand-edited saves); the disabled bit kicks in once <code>constructionRemainingMs</code> reaches 0 and the building stops short-circuiting through the construction branch. The maintenance-loop <code>if (b.disabled) continue;</code> at <code>economy.ts:~1640</code> is unreachable through the UI flow but is correct defence — a hand-edited save with both bits set would otherwise accrue <code>operatingMs</code> as soon as construction completes, before the player notices.</div>
+        <div class="note"><strong>Verification suite — exact test names from spec §05.</strong> The four <code>describe</code> strings in Task 3 step 1 ("disabled building contributes 0 to power balance", "disabled building does not accrue operatingMs", "disabled provider fails downstream gates", "disable is lossless across save round-trip") are lifted verbatim from the spec §05 verification table. Use the same strings so future-you can <code>grep -r "disabled building contributes" src/</code> to find both the spec entry and the test. The "construction freezes while disabled" row in the spec §05 belongs to the alternative pick (<code>yes_pauses_construction</code>) and is intentionally absent here — its slot is taken by an inspector-button test that asserts the button is DOM-disabled while constructing.</div>
+        <div class="note"><strong>Persistence — no schema bump.</strong> <code>persistence.ts:329</code>'s <code>s.buildings.map(b =&gt; ({ ...b, ...timestamp-shifts }))</code> shallow-copies every field of <code>PlacedBuilding</code> by spread. Adding <code>disabled?: boolean</code> rides through automatically; legacy saves load with the field absent (treated as <code>undefined</code>, which the helpers compare against <code>=== true</code> so undefined and false are equivalent). No version bump, no migration. The schema-version mechanism that exists for breaking changes stays at version 6 (terrain-modifier will bump to 7); this feature is forward-compat by construction.</div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands · implementation plan · 2026-05-23 · spec: docs/superpowers/specs/2026-05-23-building-disable-design.html
+    </footer>
+
+  </div>
+</body>
+</html>
