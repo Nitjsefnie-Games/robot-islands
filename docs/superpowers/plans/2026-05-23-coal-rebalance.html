@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coal loop rebalance — implementation plan</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --rust:#E08B7F; --warn:#E0B47F;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+      line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1120px; margin:0 auto; }
+    header.page-head { margin-bottom:48px; max-width:880px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    h1 code { font-family:var(--mono); font-size:0.78em; color:var(--clay); background:none; padding:0; border:0; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box .meta-line { margin-top:8px; }
+    .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .callout { background:var(--white); border:1.5px solid var(--gray-300);
+      border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+      font-size:13.5px; color:var(--gray-500); margin-bottom:48px; max-width:880px; }
+    .callout code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-head h2 code { font-family:var(--mono); font-size:21px; color:var(--clay); }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:780px; margin-bottom:28px; }
+    .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .summary { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 18px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .summary .v.ok { color:var(--olive); }
+    .summary .v.warn { color:var(--warn); }
+    .filetable { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .filetable .row { display:grid; grid-template-columns:280px 1fr; gap:0; }
+    @media (max-width:780px){ .filetable .row{grid-template-columns:1fr;} }
+    .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+    .filetable .cell { padding:13px 18px; font-size:13.5px; }
+    .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .filetable .cell code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .filetable .cell.desc code { color:var(--slate); }
+    .task-card { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:24px 26px; }
+    .task-blurb { font-size:13.5px; color:var(--gray-500); margin-bottom:16px; max-width:780px; }
+    .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .files-block { background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:8px; padding:12px 16px; margin-bottom:22px; }
+    .files-block .ft { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .files-block ul { list-style:none; }
+    .files-block li { font-size:13px; color:var(--gray-700); padding:2px 0; }
+    .files-block li code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .files-block li .tag { font-family:var(--mono); font-size:10.5px; color:var(--gray-500); }
+    .steps { display:flex; flex-direction:column; gap:18px; }
+    .step { display:grid; grid-template-columns:22px 1fr; gap:0 12px; }
+    .step .box { width:16px; height:16px; border:1.5px solid var(--clay); border-radius:4px; margin-top:3px; }
+    .step .step-body { min-width:0; }
+    .step .step-title { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:6px; }
+    .step .step-text { font-size:13.5px; color:var(--gray-500); margin-bottom:10px; }
+    .step .step-text:last-child { margin-bottom:0; }
+    .step .step-text code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .step .step-text.cmd code { color:var(--olive); }
+    .code-block { margin:4px 0 12px; }
+    .code-block .file-label { font-family:var(--mono); font-size:11.5px; color:var(--gray-500); margin-bottom:6px; }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .cm { color:var(--gray-500); } .code .add { color:#8FA56E; } .code .del { color:#E08B7F; }
+    .code .acc { color:#E0B47F; }
+    .notes { display:flex; flex-direction:column; gap:14px; max-width:880px; }
+    .note { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive);
+      border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-500); }
+    .note.rust { border-left-color: var(--rust); }
+    .note.warn { border-left-color: var(--warn); }
+    .note code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .note strong { color:var(--slate); font-weight:600; }
+    .tbl { width:100%; border:1.5px solid var(--gray-300); border-radius:10px;
+      border-collapse:separate; border-spacing:0; overflow:hidden; font-size:13px; margin:8px 0 14px; }
+    .tbl th, .tbl td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.04em;
+      color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl td.mono { font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+    .tbl td.lead { color:var(--slate); font-weight:600; }
+    .tbl td .del { color:var(--rust); }
+    .tbl td .add { color:var(--olive); }
+    footer.page-foot { margin-top:64px; padding-top:20px; border-top:1.5px solid var(--gray-300);
+      font-size:12px; color:var(--gray-500); font-family:var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands · balance / buildings</div>
+      <h1>Coal loop rebalance — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Make the <code>mine_on_coal</code> + <code>coal_gen</code> pair self-sustain at 1:1 with comfortable headroom on both fuel and power. Move <code>mine_on_coal</code> from <code>1 coal / 17 s</code> to <code>9 coal / 10 s</code> (mirroring commit <code>9cda2aa</code>'s Heavy-Logger pattern), and drop <code>BUILDING_DEFS.mine.power.consumes</code> from <code>40 W → 25 W</code>. Result at 1:1: <code>+0.4 coal/s</code> · <code>+75 W</code>.</div>
+        <div class="meta-line"><strong>Architecture:</strong> Single-task numeric balance change. Two source lines (<code>src/recipes.ts:1077-1080</code>, <code>src/building-defs.ts:612</code>) plus a swept update to closed-form power and coal-output assertions in <code>economy.test.ts</code> and <code>routes.test.ts</code>. Pure layer only — no PixiJS, no rendering changes.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, noUncheckedIndexedAccess, noUnusedLocals), Vite 5, PixiJS 8, vitest.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-23-coal-rebalance-design.html</code> (v1) · <strong>Audit:</strong> <code>docs/superpowers/audits/2026-05-23-coal-loop-balance.html</code> · <strong>Reference commit:</strong> <code>9cda2aa</code> (Heavy Logger / Biomass Plant)</div>
+        <div class="meta-line"><strong>User picks (locked):</strong> <code>tune_direction = boost_mine</code>, <code>coal_yield_per_cycle = 9_per_10s</code>, <code>mine_power_draw = 25W</code>.</div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: use <code>superpowers:subagent-driven-development</code> (recommended) or <code>superpowers:executing-plans</code> to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking. Mechanical edit-test-fix loop — well-suited to a Kimi K2.6 subagent brief.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">1</div></div>
+      <div class="cell"><div class="k">Source files</div><div class="v">2</div></div>
+      <div class="cell"><div class="k">Test files</div><div class="v">2</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v">0</div></div>
+      <div class="cell"><div class="k">Net @ 1:1</div><div class="v ok">+0.4 coal/s · +75 W</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">One atomic commit covers the source rebalance plus the dependent test sweep. The two source lines change a single number each; the test sweep is mechanical bookkeeping (closed-form expectations baked against the old 40 W mine draw and old 17 s coal cycle). No new files. No render-layer touches.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/recipes.ts</code></div><div class="cell desc">Line 1077-1080: <code>mine_on_coal.cycleSec: 17 → 10</code> and <code>outputs: { coal: 1 } → { coal: 9 }</code>. Update the trailing comment to record the 2026-05-23 rebalance + reference to commit <code>9cda2aa</code>'s methodology.</div></div>
+        <div class="row"><div class="cell"><code>src/building-defs.ts</code></div><div class="cell desc">Line 612: <code>mine.power.consumes: 40 → 25</code>. <strong>Spillover risk:</strong> the same <code>BUILDING_DEFS.mine</code> backs <code>mine_on_ore</code> via runtime <code>resolveRecipe</code> — every iron-mine in the world also drops to 25 W. The user pick implicitly accepts this; see §03 Notes.</div></div>
+        <div class="row"><div class="cell"><code>src/economy.test.ts</code></div><div class="cell desc">5 numeric assertions update (2 coal-output values, 3 mine-power values). All listed in Task §02 step 3 with file:line + before/after.</div></div>
+        <div class="row"><div class="cell"><code>src/routes.test.ts</code></div><div class="cell desc">~14 numeric assertions update on the <code>computeCableNetworkBalance</code> tests (per-mine draw shifts every <code>consumedTotal</code> and <code>requiredTransmission</code> on those fixtures). All listed in Task §02 step 4 with file:line + before/after.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Task 1: apply the coal-loop rebalance + sweep dependent tests</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">One atomic commit. Source change in two lines; everything else is a mechanical rebase of closed-form numeric expectations onto the new 25 W / 0.9 coal-s constants. Pure layer only — <code>economy.ts</code> / rendering untouched. Tests must pass clean before commit.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/recipes.ts</code> <span class="tag">— mine_on_coal: 17 s/1 coal → 10 s/9 coal</span></li>
+            <li>Modify: <code>src/building-defs.ts</code> <span class="tag">— mine.power.consumes: 40 → 25</span></li>
+            <li>Modify: <code>src/economy.test.ts</code> <span class="tag">— 5 assertion updates</span></li>
+            <li>Modify: <code>src/routes.test.ts</code> <span class="tag">— ~14 assertion updates (computeCableNetworkBalance fixtures)</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Edit <code>src/recipes.ts</code> — rebalance <code>mine_on_coal</code></div>
+            <p class="step-text">Use the <code>Edit</code> tool with this exact replacement on lines 1077-1082. The unique anchor is <code>outputs: { coal: 1 }</code> (single occurrence in the file).</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (current, lines 1077-1082):</span>
+<span class="del">  mine_on_coal: {
+    cycleSec: 17, // rebalanced for idle-game scale, step #19 (×10: was 5s); 2026-05-18 ÷3 for display visibility (was 50s)
+    inputs: {},
+    outputs: { coal: 1 },
+    category: 'extraction',
+  },</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  mine_on_coal: {
+    cycleSec: 10, // 2026-05-23 coal loop rebalance — mirrors commit 9cda2aa (Heavy Logger 9 wood/10s pattern). 1:1 pair net = +0.4 coal/s.
+    inputs: {},
+    outputs: { coal: 9 },
+    category: 'extraction',
+  },</span></pre></div></div>
+            <p class="step-text">Do <strong>not</strong> touch <code>mine_on_ore</code> (lines 1071-1076) or the legacy <code>mine</code> entry (1061-1066). Both stay at <code>cycleSec: 17, outputs: { iron_ore: 1 }</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Edit <code>src/building-defs.ts</code> — drop mine power draw</div>
+            <p class="step-text">Target line 612 inside the <code>mine</code> def block. Unique anchor: the literal <code>power: { consumes: 40 },</code> immediately above <code>requiredTile: ['ore', 'coal'],</code> (which only appears once in the file — the <code>mine</code> def).</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (line 612):</span>
+<span class="del">    power: { consumes: 40 },
+    requiredTile: ['ore', 'coal'],</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">    power: { consumes: 25 }, // 2026-05-23 coal loop rebalance — also applies to mine_on_ore via shared def.
+    requiredTile: ['ore', 'coal'],</span></pre></div></div>
+            <p class="step-text"><strong>Spillover (intentional, per user pick <code>mine_power_draw=25W</code>):</strong> this single edit changes <em>every</em> tile-dispatched mine on the planet — <code>mine_on_ore</code> as well as <code>mine_on_coal</code>. The audit and design spec both flag this; Notes §03 captures the risk explicitly. Other production defs at 40 W (workshop, antenna, etc.) are <strong>unaffected</strong> — they have their own <code>power.consumes</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Sweep <code>src/economy.test.ts</code> — update mine-power + coal-output assertions</div>
+            <p class="step-text">Five precise edits. All are <code>Edit</code>-tool one-shot replacements with unique surrounding context. The <code>5.88235294117647</code> coal value is <code>100 s × (1/17 coal/s)</code>; the new value is <code>100 s × (9/10 coal/s) = 90</code>. The <code>40</code> values are mine-power pins that follow the def shift to 25 W.</p>
+
+            <table class="tbl">
+              <thead><tr><th>Line</th><th>Test it lives in</th><th>Before</th><th>After</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">600</td><td>§5.3 cable network — unified covered</td><td class="mono"><span class="del">expect(power.consumed).toBe(40);</span></td><td class="mono"><span class="add">expect(power.consumed).toBe(25);</span></td><td>Single MINE_PWR → 25 W</td></tr>
+                <tr><td class="mono">716</td><td>§5.1 producer stalled (no fuel)</td><td class="mono"><span class="del">expect(power.consumed).toBe(40);</span></td><td class="mono"><span class="add">expect(power.consumed).toBe(25);</span></td><td>Single MINE_PWR → 25 W</td></tr>
+                <tr><td class="mono">923</td><td>§5.1 partial input-starved consumer draws proportional power</td><td class="mono"><span class="del">40 * (0.5 * (1 / 33) / (1 / 17)) + 60 * 0.5</span></td><td class="mono"><span class="add">25 * (0.5 * (1 / 33) / (1 / 17)) + 60 * 0.5</span></td><td>Mine contribution scales with new draw; workshop part untouched</td></tr>
+                <tr><td class="mono">1988</td><td>§8.1 mine on coal-tile produces coal at the new rate</td><td class="mono"><span class="del">expect(state.inventory.coal).toBeCloseTo(5.88235294117647, 9);</span></td><td class="mono"><span class="add">expect(state.inventory.coal).toBeCloseTo(90, 9);</span></td><td>100 s × 0.9 coal/s = 90</td></tr>
+                <tr><td class="mono">2027</td><td>§8.1 mixed coal/ore footprint picks coal variant</td><td class="mono"><span class="del">expect(state.inventory.coal).toBeCloseTo(5.88235294117647, 9);</span></td><td class="mono"><span class="add">expect(state.inventory.coal).toBeCloseTo(90, 9);</span></td><td>Same: 100 s × 0.9 coal/s = 90</td></tr>
+              </tbody>
+            </table>
+
+            <p class="step-text"><strong>Adjacent prose / comments to refresh (non-load-bearing but should be accurate):</strong> the comments at lines 1979 (<code>"Rate 1/50s = 0.02/s. Over 100s = 2 coal"</code>) and 2018 (same) — update to "Rate 9/10s = 0.9 coal/s. Over 100 s = 90 coal" so the rationale matches the new assertion. Comments at 706, 742, 760, 849, 863, 919, 940, 2440, 2520, 2534, 2871, 3026, 3555-6 mention "40 W" or "mine 40 W zeroed" — these are descriptive; refresh to "25 W" for accuracy when their containing test is touched, otherwise leave alone. Comments at lines 558, 562 (the <code>MINE_PWR</code> fixture comment) — update to <code>"mine def already consumes 25W"</code>.</p>
+
+            <p class="step-text"><strong>Do NOT touch:</strong>
+            <ul style="margin-left:18px;font-size:13.5px;line-height:1.5;">
+              <li>Line <code>569</code>: <code>base.mine = { ...base.mine, power: { consumes: 80 } };</code> — this is the <code>mineHeavyCatalog()</code> override that fully replaces the def. The 80 W is intentional fixture data for the partial-brownout test. Leaves <code>power.consumed === 140</code> (line 694), <code>factor === 100/140</code> (695) alone.</li>
+              <li>Lines <code>760, 858</code>: <code>expect(power.consumed).toBe(60)</code> / <code>toBe(0)</code> — mine is output-stalled (cap-pile) and contributes 0 W in both. Mine power doesn't enter the assertion.</li>
+              <li>Line <code>810</code>: <code>expect(baselinePower.produced).toBe(40)</code> — Wind Turbine produces 40 W, nothing to do with mine consumption.</li>
+              <li>Lines <code>664, 680, 699, 1988</code> rate-pinning numbers for <code>mine_on_ore</code> (e.g., <code>0.058823529411764705</code> = 1/17) — those are <code>RECIPES.mine</code> / <code>mine_on_ore</code> values, both untouched at <code>17 s / iron_ore: 1</code>.</li>
+            </ul>
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Sweep <code>src/routes.test.ts</code> — update <code>computeCableNetworkBalance</code> fixtures</div>
+            <p class="step-text">All edits live inside the <code>describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', …)</code> block (starting line 654) and the parallel submarine-cable block (starting line 1240). Per-mine consumed shifts from 40 → 25 W; <code>requiredTransmission</code> = <code>min(surplus, deficit)</code> needs to be recomputed scenario-by-scenario.</p>
+
+            <table class="tbl">
+              <thead><tr><th>Line</th><th>Scenario</th><th>Mines / setup</th><th>Before</th><th>After</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">703</td><td>isolated island, 1 mine, no producers</td><td class="mono">1 mine</td><td class="mono"><span class="del">consumedTotal).toBe(40)</span></td><td class="mono"><span class="add">consumedTotal).toBe(25)</span></td></tr>
+                <tr><td class="mono">723</td><td>A solars vs B 2 mines — gate FAILS (cap 50 &lt; req)</td><td class="mono">2 mines</td><td class="mono"><span class="del">consumedTotal).toBe(80)</span></td><td class="mono"><span class="add">consumedTotal).toBe(50)</span></td></tr>
+                <tr><td class="mono">724</td><td>same — requiredTransmission</td><td class="mono">min(100, 50) = 50</td><td class="mono"><span class="del">requiredTransmission).toBe(80)</span></td><td class="mono"><span class="add">requiredTransmission).toBe(50)</span></td></tr>
+                <tr><td class="mono">737</td><td>A solars vs B 2 mines — gate PASSES (cap 100)</td><td class="mono">2 mines</td><td class="mono"><span class="del">consumedTotal).toBe(80)</span></td><td class="mono"><span class="add">consumedTotal).toBe(50)</span></td></tr>
+                <tr><td class="mono">738</td><td>same — requiredTransmission</td><td class="mono">min(100, 50) = 50</td><td class="mono"><span class="del">requiredTransmission).toBe(80)</span></td><td class="mono"><span class="add">requiredTransmission).toBe(50)</span></td></tr>
+                <tr><td class="mono">773</td><td>A→B→C chain — capacity ABOVE required, gate passes</td><td class="mono">A:1 + B:2 + C:5 = 8 mines, prod 200</td><td class="mono"><span class="del">consumedTotal).toBe(320)</span></td><td class="mono"><span class="add">consumedTotal).toBe(200)</span></td></tr>
+                <tr><td class="mono">774</td><td>same — requiredTransmission</td><td class="mono">A surplus 75, B surplus 50, C deficit 125. min(125, 125) = 125</td><td class="mono"><span class="del">requiredTransmission).toBe(80)</span></td><td class="mono"><span class="add">requiredTransmission).toBe(125)</span></td></tr>
+                <tr><td class="mono">797</td><td>A→B→C chain — capacity BELOW required, gate fails</td><td class="mono">Same fixture, cap 30</td><td class="mono"><span class="del">requiredTransmission).toBe(80)</span></td><td class="mono"><span class="add">requiredTransmission).toBe(125)</span></td></tr>
+                <tr><td class="mono">822</td><td>disjoint: {A, B} cable, C alone — {A,B} consumed</td><td class="mono">A:1 mine + B:2 mines = 3 mines</td><td class="mono"><span class="del">consumedTotal).toBe(120)</span></td><td class="mono"><span class="add">consumedTotal).toBe(75)</span></td></tr>
+                <tr><td class="mono">830</td><td>disjoint: {C} alone consumed</td><td class="mono">3 mines on C</td><td class="mono"><span class="del">consumedTotal).toBe(120)</span></td><td class="mono"><span class="add">consumedTotal).toBe(75)</span></td></tr>
+                <tr><td class="mono">847</td><td>Spacetime Anchor link forces gate pass</td><td class="mono">2 mines on B</td><td class="mono"><span class="del">consumedTotal).toBe(80)</span></td><td class="mono"><span class="add">consumedTotal).toBe(50)</span></td></tr>
+                <tr><td class="mono">848</td><td>same — requiredTransmission</td><td class="mono">min(100, 50) = 50</td><td class="mono"><span class="del">requiredTransmission).toBe(80)</span></td><td class="mono"><span class="add">requiredTransmission).toBe(50)</span></td></tr>
+                <tr><td class="mono">1255</td><td>submarine_cable — gate FAILS (cap 50)</td><td class="mono">2 mines</td><td class="mono"><span class="del">consumedTotal).toBe(80)</span></td><td class="mono"><span class="add">consumedTotal).toBe(50)</span></td></tr>
+                <tr><td class="mono">1256</td><td>same — requiredTransmission</td><td class="mono">min(100, 50) = 50</td><td class="mono"><span class="del">requiredTransmission).toBe(80)</span></td><td class="mono"><span class="add">requiredTransmission).toBe(50)</span></td></tr>
+                <tr><td class="mono">1270</td><td>submarine_cable — gate PASSES (cap 100)</td><td class="mono">2 mines</td><td class="mono"><span class="del">consumedTotal).toBe(80)</span></td><td class="mono"><span class="add">consumedTotal).toBe(50)</span></td></tr>
+                <tr><td class="mono">1271</td><td>same — requiredTransmission</td><td class="mono">min(100, 50) = 50</td><td class="mono"><span class="del">requiredTransmission).toBe(80)</span></td><td class="mono"><span class="add">requiredTransmission).toBe(50)</span></td></tr>
+                <tr><td class="mono">1289</td><td>land + submarine combined capacities</td><td class="mono">2 mines, cap 30+60=90</td><td class="mono"><span class="del">requiredTransmission).toBe(80)</span></td><td class="mono"><span class="add">requiredTransmission).toBe(50)</span></td></tr>
+              </tbody>
+            </table>
+
+            <p class="step-text"><strong>Adjacent prose / comments to refresh (recommended for accuracy, not load-bearing):</strong> the per-test comment blocks at lines 660 (<code>"Mine consumes 40W"</code>), 711 (<code>"2 mines (80W consumed)"</code>), 750-753 (the A→B→C arithmetic walk-through), 818 (<code>"prod=200, cons=120, surplus=80, deficit=0"</code>), 1243 (<code>"2 mines (80W consumed)"</code>) — rewrite the numbers to match. The arithmetic narratives are the test's documentation; keeping them lying around stale will confuse future readers.</p>
+
+            <p class="step-text"><strong>Worked example for A→B→C chain (lines 750-754, also line 779-781):</strong></p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// Before (40 W mine):</span>
+<span class="cm">//   A = 2 solars (100 W) + 1 mine (40 W)  → surplus 60</span>
+<span class="cm">//   B = 2 solars (100 W) + 2 mines (80 W) → surplus 20</span>
+<span class="cm">//   C = 5 mines (200 W consumed)          → deficit 200</span>
+<span class="cm">//   totalSurplus = 80, totalDeficit = 200, required = 80</span>
+<span class="cm">//   producedTotal = 200, consumedTotal = 40 + 80 + 200 = 320</span>
+
+<span class="cm">// After (25 W mine):</span>
+<span class="cm">//   A = 2 solars (100 W) + 1 mine (25 W)  → surplus 75</span>
+<span class="cm">//   B = 2 solars (100 W) + 2 mines (50 W) → surplus 50</span>
+<span class="cm">//   C = 5 mines (125 W consumed)          → deficit 125</span>
+<span class="cm">//   totalSurplus = 125, totalDeficit = 125, required = 125</span>
+<span class="cm">//   producedTotal = 200, consumedTotal = 25 + 50 + 125 = 200</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Run the targeted test files first</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/economy.test.ts src/routes.test.ts src/recipes.test.ts src/balance.test.ts</code></p>
+            <p class="step-text">Expected: PASS clean. <code>recipes.test.ts</code> and <code>balance.test.ts</code> have no pinned numbers that depend on the changed values (they assert <em>relative</em> properties — "every cycleSec > 0", "every input/output is in ALL_RESOURCES", "deep_mine rate &gt; mine rate" — all still hold), so they're a fast regression smoke test for the recipe edit.</p>
+            <p class="step-text">If any unanticipated test fails, walk the failure: the expectation was likely either (a) a sibling closed-form pin in a comment-table I missed, or (b) a downstream test seeded by a coal value (e.g. a Smelter test that pre-seeds <code>coal: N</code> and asserts how many iron_ingots the Mine + Smelter chain produced over T seconds — those are unaffected because the Smelter recipe is untouched and any inline coal seed is independent of mine throughput).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Run the full suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: PASS — full vitest suite green. Pay particular attention to <code>maintenance.test.ts</code>, <code>placement.test.ts</code>, <code>adjacency.test.ts</code>, <code>hover-tooltip.test.ts</code>, <code>skilltree.test.ts</code>, <code>tutorial.test.ts</code>, <code>settlement.test.ts</code>, <code>sonar-buoy.test.ts</code>, <code>network-consciousness.test.ts</code>, <code>singularity-battery</code> blocks in <code>economy.test.ts</code> — all reference <code>defId: 'mine'</code> or <code>'coal_gen'</code> but use them as structural fixtures (placement, adjacency, tooltips, etc.), not power-numeric pins, so they should pass unchanged. If one fails, treat it as a closed-form pin I missed — patch using the same shape as Steps 3/4 and document the line.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS clean — <code>tsc -b && vite build</code>. Strict mode is enabled; this change touches no type signatures so failures would only surface from a stale comment containing a typo'd code token. If <code>vite build</code> succeeds but the live tab shows stale numbers, that's because the dev service serves built <code>dist/</code> without HMR — the browser tab needs a manual reload (per <code>AGENTS.md</code>). Do <strong>not</strong> restart the systemd unit.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: (Optional) Live smoke-test via Daedalus</div>
+            <p class="step-text">If a coal-loop save exists in the active browser tab, reload <code>https://islands.nitjsefni.eu/</code> and observe: coal inventory should climb monotonically with 1 mine + 1 gen on a coal vein; HUD net should land near <code>+0.4 coal/s</code> and the power summary near <code>+75 W</code>. Confirm with <code>mcp__daedalus__screenshot</code> against the active tab. Optional — verification rides on the unit tests.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 9: Commit</div>
+            <p class="step-text">Stage the four files and commit with a clear message + the implementing agent's co-author trailer.</p>
+            <div class="code-block"><div class="code"><pre>git add src/recipes.ts src/building-defs.ts src/economy.test.ts src/routes.test.ts
+git commit -F /tmp/coal-rebalance-msg.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/coal-rebalance-msg.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>balance(buildings): rework coal loop — 9 coal/10s mine, 25 W draw
+
+The mine_on_coal + coal_gen pair was unsalvageable at every ratio: one
+mine output 1 coal / 17 s = 0.0588 /s, gen burned 1 coal / 2 s = 0.5 /s,
+so coal-balance demanded &ge; 8.5 mines per gen but their combined draw
+swamped the 100 W gen output by 240 W. Rebalance mirrors commit 9cda2aa
+(Heavy Logger): mine_on_coal output 1→9 coal / 10 s (0.9 /s) and
+shared BUILDING_DEFS.mine.power.consumes 40 → 25 W. 1:1 pair now nets
++0.4 coal/s and +75 W &mdash; identical fuel shape to biomass and ahead on
+power because coal_gen produces 100 W vs biomass_plant's 80 W.
+
+The 25 W draw spillovers into mine_on_ore (shared def via resolveRecipe)
+&mdash; iron mining is now 37.5% cheaper to electrify everywhere. Five
+closed-form assertions in economy.test.ts and ~14 in routes.test.ts
+shifted onto the new constants; the cable-balance fixtures' surplus /
+deficit arithmetic is updated in lockstep.
+
+<span class="acc">Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</span></pre></div></div>
+            <p class="step-text">If a different subagent runs the task (e.g. a Claude Sonnet/Opus subagent via Task tool, or a direct Claude lead), swap the trailer accordingly: <code>Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</code> or whatever the implementing agent's identity is. <strong>The trailer is syntactic, not stylistic</strong> — scan the composed message for a <code>Co-Authored-By:</code> line before <code>git commit</code>.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Notes</h2></div>
+      <div class="notes">
+        <div class="note rust"><strong>Spillover risk — iron-mine power cost drops too.</strong> <code>BUILDING_DEFS.mine</code> backs both <code>mine_on_ore</code> and <code>mine_on_coal</code> via runtime <code>resolveRecipe</code>. Dropping <code>power.consumes</code> from 40 → 25 also drops the iron mine's draw, which the user pick (<code>mine_power_draw=25W</code>) implicitly accepts. Downstream effects: smelter / workshop / bolt chain become cheaper to electrify by 37.5% per mine; any balance assumption pinned on the 40 W iron-mine line now lives on 25 W. <strong>The routes.test.ts sweep in Task §02 step 4 is the visible surface of this spillover</strong> — every <code>computeCableNetworkBalance</code> fixture's <code>consumedTotal</code> and <code>requiredTransmission</code> rebases onto the new constant. If a future test or balance audit treats 40 W as the canonical iron-mine number, this is the entry point to chase.</div>
+        <div class="note"><strong>Skill-tree <code>mineYieldBonusMul</code> interaction.</strong> <code>src/skilltree.ts:521</code> defines a depth-2 mining node whose effect (<code>mineYieldBonusMul</code>) multiplies <em>every</em> mine recipe rate, not just <code>mine_on_ore</code> — the lookup path has no recipe-id discrimination. With the post-rebalance base of 0.9 coal/s and a maxed mining sub-path (~1.3× typical, or +33% for two stacked nodes per <code>SPEC.md</code>), the effective coal rate climbs to roughly <code>0.9 × 1.3 ≈ 1.17 coal/s</code> (net <code>+0.67 coal/s</code> after the 0.5 gen burn). The audit's headline +0.4 number is <strong>base, pre-skill-tree</strong> &mdash; expected and not a bug.</div>
+        <div class="note"><strong>Downstream coal consumers still in budget.</strong> Smelter burns coal at 1 / 27 s ≈ 0.037 /s; Workshop at 1 / 33 s ≈ 0.030 /s. The +0.4 coal/s base headroom (after the generator's 0.5 /s burn) supports up to ~10 smelters <em>or</em> ~13 workshops per coal pair before going coal-negative — comfortable margin. Coal is meant to be both fuel and process input (see audit §6); the rebalance was sized for that dual role.</div>
+        <div class="note"><strong>Tests that look like they should break but don't.</strong> <code>economy.test.ts</code> line 569's <code>mineHeavyCatalog()</code> spreads <code>BUILDING_DEFS.mine</code> then overrides <code>power: { consumes: 80 }</code>. The override fully replaces the base — the 25 W change doesn't leak through. Lines 694 (<code>power.consumed).toBe(140)</code>) and 695 (<code>factor === 100/140</code>) keep working unchanged. Similarly <code>economy.test.ts</code> tests in §5.1 that pin <code>workshop</code> draw (60 W) are unaffected because the workshop def is untouched.</div>
+        <div class="note warn"><strong>Comments mentioning 40 W are descriptive, not load-bearing.</strong> <code>economy.test.ts</code> has ~13 inline comments mentioning "40 W" (e.g. <code>"Mine 40 W consumer"</code>, <code>"40 W zeroed; workshop 60 W remains"</code>) — these don't drive test outcome but lying around stale will confuse future readers. Step 3 above flags the high-value ones to refresh; mass-replacing every comment is not required.</div>
+        <div class="note"><strong>Pure layer only — no PixiJS, no rendering touches.</strong> Changes confined to <code>recipes.ts</code>, <code>building-defs.ts</code>, and two test files. The HUD pulls power values dynamically from the def catalog and recipe table — no hard-coded 40 W or 17 s anywhere in the render layer to chase. Run <code>npm run build</code> as a strict-mode sanity pass; the live preview tab needs a manual reload to pick up the new bundle.</div>
+        <div class="note"><strong>Verification checklist (mirrors spec §07).</strong>
+          <ol style="margin-left:18px;line-height:1.55;">
+            <li><code>npx vitest run src/economy.test.ts src/routes.test.ts</code> — green after edits.</li>
+            <li><code>npm test</code> — full suite green.</li>
+            <li><code>npm run build</code> — clean tsc + vite build.</li>
+            <li>(Optional) Live: place 1 mine on coal + 1 coal_gen, observe coal inventory climbs and HUD shows stable +75 W. Daedalus screenshot for the record.</li>
+            <li>(Optional) Downstream sanity: 1 mine + 1 gen + 4 smelters &mdash; coal demand 4 × 0.037 + 0.5 = 0.648 vs 0.9 supply &mdash; still self-sustains.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands · implementation plan · 2026-05-23 · spec: docs/superpowers/specs/2026-05-23-coal-rebalance-design.html · audit: docs/superpowers/audits/2026-05-23-coal-loop-balance.html · reference commit: 9cda2aa
+    </footer>
+
+  </div>
+</body>
+</html>
