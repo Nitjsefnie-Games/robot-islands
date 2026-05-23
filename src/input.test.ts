@@ -114,8 +114,8 @@ describe('InputRegistry', () => {
     expect(reg.bindings.get('KeyK')).toBe('toggle-skill-tree');
     expect(reg.bindings.get('KeyB')).toBe('toggle-buildings');
     expect(reg.bindings.get('Escape')).toBe('dismiss-modal');
-    expect(reg.bindings.get('KeyJ')).toBe('toggle-skill-graph');
-    expect(reg.bindings.get('KeyN')).toBe('toggle-drones');
+    expect(reg.bindings.get('KeyJ')).toBe('toggle-drones');
+    expect(reg.bindings.get('KeyN')).toBe('toggle-skill-graph');
     expect(reg.bindings.get('KeyR')).toBe('toggle-routes');
     expect(reg.bindings.get('KeyC')).toBe('toggle-construction');
     expect(reg.bindings.get('KeyT')).toBe('rotate-placement');
