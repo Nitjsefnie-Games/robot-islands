@@ -1,8 +1,10 @@
-// Recipe-graph modal — render layer. Synchronous DOM table renderer;
-// no lazy imports, no async. Pattern mirrors `mountSkillTreeUi`.
+// Recipe-graph floating panel — render layer. Mounts via mountPanel into
+// Zone.R (order 3) alongside Drones / Routes / Settlement. Panel shell,
+// drag handle, resize grip, and localStorage persistence come from
+// ui-zones.ts + window-manager.ts; this module owns the body content.
 
 import { buildRecipeTableRows, type RecipeTableRow } from './recipe-graph.js';
-import { mountModal, type ModalHandle } from './ui-modal.js';
+import { mountPanel, Zone, type PanelHandle } from './ui-zones.js';
 
 export interface GraphUi {
   show(): void;
@@ -33,7 +35,6 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
   container.style.gap = '12px';
   container.style.width = '100%';
   container.style.minWidth = '720px';
-  container.style.maxHeight = '70vh';
   container.style.overflow = 'auto';
   container.style.padding = '4px';
 
@@ -160,37 +161,91 @@ export function mountGraphUi(parentEl: HTMLElement): GraphUi {
   }
   search.addEventListener('input', applyFilter);
 
-  const handle: ModalHandle = mountModal(parentEl, {
-    title: 'RECIPE GRAPH',
-    subtitle: '/ §6 + §7',
-    onClose: () => handle.hide(),
-    buildBody(body) {
-      body.style.display = 'flex';
-      body.style.flexDirection = 'column';
-      body.appendChild(container);
-    },
-  });
+// Panel root. ri-panel gives us the backdrop / border / blur; the inline
+// width/height seed the default footprint and are overridden by the
+// localStorage layout (ri-ui-layout-v1) once the user drags or resizes.
+const panel = document.createElement('div');
+panel.id = 'recipe-graph-panel';
+panel.classList.add('ri-panel');
+panel.style.width = '720px';
+panel.style.height = '520px';
+panel.style.minHeight = '320px';
+panel.style.display = 'flex';
+panel.style.flexDirection = 'column';
+panel.style.overflow = 'hidden';
+panel.style.pointerEvents = 'auto';
 
-  return {
-    show(): void {
-      handle.show();
-      // Refocus the search input each open so users can type immediately.
-      setTimeout(() => search.focus(), 0);
-    },
-    hide(): void {
-      handle.hide();
-    },
-    toggle(): boolean {
-      if (handle.isVisible()) {
-        handle.hide();
-        return false;
-      }
-      handle.show();
-      setTimeout(() => search.focus(), 0);
-      return true;
-    },
-    isVisible(): boolean {
-      return handle.isVisible();
-    },
-  };
+// Header — .ri-panel__head doubles as the drag handle (window-manager.ts
+// resolves the handle via that class).
+const head = document.createElement('div');
+head.classList.add('ri-panel__head');
+const headTitle = document.createElement('span');
+headTitle.classList.add('ri-panel__title');
+headTitle.textContent = 'RECIPE GRAPH';
+const headSub = document.createElement('span');
+headSub.classList.add('ri-panel__sub');
+headSub.textContent = '/ §6 + §7';
+const closeBtn = document.createElement('button');
+closeBtn.textContent = '×';
+closeBtn.classList.add('ri-modal__close');
+closeBtn.setAttribute('aria-label', 'Close recipe graph');
+closeBtn.style.cssText =
+  'background:transparent;border:0;color:var(--ri-fg-3);' +
+  'font-size:16px;line-height:1;cursor:pointer;padding:0 4px;';
+closeBtn.addEventListener('click', () => panelHandle.setVisible(false));
+head.appendChild(headTitle);
+head.appendChild(headSub);
+head.appendChild(closeBtn);
+
+// Body wraps the existing container (search + per-category sections).
+// flex: 1 1 auto so it fills the panel and scrolls the inner container.
+const body = document.createElement('div');
+body.classList.add('ri-panel__body');
+body.style.flex = '1 1 auto';
+body.style.display = 'flex';
+body.style.flexDirection = 'column';
+body.style.minHeight = '0';
+body.appendChild(container);
+
+panel.appendChild(head);
+panel.appendChild(body);
+parentEl.appendChild(panel);
+
+const panelHandle: PanelHandle = mountPanel(panel, {
+  id: 'recipe-graph-panel',
+  zone: Zone.R,
+  order: 3,
+  minWidth: 480,
+});
+// Same pattern as drones-ui:506 — hidden by default; toggle-graph reveals.
+panelHandle.setVisible(false);
+
+let visible = false;
+return {
+  show(): void {
+    if (visible) return;
+    visible = true;
+    panelHandle.setVisible(true);
+    setTimeout(() => search.focus(), 0);
+  },
+  hide(): void {
+    if (!visible) return;
+    visible = false;
+    panelHandle.setVisible(false);
+  },
+  toggle(): boolean {
+    if (visible) {
+      visible = false;
+      panelHandle.setVisible(false);
+      return false;
+    }
+    visible = true;
+    panelHandle.setVisible(true);
+    setTimeout(() => search.focus(), 0);
+    return true;
+  },
+  isVisible(): boolean {
+    return visible;
+  },
+};
 }
