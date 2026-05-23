@@ -844,9 +844,8 @@ export function computeRates(
       continue;
     }
     // Recipe-rate multipliers compose: skill-tree (per-category) × modifier
-    // (per-category) × modifier (global) × specialization (per-category) ×
-    // specialization (global) × NC global buff. Identity bundles in any of
-    // the new factors contribute 1× so existing callers see no change.
+    // (per-category) × modifier (global) × NC global buff. Identity bundles
+    // in any of the new factors contribute 1× so existing callers see no change.
     const rateMul =
       (skillMul.recipeRate[recipe.category] ?? 1) *
       (modifierMul.recipeRateByCategory[recipe.category] ?? 1) *

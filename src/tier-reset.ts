@@ -1,8 +1,8 @@
 // Per-island Tier Reset per SPEC §9.7. Pure logic — no PixiJS, no DOM.
 //
 // A player can pay a placeholder T2-T3 component cost to revert a Tier-3+
-// island to Tier 1, primarily to undo a §9.4 Specialization Passive
-// declaration or a poorly-chosen §9.3 sub-path commitment. Tier breakpoint
+// island to Tier 1, primarily to undo a poorly-chosen §9.3 skill-tree
+// commitment. Tier breakpoint
 // state reverts to T1; T2+ buildings remain placed but the runtime tier
 // gate in `computeRates` zeroes their effective rate until the island
 // re-climbs into the relevant tier band.

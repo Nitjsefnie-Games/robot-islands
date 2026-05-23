@@ -1,7 +1,7 @@
 // Skill-tree panel — DOM overlay rendering §9.3 as four branch columns.
 //
 // Phase 4b.2: migrated to the shared ri-modal shell (mountModal from
-// ui-modal.ts). Branch columns, specialization cards, and tier-reset row
+// ui-modal.ts). Branch columns and tier-reset row
 // are rendered inside the modal body; footer hints live in buildFooter.
 // Static inline styles are replaced with .ri-* classes where possible;
 // dynamic state-driven colours use CSS custom properties.
