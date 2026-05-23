@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   generateFillerNodes,
   MINING_FILLER_NODES,
+  ALL_FILLER_NODES,
   type FillerArchetype,
 } from './skilltree-archetypes.js';
 
@@ -99,8 +100,8 @@ describe('generateFillerNodes', () => {
 });
 
 describe('MINING_FILLER_NODES', () => {
-  it('produces ~22 nodes from 4 archetypes', () => {
-    expect(MINING_FILLER_NODES).toHaveLength(22);
+  it('produces ~24 nodes from 4 archetypes', () => {
+    expect(MINING_FILLER_NODES).toHaveLength(24);
   });
 
   it('all nodes have unique ids', () => {
@@ -115,21 +116,21 @@ describe('MINING_FILLER_NODES', () => {
     }
   });
 
-  it('recipeRate archetype contributes 7 extraction nodes', () => {
+  it('recipeRate archetype contributes 8 extraction nodes', () => {
     const rateNodes = MINING_FILLER_NODES.filter(
       (n) => n.effect.kind === 'recipeRateMul',
     );
-    expect(rateNodes).toHaveLength(7);
+    expect(rateNodes).toHaveLength(8);
     for (const n of rateNodes) {
       expect((n.effect as { category: string }).category).toBe('extraction');
     }
   });
 
-  it('storageCap archetype contributes 6 dry_goods cap nodes', () => {
+  it('storageCap archetype contributes 7 dry_goods cap nodes', () => {
     const capNodes = MINING_FILLER_NODES.filter(
       (n) => n.effect.kind === 'storageCategoryCapMul',
     );
-    expect(capNodes).toHaveLength(6);
+    expect(capNodes).toHaveLength(7);
     for (const n of capNodes) {
       expect((n.effect as { category: string }).category).toBe('dry_goods');
     }
@@ -147,5 +148,35 @@ describe('MINING_FILLER_NODES', () => {
       (n) => n.effect.kind === 'mineRareTrickleMul',
     );
     expect(trickleNodes).toHaveLength(4);
+  });
+});
+
+describe('ALL_FILLER_NODES sanity', () => {
+  it('has a node count in the expected range', () => {
+    expect(ALL_FILLER_NODES.length).toBeGreaterThanOrEqual(300);
+    expect(ALL_FILLER_NODES.length).toBeLessThanOrEqual(600);
+  });
+
+  it('all node ids are unique', () => {
+    const ids = ALL_FILLER_NODES.map((n) => n.id);
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+  });
+
+  it('covers all 20 sub-paths', () => {
+    const subPaths = new Set(ALL_FILLER_NODES.map((n) => n.subPath));
+    expect(subPaths.size).toBe(15); // 15 sub-paths with filler content
+  });
+
+  it('every node has a positive magnitude', () => {
+    for (const n of ALL_FILLER_NODES) {
+      expect(n.magnitude).toBeGreaterThan(0);
+    }
+  });
+
+  it('every node has a positive cost', () => {
+    for (const n of ALL_FILLER_NODES) {
+      expect(n.cost).toBeGreaterThan(0);
+    }
   });
 });
