@@ -42,7 +42,8 @@ import type { IslandState } from './economy.js';
 import { tileInscribedInEllipse } from './island.js';
 import { footprintMatches } from './ocean-cell.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers } from './skilltree.js';
+import { effectiveSkillMultipliers, hasBiomeBypass, effectiveTierShift, tierForLevel, DEFAULT_GRAPH } from './skilltree.js';
+import type { Graph } from './skilltree-graph.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { candidateAnchors } from './anchor-picker.js';
 import { isOceanTile, type IslandSpec, type WorldState } from './world.js';
@@ -161,6 +162,7 @@ export function validatePlacement(
   anchorX: number,
   anchorY: number,
   rotation: Rotation,
+  graph: Graph = DEFAULT_GRAPH,
 ): PlacementValidation {
   const def = BUILDING_DEFS[defId];
   // Defense-in-depth routing guard: an ocean def must NEVER be validated
@@ -173,18 +175,21 @@ export function validatePlacement(
     return { ok: false, reason: 'def-is-ocean' };
   }
   const hasSpaceport = hasOperationalBuilding(spec.buildings, 'spaceport');
-  if (
-    !buildingUnlocked(
-      state.level,
-      defId,
-      state.aiCoreCrafted,
-      state.ascendantCoreCrafted,
-      hasSpaceport,
-    )
-  ) {
+  const tierShift = effectiveTierShift(state, defId, graph);
+  let isUnlocked = buildingUnlocked(
+    state.level,
+    defId,
+    state.aiCoreCrafted,
+    state.ascendantCoreCrafted,
+    hasSpaceport,
+  );
+  if (!isUnlocked && tierShift > 0 && def.tier <= 4) {
+    isUnlocked = tierForLevel(state.level) >= def.tier - tierShift;
+  }
+  if (!isUnlocked) {
     return { ok: false, reason: 'def-not-unlocked' };
   }
-  if (!canPlaceOnIsland(def, spec)) {
+  if (!canPlaceOnIsland(def, spec) && !hasBiomeBypass(state, defId, graph)) {
     return { ok: false, reason: 'biome-locked' };
   }
   const tiles = footprintTiles(def.footprint, anchorX, anchorY, rotation);

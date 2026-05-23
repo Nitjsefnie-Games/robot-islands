@@ -24,7 +24,7 @@
 import type { BuildingDefId } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
-import type { RecipeCategory } from './recipes.js';
+import type { Recipe, RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
 import type { Biome } from './world.js';
@@ -75,9 +75,9 @@ export type SkillEffect =
   | { readonly kind: 'powerProductionMul' }
   | { readonly kind: 'powerConsumptionMul'; readonly reduce: true }
   | { readonly kind: 'placeholder' }
-  | { readonly kind: 'unlockRecipe'; readonly recipeDefId: BuildingDefId }
+  | { readonly kind: 'unlockRecipe'; readonly targetBuilding: BuildingDefId; readonly recipe: Recipe }
   | { readonly kind: 'exoticAdjacency'; readonly description: string }
-  | { readonly kind: 'biomeBypass'; readonly biomes: Biome[] }
+  | { readonly kind: 'biomeBypass'; readonly buildings: ReadonlyArray<BuildingDefId> }
   | { readonly kind: 'structural'; readonly description: string }
   | { readonly kind: 'launchSuccessAdditive' }
   // Wired in the skill-tree-finishing pass — replaces the placeholder /
@@ -1105,6 +1105,32 @@ export function launchSuccessBonus(
     bonus += node.magnitude;
   }
   return bonus;
+}
+
+export function hasBiomeBypass(
+  state: IslandState,
+  defId: BuildingDefId,
+  graph: Graph = DEFAULT_GRAPH,
+): boolean {
+  for (const nodeId of state.unlockedNodes) {
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    if (node?.effect.kind === 'biomeBypass' && node.effect.buildings.includes(defId)) return true;
+  }
+  return false;
+}
+
+export function effectiveTierShift(
+  state: IslandState,
+  defId: BuildingDefId,
+  graph: Graph = DEFAULT_GRAPH,
+): number {
+  for (const nodeId of state.unlockedNodes) {
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    if (node?.effect.kind === 'tierBypass' && node.effect.buildings.includes(defId)) {
+      return node.effect.tierShift;
+    }
+  }
+  return 0;
 }
 
 /** Look up a node by id from the default catalog. Returns undefined if unknown. */

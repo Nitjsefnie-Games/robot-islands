@@ -40,6 +40,8 @@ import type { BuildingDef, BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { TerrainKind } from './island.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
+import type { IslandState } from './economy.js';
+import type { Graph } from './skilltree-graph.js';
 
 export type ResourceId =
   // T0 raws
@@ -2631,6 +2633,40 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
  * The footprint enumeration uses `footprintTiles` from shape-mask.ts, which
  * is cycle-safe because shape-mask.ts has no imports back to recipes.ts.
  */
+
+const SPECIAL_RECIPE_IDS = new Set<RecipeId>([
+  'mine_on_ore',
+  'mine_on_coal',
+  'steel_mill_from_scrap',
+  'nodule_concentrator_re',
+  'nodule_concentrator_co',
+  'vent_mineral_refinery_exotic',
+  'vent_mineral_refinery_tritium',
+]);
+export const BASE_RECIPES: Partial<Record<BuildingDefId, Recipe[]>> = {};
+for (const [id, recipe] of Object.entries(RECIPES)) {
+  if (recipe && !SPECIAL_RECIPE_IDS.has(id as RecipeId)) {
+    BASE_RECIPES[id as BuildingDefId] = [recipe];
+  }
+}
+
+export function availableRecipes(
+  buildingDefId: BuildingDefId,
+  state: IslandState,
+  graph?: Graph,
+): Recipe[] {
+  const base = BASE_RECIPES[buildingDefId] ?? [];
+  const unlocked: Recipe[] = [];
+  const nodes = graph?.nodes ?? [];
+  for (const nodeId of state.unlockedNodes) {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (node?.effect.kind === 'unlockRecipe' && node.effect.targetBuilding === buildingDefId) {
+      unlocked.push(node.effect.recipe);
+    }
+  }
+  return [...base, ...unlocked];
+}
+
 export function resolveRecipe(
   def: BuildingDef,
   b: PlacedBuilding,

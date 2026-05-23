@@ -37,6 +37,7 @@ import { makeInitialIslandState, attachTerrainAt } from './world.js';
 import type { IslandSpec } from './world.js';
 import type { IslandState } from './economy.js';
 import type { TerrainKind } from './island.js';
+import type { Graph } from './skilltree-graph.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1259,5 +1260,168 @@ describe('placement — terrain_modifier brush', () => {
     // Adjust the assertion to whichever your test fixture produces; the
     // invariant is: this is NOT an 'overlap' failure.
     if (!v.ok) expect(v.reason).not.toBe('overlap');
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// biomeBypass + tierBypass (Task 11)
+// ---------------------------------------------------------------------------
+
+describe('biomeBypass in validatePlacement', () => {
+  it('rejects biome-locked building on wrong biome without bypass', () => {
+    const spec = makeSpec({ biome: 'plains' });
+    const state = makeState(spec, 30); // T4 level
+    const v = validatePlacement(spec, state, 'pyroforge', 0, 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('biome-locked');
+  });
+
+  it('allows biome-locked building on wrong biome with bypass', () => {
+    const spec = makeSpec({ biome: 'plains' });
+    const state = makeState(spec, 30);
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'bypass.1',
+          subPath: 'mining',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.05,
+          effect: { kind: 'biomeBypass', buildings: ['pyroforge'] },
+          description: 'bypass',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    state.unlockedNodes.add('bypass.1');
+    const v = validatePlacement(spec, state, 'pyroforge', 0, 0, 0, graph);
+    expect(v.ok).toBe(true);
+  });
+
+  it('allows biome-locked building on correct biome without bypass', () => {
+    const spec = makeSpec({ biome: 'volcanic' });
+    const state = makeState(spec, 30);
+    const v = validatePlacement(spec, state, 'pyroforge', 0, 0, 0);
+    expect(v.ok).toBe(true);
+  });
+});
+
+describe('tierBypass in validatePlacement', () => {
+  it('T3 building on level 4 island without bypass → def-not-unlocked', () => {
+    const spec = makeSpec();
+    const state = makeState(spec, 4); // tierForLevel(4) = 1
+    const v = validatePlacement(spec, state, 'electric_arc_furnace', 0, 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('def-not-unlocked');
+  });
+
+  it('T3 building on level 4 island WITH tierShift=1 → still def-not-unlocked', () => {
+    const spec = makeSpec();
+    const state = makeState(spec, 4);
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'tier.1',
+          subPath: 'mining',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.05,
+          effect: { kind: 'tierBypass', buildings: ['electric_arc_furnace'], tierShift: 1 },
+          description: 'tier bypass',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    state.unlockedNodes.add('tier.1');
+    const v = validatePlacement(spec, state, 'electric_arc_furnace', 0, 0, 0, graph);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('def-not-unlocked');
+  });
+
+  it('T3 building on level 5 island without bypass → def-not-unlocked', () => {
+    const spec = makeSpec();
+    const state = makeState(spec, 5); // tierForLevel(5) = 2
+    const v = validatePlacement(spec, state, 'electric_arc_furnace', 0, 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('def-not-unlocked');
+  });
+
+  it('T3 building on level 5 island WITH tierShift=1 → ok', () => {
+    const spec = makeSpec();
+    const state = makeState(spec, 5);
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'tier.1',
+          subPath: 'mining',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.05,
+          effect: { kind: 'tierBypass', buildings: ['electric_arc_furnace'], tierShift: 1 },
+          description: 'tier bypass',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    state.unlockedNodes.add('tier.1');
+    const v = validatePlacement(spec, state, 'electric_arc_furnace', 0, 0, 0, graph);
+    expect(v.ok).toBe(true);
+  });
+
+  it('T5 building is NOT bypassed by tierShift even with low level', () => {
+    const spec = makeSpec();
+    const state = makeState(spec, 5);
+    state.aiCoreCrafted = false;
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'tier.2',
+          subPath: 'mining',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.05,
+          effect: { kind: 'tierBypass', buildings: ['casimir_tap'], tierShift: 1 },
+          description: 'tier bypass t5',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    state.unlockedNodes.add('tier.2');
+    const v = validatePlacement(spec, state, 'casimir_tap', 0, 0, 0, graph);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('def-not-unlocked');
+  });
+
+  it('T4 building on level 15 island WITH tierShift=1 → ok (tierForLevel(15)=3 >= 4-1)', () => {
+    const spec = makeSpec();
+    const state = makeState(spec, 15);
+    const graph: Graph = {
+      nodes: [
+        {
+          id: 'tier.3',
+          subPath: 'mining',
+          depth: 1,
+          cost: 1,
+          magnitude: 0.05,
+          effect: { kind: 'tierBypass', buildings: ['fusion_core'], tierShift: 1 },
+          description: 'tier bypass t4',
+        },
+      ],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+    state.unlockedNodes.add('tier.3');
+    const v = validatePlacement(spec, state, 'fusion_core', 0, 0, 0, graph);
+    expect(v.ok).toBe(true);
   });
 });
