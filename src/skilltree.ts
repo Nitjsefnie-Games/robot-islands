@@ -30,7 +30,7 @@ import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categori
 import type { Biome } from './world.js';
 import type { Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
 
-export type BranchId = 'extraction' | 'refinement' | 'logistics' | 'orbital';
+export type BranchId = 'extraction' | 'refinement' | 'logistics' | 'orbital' | 'ocean';
 
 export type SubPathId =
   // Extraction branch
@@ -51,7 +51,13 @@ export type SubPathId =
   | 'launch'
   | 'communication'
   | 'discovery'
-  | 'resilience';
+  | 'resilience'
+  // Ocean branch
+  | 'patronage'
+  | 'aquaculture'
+  | 'hydroprocessing'
+  | 'submarine'
+  | 'oceanography';
 
 /** Node id is `<subPath>.<depth>`, e.g. `mining.1`. */
 export type NodeId = string;
@@ -209,14 +215,20 @@ export const SUBPATH_BRANCH: Readonly<Record<SubPathId, BranchId>> = {
   communication: 'orbital',
   discovery: 'orbital',
   resilience: 'orbital',
+  patronage: 'logistics',
+  aquaculture: 'ocean',
+  hydroprocessing: 'ocean',
+  submarine: 'ocean',
+  oceanography: 'ocean',
 };
 
 /** Sub-paths grouped by branch. Order is the order the UI displays them in. */
 export const BRANCH_SUBPATHS: Readonly<Record<BranchId, ReadonlyArray<SubPathId>>> = {
   extraction: ['mining', 'forestry', 'drilling', 'robotics'],
   refinement: ['smelting', 'chemistry', 'electronics', 'power_systems'],
-  logistics: ['storage', 'transport', 'network'],
+  logistics: ['storage', 'transport', 'network', 'patronage'],
   orbital: ['launch', 'communication', 'discovery', 'resilience'],
+  ocean: ['aquaculture', 'hydroprocessing', 'submarine', 'oceanography'],
 };
 
 /** Display labels for sub-paths. Pure data; UI imports these to render. */
@@ -236,6 +248,11 @@ export const SUBPATH_LABEL: Readonly<Record<SubPathId, string>> = {
   communication: 'Communication',
   discovery: 'Discovery',
   resilience: 'Resilience',
+  patronage: 'Patronage',
+  aquaculture: 'Aquaculture',
+  hydroprocessing: 'Hydroprocessing',
+  submarine: 'Submarine',
+  oceanography: 'Oceanography',
 };
 
 export const BRANCH_LABEL: Readonly<Record<BranchId, string>> = {
@@ -243,6 +260,7 @@ export const BRANCH_LABEL: Readonly<Record<BranchId, string>> = {
   refinement: 'Refinement',
   logistics: 'Logistics',
   orbital: 'Orbital',
+  ocean: 'Ocean',
 };
 
 /**
