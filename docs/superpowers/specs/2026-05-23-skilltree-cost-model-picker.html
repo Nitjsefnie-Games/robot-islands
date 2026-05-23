@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Skill graph edge-cost model — interpretation picker</title>
+<style>
+  :root {
+    --bg: #1B1A17;
+    --panel: #25231F;
+    --panel2: #2F2C27;
+    --line: #3A3833;
+    --ink: #E9E6DC;
+    --ink2: #CFCCC2;
+    --muted: #8A877E;
+    --green: #8FA56E;
+    --tan: #E0B47F;
+    --rust: #D97757;
+    --slate: #7DD3E8;
+    --pink: #D38FCC;
+    --red: #E08B7F;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Inter", sans-serif; }
+  body { padding: 32px 24px 80px; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 8px; font-weight: 700; }
+  .lede { color: var(--ink2); font-size: 14px; line-height: 1.55; margin: 0 0 28px; max-width: 740px; }
+  .lede code { color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
+  .ex { margin: 0 0 28px; padding: 14px 16px; background: var(--panel); border-left: 3px solid var(--slate); border-radius: 0 4px 4px 0; font-size: 13px; color: var(--ink2); line-height: 1.6; }
+  .ex b { color: var(--ink); }
+  .ex code { color: var(--tan); }
+
+  fieldset.picker { border: 1px solid var(--line); border-radius: 6px; padding: 18px 18px 14px; margin: 0 0 24px; background: var(--panel); }
+  fieldset.picker legend { color: var(--muted); font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; padding: 0 8px; }
+  .pq { font-size: 16px; font-weight: 700; margin: 4px 0 4px; color: var(--ink); }
+  .ps { font-size: 13px; color: var(--ink2); margin: 0 0 14px; line-height: 1.55; max-width: 800px; }
+
+  .opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 920px) { .opts { grid-template-columns: 1fr; } }
+
+  .opt { display: block; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 12px; cursor: pointer; transition: background 0.1s, border-color 0.1s; }
+  .opt:hover { border-color: var(--muted); }
+  .opt input { display: none; }
+  .opt:has(input:checked) { border-color: var(--rust); background: #322924; }
+
+  .ohead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .oname { font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 12.5px; color: var(--ink); font-weight: 600; }
+  .pill { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: var(--line); color: var(--ink2); letter-spacing: 0.6px; font-weight: 600; }
+  .pill.default { background: var(--rust); color: #1B1A17; }
+
+  svg.mock { display: block; width: 100%; height: 200px; background: var(--bg); border-radius: 3px; margin: 6px 0 8px; }
+  svg.mock text { font-family: ui-monospace, monospace; font-size: 9px; fill: var(--ink2); }
+  svg.mock text.cost { fill: var(--tan); font-weight: 700; font-size: 9.5px; }
+  svg.mock text.label { fill: var(--ink2); font-size: 9px; }
+  svg.mock text.title { fill: var(--slate); font-size: 10px; font-weight: 700; }
+  svg.mock circle.owned { fill: var(--green); stroke: var(--ink); stroke-width: 0.7; }
+  svg.mock circle.target { fill: var(--rust); stroke: var(--ink); stroke-width: 0.7; }
+  svg.mock circle.unowned { fill: var(--panel2); stroke: var(--muted); stroke-width: 0.7; }
+  svg.mock circle.acquired { fill: var(--tan); stroke: var(--ink); stroke-width: 0.7; }
+  svg.mock line.edge { stroke: var(--line); stroke-width: 1.2; }
+  svg.mock line.bridge { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 3 2; }
+  svg.mock line.paid { stroke: var(--rust); stroke-width: 2; }
+  svg.mock line.chosen { stroke: var(--rust); stroke-width: 2.4; }
+  svg.mock line.alt { stroke: var(--slate); stroke-width: 1.8; stroke-dasharray: 4 3; opacity: 0.7; }
+
+  .why { font-size: 12.5px; color: var(--ink2); line-height: 1.55; margin: 6px 0 0; }
+  .why b { color: var(--ink); }
+  .cost-readout { margin-top: 10px; padding: 6px 8px; background: var(--bg); border-radius: 3px; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--tan); }
+  .cost-readout b { color: var(--ink); font-weight: 600; }
+
+  .selections { margin-top: 36px; padding: 18px 18px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .selections h3 { margin: 0 0 4px; font-size: 14px; color: var(--ink); }
+  .selections .sub { color: var(--muted); font-size: 11.5px; margin-bottom: 12px; }
+  #selGrid { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--ink2); background: var(--bg); padding: 10px 12px; border-radius: 4px; white-space: pre; min-height: 36px; }
+  .actions { margin-top: 12px; display: flex; gap: 10px; align-items: center; }
+  .action { background: var(--rust); color: var(--bg); border: 0; padding: 8px 14px; font-size: 12.5px; font-weight: 600; border-radius: 4px; cursor: pointer; font-family: inherit; }
+  .action:hover { background: #c5654a; }
+  .toast { font-size: 11.5px; color: var(--green); opacity: 0; transition: opacity 0.2s; }
+  .toast.show { opacity: 1; }
+
+  .legend-key { display: flex; gap: 18px; margin: 4px 0 18px; flex-wrap: wrap; font-size: 11px; color: var(--ink2); }
+  .legend-key span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-key i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+  .legend-key i.owned { background: var(--green); }
+  .legend-key i.acquired { background: var(--tan); }
+  .legend-key i.unowned { background: var(--panel2); border: 1px solid var(--muted); }
+  .legend-key i.target { background: var(--rust); }
+</style>
+</head>
+<body>
+
+  <h1>Skill graph edge-cost model — interpretation picker</h1>
+  <p class="lede">
+    Locked so far: skeleton (4 branches × ~3 sub-paths), edges mixed (OR-bridges + standard + AND-synergies),
+    AND-nodes carry rare unlock-kind / new-modifier effects, only SP cost + edge prereqs gate progress,
+    cost-by-edge with "lowest current taken cost path." Three interpretations below — same example graph,
+    same player state, same target node. Pick the one that matches your intent.
+  </p>
+
+  <div class="ex">
+    <b>Shared example.</b> 6-node mini-graph. Player currently owns <b>R</b> (root) and <b>A</b> (in the
+    extraction sub-path). Edges show their SP cost. <code>A → Y</code> is a <b>bridge</b> (dashed; cross
+    to the refinement sub-path); <code>X</code> and <code>Z</code> are downstream of A;
+    <code>B</code> and <code>Y</code> are siblings in refinement.
+    <b>Target: <code>Y</code></b>. Each interpretation computes the cost differently.
+  </div>
+
+  <div class="legend-key">
+    <span><i class="owned"></i> currently owned</span>
+    <span><i class="target"></i> target (what player wants)</span>
+    <span><i class="acquired"></i> auto-owned by purchase</span>
+    <span><i class="unowned"></i> unowned</span>
+    <span><svg width="22" height="6" style="vertical-align:middle"><line x1="0" y1="3" x2="22" y2="3" stroke="#D97757" stroke-width="2"></line></svg> path paid for</span>
+    <span><svg width="22" height="6" style="vertical-align:middle"><line x1="0" y1="3" x2="22" y2="3" stroke="#7DD3E8" stroke-width="1.8" stroke-dasharray="4 3"></line></svg> alternative route shown</span>
+  </div>
+
+  <fieldset class="picker" data-picker="edge_cost_interp">
+    <legend>Interpretation</legend>
+    <div class="pq">How does "lowest current taken cost path" actually charge the player?</div>
+    <div class="ps">Each card shows the same state (own R, A) and target (Y). The differences are: what's
+      the unit of purchase, what nodes light up after the purchase, and how many decisions the player
+      makes per "expansion."</div>
+
+    <div class="opts">
+
+      <!-- ============ INTERPRETATION A — per-edge marginal ============ -->
+      <label class="opt">
+        <input type="radio" name="interp" value="per_edge">
+        <div class="ohead"><span class="oname">per_edge</span><span class="pill">A</span></div>
+
+        <svg class="mock" viewBox="0 0 220 200">
+          <text class="title" x="110" y="14" text-anchor="middle">After buying edge A→Y bridge (6 SP)</text>
+
+          <!-- edges (drawn first so they sit under circles) -->
+          <line class="edge" x1="40" y1="60" x2="100" y2="60"/>   <!-- R → A -->
+          <line class="edge" x1="100" y1="60" x2="170" y2="40"/>  <!-- A → X -->
+          <line class="edge" x1="170" y1="40" x2="200" y2="100"/> <!-- X → Z -->
+          <line class="edge" x1="40" y1="60" x2="100" y2="140"/>  <!-- R → B -->
+          <line class="edge" x1="100" y1="140" x2="170" y2="140"/><!-- B → Y -->
+          <line class="paid" x1="100" y1="60" x2="170" y2="140"/> <!-- A → Y bridge PAID -->
+          <line class="edge" x1="170" y1="140" x2="200" y2="100"/><!-- Y → Z -->
+
+          <!-- edge labels -->
+          <text class="cost" x="68" y="56" text-anchor="middle">2</text>
+          <text class="cost" x="138" y="44" text-anchor="middle">3</text>
+          <text class="cost" x="190" y="70" text-anchor="middle">5</text>
+          <text class="cost" x="64" y="104" text-anchor="middle">3</text>
+          <text class="cost" x="138" y="152" text-anchor="middle">2</text>
+          <text class="cost" x="142" y="105" text-anchor="middle" fill="#E0B47F">6</text>
+          <text class="cost" x="190" y="124" text-anchor="middle">5</text>
+
+          <!-- nodes -->
+          <circle class="owned" cx="40" cy="60" r="8"/>
+          <circle class="owned" cx="100" cy="60" r="8"/>
+          <circle class="unowned" cx="170" cy="40" r="8"/>
+          <circle class="unowned" cx="200" cy="100" r="8"/>
+          <circle class="unowned" cx="100" cy="140" r="8"/>
+          <circle class="target" cx="170" cy="140" r="8"/>
+
+          <!-- node labels -->
+          <text x="40" y="80" text-anchor="middle">R</text>
+          <text x="100" y="48" text-anchor="middle">A</text>
+          <text x="170" y="30" text-anchor="middle">X</text>
+          <text x="200" y="120" text-anchor="middle">Z</text>
+          <text x="100" y="158" text-anchor="middle">B</text>
+          <text x="170" y="158" text-anchor="middle">Y</text>
+        </svg>
+
+        <div class="cost-readout"><b>Spent:</b> 6 SP &nbsp;·&nbsp; <b>Acquired:</b> Y &nbsp;·&nbsp; <b>Decisions:</b> 1</div>
+
+        <div class="why">
+          Each <b>edge</b> is a purchase. To go from any owned node to an unowned neighbor, pay that
+          edge's cost. Player buys <code>A→Y</code> bridge (6 SP) directly — single transaction,
+          only Y becomes owned. <b>B not owned</b> (alternative route never traversed).
+          UI complexity: low — click an unowned-but-reachable node, get prompted to pay its
+          cheapest incoming-from-frontier edge.
+        </div>
+      </label>
+
+      <!-- ============ INTERPRETATION B — path auto-own ============ -->
+      <label class="opt">
+        <input type="radio" name="interp" value="path_auto_own" checked>
+        <div class="ohead"><span class="oname">path_auto_own</span><span class="pill default">DEFAULT</span></div>
+
+        <svg class="mock" viewBox="0 0 220 200">
+          <text class="title" x="110" y="14" text-anchor="middle">After buying node Y (5 SP via R→B→Y)</text>
+
+          <line class="edge" x1="40" y1="60" x2="100" y2="60"/>
+          <line class="edge" x1="100" y1="60" x2="170" y2="40"/>
+          <line class="edge" x1="170" y1="40" x2="200" y2="100"/>
+          <line class="paid" x1="40" y1="60" x2="100" y2="140"/>  <!-- R → B PAID -->
+          <line class="paid" x1="100" y1="140" x2="170" y2="140"/><!-- B → Y PAID -->
+          <line class="bridge" x1="100" y1="60" x2="170" y2="140"/> <!-- A → Y bridge unused -->
+          <line class="edge" x1="170" y1="140" x2="200" y2="100"/>
+
+          <text class="cost" x="68" y="56" text-anchor="middle">2</text>
+          <text class="cost" x="138" y="44" text-anchor="middle">3</text>
+          <text class="cost" x="190" y="70" text-anchor="middle">5</text>
+          <text class="cost" x="64" y="104" text-anchor="middle" fill="#E0B47F">3</text>
+          <text class="cost" x="138" y="152" text-anchor="middle" fill="#E0B47F">2</text>
+          <text class="cost" x="142" y="105" text-anchor="middle">6</text>
+          <text class="cost" x="190" y="124" text-anchor="middle">5</text>
+
+          <circle class="owned" cx="40" cy="60" r="8"/>
+          <circle class="owned" cx="100" cy="60" r="8"/>
+          <circle class="unowned" cx="170" cy="40" r="8"/>
+          <circle class="unowned" cx="200" cy="100" r="8"/>
+          <circle class="acquired" cx="100" cy="140" r="8"/>
+          <circle class="target" cx="170" cy="140" r="8"/>
+
+          <text x="40" y="80" text-anchor="middle">R</text>
+          <text x="100" y="48" text-anchor="middle">A</text>
+          <text x="170" y="30" text-anchor="middle">X</text>
+          <text x="200" y="120" text-anchor="middle">Z</text>
+          <text x="100" y="158" text-anchor="middle">B</text>
+          <text x="170" y="158" text-anchor="middle">Y</text>
+        </svg>
+
+        <div class="cost-readout"><b>Spent:</b> 5 SP &nbsp;·&nbsp; <b>Acquired:</b> B, Y &nbsp;·&nbsp; <b>Decisions:</b> 1</div>
+
+        <div class="why">
+          Each <b>node</b> is a purchase. Player picks target Y; system finds the cheapest unowned-edge
+          path from the frontier {R, A} to Y. Options: R→B→Y (2+3=5) or A→Y bridge (6).
+          <b>Picks R→B→Y for 5 SP.</b> All intermediate edges paid; <b>B and Y both auto-owned</b>
+          (and their effects activate). The 5-cost path is cheaper than the bridge, so the bridge
+          stays unowned. UI: hover an unowned node, see the cost, click to commit.
+        </div>
+      </label>
+
+      <!-- ============ INTERPRETATION C — path choose route ============ -->
+      <label class="opt">
+        <input type="radio" name="interp" value="path_choose_route">
+        <div class="ohead"><span class="oname">path_choose_route</span><span class="pill">C</span></div>
+
+        <svg class="mock" viewBox="0 0 220 200">
+          <text class="title" x="110" y="14" text-anchor="middle">UI shows 2 routes; player picks before paying</text>
+
+          <line class="edge" x1="40" y1="60" x2="100" y2="60"/>
+          <line class="edge" x1="100" y1="60" x2="170" y2="40"/>
+          <line class="edge" x1="170" y1="40" x2="200" y2="100"/>
+          <line class="chosen" x1="40" y1="60" x2="100" y2="140"/>   <!-- R → B chosen -->
+          <line class="chosen" x1="100" y1="140" x2="170" y2="140"/> <!-- B → Y chosen -->
+          <line class="alt" x1="100" y1="60" x2="170" y2="140"/>     <!-- A → Y alternative -->
+          <line class="edge" x1="170" y1="140" x2="200" y2="100"/>
+
+          <text class="cost" x="68" y="56" text-anchor="middle">2</text>
+          <text class="cost" x="138" y="44" text-anchor="middle">3</text>
+          <text class="cost" x="190" y="70" text-anchor="middle">5</text>
+          <text class="cost" x="64" y="104" text-anchor="middle" fill="#E0B47F">3</text>
+          <text class="cost" x="138" y="152" text-anchor="middle" fill="#E0B47F">2</text>
+          <text class="cost" x="142" y="105" text-anchor="middle" fill="#7DD3E8">6</text>
+          <text class="cost" x="190" y="124" text-anchor="middle">5</text>
+
+          <circle class="owned" cx="40" cy="60" r="8"/>
+          <circle class="owned" cx="100" cy="60" r="8"/>
+          <circle class="unowned" cx="170" cy="40" r="8"/>
+          <circle class="unowned" cx="200" cy="100" r="8"/>
+          <circle class="acquired" cx="100" cy="140" r="8"/>
+          <circle class="target" cx="170" cy="140" r="8"/>
+
+          <text x="40" y="80" text-anchor="middle">R</text>
+          <text x="100" y="48" text-anchor="middle">A</text>
+          <text x="170" y="30" text-anchor="middle">X</text>
+          <text x="200" y="120" text-anchor="middle">Z</text>
+          <text x="100" y="158" text-anchor="middle">B</text>
+          <text x="170" y="158" text-anchor="middle">Y</text>
+        </svg>
+
+        <div class="cost-readout"><b>UI offers:</b> R→B→Y (5 SP, owns B+Y) <i>or</i> A→Y bridge (6 SP, owns Y only). <b>Player picks.</b></div>
+
+        <div class="why">
+          Same as <code>path_auto_own</code>, but instead of the system picking the cheapest route
+          silently, the UI <b>surfaces all reasonable routes</b> and the player chooses. This matters
+          when the intermediate nodes have <b>different effect kinds</b> — a player might pay the
+          extra 1 SP for the direct bridge if they don't want B's effect, or take the cheaper route
+          specifically TO own B. <b>Maximum tactical depth</b>, more clicks per purchase.
+        </div>
+      </label>
+
+    </div>
+  </fieldset>
+
+  <fieldset class="picker" data-picker="intermediate_unwanted_handling">
+    <legend>Sub-question (only if you pick B or C)</legend>
+    <div class="pq">If the cheapest path goes through a node whose effect the player doesn't want, what happens?</div>
+    <div class="ps">Path-auto-own and route-choice both grant intermediate-node effects "for free."
+      Sometimes a player wants Y but doesn't want B's effect active (e.g. B is a conditional bonus
+      that doesn't fit the current build). Two policies:</div>
+    <div class="opts">
+      <label class="opt">
+        <input type="radio" name="unwanted" value="forced_own" checked>
+        <div class="ohead"><span class="oname">forced_own</span><span class="pill default">DEFAULT</span></div>
+        <svg class="mock" viewBox="0 0 220 100">
+          <text class="title" x="110" y="14" text-anchor="middle">Effects always active when owned</text>
+          <circle class="acquired" cx="60" cy="56" r="10"/>
+          <text x="60" y="76" text-anchor="middle">B</text>
+          <text x="60" y="92" text-anchor="middle" class="cost">+15% smelt</text>
+          <circle class="target" cx="160" cy="56" r="10"/>
+          <text x="160" y="76" text-anchor="middle">Y</text>
+          <text x="160" y="92" text-anchor="middle" class="cost">unlock recipe</text>
+        </svg>
+        <div class="why">Intermediates fully own &amp; effects always apply. Simple. If the player
+          doesn't want B's effect, the consequence is that buying Y means accepting B's effect too —
+          factor it into the route choice (in interpretation C) or accept the system's pick (in B).</div>
+      </label>
+      <label class="opt">
+        <input type="radio" name="unwanted" value="dormant_toggle">
+        <div class="ohead"><span class="oname">dormant_toggle</span><span class="pill">B</span></div>
+        <svg class="mock" viewBox="0 0 220 100">
+          <text class="title" x="110" y="14" text-anchor="middle">Owned nodes can be toggled dormant</text>
+          <circle class="acquired" cx="60" cy="56" r="10" opacity="0.5"/>
+          <text x="60" y="76" text-anchor="middle">B</text>
+          <text x="60" y="92" text-anchor="middle" class="cost" fill="#8A877E">dormant</text>
+          <circle class="target" cx="160" cy="56" r="10"/>
+          <text x="160" y="76" text-anchor="middle">Y</text>
+          <text x="160" y="92" text-anchor="middle" class="cost">active</text>
+        </svg>
+        <div class="why">Owned nodes carry a player-toggleable <code>active/dormant</code> flag. Dormant
+          nodes don't contribute their effect but still count as owned for prereq purposes. Adds
+          one decision dimension per owned node; useful if conditional bonuses or biome-bypasses
+          would clash with current strategy.</div>
+      </label>
+      <label class="opt">
+        <input type="radio" name="unwanted" value="not_applicable">
+        <div class="ohead"><span class="oname">na</span><span class="pill">A</span></div>
+        <svg class="mock" viewBox="0 0 220 100">
+          <text class="title" x="110" y="14" text-anchor="middle">N/A — picked per_edge</text>
+          <text x="110" y="60" text-anchor="middle" fill="#8A877E">no intermediates in per_edge model</text>
+        </svg>
+        <div class="why">Pick this if you locked <code>per_edge</code> above — intermediates aren't a
+          concept since each edge is purchased explicitly.</div>
+      </label>
+    </div>
+  </fieldset>
+
+  <div class="selections">
+    <h3>Your selections</h3>
+    <div class="sub">// copy as JSON; paste back into chat</div>
+    <div id="selGrid"></div>
+    <div class="actions">
+      <button id="copyJson" class="action" type="button">Copy as JSON</button>
+      <button id="copyPrompt" class="action" type="button">Copy as prompt</button>
+      <span id="toast" class="toast"></span>
+    </div>
+  </div>
+
+<script>
+(function () {
+  const pickers = document.querySelectorAll('fieldset.picker');
+  const out = document.getElementById('selGrid');
+  function render() {
+    const sel = {};
+    pickers.forEach(p => {
+      const k = p.dataset.picker;
+      const v = p.querySelector('input:checked');
+      sel[k] = v ? v.value : null;
+    });
+    out.textContent = JSON.stringify(sel, null, 2);
+    return sel;
+  }
+  pickers.forEach(p => p.addEventListener('change', render));
+  render();
+
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1400);
+  }
+  document.getElementById('copyJson').addEventListener('click', () => {
+    navigator.clipboard.writeText(JSON.stringify(render(), null, 2));
+    toast('JSON copied');
+  });
+  document.getElementById('copyPrompt').addEventListener('click', () => {
+    const sel = render();
+    const text = `Edge-cost interpretation locked: ${sel.edge_cost_interp || '(none)'} ; intermediate handling: ${sel.intermediate_unwanted_handling || '(none)'}.`;
+    navigator.clipboard.writeText(text);
+    toast('Prompt copied');
+  });
+})();
+</script>
+
+</body>
+</html>
