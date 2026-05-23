@@ -17,7 +17,6 @@ import {
   effectiveSkillMultipliers,
   hasPickableSkill,
   launchSuccessBonus,
-  magnitudeForDepth,
   NODE_CATALOG,
   nodeRequiredTier,
   skillPointsForLevelUp,
@@ -25,10 +24,41 @@ import {
   t5Unlocked,
   t6Unlocked,
   tierForLevel,
-  tierRequiredForDepth,
   type SkillNode,
 } from './skilltree.js';
 import type { EdgeId, Graph, KeystonePrereq } from './skilltree-graph.js';
+
+/** Minimal legacy-style nodes so multiplier-folding tests don't depend on the
+ *  live catalog (which uses `.notable.` / `.keystone.` ids). */
+const LEGACY_TEST_NODES: ReadonlyArray<SkillNode> = [
+  { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
+  { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'mineYieldBonusMul' }, description: '' },
+  { id: 'mining.3', subPath: 'mining', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'mineRareTrickleMul' }, description: '' },
+  { id: 'mining.6', subPath: 'mining', depth: 6, cost: 32, magnitude: 0, effect: { kind: 'structural', description: 'mining unique unlock (depth 6)', data: { kind: 'sharedPowerGrid' } }, description: '' },
+  { id: 'forestry.2', subPath: 'forestry', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'loggerYieldBonusMul' }, description: '' },
+  { id: 'forestry.3', subPath: 'forestry', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'loggerExoticTrickleMul' }, description: '' },
+  { id: 'power_systems.1', subPath: 'power_systems', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'powerProductionMul' }, description: '' },
+  { id: 'power_systems.2', subPath: 'power_systems', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'powerConsumptionMul', reduce: true }, description: '' },
+  { id: 'storage.1', subPath: 'storage', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'storageCapMul' }, description: '' },
+  { id: 'storage.2', subPath: 'storage', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'storageCategoryCapMul', category: 'rare' }, description: '' },
+  { id: 'robotics.1', subPath: 'robotics', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'constructionTimeMul' }, description: '' },
+  { id: 'robotics.2', subPath: 'robotics', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'parallelBuildCapAdd' }, description: '' },
+  { id: 'transport.1', subPath: 'transport', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'routeCapacityMul' }, description: '' },
+  { id: 'transport.2', subPath: 'transport', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'droneFuelEfficiencyMul' }, description: '' },
+  { id: 'network.1', subPath: 'network', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'teleporterEfficiencyMul' }, description: '' },
+  { id: 'network.2', subPath: 'network', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'commRangeMul' }, description: '' },
+  { id: 'communication.1', subPath: 'communication', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'commRangeMul' }, description: '' },
+  { id: 'communication.2', subPath: 'communication', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'satBufferCapMul' }, description: '' },
+  { id: 'discovery.1', subPath: 'discovery', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'scannerCoverageMul' }, description: '' },
+  { id: 'discovery.2', subPath: 'discovery', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'scannerDwellRateMul' }, description: '' },
+  { id: 'resilience.1', subPath: 'resilience', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'debrisProtectionMul' }, description: '' },
+  { id: 'resilience.2', subPath: 'resilience', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'satFuelReserveMul' }, description: '' },
+  { id: 'resilience.3', subPath: 'resilience', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'repairDroneReliabilityMul' }, description: '' },
+  { id: 'launch.1', subPath: 'launch', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'launchSuccessAdditive' }, description: '' },
+  { id: 'launch.2', subPath: 'launch', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'padExplosionReduceMul' }, description: '' },
+];
+
+const LG = { nodes: LEGACY_TEST_NODES, edges: [], bridges: [], graftSockets: [] } as Graph;
 
 function blankInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -144,57 +174,23 @@ describe('t6Unlocked (§14.1 T6 access gate)', () => {
 });
 
 describe('nodeRequiredTier', () => {
-  function mockNode(depth: number): SkillNode {
-    return {
-      id: `mock.${depth}`,
-      subPath: 'mining',
-      depth,
-      cost: 1,
-      magnitude: 0,
-      effect: { kind: 'placeholder' },
-      description: 'mock',
-    };
-  }
-  it('maps depth 1-2 to T2', () => {
-    expect(nodeRequiredTier(mockNode(1))).toBe(2);
-    expect(nodeRequiredTier(mockNode(2))).toBe(2);
-  });
-  it('maps depth 3 to T3', () => {
-    expect(nodeRequiredTier(mockNode(3))).toBe(3);
-  });
-  it('maps depth 4 to T4', () => {
-    expect(nodeRequiredTier(mockNode(4))).toBe(4);
-  });
-  it('maps depth 5-7 to T5', () => {
-    expect(nodeRequiredTier(mockNode(5))).toBe(5);
-    expect(nodeRequiredTier(mockNode(6))).toBe(5);
-    expect(nodeRequiredTier(mockNode(7))).toBe(5);
-  });
-  it('maps depth 8+ to T6', () => {
-    expect(nodeRequiredTier(mockNode(8))).toBe(6);
-    expect(nodeRequiredTier(mockNode(20))).toBe(6);
+  it('returns T1 for all nodes (tier gating removed in graph redesign)', () => {
+    expect(nodeRequiredTier({ id: 'x.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(1);
+    expect(nodeRequiredTier({ id: 'x.8', subPath: 'mining', depth: 8, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(1);
   });
 });
 
 describe('canSpend', () => {
-  it('allows a T2 island with a point to buy mining.1', () => {
-    const s = makeState({ level: 5, unspentSkillPoints: 1 });
-    expect(canSpend(s, 'mining.1')).toEqual({ ok: true });
+  it('allows an island with enough points to buy a node', () => {
+    const s = makeState({ level: 5, unspentSkillPoints: 5 });
+    expect(canSpend(s, 'mining.notable.deepVein')).toEqual({ ok: true });
   });
 
   it('rejects when the player has no skill points', () => {
     const s = makeState({ level: 5, unspentSkillPoints: 0 });
-    expect(canSpend(s, 'mining.1')).toEqual({
+    expect(canSpend(s, 'mining.notable.deepVein')).toEqual({
       ok: false,
       reason: 'insufficient-points',
-    });
-  });
-
-  it('rejects depth-1 nodes at T1 (level 1)', () => {
-    const s = makeState({ level: 1, unspentSkillPoints: 1 });
-    expect(canSpend(s, 'mining.1')).toEqual({
-      ok: false,
-      reason: 'tier-locked',
     });
   });
 
@@ -202,49 +198,30 @@ describe('canSpend', () => {
     const s = makeState({
       level: 5,
       unspentSkillPoints: 5,
-      unlockedNodes: new Set(['mining.1']),
+      unlockedNodes: new Set(['mining.notable.deepVein']),
     });
-    expect(canSpend(s, 'mining.1')).toEqual({
+    expect(canSpend(s, 'mining.notable.deepVein')).toEqual({
       ok: false,
       reason: 'already-unlocked',
     });
   });
 
-  it('rejects depth-2 without depth-1 owned in the same sub-path', () => {
-    const s = makeState({ level: 5, unspentSkillPoints: 5 });
-    expect(canSpend(s, 'mining.2')).toEqual({
-      ok: false,
-      reason: 'depth-prereq',
-    });
-  });
-
-  it('allows depth-2 once depth-1 is owned', () => {
+  it('allows parallel work in different branches', () => {
     const s = makeState({
       level: 5,
       unspentSkillPoints: 5,
-      unlockedNodes: new Set(['mining.1']),
+      unlockedNodes: new Set(['mining.notable.deepVein']),
     });
-    expect(canSpend(s, 'mining.2')).toEqual({ ok: true });
-  });
-
-  it('allows parallel work in different branches (mining + smelting)', () => {
-    // Even with mining COMMITTED + INCOMPLETE in the extraction branch,
-    // smelting (refinement branch) is unaffected.
-    const s = makeState({
-      level: 5,
-      unspentSkillPoints: 5,
-      unlockedNodes: new Set(['mining.1']),
-    });
-    expect(canSpend(s, 'smelting.1')).toEqual({ ok: true });
+    expect(canSpend(s, 'smelting.notable.inductionArc')).toEqual({ ok: true });
   });
 });
 
 describe('spendPoint', () => {
   it('decrements points and adds to unlockedNodes', () => {
     const s = makeState({ level: 5, unspentSkillPoints: 3 });
-    spendPoint(s, 'mining.1');
-    expect(s.unspentSkillPoints).toBe(2);
-    expect(s.unlockedNodes.has('mining.1')).toBe(true);
+    spendPoint(s, 'mining.notable.deepVein');
+    expect(s.unspentSkillPoints).toBe(3 - NODE_CATALOG.find(n => n.id === 'mining.notable.deepVein')!.cost);
+    expect(s.unlockedNodes.has('mining.notable.deepVein')).toBe(true);
   });
 
   it('allows spending on all nodes in a small catalog', () => {
@@ -262,15 +239,6 @@ describe('spendPoint', () => {
 });
 
 describe('skill tree depth', () => {
-  it('tierRequiredForDepth / nodeRequiredTier for depths 3, 5, 8, 15', () => {
-    expect(tierRequiredForDepth(3)).toBe(3);
-    expect(tierRequiredForDepth(5)).toBe(5);
-    expect(tierRequiredForDepth(8)).toBe(6);
-    expect(tierRequiredForDepth(15)).toBe(6);
-    expect(nodeRequiredTier({ id: 'x.3', subPath: 'mining', depth: 3, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(3);
-    expect(nodeRequiredTier({ id: 'x.8', subPath: 'mining', depth: 8, cost: 1, magnitude: 0, effect: { kind: 'placeholder' }, description: '' })).toBe(6);
-  });
-
   it('costForDepth grows as 1.5^(depth-1) (rounded)', () => {
     expect(costForDepth(1)).toBe(1);
     expect(costForDepth(5)).toBe(5); // 1.5^4 = 5.0625 → 5
@@ -309,25 +277,6 @@ describe('skill tree depth', () => {
     expect(cumulativeSkillPointsForLevel(50)).toBeGreaterThan(totalCost);
   });
 
-  it('magnitudeForDepth: doubles through depth 5, slowed geometric continuation through depth 15', () => {
-    // Depth 1-5: doubling ramp 0.05 → 0.80.
-    expect(magnitudeForDepth(1)).toBe(0.05);
-    expect(magnitudeForDepth(2)).toBe(0.10);
-    expect(magnitudeForDepth(3)).toBe(0.20);
-    expect(magnitudeForDepth(4)).toBe(0.40);
-    expect(magnitudeForDepth(5)).toBe(0.80);
-    // Depth 6-10: +0.40 per step (slowed past doubling so depth 15 doesn't
-    // blow up to +819×).
-    expect(magnitudeForDepth(6)).toBeCloseTo(1.20, 9);
-    expect(magnitudeForDepth(7)).toBeCloseTo(1.60, 9);
-    expect(magnitudeForDepth(10)).toBeCloseTo(2.80, 9);
-    // Depth 11-15: +0.20 per step. Late-game investment plateau.
-    expect(magnitudeForDepth(11)).toBeCloseTo(3.00, 9);
-    expect(magnitudeForDepth(15)).toBeCloseTo(3.80, 9);
-    // Beyond the catalog: clamp to 0.
-    expect(magnitudeForDepth(16)).toBe(0);
-  });
-
   it('effectiveSkillMultipliers with deep catalog composes correctly and ignores structural placeholders', () => {
     const deepCatalog: ReadonlyArray<SkillNode> = [
       { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'recipeRateMul', category: 'extraction' }, description: '' },
@@ -347,12 +296,7 @@ describe('skill tree depth', () => {
     expect(m.powerProduction).toBe(1);
   });
 
-  it('canSpend rejects depth-3 node at T2 island', () => {
-    const s = makeState({ level: 5, unspentSkillPoints: 10 });
-    expect(canSpend(s, 'mining.3')).toEqual({ ok: false, reason: 'tier-locked' });
-  });
-
-  it('allows spending all nodes in a deep catalog', () => {
+  it('allows spending all nodes in a deep catalog (no tier/depth gates)', () => {
     const deepCatalog: ReadonlyArray<SkillNode> = [
       { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'placeholder' }, description: '' },
       { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'placeholder' }, description: '' },
@@ -369,18 +313,18 @@ describe('skill tree depth', () => {
 
   it('parallel work in different branches is allowed', () => {
     const s = makeState({ level: 50, unspentSkillPoints: 10 });
-    spendPoint(s, 'mining.1');
-    spendPoint(s, 'mining.2');
-    // With graph redesign, branch lock is removed.
-    expect(canSpend(s, 'forestry.1')).toEqual({ ok: true });
-    expect(canSpend(s, 'smelting.1')).toEqual({ ok: true });
+    spendPoint(s, 'mining.notable.efficientDrills'); // 3
+    spendPoint(s, 'mining.notable.deepVein');        // 4
+    // 10 - 7 = 3 left; cheapest notables in other branches cost 3.
+    expect(canSpend(s, 'forestry.notable.clearcutCoordination')).toEqual({ ok: true });
+    expect(canSpend(s, 'smelting.notable.refractoryLining')).toEqual({ ok: true });
   });
 });
 
 describe('effectiveSkillMultipliers', () => {
   it('returns all-1.0 multipliers for an empty unlock set', () => {
     const s = makeState();
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.recipeRate.extraction).toBe(1);
     expect(m.recipeRate.smelting).toBe(1);
     expect(m.recipeRate.power).toBe(1);
@@ -391,18 +335,15 @@ describe('effectiveSkillMultipliers', () => {
 
   it('applies a single mining.1 as extraction +5%', () => {
     const s = makeState({ unlockedNodes: new Set(['mining.1']) });
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.recipeRate.extraction).toBeCloseTo(1.05, 9);
     expect(m.recipeRate.smelting).toBe(1);
     expect(m.storageCap).toBe(1);
   });
 
   it('mining.1 + mining.2 split across recipeRate.extraction and mineYieldBonus', () => {
-    // Post-rewiring: mining.1 still feeds extraction rate (primary theme
-    // "ore output"); mining.2 now feeds the Mine-specific yield bonus
-    // ("vein depth" — secondary theme).
     const s = makeState({ unlockedNodes: new Set(['mining.1', 'mining.2']) });
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.recipeRate.extraction).toBeCloseTo(1.05, 9);
     expect(m.mineYieldBonus).toBeCloseTo(1.10, 9);
   });
@@ -411,7 +352,7 @@ describe('effectiveSkillMultipliers', () => {
     const s = makeState({
       unlockedNodes: new Set(['mining.1', 'power_systems.1']),
     });
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.recipeRate.extraction).toBeCloseTo(1.05, 9);
     expect(m.powerProduction).toBeCloseTo(1.05, 9);
     expect(m.storageCap).toBe(1);
@@ -419,19 +360,16 @@ describe('effectiveSkillMultipliers', () => {
 
   it('storage.1 applies a uniform 5% cap multiplier', () => {
     const s = makeState({ unlockedNodes: new Set(['storage.1']) });
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.storageCap).toBeCloseTo(1.05, 9);
     expect(m.recipeRate.extraction).toBe(1);
   });
 
   it('robotics.1 boosts constructionTime; robotics.2 adds a parallel build slot', () => {
     const s = makeState({ unlockedNodes: new Set(['robotics.1', 'robotics.2']) });
-    const m = effectiveSkillMultipliers(s);
-    // depth-1 = constructionTimeMul +5% (faster builds; dividend stays ≥ 1)
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.constructionTime).toBeCloseTo(1.05, 9);
-    // depth-2 = parallelBuildCapAdd grants +1 concurrent slot
     expect(m.parallelBuildBonus).toBe(1);
-    // No collateral on other axes.
     expect(m.maintenanceThreshold).toBe(1);
     expect(m.recipeRate.extraction).toBe(1);
     expect(m.storageCap).toBe(1);
@@ -440,21 +378,19 @@ describe('effectiveSkillMultipliers', () => {
 
   it('transport.1 wires routeCapacity; transport.2 wires droneFuelEfficiency (spec themes split)', () => {
     const s = makeState({ unlockedNodes: new Set(['transport.1', 'transport.2']) });
-    const m = effectiveSkillMultipliers(s);
-    // depth-1 = routeCapacityMul (+5%)
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.routeCapacity).toBeCloseTo(1.05, 9);
-    // depth-2 = droneFuelEfficiencyMul (+10%) — Transport's "drone fuel" spec theme
     expect(m.droneFuelEfficiency).toBeCloseTo(1.10, 9);
     expect(m.commRange).toBe(1);
   });
 
   it('network.1 wires teleporterEfficiency; network.2 wires commRange (spec themes split)', () => {
     const s1 = makeState({ unlockedNodes: new Set(['network.1']) });
-    const m1 = effectiveSkillMultipliers(s1);
+    const m1 = effectiveSkillMultipliers(s1, LG);
     expect(m1.teleporterEfficiency).toBeCloseTo(1.05, 9);
     expect(m1.commRange).toBe(1);
     const s2 = makeState({ unlockedNodes: new Set(['network.2']) });
-    const m2 = effectiveSkillMultipliers(s2);
+    const m2 = effectiveSkillMultipliers(s2, LG);
     expect(m2.teleporterEfficiency).toBe(1);
     expect(m2.commRange).toBeCloseTo(1.10, 9);
   });
@@ -467,7 +403,7 @@ describe('effectiveSkillMultipliers', () => {
         'resilience.1',
       ]),
     });
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.commRange).toBeCloseTo(1.05, 9);
     expect(m.scannerCoverage).toBeCloseTo(1.05, 9);
     expect(m.debrisProtection).toBeCloseTo(1.05, 9);
@@ -477,21 +413,20 @@ describe('effectiveSkillMultipliers', () => {
     const s = makeState({
       unlockedNodes: new Set(['network.2', 'communication.1']),
     });
-    const m = effectiveSkillMultipliers(s);
-    // network.2 (+10%) × communication.1 (+5%) = 1.10 × 1.05 = 1.155
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.commRange).toBeCloseTo(1.155, 9);
   });
 
   it('power_systems.1 boosts production and depth-2 boosts consumption-efficiency (spec themes split)', () => {
     const s = makeState({ unlockedNodes: new Set(['power_systems.1', 'power_systems.2']) });
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.powerProduction).toBeCloseTo(1.05, 9);
     expect(m.powerConsumption).toBeCloseTo(1.10, 9);
   });
 
   it('storage.2 boosts the rare-vault category cap specifically (not all categories)', () => {
     const s = makeState({ unlockedNodes: new Set(['storage.2']) });
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.storageCategoryCap.rare).toBeCloseTo(1.10, 9);
     expect(m.storageCategoryCap.dry_goods).toBe(1);
     expect(m.storageCap).toBe(1);
@@ -499,21 +434,20 @@ describe('effectiveSkillMultipliers', () => {
 
   it('mining.2 wires mineYieldBonus; mining.3 adds rare helium_3 trickle rate', () => {
     const s2 = makeState({ unlockedNodes: new Set(['mining.2']) });
-    const m2 = effectiveSkillMultipliers(s2);
+    const m2 = effectiveSkillMultipliers(s2, LG);
     expect(m2.mineYieldBonus).toBeCloseTo(1.10, 9);
     expect(m2.mineRareTrickleRate).toBe(0);
     const s3 = makeState({ unlockedNodes: new Set(['mining.3']) });
-    const m3 = effectiveSkillMultipliers(s3);
-    // depth-3 magnitude is 0.20; trickle base 0.001 → 0.001 × 1.20 = 0.0012/sec
+    const m3 = effectiveSkillMultipliers(s3, LG);
     expect(m3.mineRareTrickleRate).toBeCloseTo(0.0012, 9);
   });
 
   it('forestry.2 wires loggerYieldBonus; forestry.3 adds exotic lumber trickle rate', () => {
     const s2 = makeState({ unlockedNodes: new Set(['forestry.2']) });
-    const m2 = effectiveSkillMultipliers(s2);
+    const m2 = effectiveSkillMultipliers(s2, LG);
     expect(m2.loggerYieldBonus).toBeCloseTo(1.10, 9);
     const s3 = makeState({ unlockedNodes: new Set(['forestry.3']) });
-    const m3 = effectiveSkillMultipliers(s3);
+    const m3 = effectiveSkillMultipliers(s3, LG);
     expect(m3.loggerExoticTrickleRate).toBeCloseTo(0.0012, 9);
   });
 
@@ -527,7 +461,7 @@ describe('effectiveSkillMultipliers', () => {
         'resilience.3',
       ]),
     });
-    const m = effectiveSkillMultipliers(s);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.padExplosionReduce).toBeCloseTo(1.10, 9);
     expect(m.satBufferCap).toBeCloseTo(1.10, 9);
     expect(m.scannerDwellRate).toBeCloseTo(1.10, 9);
@@ -539,47 +473,41 @@ describe('effectiveSkillMultipliers', () => {
 describe('§14.7 launchSuccessBonus', () => {
   it('returns 0 for an island with no unlocked nodes', () => {
     const s = makeState();
-    expect(launchSuccessBonus(s)).toBe(0);
+    expect(launchSuccessBonus(s, LEGACY_TEST_NODES)).toBe(0);
   });
 
-  it('returns magnitudeForDepth(1) when only launch.1 is unlocked', () => {
+  it('returns 0.05 when only launch.1 is unlocked', () => {
     const s = makeState({ unlockedNodes: new Set(['launch.1']) });
-    expect(launchSuccessBonus(s)).toBe(magnitudeForDepth(1));
+    expect(launchSuccessBonus(s, LEGACY_TEST_NODES)).toBe(0.05);
   });
 
   it('launch.2 contributes pad-explosion mitigation, NOT launchSuccess (spec themes split)', () => {
-    // Post-catalog-refactor: launch depth-1+3+ stays additive launch-success;
-    // depth-2 is the pad-explosion mitigation slot (separate axis).
     const s = makeState({ unlockedNodes: new Set(['launch.1', 'launch.2']) });
-    expect(launchSuccessBonus(s)).toBe(magnitudeForDepth(1));
-    const m = effectiveSkillMultipliers(s);
+    expect(launchSuccessBonus(s, LEGACY_TEST_NODES)).toBe(0.05);
+    const m = effectiveSkillMultipliers(s, LG);
     expect(m.padExplosionReduce).toBeCloseTo(1.10, 9);
   });
 
   it('returns 0 when only non-launch nodes are unlocked', () => {
     const s = makeState({ unlockedNodes: new Set(['mining.1']) });
-    expect(launchSuccessBonus(s)).toBe(0);
+    expect(launchSuccessBonus(s, LEGACY_TEST_NODES)).toBe(0);
   });
 });
 
 describe('hasPickableSkill', () => {
-  it('returns false for a fresh level-1 island with zero points', () => {
-    // No spendable points = nothing buyable, regardless of NODE_CATALOG.
+  it('returns false for a fresh island with zero points', () => {
     const state = makeState({ level: 1, unspentSkillPoints: 0 });
     expect(hasPickableSkill(state)).toBe(false);
   });
 
-  it('returns true when the island has a spendable point and a ready depth-1 node', () => {
-    // Tier 2 is required for depth-1 nodes; level 5 reaches T2.
-    const state = makeState({ level: 5, unspentSkillPoints: 1 });
-    // Cross-check: at least one node in the catalog should be buyable.
+  it('returns true when the island has enough points for the cheapest node', () => {
+    // Cheapest nodes in the live catalog cost 3 SP (depth-3 notables).
+    const state = makeState({ level: 1, unspentSkillPoints: 5 });
     expect(NODE_CATALOG.some((n) => canSpend(state, n.id).ok)).toBe(true);
     expect(hasPickableSkill(state)).toBe(true);
   });
 
   it('declaration-pending alone does NOT flip the predicate true', () => {
-    // specializationRole / declaredAt are read-free by canSpend, so a state
-    // with declaration pending but zero spendable points must be false.
     const state = makeState({
       level: 15,
       unspentSkillPoints: 0,

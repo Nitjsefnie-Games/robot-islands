@@ -450,21 +450,6 @@ export function mountSkillTreeUi(
       ref.tierTag.style.borderColor = 'var(--ri-fg-4)';
       ref.tierTag.style.color = 'var(--ri-fg-3)';
       ref.row.style.opacity = '1';
-    } else if (r.reason === 'branch-locked') {
-      // Sibling sub-path is committed-but-incomplete → this whole sub-path
-      // is gated until that one finishes. Distinct danger-tinted readout
-      // (vs tier-locked / prereq-missing fade) so players can see the lock
-      // at a glance instead of discovering it via a rejected click.
-      ref.statusDot.textContent = '⊘';
-      ref.statusDot.style.color = 'var(--ri-danger)';
-      ref.titleEl.style.color = 'var(--ri-fg-4)';
-      ref.descEl.style.color = 'var(--ri-fg-4)';
-      ref.row.style.borderLeftColor = 'var(--ri-danger)';
-      ref.costTag.style.color = 'var(--ri-fg-4)';
-      ref.costTag.style.textDecoration = 'line-through';
-      ref.tierTag.style.borderColor = 'var(--ri-fg-4)';
-      ref.tierTag.style.color = 'var(--ri-fg-4)';
-      ref.row.style.opacity = '0.65';
     } else {
       ref.statusDot.textContent = '○';
       ref.statusDot.style.color = 'var(--ri-fg-4)';
@@ -475,7 +460,7 @@ export function mountSkillTreeUi(
       ref.costTag.style.textDecoration = 'none';
       ref.tierTag.style.borderColor = 'var(--ri-fg-4)';
       ref.tierTag.style.color = 'var(--ri-fg-4)';
-      ref.row.style.opacity = r.reason === 'tier-locked' ? '0.55' : '0.78';
+      ref.row.style.opacity = '0.78';
     }
   }
 

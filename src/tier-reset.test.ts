@@ -174,14 +174,10 @@ describe('executeTierReset — clears progression', () => {
       unspentSkillPoints: 13, // start with extras to cover purchases
     });
     fund(state);
-    // Spend 1 + 2 = 3 points on mining.1 + mining.2.
-    spendPoint(state, 'mining.1');
-    spendPoint(state, 'mining.2');
-    // Spend 1 + 2 = 3 points on smelting.1 + smelting.2.
-    spendPoint(state, 'smelting.1');
-    spendPoint(state, 'smelting.2');
-    // Spent total = 6; spec wants the brief's "10 unspent + 5 spent → 15" intent:
-    // we just verify the unspent+refund sums and post-reset slate are clear.
+    // Spend 3 + 3 = 6 points on two notables.
+    spendPoint(state, 'mining.notable.efficientDrills');
+    spendPoint(state, 'smelting.notable.refractoryLining');
+    // Spent total = 6; verify the unspent+refund sums and post-reset slate are clear.
     const unspentBeforeReset = state.unspentSkillPoints; // 13 - 6 = 7
     const refundExpected = 6;
     executeTierReset(state, 1_000);
@@ -199,11 +195,8 @@ describe('executeTierReset — clears progression', () => {
       unspentSkillPoints: 17, // need 5 for purchases + 12 leftover for symmetry
     });
     fund(state);
-    spendPoint(state, 'mining.1');     // 1
-    spendPoint(state, 'mining.2');     // 2
-    spendPoint(state, 'forestry.1');   // 1
-    // 1 + 2 + 1 = 4. Top up to 5 by spending another depth-1 node.
-    spendPoint(state, 'smelting.1');   // 1 → total spent = 5
+    // Use a cost-5 notable to match the brief's "5 spent" example.
+    spendPoint(state, 'mining.notable.heliumSeep'); // 5 → total spent = 5
     expect(state.unspentSkillPoints).toBe(12);
     executeTierReset(state, 1_000);
     expect(state.unspentSkillPoints).toBe(12 + 5);
