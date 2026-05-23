@@ -70,6 +70,7 @@ import { mountTerrainModifierTargetPicker } from './terrain-modifier-target-pick
 import { mountAnchorPicker } from './anchor-picker.js';
 import { mountSkillTreeUi } from './skilltree-ui.js';
 import { mountGraphUi } from './graph-ui.js';
+import { mountSkillGraphView } from './skilltree-graphview.js';
 import { mountUi } from './ui.js';
 import {
   findPopulatedIslandAt,
@@ -1007,6 +1008,11 @@ async function main(): Promise<void> {
     graphUi.toggle();
   });
 
+  const skillGraph = mountSkillGraphView(document.body, { getState: activeState });
+  defineAction(reg, 'toggle-skill-graph', () => {
+    skillGraph.toggle();
+  });
+
   // Buildings catalog — sister modal panel to the skill tree. KeyB toggles;
   // Escape routes to whichever modal is visible (`dismiss-modal` below).
   // §9.5: reads the active spec through the getter so biome-locked uniques
@@ -1414,6 +1420,7 @@ async function main(): Promise<void> {
   // idempotent too.
   defineAction(reg, 'dismiss-modal', () => {
     skillTree.hide();
+    skillGraph.hide();
     buildingsUi.hide();
     constructionUi.hide();
     inventoryUi.hide();

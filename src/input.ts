@@ -124,6 +124,8 @@ export function installDefaultBindings(reg: InputRegistry): void {
   bind(reg, 'KeyS', 'toggle-settings');
   // O = orbital — T6 satellite launch modal (§14.2-14.7).
   bind(reg, 'KeyO', 'toggle-orbital');
+  // N = network/nodes — toggles the full-page skill-graph overlay (Tasks 3-9).
+  bind(reg, 'KeyN', 'toggle-skill-graph');
   bind(reg, 'Equal', 'zoom-in'); // '=' / '+' on US layouts
   bind(reg, 'NumpadAdd', 'zoom-in');
   bind(reg, 'Minus', 'zoom-out');
