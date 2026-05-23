@@ -52,7 +52,7 @@ import {
   makeRegistry,
 } from './input.js';
 import { resetUiLayout } from './window-manager.js';
-import { TILE_PX } from './island.js';
+import { islandInscribedAny, TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
 import { mountFeatureGlyphs, renderOcean, renderOceanFogOverlay } from './ocean.js';
 import { loadPrefs, loadWorld, savePrefs, saveWorld } from './persistence.js';
@@ -66,6 +66,7 @@ import { expandIsland, type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
 import { buildingAtTile, demolishBuilding, findOceanBuildingAt } from './placement.js';
 import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
+import { resolveShot } from './terrain-modifier.js';
 import { mountPlacementUi } from './placement-ui.js';
 import { mountCargoLabelPicker } from './cargo-label-picker.js';
 import { mountAnchorPicker } from './anchor-picker.js';
@@ -1731,6 +1732,7 @@ async function main(): Promise<void> {
 
     const islandPower = new Map<string, PowerBalance>();
     const islandNets = new Map<string, Record<ResourceId, number>>();
+    let needRebuild = false;
     for (const s of islandStates.values()) {
       // Thread the spec's `terrainAt` closure so `resolveRecipe` (recipes.ts)
       // can branch Mine output on the tile under each footprint (§8.1).
@@ -1741,6 +1743,9 @@ async function main(): Promise<void> {
       const crossIsland = crossIslandById.get(s.id);
       const cableComponent = cableBalances.get(s.id);
       const geothermalActive = spec?.modifiers.includes('geothermal_active') === true;
+      const inscribedFor = spec
+        ? (lx: number, ly: number) => islandInscribedAny(spec, spec.cx + lx, spec.cy + ly)
+        : () => false;
       advanceIsland(s, now, {
         modifierMul: modifierMulFor(s.id),
         specMul: specMulFor(s),
@@ -1754,6 +1759,12 @@ async function main(): Promise<void> {
         geothermalActive,
         solarBoost: solarBoostByIsland.get(s.id),
         world: worldState,
+        onTerrainShotFire: (buildingId) => {
+          const modifier = s.buildings.find((b) => b.id === buildingId);
+          if (!modifier) return;
+          if (spec) resolveShot(spec, s, modifier, inscribedFor);
+          needRebuild = true;
+        },
       }, nowWall);
       const { net, power } = computeRates(s, {
         modifierMul: modifierMulFor(s.id),
@@ -1771,6 +1782,7 @@ async function main(): Promise<void> {
       islandNets.set(s.id, net);
       islandPower.set(s.id, power);
     }
+    if (needRebuild) rebuildWorldLayers();
     // Task 3: tutorial objective banner — check completion after every
     // economy advance so placement / level-up events are reflected immediately.
     if (worldState.tutorialState) {

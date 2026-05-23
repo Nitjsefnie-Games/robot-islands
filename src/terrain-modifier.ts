@@ -211,3 +211,65 @@ export function applyTileOverride(
   }
   spec.tileOverrides[`${x},${y}`] = kind;
 }
+
+// ---------------------------------------------------------------------------
+// Shot resolution — Task 4's pure mutation primitive
+// ---------------------------------------------------------------------------
+
+import type { IslandState } from './economy.js';
+import { BUILDING_DEFS } from './building-defs.js';
+import { footprintTiles, type Rotation } from './shape-mask.js';
+import type { PlacedBuilding } from './buildings.js';
+
+/** Resolve a terrain_modifier shot: write tile overrides for every brush
+ *  tile inside the ellipse, remove the modifier from state.buildings, and
+ *  re-run the requiredTile invalidation pass against every other building
+ *  on the island.
+ *
+ *  `inscribed` is the island-local "is tile inside the union ellipse?"
+ *  predicate (typically `(x,y) => islandInscribedAny(spec, x+spec.cx, y+spec.cy)`).
+ *  Tiles outside the predicate are SKIPPED, not refunded — spec
+ *  p3_ellipse_boundary = skip_outside_full_charge.
+ *
+ *  Returns the count of (a) tiles actually written and (b) buildings newly
+ *  marked invalid, mostly for testing and for the main.ts callback to log. */
+export function resolveShot(
+  spec: IslandSpec,
+  state: IslandState,
+  modifier: PlacedBuilding,
+  inscribed: (localX: number, localY: number) => boolean,
+): { tilesWritten: number; buildingsInvalidated: number } {
+  let tilesWritten = 0;
+  if (modifier.terrainTarget !== undefined) {
+    const brush = brushTilesAt(modifier.x, modifier.y);
+    for (const t of brush) {
+      if (!inscribed(t.x, t.y)) continue;
+      applyTileOverride(spec, t.x, t.y, modifier.terrainTarget);
+      tilesWritten += 1;
+    }
+  }
+  // Remove the modifier from state.buildings. The same array is shared by
+  // reference with spec.buildings (see makeInitialIslandState); splicing on
+  // either reflects on both.
+  const idx = state.buildings.findIndex((b) => b.id === modifier.id);
+  if (idx !== -1) state.buildings.splice(idx, 1);
+  // Invalidation pass — mirror universe-editor.ts:91-110.
+  let buildingsInvalidated = 0;
+  const terrainAt = spec.terrainAt;
+  if (terrainAt !== undefined) {
+    for (const b of state.buildings) {
+      const def = BUILDING_DEFS[b.defId];
+      if (!def.requiredTile || def.requiredTile.length === 0) continue;
+      const rotation = (b.rotation ?? 0) as Rotation;
+      const ftiles = footprintTiles(def.footprint, b.x, b.y, rotation);
+      let allMatch = true;
+      for (const ft of ftiles) {
+        if (!def.requiredTile.includes(terrainAt(ft.x, ft.y))) { allMatch = false; break; }
+      }
+      const wasInvalid = b.invalid === true;
+      (b as { invalid?: boolean }).invalid = !allMatch;
+      if (!allMatch && !wasInvalid) buildingsInvalidated += 1;
+    }
+  }
+  return { tilesWritten, buildingsInvalidated };
+}
