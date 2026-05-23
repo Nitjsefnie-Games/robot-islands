@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planCargo, migrateLegacyCargo } from './route-cargo.js';
+import { planCargo } from './route-cargo.js';
 import type { ViableEntry } from './route-cargo.js';
 
 // helper: a viable entry with sensible defaults
@@ -85,17 +85,3 @@ describe('planCargo — balanced', () => {
   });
 });
 
-describe('migrateLegacyCargo', () => {
-  it('a filtered route becomes priority mode with a one-entry list', () => {
-    expect(migrateLegacyCargo({ filter: 'iron_ore', priorityList: [] }))
-      .toEqual({ mode: 'priority', cargo: [{ resourceId: 'iron_ore' }] });
-  });
-  it('an any route keeps its list, in priority mode', () => {
-    expect(migrateLegacyCargo({ filter: null, priorityList: ['wood', 'coal'] }))
-      .toEqual({ mode: 'priority', cargo: [{ resourceId: 'wood' }, { resourceId: 'coal' }] });
-  });
-  it('an already-migrated route (has mode/cargo) is returned unchanged', () => {
-    const r = { mode: 'split' as const, cargo: [{ resourceId: 'wood' as const, weight: 2 }] };
-    expect(migrateLegacyCargo(r)).toEqual(r);
-  });
-});

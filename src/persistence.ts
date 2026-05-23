@@ -42,7 +42,7 @@
 
 import { del, get, set } from 'idb-keyval';
 
-import { BASELINE_STORAGE_CAP } from './constants.js';
+
 import { islandCells, tileToCell } from './discovery.js';
 import type { IslandState } from './economy.js';
 import type { Drone } from './drones.js';
@@ -50,107 +50,36 @@ import { _seedConstructionCounter } from './construction-ui.js';
 import { _seedDroneIdCounter } from './drones.js';
 import type { Route } from './routes.js';
 import { _seedRouteIdCounter } from './routes.js';
-import { migrateLegacyCargo } from './route-cargo.js';
+
 import type { SettlementVehicle } from './settlement.js';
 import { SAT_BUFFER_CAP, type Satellite } from './orbital.js';
 import type { ObjectiveId } from './tutorial.js';
-import { _seedVehicleIdCounter, tuningFor } from './settlement.js';
-import type { PlacedBuilding } from './buildings.js';
-import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import { _seedVehicleIdCounter } from './settlement.js';
+
+
 import type { VictoryCondition } from './endgame.js';
-import { cumulativeSkillPointsForLevel, type NodeId, type SubPathId } from './skilltree.js';
+import type { NodeId, SubPathId } from './skilltree.js';
 import type { OceanCellSpec } from './ocean-cell.js';
-import { generateOceanTerrain } from './ocean-gen.js';
+
 import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
- *  intended migration entry point — `loadWorld` keys on this string, so a
- *  new key returns "no save" without colliding with the v1 store.
- *
- *  Step-12 bumped this from v1 → v2: the world snapshot grew a `vehicles`
- *  field and the home spec grew a Shipyard + Kit Assembler placement.
- *  Bumping the key (rather than defaulting `vehicles ?? []`) means a stale
- *  v1 save is cleanly ignored, so a returning player gets a fresh demo
- *  seed that includes the new buildings + Foundation Kit starter inventory.
- *
- *  Step-§4.7: bumped v2 → v3 because PlacedBuilding gained `placedAt`,
- *  `operatingMs`, `maintainedAt`. The optional-field shape would let v2
- *  saves load (the maintenance code defensively treats missing fields as
- *  "not yet stamped"), but bumping invalidates them anyway to surface the
- *  schema change cleanly — saved v2 buildings have no `placedAt`, so a
- *  reload would have all buildings looking 0-second-old on the new tab,
- *  even after a 30-hour offline gap. A clean reseed is simpler than a
- *  half-correct migration.
- *
- *  §2.1 infinite map: bumped v3 → v4 because the lazy per-cell generator
- *  is keyed to `WorldState.generatedCells`. A v3 save predates the field
- *  and predates the density / overlap retune (now density 0.08, overlap
- *  16). Loading it under v4 would re-roll every visited cell against the
- *  new generator and produce a different island layout in any unrevealed
- *  area while carrying forward the player's stale, denser saved specs —
- *  visually jarring and impossible to migrate cleanly. Rejecting v3
- *  outright (the caller falls back to a fresh world) avoids the half-state.
- *
- *  Ocean-layer §2 (v4 → v5): SCHEMA_VERSION was bumped 4 → 5 to add the
- *  `oceanCells` + `depthRevealedCells` fields, but the STORAGE_KEY stays
- *  at `:v4` because v4 saves are MIGRATED in-place (re-derive ocean
- *  terrain from the world seed via `generateOceanTerrain`, default depth
- *  reveals to empty). Bumping the key would silently orphan every v4 save
- *  in the wild instead of migrating it. The "v4" in the key name is now
- *  a misnomer — it persists for back-compat read access. Future bumps
- *  that ARE breaking (no clean migration path) should reintroduce a key
- *  suffix change so the loader doesn't even see the stale blob.
- *
- *  See the comment on `SCHEMA_VERSION` for the reasoning. */
-export const STORAGE_KEY = 'robot-islands:save:v4';
+ *  intended break-from-stale-saves entry point — `loadWorld` keys on this
+ *  string, so a new key returns "no save" without colliding with older
+ *  stores. */
+export const STORAGE_KEY = 'robot-islands:save:v6';
 
-/** User-visible storage-key label, decoupled from the IDB key that
- *  stays at `:v4` for backwards-compat (see STORAGE_KEY comment). The
- *  Settings panel renders THIS string so v5+ users don't see "v4" in
- *  the storage-key footer line. */
+/** User-visible storage-key label. The Settings panel renders this
+ *  string in the storage-key footer line. */
 export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
- *  snapshot whose `v` is not strictly equal to this.
- *
- *  Step-12: bumped 1 → 2 to silently invalidate stale v1 saves that lack
- *  `world.vehicles` and the Step-12 home-island Shipyard/Kit Assembler
- *  placements. See `STORAGE_KEY` for the matching key change.
- *
- *  Step-§4.7: bumped 2 → 3 alongside the PlacedBuilding maintenance fields
- *  to discard saves that pre-date the maintenance timer.
- *
- *  Step-20 (T6 Orbital) intentionally does NOT bump 3 → 4. The new
- *  `IslandState.ascendantCoreCrafted` field is backfilled in
- *  `deserializeWorld` (defaults to false), and the new T6 ResourceIds /
- *  BuildingDefIds are additive (`ALL_RESOURCES` backfill in
- *  `deserializeWorld` zeroes new inventory keys; placed buildings list is
- *  preserved as-is). A v3 save loads cleanly without losing pre-T6
- *  progress.
- *
- *  §2.1 infinite map: bumped 3 → 4. The new generator (density 0.08,
- *  overlap 16 tiles, lazy per-cell via `ensureCellGenerated`) cannot be
- *  back-compatibly applied to v3 saves whose discovered-but-unpopulated
- *  specs were rolled by the old denser placeholder. See STORAGE_KEY for
- *  the full reasoning.
- *
- *  Ocean-layer §2 (v4 → v5): bumped 4 → 5 to add the `oceanCells` and
- *  `depthRevealedCells` fields. Unlike the v3 → v4 jump, this IS
- *  cleanly migratable: `generateOceanTerrain(seed, islands)` is
- *  deterministic, so a v4 save's ocean terrain is re-derived from its
- *  stored `seed` + `islands` on load and `depthRevealedCells` defaults
- *  to empty (legacy saves have surface visibility but no depth
- *  knowledge yet). The migration lives in `migrateV4ToV5` and runs
- *  unconditionally inside `deserializeWorld` before the version check. */
-export const SCHEMA_VERSION = 5 as const;
+ *  snapshot whose `v` is not strictly equal to this. */
+export const SCHEMA_VERSION = 6 as const;
 
-/** Versions that load paths accept. Includes the current SCHEMA_VERSION
- *  AND any prior version a live migration handles (currently v4 via
- *  `migrateV4ToV5`). Update this set when bumping SCHEMA_VERSION and
- *  adding a new migrateVNtoVM function — collapses what used to be
- *  three independent `=== 4 && === SCHEMA_VERSION` literals into one
- *  source-of-truth so the next bump can't accidentally skip a gate. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([4, SCHEMA_VERSION]);
+/** Versions that load paths accept. Only the current SCHEMA_VERSION
+ *  — all migration paths were removed pre-release. */
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([SCHEMA_VERSION]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -188,8 +117,7 @@ export interface SerializedIslandStateEntry {
  *  §11 telemetry: `revealedCells` is serialized as a sorted array of cell
  *  keys (Sets don't survive JSON.stringify). Sorted for deterministic save
  *  blob ordering — diff-friendly + smaller-on-disk than the unsorted iteration
- *  order. Legacy saves (pre-§11) lack this field; the deserializer backfills
- *  with cells under each populated island's footprint. */
+ *  order. */
 export interface SerializedWorld {
   readonly islands: ReadonlyArray<SerializedIslandSpec>;
   readonly seed?: string;
@@ -197,39 +125,35 @@ export interface SerializedWorld {
   readonly routes: ReadonlyArray<Route>;
   readonly vehicles: ReadonlyArray<SettlementVehicle>;
   readonly revealedCells?: ReadonlyArray<string>;
-  /** §14.2 satellite fleet. Backfilled to `[]` on legacy saves. */
-  readonly satellites?: ReadonlyArray<import('./orbital.js').Satellite>;
-  /** §14.12 T6 Repair Drone fleet. Backfilled to `[]` on legacy saves. */
-  readonly repairDrones?: ReadonlyArray<import('./orbital.js').RepairDrone>;
-  /** §14.8 orbital debris fields. Backfilled to `[]` on legacy saves. */
-  readonly debrisFields?: ReadonlyArray<import('./orbital.js').DebrisField>;
-  /** Tutorial onboarding state. Backfilled on legacy saves. */
+  /** §14.2 satellite fleet. */
+  readonly satellites: ReadonlyArray<import('./orbital.js').Satellite>;
+  /** §14.12 T6 Repair Drone fleet. */
+  readonly repairDrones: ReadonlyArray<import('./orbital.js').RepairDrone>;
+  /** §14.8 orbital debris fields. */
+  readonly debrisFields: ReadonlyArray<import('./orbital.js').DebrisField>;
+  /** Tutorial onboarding state. */
   readonly tutorialState?: { completed: ObjectiveId[]; current: ObjectiveId | null };
-  /** §13.4 endgame progress. Backfilled on legacy saves. */
+  /** §13.4 endgame progress. */
   readonly endgameState?: {
     readonly achieved: ReadonlyArray<VictoryCondition>;
     readonly firstAchievedMs: number | null;
   };
-  /** §13.3 Omniscient Lattice activation. Backfilled on legacy saves. */
+  /** §13.3 Omniscient Lattice activation. */
   readonly latticeActive?: boolean;
-  /** §13.3 Lattice Node island list. Backfilled on legacy saves. */
+  /** §13.3 Lattice Node island list. */
   readonly latticeNodeIslands?: ReadonlyArray<string>;
-  /** §14.4 in-flight comm packets. Backfilled to `[]` on legacy saves. */
-  readonly commPackets?: ReadonlyArray<import('./orbital.js').CommPacket>;
+  /** §14.4 in-flight comm packets. */
+  readonly commPackets: ReadonlyArray<import('./orbital.js').CommPacket>;
   /** §2.1 infinite map — cell keys (`"cellX,cellY"`) the procedural
    *  generator has already considered. Serialized as a sorted array so
    *  the blob diffs cleanly between saves (mirrors `revealedCells`). */
   readonly generatedCells?: ReadonlyArray<string>;
   /** Ocean-layer §2 — sparse ocean-terrain map as `[key, spec]` pairs
    *  (Maps don't survive JSON; mirrors the `subPathProgress` idiom).
-   *  Sorted by key for deterministic blob output. Absent on v4 saves
-   *  before the v4 → v5 migration runs; backfilled by re-deriving from
-   *  the world seed via `generateOceanTerrain`. */
+   *  Sorted by key for deterministic blob output. */
   readonly oceanCells?: ReadonlyArray<readonly [string, OceanCellSpec]>;
   /** Ocean-layer §5 — depth-revealed cell keys as a sorted array
-   *  (mirrors `revealedCells`). Absent on v4 saves; defaults to empty
-   *  via the v4 → v5 migration (legacy players have surface vision but
-   *  no depth knowledge until they build a sonar revealer). */
+   *  (mirrors `revealedCells`). */
   readonly depthRevealedCells?: ReadonlyArray<string>;
 }
 
@@ -365,92 +289,15 @@ export function serializeWorld(
  * world on a corrupt save.
  */
 
-/** Defensive migration: pre-fix saves minted ids via a session-local
- *  counter (`placed-1`, `placed-2`, …) that reset to 0 on every reload,
- *  with no persistence-side counter seeding. Saved buildings could end up
- *  sharing an id with new placements minted post-reload. The fix in
- *  `placement-ui.ts` derives new ids from anchor coords (`placed-x,y`),
- *  but legacy saves still carry colliding `placed-N` ids. This helper
- *  detects any duplicate id within an island's buildings array and
- *  re-keys the duplicates to the new coord-based shape, so the live game
- *  state is collision-free regardless of save vintage.
- *
- *  Pure: returns a new array with possibly-renamed `id` fields. Original
- *  input is not mutated. Building order is preserved. */
-function rekeyCollidingBuildingIds(
-  buildings: ReadonlyArray<PlacedBuilding>,
-): PlacedBuilding[] {
-  const seen = new Set<string>();
-  return buildings.map((b) => {
-    if (!seen.has(b.id)) {
-      seen.add(b.id);
-      return b;
-    }
-    // Collision — rename via the new coord-based shape. Two buildings
-    // can't share an (x, y) anchor (`validatePlacement` rejects overlap),
-    // so the new id is unique by construction.
-    const newId = `placed-${b.x},${b.y}`;
-    seen.add(newId);
-    return { ...b, id: newId };
-  });
-}
-
-/** Ocean-layer §2 — migrate a v4 snapshot in-place to the v5 shape.
- *  Idempotent: a snapshot already at v5 returns unchanged.
- *
- *  v4 saves predate the `oceanCells` + `depthRevealedCells` fields. The
- *  migration re-derives terrain from the snapshot's stored `seed` +
- *  `islands` via `generateOceanTerrain` (deterministic — same inputs
- *  always produce the same map) and defaults the depth-revealed set to
- *  empty (legacy players have surface visibility but have not built any
- *  sonar revealer yet, so no cells are depth-known).
- *
- *  The `seed` field on a v4 save defaults to `WORLD_SEED` when absent
- *  (a snapshot minted before the seed was persisted at all); the same
- *  fallback that `deserializeWorld` already applies on the live shape. */
-function migrateV4ToV5(snapshot: SaveSnapshot): SaveSnapshot {
-  // Pre-migration, the snapshot's `v` field may be 4 (pre-bump) instead
-  // of the SCHEMA_VERSION literal (5) baked into the SaveSnapshot type.
-  // Widen via `unknown` so the literal-type comparison check below isn't
-  // rejected by TS (which knows `v: typeof SCHEMA_VERSION === 5` has no
-  // overlap with `4`). After the migration completes, `v` is set to
-  // SCHEMA_VERSION and the structural type is honest again.
-  if ((snapshot.v as unknown as number) !== 4) return snapshot;
-  const seed =
-    'seed' in snapshot.world && typeof (snapshot.world as { seed?: unknown }).seed === 'string'
-      ? (snapshot.world as { seed: string }).seed
-      : WORLD_SEED;
-  // Re-derive the ocean terrain. `generateOceanTerrain` is pure and only
-  // reads each spec's static placement fields (cx, cy, radii, biome) —
-  // the missing `terrainAt` closure on serialized specs is irrelevant.
-  const oceanCellsMap = generateOceanTerrain(seed, snapshot.world.islands as IslandSpec[]);
-  const oceanCells: ReadonlyArray<readonly [string, OceanCellSpec]> = [...oceanCellsMap.entries()]
-    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  return {
-    ...snapshot,
-    v: SCHEMA_VERSION,
-    world: {
-      ...snapshot.world,
-      oceanCells,
-      depthRevealedCells: [],
-    },
-  };
-}
-
 export function deserializeWorld(
   snapshot: SaveSnapshot,
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Ocean-layer §2 — migrate v4 snapshots in-place before the version
-  // check. v4 is the only previously-supported version still in the
-  // wild; older shapes (v1-v3) are rejected by the check below.
-  // `v` is typed as `typeof SCHEMA_VERSION` on a current SaveSnapshot,
-  // so the v=4 check has to widen via unknown — same idiom as inside
-  // `migrateV4ToV5`. After the migration runs, the literal type matches.
-  if ((snapshot.v as unknown as number) === 4) snapshot = migrateV4ToV5(snapshot);
-  if (!SUPPORTED_LOAD_VERSIONS.has(snapshot.v as unknown as number)) {
-    throw new Error(`persistence: unknown schema version ${String(snapshot.v)}`);
+  if (snapshot.v !== SCHEMA_VERSION) {
+    throw new Error(
+      `save version ${String(snapshot.v)} not supported (current: ${String(SCHEMA_VERSION)}); migration paths were removed pre-release`,
+    );
   }
 
   // Wall-clock delta between save and now. Negative would mean the system
@@ -473,43 +320,24 @@ export function deserializeWorld(
     // on `id === 'home'` so the home spec is unaffected by the predicate.
     return attachTerrainAt({
       ...s,
-      // Forward-compat backfill: a save written before the player-mutable
-      // display-name field existed has no `name`. Default to `id` so the
-      // legacy UX (id-as-display-name) is preserved verbatim. Same
-      // SCHEMA_VERSION — mirror the `ascendantCoreCrafted` / `lastResetAt`
-      // backfill pattern.
-      name:
-        typeof (s as { name?: unknown }).name === 'string'
-          ? (s as { name: string }).name
-          : s.id,
-      // Forward-compat backfill: a save written before island `modifiers`
-      // were persisted has none. `modifiers` is a required IslandSpec field
-      // the HUD SITE section reads unconditionally (`hud.ts`), so a missing
-      // one breaks that island's panel. Default to [] (no modifiers).
-      // Mirrors the `name` backfill above.
-      modifiers: Array.isArray((s as { modifiers?: unknown }).modifiers)
-        ? (s as { modifiers: IslandSpec['modifiers'] }).modifiers
-        : [],
       // The buildings array is mutable on the live spec, so we clone it.
       // The serializer already deep-copied via JSON-equivalence in the IDB
       // layer, but explicit cloning makes the in-memory round-trip path
       // (tests) safe too. Each building gets its maintenance timestamps
       // shifted into the new perf-clock domain (drone/route timestamp
       // remap mirror).
-      buildings: rekeyCollidingBuildingIds(
-        s.buildings.map((b) => ({
-          ...b,
-          ...(b.placedAt !== undefined
-            ? { placedAt: b.placedAt + perfShift }
-            : {}),
-          ...(b.maintainedAt !== undefined
-            ? { maintainedAt: b.maintainedAt + perfShift }
-            : {}),
-          ...(b.toxicityExpiryMs !== undefined
-            ? { toxicityExpiryMs: b.toxicityExpiryMs + perfShift }
-            : {}),
-        })),
-      ),
+      buildings: s.buildings.map((b) => ({
+        ...b,
+        ...(b.placedAt !== undefined
+          ? { placedAt: b.placedAt + perfShift }
+          : {}),
+        ...(b.maintainedAt !== undefined
+          ? { maintainedAt: b.maintainedAt + perfShift }
+          : {}),
+        ...(b.toxicityExpiryMs !== undefined
+          ? { toxicityExpiryMs: b.toxicityExpiryMs + perfShift }
+          : {}),
+      })),
     });
   });
 
@@ -530,148 +358,53 @@ export function deserializeWorld(
   // advanceIsland.
   const world: WorldState = {
     islands,
-    seed:
-      'seed' in snapshot.world && typeof (snapshot.world as { seed?: unknown }).seed === 'string'
-        ? (snapshot.world as { seed: string }).seed
-        : WORLD_SEED,
+    seed: snapshot.world.seed ?? WORLD_SEED,
     drones: snapshot.world.drones.map((d) => ({
       ...d,
       launchTime: d.launchTime + perfShift,
       expectedReturnTime: d.expectedReturnTime + perfShift,
-      // §11.7 tier-matched fuel backfill. Legacy saves predate the
-      // `fuelResource` field — every in-flight drone written before the
-      // §11.7 patch was dispatched with biofuel (the previous hardcode),
-      // so default missing values to 'biofuel'. New saves carry the
-      // explicit value and round-trip unchanged. Mirrors the
-      // `ascendantCoreCrafted` backfill pattern below.
-      fuelResource:
-        'fuelResource' in d && typeof (d as { fuelResource?: unknown }).fuelResource === 'string'
-          ? (d as { fuelResource: Drone['fuelResource'] }).fuelResource
-          : 'biofuel',
-      // T5 path-drawn drone backfill. Legacy saves predate waypoint,
-      // dark-mode telemetry, and probability-bias fields.
-      waypoints:
-        'waypoints' in d && Array.isArray((d as { waypoints?: unknown }).waypoints)
-          ? (d as { waypoints: Drone['waypoints'] }).waypoints
-          : [],
-      darkMode:
-        'darkMode' in d && typeof (d as { darkMode?: unknown }).darkMode === 'boolean'
-          ? (d as { darkMode: boolean }).darkMode
-          : false,
-      darkModeDiscoveries:
-        'darkModeDiscoveries' in d && Array.isArray((d as { darkModeDiscoveries?: unknown }).darkModeDiscoveries)
-          ? (d as { darkModeDiscoveries: Drone['darkModeDiscoveries'] }).darkModeDiscoveries
-          : [],
-      probabilityBias:
-        'probabilityBias' in d && typeof (d as { probabilityBias?: unknown }).probabilityBias === 'number'
-          ? (d as { probabilityBias: number }).probabilityBias
-          : 0,
     })),
-    routes: snapshot.world.routes.map((r) => {
-      const { mode, cargo } = migrateLegacyCargo(r as unknown as Parameters<typeof migrateLegacyCargo>[0]);
-      return {
-        ...r,
-        mode,
-        cargo,
-        inFlight: r.inFlight.map((b) => ({
-          ...b,
-          arrivalTime: b.arrivalTime + perfShift,
-          dispatchTime: b.dispatchTime + perfShift,
-        })),
-      };
-    }),
-    // Settlement vehicles share the same `performance.now()` domain as
-    // drones/routes; apply the same shift so an in-flight vehicle's
-    // arrival lands correctly in the new session's perf-domain.
-    // Default to [] when restoring a snapshot that pre-dates the field
-    // (defensive — v2 always carries `vehicles`, but a hand-crafted or
-    // partially-migrated snapshot might omit it).
-    vehicles: (snapshot.world.vehicles ?? []).map((v) => ({
+    routes: snapshot.world.routes.map((r) => ({
+      ...r,
+      inFlight: r.inFlight.map((b) => ({
+        ...b,
+        arrivalTime: b.arrivalTime + perfShift,
+        dispatchTime: b.dispatchTime + perfShift,
+      })),
+    })),
+    vehicles: snapshot.world.vehicles.map((v) => ({
       ...v,
       launchTime: v.launchTime + perfShift,
       expectedArrivalTime: v.expectedArrivalTime + perfShift,
-      // §11.7 tier-matched fuel backfill — see drones above for rationale.
-      fuelResource:
-        'fuelResource' in v && typeof (v as { fuelResource?: unknown }).fuelResource === 'string'
-          ? (v as { fuelResource: SettlementVehicle['fuelResource'] }).fuelResource
-          : 'biofuel',
-      // §12.5 mechanical-failure rate backfill. Legacy saves predate the
-      // `failureRate` field — derive from vehicle kind via tuning table.
-      failureRate:
-        'failureRate' in v && typeof (v as { failureRate?: unknown }).failureRate === 'number'
-          ? (v as { failureRate: SettlementVehicle['failureRate'] }).failureRate
-          : tuningFor(
-              v.kind,
-              'tier' in v && typeof (v as { tier?: unknown }).tier === 'number'
-                ? (v as { tier: SettlementVehicle['tier'] }).tier
-                : (v.kind === 'ship' ? 1 : 2),
-            ).failureRate,
     })),
-    // §11 telemetry forward-compat backfill: legacy v3 saves predate the
-    // `revealedCells` field. Restore from the snapshot's array (Set form
-    // doesn't survive JSON); on a missing/empty array, seed every cell
-    // touched by a populated island's footprint so the player doesn't
-    // load into a pitch-dark world. The fresh-game seed in
-    // `makeInitialWorld` does the same thing; this just covers the
-    // "loaded a save written before §11 landed" case.
     revealedCells: deserializeRevealedCells(islands, snapshot.world.revealedCells),
-    // §14.2 satellite fleet backfill: legacy v3 saves predate `satellites`.
-    // Default to an empty array so the world loads cleanly.
-    satellites: (snapshot.world.satellites ?? []).map((s) => ({
+    satellites: snapshot.world.satellites.map((s) => ({
       ...s,
-      buffer: Array.isArray((s as { buffer?: unknown }).buffer)
-        ? (s as { buffer: Satellite['buffer'] }).buffer.slice(-SAT_BUFFER_CAP)
-        : [],
+      buffer: (s as { buffer: Satellite['buffer'] }).buffer.slice(-SAT_BUFFER_CAP),
     })),
-    // §14.12 repair drone fleet backfill. perfShift the in-flight timestamps
-    // so the prior session's `performance.now()` domain doesn't strand the
-    // drone forever. Mirrors the drone (lines 354-355) / vehicle (401-402)
-    // backfill pattern.
-    repairDrones: (snapshot.world.repairDrones ?? []).map((d) => ({
+    repairDrones: snapshot.world.repairDrones.map((d) => ({
       ...d,
       launchTime: d.launchTime + perfShift,
       expectedArrivalTime: d.expectedArrivalTime + perfShift,
     })),
-    // §14.8 debris fields backfill: legacy saves predate the field.
-    // No timestamp shifting needed — fields are static cell-anchored data.
-    debrisFields: [...(snapshot.world.debrisFields ?? [])],
-    // Tutorial onboarding state backfill: legacy saves predate the field.
-    // Default to the fresh-game starting objective.
+    debrisFields: [...snapshot.world.debrisFields],
     tutorialState: snapshot.world.tutorialState
       ? {
           completed: new Set(snapshot.world.tutorialState.completed),
           current: snapshot.world.tutorialState.current,
         }
       : { completed: new Set(), current: 'place_solar' },
-    // §13.4 endgame state backfill: legacy saves predate the field.
     endgameState: snapshot.world.endgameState
       ? {
           achieved: new Set<VictoryCondition>(snapshot.world.endgameState.achieved),
           firstAchievedMs: snapshot.world.endgameState.firstAchievedMs,
         }
       : { achieved: new Set<VictoryCondition>(), firstAchievedMs: null },
-    // §13.3 Omniscient Lattice backfill: legacy saves predate these fields.
     latticeActive: snapshot.world.latticeActive ?? false,
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
-    commPackets: [...(snapshot.world.commPackets ?? [])],
-    // §2.1 infinite map. Start from the saved `generatedCells` set so the
-    // generator doesn't re-roll any cell the prior session already
-    // considered (mints a duplicate `gen-X-Y` id, since `generateCellIslands`
-    // is deterministic per cell). Then UNION the cells covered by every
-    // populated spec's centre as a safety net for hand-edited saves where
-    // `generatedCells` was trimmed below the populated set.
+    commPackets: [...snapshot.world.commPackets],
     generatedCells: deserializeGeneratedCells(islands, snapshot.world.generatedCells),
-    // Ocean-layer §2 — rebuild the live Map from the serialized array of
-    // [key, spec] pairs. After the v4 → v5 migration runs above, every
-    // snapshot carries an `oceanCells` array (re-derived from the seed
-    // for v4 inputs; round-tripped verbatim for v5 inputs). Defensive
-    // `?? []` for a partially-migrated hand-crafted snapshot — `new
-    // Map(undefined)` would throw.
     oceanCells: new Map(snapshot.world.oceanCells ?? []),
-    // Ocean-layer §5 — rebuild the live Set from the serialized array.
-    // v4 → v5 migration defaults this to []; v5 saves round-trip
-    // verbatim. Pure forward-compat: a v5 snapshot missing the field is
-    // treated as "no depth reveals yet".
     depthRevealedCells: new Set(snapshot.world.depthRevealedCells ?? []),
   };
 
@@ -682,114 +415,24 @@ export function deserializeWorld(
     // replacing the two non-JSON fields and remapping lastTick. The order
     // matters: spread first, then the explicit Set/Map/lastTick writes
     // win over the carried-through values.
-    const inventoryClone = { ...s.inventory };
-    const storageCapsClone = { ...s.storageCaps };
-    const funnelClone = { ...s.funnelPending };
-    const graceClone = { ...(s as { starterInventoryGrace?: Record<ResourceId, number> }).starterInventoryGrace } as Record<ResourceId, number>;
-    // Forward-compat backfill: a save written by an older build is missing
-    // any ResourceId added since. The strict `Record<ResourceId, number>`
-    // type would catch reads of missing keys via `noUncheckedIndexedAccess`
-    // (returning undefined), but the per-cap-derived clamp in
-    // `demolishBuilding` and the `applyRates` path expect a real cap
-    // number — `cap=0` would silently zero the demolition credit. Seed
-    // the baseline cap for missing keys; inventory stays at 0 by default.
-    // BASELINE_STORAGE_CAP is sourced from `constants.ts` (shared with
-    // `world.ts`) so reload produces the same per-resource baseline as a
-    // fresh state with zero drift risk.
-    for (const r of ALL_RESOURCES) {
-      if (!(r in inventoryClone)) inventoryClone[r] = 0;
-      if (!(r in storageCapsClone)) storageCapsClone[r] = BASELINE_STORAGE_CAP;
-      if (!(r in funnelClone)) funnelClone[r] = 0;
-      if (!(r in graceClone)) graceClone[r] = 0;
-    }
-    // Forward-compat backfill: step-20 added `ascendantCoreCrafted` to
-    // IslandState (§14.1 T6 access gate). A v3 save written before the
-    // step-20 schema landed lacks the field; reading it through the
-    // strict `boolean` type would surface as `undefined` at runtime and
-    // poison every downstream gate evaluation. Default to `false` so old
-    // saves keep their pre-T6 progress (the SCHEMA_VERSION 3 → 4 bump
-    // alternative would invalidate every save unnecessarily).
-    const ascendantCoreCrafted =
-      'ascendantCoreCrafted' in s && typeof (s as { ascendantCoreCrafted?: unknown }).ascendantCoreCrafted === 'boolean'
-        ? (s as { ascendantCoreCrafted: boolean }).ascendantCoreCrafted
-        : false;
-    // Forward-compat backfill: §9.7 Tier Reset added `lastResetAt` to
-    // IslandState. Defaults to `null` (never reset) on legacy saves —
-    // the cooldown gate trivially passes, matching the player's pre-§9.7
-    // experience. Same SCHEMA_VERSION as ascendantCoreCrafted's backfill,
-    // for the same "no need to invalidate every save" reasoning.
-    const lastResetAt =
-      'lastResetAt' in s &&
-      (typeof (s as { lastResetAt?: unknown }).lastResetAt === 'number' ||
-        (s as { lastResetAt?: unknown }).lastResetAt === null)
-        ? (s as { lastResetAt: number | null }).lastResetAt
-        : null;
-    // Forward-compat backfill: Time Lock fields added after v3. Legacy saves
-    // lack them; default to safe baseline values so banking / spending math
-    // doesn't see `undefined` and produce NaN.
-    const timeLockBankedMin =
-      typeof (s as { timeLockBankedMin?: unknown }).timeLockBankedMin === 'number'
-        ? (s as { timeLockBankedMin: number }).timeLockBankedMin
-        : 0;
-    const accelerationQueue = Array.isArray(
-      (s as { accelerationQueue?: unknown }).accelerationQueue,
-    )
-      ? (s as { accelerationQueue: IslandState['accelerationQueue'] }).accelerationQueue
-      : [];
-    const accelerationRemainingMin =
-      typeof (s as { accelerationRemainingMin?: unknown }).accelerationRemainingMin ===
-      'number'
-        ? (s as { accelerationRemainingMin: number }).accelerationRemainingMin
-        : 0;
-    const bankingEnabled =
-      typeof (s as { bankingEnabled?: unknown }).bankingEnabled === 'boolean'
-        ? (s as { bankingEnabled: boolean }).bankingEnabled
-        : false;
-    // Forward-compat backfill: Genesis Chamber target added after v3.
-    const genesisTarget =
-      (s as { genesisTarget?: unknown }).genesisTarget === null ||
-      typeof (s as { genesisTarget?: unknown }).genesisTarget === 'string'
-        ? (s as { genesisTarget: ResourceId | null }).genesisTarget
-        : null;
-    // Forward-compat backfill: Singularity Battery stored energy added after v3.
-    const singularityStoredWs =
-      typeof (s as { singularityStoredWs?: unknown }).singularityStoredWs === 'number'
-        ? (s as { singularityStoredWs: number }).singularityStoredWs
-        : 0;
-    // Forward-compat backfill: `declaredAt` added after v3. A snapshot
-    // missing the field must backfill to `null`, not `undefined`, so the
-    // `null + perfShift` guard below doesn't produce NaN.
-    const declaredAt =
-      'declaredAt' in s &&
-      (typeof (s as { declaredAt?: unknown }).declaredAt === 'number' ||
-        (s as { declaredAt?: unknown }).declaredAt === null)
-        ? (s as { declaredAt: number | null }).declaredAt
-        : null;
     const live: IslandState = {
       ...s,
       // Defensive inventory + storageCaps + funnelPending clones so the
       // restored state has its own objects (saved snapshot stays inert).
-      inventory: inventoryClone,
-      storageCaps: storageCapsClone,
-      funnelPending: funnelClone,
-      starterInventoryGrace: graceClone,
+      inventory: { ...s.inventory },
+      storageCaps: { ...s.storageCaps },
+      funnelPending: { ...s.funnelPending },
+      starterInventoryGrace: { ...s.starterInventoryGrace },
       unlockedNodes: new Set(s.unlockedNodes),
       subPathProgress: new Map(s.subPathProgress),
-      ascendantCoreCrafted,
       // §9.7 cooldown anchors. Both fields were minted in the saved
       // session's `performance.now()` domain (matching `lastTick`); apply
       // the same perfShift the drone/vehicle/repair-drone timestamps get,
       // so the 24-hour cooldown gate reads a real elapsed value after a
       // reload. Null-preserving: a fresh island has both null and must
       // survive deserialize as null (null + number would be NaN).
-      declaredAt: declaredAt === null ? null : declaredAt + perfShift,
-      lastResetAt: lastResetAt === null ? null : lastResetAt + perfShift,
-      timeLockBankedMin,
-      accelerationQueue,
-      accelerationRemainingMin,
-      bankingEnabled,
-      genesisTarget,
-      singularityStoredWs,
+      declaredAt: s.declaredAt === null ? null : s.declaredAt + perfShift,
+      lastResetAt: s.lastResetAt === null ? null : s.lastResetAt + perfShift,
       // Remap lastTick from the saved performance.now() domain into the
       // current session's performance.now() domain. The save preserved
       // lastTick literally; we shift by the offline delta so the
@@ -803,18 +446,6 @@ export function deserializeWorld(
     // would push into the spec's array but not the state's.
     const spec = islands.find((i) => i.id === entry.id);
     if (spec) live.buildings = spec.buildings;
-    // §9.3 grant-curve migration. Pre-migration saves got 1 skill point per
-    // level-up; the new schedule is `floor(1.1^L)`. Top up by the difference
-    // so a long-lived L50 save lands the 1,256 cumulative points it would
-    // have under the new schedule (vs the 50 it received under the old one).
-    // The flag prevents double-application across multiple loads.
-    if (live.skillPointGrantMigrationApplied !== true) {
-      const oldGrantTotal = live.level;
-      const newGrantTotal = cumulativeSkillPointsForLevel(live.level);
-      const topUp = Math.max(0, newGrantTotal - oldGrantTotal);
-      live.unspentSkillPoints += topUp;
-      live.skillPointGrantMigrationApplied = true;
-    }
     islandStates.set(entry.id, live);
   }
 
@@ -857,36 +488,23 @@ export function deserializeWorld(
   return { world, islandStates };
 }
 
-/** Backfill the `revealedCells` Set on load. If the saved blob carries an
- *  explicit array, use it verbatim (recent saves). If the field is missing
- *  (legacy v3 save written before §11 landed) OR the array is empty,
- *  reconstruct from each populated island's footprint cells so the player
- *  doesn't load into a pitch-dark world.
- *
- *  We deliberately also re-seed populated-island cells when the saved array
- *  is non-empty — a player's save retains whatever they explored, and the
- *  populated-island cells are part of that set, but seeding them again is
- *  idempotent (Set semantics) and protects against a future scenario where
- *  someone manually trimmed `revealedCells` from a save blob. */
+/** Rebuild the `revealedCells` Set on load. Starts from the saved array
+ *  and re-seeds every populated or discovered island's footprint cells.
+ *  Seeding is idempotent (Set semantics) and protects against hand-edited
+ *  saves where `revealedCells` was trimmed below the populated set. */
 function deserializeRevealedCells(
   islands: ReadonlyArray<IslandSpec>,
   saved: ReadonlyArray<string> | undefined,
 ): Set<string> {
   const out = new Set<string>(saved ?? []);
   for (const spec of islands) {
-    // Seed cells for populated AND already-discovered islands. A legacy v3
-    // save that pre-dates §11 may carry `discovered: true` on islands that
-    // the player revealed via the old center-flip mechanic; without seeding
-    // their cells here the fog overlay would paint over them on load.
-    // `islandCells` walks every constituent (primary + extraEllipses) so
-    // merged islands get their absorbed-lobe cells seeded too.
     if (!spec.populated && !spec.discovered) continue;
     for (const k of islandCells(spec)) out.add(k);
   }
   return out;
 }
 
-/** Backfill the `generatedCells` Set on load. Saved blob's array is unioned
+/** Rebuild the `generatedCells` Set on load. Saved blob's array is unioned
  *  with each populated spec's home cell (`tileToCell(spec.cx, spec.cy)`) so
  *  the generator never re-rolls the cell containing a settled island.
  *
@@ -966,11 +584,7 @@ export async function clearSave(): Promise<void> {
 export function isValidSaveSnapshot(value: unknown): value is SaveSnapshot {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  // Accept any version `SUPPORTED_LOAD_VERSIONS` covers — currently v4
-  // (auto-migrated to v5 on load) and the current SCHEMA_VERSION. Mirrors
-  // `loadWorld`'s gate so an imported v4 blob hits the same migration path
-  // as one loaded from IDB.
-  if (typeof v['v'] !== 'number' || !SUPPORTED_LOAD_VERSIONS.has(v['v'])) return false;
+  if (typeof v['v'] !== 'number' || v['v'] !== SCHEMA_VERSION) return false;
   if (typeof v['savedAt'] !== 'number') return false;
   if (typeof v['savedAtPerf'] !== 'number') return false;
   if (typeof v['world'] !== 'object' || v['world'] === null) return false;
@@ -1001,16 +615,7 @@ export async function loadWorld(): Promise<
   try {
     const stored = (await get(STORAGE_KEY)) as SaveSnapshot | undefined;
     if (stored === undefined) return null;
-    // Ocean-layer §2 migration: v4 saves are READABLE — `deserializeWorld`
-    // migrates them to v5 in-place. Only versions outside the migratable
-    // range get bounced (the caller falls back to a fresh world). When a
-    // future bump (v5 → v6) adds another migration path, expand this
-    // check rather than reading every accumulated version.
-    // Cast via unknown to compare against the legacy literal `4` — `v` is
-    // typed as the SCHEMA_VERSION literal (`5`) on the SaveSnapshot
-    // interface, so a direct `=== 4` check is rejected for non-overlap.
-    const ver = stored.v as unknown as number;
-    if (!SUPPORTED_LOAD_VERSIONS.has(ver)) {
+    if (stored.v !== SCHEMA_VERSION) {
       console.warn(
         `[robot-islands] loadWorld: ignoring snapshot with unknown v=${String(stored.v)}`,
       );

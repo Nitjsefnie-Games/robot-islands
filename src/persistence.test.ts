@@ -30,12 +30,11 @@ import {
 import type { VictoryCondition } from './endgame.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { ObjectiveId } from './tutorial.js';
-import { generateOceanTerrain } from './ocean-gen.js';
+
 import {
   SCHEMA_VERSION,
   STORAGE_KEY,
   STORAGE_KEY_DISPLAY,
-  SUPPORTED_LOAD_VERSIONS,
   deserializeWorld,
   isValidSaveSnapshot,
   serializeWorld,
@@ -81,10 +80,6 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     xp: 0,
     level: 1,
     unspentSkillPoints: 0,
-    // Default to "migration already applied" so the round-trip tests below
-    // assert serialization preservation; the migration-specific test
-    // explicitly overrides this flag to false.
-    skillPointGrantMigrationApplied: true,
     unlockedNodes: new Set(),
     subPathProgress: new Map(),
     funnelPending: emptyFunnel(),
@@ -121,10 +116,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    // Pin the literal so a future bump forces a deliberate test update
-    // alongside the new migration test (the only way to keep persistence
-    // version drift honest).
-    expect(snap.v).toBe(5);
+    expect(snap.v).toBe(6);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -220,39 +212,6 @@ describe('serialize → JSON → deserialize round-trip', () => {
     expect(r.level).toBe(50);
     expect(r.xp).toBeCloseTo(12345.6, 5);
     expect(r.unspentSkillPoints).toBe(7);
-  });
-
-  it('skill-point grant migration: tops up an unmigrated L50 save by the cumulative delta', () => {
-    // Legacy save shape: no skillPointGrantMigrationApplied flag (or false).
-    // The deserializer must observe the missing flag and add the cumulative
-    // top-up = cumulative(L50) - L50 (≈ 1,256 - 50 = 1,206).
-    const home = makeIslandState({
-      level: 50,
-      unspentSkillPoints: 7,
-      // Drop the default-true flag — this island predates the migration.
-      skillPointGrantMigrationApplied: undefined,
-    });
-    const world = makeInitialWorld(0);
-    const states = new Map<string, IslandState>([['home', home]]);
-    const snap = serializeWorld(world, states, 0);
-    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    const { islandStates: restored } = deserializeWorld(json, 0, 0);
-    const r = restored.get('home')!;
-    // 7 starting + (cumulative L50 ~ 1256) - (L50 old grant 50) = 1213
-    expect(r.unspentSkillPoints).toBeGreaterThan(1200);
-    expect(r.unspentSkillPoints).toBeLessThan(1300);
-    // Flag is now set so a subsequent load doesn't double-apply.
-    expect(r.skillPointGrantMigrationApplied).toBe(true);
-  });
-
-  it('skill-point grant migration: a freshly-minted island stays at its 0 points (flag pre-set)', () => {
-    const home = makeIslandState(); // flag defaults to true via factory
-    const world = makeInitialWorld(0);
-    const states = new Map<string, IslandState>([['home', home]]);
-    const snap = serializeWorld(world, states, 0);
-    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    const { islandStates: restored } = deserializeWorld(json, 0, 0);
-    expect(restored.get('home')!.unspentSkillPoints).toBe(0);
   });
 
   it('restores unlockedNodes back to a Set with identical membership', () => {
@@ -515,37 +474,26 @@ describe('schema version', () => {
     const snap = serializeWorld(world, states, 0);
     // Fake a future snapshot.
     const future = { ...snap, v: 99 } as unknown as SaveSnapshot;
-    expect(() => deserializeWorld(future, 0, 0)).toThrow(/unknown schema version/);
+    expect(() => deserializeWorld(future, 0, 0)).toThrow(/not supported/);
   });
 
-  it('exports STORAGE_KEY containing v4 so it does not collide with stale v1/v2/v3 saves', () => {
-    expect(STORAGE_KEY).toMatch(/v4$/);
+  it('exports STORAGE_KEY containing v6 so it does not collide with stale saves', () => {
+    expect(STORAGE_KEY).toMatch(/v6$/);
   });
 
-  it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key — UI label is misnomer-free', () => {
-    // STORAGE_KEY persists at `:v4` for IDB back-compat; STORAGE_KEY_DISPLAY
-    // is what the Settings panel renders so v5+ users don't see "v4". The
-    // two MUST stay distinct or the misnomer leaks back into the UI.
+  it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
     expect(STORAGE_KEY).not.toBe(STORAGE_KEY_DISPLAY);
     expect(typeof STORAGE_KEY).toBe('string');
     expect(typeof STORAGE_KEY_DISPLAY).toBe('string');
     expect(STORAGE_KEY_DISPLAY).toBe('robot-islands:save');
   });
 
-  it('rejects a synthetic future version (v=6) via the SUPPORTED_LOAD_VERSIONS gate', () => {
-    // Confirms the single gate — both `deserializeWorld` and
-    // `isValidSaveSnapshot` consult the SUPPORTED_LOAD_VERSIONS set. The
-    // set currently covers {4, SCHEMA_VERSION (=5)}; v6 is outside it so
-    // both load paths must reject without the per-call literal duplication
-    // we collapsed.
-    expect(SUPPORTED_LOAD_VERSIONS.has(6)).toBe(false);
-    expect(SUPPORTED_LOAD_VERSIONS.has(SCHEMA_VERSION)).toBe(true);
-    expect(SUPPORTED_LOAD_VERSIONS.has(4)).toBe(true);
+  it('rejects a synthetic future version via the SCHEMA_VERSION gate', () => {
     const world = makeInitialWorld(0);
     const snap = serializeWorld(world, new Map(), 0);
-    const v6Shaped = { ...snap, v: 6 } as unknown as SaveSnapshot;
-    expect(() => deserializeWorld(v6Shaped, 0, 0)).toThrow(/unknown schema version/);
-    expect(isValidSaveSnapshot(v6Shaped)).toBe(false);
+    const v7Shaped = { ...snap, v: 7 } as unknown as SaveSnapshot;
+    expect(() => deserializeWorld(v7Shaped, 0, 0)).toThrow(/not supported/);
+    expect(isValidSaveSnapshot(v7Shaped)).toBe(false);
   });
 
   it('rejects a v3-shaped snapshot (the §2.1 infinite-map bump is breaking)', () => {
@@ -557,7 +505,7 @@ describe('schema version', () => {
     const world = makeInitialWorld(0);
     const snap = serializeWorld(world, new Map(), 0);
     const v3Shaped = { ...snap, v: 3 } as unknown as SaveSnapshot;
-    expect(() => deserializeWorld(v3Shaped, 0, 0)).toThrow(/unknown schema version/);
+    expect(() => deserializeWorld(v3Shaped, 0, 0)).toThrow(/not supported/);
   });
 });
 
@@ -928,73 +876,10 @@ describe('§11.7 tier-matched fuelResource persistence', () => {
     expect(restored.vehicles[0]!.fuelResource).toBe('diesel');
   });
 
-  it('backfills missing fuelResource on legacy drones to biofuel', () => {
-    // Synthesise a legacy v3 snapshot whose drone record predates §11.7 —
-    // serialized without a `fuelResource` field. The deserializer must
-    // backfill to 'biofuel' (the only fuel grade that the legacy hardcoded
-    // dispatch path ever consumed).
-    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
-    // Hand-craft a drone entry without `fuelResource` to simulate the
-    // legacy save shape. Type-asserted because the new `Drone` interface
-    // requires the field; the persistence loader treats it as missing.
-    const legacyDrone = {
-      id: 'drone-legacy',
-      fromIslandId: 'home',
-      originX: 0,
-      originY: 0,
-      dirX: 1,
-      dirY: 0,
-      outboundTiles: 20,
-      scanRadius: 8,
-      launchTime: 0,
-      expectedReturnTime: 10_000,
-      tier: 2,
-      fuelLoaded: 10,
-    };
-    const legacySnap = {
-      ...baseSnap,
-      world: {
-        ...baseSnap.world,
-        drones: [legacyDrone],
-      },
-    } as unknown as SaveSnapshot;
-    const json = JSON.parse(JSON.stringify(legacySnap)) as SaveSnapshot;
-    const { world: restored } = deserializeWorld(json, 0, 0);
-    expect(restored.drones).toHaveLength(1);
-    expect(restored.drones[0]!.fuelResource).toBe('biofuel');
-  });
-
-  it('backfills missing fuelResource on legacy vehicles to biofuel', () => {
-    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
-    const legacyVehicle = {
-      id: 'vehicle-legacy',
-      kind: 'ship',
-      tier: 1,
-      from: 'home',
-      target: 'forest-ne',
-      fuelLoaded: 10,
-      foundationKitCount: 1,
-      speed: 0.25,
-      launchTime: 0,
-      expectedArrivalTime: 10_000,
-      weatherMultiplier: 1.0,
-    };
-    const legacySnap = {
-      ...baseSnap,
-      world: {
-        ...baseSnap.world,
-        vehicles: [legacyVehicle],
-      },
-    } as unknown as SaveSnapshot;
-    const json = JSON.parse(JSON.stringify(legacySnap)) as SaveSnapshot;
-    const { world: restored } = deserializeWorld(json, 0, 0);
-    expect(restored.vehicles).toHaveLength(1);
-    expect(restored.vehicles[0]!.fuelResource).toBe('biofuel');
-  });
 });
 
 // ---------------------------------------------------------------------------
-// §9.7 Tier Reset — lastResetAt round-trip + legacy backfill
+// §9.7 Tier Reset — lastResetAt round-trip
 // ---------------------------------------------------------------------------
 
 describe('§9.7 Tier Reset lastResetAt persistence', () => {
@@ -1023,29 +908,10 @@ describe('§9.7 Tier Reset lastResetAt persistence', () => {
     expect(restored.get('home')!.lastResetAt).toBe(null);
   });
 
-  it('backfills lastResetAt to null on a legacy save without the field', () => {
-    // Hand-crafted legacy snapshot: build a normal one, then strip
-    // `lastResetAt` from each island-state entry before round-tripping.
-    const world = makeInitialWorld(0);
-    const states = new Map<string, IslandState>([
-      ['home', makeIslandState({ id: 'home', lastResetAt: 99_999 })],
-    ]);
-    const snap = serializeWorld(world, states, 0, 0);
-    // Strip lastResetAt from every island-state to simulate the pre-§9.7
-    // save shape.
-    const legacy = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    for (const entry of legacy.islandStates) {
-      delete (entry.state as { lastResetAt?: unknown }).lastResetAt;
-    }
-    const { islandStates: restored } = deserializeWorld(legacy, 0, 0);
-    expect(restored.get('home')!.lastResetAt).toBe(null);
-  });
 });
 
 // ---------------------------------------------------------------------------
 // Player-mutable display name persistence (separate from immutable `id`).
-// Mirrors the lastResetAt / ascendantCoreCrafted pattern: schema version is
-// NOT bumped — `deserializeWorld` backfills `name = id` on legacy saves.
 // ---------------------------------------------------------------------------
 
 describe('IslandSpec.name persistence', () => {
@@ -1064,73 +930,6 @@ describe('IslandSpec.name persistence', () => {
     expect(restoredHome.id).toBe('home');
   });
 
-  it('backfills name = id on a legacy save without the field', () => {
-    // Hand-crafted legacy snapshot: build a normal one, then strip `name`
-    // from each island spec before round-tripping. The deserializer must
-    // default missing `name` to the spec's `id` so every UI surface that
-    // reads `spec.name` keeps producing the legacy id-as-display-name UX.
-    const world = makeInitialWorld(0);
-    const snap = serializeWorld(world, new Map(), 0);
-    const legacy = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    for (const isl of legacy.world.islands) {
-      delete (isl as { name?: unknown }).name;
-    }
-    const { world: restored } = deserializeWorld(legacy, 0, 0);
-    for (const spec of restored.islands) {
-      expect(spec.name).toBe(spec.id);
-    }
-  });
-
-  it('backfills modifiers = [] on a legacy save without the field', () => {
-    // A save written before island `modifiers` were persisted has none;
-    // the deserializer must default it to [] so the HUD SITE section,
-    // which reads `spec.modifiers` unconditionally, never breaks.
-    const world = makeInitialWorld(0);
-    const snap = serializeWorld(world, new Map(), 0);
-    const legacy = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    for (const isl of legacy.world.islands) {
-      delete (isl as { modifiers?: unknown }).modifiers;
-    }
-    const { world: restored } = deserializeWorld(legacy, 0, 0);
-    for (const spec of restored.islands) {
-      expect(spec.modifiers).toEqual([]);
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// §14.2 satellite buffer backfill
-// ---------------------------------------------------------------------------
-
-describe('satellite buffer persistence', () => {
-  it('backfills missing buffer on a legacy satellite to []', () => {
-    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
-    const legacySat = {
-      id: 'sat-legacy',
-      variant: 'scanner',
-      spaceportIslandId: 'home',
-      x: 0,
-      y: 0,
-      commRange: 10,
-      coverageRadius: 20,
-      fuel: 5,
-      lodges: { scan: 0, weather: 0, comm: 0 },
-      locked: true,
-      pendingRepairDroneId: null,
-      // buffer is intentionally omitted
-    };
-    const legacySnap = {
-      ...baseSnap,
-      world: {
-        ...baseSnap.world,
-        satellites: [legacySat],
-      },
-    } as unknown as SaveSnapshot;
-    const json = JSON.parse(JSON.stringify(legacySnap)) as SaveSnapshot;
-    const { world: restored } = deserializeWorld(json, 0, 0);
-    expect(restored.satellites).toHaveLength(1);
-    expect(restored.satellites[0]!.buffer).toEqual([]);
-  });
 });
 
 describe('repair drone persistence', () => {
@@ -1151,14 +950,6 @@ describe('repair drone persistence', () => {
     expect(d.targetSatId).toBe('sat1');
     expect(d.launchTime).toBe(1234);
     expect(d.expectedArrivalTime).toBe(5678);
-  });
-
-  it('backfills missing repairDrones on a legacy save to []', () => {
-    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
-    const legacy = JSON.parse(JSON.stringify(baseSnap)) as SaveSnapshot;
-    delete (legacy.world as { repairDrones?: unknown }).repairDrones;
-    const { world: restored } = deserializeWorld(legacy, 0, 0);
-    expect(restored.repairDrones).toEqual([]);
   });
 
   it('repairDrones launchTime + expectedArrivalTime are perfShift-ed (§14.12)', () => {
@@ -1506,13 +1297,6 @@ describe('debrisFields persistence', () => {
     expect(restored.debrisFields[2]).toEqual({ cellX: 0, cellY: 0, fragments: 55 });
   });
 
-  it('backfills missing debrisFields on legacy saves to []', () => {
-    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
-    const legacy = JSON.parse(JSON.stringify(baseSnap)) as SaveSnapshot;
-    delete (legacy.world as { debrisFields?: unknown }).debrisFields;
-    const { world: restored } = deserializeWorld(legacy, 0, 0);
-    expect(restored.debrisFields).toEqual([]);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1621,7 +1405,7 @@ describe('§14.5 scanner dwellByCellKey persistence', () => {
     const snap = serializeWorld(world, new Map(), 0, 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     // Strip dwellByCellKey to simulate a pre-§14.5 save.
-    for (const sat of (json.world as { satellites?: Array<{ dwellByCellKey?: unknown }> }).satellites ?? []) {
+    for (const sat of (json.world as unknown as { satellites: Array<{ dwellByCellKey?: unknown }> }).satellites) {
       delete sat.dwellByCellKey;
     }
     const { world: restored } = deserializeWorld(json, 0, 0);
@@ -1664,101 +1448,14 @@ describe('§14.4 commPackets persistence', () => {
     expect(pkt.generatedMs).toBe(1234);
   });
 
-  it('backfills missing commPackets on legacy saves to []', () => {
-    const baseSnap = serializeWorld(makeInitialWorld(0), new Map(), 0, 0);
-    const legacy = JSON.parse(JSON.stringify(baseSnap)) as SaveSnapshot;
-    delete (legacy.world as { commPackets?: unknown }).commPackets;
-    const { world: restored } = deserializeWorld(legacy, 0, 0);
-    expect(restored.commPackets).toEqual([]);
-  });
-
-  it('backfills missing declaredAt to null instead of NaN', () => {
-    const world = makeInitialWorld(0);
-    const home = makeIslandState();
-    const states = new Map<string, IslandState>([['home', home]]);
-    const snap = serializeWorld(world, states, 0);
-    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    // Simulate a legacy snapshot that omits declaredAt entirely.
-    const entry = json.islandStates[0]!;
-    delete (entry.state as { declaredAt?: unknown }).declaredAt;
-    const { islandStates: restored } = deserializeWorld(json, 0, 0);
-    const r = restored.get('home')!;
-    expect(r.declaredAt).toBeNull();
-    expect(Number.isNaN(r.declaredAt as unknown as number)).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
-// Ocean-layer §2 — v4 → v5 migration
+// Ocean-layer §2 — oceanCells round-trip
 // ---------------------------------------------------------------------------
 
-describe('v4 → v5 ocean migration', () => {
-  // Build a v4-shape snapshot by serializing a fresh world, downgrading the
-  // version field, and stripping the two ocean fields the v4 schema did not
-  // carry. Mirrors how a real v4 save would look post-IDB read.
-  function makeV4Snapshot(seed: string): SaveSnapshot {
-    const world = makeInitialWorld(0);
-    // Force a known seed on the world before serializing so the migration's
-    // re-derivation has a deterministic comparison target.
-    (world as { seed: string }).seed = seed;
-    const snap = serializeWorld(world, new Map(), 0);
-    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    // Downgrade and strip the v5-only fields.
-    const v4 = {
-      ...json,
-      v: 4,
-      world: { ...json.world },
-    } as unknown as { v: number; world: Record<string, unknown> };
-    delete v4.world['oceanCells'];
-    delete v4.world['depthRevealedCells'];
-    return v4 as unknown as SaveSnapshot;
-  }
-
-  it('populates oceanCells by re-deriving from world seed on load', () => {
-    const v4 = makeV4Snapshot('migration-seed-1');
-    const { world: restored } = deserializeWorld(v4, 0, 0);
-    expect(restored.oceanCells).toBeInstanceOf(Map);
-    // The migrated map should match a fresh `generateOceanTerrain` call
-    // against the same seed and post-load islands list (the islands round-
-    // trip verbatim, so this is a deterministic equality check).
-    const expected = generateOceanTerrain('migration-seed-1', restored.islands);
-    expect([...restored.oceanCells.entries()].sort()).toEqual(
-      [...expected.entries()].sort(),
-    );
-    expect(restored.depthRevealedCells).toEqual(new Set());
-  });
-
-  it('does NOT touch already-revealed surface cells (revealedCells stays as saved)', () => {
-    const v4 = makeV4Snapshot('migration-seed-2');
-    // Carry an explicit revealedCells array on the v4 blob and ensure it
-    // survives the migration unscathed (the migration only fabricates
-    // ocean-layer fields).
-    (v4.world as unknown as { revealedCells: string[] }).revealedCells = ['0,0', '1,0'];
-    const { world: restored } = deserializeWorld(v4, 0, 0);
-    expect(restored.revealedCells.has('0,0')).toBe(true);
-    expect(restored.revealedCells.has('1,0')).toBe(true);
-  });
-
-  it('bumps the in-memory schema version to 5 (re-serialize round-trip)', () => {
-    const v4 = makeV4Snapshot('migration-seed-3');
-    const { world: restored, islandStates } = deserializeWorld(v4, 0, 0);
-    // After load, a re-serialize should emit the current SCHEMA_VERSION (5).
-    const reSerialized = serializeWorld(restored, islandStates, 0);
-    expect(reSerialized.v).toBe(5);
-    expect(reSerialized.v).toBe(SCHEMA_VERSION);
-  });
-
-  it('rejects pre-v4 saves with unknown schema', () => {
-    // Build a v3-shaped blob: a serialized v5 snapshot with v rewritten to
-    // 3. The migration path skips it (v !== 4), then the version gate
-    // throws.
-    const world = makeInitialWorld(0);
-    const snap = serializeWorld(world, new Map(), 0);
-    const v3 = { ...snap, v: 3 } as unknown as SaveSnapshot;
-    expect(() => deserializeWorld(v3, 0, 0)).toThrow(/unknown schema version/i);
-  });
-
-  it('v5 saves roundtrip cleanly (oceanCells + depthRevealedCells preserved)', () => {
+describe('oceanCells round-trip', () => {
+  it('v6 saves roundtrip cleanly (oceanCells + depthRevealedCells preserved)', () => {
     const world = makeInitialWorld(0);
     // Add a couple of explicit depth reveals so the round-trip exercises
     // a non-empty Set (the fresh world starts with an empty depth set).

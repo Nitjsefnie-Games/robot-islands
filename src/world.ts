@@ -1039,9 +1039,6 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     xp: 0,
     level: 1,
     unspentSkillPoints: 0,
-    // Fresh island has nothing to migrate — flag pre-applied so the
-    // persistence load path doesn't top up on first save round-trip.
-    skillPointGrantMigrationApplied: true,
     unlockedNodes: new Set(),
     subPathProgress: new Map(),
     funnelPending: startingFunnelPending(),
