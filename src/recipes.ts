@@ -1075,9 +1075,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'extraction',
   },
   mine_on_coal: {
-    cycleSec: 17, // rebalanced for idle-game scale, step #19 (×10: was 5s); 2026-05-18 ÷3 for display visibility (was 50s)
+    cycleSec: 10, // 2026-05-23 coal loop rebalance — mirrors commit 9cda2aa (Heavy Logger 9 wood/10s pattern). 1:1 pair net = +0.4 coal/s.
     inputs: {},
-    outputs: { coal: 1 },
+    outputs: { coal: 9 },
     category: 'extraction',
   },
   logger: {
