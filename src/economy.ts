@@ -56,11 +56,6 @@ import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiv
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
 
-/**
- * Optional context object for `computeRates` and `advanceIsland`. Adding
- * new parameters (heat, gates, …) extends this interface rather than
- * growing positional arity.
- */
 /** Per-battery-def electrical buffer capacity in W-seconds. Summed across
  *  every operational battery on an island to compute total cap. Buildings
  *  not in this table contribute 0 — non-battery buildings ignore the path. */
@@ -83,6 +78,11 @@ export function batteryCapacityWs(state: IslandState, mul: SkillMultipliers): nu
   return raw * mul.batteryCapacity;
 }
 
+/**
+ * Optional context object for `computeRates` and `advanceIsland`. Adding
+ * new parameters (heat, gates, …) extends this interface rather than
+ * growing positional arity.
+ */
 /**
  * §4 ocean-layer paused-state reasons (Task 10). Set on `PlacedBuilding.paused`
  * by `computeRates` when an ocean platform's preconditions fail; cleared
@@ -624,9 +624,9 @@ export interface PowerBalance {
   readonly consumed: number;
   /** `consumed === 0 ? 1 : min(1, produced / consumed)`. */
   readonly factor: number;
-  /** Power produced before Singularity Battery discharge adjustment. */
+  /** Power produced before battery buffer discharge adjustment. */
   readonly rawProduced: number;
-  /** Power consumed before Singularity Battery discharge adjustment. */
+  /** Power consumed before battery buffer discharge adjustment. */
   readonly rawConsumed: number;
 }
 
