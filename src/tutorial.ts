@@ -304,6 +304,18 @@ export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; chec
   // without the game framing any artifact as "the finish."
 };
 
+/** Per-objective additive XP bonus stacks: 1st completed = +1%, 2nd = +2%,
+ *  3rd = +3%, etc. Total bonus after N completed = sum(1..N) = N(N+1)/2 %.
+ *  Returns the multiplier (1 + bonus/100) applied to XP accrual.
+ *
+ *  Pure: takes only the completion-count, ignores order. Global per world
+ *  (single TutorialState lives on WorldState; bonus applies to every
+ *  island's XP gain uniformly). */
+export function tutorialXpMul(state: TutorialState | undefined): number {
+  const n = state?.completed.size ?? 0;
+  return 1 + (n * (n + 1)) / 200;
+}
+
 export function checkObjectives(state: TutorialState, world: WorldState): ObjectiveId[] {
   const newlyCompleted: ObjectiveId[] = [];
   for (const [id, obj] of Object.entries(OBJECTIVES)) {
