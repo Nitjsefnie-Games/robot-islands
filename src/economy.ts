@@ -79,12 +79,7 @@ export function batteryCapacityWs(state: IslandState, mul: SkillMultipliers): nu
 }
 
 /**
- * Optional context object for `computeRates` and `advanceIsland`. Adding
- * new parameters (heat, gates, …) extends this interface rather than
- * growing positional arity.
- */
-/**
- * §4 ocean-layer paused-state reasons (Task 10). Set on `PlacedBuilding.paused`
+ * §4 ocean-layer paused-state reasons (Task 10). Set on `PlacedBuilding.paused
  * by `computeRates` when an ocean platform's preconditions fail; cleared
  * (undefined) when they recover. Per the §4 design doc edge cases:
  *
@@ -105,6 +100,11 @@ export function batteryCapacityWs(state: IslandState, mul: SkillMultipliers): nu
  */
 export type PausedReason = 'anchor-depopulated' | 'terrain-lost';
 
+/**
+ * Optional context object for `computeRates` and `advanceIsland`. Adding
+ * new parameters (heat, gates, …) extends this interface rather than
+ * growing positional arity.
+ */
 export interface RatesContext {
   readonly modifierMul?: ModifierMultipliers;
   readonly defs?: DefCatalog;
