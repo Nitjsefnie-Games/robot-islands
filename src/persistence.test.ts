@@ -46,6 +46,8 @@ import {
   type SerializedSnapshotV7,
   type SerializedSnapshotV8,
   type SerializedSnapshotV11,
+  type SerializedIslandStateV11,
+  type SerializedWorld,
 } from './persistence.js';
 import {
   attachTerrainAt,
@@ -1710,18 +1712,55 @@ describe('deserializeWorld v8 → v9 round-trip', () => {
 describe('migrateV11toV12', () => {
   it('renames singularityStoredWs to batteryStoredWs preserving the value', () => {
     const v11: SerializedSnapshotV11 = {
-      v: 11, savedAt: 0, savedAtPerf: 0, world: {} as any,
+      v: 11,
+      savedAt: 0,
+      savedAtPerf: 0,
+      world: {
+        islands: [],
+        drones: [],
+        routes: [],
+        vehicles: [],
+        satellites: [],
+        repairDrones: [],
+        debrisFields: [],
+        commPackets: [],
+      } as unknown as SerializedWorld,
       islandStates: [{
         id: 'home',
-        state: { id: 'home', level: 5, xp: 100, lastTick: 0, inventory: {},
-          buildings: [], unlockedNodes: [], unlockedEdges: [], unspentSkillPoints: 4,
-          socketBindings: [], singularityStoredWs: 12345 } as any,
+        state: {
+          id: 'home',
+          level: 5,
+          xp: 100,
+          lastTick: 0,
+          inventory: {},
+          storageCaps: {},
+          funnelPending: {},
+          starterInventoryGrace: {},
+          buildings: [],
+          unlockedNodes: [],
+          unlockedEdges: [],
+          unspentSkillPoints: 4,
+          socketBindings: [],
+          declaredAt: null,
+          lastResetAt: null,
+          aiCoreCrafted: false,
+          ascendantCoreCrafted: false,
+          timeLockBankedMin: 0,
+          accelerationQueue: [],
+          accelerationRemainingMin: 0,
+          bankingEnabled: false,
+          genesisTarget: null,
+          singularityStoredWs: 12345,
+        } as unknown as SerializedIslandStateV11,
       }],
-    } as any;
+    };
     const v12 = migrateV11toV12(v11);
     expect(v12.v).toBe(12);
-    expect((v12.islandStates[0]!.state as any).batteryStoredWs).toBe(12345);
+    expect(v12.islandStates[0]!.state.batteryStoredWs).toBe(12345);
     expect((v12.islandStates[0]!.state as any).singularityStoredWs).toBeUndefined();
+    expect(v12.islandStates[0]!.state.level).toBe(5);
+    expect(v12.islandStates[0]!.state.xp).toBe(100);
+    expect(v12.islandStates[0]!.state.unspentSkillPoints).toBe(4);
   });
 });
 
