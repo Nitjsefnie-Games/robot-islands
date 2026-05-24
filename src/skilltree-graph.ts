@@ -3,7 +3,7 @@
 // player's frontier to a target node; `buyNode` applies that path.
 // AND-prereq keystones gate on full upstream ownership instead.
 
-import type { BranchId, SubPathId, SkillNode } from './skilltree.js';
+import type { BranchId, SubPathId, SkillNode, SkillEffect } from './skilltree.js';
 
 export type NodeId = string & { readonly __nodeBrand: unique symbol };
 export type EdgeId = string & { readonly __edgeBrand: unique symbol };
@@ -47,4 +47,26 @@ export interface KeystonePrereq {
   readonly targetNode: NodeId;
   readonly requires: ReadonlyArray<NodeId>;
   readonly cost: number;
+}
+
+export type CrystalId = string & { readonly __crystalBrand: unique symbol };
+
+export interface CrystalDef {
+  readonly id: CrystalId;
+  readonly displayName: string;
+  readonly tier: 1 | 2 | 3;
+  readonly eligibleSubPaths: ReadonlyArray<SubPathId>;
+  readonly nodes: ReadonlyArray<{
+    readonly idSuffix: string;
+    readonly cost: number;
+    readonly magnitude: number;
+    readonly effect: SkillEffect;
+    readonly description: string;
+    readonly position: { dx: number; dy: number };
+  }>;
+  readonly edges: ReadonlyArray<{
+    readonly fromSuffix: string;
+    readonly toSuffix: string;
+    readonly cost: number;
+  }>;
 }
