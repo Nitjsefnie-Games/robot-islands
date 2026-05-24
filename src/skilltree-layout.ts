@@ -2,18 +2,21 @@
 // Pure: computes deterministic positions for every skill-graph node, virtual
 // branch-root, and graft socket. No PixiJS, no DOM.
 //
-// Two-stage:
+// Three-stage:
 //   A. Place 5 branch roots on a regular pentagon (radius R).
-//   B. For each branch, run Fruchterman–Reingold on the sub-graph of nodes
-//      whose subPath belongs to that branch, anchored to the branch root.
+//   B. Place a sub-anchor per (branch, sub-path) — each sub-path gets its own
+//      angular slot in the branch's 72° wedge, at a fixed outward radius.
+//   C. Run Fruchterman–Reingold per sub-path (NOT per branch), pulling toward
+//      its sub-anchor. Sub-paths can't collapse into each other because each
+//      sim sees only intra-sub-path nodes and a sub-path-local anchor.
 //
 // Determinism is provided by mulberry32 seeded with the catalog node-count.
 
 import type { Graph, NodeId } from './skilltree-graph.js';
 import {
   BRANCH_SUBPATHS,
-  SUBPATH_BRANCH,
   type BranchId,
+  type SubPathId,
 } from './skilltree.js';
 
 export interface Point { readonly x: number; readonly y: number; }
@@ -24,12 +27,13 @@ export interface SkillGraphLayout {
   readonly graftSockets: ReadonlyMap<string, Point>;
 }
 
-const R = 600;       // pentagon radius (world-px)
-const K_REPULSION = 8000;
-const K_SPRING = 0.1;
-const ITERATIONS = 200;
-const SUB_RADIUS = 280; // initial scatter radius around each branch root
-const SOCKET_OFFSET = 140; // distance beyond the deepest node on its sub-path arc
+const R = 600;             // pentagon radius (world-px)
+const SUB_ANCHOR_OFFSET = 360; // sub-anchor distance from branch root, outward
+const SOCKET_OFFSET = 140; // graft socket distance past the sub-anchor
+const K_REPULSION = 6500;
+const K_SPRING = 0.12;
+const ITERATIONS = 220;
+const ANCHOR_K = 0.085;    // stronger pull than v1 so sub-paths stay tight in their wedge
 
 function mulberry32(seed: number): () => number {
   let t = seed >>> 0;
@@ -44,7 +48,7 @@ function mulberry32(seed: number): () => number {
 export function computeSkillGraphLayout(graph: Graph): SkillGraphLayout {
   const rng = mulberry32(graph.nodes.length);
 
-  // Stage A: place 5 branch roots on a regular pentagon.
+  // Stage A: 5 branch roots on a regular pentagon.
   const branchRoots = new Map<BranchId, Point>();
   const branches = Object.keys(BRANCH_SUBPATHS) as BranchId[];
   for (let i = 0; i < branches.length; i++) {
@@ -52,45 +56,64 @@ export function computeSkillGraphLayout(graph: Graph): SkillGraphLayout {
     branchRoots.set(branches[i]!, { x: R * Math.cos(theta), y: R * Math.sin(theta) });
   }
 
-  // Stage B: per-branch FR sim on the sub-graph.
-  const nodes = new Map<NodeId, { x: number; y: number }>();
-
+  // Stage B: per-(branch, sub-path) sub-anchors. Each branch owns a 72° wedge;
+  // its N sub-paths divide that wedge into N angular slots.
+  const subAnchors = new Map<SubPathId, Point>();
+  const BRANCH_WEDGE = (2 * Math.PI) / branches.length; // 72°
   for (const branch of branches) {
     const root = branchRoots.get(branch)!;
-    const branchNodeList = graph.nodes.filter(
-      (n) => SUBPATH_BRANCH[n.subPath] === branch,
-    );
-    if (branchNodeList.length === 0) continue;
-
-    // Initial scatter: place each node at root + small random offset, biased
-    // outward by sub-path index so sub-paths fan out as separate arcs.
+    const branchAngle = Math.atan2(root.y, root.x);
     const subPaths = BRANCH_SUBPATHS[branch];
+    for (let i = 0; i < subPaths.length; i++) {
+      // Each sub-path centred in its slot: slot width = wedge/N, slot centre =
+      // branchAngle + ((i + 0.5)/N - 0.5) * wedge.
+      const offsetFrac = (i + 0.5) / subPaths.length - 0.5;
+      const subAngle = branchAngle + offsetFrac * BRANCH_WEDGE;
+      const r = R + SUB_ANCHOR_OFFSET;
+      subAnchors.set(subPaths[i]!, { x: r * Math.cos(subAngle), y: r * Math.sin(subAngle) });
+    }
+  }
+
+  // Stage C: per-sub-path FR sim. Each sub-path's nodes are anchored to their
+  // own sub-anchor; only intra-sub-path edges feed attraction.
+  const nodes = new Map<NodeId, { x: number; y: number }>();
+
+  // Group nodes by sub-path once.
+  const nodesBySubPath = new Map<SubPathId, typeof graph.nodes[number][]>();
+  for (const n of graph.nodes) {
+    const arr = nodesBySubPath.get(n.subPath) ?? [];
+    arr.push(n);
+    nodesBySubPath.set(n.subPath, arr);
+  }
+
+  for (const [subPath, subNodes] of nodesBySubPath) {
+    const anchor = subAnchors.get(subPath);
+    if (!anchor) continue; // sub-path not assigned to any branch (shouldn't happen)
+    if (subNodes.length === 0) continue;
+
+    // Initial scatter around the sub-anchor.
     const pos = new Map<NodeId, { x: number; y: number }>();
-    for (const n of branchNodeList) {
-      const spIdx = subPaths.indexOf(n.subPath);
-      const arcSpread = (Math.PI * 2) / 6; // each sub-path gets ~60° arc
-      const spTheta = (spIdx - (subPaths.length - 1) / 2) * arcSpread / Math.max(1, subPaths.length - 1);
-      const baseAngle = Math.atan2(root.y, root.x) + spTheta;
-      const r0 = SUB_RADIUS * (0.4 + 0.6 * rng());
+    for (const n of subNodes) {
+      const a = rng() * Math.PI * 2;
+      const r0 = 60 + 40 * rng();
       pos.set(n.id as unknown as NodeId, {
-        x: root.x + r0 * Math.cos(baseAngle) + (rng() - 0.5) * 40,
-        y: root.y + r0 * Math.sin(baseAngle) + (rng() - 0.5) * 40,
+        x: anchor.x + r0 * Math.cos(a),
+        y: anchor.y + r0 * Math.sin(a),
       });
     }
 
-    // Build adjacency for the branch's sub-graph (only intra-branch edges).
-    const branchNodeIds = new Set(branchNodeList.map((n) => n.id));
+    // Intra-sub-path edges only.
+    const subIds = new Set(subNodes.map((n) => n.id));
     const intraEdges = graph.edges.filter(
-      (e) => branchNodeIds.has(e.from as unknown as string) &&
-             branchNodeIds.has(e.to as unknown as string),
+      (e) => subIds.has(e.from as unknown as string) &&
+             subIds.has(e.to as unknown as string),
     );
 
-    // Fruchterman–Reingold
     for (let iter = 0; iter < ITERATIONS; iter++) {
       const disp = new Map<NodeId, { x: number; y: number }>();
       for (const id of pos.keys()) disp.set(id, { x: 0, y: 0 });
 
-      // Repulsion (pairwise).
+      // Pairwise repulsion within the sub-path.
       const arr = [...pos.entries()];
       for (let i = 0; i < arr.length; i++) {
         const [idA, pa] = arr[i]!;
@@ -108,7 +131,7 @@ export function computeSkillGraphLayout(graph: Graph): SkillGraphLayout {
         }
       }
 
-      // Attraction along edges.
+      // Edge attraction.
       for (const e of intraEdges) {
         const pa = pos.get(e.from);
         const pb = pos.get(e.to);
@@ -125,15 +148,14 @@ export function computeSkillGraphLayout(graph: Graph): SkillGraphLayout {
         disp.get(e.to)!.y += fy;
       }
 
-      // Anchor pull toward the branch root (so the cluster doesn't drift).
-      const anchorK = 0.02;
+      // Sub-anchor pull. Stronger than v1 so the cluster stays inside its wedge.
       for (const [id, p] of pos) {
-        disp.get(id)!.x += (root.x - p.x) * anchorK;
-        disp.get(id)!.y += (root.y - p.y) * anchorK;
+        disp.get(id)!.x += (anchor.x - p.x) * ANCHOR_K;
+        disp.get(id)!.y += (anchor.y - p.y) * ANCHOR_K;
       }
 
-      // Cooling step: cap displacement and apply.
-      const temp = 30 * (1 - iter / ITERATIONS);
+      // Cooling step.
+      const temp = 28 * (1 - iter / ITERATIONS);
       for (const [id, p] of pos) {
         const d = disp.get(id)!;
         const mag = Math.max(0.01, Math.hypot(d.x, d.y));
@@ -146,23 +168,22 @@ export function computeSkillGraphLayout(graph: Graph): SkillGraphLayout {
     for (const [id, p] of pos) nodes.set(id, p);
   }
 
-  // Graft sockets: place at branch-root + outward radius along sub-path arc,
-  // past the deepest node in that sub-path.
+  // Graft sockets: past their sub-anchor, in the same angular slot.
   const graftSockets = new Map<string, Point>();
   for (const s of graph.graftSockets) {
-    const root = branchRoots.get(s.branchId) ?? { x: 0, y: 0 };
-    const subPaths = BRANCH_SUBPATHS[s.branchId] ?? [];
-    const spIdx = subPaths.indexOf(s.subPathId);
-    const arcSpread = (Math.PI * 2) / 6;
-    const spTheta = subPaths.length > 1
-      ? (spIdx - (subPaths.length - 1) / 2) * arcSpread / (subPaths.length - 1)
-      : 0;
-    const baseAngle = Math.atan2(root.y, root.x) + spTheta;
-    const r0 = SUB_RADIUS + SOCKET_OFFSET + s.attachmentDepth * 20;
-    graftSockets.set(s.id, {
-      x: root.x + r0 * Math.cos(baseAngle),
-      y: root.y + r0 * Math.sin(baseAngle),
-    });
+    const anchor = subAnchors.get(s.subPathId);
+    if (!anchor) {
+      // Fallback to branch root if the sub-path isn't slotted.
+      const root = branchRoots.get(s.branchId) ?? { x: 0, y: 0 };
+      graftSockets.set(s.id, { x: root.x * 1.4, y: root.y * 1.4 });
+      continue;
+    }
+    // Place outward along the sub-anchor's direction from origin.
+    const ar = Math.hypot(anchor.x, anchor.y);
+    const ax = anchor.x / ar;
+    const ay = anchor.y / ar;
+    const r = ar + SOCKET_OFFSET + s.attachmentDepth * 18;
+    graftSockets.set(s.id, { x: r * ax, y: r * ay });
   }
 
   return { nodes, branchRoots, graftSockets };
