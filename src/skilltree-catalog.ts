@@ -336,6 +336,15 @@ export const POWER_SYSTEMS_NOTABLES: SkillNode[] = [
     description: 'Fusion Pilot — ×1.30 power production',
     aura: { radius: 2, bonus: 0.12 },
   },
+  {
+    id: 'power_systems.notable.electrochemistry' as NodeId,
+    subPath: 'power_systems',
+    depth: 5,
+    cost: 5,
+    magnitude: 0.30,
+    effect: { kind: 'batteryCapacityMul' },
+    description: 'Electrochemistry Lab — ×1.30 battery capacity (all tiers)',
+  },
 ];
 
 // ---------------------------------------------------------------------------
