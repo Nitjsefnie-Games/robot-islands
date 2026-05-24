@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graft socket system — design spec · 2026-05-24</title>
+<style>
+  :root {
+    --bg:#1B1A17; --panel:#25231F; --panel2:#2E2C27; --rule:#3A3833;
+    --ink:#E9E6DC; --ink2:#CFCCC2; --muted:#8A877E;
+    --green:#8FA56E; --tan:#E0B47F; --rust:#D97757; --slate:#7DD3E8; --pink:#D38FCC; --red:#E08B7F; --oat:#3A352B;
+    --serif: ui-serif, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--ink); line-height: 1.6;
+    padding: 48px 24px 120px; }
+  .page { max-width: 1080px; margin: 0 auto; }
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 12px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 32px; color: var(--ink); margin-bottom: 12px; }
+  .lede { font-size: 14.5px; color: var(--ink2); margin-bottom: 22px; max-width: 820px; }
+  .lede code { color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 13px; font-family: var(--mono); }
+
+  .callout { background: var(--panel); border-left: 3px solid var(--slate); border-radius: 0 6px 6px 0;
+    padding: 12px 16px; margin: 14px 0 22px; font-size: 13.5px; color: var(--ink2); max-width: 880px; }
+  .callout.warn { border-left-color: var(--red); }
+  .callout.info { border-left-color: var(--green); }
+  .callout b { color: var(--ink); }
+  .callout code { font-family: var(--mono); font-size: 12.5px; color: var(--tan); }
+
+  section { margin-bottom: 36px; }
+  .sec-head { display: flex; gap: 12px; align-items: baseline; padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule); margin-bottom: 14px; }
+  .sec-head .num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .sec-head h2 { font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--ink); }
+  p { margin: 10px 0; color: var(--ink2); max-width: 860px; font-size: 14px; }
+  p code, li code, td code { font-family: var(--mono); font-size: 12.5px; color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; }
+  ul, ol { margin: 6px 0 14px 24px; }
+  li { color: var(--ink2); font-size: 14px; margin: 4px 0; }
+  b { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 13px; }
+  th, td { border: 1px solid var(--rule); padding: 8px 11px; text-align: left; vertical-align: top; color: var(--ink2); }
+  th { background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 600; }
+
+  pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 10px 14px; margin: 10px 0 16px; overflow-x: auto; font-family: var(--mono);
+    font-size: 12px; color: var(--ink); line-height: 1.5; max-width: 880px; }
+  .kw { color: var(--pink); } .str { color: var(--green); } .cmt { color: var(--muted); font-style: italic; }
+  .ty { color: var(--slate); } .num { color: var(--tan); }
+
+  .footer { color: var(--muted); margin-top: 56px; font-size: 12px; padding-top: 18px;
+    border-top: 1px solid var(--rule); }
+  .footer code { font-family: var(--mono); color: var(--tan); }
+
+  .toc { background: var(--panel); border-left: 3px solid var(--slate); border-radius: 0 6px 6px 0;
+    padding: 12px 18px; margin: 18px 0 24px; max-width: 880px; }
+  .toc h3 { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 8px; font-family: var(--mono); }
+  .toc ol { list-style: none; padding: 0; column-count: 2; column-gap: 28px; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--ink2); text-decoration: none; }
+  .toc a:hover { color: var(--rust); }
+  .toc .num { color: var(--muted); font-family: var(--mono); margin-right: 6px; font-size: 11.5px; }
+
+  .asciidiag {
+    background: var(--panel); border: 1px solid var(--rule); padding: 16px 22px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink2);
+    white-space: pre; line-height: 1.4; max-width: 880px; border-radius: 5px;
+    margin: 14px 0;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="eyebrow">Design spec · skilltree · graft socket system · 2026-05-24</div>
+<h1>Graft socket system — crafted Skill Crystals on a hand-curated socket grid</h1>
+<p class="lede">
+  Activate the 44 <code>GRAFT_SOCKET_CATALOG</code> entries that currently render as inert dashed circles in the graphview. Players craft <b>Skill Crystals</b> at a new T4 <b>Skill Forge</b> building; each crystal is attached to a single eligible socket, where it adds a small permanent mini-tree (3-5 nodes) of pure-multiplier or unique-effect nodes that integrate with the existing <code>buyNode</code> / cheapest-path solver. Free swap; persists per island. PoE cluster-jewel idiom applied to a sparse, pre-wired socket grid.
+</p>
+
+<div class="callout warn">
+  <b>Scope is large</b> — 3-5 days estimated end-to-end. Touches: new building def, new recipes, new SkillEffect surface, IslandState shape, persistence schema bump v8 → v9, graphview interactive socket UI, new modal for crystal selection, balance tuning. This spec breaks the work into 6 sub-tasks that can land independently across multiple sessions; ship Task 1-2 first to gate the rest.
+</div>
+
+<div class="callout info">
+  <b>Why crystals + sockets, not just more permanent nodes?</b> The hand-curated catalog already has 80 notables + 30 keystones. Crystals add player-driven late-game choice without expanding the fixed catalog further — they are inventory-craftable + freely swappable, which is the only "build-changing" mechanism that doesn't require respec (and v1 has no respec). Players reaching the level where sockets are reachable (sub-path depth 7-11) get a meaningful "I can specialize THIS island differently" lever.
+</div>
+
+<div class="toc">
+  <h3>Sections</h3>
+  <ol>
+    <li><span class="num">01</span><a href="#sec-overview">System overview</a></li>
+    <li><span class="num">02</span><a href="#sec-data">Data model</a></li>
+    <li><span class="num">03</span><a href="#sec-crystals">Skill Crystals (content)</a></li>
+    <li><span class="num">04</span><a href="#sec-forge">Skill Forge (building + recipes)</a></li>
+    <li><span class="num">05</span><a href="#sec-ui">Graphview UI for sockets</a></li>
+    <li><span class="num">06</span><a href="#sec-engine">Engine integration</a></li>
+    <li><span class="num">07</span><a href="#sec-persistence">Persistence + migration</a></li>
+    <li><span class="num">08</span><a href="#sec-balance">Balance</a></li>
+    <li><span class="num">09</span><a href="#sec-tasks">Task breakdown</a></li>
+    <li><span class="num">10</span><a href="#sec-scope">Out of scope</a></li>
+  </ol>
+</div>
+
+<!-- ====================================================================== -->
+<section id="sec-overview">
+<div class="sec-head"><span class="num">01</span><h2>System overview</h2></div>
+<div class="asciidiag">  inventory:  [ Mining Crystal × 2 ]  [ Smelting Crystal × 1 ]  [ … ]
+                            │
+                            ▼  attach via socket modal
+  graphview:           ┌─────────────┐
+                       │  socket  ◯ │  ← unbound (current behaviour)
+                       └─────────────┘
+
+  ── attach Mining Crystal ──▶
+
+                       ┌─────────────┐
+                       │  socket  ⬢ │  ← bound; mini-tree of 3-5
+                       │      ╱│╲    │     crystal-defined nodes
+                       │  ◉─◉ ◉─◉   │     becomes reachable via
+                       │      ◉      │     cheapest-path solver.
+                       └─────────────┘</div>
+<p>Crystal kinds are catalog-defined (NOT random per-save); the mini-tree's shape + node effects are constants. What's player-driven is <b>which crystal goes in which socket</b> — a build-shaping choice.</p>
+<p><b>Eligibility:</b> each socket has a <code>subPathId</code> in <code>GRAFT_SOCKET_CATALOG</code>. A Mining Crystal can only attach to sockets with <code>subPathId === 'mining'</code>. This keeps the player from mismatching crystals to thematically wrong sub-paths.</p>
+<p><b>Reachability:</b> sockets in the layout sit past the deepest catalog node of their sub-path (see <code>skilltree-layout.ts</code>). To buy any crystal mini-tree node, the player must first own the socket — which requires owning the deepest pre-socket node of that sub-path. So crystals reward sub-path investment.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-data">
+<div class="sec-head"><span class="num">02</span><h2>Data model</h2></div>
+<p>Extend <code>skilltree-graph.ts</code> with a <code>CrystalCatalog</code> type. Each catalog entry is a small graph fragment that gets <i>instantiated</i> against a specific socket at attachment time.</p>
+<pre><span class="cmt">// src/skilltree-graph.ts — additions</span>
+<span class="kw">export type</span> CrystalId = <span class="ty">string</span> &amp; { <span class="kw">readonly</span> __crystalBrand: <span class="kw">unique symbol</span> };
+
+<span class="kw">export interface</span> CrystalDef {
+  <span class="kw">readonly</span> id: CrystalId;
+  <span class="kw">readonly</span> displayName: <span class="ty">string</span>;
+  <span class="kw">readonly</span> tier: 1 | 2 | 3;        <span class="cmt">// crafting cost + power scales with tier</span>
+  <span class="kw">readonly</span> eligibleSubPaths: <span class="kw">ReadonlyArray</span>&lt;SubPathId&gt;;
+  <span class="cmt">// Mini-tree fragment — relative to the socket. Node ids and edge ids</span>
+  <span class="cmt">// are SUFFIXES; the engine prefixes them with the socket id at bind.</span>
+  <span class="kw">readonly</span> nodes: <span class="kw">ReadonlyArray</span>&lt;{
+    <span class="kw">readonly</span> idSuffix: <span class="ty">string</span>;          <span class="cmt">// e.g. 'core', 'a', 'notable'</span>
+    <span class="kw">readonly</span> cost: <span class="ty">number</span>;
+    <span class="kw">readonly</span> magnitude: <span class="ty">number</span>;
+    <span class="kw">readonly</span> effect: SkillEffect;
+    <span class="kw">readonly</span> description: <span class="ty">string</span>;
+    <span class="kw">readonly</span> position: { dx: <span class="ty">number</span>; dy: <span class="ty">number</span> }; <span class="cmt">// relative to socket centre</span>
+  }&gt;;
+  <span class="kw">readonly</span> edges: <span class="kw">ReadonlyArray</span>&lt;{
+    <span class="kw">readonly</span> fromSuffix: <span class="ty">string</span>;  <span class="cmt">// 'socket' refers to the socket itself</span>
+    <span class="kw">readonly</span> toSuffix: <span class="ty">string</span>;
+    <span class="kw">readonly</span> cost: <span class="ty">number</span>;
+  }&gt;;
+}</pre>
+<p>Per-island binding state on <code>IslandState</code>:</p>
+<pre><span class="kw">interface</span> IslandState {
+  <span class="cmt">// ... existing fields ...</span>
+  <span class="kw">readonly</span> socketBindings: <span class="kw">Map</span>&lt;<span class="ty">string</span>, CrystalId&gt;;  <span class="cmt">// socket.id → crystal.id</span>
+  <span class="cmt">// Crystals are consumed from inventory at bind time. To support free</span>
+  <span class="cmt">// swap, the engine RESTORES the previous crystal to inventory when a</span>
+  <span class="cmt">// socket is rebound. See §06.</span>
+}</pre>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-crystals">
+<div class="sec-head"><span class="num">03</span><h2>Skill Crystals (content)</h2></div>
+<p>v1 ships <b>15 crystal kinds</b> — one per sub-path. Each crystal has a tier-1 / tier-2 / tier-3 variant for cost gating + scaling magnitude (×1.5 between tiers).</p>
+<table>
+  <thead><tr><th>Crystal family</th><th>Sub-path</th><th>Mini-tree shape</th><th>Top-end effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>mining_core</code></td><td>mining</td><td>1 core notable + 2 filler arms</td><td>×1.50 ore-yield + 1.25 rare-trickle</td></tr>
+    <tr><td><code>forestry_core</code></td><td>forestry</td><td>same</td><td>logger analog</td></tr>
+    <tr><td><code>drilling_core</code></td><td>drilling</td><td>same</td><td>drill analog</td></tr>
+    <tr><td><code>robotics_core</code></td><td>robotics</td><td>1 core + 3-node linear</td><td>×0.5 construction time keystone</td></tr>
+    <tr><td><code>smelting_core</code> · <code>chemistry_core</code> · <code>electronics_core</code> · <code>power_core</code></td><td>refinement sub-paths</td><td>3-node V-shape</td><td>recipe-rate + power-consumption</td></tr>
+    <tr><td><code>storage_core</code> · <code>transport_core</code> · <code>network_core</code></td><td>logistics sub-paths</td><td>2-arm split</td><td>per-category cap + route capacity + comm range</td></tr>
+    <tr><td><code>launch_core</code> · <code>comm_core</code> · <code>discovery_core</code> · <code>resilience_core</code></td><td>orbital sub-paths</td><td>4-node ring</td><td>per-sub-path orbital ceilings</td></tr>
+  </tbody>
+</table>
+<p>Mini-tree node positions (relative to socket) keep the cluster within ~80 world-px of the socket centre so it doesn't overlap with sibling sockets or notable nodes nearby. Layout module reads <code>crystal.nodes[].position.{dx,dy}</code> and emits absolute positions at bind time.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-forge">
+<div class="sec-head"><span class="num">04</span><h2>Skill Forge (building + recipes)</h2></div>
+<p>New T4 building:</p>
+<table>
+  <thead><tr><th>Field</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code></td><td><code>skill_forge</code></td></tr>
+    <tr><td><code>displayName</code></td><td>Skill Forge</td></tr>
+    <tr><td><code>category</code></td><td><code>production</code></td></tr>
+    <tr><td><code>tier</code></td><td>4</td></tr>
+    <tr><td><code>footprint</code></td><td>2×2</td></tr>
+    <tr><td><code>power.consumes</code></td><td>1500 W operating, 200 W standby</td></tr>
+    <tr><td><code>placementCost</code></td><td>40 microchip + 8 ai_core_fragment + 4 reality_anchor</td></tr>
+  </tbody>
+</table>
+<p>Recipes — one per crystal-tier combo (~45 total: 15 crystals × 3 tiers). Each Skill Forge can run one recipe at a time. Cycle ~120s. Inputs scale: T1 crystal = a few rare resources; T3 crystal = significant late-game investment.</p>
+<p>Example recipe (Mining Crystal T1):</p>
+<pre>mining_crystal_t1:
+  inputs:  { iron_ore: 100, microchip: 4, reality_anchor: 1 }
+  outputs: { mining_crystal_t1: 1 }
+  cycleSec: 120</pre>
+<p>Per AGENTS.md "data lives where the consumer is" — crystal recipes go in <code>recipes.ts</code> like every other recipe; Skill Forge is just the building that runs them.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-ui">
+<div class="sec-head"><span class="num">05</span><h2>Graphview UI for sockets</h2></div>
+<p>The graphview today draws sockets as dashed circles (8-segment dashes) with no interactivity. Add:</p>
+<ol>
+  <li><b>Click an empty socket</b> → opens a DOM <i>crystal-picker</i> modal centred on the socket. Lists every crystal in the active island's inventory that's eligible (i.e. its <code>eligibleSubPaths</code> includes the socket's <code>subPathId</code>). Player picks one; engine binds it.</li>
+  <li><b>Click a bound socket</b> → opens the same modal pre-populated with the current crystal selected, plus an "Unbind (returns crystal to inventory)" button. Confirm before unbind if any of the bound crystal's mini-tree nodes are <i>owned</i> — unbinding refunds the SP spent on those nodes and clears them from <code>state.unlockedNodes</code>.</li>
+  <li><b>Render bound sockets</b> with the crystal's mini-tree nodes (via the existing <code>drawNodes</code> path) + edges (via <code>drawEdges</code>). The mini-tree's nodes appear in <code>DEFAULT_GRAPH.nodes</code> at runtime — see §06.</li>
+  <li><b>Hover an empty socket</b> → tooltip "<i>Empty graft socket — craft a Skill Crystal at a Skill Forge and click to attach.</i>"</li>
+  <li><b>Hover a bound socket</b> → tooltip with crystal name + sub-tree node count + total SP cost.</li>
+</ol>
+<p>Modal styling reuses the existing <code>.ri-skillgraph-overlay</code> conventions; the picker is a child overlay that doesn't dismiss the graphview.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-engine">
+<div class="sec-head"><span class="num">06</span><h2>Engine integration</h2></div>
+<p>The graph the cheapest-path solver sees is the union of <code>DEFAULT_GRAPH</code> + every island-bound crystal's mini-tree. Two implementation options:</p>
+<ol>
+  <li><b>Lazy graph construction.</b> A new <code>effectiveGraph(state): Graph</code> returns <code>DEFAULT_GRAPH</code> with each bound crystal's nodes + edges appended (with their IDs prefixed by the socket id). Solver calls <code>effectiveGraph(state)</code> at the start of <code>costToUnlock</code> / <code>buyNode</code>. Cost: ~O(n) per call where n = total mini-tree size; negligible.</li>
+  <li><b>Persistent graph mutation.</b> Mutate <code>DEFAULT_GRAPH</code> when binding / unbinding. Risky — defeats the readonly nature, and breaks parallel-island reasoning (each island has its own bindings).</li>
+</ol>
+<p><b>Pick option 1.</b> Pure, per-island-safe, and the per-tick cost is dominated by the existing Dijkstra anyway.</p>
+<p>Binding write path:</p>
+<pre>bindCrystal(state, socketId, crystalId):
+  <span class="kw">if</span> state.inventory[crystalId] === 0 <span class="kw">throw</span>
+  state.inventory[crystalId] -= 1
+  <span class="kw">const</span> prev = state.socketBindings.get(socketId)
+  <span class="kw">if</span> prev:
+    state.inventory[prev] = (state.inventory[prev] ?? 0) + 1
+    <span class="cmt">// Refund SP for any owned mini-tree nodes from the previous crystal</span>
+    refundSPForMiniTreeNodes(state, socketId, prev)
+  state.socketBindings.set(socketId, crystalId)</pre>
+<p>Effect fold: the existing <code>effectiveSkillMultipliers</code> walks <code>state.unlockedNodes</code> — if mini-tree nodes are in that set, their effects fold naturally with no special-casing. The crystal IS the catalog entry for those nodes.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-persistence">
+<div class="sec-head"><span class="num">07</span><h2>Persistence + migration</h2></div>
+<p>Schema bump v8 → v9:</p>
+<ul>
+  <li>New field <code>socketBindings: ReadonlyArray&lt;[socketId, crystalId]&gt;</code> on each <code>SerializedIslandStateV9</code> (serialized as tuple-array; deserialized into <code>Map</code>).</li>
+  <li><code>migrateV8toV9(s)</code>: adds <code>socketBindings: []</code> to every island state. Lossless; existing saves get empty bindings (no crystals attached anywhere). Inventory items already serialize naturally; no new field there.</li>
+  <li>SUPPORTED_LOAD_VERSIONS extended to <code>{7, 8, 9}</code>; loader walker chains.</li>
+  <li>If running the battery-ladder migration alongside, both fold into the v8 → v9 step.</li>
+</ul>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-balance">
+<div class="sec-head"><span class="num">08</span><h2>Balance — discussion</h2></div>
+<ul>
+  <li><b>Why one crystal per sub-path?</b> Mirrors the sub-path / branch axis the player already understands. 15 crystals × 3 tiers = 45 distinct items, manageable but not overwhelming.</li>
+  <li><b>Why T4 forge?</b> T4 is when players have stable mid-game logistics + can afford rare resources. Crystals unlock at T4 → reach socket depth (7-11) → bind. ~10-15 levels of progression before crystals matter.</li>
+  <li><b>Magnitude:</b> tier-3 crystals top out at ×1.5 for a single notable + a few small nodes. Compares to: a hand-curated notable in the main catalog is typically ×1.2-1.3. Crystals are stronger than catalog notables (justifies the crafting cost) but not game-breaking.</li>
+  <li><b>Per-island scope:</b> bindings are PER ISLAND. Each island can specialise differently; the player isn't locked into one global build.</li>
+  <li><b>Refund on unbind:</b> player can experiment without permanent loss. Lowers the cost-of-mistake floor; raises engagement.</li>
+</ul>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-tasks">
+<div class="sec-head"><span class="num">09</span><h2>Task breakdown</h2></div>
+<table>
+  <thead><tr><th>#</th><th>Task</th><th>Scope</th><th>Blocks</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Add <code>CrystalDef</code> + <code>CrystalCatalog</code> types, ship 3 starter crystals (mining T1/T2/T3) in <code>skilltree-crystals.ts</code>, <code>effectiveGraph</code> helper.</td><td>S–M</td><td>—</td></tr>
+    <tr><td>2</td><td><code>state.socketBindings</code> + <code>bindCrystal</code> / <code>unbindCrystal</code> functions + tests. Schema bump v8→v9 + <code>migrateV8toV9</code>.</td><td>M</td><td>1</td></tr>
+    <tr><td>3</td><td>Skill Forge building def + first crystal recipe in <code>recipes.ts</code>. Confirms craft pipeline works end-to-end before adding all 45 recipes.</td><td>S</td><td>—</td></tr>
+    <tr><td>4</td><td>Graphview: clickable empty socket → DOM crystal-picker modal → bind. Mini-tree renders via existing <code>drawNodes</code>. Owned mini-tree nodes light up.</td><td>M</td><td>1, 2</td></tr>
+    <tr><td>5</td><td>Unbind affordance + SP refund + crystal-return-to-inventory + confirmation prompt.</td><td>S</td><td>4</td></tr>
+    <tr><td>6</td><td>Content fill: remaining 12 crystal families × 3 tiers = 36 catalog rows + 42 recipes. Mostly mechanical; balance tuning per §08.</td><td>M–L</td><td>3</td></tr>
+  </tbody>
+</table>
+<p>Tasks 1-2 are the engine + persistence foundation; everything else builds on them. Ship in that order. Tasks 3-5 unlock playable end-to-end (one crystal, one forge, one socket); Task 6 fills the rest.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-scope">
+<div class="sec-head"><span class="num">10</span><h2>Out of scope</h2></div>
+<ul>
+  <li><b>Random / generated crystal stats.</b> Every crystal is catalog-defined; nothing rolls per save. PoE-style "stat-rolled" jewels would compound balance complexity and need an itemiser system.</li>
+  <li><b>Cross-island crystal sharing.</b> Crystals are inventory items on the crafting island; transferring them between islands uses the existing route system if applicable. No special "crystal share" mechanic.</li>
+  <li><b>Crystal upgrade / fusion.</b> No "combine 3 T1 crystals into a T2 crystal" recipe. Each tier is crafted independently from rarer inputs.</li>
+  <li><b>Socket count expansion.</b> The 44 hand-curated sockets are fixed. Adding more requires updating <code>GRAFT_SOCKET_CATALOG</code> + the layout module; not a player-facing growth lever.</li>
+  <li><b>Quest / drop crystal sources.</b> All crystals are crafted at the Skill Forge. A future spec could add quest drops; not v1.</li>
+  <li><b>Build planner integration.</b> Saved-builds (separate audit item, deferred) would also need to capture socket bindings. Out of scope until build-planner ships.</li>
+</ul>
+</section>
+
+<div class="footer">
+  Graft socket system design v1 · 2026-05-24 · sources: <code>src/skilltree-graph.ts:29</code>, <code>src/skilltree-catalog.ts:1219-1273</code>, <code>src/skilltree-layout.ts (graftSockets path)</code>, <code>src/skilltree-graphview.ts (socket draw block)</code> · gap surfaced by <code>robot-islands/2026-05-24-skilltree-unfinished</code> audit.
+</div>
+
+</div>
+</body>
+</html>
