@@ -349,7 +349,67 @@ export type ResourceId =
   | 'tritium_seed'
   | 'heavy_water'
   // §04: Skill Crystal — T1 Mining Crystal (crafted at Skill Forge).
-  | 'mining_crystal_t1';
+  | 'mining_crystal_t1'
+  // Task 6: content fill — 19 remaining families × 3 tiers = 57 new crystals.
+  | 'mining_crystal_t2'
+  | 'mining_crystal_t3'
+  | 'forestry_crystal_t1'
+  | 'forestry_crystal_t2'
+  | 'forestry_crystal_t3'
+  | 'drilling_crystal_t1'
+  | 'drilling_crystal_t2'
+  | 'drilling_crystal_t3'
+  | 'robotics_crystal_t1'
+  | 'robotics_crystal_t2'
+  | 'robotics_crystal_t3'
+  | 'smelting_crystal_t1'
+  | 'smelting_crystal_t2'
+  | 'smelting_crystal_t3'
+  | 'chemistry_crystal_t1'
+  | 'chemistry_crystal_t2'
+  | 'chemistry_crystal_t3'
+  | 'electronics_crystal_t1'
+  | 'electronics_crystal_t2'
+  | 'electronics_crystal_t3'
+  | 'power_systems_crystal_t1'
+  | 'power_systems_crystal_t2'
+  | 'power_systems_crystal_t3'
+  | 'storage_crystal_t1'
+  | 'storage_crystal_t2'
+  | 'storage_crystal_t3'
+  | 'transport_crystal_t1'
+  | 'transport_crystal_t2'
+  | 'transport_crystal_t3'
+  | 'network_crystal_t1'
+  | 'network_crystal_t2'
+  | 'network_crystal_t3'
+  | 'launch_crystal_t1'
+  | 'launch_crystal_t2'
+  | 'launch_crystal_t3'
+  | 'communication_crystal_t1'
+  | 'communication_crystal_t2'
+  | 'communication_crystal_t3'
+  | 'discovery_crystal_t1'
+  | 'discovery_crystal_t2'
+  | 'discovery_crystal_t3'
+  | 'resilience_crystal_t1'
+  | 'resilience_crystal_t2'
+  | 'resilience_crystal_t3'
+  | 'patronage_crystal_t1'
+  | 'patronage_crystal_t2'
+  | 'patronage_crystal_t3'
+  | 'aquaculture_crystal_t1'
+  | 'aquaculture_crystal_t2'
+  | 'aquaculture_crystal_t3'
+  | 'hydroprocessing_crystal_t1'
+  | 'hydroprocessing_crystal_t2'
+  | 'hydroprocessing_crystal_t3'
+  | 'submarine_crystal_t1'
+  | 'submarine_crystal_t2'
+  | 'submarine_crystal_t3'
+  | 'oceanography_crystal_t1'
+  | 'oceanography_crystal_t2'
+  | 'oceanography_crystal_t3';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -596,6 +656,66 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'heavy_water',
   // §04: Skill Crystal — T1 Mining Crystal.
   'mining_crystal_t1',
+  // Task 6: content fill — 19 remaining families × 3 tiers.
+  'mining_crystal_t2',
+  'mining_crystal_t3',
+  'forestry_crystal_t1',
+  'forestry_crystal_t2',
+  'forestry_crystal_t3',
+  'drilling_crystal_t1',
+  'drilling_crystal_t2',
+  'drilling_crystal_t3',
+  'robotics_crystal_t1',
+  'robotics_crystal_t2',
+  'robotics_crystal_t3',
+  'smelting_crystal_t1',
+  'smelting_crystal_t2',
+  'smelting_crystal_t3',
+  'chemistry_crystal_t1',
+  'chemistry_crystal_t2',
+  'chemistry_crystal_t3',
+  'electronics_crystal_t1',
+  'electronics_crystal_t2',
+  'electronics_crystal_t3',
+  'power_systems_crystal_t1',
+  'power_systems_crystal_t2',
+  'power_systems_crystal_t3',
+  'storage_crystal_t1',
+  'storage_crystal_t2',
+  'storage_crystal_t3',
+  'transport_crystal_t1',
+  'transport_crystal_t2',
+  'transport_crystal_t3',
+  'network_crystal_t1',
+  'network_crystal_t2',
+  'network_crystal_t3',
+  'launch_crystal_t1',
+  'launch_crystal_t2',
+  'launch_crystal_t3',
+  'communication_crystal_t1',
+  'communication_crystal_t2',
+  'communication_crystal_t3',
+  'discovery_crystal_t1',
+  'discovery_crystal_t2',
+  'discovery_crystal_t3',
+  'resilience_crystal_t1',
+  'resilience_crystal_t2',
+  'resilience_crystal_t3',
+  'patronage_crystal_t1',
+  'patronage_crystal_t2',
+  'patronage_crystal_t3',
+  'aquaculture_crystal_t1',
+  'aquaculture_crystal_t2',
+  'aquaculture_crystal_t3',
+  'hydroprocessing_crystal_t1',
+  'hydroprocessing_crystal_t2',
+  'hydroprocessing_crystal_t3',
+  'submarine_crystal_t1',
+  'submarine_crystal_t2',
+  'submarine_crystal_t3',
+  'oceanography_crystal_t1',
+  'oceanography_crystal_t2',
+  'oceanography_crystal_t3',
 ];
 
 /**
@@ -878,6 +998,66 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // §04: T1 Skill Crystal. Crafted at T4 Skill Forge using T5 inputs
   // (reality_anchor), so it carries T4 endgame weight (100).
   mining_crystal_t1: 100,
+  // Task 6: T2 = 300 (T5-ish), T3 = 1000 (T6-ish).
+  mining_crystal_t2: 300,
+  mining_crystal_t3: 1000,
+  forestry_crystal_t1: 100,
+  forestry_crystal_t2: 300,
+  forestry_crystal_t3: 1000,
+  drilling_crystal_t1: 100,
+  drilling_crystal_t2: 300,
+  drilling_crystal_t3: 1000,
+  robotics_crystal_t1: 100,
+  robotics_crystal_t2: 300,
+  robotics_crystal_t3: 1000,
+  smelting_crystal_t1: 100,
+  smelting_crystal_t2: 300,
+  smelting_crystal_t3: 1000,
+  chemistry_crystal_t1: 100,
+  chemistry_crystal_t2: 300,
+  chemistry_crystal_t3: 1000,
+  electronics_crystal_t1: 100,
+  electronics_crystal_t2: 300,
+  electronics_crystal_t3: 1000,
+  power_systems_crystal_t1: 100,
+  power_systems_crystal_t2: 300,
+  power_systems_crystal_t3: 1000,
+  storage_crystal_t1: 100,
+  storage_crystal_t2: 300,
+  storage_crystal_t3: 1000,
+  transport_crystal_t1: 100,
+  transport_crystal_t2: 300,
+  transport_crystal_t3: 1000,
+  network_crystal_t1: 100,
+  network_crystal_t2: 300,
+  network_crystal_t3: 1000,
+  launch_crystal_t1: 100,
+  launch_crystal_t2: 300,
+  launch_crystal_t3: 1000,
+  communication_crystal_t1: 100,
+  communication_crystal_t2: 300,
+  communication_crystal_t3: 1000,
+  discovery_crystal_t1: 100,
+  discovery_crystal_t2: 300,
+  discovery_crystal_t3: 1000,
+  resilience_crystal_t1: 100,
+  resilience_crystal_t2: 300,
+  resilience_crystal_t3: 1000,
+  patronage_crystal_t1: 100,
+  patronage_crystal_t2: 300,
+  patronage_crystal_t3: 1000,
+  aquaculture_crystal_t1: 100,
+  aquaculture_crystal_t2: 300,
+  aquaculture_crystal_t3: 1000,
+  hydroprocessing_crystal_t1: 100,
+  hydroprocessing_crystal_t2: 300,
+  hydroprocessing_crystal_t3: 1000,
+  submarine_crystal_t1: 100,
+  submarine_crystal_t2: 300,
+  submarine_crystal_t3: 1000,
+  oceanography_crystal_t1: 100,
+  oceanography_crystal_t2: 300,
+  oceanography_crystal_t3: 1000,
 };
 
 /**
@@ -1016,7 +1196,67 @@ export type RecipeId =
   | 'nodule_concentrator_re'
   | 'nodule_concentrator_co'
   | 'vent_mineral_refinery_exotic'
-  | 'vent_mineral_refinery_tritium';
+  | 'vent_mineral_refinery_tritium'
+  // Task 6: synthetic recipe ids for Skill Forge crystal variants.
+  | 'skill_forge_mining_t2'
+  | 'skill_forge_mining_t3'
+  | 'skill_forge_forestry_t1'
+  | 'skill_forge_forestry_t2'
+  | 'skill_forge_forestry_t3'
+  | 'skill_forge_drilling_t1'
+  | 'skill_forge_drilling_t2'
+  | 'skill_forge_drilling_t3'
+  | 'skill_forge_robotics_t1'
+  | 'skill_forge_robotics_t2'
+  | 'skill_forge_robotics_t3'
+  | 'skill_forge_smelting_t1'
+  | 'skill_forge_smelting_t2'
+  | 'skill_forge_smelting_t3'
+  | 'skill_forge_chemistry_t1'
+  | 'skill_forge_chemistry_t2'
+  | 'skill_forge_chemistry_t3'
+  | 'skill_forge_electronics_t1'
+  | 'skill_forge_electronics_t2'
+  | 'skill_forge_electronics_t3'
+  | 'skill_forge_power_systems_t1'
+  | 'skill_forge_power_systems_t2'
+  | 'skill_forge_power_systems_t3'
+  | 'skill_forge_storage_t1'
+  | 'skill_forge_storage_t2'
+  | 'skill_forge_storage_t3'
+  | 'skill_forge_transport_t1'
+  | 'skill_forge_transport_t2'
+  | 'skill_forge_transport_t3'
+  | 'skill_forge_network_t1'
+  | 'skill_forge_network_t2'
+  | 'skill_forge_network_t3'
+  | 'skill_forge_launch_t1'
+  | 'skill_forge_launch_t2'
+  | 'skill_forge_launch_t3'
+  | 'skill_forge_communication_t1'
+  | 'skill_forge_communication_t2'
+  | 'skill_forge_communication_t3'
+  | 'skill_forge_discovery_t1'
+  | 'skill_forge_discovery_t2'
+  | 'skill_forge_discovery_t3'
+  | 'skill_forge_resilience_t1'
+  | 'skill_forge_resilience_t2'
+  | 'skill_forge_resilience_t3'
+  | 'skill_forge_patronage_t1'
+  | 'skill_forge_patronage_t2'
+  | 'skill_forge_patronage_t3'
+  | 'skill_forge_aquaculture_t1'
+  | 'skill_forge_aquaculture_t2'
+  | 'skill_forge_aquaculture_t3'
+  | 'skill_forge_hydroprocessing_t1'
+  | 'skill_forge_hydroprocessing_t2'
+  | 'skill_forge_hydroprocessing_t3'
+  | 'skill_forge_submarine_t1'
+  | 'skill_forge_submarine_t2'
+  | 'skill_forge_submarine_t3'
+  | 'skill_forge_oceanography_t1'
+  | 'skill_forge_oceanography_t2'
+  | 'skill_forge_oceanography_t3';
 
 /**
  * Recipe binding by recipe id. Buildings without a recipe (Solar, Dock,
@@ -1385,6 +1625,362 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 120,
     inputs: { iron_ore: 100, microchip: 4, reality_anchor: 1 },
     outputs: { mining_crystal_t1: 1 },
+    category: 'electronics',
+  },
+
+  // Task 6: remaining crystal recipes (57 new recipes for 19 families × 3 tiers + mining T2/T3).
+  skill_forge_mining_t2: {
+    cycleSec: 120,
+    inputs: { steel: 50, microchip: 8, reality_anchor: 2 },
+    outputs: { mining_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_mining_t3: {
+    cycleSec: 120,
+    inputs: { exotic_alloy: 10, ai_core: 2, reality_anchor: 4 },
+    outputs: { mining_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_forestry_t1: {
+    cycleSec: 120,
+    inputs: { wood: 100, microchip: 4, reality_anchor: 1 },
+    outputs: { forestry_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_forestry_t2: {
+    cycleSec: 120,
+    inputs: { lumber: 50, microchip: 8, reality_anchor: 2 },
+    outputs: { forestry_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_forestry_t3: {
+    cycleSec: 120,
+    inputs: { carbon_fiber: 20, ai_core: 2, reality_anchor: 4 },
+    outputs: { forestry_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_drilling_t1: {
+    cycleSec: 120,
+    inputs: { stone: 100, microchip: 4, reality_anchor: 1 },
+    outputs: { drilling_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_drilling_t2: {
+    cycleSec: 120,
+    inputs: { steel: 50, microchip: 8, reality_anchor: 2 },
+    outputs: { drilling_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_drilling_t3: {
+    cycleSec: 120,
+    inputs: { diamond_ore: 20, ai_core: 2, reality_anchor: 4 },
+    outputs: { drilling_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_robotics_t1: {
+    cycleSec: 120,
+    inputs: { gear: 20, microchip: 4, reality_anchor: 1 },
+    outputs: { robotics_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_robotics_t2: {
+    cycleSec: 120,
+    inputs: { electric_motor: 10, microchip: 8, reality_anchor: 2 },
+    outputs: { robotics_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_robotics_t3: {
+    cycleSec: 120,
+    inputs: { ai_core: 2, quantum_chip: 2, reality_anchor: 4 },
+    outputs: { robotics_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_smelting_t1: {
+    cycleSec: 120,
+    inputs: { iron_ore: 100, coke: 20, reality_anchor: 1 },
+    outputs: { smelting_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_smelting_t2: {
+    cycleSec: 120,
+    inputs: { steel: 30, microchip: 8, reality_anchor: 2 },
+    outputs: { smelting_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_smelting_t3: {
+    cycleSec: 120,
+    inputs: { exotic_alloy: 10, ai_core: 2, reality_anchor: 4 },
+    outputs: { smelting_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_chemistry_t1: {
+    cycleSec: 120,
+    inputs: { sulfur: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { chemistry_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_chemistry_t2: {
+    cycleSec: 120,
+    inputs: { sulfuric_acid: 30, microchip: 8, reality_anchor: 2 },
+    outputs: { chemistry_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_chemistry_t3: {
+    cycleSec: 120,
+    inputs: { exotic_alloy_seed: 10, ai_core: 2, reality_anchor: 4 },
+    outputs: { chemistry_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_electronics_t1: {
+    cycleSec: 120,
+    inputs: { microchip: 20, wire: 20, reality_anchor: 1 },
+    outputs: { electronics_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_electronics_t2: {
+    cycleSec: 120,
+    inputs: { quantum_chip: 5, microchip: 10, reality_anchor: 2 },
+    outputs: { electronics_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_electronics_t3: {
+    cycleSec: 120,
+    inputs: { ai_core: 2, quantum_chip: 5, reality_anchor: 4 },
+    outputs: { electronics_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_power_systems_t1: {
+    cycleSec: 120,
+    inputs: { coal: 100, microchip: 4, reality_anchor: 1 },
+    outputs: { power_systems_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_power_systems_t2: {
+    cycleSec: 120,
+    inputs: { battery: 20, microchip: 8, reality_anchor: 2 },
+    outputs: { power_systems_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_power_systems_t3: {
+    cycleSec: 120,
+    inputs: { nuclear_fuel_rod: 5, ai_core: 2, reality_anchor: 4 },
+    outputs: { power_systems_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_storage_t1: {
+    cycleSec: 120,
+    inputs: { wood: 100, microchip: 4, reality_anchor: 1 },
+    outputs: { storage_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_storage_t2: {
+    cycleSec: 120,
+    inputs: { steel: 30, microchip: 8, reality_anchor: 2 },
+    outputs: { storage_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_storage_t3: {
+    cycleSec: 120,
+    inputs: { foundation_kit_refined: 10, ai_core: 2, reality_anchor: 4 },
+    outputs: { storage_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_transport_t1: {
+    cycleSec: 120,
+    inputs: { bolt: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { transport_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_transport_t2: {
+    cycleSec: 120,
+    inputs: { gear: 20, microchip: 8, reality_anchor: 2 },
+    outputs: { transport_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_transport_t3: {
+    cycleSec: 120,
+    inputs: { steel_beam: 20, ai_core: 2, reality_anchor: 4 },
+    outputs: { transport_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_network_t1: {
+    cycleSec: 120,
+    inputs: { wire: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { network_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_network_t2: {
+    cycleSec: 120,
+    inputs: { optical_fiber: 20, microchip: 8, reality_anchor: 2 },
+    outputs: { network_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_network_t3: {
+    cycleSec: 120,
+    inputs: { quantum_chip: 5, ai_core: 2, reality_anchor: 4 },
+    outputs: { network_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_launch_t1: {
+    cycleSec: 120,
+    inputs: { steel: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { launch_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_launch_t2: {
+    cycleSec: 120,
+    inputs: { fuel_cell: 10, microchip: 8, reality_anchor: 2 },
+    outputs: { launch_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_launch_t3: {
+    cycleSec: 120,
+    inputs: { ascendant_core: 1, ai_core: 2, reality_anchor: 4 },
+    outputs: { launch_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_communication_t1: {
+    cycleSec: 120,
+    inputs: { copper_ingot: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { communication_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_communication_t2: {
+    cycleSec: 120,
+    inputs: { transistor: 20, microchip: 8, reality_anchor: 2 },
+    outputs: { communication_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_communication_t3: {
+    cycleSec: 120,
+    inputs: { tachyonic_transmitter: 2, ai_core: 2, reality_anchor: 4 },
+    outputs: { communication_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_discovery_t1: {
+    cycleSec: 120,
+    inputs: { quartz: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { discovery_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_discovery_t2: {
+    cycleSec: 120,
+    inputs: { glass: 30, microchip: 8, reality_anchor: 2 },
+    outputs: { discovery_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_discovery_t3: {
+    cycleSec: 120,
+    inputs: { scanner_sat: 1, ai_core: 2, reality_anchor: 4 },
+    outputs: { discovery_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_resilience_t1: {
+    cycleSec: 120,
+    inputs: { brick: 100, microchip: 4, reality_anchor: 1 },
+    outputs: { resilience_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_resilience_t2: {
+    cycleSec: 120,
+    inputs: { concrete: 50, microchip: 8, reality_anchor: 2 },
+    outputs: { resilience_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_resilience_t3: {
+    cycleSec: 120,
+    inputs: { repair_pack: 10, ai_core: 2, reality_anchor: 4 },
+    outputs: { resilience_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_patronage_t1: {
+    cycleSec: 120,
+    inputs: { plank: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { patronage_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_patronage_t2: {
+    cycleSec: 120,
+    inputs: { lumber: 30, microchip: 8, reality_anchor: 2 },
+    outputs: { patronage_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_patronage_t3: {
+    cycleSec: 120,
+    inputs: { foundation_kit_enriched: 10, ai_core: 2, reality_anchor: 4 },
+    outputs: { patronage_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_aquaculture_t1: {
+    cycleSec: 120,
+    inputs: { fresh_water: 100, microchip: 4, reality_anchor: 1 },
+    outputs: { aquaculture_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_aquaculture_t2: {
+    cycleSec: 120,
+    inputs: { salt: 50, microchip: 8, reality_anchor: 2 },
+    outputs: { aquaculture_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_aquaculture_t3: {
+    cycleSec: 120,
+    inputs: { heavy_water: 20, ai_core: 2, reality_anchor: 4 },
+    outputs: { aquaculture_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_hydroprocessing_t1: {
+    cycleSec: 120,
+    inputs: { crude_oil: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { hydroprocessing_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_hydroprocessing_t2: {
+    cycleSec: 120,
+    inputs: { diesel: 30, microchip: 8, reality_anchor: 2 },
+    outputs: { hydroprocessing_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_hydroprocessing_t3: {
+    cycleSec: 120,
+    inputs: { cryogenic_hydrogen: 20, ai_core: 2, reality_anchor: 4 },
+    outputs: { hydroprocessing_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_submarine_t1: {
+    cycleSec: 120,
+    inputs: { steel: 50, microchip: 4, reality_anchor: 1 },
+    outputs: { submarine_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_submarine_t2: {
+    cycleSec: 120,
+    inputs: { battery: 20, microchip: 8, reality_anchor: 2 },
+    outputs: { submarine_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_submarine_t3: {
+    cycleSec: 120,
+    inputs: { fuel_cell: 10, ai_core: 2, reality_anchor: 4 },
+    outputs: { submarine_crystal_t3: 1 },
+    category: 'electronics',
+  },
+  skill_forge_oceanography_t1: {
+    cycleSec: 120,
+    inputs: { sand: 100, microchip: 4, reality_anchor: 1 },
+    outputs: { oceanography_crystal_t1: 1 },
+    category: 'electronics',
+  },
+  skill_forge_oceanography_t2: {
+    cycleSec: 120,
+    inputs: { glass: 30, microchip: 8, reality_anchor: 2 },
+    outputs: { oceanography_crystal_t2: 1 },
+    category: 'electronics',
+  },
+  skill_forge_oceanography_t3: {
+    cycleSec: 120,
+    inputs: { optical_fiber: 20, ai_core: 2, reality_anchor: 4 },
+    outputs: { oceanography_crystal_t3: 1 },
     category: 'electronics',
   },
 
