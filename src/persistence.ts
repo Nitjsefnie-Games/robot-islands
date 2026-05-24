@@ -58,6 +58,7 @@ import { _seedVehicleIdCounter } from './settlement.js';
 
 import type { VictoryCondition } from './endgame.js';
 import type { NodeId } from './skilltree.js';
+import { cumulativeSkillPointsForLevel } from './skilltree.js';
 import type { CrystalId, EdgeId } from './skilltree-graph.js';
 import type { OceanCellSpec } from './ocean-cell.js';
 
@@ -67,7 +68,7 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
  *  string, so a new key returns "no save" without colliding with older
  *  stores. */
-export const STORAGE_KEY = 'robot-islands:save:v10';
+export const STORAGE_KEY = 'robot-islands:save:v11';
 
 /** User-visible storage-key label. The Settings panel renders this
  *  string in the storage-key footer line. */
@@ -75,17 +76,15 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 10 as const;
+export const SCHEMA_VERSION = 11 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
- *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10.
+ *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10 → v11.
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
- *  policy from v7 onward. When bumping past v10: add `migrateV10toV11`,
- *  extend this set with 11, bump SCHEMA_VERSION, add a SerializedSnapshotV10
- *  type alias for the migration's input shape. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10]);
+ *  policy from v7 onward. */
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -263,8 +262,11 @@ export type SerializedSnapshotV9 = Omit<SaveSnapshot, 'v'> & { readonly v: 9 };
  *  crystals stay bound; the mini-tree node ownership in unlockedNodes gets
  *  wiped along with everything else).
  *  Reset: unlockedNodes → [], unlockedEdges → [], unspentSkillPoints →
- *  max(0, level - 1) (matches the SP-grant-per-level formula from §9.1). */
-export function migrateV9toV10(s: SerializedSnapshotV9): SaveSnapshot {
+ *  cumulativeSkillPointsForLevel(level) — the §9.1-correct total a level-L
+ *  island should have received under the 1.1^level grant curve. At L10 that's
+ *  ~14 SP; at L70 ~5500; at L100 ~~14000 (vs. the flat (level-1) approximation
+ *  which under-refunds badly past ~L15). */
+export function migrateV9toV10(s: SerializedSnapshotV9): SerializedSnapshotV10 {
   return {
     ...s,
     v: 10 as const,
@@ -274,7 +276,38 @@ export function migrateV9toV10(s: SerializedSnapshotV9): SaveSnapshot {
         ...entry.state,
         unlockedNodes: [] as ReadonlyArray<NodeId>,
         unlockedEdges: [] as ReadonlyArray<EdgeId>,
-        unspentSkillPoints: Math.max(0, entry.state.level - 1),
+        unspentSkillPoints: cumulativeSkillPointsForLevel(entry.state.level),
+      },
+    })),
+  } as SerializedSnapshotV10;
+}
+
+/** v10 top-level snapshot shape. Structurally identical to v11 (SaveSnapshot)
+ *  except the v literal. The v10 → v11 migration is a per-island SP top-up. */
+export type SerializedSnapshotV10 = Omit<SaveSnapshot, 'v'> & { readonly v: 10 };
+
+/** Migrate a v10 snapshot to v11 (current). Top-up only — does NOT reset
+ *  progression. The shipped v10 migration used a wrong formula
+ *  (`max(0, level - 1)`) that under-refunded high-level islands (L70 got 69
+ *  SP instead of ~5500). This pass corrects: if any island's unspent SP is
+ *  below cumulativeSkillPointsForLevel(level), bump it up to that value.
+ *
+ *  Side effect: a player who legitimately spent SP after v9→v10 migration
+ *  gets refunded the difference (over-credit). That's the friendly
+ *  direction and was explicitly chosen — under-refund must be fixable
+ *  without making players manually re-buy everything they unlocked since. */
+export function migrateV10toV11(s: SerializedSnapshotV10): SaveSnapshot {
+  return {
+    ...s,
+    v: 11 as const,
+    islandStates: s.islandStates.map((entry) => ({
+      id: entry.id,
+      state: {
+        ...entry.state,
+        unspentSkillPoints: Math.max(
+          entry.state.unspentSkillPoints,
+          cumulativeSkillPointsForLevel(entry.state.level),
+        ),
       },
     })),
   } as SaveSnapshot;
@@ -414,7 +447,7 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Walk v7 → v8 → v9 → v10 migration chain.
+  // Walk v7 → v8 → v9 → v10 → v11 migration chain.
   if ((snapshot as unknown as { v: number }).v === 7) {
     snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7) as unknown as SaveSnapshot;
   }
@@ -422,7 +455,10 @@ export function deserializeWorld(
     snapshot = migrateV8toV9(snapshot as unknown as SerializedSnapshotV8) as unknown as SaveSnapshot;
   }
   if ((snapshot as unknown as { v: number }).v === 9) {
-    snapshot = migrateV9toV10(snapshot as unknown as SerializedSnapshotV9);
+    snapshot = migrateV9toV10(snapshot as unknown as SerializedSnapshotV9) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 10) {
+    snapshot = migrateV10toV11(snapshot as unknown as SerializedSnapshotV10);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {

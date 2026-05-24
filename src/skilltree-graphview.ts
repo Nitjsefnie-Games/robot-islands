@@ -8,9 +8,7 @@ import {
   DEFAULT_GRAPH,
   BRANCH_LABEL,
   SUBPATH_BRANCH,
-  buyKeystone,
   buyNode,
-  canBuyKeystone,
   costToUnlock,
   effectiveGraph,
   bindCrystal,
@@ -44,10 +42,6 @@ type NodeKind = 'filler' | 'notable' | 'keystone';
 
 const KEYSTONE_TARGETS: ReadonlySet<string> = new Set(
   KEYSTONE_PREREQS.map((k) => String(k.targetNode)),
-);
-
-const KEYSTONE_BY_TARGET: ReadonlyMap<string, typeof KEYSTONE_PREREQS[number]> = new Map(
-  KEYSTONE_PREREQS.map((k) => [String(k.targetNode), k]),
 );
 
 function spentInBranchLocal(state: IslandState, branchId: BranchId, graph: Graph): number {
@@ -362,21 +356,10 @@ export function mountSkillGraphView(
   function handleNodeClick(nodeId: GNodeId): void {
     const state = deps.getState();
     if (state.unlockedNodes.has(nodeId)) return;
-
-    const ks = KEYSTONE_BY_TARGET.get(String(nodeId));
-    if (ks) {
-      if (!canBuyKeystone(ks, state)) return;
-      buyKeystone(ks, state);
-      refresh();
-      return;
-    }
-
+    // Uniform Dijkstra path for everything — fillers, notables, keystones.
+    // buyNode handles the root-node fallback for depth-1 fillers (no incoming
+    // edges) and walks the cheapest path otherwise, auto-owning intermediates.
     const graph = effectiveGraph(state);
-    // Don't pre-check costToUnlock — it returns null for root nodes
-    // (depth-1 fillers with no incoming edges), which would block a fresh
-    // island from ever buying its first node. buyNode has its own
-    // root-node fallback (skilltree.ts buyNode) that handles this case
-    // by checking isRootNode and charging the node's flat cost.
     try { buyNode(graph, state, nodeId); } catch { return; }
     refresh();
   }
@@ -397,10 +380,8 @@ export function mountSkillGraphView(
     const state = deps.getState();
     const graph = effectiveGraph(state);
     const owned = state.unlockedNodes.has(node.id as unknown as GNodeId);
-    const ks = KEYSTONE_BY_TARGET.get(String(node.id));
     let reachable: number | null;
     if (owned) reachable = 0;
-    else if (ks) reachable = ks.cost;
     else {
       const path = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, node.id as unknown as GNodeId);
       if (path) reachable = path.totalCost;
@@ -428,25 +409,63 @@ export function mountSkillGraphView(
     const posMap = buildEffectivePosMap(layout, state);
     const getPos = (id: string) => posMap.get(id) ?? null;
 
+    // For unowned reachable nodes: highlight the entire cheapest-path the
+    // player would pay if they clicked. For owned nodes: fall back to the
+    // direct-incident-edges highlight (no useful path to draw).
+    const isOwned = state.unlockedNodes.has(nodeId);
+    const path = isOwned
+      ? null
+      : costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, nodeId);
+
     const g = new Graphics();
-    for (const e of graph.edges) {
-      if (e.from !== nodeId && e.to !== nodeId) continue;
-      const a = getPos(String(e.from));
-      const b = getPos(String(e.to));
-      if (!a || !b) continue;
-      const cp = controlPoint(a, b, curveSign(String(e.id)));
-      g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+    if (path && path.path.length > 0) {
+      // Highlight every edge on the cheapest path with the rust accent.
+      // Also highlight every node on the path (the intermediates that the
+      // player would auto-own) so the visual sweep is unambiguous.
+      const pathNodeIds = new Set<string>();
+      for (const e of path.path) {
+        const a = getPos(String(e.from));
+        const b = getPos(String(e.to));
+        if (!a || !b) continue;
+        const cp = controlPoint(a, b, curveSign(String(e.id)));
+        g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        pathNodeIds.add(String(e.from));
+        pathNodeIds.add(String(e.to));
+      }
+      g.stroke({ color: 0xD97757, width: 2.6, alpha: 1 });
+      layers.highlight.addChild(g);
+
+      // Path-node rings: small clay ring around each auto-owned intermediate
+      // so the player sees exactly which nodes the click would unlock.
+      const rings = new Graphics();
+      for (const id of pathNodeIds) {
+        if (state.unlockedNodes.has(id as unknown as GNodeId)) continue; // already owned, skip
+        const p = getPos(id);
+        if (!p) continue;
+        rings.circle(p.x, p.y, 14).stroke({ color: 0xD97757, width: 1.5, alpha: 0.9 });
+      }
+      layers.highlight.addChild(rings);
+    } else {
+      // Owned or root-node hover: incident edges only.
+      for (const e of graph.edges) {
+        if (e.from !== nodeId && e.to !== nodeId) continue;
+        const a = getPos(String(e.from));
+        const b = getPos(String(e.to));
+        if (!a || !b) continue;
+        const cp = controlPoint(a, b, curveSign(String(e.id)));
+        g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+      }
+      for (const e of graph.bridges) {
+        if (e.from !== nodeId && e.to !== nodeId) continue;
+        const a = getPos(String(e.from));
+        const b = getPos(String(e.to));
+        if (!a || !b) continue;
+        const cp = controlPoint(a, b, curveSign(String(e.id)));
+        g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+      }
+      g.stroke({ color: 0xD97757, width: 2.6, alpha: 1 });
+      layers.highlight.addChild(g);
     }
-    for (const e of graph.bridges) {
-      if (e.from !== nodeId && e.to !== nodeId) continue;
-      const a = getPos(String(e.from));
-      const b = getPos(String(e.to));
-      if (!a || !b) continue;
-      const cp = controlPoint(a, b, curveSign(String(e.id)));
-      g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-    }
-    g.stroke({ color: 0xD97757, width: 2.6, alpha: 1 });
-    layers.highlight.addChild(g);
 
     const node = graph.nodes.find((n) => (n.id as unknown as GNodeId) === nodeId);
     if (node?.aura) {
@@ -504,17 +523,14 @@ export function mountSkillGraphView(
       if (!filterOn[kind]) continue;
 
       const owned = state.unlockedNodes.has(n.id as unknown as GNodeId);
-      const ks = KEYSTONE_BY_TARGET.get(String(n.id));
-      const path = ks ? null : costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, n.id as unknown as GNodeId);
-      // Root nodes (no incoming edges) are directly purchasable at their
-      // flat node cost via buyNode's root-fallback — costToUnlock returns
-      // null for them because Dijkstra has no incoming edges to walk.
-      let reachableCost: number;
-      if (ks) reachableCost = ks.cost;
-      else if (path) reachableCost = path.totalCost;
-      else reachableCost = graph.edges.some((e) => e.to === (n.id as unknown as GNodeId)) ? Infinity : n.cost;
+      // Uniform: every node uses the Dijkstra cheapest-path cost. Root nodes
+      // (no incoming edges — depth-1 fillers) fall back to their flat node
+      // cost since costToUnlock returns null when no path exists.
+      const path = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, n.id as unknown as GNodeId);
+      const hasIncoming = graph.edges.some((e) => e.to === (n.id as unknown as GNodeId));
+      const reachableCost: number = path ? path.totalCost : (hasIncoming ? Infinity : n.cost);
       const affordable = state.unspentSkillPoints >= reachableCost;
-      const purchasable = !owned && affordable && (ks ? canBuyKeystone(ks, state) : reachableCost !== Infinity);
+      const purchasable = !owned && affordable && reachableCost !== Infinity;
 
       // State-driven palette: owned (green fill, full alpha), purchasable
       // (kind fill + clay accent stroke, full alpha, thicker), locked

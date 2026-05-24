@@ -121,7 +121,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(10);
+    expect(snap.v).toBe(11);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -463,8 +463,8 @@ describe('schema version', () => {
     expect(() => deserializeWorld(future, 0, 0)).toThrow(/not supported/);
   });
 
-  it('exports STORAGE_KEY containing v10 so it does not collide with stale saves', () => {
-    expect(STORAGE_KEY).toMatch(/v10$/);
+  it('exports STORAGE_KEY containing v11 so it does not collide with stale saves', () => {
+    expect(STORAGE_KEY).toMatch(/v11$/);
   });
 
   it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
@@ -1456,7 +1456,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(10);
+    expect(snap.v).toBe(11);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -1705,18 +1705,18 @@ describe('deserializeWorld v8 → v9 round-trip', () => {
   });
 });
 
-describe('deserializeWorld v7 → v8 round-trip', () => {
-  it('migrates a v7 snapshot and yields v8 in-memory state', () => {
+describe('deserializeWorld v7 → v11 migration chain', () => {
+  it('walks v7 through v8/v9/v10/v11 and refunds SP via cumulativeSkillPointsForLevel', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
-    const v9snap = serializeWorld(world, states, 0, 0);
+    const currentSnap = serializeWorld(world, states, 0, 0);
 
-    // Forge a v7-shaped snapshot from the v9 one.
+    // Forge a v7-shaped snapshot from the current one.
     const v7 = {
-      ...v9snap,
+      ...currentSnap,
       v: 7,
-      islandStates: v9snap.islandStates.map((entry) => {
+      islandStates: currentSnap.islandStates.map((entry) => {
         const { unlockedEdges: _ue, socketBindings: _sb, ...stateRest } = entry.state;
         return {
           id: entry.id,
@@ -1735,7 +1735,9 @@ describe('deserializeWorld v7 → v8 round-trip', () => {
     const home = restored.get('home')!;
     expect(home.level).toBe(5);
     expect(home.xp).toBe(1200);
-    expect(home.unspentSkillPoints).toBe(4);
+    // L5 cumulative under the 1.1^L curve: sum of max(1, floor(1.1^L)) for L=1..5
+    // = 1+1+1+1+1 = 5 (1.1^5 ≈ 1.61 → floor 1).
+    expect(home.unspentSkillPoints).toBe(5);
     expect(home.unlockedNodes.size).toBe(0);
     expect(home.unlockedEdges.size).toBe(0);
     expect(home.socketBindings).toBeInstanceOf(Map);
