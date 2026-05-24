@@ -268,7 +268,7 @@ export const POWER_SYSTEMS_FILLER_ARCHETYPES: FillerArchetype[] = [
   },
   {
     idPrefix: 'powerSystems.xpGain', effectKind: 'xpGainMul',
-    effectExtra: { category: 'power' }, subPath: 'power_systems',
+    subPath: 'power_systems',
     baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
 ];
