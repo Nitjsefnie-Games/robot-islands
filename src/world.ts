@@ -983,9 +983,13 @@ export function ensureCellGenerated(world: WorldState, cellX: number, cellY: num
 function startingInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
   for (const r of ALL_RESOURCES) inv[r] = 0;
-  // §3.7 starter placeholder — tuned for first-build bootstrap.
+  // §3.7 starter placeholder — tuned for first-build bootstrap. 30 steel
+  // covers a single Wind Turbine (the night-safe T1 power option — see the
+  // `place_solar` tutorial step which now points at Wind, since spawning
+  // during the night phase with only Solar would stall the economy).
   inv.stone = 60;
   inv.wood = 40;
+  inv.steel = 30;
   inv.foundation_kit = 1;
   return inv;
 }

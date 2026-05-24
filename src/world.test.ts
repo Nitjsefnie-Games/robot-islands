@@ -314,6 +314,7 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
     // The starter bundle resources land at the §14-tuned figures.
     expect(state.inventory.stone).toBe(60);
     expect(state.inventory.wood).toBe(40);
+    expect(state.inventory.steel).toBe(30);
     expect(state.inventory.foundation_kit).toBe(1);
     // Every other resource stays at 0 — the kit is INTENTIONALLY minimal,
     // not a "skip the early game" seed. Pre-§3.7 regression sentinels
@@ -325,7 +326,7 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
     expect(state.inventory.iron_ingot).toBe(0);
     // Every NON-starter resource is 0.
     for (const r of ALL_RESOURCES) {
-      if (r === 'stone' || r === 'wood' || r === 'foundation_kit') continue;
+      if (r === 'stone' || r === 'wood' || r === 'steel' || r === 'foundation_kit') continue;
       expect(state.inventory[r], `inventory.${r} should be 0`).toBe(0);
     }
   });
