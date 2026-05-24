@@ -1094,6 +1094,7 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     singularityStoredWs: 0,
     // §12.4 Starter inventory grace cap — no kit yet delivered.
     starterInventoryGrace: {} as Record<ResourceId, number>,
+    socketBindings: new Map(),
     lastTick: nowMs,
   };
 }

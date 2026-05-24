@@ -84,6 +84,7 @@ function makeState(inventory: Partial<Record<ResourceId, number>> = {}): IslandS
     genesisTarget: null,
     singularityStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
+    socketBindings: new Map(),
     lastTick: 0,
   };
 }

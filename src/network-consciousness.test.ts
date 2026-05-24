@@ -52,6 +52,7 @@ function makeState(id: string, level: number): IslandState {
     bankingEnabled: false,
     singularityStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
+    socketBindings: new Map(),
   };
 }
 

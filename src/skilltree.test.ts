@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
+  bindCrystal,
   buyKeystone,
   buyNode,
   canBuyKeystone,
@@ -14,6 +15,7 @@ import {
   costForDepth,
   costToUnlock,
   cumulativeSkillPointsForLevel,
+  effectiveGraph,
   effectiveSkillMultipliers,
   hasPickableSkill,
   launchSuccessBonus,
@@ -24,8 +26,11 @@ import {
   t6Unlocked,
   tierForLevel,
   type SkillNode,
+  unbindCrystal,
 } from './skilltree.js';
+import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import type { EdgeId, Graph, KeystonePrereq } from './skilltree-graph.js';
+import { DEFAULT_GRAPH } from './skilltree.js';
 
 /** Minimal legacy-style nodes so multiplier-folding tests don't depend on the
  *  live catalog (which uses `.notable.` / `.keystone.` ids). */
@@ -100,6 +105,7 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     genesisTarget: null,
     singularityStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
+    socketBindings: new Map(),
     lastTick: 0,
     ...over,
   };
@@ -703,5 +709,89 @@ describe('canBuyKeystone / buyKeystone', () => {
     buyKeystone(ks, state);
     expect(state.unspentSkillPoints).toBe(2);
     expect(state.unlockedNodes.has('K1')).toBe(true);
+  });
+});
+
+describe('bindCrystal / unbindCrystal', () => {
+  it('bindCrystal consumes crystal from inventory and sets binding', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 2;
+    const state = makeState({ inventory: inv });
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(1);
+    expect(state.socketBindings.get('gs.ext.mining-1')).toBe('mining_crystal_t1');
+  });
+
+  it('bindCrystal throws when crystal is absent', () => {
+    const state = makeState();
+    expect(() =>
+      bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId),
+    ).toThrow(/no mining_crystal_t1 in inventory/);
+  });
+
+  it('bindCrystal returns previous crystal to inventory', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    (inv as Record<string, number>).mining_crystal_t2 = 1;
+    const state = makeState({ inventory: inv });
+    state.socketBindings.set('gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t2' as import('./skilltree-graph.js').CrystalId);
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(2);
+    expect((state.inventory as Record<string, number>).mining_crystal_t2).toBe(0);
+    expect(state.socketBindings.get('gs.ext.mining-1')).toBe('mining_crystal_t2');
+  });
+
+  it('unbindCrystal returns crystal to inventory and clears binding', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 0;
+    const state = makeState({ inventory: inv });
+    state.socketBindings.set('gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    unbindCrystal(state, 'gs.ext.mining-1');
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(1);
+    expect(state.socketBindings.has('gs.ext.mining-1')).toBe(false);
+  });
+
+  it('unbindCrystal is a no-op on an empty socket', () => {
+    const state = makeState();
+    unbindCrystal(state, 'gs.ext.mining-1');
+    expect(state.socketBindings.has('gs.ext.mining-1')).toBe(false);
+  });
+});
+
+describe('effectiveGraph with crystal bindings', () => {
+  it('returns DEFAULT_GRAPH reference when there are no bindings', () => {
+    const state = makeState();
+    expect(effectiveGraph(state)).toBe(DEFAULT_GRAPH);
+  });
+
+  it('appends mini-tree nodes and edges with the crystal-id prefix', () => {
+    const state = makeState({
+      socketBindings: new Map([['gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId]]),
+    });
+    const g = effectiveGraph(state);
+    expect(g.nodes.length).toBeGreaterThan(DEFAULT_GRAPH.nodes.length);
+    expect(g.edges.length).toBeGreaterThan(DEFAULT_GRAPH.edges.length);
+
+    const crystal = CRYSTAL_CATALOG.find((c) => c.id === 'mining_crystal_t1')!;
+    for (const nodeDef of crystal.nodes) {
+      const id = `gs.ext.mining-1.mining_crystal_t1.${nodeDef.idSuffix}`;
+      expect(g.nodes.some((n) => n.id === id)).toBe(true);
+    }
+    for (const edgeDef of crystal.edges) {
+      const from = edgeDef.fromSuffix === 'socket' ? 'gs.ext.mining-1' : `gs.ext.mining-1.mining_crystal_t1.${edgeDef.fromSuffix}`;
+      const to = edgeDef.toSuffix === 'socket' ? 'gs.ext.mining-1' : `gs.ext.mining-1.mining_crystal_t1.${edgeDef.toSuffix}`;
+      expect(g.edges.some((e) => e.from === from && e.to === to)).toBe(true);
+    }
+  });
+
+  it('includes the synthetic socket node only once per socket', () => {
+    const state = makeState({
+      socketBindings: new Map([
+        ['gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId],
+      ]),
+    });
+    const g = effectiveGraph(state);
+    const socketNodes = g.nodes.filter((n) => n.id === 'gs.ext.mining-1');
+    expect(socketNodes.length).toBe(1);
   });
 });

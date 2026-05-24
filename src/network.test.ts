@@ -28,6 +28,7 @@ describe('computeSharedNetworkState', () => {
       genesisTarget: null,
       singularityStoredWs: 0,
       starterInventoryGrace: {} as any,
+      socketBindings: new Map(),
       lastTick: 0,
     } as IslandState;
 
@@ -53,6 +54,7 @@ describe('computeSharedNetworkState', () => {
       genesisTarget: null,
       singularityStoredWs: 0,
       starterInventoryGrace: {} as any,
+      socketBindings: new Map(),
       lastTick: 0,
     } as IslandState;
 
@@ -127,6 +129,7 @@ describe('computeSharedNetworkState', () => {
       genesisTarget: null,
       singularityStoredWs: 0,
       starterInventoryGrace: {} as any,
+      socketBindings: new Map(),
       lastTick: 0,
     } as IslandState;
 
@@ -152,6 +155,7 @@ describe('computeSharedNetworkState', () => {
       genesisTarget: null,
       singularityStoredWs: 0,
       starterInventoryGrace: {} as any,
+      socketBindings: new Map(),
       lastTick: 0,
     } as IslandState;
 
@@ -227,6 +231,7 @@ describe('computeSharedNetworkState', () => {
       genesisTarget: null,
       singularityStoredWs: 0,
       starterInventoryGrace: {} as any,
+      socketBindings: new Map(),
       lastTick: 0,
     } as IslandState;
 
@@ -298,6 +303,7 @@ describe('computeSharedNetworkState', () => {
       genesisTarget: null,
       singularityStoredWs: 0,
       starterInventoryGrace: {} as any,
+      socketBindings: new Map(),
       lastTick: 0,
     } as IslandState;
 
@@ -323,6 +329,7 @@ describe('computeSharedNetworkState', () => {
       genesisTarget: null,
       singularityStoredWs: 0,
       starterInventoryGrace: {} as any,
+      socketBindings: new Map(),
       lastTick: 0,
     } as IslandState;
 

@@ -83,7 +83,7 @@ describe('loadWorld IDB walker', () => {
     // Current key should now hold the migrated v8 snapshot.
     expect(store.has(STORAGE_KEY)).toBe(true);
     const v8snapshot = store.get(STORAGE_KEY) as { v: number };
-    expect(v8snapshot.v).toBe(8);
+    expect(v8snapshot.v).toBe(9);
 
     // Old v7 key should be deleted.
     expect(store.has(v7Key)).toBe(false);

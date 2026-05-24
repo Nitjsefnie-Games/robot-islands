@@ -58,7 +58,7 @@ import { _seedVehicleIdCounter } from './settlement.js';
 
 import type { VictoryCondition } from './endgame.js';
 import type { NodeId } from './skilltree.js';
-import type { EdgeId } from './skilltree-graph.js';
+import type { CrystalId, EdgeId } from './skilltree-graph.js';
 import type { OceanCellSpec } from './ocean-cell.js';
 
 import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
@@ -67,7 +67,7 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
  *  string, so a new key returns "no save" without colliding with older
  *  stores. */
-export const STORAGE_KEY = 'robot-islands:save:v8';
+export const STORAGE_KEY = 'robot-islands:save:v9';
 
 /** User-visible storage-key label. The Settings panel renders this
  *  string in the storage-key footer line. */
@@ -75,7 +75,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 8 as const;
+export const SCHEMA_VERSION = 9 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -85,7 +85,7 @@ export const SCHEMA_VERSION = 8 as const;
  *  bump SCHEMA_VERSION to 9, add a SerializedSnapshotV8 type alias for
  *  the migration's input shape. See AGENTS.md → "Persistence migrations"
  *  for the full "bump = migrate" policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -101,9 +101,10 @@ export type SerializedIslandSpec = Omit<IslandSpec, 'terrainAt'>;
 
 /** IslandState with Set and Map fields converted to arrays for JSON. */
 export interface SerializedIslandState
-  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges'> {
+  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings'> {
   readonly unlockedNodes: ReadonlyArray<NodeId>;
   readonly unlockedEdges: ReadonlyArray<EdgeId>;
+  readonly socketBindings: ReadonlyArray<[string, CrystalId]>;
 }
 
 /** One entry of the per-island state map. We avoid serializing a `Map`
@@ -170,10 +171,13 @@ export interface SerializedWorld {
 
 /** v7 island state — same as v8 but without unlockedEdges and with the old
  *  progression fields subPathProgress and specializationRole. */
-export type SerializedIslandStateV7 = Omit<SerializedIslandState, 'unlockedEdges'> & {
+export type SerializedIslandStateV7 = Omit<SerializedIslandState, 'unlockedEdges' | 'socketBindings'> & {
   readonly subPathProgress: ReadonlyArray<[string, { spent: number; complete: boolean }]>;
   readonly specializationRole: string | null;
 };
+
+/** v8 island state — same as v9 but without socketBindings. */
+export type SerializedIslandStateV8 = Omit<SerializedIslandState, 'socketBindings'>;
 
 /** v7 top-level snapshot shape. Mirrors SaveSnapshot but with v7 island
  *  states and schema version pinned to 7. */
@@ -188,11 +192,24 @@ export interface SerializedSnapshotV7 {
   }>;
 }
 
-/** Migrate a v7 snapshot to v8 (SaveSnapshot). Preserves identity (level, xp,
- *  inventory, buildings) and resets progression: unlockedNodes → [],
+/** v8 top-level snapshot shape. Mirrors SaveSnapshot but with v8 island
+ *  states and schema version pinned to 8. */
+export interface SerializedSnapshotV8 {
+  readonly v: 8;
+  readonly savedAt: number;
+  readonly savedAtPerf: number;
+  readonly world: SerializedWorld;
+  readonly islandStates: ReadonlyArray<{
+    readonly id: string;
+    readonly state: SerializedIslandStateV8;
+  }>;
+}
+
+/** Migrate a v7 snapshot to v8 (intermediate shape). Preserves identity (level,
+ *  xp, inventory, buildings) and resets progression: unlockedNodes → [],
  *  unlockedEdges → [], strips subPathProgress / specializationRole,
  *  recomputes unspentSkillPoints as max(0, level - 1). */
-export function migrateV7toV8(s: SerializedSnapshotV7): SaveSnapshot {
+export function migrateV7toV8(s: SerializedSnapshotV7): SerializedSnapshotV8 {
   return {
     ...s,
     v: 8 as const,
@@ -210,6 +227,22 @@ export function migrateV7toV8(s: SerializedSnapshotV7): SaveSnapshot {
         },
       };
     }),
+  };
+}
+
+/** Migrate a v8 snapshot to v9 (SaveSnapshot). Adds empty socketBindings to
+ *  every island state. Lossless — existing saves get empty bindings. */
+export function migrateV8toV9(s: SerializedSnapshotV8): SaveSnapshot {
+  return {
+    ...s,
+    v: 9 as const,
+    islandStates: s.islandStates.map((entry) => ({
+      id: entry.id,
+      state: {
+        ...entry.state,
+        socketBindings: [] as ReadonlyArray<[string, CrystalId]>,
+      } as unknown as SerializedIslandState,
+    })),
   } as SaveSnapshot;
 }
 
@@ -260,6 +293,7 @@ export function serializeWorld(
       ...state,
       unlockedNodes: [...state.unlockedNodes],
       unlockedEdges: [...state.unlockedEdges],
+      socketBindings: [...state.socketBindings],
     };
     stateEntries.push({ id, state: serialized });
   }
@@ -346,9 +380,12 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Walk v7 → v8 migration chain.
+  // Walk v7 → v8 → v9 migration chain.
   if ((snapshot as unknown as { v: number }).v === 7) {
-    snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7);
+    snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 8) {
+    snapshot = migrateV8toV9(snapshot as unknown as SerializedSnapshotV8) as unknown as SaveSnapshot;
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
@@ -483,6 +520,7 @@ export function deserializeWorld(
       starterInventoryGrace: { ...s.starterInventoryGrace },
       unlockedNodes: new Set(s.unlockedNodes),
       unlockedEdges: new Set(s.unlockedEdges ?? []),
+      socketBindings: new Map(s.socketBindings ?? []),
       // §9.7 cooldown anchors. Both fields were minted in the saved
       // session's `performance.now()` domain (matching `lastTick`); apply
       // the same perfShift the drone/vehicle/repair-drone timestamps get,
