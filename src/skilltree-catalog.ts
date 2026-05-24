@@ -323,8 +323,8 @@ export const POWER_SYSTEMS_NOTABLES: SkillNode[] = [
     depth: 3,
     cost: 3,
     magnitude: 0.25,
-    effect: { kind: 'xpGainMul', category: 'power' },
-    description: 'XP Telemetry — ×1.25 XP gain from power-category recipes',
+    effect: { kind: 'xpGainMul' },
+    description: 'XP Telemetry — ×1.25 XP gain',
   },
   {
     id: 'power_systems.notable.fusionPilot' as NodeId,
