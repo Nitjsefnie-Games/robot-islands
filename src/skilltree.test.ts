@@ -476,6 +476,8 @@ describe('effectiveSkillMultipliers', () => {
     const s = makeState({ unlockedNodes: new Set(['bat.1']) });
     const m = effectiveSkillMultipliers(s, { nodes: LG_BAT, edges: [], bridges: [], graftSockets: [] } as Graph);
     expect(m.batteryCapacity).toBeCloseTo(1.30, 9);
+    expect(m.powerProduction).toBe(1); // negative assertion: cross-contamination guard
+    expect(m.storageCap).toBe(1); //                "
   });
 });
 
