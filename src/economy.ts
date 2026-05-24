@@ -79,7 +79,7 @@ export function batteryCapacityWs(state: IslandState, mul: SkillMultipliers): nu
 }
 
 /**
- * §4 ocean-layer paused-state reasons (Task 10). Set on `PlacedBuilding.paused
+ * §4 ocean-layer paused-state reasons (Task 10). Set on `PlacedBuilding.paused`
  * by `computeRates` when an ocean platform's preconditions fail; cleared
  * (undefined) when they recover. Per the §4 design doc edge cases:
  *
