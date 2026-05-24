@@ -211,11 +211,7 @@ export const SUBPATH_BRANCH: Readonly<Record<SubPathId, BranchId>> = {
   communication: 'orbital',
   discovery: 'orbital',
   resilience: 'orbital',
-  // Patronage is intentionally a logistics sub-path (storage/transport/network
-  // share the supply-chain framing). The redesign brainstorm log lists it
-  // beside "Ocean" because both were added in the same task slice, NOT because
-  // patronage belongs to the ocean branch. Keep here.
-  patronage: 'logistics',
+  patronage: 'ocean',
   aquaculture: 'ocean',
   hydroprocessing: 'ocean',
   submarine: 'ocean',
@@ -226,9 +222,9 @@ export const SUBPATH_BRANCH: Readonly<Record<SubPathId, BranchId>> = {
 export const BRANCH_SUBPATHS: Readonly<Record<BranchId, ReadonlyArray<SubPathId>>> = {
   extraction: ['mining', 'forestry', 'drilling', 'robotics'],
   refinement: ['smelting', 'chemistry', 'electronics', 'power_systems'],
-  logistics: ['storage', 'transport', 'network', 'patronage'],
+  logistics: ['storage', 'transport', 'network'],
   orbital: ['launch', 'communication', 'discovery', 'resilience'],
-  ocean: ['aquaculture', 'hydroprocessing', 'submarine', 'oceanography'],
+  ocean: ['aquaculture', 'hydroprocessing', 'submarine', 'oceanography', 'patronage'],
 };
 
 /** Display labels for sub-paths. Pure data; UI imports these to render. */
@@ -305,8 +301,7 @@ export function t5Unlocked(state: { level: number; aiCoreCrafted: boolean }): bo
  * building on that island. Pure — takes the minimal duck-typed shape so
  * it can be called with `(IslandState, IslandSpec)` or with bespoke
  * fixtures. Used as the canonical full-island T6 gate (catalog rows,
- * future T6 skill sub-paths per §14.9, future T6 launch mechanics per
- * §14.2-14.8).
+ * orbital skill sub-paths per §14.9, T6 launch mechanics per §14.2-14.8).
  *
  * Note: `buildingUnlocked` exempts the Spaceport itself from the
  * "Spaceport placed" half of the gate — otherwise the very first
