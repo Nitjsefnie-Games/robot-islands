@@ -555,9 +555,6 @@ export function evaluateConditionalEffectCondition(
       }
       return count >= c.n;
     }
-    case 'adjacent-tile-is-biome':
-      // Placeholder: terrainAt not available at this call site without ctx.
-      return false;
   }
 }
 
