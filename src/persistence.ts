@@ -77,8 +77,14 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
  *  snapshot whose `v` is not strictly equal to this. */
 export const SCHEMA_VERSION = 8 as const;
 
-/** Versions that load paths accept. Only the current SCHEMA_VERSION
- *  — all migration paths were removed pre-release. */
+/** Versions that loadWorld accepts. The walker (loadWorld) chains
+ *  migrateV<N>toV<N+1> functions from the lowest known version up to
+ *  SCHEMA_VERSION; current chain: v7 → v8 (graph redesign).
+ *
+ *  When bumping to v9: add `migrateV8toV9`, extend this set with 9,
+ *  bump SCHEMA_VERSION to 9, add a SerializedSnapshotV8 type alias for
+ *  the migration's input shape. See AGENTS.md → "Persistence migrations"
+ *  for the full "bump = migrate" policy from v7 onward. */
 export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8]);
 
 // ---------------------------------------------------------------------------
