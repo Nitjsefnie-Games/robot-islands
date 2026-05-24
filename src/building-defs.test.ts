@@ -64,6 +64,8 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'cryo_containment_assembler',
   'accelerator_core_lab',
   'self_replication_lab',
+  // §04: Skill Forge — T4 production building for crafting Skill Crystals.
+  'skill_forge',
   // §9.5 biome-locked uniques (Mass Driver + Carbon Forge + Tidal Array + Sunspire)
   'mass_driver',
   'carbon_forge',

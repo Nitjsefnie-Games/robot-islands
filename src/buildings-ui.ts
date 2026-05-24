@@ -57,6 +57,7 @@ const CATEGORY_LABEL: Readonly<Record<BuildingCategory, string>> = {
   logistics: 'Logistics',
   cooling: 'Cooling',
   special: 'Special',
+  production: 'Production',
 };
 
 const TIER_BREAKPOINT: Readonly<Record<Tier, number>> = {

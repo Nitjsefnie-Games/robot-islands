@@ -89,6 +89,7 @@ export const CATEGORY_HUD_LABEL: Readonly<Record<BuildingCategory, string>> = {
   logistics: 'Logistics',
   special: 'Special',
   cooling: 'Cooling',
+  production: 'Production',
 };
 
 /** HUD display order for category rows. Categories absent from a building
@@ -104,6 +105,7 @@ export const HUD_CATEGORY_ORDER: ReadonlyArray<BuildingCategory> = [
   'logistics',
   'special',
   'cooling',
+  'production',
 ];
 
 /** A single defId entry in the buildings enumeration. */

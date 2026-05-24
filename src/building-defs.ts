@@ -70,6 +70,7 @@ export type BuildingCategory =
   | 'storage'
   | 'logistics'
   | 'cooling'
+  | 'production'
   | 'special';
 
 /** Every defId in the step-9 catalog. New defs require both a literal here
@@ -134,6 +135,8 @@ export type BuildingDefId =
   | 'cryo_containment_assembler'
   | 'accelerator_core_lab'
   | 'self_replication_lab'
+  // §04: Skill Forge — T4 production building for crafting Skill Crystals.
+  | 'skill_forge'
   // §9.5 biome-locked uniques (Mass Driver + Carbon Forge + Tidal Array + Sunspire)
   | 'mass_driver'
   | 'carbon_forge'
@@ -1838,6 +1841,21 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 700 },
     placementCost: { steel: 350, ai_core: 2, microchip: 50, electric_motor: 20 },
     glyph: '↻',
+  },
+  // §04: Skill Forge — T4 production building for crafting Skill Crystals.
+  // 2×2 footprint, high power draw (1500W operating; standby not modelled
+  // separately — single `consumes` figure captures operating load).
+  skill_forge: {
+    id: 'skill_forge',
+    displayName: 'Skill Forge',
+    category: 'production',
+    tier: 4,
+    footprint: SHAPES.square2,
+    fill: 0xa050c0,
+    stroke: 0x401060,
+    power: { consumes: 1500 },
+    placementCost: { microchip: 40, ai_core: 8, reality_anchor: 4 },
+    glyph: '◈',
   },
   // -------------------------------------------------------------------------
   // T5 (levels 50+, AI Core required) — Transcendent per §13 / step 13

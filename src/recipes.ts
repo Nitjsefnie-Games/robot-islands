@@ -347,7 +347,9 @@ export type ResourceId =
   | 'refined_cobalt'
   | 'exotic_alloy_seed'
   | 'tritium_seed'
-  | 'heavy_water';
+  | 'heavy_water'
+  // §04: Skill Crystal — T1 Mining Crystal (crafted at Skill Forge).
+  | 'mining_crystal_t1';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -592,6 +594,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'exotic_alloy_seed',
   'tritium_seed',
   'heavy_water',
+  // §04: Skill Crystal — T1 Mining Crystal.
+  'mining_crystal_t1',
 ];
 
 /**
@@ -871,6 +875,9 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   exotic_alloy_seed: 300,
   tritium_seed: 300,
   heavy_water: 300,
+  // §04: T1 Skill Crystal. Crafted at T4 Skill Forge using T5 inputs
+  // (reality_anchor), so it carries T4 endgame weight (100).
+  mining_crystal_t1: 100,
 };
 
 /**
@@ -1370,6 +1377,15 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { wood: 5, coke: 2 },
     outputs: { carbon_fiber: 1 },
     category: 'smelting',
+  },
+
+  // §04: Skill Forge — first crystal recipe (Mining Crystal T1).
+  // Confirms the craft pipeline works end-to-end before adding all 45 recipes.
+  skill_forge: {
+    cycleSec: 120,
+    inputs: { iron_ore: 100, microchip: 4, reality_anchor: 1 },
+    outputs: { mining_crystal_t1: 1 },
+    category: 'electronics',
   },
 
   // ---------------------------------------------------------------------------

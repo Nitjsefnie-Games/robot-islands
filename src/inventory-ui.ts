@@ -290,6 +290,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   exotic_alloy_seed: 'rare',
   tritium_seed: 'rare',
   heavy_water: 'liquid',
+  // §04: T1 Mining Skill Crystal — rare crafted item.
+  mining_crystal_t1: 'rare',
 };
 
 /** Filter chips shown above the resource list. `'all'` is the default. */
