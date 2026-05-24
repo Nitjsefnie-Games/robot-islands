@@ -68,7 +68,7 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
  *  string, so a new key returns "no save" without colliding with older
  *  stores. */
-export const STORAGE_KEY = 'robot-islands:save:v11';
+export const STORAGE_KEY = 'robot-islands:save:v12';
 
 /** User-visible storage-key label. The Settings panel renders this
  *  string in the storage-key footer line. */
@@ -76,7 +76,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 11 as const;
+export const SCHEMA_VERSION = 12 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -84,7 +84,7 @@ export const SCHEMA_VERSION = 11 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -100,14 +100,11 @@ export type SerializedIslandSpec = Omit<IslandSpec, 'terrainAt'>;
 
 /** IslandState with Set and Map fields converted to arrays for JSON. */
 export interface SerializedIslandState
-  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings' | 'batteryStoredWs'> {
+  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings'> {
   readonly unlockedNodes: ReadonlyArray<NodeId>;
   readonly unlockedEdges: ReadonlyArray<EdgeId>;
   readonly socketBindings: ReadonlyArray<[string, CrystalId]>;
-  /** v11 serialized field name. Task 5 bumps to v12 and renames this to
-   *  `batteryStoredWs`. Bridge in serializeWorld / deserializeWorld keeps
-   *  the in-memory name independent of the on-disk name. */
-  readonly singularityStoredWs: number;
+  readonly batteryStoredWs: number;
 }
 
 /** One entry of the per-island state map. We avoid serializing a `Map`
@@ -290,6 +287,22 @@ export function migrateV9toV10(s: SerializedSnapshotV9): SerializedSnapshotV10 {
  *  except the v literal. The v10 → v11 migration is a per-island SP top-up. */
 export type SerializedSnapshotV10 = Omit<SaveSnapshot, 'v'> & { readonly v: 10 };
 
+/** v11 top-level snapshot shape. Structurally identical to v12 (SaveSnapshot)
+ *  except the v literal AND the per-island state's energy-buffer field name. */
+export interface SerializedIslandStateV11
+  extends Omit<SerializedIslandState, 'batteryStoredWs'> {
+  readonly singularityStoredWs: number;
+}
+
+export interface SerializedSnapshotV11
+  extends Omit<Omit<SaveSnapshot, 'v'>, 'islandStates'> {
+  readonly v: 11;
+  readonly islandStates: ReadonlyArray<{
+    readonly id: string;
+    readonly state: SerializedIslandStateV11;
+  }>;
+}
+
 /** Migrate a v10 snapshot to v11 (current). Top-up only — does NOT reset
  *  progression. The shipped v10 migration used a wrong formula
  *  (`max(0, level - 1)`) that under-refunded high-level islands (L70 got 69
@@ -300,7 +313,7 @@ export type SerializedSnapshotV10 = Omit<SaveSnapshot, 'v'> & { readonly v: 10 }
  *  gets refunded the difference (over-credit). That's the friendly
  *  direction and was explicitly chosen — under-refund must be fixable
  *  without making players manually re-buy everything they unlocked since. */
-export function migrateV10toV11(s: SerializedSnapshotV10): SaveSnapshot {
+export function migrateV10toV11(s: SerializedSnapshotV10): SerializedSnapshotV11 {
   return {
     ...s,
     v: 11 as const,
@@ -312,8 +325,28 @@ export function migrateV10toV11(s: SerializedSnapshotV10): SaveSnapshot {
           entry.state.unspentSkillPoints,
           cumulativeSkillPointsForLevel(entry.state.level),
         ),
-      },
+      } as unknown as SerializedIslandStateV11,
     })),
+  } as SerializedSnapshotV11;
+}
+
+/** Migrate a v11 snapshot to v12 (current). Renames the per-island energy
+ *  buffer field singularityStoredWs → batteryStoredWs. Lossless — every
+ *  island's stored energy carries over to the generalised battery system. */
+export function migrateV11toV12(s: SerializedSnapshotV11): SaveSnapshot {
+  return {
+    ...s,
+    v: 12 as const,
+    islandStates: s.islandStates.map((entry) => {
+      const { singularityStoredWs, ...stateRest } = entry.state;
+      return {
+        id: entry.id,
+        state: {
+          ...stateRest,
+          batteryStoredWs: singularityStoredWs,
+        } as unknown as SerializedIslandState,
+      };
+    }),
   } as SaveSnapshot;
 }
 
@@ -360,13 +393,12 @@ export function serializeWorld(
   });
   const stateEntries: SerializedIslandStateEntry[] = [];
   for (const [id, state] of islandStates) {
-    const { batteryStoredWs, ...rest } = state;
+    const { unlockedNodes, unlockedEdges, socketBindings, ...rest } = state;
     const serialized: SerializedIslandState = {
       ...rest,
-      singularityStoredWs: batteryStoredWs,
-      unlockedNodes: [...state.unlockedNodes],
-      unlockedEdges: [...state.unlockedEdges],
-      socketBindings: [...state.socketBindings],
+      unlockedNodes: [...unlockedNodes],
+      unlockedEdges: [...unlockedEdges],
+      socketBindings: [...socketBindings],
     };
     stateEntries.push({ id, state: serialized });
   }
@@ -453,7 +485,7 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Walk v7 → v8 → v9 → v10 → v11 migration chain.
+  // Walk v7 → v8 → v9 → v10 → v11 → v12 migration chain.
   if ((snapshot as unknown as { v: number }).v === 7) {
     snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7) as unknown as SaveSnapshot;
   }
@@ -464,7 +496,10 @@ export function deserializeWorld(
     snapshot = migrateV9toV10(snapshot as unknown as SerializedSnapshotV9) as unknown as SaveSnapshot;
   }
   if ((snapshot as unknown as { v: number }).v === 10) {
-    snapshot = migrateV10toV11(snapshot as unknown as SerializedSnapshotV10);
+    snapshot = migrateV10toV11(snapshot as unknown as SerializedSnapshotV10) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 11) {
+    snapshot = migrateV11toV12(snapshot as unknown as SerializedSnapshotV11);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
@@ -600,9 +635,6 @@ export function deserializeWorld(
       unlockedNodes: new Set(s.unlockedNodes),
       unlockedEdges: new Set(s.unlockedEdges ?? []),
       socketBindings: new Map(s.socketBindings ?? []),
-      // Bridge v11 serialized field name to v11 in-memory name. Task 5 bumps
-      // to v12 and renames the serialized field to `batteryStoredWs`.
-      batteryStoredWs: s.singularityStoredWs,
       // §9.7 cooldown anchors. Both fields were minted in the saved
       // session's `performance.now()` domain (matching `lastTick`); apply
       // the same perfShift the drone/vehicle/repair-drone timestamps get,

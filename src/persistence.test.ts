@@ -40,10 +40,12 @@ import {
   isValidSaveSnapshot,
   migrateV7toV8,
   migrateV8toV9,
+  migrateV11toV12,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
   type SerializedSnapshotV8,
+  type SerializedSnapshotV11,
 } from './persistence.js';
 import {
   attachTerrainAt,
@@ -121,7 +123,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(11);
+    expect(snap.v).toBe(12);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -464,7 +466,7 @@ describe('schema version', () => {
   });
 
   it('exports STORAGE_KEY containing v11 so it does not collide with stale saves', () => {
-    expect(STORAGE_KEY).toMatch(/v11$/);
+    expect(STORAGE_KEY).toMatch(/v12$/);
   });
 
   it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
@@ -1456,7 +1458,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(11);
+    expect(snap.v).toBe(12);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -1705,8 +1707,26 @@ describe('deserializeWorld v8 → v9 round-trip', () => {
   });
 });
 
-describe('deserializeWorld v7 → v11 migration chain', () => {
-  it('walks v7 through v8/v9/v10/v11 and refunds SP via cumulativeSkillPointsForLevel', () => {
+describe('migrateV11toV12', () => {
+  it('renames singularityStoredWs to batteryStoredWs preserving the value', () => {
+    const v11: SerializedSnapshotV11 = {
+      v: 11, savedAt: 0, savedAtPerf: 0, world: {} as any,
+      islandStates: [{
+        id: 'home',
+        state: { id: 'home', level: 5, xp: 100, lastTick: 0, inventory: {},
+          buildings: [], unlockedNodes: [], unlockedEdges: [], unspentSkillPoints: 4,
+          socketBindings: [], singularityStoredWs: 12345 } as any,
+      }],
+    } as any;
+    const v12 = migrateV11toV12(v11);
+    expect(v12.v).toBe(12);
+    expect((v12.islandStates[0]!.state as any).batteryStoredWs).toBe(12345);
+    expect((v12.islandStates[0]!.state as any).singularityStoredWs).toBeUndefined();
+  });
+});
+
+describe('deserializeWorld v7 → v12 migration chain', () => {
+  it('walks v7 through v8/v9/v10/v11/v12 and refunds SP via cumulativeSkillPointsForLevel', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
