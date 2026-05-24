@@ -1,3 +1,12 @@
+// Integration smoke tests for the §8.5 battery ladder.
+//
+// Covers two paths the unit tests in economy.test.ts / skilltree.test.ts
+// don't exercise together:
+//   1. End-to-end charge path: power surplus from a generator flows
+//      into batteryStoredWs, capped at the building's per-def capacity.
+//   2. batteryCapacityWs sums capacity across mixed battery types and
+//      scales with the skill-tree batteryCapacity multiplier.
+
 import { describe, expect, it } from 'vitest';
 import { advanceIsland, batteryCapacityWs } from './economy.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
@@ -53,13 +62,14 @@ describe('battery ladder integration', () => {
         { id: 'f1', defId: 'coal_gen', x: 1, y: 0 },
         { id: 'm1', defId: 'mine', x: 2, y: 0 },
       ],
-      inventory: { ...blankInventory(), coal: 10_000, iron_ore: 0 },
+      inventory: { ...blankInventory(), coal: 10_000 },
     });
     expect(state.batteryStoredWs).toBe(0);
     // Advance ~5 minutes. Coal generator produces 100W, mine consumes 25W;
     // 75W surplus charges the battery.
     advanceIsland(state, 300_000);
     expect(state.batteryStoredWs).toBeGreaterThan(0);
+    expect(state.batteryStoredWs).toBeCloseTo(75 * 300, -2);
     // Cap is 5 kWh × 3600 = 18_000_000 Ws for one Battery Bank.
     expect(state.batteryStoredWs).toBeLessThanOrEqual(5_000 * 3600);
   });
@@ -74,8 +84,7 @@ describe('battery ladder integration', () => {
     const mul = effectiveSkillMultipliers(state);
     const cap1 = batteryCapacityWs(state, mul);
     expect(cap1).toBe((5_000 + 100_000) * 3600);
-    (mul as any).batteryCapacity = 1.30;
-    const cap2 = batteryCapacityWs(state, mul);
+    const cap2 = batteryCapacityWs(state, { ...mul, batteryCapacity: 1.30 });
     expect(cap2).toBeCloseTo((5_000 + 100_000) * 3600 * 1.30, 6);
   });
 });
