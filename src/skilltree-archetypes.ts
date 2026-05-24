@@ -19,16 +19,75 @@ export interface FillerArchetype {
   readonly count: number;
 }
 
+/** Human-readable label for an effect kind. Pre-fixed with the catalog's
+ *  `category` extra (if any) so descriptions read naturally. */
+function effectLabel(kind: SkillEffect['kind'], extra?: Record<string, unknown>): string {
+  const category = typeof extra?.['category'] === 'string' ? (extra['category'] as string).replace(/_/g, ' ') : '';
+  const cat = category ? `${category} ` : '';
+  switch (kind) {
+    case 'recipeRateMul':              return `${cat}recipe rate`;
+    case 'storageCapMul':              return 'uniform storage cap';
+    case 'storageCategoryCapMul':      return `${cat}storage cap`;
+    case 'powerProductionMul':         return 'power production';
+    case 'powerConsumptionMul':        return 'power consumption';
+    case 'routeCapacityMul':           return 'route capacity';
+    case 'commRangeMul':               return 'comm range';
+    case 'maintenanceThresholdMul':    return 'maintenance threshold';
+    case 'scannerCoverageMul':         return 'scanner coverage';
+    case 'debrisProtectionMul':        return 'debris protection';
+    case 'droneFuelEfficiencyMul':     return 'drone fuel efficiency';
+    case 'airshipRangeMul':            return 'airship range';
+    case 'padExplosionReduceMul':      return 'pad-explosion divisor';
+    case 'satBufferCapMul':            return 'sat buffer cap';
+    case 'scannerDwellRateMul':        return 'scanner dwell rate';
+    case 'satFuelReserveMul':          return 'sat fuel reserve';
+    case 'repairDroneReliabilityMul':  return 'repair-drone reliability';
+    case 'constructionTimeMul':        return 'construction time';
+    case 'droneScanRadiusMul':         return 'drone scan radius';
+    case 'mineYieldBonusMul':          return 'mine yield';
+    case 'mineRareTrickleMul':         return 'mine rare-trickle';
+    case 'loggerYieldBonusMul':        return 'logger yield';
+    case 'loggerExoticTrickleMul':     return 'logger exotic-trickle';
+    case 'teleporterEfficiencyMul':    return 'teleporter efficiency';
+    case 'parallelBuildCapAdd':        return 'parallel build slots';
+    case 'launchSuccessAdditive':      return 'launch success';
+    case 'xpGainMul':                  return `${cat}xp gain`;
+    default:                           return String(kind);
+  }
+}
+
+/** Format the per-node factor. Reducer effects display as ÷, additive
+ *  effects as +, everything else as ×. */
+function formatFactor(magnitude: number, kind: SkillEffect['kind'], extra?: Record<string, unknown>): string {
+  const reduce = extra?.['reduce'] === true;
+  if (kind === 'launchSuccessAdditive') {
+    return `+${(magnitude * 100).toFixed(1)} pp`; // percentage points, additive
+  }
+  if (kind === 'parallelBuildCapAdd') {
+    return `+${magnitude.toFixed(2)} slot`;
+  }
+  if (reduce) {
+    return `÷${(1 + magnitude).toFixed(2)}`;
+  }
+  return `×${(1 + magnitude).toFixed(2)}`;
+}
+
 /** Generate a depth-ramped filler chain from an archetype.
  *
  *  Per-node factor follows multiplicative growth:
  *    depth-d factor = (1 + baseMag) * growth^(d-1)
  *  Magnitude is stored as the +bonus (factor - 1), matching the `SkillNode`
- *  convention (0.05 means +5%).
+ *  convention (0.05 means per-node factor ×1.05).
+ *
+ *  Description format: `<label> <factor> per node` — e.g. `extraction recipe
+ *  rate ×1.04 per node`. Reducer effects (powerConsumption + reduce:true)
+ *  use ÷ notation. The fold is multiplicative across owned nodes:
+ *  total = ∏ (1 + magᵢ).
  *
  *  Cost follows geometric growth with rounding per depth. */
 export function generateFillerNodes(arch: FillerArchetype): SkillNode[] {
   const nodes: SkillNode[] = [];
+  const label = effectLabel(arch.effectKind, arch.effectExtra);
   let factor = 1 + arch.baseMag;
   let cost = arch.baseCost;
   for (let d = 0; d < arch.count; d++) {
@@ -40,7 +99,7 @@ export function generateFillerNodes(arch: FillerArchetype): SkillNode[] {
       cost: Math.round(cost),
       magnitude,
       effect: { kind: arch.effectKind, ...(arch.effectExtra ?? {}) } as SkillEffect,
-      description: `${arch.subPath} ${arch.effectKind} depth ${d + 1}`,
+      description: `${label} ${formatFactor(magnitude, arch.effectKind, arch.effectExtra)} per node`,
     });
     factor *= arch.growth;
     cost *= arch.costGrowth;
