@@ -67,7 +67,7 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
  *  string, so a new key returns "no save" without colliding with older
  *  stores. */
-export const STORAGE_KEY = 'robot-islands:save:v9';
+export const STORAGE_KEY = 'robot-islands:save:v10';
 
 /** User-visible storage-key label. The Settings panel renders this
  *  string in the storage-key footer line. */
@@ -75,17 +75,17 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 9 as const;
+export const SCHEMA_VERSION = 10 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
- *  SCHEMA_VERSION; current chain: v7 → v8 (graph redesign).
+ *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10.
  *
- *  When bumping to v9: add `migrateV8toV9`, extend this set with 9,
- *  bump SCHEMA_VERSION to 9, add a SerializedSnapshotV8 type alias for
- *  the migration's input shape. See AGENTS.md → "Persistence migrations"
- *  for the full "bump = migrate" policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9]);
+ *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
+ *  policy from v7 onward. When bumping past v10: add `migrateV10toV11`,
+ *  extend this set with 11, bump SCHEMA_VERSION, add a SerializedSnapshotV10
+ *  type alias for the migration's input shape. */
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -230,9 +230,9 @@ export function migrateV7toV8(s: SerializedSnapshotV7): SerializedSnapshotV8 {
   };
 }
 
-/** Migrate a v8 snapshot to v9 (SaveSnapshot). Adds empty socketBindings to
+/** Migrate a v8 snapshot to v9 (intermediate shape). Adds empty socketBindings to
  *  every island state. Lossless — existing saves get empty bindings. */
-export function migrateV8toV9(s: SerializedSnapshotV8): SaveSnapshot {
+export function migrateV8toV9(s: SerializedSnapshotV8): SerializedSnapshotV9 {
   return {
     ...s,
     v: 9 as const,
@@ -242,6 +242,40 @@ export function migrateV8toV9(s: SerializedSnapshotV8): SaveSnapshot {
         ...entry.state,
         socketBindings: [] as ReadonlyArray<[string, CrystalId]>,
       } as unknown as SerializedIslandState,
+    })),
+  } as SerializedSnapshotV9;
+}
+
+/** v9 top-level snapshot shape. Structurally identical to v10 (SaveSnapshot)
+ *  except the v literal. The v9 → v10 migration only resets per-island skill
+ *  progression. */
+export type SerializedSnapshotV9 = Omit<SaveSnapshot, 'v'> & { readonly v: 9 };
+
+/** Migrate a v9 snapshot to v10 (current). Resets skill progression on every
+ *  island and refunds all spent SP — required because v9 shipped with a bug:
+ *  the graph generator left notable + depth-1 filler nodes unconnected, so
+ *  players could buy any notable directly for its flat cost with no chain
+ *  investment. v10 fixes the graph (notables now anchor to their sub-path's
+ *  filler chain) but already-saved progressions are no longer reachable under
+ *  the corrected topology, so we clear them and refund SP.
+ *
+ *  Preserved: level, xp, inventory, buildings, socketBindings (crafted
+ *  crystals stay bound; the mini-tree node ownership in unlockedNodes gets
+ *  wiped along with everything else).
+ *  Reset: unlockedNodes → [], unlockedEdges → [], unspentSkillPoints →
+ *  max(0, level - 1) (matches the SP-grant-per-level formula from §9.1). */
+export function migrateV9toV10(s: SerializedSnapshotV9): SaveSnapshot {
+  return {
+    ...s,
+    v: 10 as const,
+    islandStates: s.islandStates.map((entry) => ({
+      id: entry.id,
+      state: {
+        ...entry.state,
+        unlockedNodes: [] as ReadonlyArray<NodeId>,
+        unlockedEdges: [] as ReadonlyArray<EdgeId>,
+        unspentSkillPoints: Math.max(0, entry.state.level - 1),
+      },
     })),
   } as SaveSnapshot;
 }
@@ -380,12 +414,15 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Walk v7 → v8 → v9 migration chain.
+  // Walk v7 → v8 → v9 → v10 migration chain.
   if ((snapshot as unknown as { v: number }).v === 7) {
     snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7) as unknown as SaveSnapshot;
   }
   if ((snapshot as unknown as { v: number }).v === 8) {
     snapshot = migrateV8toV9(snapshot as unknown as SerializedSnapshotV8) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 9) {
+    snapshot = migrateV9toV10(snapshot as unknown as SerializedSnapshotV9);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
