@@ -59,7 +59,7 @@ describe('checkObjectives', () => {
   it('advances current when objective is completed', () => {
     const state: TutorialState = { completed: new Set(), current: 'place_solar' };
     const world = makeWorld({
-      islandStates: new Map([['home', makeIslandState({ buildings: [{ id: 's1', defId: 'solar', x: 0, y: 0 }] })]]),
+      islandStates: new Map([['home', makeIslandState({ buildings: [{ id: 's1', defId: 'wind_turbine', x: 0, y: 0 }] })]]),
     });
     checkObjectives(state, world);
     expect(state.current).toBe('place_logger');
@@ -68,7 +68,7 @@ describe('checkObjectives', () => {
   it('returns newly completed ids', () => {
     const state: TutorialState = { completed: new Set(), current: 'place_solar' };
     const world = makeWorld({
-      islandStates: new Map([['home', makeIslandState({ buildings: [{ id: 's1', defId: 'solar', x: 0, y: 0 }] })]]),
+      islandStates: new Map([['home', makeIslandState({ buildings: [{ id: 's1', defId: 'wind_turbine', x: 0, y: 0 }] })]]),
     });
     const newly = checkObjectives(state, world);
     expect(newly).toEqual(['place_solar']);
@@ -145,7 +145,7 @@ describe('checkObjectives', () => {
         { id: 'q1', defId: 'quarry', x: -11, y: 4 },
         { id: 'm1', defId: 'mine', x: 8, y: 5 },
         { id: 'l1', defId: 'logger', x: 6, y: -3 },
-        { id: 's1', defId: 'solar', x: 0, y: 0 },
+        { id: 's1', defId: 'wind_turbine', x: 0, y: 0 },
       ] })]]),
     });
     const newly = checkObjectives(state, world);
@@ -159,10 +159,10 @@ describe('checkObjectives', () => {
     expect(state.current).toBe('build_smelter');
   });
 
-  it('place_solar objective detected when solar building exists', () => {
+  it('place_solar objective detected when wind_turbine building exists', () => {
     const state: TutorialState = { completed: new Set(), current: 'place_solar' };
     const world = makeWorld({
-      islandStates: new Map([['home', makeIslandState({ buildings: [{ id: 's1', defId: 'solar', x: 0, y: 0 }] })]]),
+      islandStates: new Map([['home', makeIslandState({ buildings: [{ id: 's1', defId: 'wind_turbine', x: 0, y: 0 }] })]]),
     });
     const newly = checkObjectives(state, world);
     expect(newly).toContain('place_solar');
@@ -240,7 +240,7 @@ describe('checkObjectives', () => {
     const state: TutorialState = { completed: new Set(['place_solar']), current: 'place_mine' };
     const world = makeWorld({
       islandStates: new Map([['home', makeIslandState({ buildings: [
-        { id: 's1', defId: 'solar', x: 0, y: 0 },
+        { id: 's1', defId: 'wind_turbine', x: 0, y: 0 },
         { id: 'm1', defId: 'mine', x: 1, y: 0 },
       ] })]]),
     });
@@ -257,7 +257,7 @@ describe('checkObjectives', () => {
     };
     const world = makeWorld({
       islandStates: new Map([['home', makeIslandState({ buildings: [
-        { id: 's1', defId: 'solar', x: 0, y: 0 },
+        { id: 's1', defId: 'wind_turbine', x: 0, y: 0 },
         { id: 'l1', defId: 'logger', x: 6, y: -3 },
         { id: 'q1', defId: 'quarry', x: -11, y: 4 },
         { id: 'm1', defId: 'mine', x: 8, y: 5 },

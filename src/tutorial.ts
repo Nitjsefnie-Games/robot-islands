@@ -70,9 +70,12 @@ export interface TutorialState {
 
 export const OBJECTIVES: Record<ObjectiveId, { title: string; hint: string; check: (world: WorldState) => boolean }> = {
   place_solar: {
+    // ID kept for save / test compatibility; first power-up step has been
+    // re-keyed to the Wind Turbine because Solar produces 0 at night and a
+    // fresh game spawning during the night phase would otherwise stall.
     title: 'Power Up',
-    hint: 'Place a Solar Panel on any grass tile (20 stone, 10 wood).',
-    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'solar')),
+    hint: 'Place a Wind Turbine on a water tile (30 steel, 10 wood). Wind produces power day and night.',
+    check: (w) => Array.from(w.islandStates?.values() ?? []).some(s => s.buildings.some(b => b.defId === 'wind_turbine')),
   },
   place_logger: {
     title: 'Renewable Wood',
