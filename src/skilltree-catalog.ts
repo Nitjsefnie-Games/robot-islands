@@ -317,6 +317,20 @@ export const POWER_SYSTEMS_NOTABLES: SkillNode[] = [
     effect: { kind: 'powerConsumptionMul', reduce: true },
     description: 'Smart Grid — power consumers draw ÷1.15',
   },
+  // Structural deviation: power_systems is the first sub-path with 5 notables
+  // (vs. the 4-per-sub-path convention). batteryCapacityMul is a high-impact
+  // axis driving the §8.5 battery ladder, so it gets its own depth-5 lever at
+  // mag 0.30 (×1.30) rather than displacing an existing depth-5 notable or
+  // dropping to the sibling-pattern mag 0.15.
+  {
+    id: 'power_systems.notable.electrochemistry' as NodeId,
+    subPath: 'power_systems',
+    depth: 5,
+    cost: 5,
+    magnitude: 0.30,
+    effect: { kind: 'batteryCapacityMul' },
+    description: 'Electrochemistry Lab — ×1.30 battery capacity (all tiers)',
+  },
   {
     id: 'power_systems.notable.xpTelemetry' as NodeId,
     subPath: 'power_systems',
@@ -335,15 +349,6 @@ export const POWER_SYSTEMS_NOTABLES: SkillNode[] = [
     effect: { kind: 'powerProductionMul' },
     description: 'Fusion Pilot — ×1.30 power production',
     aura: { radius: 2, bonus: 0.12 },
-  },
-  {
-    id: 'power_systems.notable.electrochemistry' as NodeId,
-    subPath: 'power_systems',
-    depth: 5,
-    cost: 5,
-    magnitude: 0.30,
-    effect: { kind: 'batteryCapacityMul' },
-    description: 'Electrochemistry Lab — ×1.30 battery capacity (all tiers)',
   },
 ];
 
