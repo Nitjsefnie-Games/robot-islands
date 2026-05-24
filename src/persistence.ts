@@ -80,7 +80,7 @@ export const SCHEMA_VERSION = 12 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
- *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10 → v11.
+ *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10 → v11 → v12.
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
@@ -283,8 +283,8 @@ export function migrateV9toV10(s: SerializedSnapshotV9): SerializedSnapshotV10 {
   } as SerializedSnapshotV10;
 }
 
-/** v10 top-level snapshot shape. Structurally identical to v11 (SaveSnapshot)
- *  except the v literal. The v10 → v11 migration is a per-island SP top-up. */
+/** v10 top-level snapshot shape. Structurally identical to v11 except the v
+ *  literal. The v10 → v11 migration is a per-island SP top-up. */
 export type SerializedSnapshotV10 = Omit<SaveSnapshot, 'v'> & { readonly v: 10 };
 
 /** v11 top-level snapshot shape. Structurally identical to v12 (SaveSnapshot)
@@ -303,7 +303,7 @@ export interface SerializedSnapshotV11
   }>;
 }
 
-/** Migrate a v10 snapshot to v11 (current). Top-up only — does NOT reset
+/** Migrate a v10 snapshot to v11. Top-up only — does NOT reset
  *  progression. The shipped v10 migration used a wrong formula
  *  (`max(0, level - 1)`) that under-refunded high-level islands (L70 got 69
  *  SP instead of ~5500). This pass corrects: if any island's unspent SP is
@@ -317,15 +317,15 @@ export function migrateV10toV11(s: SerializedSnapshotV10): SerializedSnapshotV11
   return {
     ...s,
     v: 11 as const,
-    islandStates: s.islandStates.map((entry) => ({
+    islandStates: s.islandStates.map((entry): { id: string; state: SerializedIslandStateV11 } => ({
       id: entry.id,
       state: {
-        ...entry.state,
+        ...entry.state as unknown as SerializedIslandStateV11,
         unspentSkillPoints: Math.max(
           entry.state.unspentSkillPoints,
           cumulativeSkillPointsForLevel(entry.state.level),
         ),
-      } as unknown as SerializedIslandStateV11,
+      },
     })),
   } as SerializedSnapshotV11;
 }
