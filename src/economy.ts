@@ -55,6 +55,7 @@ import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WE
 import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition } from './skilltree.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
+import { tutorialXpMul } from './tutorial.js';
 
 /**
  * Optional context object for `computeRates` and `advanceIsland`. Adding
@@ -1679,7 +1680,12 @@ export function advanceIsland(
       applyRates(state, net, dtSec, ctx?.caps);
       const skillMulForXp = effectiveSkillMultipliers(state);
       layerConditionalBonuses(skillMulForXp, state, ctx?.world, DEFAULT_GRAPH, nowMs);
-      accrueXp(state, production, consumption, dtSec, 1, skillMulForXp.xpGain);
+      // Tutorial XP bonus stacks 1%/2%/3%/... per completed objective —
+      // applied as a uniform multiplier on top of skill-tree xpGain so a
+      // player carving through tutorial objectives feels their levelling
+      // accelerate. Global per world; cheap to compute from completed.size.
+      const tutMul = tutorialXpMul(ctx?.world?.tutorialState);
+      accrueXp(state, production, consumption, dtSec, 1, skillMulForXp.xpGain * tutMul);
       // §13.3 Singularity Battery — apply charge/discharge over the segment.
       if (rawBalance > 0 && maxCap > 0) {
         const chargeWs = rawBalance * dtSec;
