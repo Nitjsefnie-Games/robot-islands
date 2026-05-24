@@ -2943,7 +2943,7 @@ describe('Singularity Battery', () => {
       inventory: { ...blankInventory(), coal: 50 },
     });
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0 });
-    // Solar (50W) + Coal Gen (100W) = 150W produced; battery consumes 100W → 50W surplus
+    // Solar (50W) + Coal Gen (100W) = 150W produced; battery consumes 0W → 150W surplus
     state.buildings.push({ id: 'sol1', defId: 'solar', x: 2, y: 0 });
     state.buildings.push({ id: 'cg1', defId: 'coal_gen', x: 4, y: 0 });
     advanceIsland(state, 1000);
@@ -2956,7 +2956,7 @@ describe('Singularity Battery', () => {
     });
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0 });
     state.singularityStoredWs = 1e9; // seed with stored energy
-    // Mine (40W consumer) + battery (100W) = 140W deficit, no producers
+    // Mine (40W consumer) + battery (0W) = 40W deficit, no producers
     state.buildings.push({ id: 'mine1', defId: 'mine', x: 2, y: 0 });
     advanceIsland(state, 1000);
     expect(state.singularityStoredWs).toBeLessThan(1e9);
@@ -2970,7 +2970,7 @@ describe('Singularity Battery', () => {
     });
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0 });
     state.singularityStoredWs = SINGULARITY_BATTERY_CAPACITY_WS - 100;
-    // Solar (50W) + Coal Gen (100W) = 150W produced; battery consumes 100W → 50W surplus
+    // Solar (50W) + Coal Gen (100W) = 150W produced; battery consumes 0W → 150W surplus
     state.buildings.push({ id: 'sol1', defId: 'solar', x: 2, y: 0 });
     state.buildings.push({ id: 'cg1', defId: 'coal_gen', x: 4, y: 0 });
     advanceIsland(state, 10_000);
@@ -2985,10 +2985,10 @@ describe('Singularity Battery', () => {
     });
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0 });
     state.singularityStoredWs = 1000;
-    // Coal Gen (100W) = exact balance with battery (100W) → no surplus, no deficit
+    // Coal Gen (100W) = 100W surplus with battery (0W standby)
     state.buildings.push({ id: 'cg1', defId: 'coal_gen', x: 2, y: 0 });
     advanceIsland(state, 1000);
-    expect(state.singularityStoredWs).toBe(1000);
+    expect(state.singularityStoredWs).toBe(1100);
   });
 });
 
