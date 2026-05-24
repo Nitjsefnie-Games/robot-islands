@@ -369,7 +369,10 @@ export type BuildingDefId =
   | 'advanced_weather_station_t3'
   // §8.5 power generation
   | 'wind_turbine'
+  | 'battery_bank'
+  | 'capacitor_bank'
   | 'cryogenic_generator'
+  | 'flywheel_array'
   | 'nuclear_reactor'
   // §8.7 cooling / treatment
   | 'cooling_tower'
@@ -827,6 +830,45 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiredTile: ['water'],
     placementCost: { steel: 30, wood: 10 },
     glyph: '✦',
+  },
+  // §X.Y T2 battery — 5 kWh power buffer. Zero standby; charges from
+  // any island power surplus, discharges into deficit. Capacity is set
+  // via the BATTERY_CAPACITY_WS table in economy.ts (Task 4).
+  battery_bank: {
+    id: 'battery_bank',
+    displayName: 'Battery Bank',
+    category: 'power',
+    tier: 2,
+    footprint: SHAPES.single,
+    fill: 0x4060a0,
+    stroke: 0x101030,
+    power: { consumes: 0 },
+    placementCost: { battery: 4, wire: 3, steel_beam: 1 },
+    glyph: '▭',
+  },
+  capacitor_bank: {
+    id: 'capacitor_bank',
+    displayName: 'Capacitor Bank',
+    category: 'power',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x6080d0,
+    stroke: 0x202050,
+    power: { consumes: 0 },
+    placementCost: { battery: 20, microchip: 12, steel_beam: 6, coolant: 2 },
+    glyph: '▥',
+  },
+  flywheel_array: {
+    id: 'flywheel_array',
+    displayName: 'Flywheel Array',
+    category: 'power',
+    tier: 4,
+    footprint: SHAPES.square3,
+    fill: 0xa0b0c0,
+    stroke: 0x303040,
+    power: { consumes: 0 },
+    placementCost: { battery: 100, microchip: 40, steel_beam: 20, coolant: 10, heavy_cable: 5 },
+    glyph: '◯',
   },
   // §5.2 / §8.6: Coal Furnace — T1 fuel-burning heat source. Burns
   // `coalPerCycle × consumersServed` coal per 30s cycle (literal §5.2:
@@ -1902,8 +1944,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // grants a giant `singularityStoredWs` buffer that charges from surplus
   // and discharges into deficits (see `economy.ts` brownout path). Per
   // the §8.4 note ("not a resource storage building") this def carries
-  // NO `storage` contribution — it never raises any resource cap. Tiny
-  // consumption (100W) models continuous standby overhead.
+  // NO `storage` contribution — it never raises any resource cap. Zero
+  // standby — generalised battery system has no idle draw.
   singularity_battery: {
     id: 'singularity_battery',
     displayName: 'Singularity Battery',
@@ -1912,7 +1954,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x202060, // deep ultramarine
     stroke: 0x0a0a30,
-    power: { consumes: 100 },
+    power: { consumes: 0 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { reality_anchor: 50, steel: 100, microchip: 50 },
     glyph: '▦',

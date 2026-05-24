@@ -251,6 +251,10 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   // Task 13.2 — Foundation Kit variants
   'kit_assembler_enriched',
   'kit_assembler_refined',
+  // §X.Y T2-T4 battery defs (Task 1)
+  'battery_bank',
+  'capacitor_bank',
+  'flywheel_array',
 ];
 
 // Helper: build a minimal IslandSpec for the canPlaceOnIsland tests. The
@@ -931,7 +935,7 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
     expect(shapeWidth(def.footprint)).toBe(2);
     expect(shapeHeight(def.footprint)).toBe(2);
     expect(def.storage).toBeUndefined();
-    expect(def.power?.consumes).toBe(100);
+    expect(def.power?.consumes).toBe(0);
     expect(def.category).toBe('power');
   });
 
