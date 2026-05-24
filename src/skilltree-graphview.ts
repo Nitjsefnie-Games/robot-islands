@@ -14,6 +14,8 @@ import {
   costToUnlock,
   effectiveGraph,
   bindCrystal,
+  unbindCrystal,
+  computeMiniTreeRefund,
   type BranchId,
 } from './skilltree.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
@@ -726,11 +728,23 @@ export function mountSkillGraphView(
 
     const head = document.createElement('div');
     head.className = 'ri-panel__head';
-    head.textContent = 'Attach Skill Crystal';
     pickerModal.appendChild(head);
 
     const body = document.createElement('div');
     body.className = 'ri-panel__body';
+
+    const boundCrystalId = state.socketBindings.get(socketId);
+    if (boundCrystalId) {
+      head.textContent = 'Change Skill Crystal';
+      const current = document.createElement('div');
+      current.style.marginBottom = '10px';
+      current.style.color = '#E9E6DC';
+      const crystal = CRYSTAL_CATALOG.find((c) => c.id === boundCrystalId);
+      current.textContent = `Currently bound: ${crystal ? crystal.displayName : boundCrystalId}`;
+      body.appendChild(current);
+    } else {
+      head.textContent = 'Attach Skill Crystal';
+    }
 
     const eligible = CRYSTAL_CATALOG.filter(
       (c) => c.eligibleSubPaths.includes(socket.subPathId) && ((state.inventory as Record<string, number>)[c.id as string] ?? 0) > 0,
@@ -757,6 +771,29 @@ export function mountSkillGraphView(
         });
         body.appendChild(row);
       }
+    }
+
+    if (boundCrystalId) {
+      const unbindBtn = document.createElement('button');
+      unbindBtn.className = 'ri-btn';
+      unbindBtn.style.display = 'block';
+      unbindBtn.style.width = '100%';
+      unbindBtn.style.marginTop = '10px';
+      unbindBtn.style.textAlign = 'left';
+      unbindBtn.textContent = 'Unbind (returns crystal to inventory)';
+      unbindBtn.addEventListener('click', () => {
+        const refund = computeMiniTreeRefund(state, socketId, boundCrystalId);
+        if (refund.nodeCount > 0) {
+          const ok = confirm(
+            `This socket has ${refund.nodeCount} unlocked node${refund.nodeCount === 1 ? '' : 's'} (${refund.spRefund} SP will be refunded). Unbind?`,
+          );
+          if (!ok) return;
+        }
+        unbindCrystal(state, socketId);
+        closePickerModal();
+        refresh();
+      });
+      body.appendChild(unbindBtn);
     }
 
     pickerModal.appendChild(body);
