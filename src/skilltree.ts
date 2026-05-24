@@ -213,6 +213,10 @@ export const SUBPATH_BRANCH: Readonly<Record<SubPathId, BranchId>> = {
   communication: 'orbital',
   discovery: 'orbital',
   resilience: 'orbital',
+  // Patronage is intentionally a logistics sub-path (storage/transport/network
+  // share the supply-chain framing). The redesign brainstorm log lists it
+  // beside "Ocean" because both were added in the same task slice, NOT because
+  // patronage belongs to the ocean branch. Keep here.
   patronage: 'logistics',
   aquaculture: 'ocean',
   hydroprocessing: 'ocean',

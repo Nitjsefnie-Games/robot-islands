@@ -28,10 +28,6 @@ export interface SkillTreeUi {
   isVisible(): boolean;
 }
 
-export interface SkillTreeUiOptions {
-  /** No hooks currently; reserved for future use. */
-}
-
 /** Active-island getter injected at mount. The panel reads the active
  *  island's state through this every refresh / click — switching active
  *  retargets the panel without re-mounting. */
@@ -43,7 +39,6 @@ export interface SkillTreeUiDeps {
 export function mountSkillTreeUi(
   parentEl: HTMLElement,
   deps: SkillTreeUiDeps,
-  _options: SkillTreeUiOptions = {},
 ): SkillTreeUi {
   const getState = (): IslandState => deps.getState();
 

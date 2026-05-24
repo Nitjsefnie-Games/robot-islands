@@ -37,8 +37,6 @@ export interface SkillGraphViewDeps {
 
 type NodeKind = 'filler' | 'notable' | 'keystone';
 
-const CONFIRM_THRESHOLD_SP = 20;
-
 const KEYSTONE_TARGETS: ReadonlySet<string> = new Set(
   KEYSTONE_PREREQS.map((k) => String(k.targetNode)),
 );
@@ -329,9 +327,6 @@ export function mountSkillGraphView(
     const ks = KEYSTONE_BY_TARGET.get(String(nodeId));
     if (ks) {
       if (!canBuyKeystone(ks, state)) return;
-      if (ks.cost > CONFIRM_THRESHOLD_SP) {
-        if (!window.confirm(`Buy keystone (${ks.cost} SP)?`)) return;
-      }
       buyKeystone(ks, state);
       refresh();
       return;
@@ -340,9 +335,6 @@ export function mountSkillGraphView(
     const path = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, nodeId);
     if (path === null) return;
     if (state.unspentSkillPoints < path.totalCost) return;
-    if (path.totalCost > CONFIRM_THRESHOLD_SP) {
-      if (!window.confirm(`Buy via ${path.path.length}-edge cheapest path (${path.totalCost} SP)?`)) return;
-    }
     try { buyNode(DEFAULT_GRAPH, state, nodeId); } catch { return; }
     refresh();
   }
@@ -424,7 +416,11 @@ export function mountSkillGraphView(
 
     const state = deps.getState();
 
-    // Branch roots.
+    // Branch roots. Only branch-root labels are rendered today (no per-node
+    // labels — the spec §06 open question about zoomed-out overlap therefore
+    // doesn't bite). If per-node labels are ever added, gate their visibility
+    // on camera.zoom (e.g. `if (camera.zoom < 1) skip node-level labels`) to
+    // avoid the overlap-soup the spec called out.
     for (const [branch, p] of layout.branchRoots) {
       const g = new Graphics();
       g.circle(p.x, p.y, 13).fill(COLOR.rootFill).stroke({ color: COLOR.rootStroke, width: 2 });
