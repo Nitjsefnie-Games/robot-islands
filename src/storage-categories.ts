@@ -345,4 +345,6 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   exotic_alloy_seed: 'rare',
   tritium_seed: 'rare',
   heavy_water: 'liquid_gas',
+  // §04: T1 Mining Skill Crystal — rare crafted item (stored in Vault/rare).
+  mining_crystal_t1: 'rare',
 };

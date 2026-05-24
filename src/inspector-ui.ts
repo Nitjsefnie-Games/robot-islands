@@ -76,6 +76,7 @@ const CATEGORY_LABEL: Readonly<Record<BuildingCategory, string>> = {
   logistics: 'Logistics',
   cooling: 'Cooling',
   special: 'Special',
+  production: 'Production',
 };
 
 /** Display label for each §4.6 storage category. Used by the inspector's
