@@ -19,7 +19,6 @@ import type { IslandState } from './economy.js';
 import type { Recipe, RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
-import type { Biome } from './world.js';
 import type { Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
 import {
   BRIDGE_CATALOG,
@@ -170,8 +169,7 @@ export type SkillEffect =
 export type ConditionalEffectCondition =
   | { readonly kind: 'during-storm' }
   | { readonly kind: 'during-night' }
-  | { readonly kind: 'networked-to-N-T3-islands'; readonly n: number }
-  | { readonly kind: 'adjacent-tile-is-biome'; readonly biome: Biome };
+  | { readonly kind: 'networked-to-N-T3-islands'; readonly n: number };
 
 export interface AuraSpec {
   readonly radius: 1 | 2;
