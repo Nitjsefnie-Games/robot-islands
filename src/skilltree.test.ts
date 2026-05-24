@@ -756,6 +756,78 @@ describe('bindCrystal / unbindCrystal', () => {
     unbindCrystal(state, 'gs.ext.mining-1');
     expect(state.socketBindings.has('gs.ext.mining-1')).toBe(false);
   });
+
+  it('unbindCrystal refunds SP for owned mini-tree nodes and edges', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    const state = makeState({ inventory: inv, unspentSkillPoints: 0 });
+    state.socketBindings.set('gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    // Simulate owning two mini-tree nodes and one edge
+    state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.core');
+    state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.left1');
+    state.unlockedEdges.add('gs.ext.mining-1.mining_crystal_t1.edge.socket.core.0' as EdgeId);
+    unbindCrystal(state, 'gs.ext.mining-1');
+    expect(state.unspentSkillPoints).toBe(3 + 1 + 0); // core=3, left1=1, edge=0
+    expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.core')).toBe(false);
+    expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.left1')).toBe(false);
+    expect(state.unlockedEdges.has('gs.ext.mining-1.mining_crystal_t1.edge.socket.core.0' as EdgeId)).toBe(false);
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(2);
+    expect(state.socketBindings.has('gs.ext.mining-1')).toBe(false);
+  });
+
+  it('unbindCrystal leaves unrelated nodes and edges untouched', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    const state = makeState({ inventory: inv, unspentSkillPoints: 5 });
+    state.socketBindings.set('gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    state.unlockedNodes.add('mining.1');
+    state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.core');
+    state.unlockedEdges.add('some.edge' as EdgeId);
+    unbindCrystal(state, 'gs.ext.mining-1');
+    expect(state.unlockedNodes.has('mining.1')).toBe(true);
+    expect(state.unlockedEdges.has('some.edge' as EdgeId)).toBe(true);
+    expect(state.unspentSkillPoints).toBe(5 + 3);
+  });
+
+  it('bindCrystal refunds SP and clears nodes when replacing a previous crystal', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    (inv as Record<string, number>).mining_crystal_t2 = 1;
+    const state = makeState({ inventory: inv, unspentSkillPoints: 0 });
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.core');
+    state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.left1');
+
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t2' as import('./skilltree-graph.js').CrystalId);
+    expect(state.unspentSkillPoints).toBe(3 + 1); // refunded from t1
+    expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.core')).toBe(false);
+    expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.left1')).toBe(false);
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(1);
+    expect((state.inventory as Record<string, number>).mining_crystal_t2).toBe(0);
+    expect(state.socketBindings.get('gs.ext.mining-1')).toBe('mining_crystal_t2');
+  });
+
+  it('re-binding the same crystal after unbind restores cleanly without state corruption', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    const state = makeState({ inventory: inv, unspentSkillPoints: 0 });
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.core');
+    state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.left1');
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(0);
+
+    unbindCrystal(state, 'gs.ext.mining-1');
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(1);
+    expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.core')).toBe(false);
+    expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.left1')).toBe(false);
+
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(0);
+    expect(state.socketBindings.get('gs.ext.mining-1')).toBe('mining_crystal_t1');
+    // Ensure no phantom nodes from the previous binding remain
+    expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.core')).toBe(false);
+    expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.left1')).toBe(false);
+  });
 });
 
 describe('effectiveGraph with crystal bindings', () => {

@@ -544,6 +544,92 @@ export function effectiveGraph(
   };
 }
 
+/** Compute how many mini-tree nodes/edges are owned and how much SP would be refunded. */
+export function computeMiniTreeRefund(
+  state: IslandState,
+  socketId: string,
+  crystalId: CrystalId,
+): { nodeCount: number; spRefund: number } {
+  const crystal = CRYSTAL_CATALOG.find((c) => c.id === crystalId);
+  if (!crystal) return { nodeCount: 0, spRefund: 0 };
+
+  const nodeCostBySuffix = new Map(crystal.nodes.map((n) => [n.idSuffix, n.cost]));
+  const edgeCostByPair = new Map(crystal.edges.map((e) => [`${e.fromSuffix}|${e.toSuffix}`, e.cost]));
+  const prefix = `${socketId}.${crystalId}.`;
+
+  let nodeCount = 0;
+  let spRefund = 0;
+
+  for (const nodeId of state.unlockedNodes) {
+    const s = nodeId as string;
+    if (!s.startsWith(prefix)) continue;
+    const suffix = s.slice(prefix.length);
+    const cost = nodeCostBySuffix.get(suffix);
+    if (cost !== undefined) {
+      nodeCount++;
+      spRefund += cost;
+    }
+  }
+
+  for (const edgeId of state.unlockedEdges) {
+    const s = edgeId as string;
+    if (!s.startsWith(prefix)) continue;
+    const rest = s.slice(prefix.length);
+    const parts = rest.split('.');
+    if (parts.length >= 3 && parts[0] === 'edge') {
+      const cost = edgeCostByPair.get(`${parts[1]}|${parts[2]}`);
+      if (cost !== undefined) {
+        spRefund += cost;
+      }
+    }
+  }
+
+  return { nodeCount, spRefund };
+}
+
+/** Remove all owned mini-tree nodes and edges for a crystal, refunding their costs. */
+function refundAndClearMiniTree(state: IslandState, socketId: string, crystalId: CrystalId): void {
+  const crystal = CRYSTAL_CATALOG.find((c) => c.id === crystalId);
+  if (!crystal) return;
+
+  const nodeCostBySuffix = new Map(crystal.nodes.map((n) => [n.idSuffix, n.cost]));
+  const edgeCostByPair = new Map(crystal.edges.map((e) => [`${e.fromSuffix}|${e.toSuffix}`, e.cost]));
+  const prefix = `${socketId}.${crystalId}.`;
+
+  const nodesToRemove: NodeId[] = [];
+  for (const nodeId of state.unlockedNodes) {
+    const s = nodeId as string;
+    if (!s.startsWith(prefix)) continue;
+    const suffix = s.slice(prefix.length);
+    const cost = nodeCostBySuffix.get(suffix);
+    if (cost !== undefined) {
+      state.unspentSkillPoints += cost;
+      nodesToRemove.push(nodeId);
+    }
+  }
+  for (const nodeId of nodesToRemove) {
+    state.unlockedNodes.delete(nodeId);
+  }
+
+  const edgesToRemove: EdgeId[] = [];
+  for (const edgeId of state.unlockedEdges) {
+    const s = edgeId as string;
+    if (!s.startsWith(prefix)) continue;
+    const rest = s.slice(prefix.length);
+    const parts = rest.split('.');
+    if (parts.length >= 3 && parts[0] === 'edge') {
+      const cost = edgeCostByPair.get(`${parts[1]}|${parts[2]}`);
+      if (cost !== undefined) {
+        state.unspentSkillPoints += cost;
+        edgesToRemove.push(edgeId);
+      }
+    }
+  }
+  for (const edgeId of edgesToRemove) {
+    state.unlockedEdges.delete(edgeId);
+  }
+}
+
 /** Bind a crystal to a socket, consuming it from inventory.
  *  If a previous crystal was bound, it is returned to inventory.
  *  Throws if the crystal is not present in inventory. */
@@ -561,7 +647,7 @@ export function bindCrystal(
   if (prev) {
     const prevRid = prev as string as ResourceId;
     state.inventory[prevRid] = (state.inventory[prevRid] ?? 0) + 1;
-    // TODO(T5): refund SP for any owned mini-tree nodes from the previous crystal
+    refundAndClearMiniTree(state, socketId, prev);
   }
   state.inventory[rid] = have - 1;
   state.socketBindings.set(socketId, crystalId);
@@ -574,7 +660,7 @@ export function unbindCrystal(state: IslandState, socketId: string): void {
   if (!prev) return;
   const prevRid = prev as string as ResourceId;
   state.inventory[prevRid] = (state.inventory[prevRid] ?? 0) + 1;
-  // TODO(T5): refund SP for any owned mini-tree nodes from the previous crystal
+  refundAndClearMiniTree(state, socketId, prev);
   state.socketBindings.delete(socketId);
 }
 
