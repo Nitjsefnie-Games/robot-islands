@@ -162,7 +162,8 @@ export type SkillEffect =
       | { readonly kind: 'sharedRouteCapacity' } }
   | { readonly kind: 'tierBypass'; readonly buildings: ReadonlyArray<BuildingDefId>;
       readonly tierShift: 1 }
-  | { readonly kind: 'xpGainMul'; readonly category?: RecipeCategory };
+  | { readonly kind: 'xpGainMul'; readonly category?: RecipeCategory }
+  | { readonly kind: 'batteryCapacityMul' };
 
 /** Closed union of conditions for `conditionalBonus`. Each must be evaluable
  *  in O(1) at tick start; new entries require both a case here and an evaluator
@@ -822,6 +823,10 @@ export interface SkillMultipliers {
   readonly xpGain: number;
   /** Per-category XP gain multiplier. */
   readonly xpGainByCategory: Record<RecipeCategory, number>;
+  /** Per-island electrical buffer capacity multiplier. Composes with the
+   *  per-def BATTERY_CAPACITY_WS table in economy.ts — total cap on this
+   *  island = Σ(building cap) × batteryCapacity. Default 1. */
+  readonly batteryCapacity: number;
 }
 
 function blankMultipliers(): SkillMultipliers {
@@ -857,6 +862,7 @@ function blankMultipliers(): SkillMultipliers {
     droneScanRadius: 1,
     xpGain: 1,
     xpGainByCategory: Object.fromEntries(ALL_RECIPE_CATEGORIES.map((c) => [c, 1])) as Record<RecipeCategory, number>,
+    batteryCapacity: 1,
   };
 }
 
@@ -900,6 +906,7 @@ export function effectiveSkillMultipliers(
   let loggerExoticTrickleRate = 0;
   let droneScanRadius = 1;
   let xpGain = 1;
+  let batteryCapacity = 1;
   // Rare-trickle additive base rate per skill node. Continuous yield model
   // — at depth 1 each Mine produces an extra `RARE_TRICKLE_BASE × magnitude`
   // helium_3 per second; deeper nodes scale up via the magnitude ramp.
@@ -1005,6 +1012,9 @@ export function effectiveSkillMultipliers(
         if (node.effect.category !== undefined) xpGainByCategory[node.effect.category] *= m;
         else xpGain *= m;
         break;
+      case 'batteryCapacityMul':
+        batteryCapacity *= m;
+        break;
       case 'placeholder':
       case 'unlockRecipe':
       case 'exoticAdjacency':
@@ -1045,6 +1055,7 @@ export function effectiveSkillMultipliers(
     droneScanRadius,
     xpGain,
     xpGainByCategory,
+    batteryCapacity,
   };
 }
 
