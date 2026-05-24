@@ -448,10 +448,13 @@ function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
     }
   }
 
-  // Keystone AND-prereqs: edge from each required node to target with mode 'and'.
-  // Also tracked so the notable-anchoring pass below knows which non-numeric-
-  // suffix nodes are keystones (already gated by AND-prereqs) and shouldn't
-  // get a filler-chain anchor edge.
+  // Keystone prereq edges: one edge per (prereq → keystone). Cost is ks.cost
+  // on every edge, so Dijkstra picks the cheapest prereq path and the player
+  // pays ks.cost (regardless of which prereq is cheapest). `mode: 'and'` keeps
+  // these edges out of aura-adjacency (`buildAdjacency` skips them) so
+  // notables that share a keystone don't get false spatial neighbours through
+  // it. Tracked so the notable-anchoring pass below skips keystones — they
+  // get their entry via the prereq notables (which anchor to the chain).
   const keystoneTargets = new Set<string>();
   for (const ks of KEYSTONE_PREREQS) {
     keystoneTargets.add(String(ks.targetNode));
@@ -460,7 +463,7 @@ function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
         id: `edge.ks.${ks.targetNode}.${req}.${edgeCounter++}` as EdgeId,
         from: req,
         to: ks.targetNode,
-        cost: 0,
+        cost: ks.cost,
         mode: 'and',
       });
     }
