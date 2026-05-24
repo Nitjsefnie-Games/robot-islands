@@ -372,9 +372,11 @@ export function mountSkillGraphView(
     }
 
     const graph = effectiveGraph(state);
-    const path = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, nodeId);
-    if (path === null) return;
-    if (state.unspentSkillPoints < path.totalCost) return;
+    // Don't pre-check costToUnlock — it returns null for root nodes
+    // (depth-1 fillers with no incoming edges), which would block a fresh
+    // island from ever buying its first node. buyNode has its own
+    // root-node fallback (skilltree.ts buyNode) that handles this case
+    // by checking isRootNode and charging the node's flat cost.
     try { buyNode(graph, state, nodeId); } catch { return; }
     refresh();
   }
@@ -396,8 +398,14 @@ export function mountSkillGraphView(
     const graph = effectiveGraph(state);
     const owned = state.unlockedNodes.has(node.id as unknown as GNodeId);
     const ks = KEYSTONE_BY_TARGET.get(String(node.id));
-    const reachable = owned ? 0 : ks ? ks.cost
-      : costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, node.id as unknown as GNodeId)?.totalCost ?? null;
+    let reachable: number | null;
+    if (owned) reachable = 0;
+    else if (ks) reachable = ks.cost;
+    else {
+      const path = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, node.id as unknown as GNodeId);
+      if (path) reachable = path.totalCost;
+      else reachable = graph.edges.some((e) => e.to === (node.id as unknown as GNodeId)) ? null : node.cost;
+    }
     const costLine = owned
       ? '<span style="color:#8FA56E">OWNED</span>'
       : reachable === null
@@ -498,9 +506,15 @@ export function mountSkillGraphView(
       const owned = state.unlockedNodes.has(n.id as unknown as GNodeId);
       const ks = KEYSTONE_BY_TARGET.get(String(n.id));
       const path = ks ? null : costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, n.id as unknown as GNodeId);
-      const reachableCost = ks ? ks.cost : path?.totalCost ?? Infinity;
+      // Root nodes (no incoming edges) are directly purchasable at their
+      // flat node cost via buyNode's root-fallback — costToUnlock returns
+      // null for them because Dijkstra has no incoming edges to walk.
+      let reachableCost: number;
+      if (ks) reachableCost = ks.cost;
+      else if (path) reachableCost = path.totalCost;
+      else reachableCost = graph.edges.some((e) => e.to === (n.id as unknown as GNodeId)) ? Infinity : n.cost;
       const affordable = state.unspentSkillPoints >= reachableCost;
-      const purchasable = !owned && affordable && (ks ? canBuyKeystone(ks, state) : path !== null);
+      const purchasable = !owned && affordable && (ks ? canBuyKeystone(ks, state) : reachableCost !== Infinity);
 
       // State-driven palette: owned (green fill, full alpha), purchasable
       // (kind fill + clay accent stroke, full alpha, thicker), locked
