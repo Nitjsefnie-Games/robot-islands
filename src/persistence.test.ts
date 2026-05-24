@@ -121,7 +121,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(9);
+    expect(snap.v).toBe(10);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -463,8 +463,8 @@ describe('schema version', () => {
     expect(() => deserializeWorld(future, 0, 0)).toThrow(/not supported/);
   });
 
-  it('exports STORAGE_KEY containing v9 so it does not collide with stale saves', () => {
-    expect(STORAGE_KEY).toMatch(/v9$/);
+  it('exports STORAGE_KEY containing v10 so it does not collide with stale saves', () => {
+    expect(STORAGE_KEY).toMatch(/v10$/);
   });
 
   it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
@@ -1456,7 +1456,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(9);
+    expect(snap.v).toBe(10);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({

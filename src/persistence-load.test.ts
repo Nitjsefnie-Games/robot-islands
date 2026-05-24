@@ -80,10 +80,10 @@ describe('loadWorld IDB walker', () => {
     expect(result!.world).toBeDefined();
     expect(result!.islandStates.has(islandState.id)).toBe(true);
 
-    // Current key should now hold the migrated v8 snapshot.
+    // Current key should now hold the migrated snapshot.
     expect(store.has(STORAGE_KEY)).toBe(true);
-    const v8snapshot = store.get(STORAGE_KEY) as { v: number };
-    expect(v8snapshot.v).toBe(9);
+    const migrated = store.get(STORAGE_KEY) as { v: number };
+    expect(migrated.v).toBe(10);
 
     // Old v7 key should be deleted.
     expect(store.has(v7Key)).toBe(false);

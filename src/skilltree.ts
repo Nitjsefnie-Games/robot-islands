@@ -449,7 +449,12 @@ function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
   }
 
   // Keystone AND-prereqs: edge from each required node to target with mode 'and'.
+  // Also tracked so the notable-anchoring pass below knows which non-numeric-
+  // suffix nodes are keystones (already gated by AND-prereqs) and shouldn't
+  // get a filler-chain anchor edge.
+  const keystoneTargets = new Set<string>();
   for (const ks of KEYSTONE_PREREQS) {
+    keystoneTargets.add(String(ks.targetNode));
     for (const req of ks.requires) {
       edges.push({
         id: `edge.ks.${ks.targetNode}.${req}.${edgeCounter++}` as EdgeId,
@@ -459,6 +464,42 @@ function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
         mode: 'and',
       });
     }
+  }
+
+  // Notable anchoring: every notable (non-numeric suffix, NOT a keystone)
+  // needs an incoming edge from its sub-path's filler chain. Without this,
+  // notables are root nodes — buyable for SP cost any time, with no
+  // progression gate. Match effect.kind to a chain; fall back to the
+  // alphabetically-first chain of the sub-path.
+  for (const n of nodes) {
+    const lastDot = n.id.lastIndexOf('.');
+    if (lastDot < 0) continue;
+    const lastSegment = n.id.slice(lastDot + 1);
+    if (/^\d+$/.test(lastSegment)) continue; // skip filler nodes
+    if (keystoneTargets.has(String(n.id))) continue; // skip keystones (AND-gated)
+
+    // Find candidate chains in this notable's sub-path.
+    const subPathChains: Array<[string, SkillNode[]]> = [];
+    for (const [prefix, arr] of byPrefix) {
+      if (arr[0]?.subPath !== n.subPath) continue;
+      subPathChains.push([prefix, arr]);
+    }
+    if (subPathChains.length === 0) continue; // no chain to anchor to
+
+    // Prefer a chain whose effect kind matches the notable's.
+    const match = subPathChains.find(([, arr]) => arr[0]?.effect.kind === n.effect.kind);
+    const chosen = match ?? subPathChains.sort(([a], [b]) => a.localeCompare(b))[0]!;
+    const chain = chosen[1];
+
+    // Anchor from chain depth (notable.depth - 1) if it exists; else deepest.
+    const targetDepth = Math.max(1, n.depth - 1);
+    const fromNode = chain.find((c) => c.depth === targetDepth) ?? chain[chain.length - 1]!;
+    edges.push({
+      id: `edge.notable.${fromNode.id}.${n.id}.${edgeCounter++}` as EdgeId,
+      from: fromNode.id as unknown as import('./skilltree-graph.js').NodeId,
+      to: n.id as unknown as import('./skilltree-graph.js').NodeId,
+      cost: n.cost,
+    });
   }
 
   return edges;
