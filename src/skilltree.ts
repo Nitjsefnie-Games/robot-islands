@@ -17,7 +17,7 @@ import type { BuildingDefId } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import type { Recipe, RecipeCategory } from './recipes.js';
-import { ALL_RECIPE_CATEGORIES } from './recipes.js';
+import { ALL_RECIPE_CATEGORIES, type ResourceId } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
 import type { CrystalId, Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
@@ -489,6 +489,7 @@ export function effectiveGraph(
   const extraNodes: SkillNode[] = [];
   const extraEdges: Edge[] = [];
   let edgeCounter = 0;
+  const addedSockets = new Set<string>();
 
   for (const [socketId, crystalId] of bindings) {
     const socket = DEFAULT_GRAPH.graftSockets.find((s) => s.id === socketId);
@@ -497,20 +498,23 @@ export function effectiveGraph(
     const crystal = CRYSTAL_CATALOG.find((c) => c.id === crystalId);
     if (!crystal) continue;
 
-    // Synthetic socket node so crystal edges have a valid endpoint in the graph.
-    extraNodes.push({
-      id: socketId,
-      subPath: socket.subPathId,
-      depth: socket.attachmentDepth,
-      cost: 0,
-      magnitude: 0,
-      effect: { kind: 'placeholder' },
-      description: '',
-    });
+    if (!addedSockets.has(socketId)) {
+      addedSockets.add(socketId);
+      // Synthetic socket node so crystal edges have a valid endpoint in the graph.
+      extraNodes.push({
+        id: socketId,
+        subPath: socket.subPathId,
+        depth: socket.attachmentDepth,
+        cost: 0,
+        magnitude: 0,
+        effect: { kind: 'placeholder' },
+        description: '',
+      });
+    }
 
     for (const nodeDef of crystal.nodes) {
       extraNodes.push({
-        id: `${socketId}.${nodeDef.idSuffix}`,
+        id: `${socketId}.${crystalId}.${nodeDef.idSuffix}`,
         subPath: socket.subPathId,
         depth: 1,
         cost: nodeDef.cost,
@@ -521,10 +525,10 @@ export function effectiveGraph(
     }
 
     for (const edgeDef of crystal.edges) {
-      const from = edgeDef.fromSuffix === 'socket' ? socketId : `${socketId}.${edgeDef.fromSuffix}`;
-      const to = edgeDef.toSuffix === 'socket' ? socketId : `${socketId}.${edgeDef.toSuffix}`;
+      const from = edgeDef.fromSuffix === 'socket' ? socketId : `${socketId}.${crystalId}.${edgeDef.fromSuffix}`;
+      const to = edgeDef.toSuffix === 'socket' ? socketId : `${socketId}.${crystalId}.${edgeDef.toSuffix}`;
       extraEdges.push({
-        id: `${socketId}.edge.${edgeDef.fromSuffix}.${edgeDef.toSuffix}.${edgeCounter++}` as EdgeId,
+        id: `${socketId}.${crystalId}.edge.${edgeDef.fromSuffix}.${edgeDef.toSuffix}.${edgeCounter++}` as EdgeId,
         from: from as unknown as import('./skilltree-graph.js').NodeId,
         to: to as unknown as import('./skilltree-graph.js').NodeId,
         cost: edgeDef.cost,
@@ -538,6 +542,40 @@ export function effectiveGraph(
     bridges: DEFAULT_GRAPH.bridges,
     graftSockets: DEFAULT_GRAPH.graftSockets,
   };
+}
+
+/** Bind a crystal to a socket, consuming it from inventory.
+ *  If a previous crystal was bound, it is returned to inventory.
+ *  Throws if the crystal is not present in inventory. */
+export function bindCrystal(
+  state: IslandState,
+  socketId: string,
+  crystalId: CrystalId,
+): void {
+  const rid = crystalId as string as ResourceId;
+  const have = state.inventory[rid] ?? 0;
+  if (have <= 0) {
+    throw new Error(`bindCrystal: no ${crystalId} in inventory`);
+  }
+  const prev = state.socketBindings.get(socketId);
+  if (prev) {
+    const prevRid = prev as string as ResourceId;
+    state.inventory[prevRid] = (state.inventory[prevRid] ?? 0) + 1;
+    // TODO(T5): refund SP for any owned mini-tree nodes from the previous crystal
+  }
+  state.inventory[rid] = have - 1;
+  state.socketBindings.set(socketId, crystalId);
+}
+
+/** Unbind the crystal from a socket, returning it to inventory.
+ *  No-op if the socket is empty. */
+export function unbindCrystal(state: IslandState, socketId: string): void {
+  const prev = state.socketBindings.get(socketId);
+  if (!prev) return;
+  const prevRid = prev as string as ResourceId;
+  state.inventory[prevRid] = (state.inventory[prevRid] ?? 0) + 1;
+  // TODO(T5): refund SP for any owned mini-tree nodes from the previous crystal
+  state.socketBindings.delete(socketId);
 }
 
 /**

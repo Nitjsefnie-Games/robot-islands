@@ -39,9 +39,11 @@ import {
   deserializeWorld,
   isValidSaveSnapshot,
   migrateV7toV8,
+  migrateV8toV9,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
+  type SerializedSnapshotV8,
 } from './persistence.js';
 import {
   attachTerrainAt,
@@ -97,6 +99,7 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     genesisTarget: null,
     singularityStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
+    socketBindings: new Map(),
     lastTick: 1000,
     ...over,
   };
@@ -118,7 +121,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(8);
+    expect(snap.v).toBe(9);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -460,8 +463,8 @@ describe('schema version', () => {
     expect(() => deserializeWorld(future, 0, 0)).toThrow(/not supported/);
   });
 
-  it('exports STORAGE_KEY containing v7 so it does not collide with stale saves', () => {
-    expect(STORAGE_KEY).toMatch(/v8$/);
+  it('exports STORAGE_KEY containing v9 so it does not collide with stale saves', () => {
+    expect(STORAGE_KEY).toMatch(/v9$/);
   });
 
   it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
@@ -1453,7 +1456,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(8);
+    expect(snap.v).toBe(9);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -1607,19 +1610,114 @@ describe('migrateV7toV8', () => {
   });
 });
 
+describe('migrateV8toV9', () => {
+  it('adds empty socketBindings to every island state', () => {
+    const v8: SerializedSnapshotV8 = {
+      v: 8,
+      savedAt: 0,
+      savedAtPerf: 0,
+      world: {
+        islands: [],
+        drones: [],
+        routes: [],
+        vehicles: [],
+        satellites: [],
+        repairDrones: [],
+        debrisFields: [],
+        commPackets: [],
+      },
+      islandStates: [
+        {
+          id: 'home',
+          state: {
+            id: 'home',
+            buildings: [],
+            inventory: {},
+            storageCaps: {},
+            funnelPending: {},
+            starterInventoryGrace: {},
+            xp: 0,
+            level: 1,
+            unspentSkillPoints: 0,
+            unlockedNodes: [],
+            unlockedEdges: [],
+            declaredAt: null,
+            lastResetAt: null,
+            lastTick: 0,
+            aiCoreCrafted: false,
+            ascendantCoreCrafted: false,
+            timeLockBankedMin: 0,
+            accelerationQueue: [],
+            accelerationRemainingMin: 0,
+            bankingEnabled: false,
+            genesisTarget: null,
+            singularityStoredWs: 0,
+          } as unknown as import('./persistence.js').SerializedIslandStateV8,
+        },
+      ],
+    };
+
+    const v9 = migrateV8toV9(v8);
+    expect(v9.v).toBe(9);
+    expect(v9.islandStates[0]!.state.socketBindings).toEqual([]);
+  });
+});
+
+describe('deserializeWorld v8 → v9 round-trip', () => {
+  it('migrates a v8 snapshot and yields v9 in-memory state with empty socketBindings', () => {
+    const world = makeInitialWorld(0);
+    const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
+    const states = new Map<string, IslandState>([['home', homeState]]);
+    const v9snap = serializeWorld(world, states, 0, 0);
+
+    // Forge a v8-shaped snapshot from the v9 one.
+    const v8 = {
+      ...v9snap,
+      v: 8,
+      islandStates: v9snap.islandStates.map((entry) => {
+        const { socketBindings: _sb, ...stateRest } = entry.state;
+        return {
+          id: entry.id,
+          state: stateRest,
+        };
+      }),
+    } as unknown as SaveSnapshot;
+
+    const { islandStates: restored } = deserializeWorld(v8, 0, 0);
+    const home = restored.get('home')!;
+    expect(home.level).toBe(5);
+    expect(home.xp).toBe(1200);
+    expect(home.socketBindings).toBeInstanceOf(Map);
+    expect(home.socketBindings.size).toBe(0);
+  });
+
+  it('round-trips v9 socketBindings through serialize → JSON → deserialize', () => {
+    const world = makeInitialWorld(0);
+    const homeState = makeIslandState({ id: 'home' });
+    homeState.socketBindings.set('mining.socket.1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    const states = new Map<string, IslandState>([['home', homeState]]);
+    const snap = serializeWorld(world, states, 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    const home = restored.get('home')!;
+    expect(home.socketBindings.size).toBe(1);
+    expect(home.socketBindings.get('mining.socket.1')).toBe('mining_crystal_t1');
+  });
+});
+
 describe('deserializeWorld v7 → v8 round-trip', () => {
   it('migrates a v7 snapshot and yields v8 in-memory state', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
-    const v8snap = serializeWorld(world, states, 0, 0);
+    const v9snap = serializeWorld(world, states, 0, 0);
 
-    // Forge a v7-shaped snapshot from the v8 one.
+    // Forge a v7-shaped snapshot from the v9 one.
     const v7 = {
-      ...v8snap,
+      ...v9snap,
       v: 7,
-      islandStates: v8snap.islandStates.map((entry) => {
-        const { unlockedEdges: _ue, ...stateRest } = entry.state;
+      islandStates: v9snap.islandStates.map((entry) => {
+        const { unlockedEdges: _ue, socketBindings: _sb, ...stateRest } = entry.state;
         return {
           id: entry.id,
           state: {
@@ -1640,5 +1738,7 @@ describe('deserializeWorld v7 → v8 round-trip', () => {
     expect(home.unspentSkillPoints).toBe(4);
     expect(home.unlockedNodes.size).toBe(0);
     expect(home.unlockedEdges.size).toBe(0);
+    expect(home.socketBindings).toBeInstanceOf(Map);
+    expect(home.socketBindings.size).toBe(0);
   });
 });

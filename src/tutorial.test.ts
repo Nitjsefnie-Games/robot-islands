@@ -49,6 +49,7 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     genesisTarget: null,
     singularityStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
+    socketBindings: new Map(),
     lastTick: 0,
     ...over,
   };

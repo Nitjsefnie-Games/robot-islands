@@ -53,7 +53,7 @@ import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js'
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition } from './skilltree.js';
-import type { EdgeId, Graph } from './skilltree-graph.js';
+import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
 
 /**
@@ -283,6 +283,8 @@ export interface IslandState {
    *  that lets a new colony hold kit-delivered raws even with zero storage.
    *  Shrinks resource-by-resource as normal cap meets or exceeds inventory. */
   starterInventoryGrace: Record<ResourceId, number>;
+  /** Socket id → bound crystal id. Empty on a fresh island. */
+  socketBindings: Map<string, CrystalId>;
 }
 
 /**
