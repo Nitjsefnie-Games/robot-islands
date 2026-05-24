@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Skill-tree — unfinished inventory · 2026-05-24</title>
+<style>
+  :root {
+    --page:#1B1A17; --panel:#252420; --panel2:#2E2C27;
+    --ink:#F5F3EC; --ink2:#CFCCC2; --muted:#8F8D82; --rule:#3A3833;
+    --clay:#D97757; --clay-d:#E0916F; --tan:#E0B47F;
+    --olive:#8FA56E; --pink:#D38FCC; --slate:#7DD3E8; --red:#E08B7F; --oat:#3A352B;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--page); color:var(--ink2); font-family:var(--sans); font-size:14px; line-height:1.55; }
+  .wrap { max-width:1200px; margin:0 auto; padding:44px 28px 96px; }
+
+  header { margin-bottom:14px; }
+  .eyebrow { font-family:var(--mono); font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+  h1 { font-family:var(--serif); font-weight:500; font-size:30px; letter-spacing:-0.01em; color:var(--ink); margin:6px 0 6px; }
+  .sub { color:var(--muted); max-width:780px; margin:0; font-size:13.5px; }
+  .sub code { font-family:var(--mono); font-size:12px; color:var(--tan); background:var(--panel); padding:1px 5px; border-radius:3px; }
+
+  .toolbar {
+    position:sticky; top:0; z-index:5; background:var(--page);
+    display:flex; align-items:center; gap:14px; padding:16px 0 12px; margin:22px 0 8px;
+    border-bottom:1.5px solid var(--rule);
+  }
+  .summary { font-family:var(--mono); font-size:12px; color:var(--ink2); }
+  .summary b { color:var(--ink); font-weight:600; }
+  .summary .dot { color:var(--rule); margin:0 5px; }
+  .spacer { flex:1; }
+  .toolbar button, .toolbar .filterchip {
+    background:var(--panel); color:var(--ink2); border:1px solid var(--rule);
+    font:600 11.5px var(--mono); letter-spacing:0.05em; text-transform:uppercase;
+    padding:6px 11px; border-radius:3px; cursor:pointer;
+  }
+  .toolbar button:hover { border-color:var(--clay); color:var(--ink); }
+  .filterchip[data-on="true"] { color:var(--ink); border-color:var(--clay-d); background:rgba(217,119,87,0.12); }
+
+  .toc {
+    background:var(--panel); border:1px solid var(--rule); border-left:3px solid var(--slate);
+    padding:14px 18px; border-radius:0 6px 6px 0; margin:18px 0 28px;
+  }
+  .toc h3 { color:var(--muted); font:600 11px var(--mono); text-transform:uppercase; letter-spacing:0.07em; margin:0 0 8px; }
+  .toc ul { list-style:none; padding:0; margin:0; columns:2; column-gap:32px; }
+  .toc li { margin:3px 0; font-size:13px; }
+  .toc a { color:var(--ink2); text-decoration:none; }
+  .toc a:hover { color:var(--clay-d); }
+  .toc .ct { color:var(--muted); font-family:var(--mono); font-size:11.5px; margin-left:6px; }
+
+  section { margin-bottom:30px; }
+  section h2 {
+    font-family:var(--serif); font-weight:500; font-size:20px; color:var(--ink);
+    padding-bottom:6px; border-bottom:1px solid var(--rule); margin:0 0 14px;
+    display:flex; align-items:baseline; gap:10px;
+  }
+  section h2 .badge {
+    font-family:var(--mono); font-size:10.5px; padding:2px 7px; border-radius:3px;
+    background:var(--oat); color:var(--ink); font-weight:600; letter-spacing:0.04em;
+  }
+
+  .card {
+    background:var(--panel); border:1px solid var(--rule); border-radius:6px;
+    padding:12px 14px; margin-bottom:10px; display:grid;
+    grid-template-columns: 1fr 200px; gap:14px;
+  }
+  .card[data-state="done"] { border-left:3px solid var(--olive); }
+  .card[data-state="defer"] { border-left:3px solid var(--tan); opacity:0.82; }
+  .card[data-state="wontfix"] { border-left:3px solid var(--muted); opacity:0.55; }
+  .card[data-state="open"] { border-left:3px solid var(--clay-d); }
+  .card-body { min-width:0; }
+  .card-title {
+    color:var(--ink); font-weight:600; font-size:13.5px; margin-bottom:4px;
+  }
+  .card-desc { color:var(--ink2); font-size:13px; }
+  .card-desc code { font-family:var(--mono); font-size:12px; color:var(--tan); background:var(--panel2); padding:1px 5px; border-radius:3px; }
+  .card-meta { margin-top:6px; font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .card-meta .tag {
+    display:inline-block; padding:1px 6px; border-radius:3px; background:var(--panel2);
+    border:1px solid var(--rule); margin-right:5px; color:var(--ink2);
+  }
+  .card-meta .tag.size-S { color:var(--olive); border-color:var(--olive); }
+  .card-meta .tag.size-M { color:var(--tan); border-color:var(--tan); }
+  .card-meta .tag.size-L { color:var(--red); border-color:var(--red); }
+  .card-actions { display:flex; flex-direction:column; gap:6px; }
+  .card-actions button {
+    background:var(--panel2); color:var(--ink2); border:1px solid var(--rule);
+    font:600 11px var(--mono); letter-spacing:0.04em; text-transform:uppercase;
+    padding:5px 9px; border-radius:3px; cursor:pointer; text-align:left;
+  }
+  .card-actions button[data-on="true"] { background:rgba(217,119,87,0.14); color:var(--clay-d); border-color:var(--clay-d); }
+  .card-actions textarea {
+    background:var(--page); color:var(--ink2); border:1px solid var(--rule);
+    font:12px var(--mono); padding:5px 7px; border-radius:3px;
+    width:100%; resize:vertical; min-height:36px;
+  }
+
+  .note {
+    background:var(--panel2); border:1px solid var(--rule); border-left:3px solid var(--tan);
+    padding:10px 14px; margin:10px 0 18px; font-size:13px; color:var(--ink2);
+  }
+  .note b { color:var(--ink); }
+
+  .exportbar {
+    position:fixed; bottom:18px; right:22px; z-index:10;
+    background:var(--panel); border:1px solid var(--rule);
+    padding:10px 14px; border-radius:5px; font:11.5px var(--mono); color:var(--ink2);
+    box-shadow:0 6px 22px rgba(0,0,0,0.35); display:flex; gap:10px; align-items:center;
+  }
+  .exportbar button {
+    background:var(--clay); color:#1B1A17; border:none; padding:6px 12px; cursor:pointer;
+    font:600 11px var(--mono); letter-spacing:0.04em; text-transform:uppercase; border-radius:3px;
+  }
+  .exportbar button:hover { background:var(--clay-d); }
+
+  dialog.copy-dialog {
+    background:var(--panel); color:var(--ink2); border:1px solid var(--rule);
+    padding:18px; border-radius:6px; max-width:700px;
+  }
+  dialog.copy-dialog textarea {
+    width:100%; min-height:340px; background:var(--page); color:var(--ink2);
+    font:12px var(--mono); border:1px solid var(--rule); padding:8px; border-radius:3px;
+  }
+  dialog.copy-dialog::backdrop { background:rgba(0,0,0,0.6); }
+
+  footer { margin-top:48px; padding-top:18px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }
+  footer code { font-family:var(--mono); color:var(--tan); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Audit · skilltree · post-shipping inventory · 2026-05-24</div>
+  <h1>Skill-tree subsystem — what's not finished</h1>
+  <p class="sub">
+    Inventory of deferred, stubbed, or partially-wired skill-tree work after the graph-redesign + graph-view UI ship. Each card is triagable —
+    click <b>Do now</b> / <b>Defer</b> / <b>Won't fix</b> to mark it; annotations persist in the JSON export at the bottom.
+    Source: pure read-only scan of <code>SPEC.md</code>, <code>src/skilltree*.ts</code>, <code>src/economy.ts</code>, <code>src/persistence.ts</code>, <code>src/tier-reset.ts</code>, plus the design specs published this cycle.
+  </p>
+</header>
+
+<div class="toolbar">
+  <div class="summary" id="summary">…</div>
+  <div class="spacer"></div>
+  <button class="filterchip" data-filter="all" data-on="true">All</button>
+  <button class="filterchip" data-filter="open">Open</button>
+  <button class="filterchip" data-filter="done">Do now</button>
+  <button class="filterchip" data-filter="defer">Deferred</button>
+  <button class="filterchip" data-filter="wontfix">Won't fix</button>
+</div>
+
+<div class="toc">
+  <h3>Sections</h3>
+  <ul id="toc"></ul>
+</div>
+
+<!-- ====================================================================== -->
+<section id="sec-spec">
+  <h2>Spec gaps <span class="badge" data-count-for="sec-spec">5</span></h2>
+  <p class="note"><b>Source-of-truth drift:</b> the design specs at <code>docs/superpowers/specs/2026-05-23-skilltree-graphview-ui-design.html</code> §05/§06 and <code>SPEC.md</code> §9.x describe mechanics that are intentionally deferred to v2+. Listed here for visibility; most are not ship-blockers.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-effects">
+  <h2>Unwired / stubbed SkillEffect kinds <span class="badge" data-count-for="sec-effects">2</span></h2>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-content">
+  <h2>Sub-path / content gaps <span class="badge" data-count-for="sec-content">2</span></h2>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-graphview">
+  <h2>Graph-view UI deferred <span class="badge" data-count-for="sec-graphview">6</span></h2>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-other">
+  <h2>Other deferred / TODO / stubs <span class="badge" data-count-for="sec-other">3</span></h2>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-persistence">
+  <h2>Persistence / migration <span class="badge" data-count-for="sec-persistence">2</span></h2>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-large">
+  <h2>Larger initiatives <span class="badge" data-count-for="sec-large">5</span></h2>
+</section>
+
+<div class="exportbar">
+  <span id="quickcount">0 marked</span>
+  <button id="copybtn">Copy as JSON →</button>
+</div>
+
+<dialog class="copy-dialog" id="copydialog">
+  <h3 style="color:var(--ink);margin:0 0 8px;font-family:var(--serif);font-weight:500">Triage state — copy for next session</h3>
+  <p style="color:var(--muted);font-size:12px;margin:0 0 10px">Paste into a follow-up prompt to keep state across sessions.</p>
+  <textarea id="copybox" readonly></textarea>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px">
+    <button onclick="document.getElementById('copydialog').close()" style="background:var(--panel2);color:var(--ink2);border:1px solid var(--rule);padding:6px 14px;font:600 11px var(--mono);text-transform:uppercase;cursor:pointer">Close</button>
+    <button onclick="navigator.clipboard.writeText(document.getElementById('copybox').value);this.textContent='Copied'" style="background:var(--clay);color:#1B1A17;border:none;padding:6px 14px;font:600 11px var(--mono);text-transform:uppercase;cursor:pointer">Copy</button>
+  </div>
+</dialog>
+
+<footer>
+  Audit v1 · 2026-05-24 · sources: <code>SPEC.md §§9.1–9.7</code>, <code>src/skilltree*.ts</code>, <code>src/economy.ts</code>, design specs <code>robot-islands/2026-05-23-skilltree-graph-redesign-design</code> v4 + <code>robot-islands/2026-05-23-skilltree-graphview-ui-design</code> v1.
+</footer>
+
+</div>
+
+<script>
+const ITEMS = [
+  // Spec gaps
+  { sec:"sec-spec", id:"spec-manual-coords", title:"§9.3 manual node coord overrides",
+    desc:"Catalog can specify <code>{x, y}</code> per node as fixed anchors for force-directed sim. v1 ships pure force-directed; designers can pin specific keystones later if FR mis-places them.",
+    cite:"design §01, §05", size:"S" },
+  { sec:"sec-spec", id:"spec-build-planner", title:"§9.3 build planner (save / compare two builds)",
+    desc:"Side-panel for saving named builds and diffing two of them. Deferred to v2 spec.",
+    cite:"design §05", size:"L" },
+  { sec:"sec-spec", id:"spec-graft-attach", title:"§9.3 graft-socket attachment",
+    desc:"Sockets render as empty dashed circles; mechanism to attach cluster-jewel-style content is a separate feature spec.",
+    cite:"design §05", size:"L" },
+  { sec:"sec-spec", id:"spec-tier-reset-cost", title:"§9.7 tier-reset cost is a placeholder",
+    desc:"<code>tierResetCost(level)</code> uses a placeholder <code>level²</code> formula. Balance pass deferred until §6.5 T4–T5 production throughput data is collected.",
+    cite:"src/tier-reset.ts:61-70", size:"M" },
+  { sec:"sec-spec", id:"spec-t6-subpaths", title:"§14.7 T6 skill sub-paths referenced but not implemented",
+    desc:"SPEC §9.2 / §9.3 reference T6-tier sub-paths in headings without concrete content in the catalog.",
+    cite:"src/skilltree.ts:306-307", size:"M" },
+
+  // SkillEffect kinds
+  { sec:"sec-effects", id:"eff-adjacent-biome", title:"<code>adjacent-tile-is-biome</code> condition returns false unconditionally",
+    desc:"<code>evaluateConditionalEffectCondition</code> hits the case and returns false because <code>terrainAt</code> isn't threaded into the call site. Affected keystones include <code>communication.keystone.networkedExtract</code>.",
+    cite:"src/economy.ts:558-560 · src/skilltree-catalog.ts:928-931", size:"M" },
+  { sec:"sec-effects", id:"eff-conditional-coverage", title:"Verify other <code>conditionalBonus</code> conditions are live",
+    desc:"<code>during-storm</code>, <code>during-night</code>, <code>networked-to-N-T3-islands</code> are reported wired in the prior session. Worth a spot-check that each evaluator actually fires on a built save.",
+    cite:"src/economy.ts (search <code>evaluateConditionalEffectCondition</code>)", size:"S" },
+
+  // Sub-path / content gaps
+  { sec:"sec-content", id:"content-patronage-branch", title:"Patronage sub-path lives in <code>logistics</code> — was it meant for <code>ocean</code>?",
+    desc:"Both <code>SUBPATH_BRANCH</code> and <code>BRANCH_SUBPATHS</code> are internally consistent (patronage in logistics), but the redesign brainstorm log says <em>“T15.5 inserted to add Ocean/Patronage that the existing SubPathId type was missing.”</em> If Patronage was intended as a 5th ocean sub-path, this is mis-slotted; otherwise SPEC.md should clarify why it's in logistics.",
+    cite:"src/skilltree.ts:216, 227 vs handoff §06", size:"S" },
+  { sec:"sec-content", id:"content-graft-orphans", title:"Graft sockets present in catalog, no content can attach to them",
+    desc:"<code>GRAFT_SOCKET_CATALOG</code> ships 44 sockets, but until the attachment system lands (large initiative) they render as dashed circles with no purchase / hover affordance beyond what the graphview shows generically.",
+    cite:"src/skilltree-catalog.ts:1219 · src/skilltree-graph.ts:29", size:"L" },
+
+  // Graphview UI deferred
+  { sec:"sec-graphview", id:"gv-manual-coords", title:"Manual <code>{x,y}</code> override coords not wired",
+    desc:"Design §05 lists this as v1-deferred. Currently <code>computeSkillGraphLayout</code> consumes only the graph topology; node-level coord overrides aren't read.",
+    cite:"src/skilltree-layout.ts", size:"S" },
+  { sec:"sec-graphview", id:"gv-build-planner", title:"Build-planner side-panel",
+    desc:"Not started; v2 spec.",
+    cite:"design §05", size:"L" },
+  { sec:"sec-graphview", id:"gv-socket-ui", title:"Graft-socket attachment UI",
+    desc:"Sockets render but can't be clicked / inspected — by design, since nothing attaches to them yet.",
+    cite:"design §05 · src/skilltree-graphview.ts drawNodes (socket loop)", size:"L" },
+  { sec:"sec-graphview", id:"gv-mobile", title:"Mobile / touch interaction",
+    desc:"Pointer handlers use single-touch pointerdown/up; no pinch-zoom, no multi-touch pan. Desktop-only at v1.",
+    cite:"design §05 · src/skilltree-graphview.ts pan/zoom block", size:"M" },
+  { sec:"sec-graphview", id:"gv-search", title:"Text search / filter beyond chip toggles",
+    desc:"Filter chips toggle by kind (filler/notable/keystone/bridge/socket). No name-search box.",
+    cite:"design §05 · src/skilltree-graphview.ts HUD block", size:"S" },
+  { sec:"sec-graphview", id:"gv-label-zoom", title:"Label overlap at zoomed-out levels",
+    desc:"Spec §06 floated hiding non-branch labels below 1× zoom. Currently all labels render at all zooms (only branch-root labels exist today — node labels are absent). Revisit if node labels are added.",
+    cite:"design §06 · drawNodes labels block", size:"S" },
+
+  // Other
+  { sec:"sec-other", id:"other-skilltree-ui-hooks", title:"<code>SkillTreeUiOptions</code> is empty placeholder",
+    desc:"Interface comment says “No hooks currently; reserved for future use.” Either populate or drop.",
+    cite:"src/skilltree-ui.ts:50-52", size:"S" },
+  { sec:"sec-other", id:"other-confirm-threshold", title:"Hardcoded <code>CONFIRM_THRESHOLD_SP = 20</code>",
+    desc:"Click-to-buy confirm cutoff isn't user-configurable. Promote to settings panel if players want to tune.",
+    cite:"src/skilltree-graphview.ts (top constants)", size:"S" },
+  { sec:"sec-other", id:"other-keystone-lock-icon", title:"Locked keystones get dim styling but no lock icon",
+    desc:"Design §02 mentions a lock icon overlay for locked keystones; current code only dims fill+stroke alpha.",
+    cite:"design §02 · drawNodes keystone branch", size:"S" },
+
+  // Persistence
+  { sec:"sec-persistence", id:"pers-future-bump", title:"Next schema bump must add v8→v9 walker",
+    desc:"Per AGENTS.md “bump = migrate” policy. <code>SUPPORTED_LOAD_VERSIONS = {7, 8}</code> today; adding v9 means writing <code>migrateV8toV9</code> + extending the loader walker + the SUPPORTED set.",
+    cite:"src/persistence.ts:82, 189-207", size:"S" },
+  { sec:"sec-persistence", id:"pers-v7-fixture-thin", title:"v7 fixture coverage is one happy-path test",
+    desc:"Only one v7-shaped snapshot is exercised through <code>loadWorld</code>. Edge cases (saves with unknown old NodeId strings, partial sub-path progress, null vs missing specializationRole) aren't fixtured.",
+    cite:"src/persistence.test.ts (search <code>migrateV7toV8</code>)", size:"S" },
+
+  // Larger initiatives
+  { sec:"sec-large", id:"large-build-planner", title:"Build planner subsystem",
+    desc:"Persistent “saved builds” array on <code>IslandState</code>; modal listing them; diff view comparing two. Affects: persistence schema bump, new modal, SkillTreeUi entry-point. Rough scope: 2–3 days.",
+    cite:"design §05", size:"L" },
+  { sec:"sec-large", id:"large-graft-system", title:"Graft-socket attachment system",
+    desc:"Define cluster-jewel nodes + binding mechanism. New SkillEffect kind, new catalog entries, graphview select-and-attach, persistence of bindings. Rough scope: 3–5 days.",
+    cite:"design §05/§06", size:"L" },
+  { sec:"sec-large", id:"large-adj-biome-wire", title:"Wire <code>adjacent-tile-is-biome</code> end-to-end",
+    desc:"Thread <code>spec: IslandSpec</code> (or a <code>terrainAt</code> closure) through <code>effectiveSkillMultipliers</code> + <code>layerConditionalBonuses</code> to <code>evaluateConditionalEffectCondition</code>. Rough scope: 1–2 days.",
+    cite:"src/economy.ts:558 · src/skilltree-catalog.ts:928", size:"M" },
+  { sec:"sec-large", id:"large-tier-reset-balance", title:"Tier-reset cost rebalance",
+    desc:"Once T4–T5 throughput data is collected, revisit the <code>level²</code> formula. L15=225s+112g, L30=900+450, L50=2500+1250 today. <1 day tuning once data is available.",
+    cite:"src/tier-reset.ts:67-70", size:"M" },
+  { sec:"sec-large", id:"large-manual-coord-override", title:"Manual layout overrides for keystones",
+    desc:"Add optional <code>{x?, y?}</code> to catalog node defs; wire as fixed anchors in <code>computeSkillGraphLayout</code>. Activate when playtesting surfaces specific mis-placements. <1 day after data.",
+    cite:"src/skilltree-layout.ts", size:"S" },
+];
+
+const SECTIONS = [
+  { id:"sec-spec",       title:"Spec gaps" },
+  { id:"sec-effects",    title:"SkillEffect kinds" },
+  { id:"sec-content",    title:"Sub-path / content gaps" },
+  { id:"sec-graphview",  title:"Graph-view UI deferred" },
+  { id:"sec-other",      title:"Other TODOs / stubs" },
+  { id:"sec-persistence",title:"Persistence / migration" },
+  { id:"sec-large",      title:"Larger initiatives" },
+];
+
+const STATES = ["open", "done", "defer", "wontfix"];
+const stateLabel = { open:"Open", done:"Do now", defer:"Defer", wontfix:"Won't fix" };
+const triage = Object.create(null);
+const notes = Object.create(null);
+for (const it of ITEMS) { triage[it.id] = "open"; notes[it.id] = ""; }
+
+function render() {
+  // Build TOC.
+  const toc = document.getElementById("toc");
+  toc.innerHTML = SECTIONS.map(s => {
+    const ct = ITEMS.filter(i => i.sec === s.id).length;
+    return `<li><a href="#${s.id}">${s.title}</a><span class="ct">${ct}</span></li>`;
+  }).join("");
+
+  // Cards into sections.
+  for (const sec of SECTIONS) {
+    const sectionEl = document.getElementById(sec.id);
+    // Remove old cards (keep h2 + note).
+    [...sectionEl.querySelectorAll(".card")].forEach(n => n.remove());
+    const items = ITEMS.filter(i => i.sec === sec.id);
+    for (const it of items) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.state = triage[it.id];
+      card.dataset.id = it.id;
+      card.innerHTML = `
+        <div class="card-body">
+          <div class="card-title">${it.title}</div>
+          <div class="card-desc">${it.desc}</div>
+          <div class="card-meta">
+            <span class="tag size-${it.size}">${it.size}</span>
+            <span>${it.cite}</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          ${STATES.filter(s => s !== "open").map(s =>
+            `<button data-act="${s}" data-on="${triage[it.id] === s}">${stateLabel[s]}</button>`).join("")}
+          <textarea placeholder="annotate…" data-note="${it.id}">${notes[it.id] || ""}</textarea>
+        </div>`;
+      sectionEl.appendChild(card);
+    }
+  }
+
+  // Wire actions.
+  document.querySelectorAll(".card .card-actions button").forEach(btn => {
+    btn.addEventListener("click", (ev) => {
+      const card = ev.target.closest(".card");
+      const id = card.dataset.id;
+      const act = ev.target.dataset.act;
+      triage[id] = (triage[id] === act) ? "open" : act;
+      render();
+      applyFilter();
+      updateSummary();
+    });
+  });
+  document.querySelectorAll(".card textarea").forEach(ta => {
+    ta.addEventListener("input", (ev) => { notes[ev.target.dataset.note] = ev.target.value; updateSummary(); });
+  });
+}
+
+function updateSummary() {
+  const total = ITEMS.length;
+  const counts = { open:0, done:0, defer:0, wontfix:0 };
+  for (const it of ITEMS) counts[triage[it.id]]++;
+  document.getElementById("summary").innerHTML =
+    `<b>${total}</b> items <span class="dot">·</span> ` +
+    `<span style="color:var(--clay-d)">${counts.open} open</span> <span class="dot">·</span> ` +
+    `<span style="color:var(--olive)">${counts.done} do now</span> <span class="dot">·</span> ` +
+    `<span style="color:var(--tan)">${counts.defer} deferred</span> <span class="dot">·</span> ` +
+    `<span style="color:var(--muted)">${counts.wontfix} won't fix</span>`;
+  const marked = counts.done + counts.defer + counts.wontfix;
+  document.getElementById("quickcount").textContent = `${marked} marked`;
+}
+
+let filter = "all";
+function applyFilter() {
+  for (const it of ITEMS) {
+    const card = document.querySelector(`.card[data-id="${it.id}"]`);
+    if (!card) continue;
+    card.style.display = (filter === "all" || triage[it.id] === filter) ? "" : "none";
+  }
+}
+document.querySelectorAll(".filterchip").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".filterchip").forEach(b => b.dataset.on = "false");
+    btn.dataset.on = "true";
+    filter = btn.dataset.filter;
+    applyFilter();
+  });
+});
+
+document.getElementById("copybtn").addEventListener("click", () => {
+  const out = ITEMS.filter(it => triage[it.id] !== "open" || notes[it.id])
+    .map(it => ({ id:it.id, title:it.title.replace(/<[^>]+>/g, ""), state:triage[it.id], note:notes[it.id] || undefined, size:it.size, cite:it.cite }));
+  const payload = JSON.stringify({ source:"robot-islands/2026-05-24-skilltree-unfinished", items:out }, null, 2);
+  document.getElementById("copybox").value = payload;
+  document.getElementById("copydialog").showModal();
+});
+
+render();
+updateSummary();
+applyFilter();
+</script>
+
+</body>
+</html>
