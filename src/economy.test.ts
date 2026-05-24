@@ -33,7 +33,7 @@ import {
   findNextCapEvent,
   setGenesisTarget,
   spendTimeLock,
-  SINGULARITY_BATTERY_CAPACITY_WS,
+  batteryCapacityWs,
   xpForLevel,
   type DefCatalog,
   type IslandState,
@@ -114,7 +114,7 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     accelerationRemainingMin: 0,
     bankingEnabled: false,
     genesisTarget: null,
-    singularityStoredWs: 0,
+    batteryStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),
     lastTick: 0,
@@ -2947,7 +2947,7 @@ describe('Singularity Battery', () => {
     state.buildings.push({ id: 'sol1', defId: 'solar', x: 2, y: 0 });
     state.buildings.push({ id: 'cg1', defId: 'coal_gen', x: 4, y: 0 });
     advanceIsland(state, 1000);
-    expect(state.singularityStoredWs).toBeGreaterThan(0);
+    expect(state.batteryStoredWs).toBeGreaterThan(0);
   });
 
   it('discharges on deficit preventing brownout', () => {
@@ -2955,11 +2955,11 @@ describe('Singularity Battery', () => {
       inventory: { ...blankInventory(), iron_ore: 50 },
     });
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0 });
-    state.singularityStoredWs = 1e9; // seed with stored energy
+    state.batteryStoredWs = 1e9; // seed with stored energy
     // Mine (40W consumer) + battery (0W) = 40W deficit, no producers
     state.buildings.push({ id: 'mine1', defId: 'mine', x: 2, y: 0 });
     advanceIsland(state, 1000);
-    expect(state.singularityStoredWs).toBeLessThan(1e9);
+    expect(state.batteryStoredWs).toBeLessThan(1e9);
     // Mine ran at full speed because battery covered the deficit
     expect(state.inventory.iron_ore).toBeGreaterThan(50);
   });
@@ -2969,12 +2969,13 @@ describe('Singularity Battery', () => {
       inventory: { ...blankInventory(), coal: 50 },
     });
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0 });
-    state.singularityStoredWs = SINGULARITY_BATTERY_CAPACITY_WS - 100;
+    const cap = batteryCapacityWs(state, effectiveSkillMultipliers(state));
+    state.batteryStoredWs = cap - 100;
     // Solar (50W) + Coal Gen (100W) = 150W produced; battery consumes 0W → 150W surplus
     state.buildings.push({ id: 'sol1', defId: 'solar', x: 2, y: 0 });
     state.buildings.push({ id: 'cg1', defId: 'coal_gen', x: 4, y: 0 });
     advanceIsland(state, 10_000);
-    expect(state.singularityStoredWs).toBeLessThanOrEqual(SINGULARITY_BATTERY_CAPACITY_WS);
+    expect(state.batteryStoredWs).toBeLessThanOrEqual(cap);
   });
 
   it('does not overfill when there is no surplus', () => {
@@ -2984,11 +2985,11 @@ describe('Singularity Battery', () => {
       aiCoreCrafted: true,
     });
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0 });
-    state.singularityStoredWs = 1000;
+    state.batteryStoredWs = 1000;
     // Coal Gen (100W) = 100W surplus with battery (0W standby)
     state.buildings.push({ id: 'cg1', defId: 'coal_gen', x: 2, y: 0 });
     advanceIsland(state, 1000);
-    expect(state.singularityStoredWs).toBe(1100);
+    expect(state.batteryStoredWs).toBe(1100);
   });
 });
 

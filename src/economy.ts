@@ -61,8 +61,27 @@ import { networkedIslandIds } from './network-consciousness.js';
  * new parameters (heat, gates, …) extends this interface rather than
  * growing positional arity.
  */
-/** §13.3 Singularity Battery capacity per unit: 50 MWh in W-seconds. */
-export const SINGULARITY_BATTERY_CAPACITY_WS = 50e6 * 3600;
+/** Per-battery-def electrical buffer capacity in W-seconds. Summed across
+ *  every operational battery on an island to compute total cap. Buildings
+ *  not in this table contribute 0 — non-battery buildings ignore the path. */
+export const BATTERY_CAPACITY_WS: Readonly<Partial<Record<BuildingDefId, number>>> = {
+  battery_bank:        5_000      * 3600,
+  capacitor_bank:      100_000    * 3600,
+  flywheel_array:      2_000_000  * 3600,
+  singularity_battery: 50_000_000 * 3600,
+};
+
+/** Total per-island battery capacity in W-seconds, summed across operational
+ *  batteries × the skill-tree batteryCapacity multiplier. */
+export function batteryCapacityWs(state: IslandState, mul: SkillMultipliers): number {
+  let raw = 0;
+  for (const b of state.buildings) {
+    if (!isOperationalBuilding(b)) continue;
+    const per = BATTERY_CAPACITY_WS[b.defId] ?? 0;
+    raw += per;
+  }
+  return raw * mul.batteryCapacity;
+}
 
 /**
  * §4 ocean-layer paused-state reasons (Task 10). Set on `PlacedBuilding.paused`
@@ -277,8 +296,11 @@ export interface IslandState {
   bankingEnabled: boolean;
   /** §13.3 Target resource for Genesis Chamber, or null if inactive. */
   genesisTarget: ResourceId | null;
-  /** Singularity Battery stored energy in W-seconds (Joules). */
-  singularityStoredWs: number;
+  /** Per-island electrical energy buffer (W-seconds). Filled by power surplus,
+   *  drained into deficits via the §5.1 brownout path. Generalised across the
+   *  battery ladder (T2 battery_bank / T3 capacitor_bank / T4 flywheel_array /
+   *  T5 singularity_battery). Capacity = batteryCapacityWs(state, mul). */
+  batteryStoredWs: number;
   /** §12.4 Starter inventory grace cap — per-resource one-time allowance
    *  that lets a new colony hold kit-delivered raws even with zero storage.
    *  Shrinks resource-by-resource as normal cap meets or exceeds inventory. */
@@ -1084,13 +1106,13 @@ export function computeRates(
     powerConsumed += (GENESIS_POWER_KW[targetTier]! * 1000) / skillMul.powerConsumption;
   }
 
-  // §13.3 Singularity Battery — cover deficit from stored energy. Local
-  // only: the battery doesn't contribute wattage to the §5.3 cable network
+  // §13.3 Battery buffer — cover deficit from stored energy. Local
+  // only: batteries don't contribute wattage to the §5.3 cable network
   // pool (the network was analysed pre-battery via `computeIslandLocalPower`).
-  const batteryCount = validBuildings.filter((b) => b.defId === 'singularity_battery').length;
+  const batteryCap = batteryCapacityWs(state, skillMul);
   const rawProduced = powerProduced;
   const rawConsumed = powerConsumed;
-  if (batteryCount > 0 && powerProduced < powerConsumed && state.singularityStoredWs > 0) {
+  if (batteryCap > 0 && powerProduced < powerConsumed && state.batteryStoredWs > 0) {
     powerProduced = powerConsumed; // cover full deficit
   }
 
@@ -1606,20 +1628,21 @@ export function advanceIsland(
     if (!state.boltProduced && (production.bolt ?? 0) > 0) {
       state.boltProduced = true;
     }
-    // §13.3 Singularity Battery — bound segment to battery depletion/fill so the
+    // §13.3 Battery buffer — bound segment to battery depletion/fill so the
     // piecewise integrator stays exact (rates are constant within a segment).
     const validBuildings = state.buildings.filter((b) => !b.invalid);
-    const batteryCount = validBuildings.filter((b) => b.defId === 'singularity_battery').length;
-    const maxCap = batteryCount * SINGULARITY_BATTERY_CAPACITY_WS;
+    const skillMul = effectiveSkillMultipliers(state);
+    layerConditionalBonuses(skillMul, state, ctx?.world, DEFAULT_GRAPH, nowMs);
+    const maxCap = batteryCapacityWs(state, skillMul);
     const rawBalance = power.rawProduced - power.rawConsumed;
     let nextBatteryMs = Infinity;
-    if (rawBalance > 0 && maxCap > 0 && state.singularityStoredWs < maxCap) {
+    if (rawBalance > 0 && maxCap > 0 && state.batteryStoredWs < maxCap) {
       const surplus = rawBalance;
-      const fillTimeSec = (maxCap - state.singularityStoredWs) / surplus;
+      const fillTimeSec = (maxCap - state.batteryStoredWs) / surplus;
       nextBatteryMs = t + fillTimeSec * 1000;
-    } else if (rawBalance < 0 && state.singularityStoredWs > 0 && batteryCount > 0) {
+    } else if (rawBalance < 0 && state.batteryStoredWs > 0 && maxCap > 0) {
       const deficit = -rawBalance;
-      const depletionTimeSec = state.singularityStoredWs / deficit;
+      const depletionTimeSec = state.batteryStoredWs / deficit;
       nextBatteryMs = t + depletionTimeSec * 1000;
     }
     const nextEventMs = findNextCapEvent(state, net, t, nowMs, ctx);
@@ -1677,18 +1700,16 @@ export function advanceIsland(
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps);
-      const skillMulForXp = effectiveSkillMultipliers(state);
-      layerConditionalBonuses(skillMulForXp, state, ctx?.world, DEFAULT_GRAPH, nowMs);
-      accrueXp(state, production, consumption, dtSec, 1, skillMulForXp.xpGain);
-      // §13.3 Singularity Battery — apply charge/discharge over the segment.
+      accrueXp(state, production, consumption, dtSec, 1, skillMul.xpGain);
+      // §13.3 Battery buffer — apply charge/discharge over the segment.
       if (rawBalance > 0 && maxCap > 0) {
         const chargeWs = rawBalance * dtSec;
-        const charge = Math.min(chargeWs, maxCap - state.singularityStoredWs);
-        state.singularityStoredWs += charge;
-      } else if (rawBalance < 0 && state.singularityStoredWs > 0) {
+        const charge = Math.min(chargeWs, maxCap - state.batteryStoredWs);
+        state.batteryStoredWs += charge;
+      } else if (rawBalance < 0 && state.batteryStoredWs > 0) {
         const deficitWs = -rawBalance * dtSec;
-        const discharge = Math.min(deficitWs, state.singularityStoredWs);
-        state.singularityStoredWs -= discharge;
+        const discharge = Math.min(deficitWs, state.batteryStoredWs);
+        state.batteryStoredWs -= discharge;
       }
       levelUpIfReady(state);
       // terrain_modifier v5 — decrement and fire. After the segment integrates,

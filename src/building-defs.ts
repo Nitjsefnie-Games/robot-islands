@@ -1948,7 +1948,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §8.4: Singularity Battery — "effectively infinite electrical power
   // storage" per spec. Wired into the §5.1 power balance: each battery
-  // grants a giant `singularityStoredWs` buffer that charges from surplus
+  // grants a giant `batteryStoredWs` buffer that charges from surplus
   // and discharges into deficits (see `economy.ts` brownout path). Per
   // the §8.4 note ("not a resource storage building") this def carries
   // NO `storage` contribution — it never raises any resource cap. Zero

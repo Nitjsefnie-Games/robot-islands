@@ -100,10 +100,14 @@ export type SerializedIslandSpec = Omit<IslandSpec, 'terrainAt'>;
 
 /** IslandState with Set and Map fields converted to arrays for JSON. */
 export interface SerializedIslandState
-  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings'> {
+  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings' | 'batteryStoredWs'> {
   readonly unlockedNodes: ReadonlyArray<NodeId>;
   readonly unlockedEdges: ReadonlyArray<EdgeId>;
   readonly socketBindings: ReadonlyArray<[string, CrystalId]>;
+  /** v11 serialized field name. Task 5 bumps to v12 and renames this to
+   *  `batteryStoredWs`. Bridge in serializeWorld / deserializeWorld keeps
+   *  the in-memory name independent of the on-disk name. */
+  readonly singularityStoredWs: number;
 }
 
 /** One entry of the per-island state map. We avoid serializing a `Map`
@@ -356,8 +360,10 @@ export function serializeWorld(
   });
   const stateEntries: SerializedIslandStateEntry[] = [];
   for (const [id, state] of islandStates) {
+    const { batteryStoredWs, ...rest } = state;
     const serialized: SerializedIslandState = {
-      ...state,
+      ...rest,
+      singularityStoredWs: batteryStoredWs,
       unlockedNodes: [...state.unlockedNodes],
       unlockedEdges: [...state.unlockedEdges],
       socketBindings: [...state.socketBindings],
@@ -594,6 +600,9 @@ export function deserializeWorld(
       unlockedNodes: new Set(s.unlockedNodes),
       unlockedEdges: new Set(s.unlockedEdges ?? []),
       socketBindings: new Map(s.socketBindings ?? []),
+      // Bridge v11 serialized field name to v11 in-memory name. Task 5 bumps
+      // to v12 and renames the serialized field to `batteryStoredWs`.
+      batteryStoredWs: s.singularityStoredWs,
       // §9.7 cooldown anchors. Both fields were minted in the saved
       // session's `performance.now()` domain (matching `lastTick`); apply
       // the same perfShift the drone/vehicle/repair-drone timestamps get,
