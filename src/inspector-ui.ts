@@ -1487,7 +1487,9 @@ export function mountInspectorUi(
         const missing = affordabilityShortfall(state.inventory, refreshCost);
         const parts: string[] = [];
         for (const [r, need] of Object.entries(refreshCost)) {
-          const have = state.inventory[r as ResourceId] ?? 0;
+          // Inventory can carry fractional amounts (continuous-yield trickles)
+          // but you can only spend whole units, so floor for display.
+          const have = Math.floor(state.inventory[r as ResourceId] ?? 0);
           parts.push(`${need} ${r} (${have})`);
         }
         refreshBtn.textContent = `REFRESH · ${parts.join(', ')}`;
