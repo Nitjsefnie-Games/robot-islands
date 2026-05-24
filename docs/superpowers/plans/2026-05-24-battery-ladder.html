@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Battery ladder — implementation plan</title>
+<style>
+  :root {
+    --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+    --tan:#E0B47F; --pink:#D38FCC; --red:#E08B7F; --info:#7DD3E8;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1180px; margin:0 auto; }
+  header.page-head { margin-bottom:48px; max-width:900px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:36px; line-height:1.15; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+  .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+  .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+  .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+  .callout { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-700); margin: 14px 0; max-width:900px; }
+  .callout.info { border-left-color:var(--info); }
+  .callout.warn { border-left-color:var(--red); }
+  .callout code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .callout b { color:var(--slate); }
+
+  section { margin-bottom:56px; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:24px; color:var(--slate); letter-spacing:-0.01em; }
+  .sec-head h2 code { font-family:var(--mono); font-size:18px; color:var(--clay); }
+  .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:840px; margin-bottom:20px; }
+  .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--tan); }
+
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:40px; max-width: 1080px; }
+  @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+  .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px; padding:14px 16px; }
+  .summary .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+  .summary .v { font-size:15px; color:var(--slate); font-weight:600; }
+  .summary .v.accent { color:var(--clay); }
+
+  .filetable { border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden; background:var(--white); margin-bottom:32px; }
+  .filetable .row { display:grid; grid-template-columns:280px 100px 1fr; gap:0; }
+  @media (max-width:900px){ .filetable .row{grid-template-columns:1fr;} }
+  .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+  .filetable .cell { padding:11px 14px; font-size:13px; vertical-align:top; }
+  .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+  @media (max-width:900px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+  .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+  .filetable .cell code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+  .filetable .pill { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--mono); font-size:10.5px; font-weight:600; }
+  .filetable .pill.new { background:var(--olive); color:var(--ivory); }
+  .filetable .pill.mod { background:var(--tan); color:var(--ivory); }
+  .filetable .pill.del { background:var(--red); color:var(--ivory); }
+
+  .task-card { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 22px; margin-bottom:18px; }
+  .files-block { background:var(--gray-150); border:1px solid var(--gray-300); border-radius:8px; padding:10px 13px; margin-bottom:14px; font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+  .files-block .h { color:var(--gray-500); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .files-block code { color:var(--tan); }
+
+  .step { margin: 10px 0; padding-left: 24px; position: relative; font-size:14px; color:var(--gray-700); }
+  .step::before { content: "☐"; position: absolute; left: 0; top: 0; color: var(--gray-500); }
+  .step b { color: var(--slate); }
+  .step code { font-family:var(--mono); font-size:12.5px; color:var(--tan); background: var(--gray-150); padding: 1px 5px; border-radius: 3px; }
+
+  pre { background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 10px 14px; margin: 8px 0 14px 24px; overflow-x: auto; font-family: var(--mono); font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 1000px; }
+  pre.bash { background: #1F1D19; color: var(--olive); }
+  pre.bash::before { content: "$ "; color: var(--gray-500); }
+  pre .comment { color: var(--gray-500); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--olive); }
+  pre .ty { color: var(--info); }
+  pre .fn { color: var(--tan); }
+
+  .expected { background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 0 6px 6px 0; padding: 6px 12px; margin: 6px 0 10px 24px; font-family: var(--mono); font-size: 12px; color: var(--gray-700); max-width: 980px; }
+  .expected b { color: var(--olive); }
+
+  .toc { background: var(--gray-150); border-left: 3px solid var(--info); border-radius: 0 6px 6px 0; padding: 14px 22px; margin: 28px 0 36px; max-width: 980px; }
+  .toc h3 { color: var(--gray-500); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 10px; font-family: var(--mono); }
+  .toc ol { list-style: none; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--gray-700); text-decoration: none; }
+  .toc a:hover { color: var(--clay); }
+  .toc .num { color: var(--gray-500); font-family: var(--mono); margin-right: 8px; font-size: 11.5px; }
+
+  .footer { color: var(--gray-500); margin-top: 64px; font-size: 12px; padding-top: 18px; border-top: 1.5px solid var(--gray-300); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · power · battery ladder · 2026-05-24</div>
+    <h1>Battery ladder — T2 / T3 / T4 power-storage progression</h1>
+    <div class="prompt-box">
+      <span class="label">For agentic workers</span>
+      <b>REQUIRED SUB-SKILL:</b> use <code>superpowers:subagent-driven-development</code>. Steps use checkbox markers (the ☐ glyphs); flip to ✓ as you go.
+      <div style="margin-top:8px;font-size:13px;color:var(--gray-500)">
+        <b style="color:var(--slate)">Goal:</b> add T2/T3/T4 battery buildings + generalise the existing single-battery (T5 Singularity Battery) energy buffer to a per-tier capacity table summed across all battery types on an island. New <code>batteryCapacityMul</code> skill effect lets the player scale capacity via Power Systems sub-path. Schema bump v11→v12 renames <code>singularityStoredWs</code>→<code>batteryStoredWs</code>.<br>
+        <b style="color:var(--slate)">Architecture:</b> the existing charge/discharge integrator at <code>economy.ts:1610-1693</code> already operates on one per-island energy buffer + one capacity value. Only the capacity calculation widens (per-def table summed) and the field is renamed. Battery buildings produce no W, consume no W; placement cost only (no Battery Factory crafted-unit chain).<br>
+        <b style="color:var(--slate)">Tech stack:</b> Vite 5 + TypeScript strict + PixiJS 8 + vitest. Strict + noUncheckedIndexedAccess + noUnusedLocals.<br>
+        <b style="color:var(--slate)">Source of truth:</b> design spec at <code>docs/superpowers/specs/2026-05-24-battery-ladder-design.html</code> (v1) — but the spec's capacities + standby values are SUPERSEDED by the locked numbers in this plan (see §Tier table).
+      </div>
+    </div>
+  </header>
+
+  <div class="callout warn">
+    <b>Locked design choices (do NOT deviate):</b>
+    <ul style="margin-top:8px;margin-left:18px;list-style:disc">
+      <li>Tier ramp: <b>T2 + T3 + T4</b> (plus existing T5 unchanged in capacity).</li>
+      <li><b>All batteries have 0 W standby draw</b> — including dropping <code>singularity_battery</code> from 100W → 0W for consistency.</li>
+      <li>Placement cost only — <b>NO</b> Battery Factory crafted-unit chain.</li>
+      <li>One new <code>batteryCapacityMul</code> SkillEffect kind + ONE notable using it (no keystone, no archetype filler chain).</li>
+      <li>State field rename: <code>singularityStoredWs</code> → <code>batteryStoredWs</code> (everywhere).</li>
+    </ul>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:30px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Tier table (locked numbers)</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">defId</div><div class="cell">Tier / size</div><div class="cell">Capacity · Standby · Placement cost</div></div>
+    <div class="row">
+      <div class="cell"><code>battery_bank</code> · Battery Bank</div>
+      <div class="cell">T2 · 1×1</div>
+      <div class="cell"><b>5 kWh</b> (18 000 000 Ws) · 0 W · <code>{ battery: 4, wire: 3, steel_beam: 1 }</code></div>
+    </div>
+    <div class="row">
+      <div class="cell"><code>capacitor_bank</code> · Capacitor Bank</div>
+      <div class="cell">T3 · 2×2</div>
+      <div class="cell"><b>100 kWh</b> (360 000 000 Ws) · 0 W · <code>{ battery: 20, microchip: 12, steel_beam: 6, coolant: 2 }</code></div>
+    </div>
+    <div class="row">
+      <div class="cell"><code>flywheel_array</code> · Flywheel Array</div>
+      <div class="cell">T4 · 3×3</div>
+      <div class="cell"><b>2 MWh</b> (7 200 000 000 Ws) · 0 W · <code>{ battery: 100, microchip: 40, steel_beam: 20, coolant: 10, heavy_cable: 5 }</code></div>
+    </div>
+    <div class="row">
+      <div class="cell"><code>singularity_battery</code> (existing)</div>
+      <div class="cell">T5 · 2×2</div>
+      <div class="cell"><b>50 MWh</b> (180 000 000 000 Ws — UNCHANGED) · standby <b>100 W → 0 W</b> · placement cost UNCHANGED</div>
+    </div>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Summary</h3>
+  <div class="summary">
+    <div class="cell"><div class="k">New buildings</div><div class="v accent">3</div></div>
+    <div class="cell"><div class="k">Schema bump</div><div class="v">11 → 12</div></div>
+    <div class="cell"><div class="k">New SkillEffect</div><div class="v">batteryCapacityMul</div></div>
+    <div class="cell"><div class="k">Tasks</div><div class="v">6</div></div>
+  </div>
+
+  <div class="toc">
+    <h3>Tasks</h3>
+    <ol>
+      <li><span class="num">01</span><a href="#task-1">Add 3 battery defs + drop singularity_battery standby</a></li>
+      <li><span class="num">02</span><a href="#task-2">Add <code>batteryCapacityMul</code> SkillEffect + fold</a></li>
+      <li><span class="num">03</span><a href="#task-3">Add Electrochemistry notable using the new effect</a></li>
+      <li><span class="num">04</span><a href="#task-4">State rename + per-def capacity table + integrator wire</a></li>
+      <li><span class="num">05</span><a href="#task-5">Schema bump v11→v12 + <code>migrateV11toV12</code></a></li>
+      <li><span class="num">06</span><a href="#task-6">Integration smoke test (place battery, surplus accrues)</a></li>
+    </ol>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Files touched</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Path</div><div class="cell">Status</div><div class="cell">Responsibility</div></div>
+    <div class="row"><div class="cell"><code>src/building-defs.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Add 3 new battery defs to BUILDING_DEFS + add their ids to BuildingDefId union. Drop <code>singularity_battery.power.consumes</code> 100 → 0.</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Extend <code>SkillEffect</code> union with <code>{ kind: 'batteryCapacityMul' }</code>. Add <code>readonly batteryCapacity: number</code> to <code>SkillMultipliers</code>; blank = 1. Fold case multiplies.</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-catalog.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Add <code>power_systems.notable.electrochemistry</code> SkillNode using <code>batteryCapacityMul</code> magnitude 0.30.</div></div>
+    <div class="row"><div class="cell"><code>src/economy.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Replace <code>SINGULARITY_BATTERY_CAPACITY_WS</code> + counting code with <code>BATTERY_CAPACITY_WS</code> per-def table + <code>batteryCapacityWs(state, mul)</code> helper. Rename <code>state.singularityStoredWs</code> → <code>state.batteryStoredWs</code> at every read/write site (charge, discharge, init, snapshot).</div></div>
+    <div class="row"><div class="cell"><code>src/world.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell"><code>makeInitialIslandState</code>: rename field initializer.</div></div>
+    <div class="row"><div class="cell"><code>src/persistence.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Schema 11→12; <code>STORAGE_KEY</code> :v12; <code>SerializedSnapshotV11</code> alias; <code>migrateV11toV12</code> (renames field); extend <code>SUPPORTED_LOAD_VERSIONS</code>; loader walker v11 case; <code>SerializedIslandState</code> field rename.</div></div>
+    <div class="row"><div class="cell"><code>src/*.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Test fixtures touching <code>singularityStoredWs</code> get renamed. v12 fixture literals updated. Migration test added. Integration test added (T6).</div></div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 1 -->
+  <section id="task-1">
+    <div class="sec-head"><span class="num">01</span><h2>Task 1 — Add 3 battery defs + drop <code>singularity_battery</code> standby</h2></div>
+    <p class="sec-intro">Pure additive content edit + one-line tweak on the existing T5 battery. Each new building has zero standby draw, no <code>produces</code>, no storage contribution. Tests assert the new defs exist with the locked capacity-irrelevant fields (cap is set in T4).</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/building-defs.ts</code> &nbsp; <code>~ src/building-defs.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add three new entries to the <code>BuildingDefId</code> union (top of <code>src/building-defs.ts</code> — search for the existing string-literal-union of building ids; append in alphabetical-or-tier order, follow the existing style):</div>
+      <pre><span class="kw">  | </span><span class="str">'battery_bank'</span>
+<span class="kw">  | </span><span class="str">'capacitor_bank'</span>
+<span class="kw">  | </span><span class="str">'flywheel_array'</span></pre>
+
+      <div class="step"><b>Step 2.</b> Add three new entries to the <code>BUILDING_DEFS</code> map. Place them near the existing power-category buildings (after <code>wind_turbine</code> is a good neighbour). Use these EXACT shapes:</div>
+      <pre><span class="comment">// §X.Y T2 battery — 5 kWh power buffer. Zero standby; charges from</span>
+<span class="comment">// any island power surplus, discharges into deficit. Capacity is set</span>
+<span class="comment">// via the BATTERY_CAPACITY_WS table in economy.ts (Task 4).</span>
+battery_bank: {
+  id: <span class="str">'battery_bank'</span>,
+  displayName: <span class="str">'Battery Bank'</span>,
+  category: <span class="str">'power'</span>,
+  tier: 2,
+  footprint: SHAPES.single,
+  fill: 0x4060a0,
+  stroke: 0x101030,
+  power: { consumes: 0 },
+  placementCost: { battery: 4, wire: 3, steel_beam: 1 },
+  glyph: <span class="str">'▭'</span>,
+},
+capacitor_bank: {
+  id: <span class="str">'capacitor_bank'</span>,
+  displayName: <span class="str">'Capacitor Bank'</span>,
+  category: <span class="str">'power'</span>,
+  tier: 3,
+  footprint: SHAPES.square2,
+  fill: 0x6080d0,
+  stroke: 0x202050,
+  power: { consumes: 0 },
+  placementCost: { battery: 20, microchip: 12, steel_beam: 6, coolant: 2 },
+  glyph: <span class="str">'▥'</span>,
+},
+flywheel_array: {
+  id: <span class="str">'flywheel_array'</span>,
+  displayName: <span class="str">'Flywheel Array'</span>,
+  category: <span class="str">'power'</span>,
+  tier: 4,
+  footprint: SHAPES.square3,
+  fill: 0xa0b0c0,
+  stroke: 0x303040,
+  power: { consumes: 0 },
+  placementCost: { battery: 100, microchip: 40, steel_beam: 20, coolant: 10, heavy_cable: 5 },
+  glyph: <span class="str">'◯'</span>,
+},</pre>
+
+      <div class="step"><b>Step 3.</b> Drop <code>singularity_battery</code> standby. Find the entry around line 1889 and change <code>power: { consumes: 100 }</code> → <code>power: { consumes: 0 }</code>. Update the inline comment that mentions "100W standby overhead" — replace with "Zero standby — generalised battery system has no idle draw."</div>
+
+      <div class="step"><b>Step 4.</b> Update <code>KNOWN_DEF_IDS</code> in <code>src/building-defs.test.ts</code> (search for the existing exhaustive list) — append the 3 new ids.</div>
+
+      <div class="step"><b>Step 5.</b> Build + run tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -3 &amp;&amp; npm test 2&gt;&amp;1 | tail -3</pre>
+      <div class="expected"><b>Expected:</b> build clean, tests green (count unchanged from baseline).</div>
+
+      <div class="step"><b>Step 6.</b> Commit.</div>
+      <pre class="bash">git add src/building-defs.ts src/building-defs.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(buildings): add 3 battery defs (T2/T3/T4) + zero singularity_battery standby
+
+Three new power-category buildings — Battery Bank (T2 1×1), Capacitor
+Bank (T3 2×2), Flywheel Array (T4 3×3). All have 0 W standby, no
+produces, no storage contribution. Placement cost only (no crafted-unit
+chain). Capacity values land in Task 4.
+
+singularity_battery standby drops 100 → 0 W for consistency — the
+generalised battery system has no idle draw at any tier.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 2 -->
+  <section id="task-2">
+    <div class="sec-head"><span class="num">02</span><h2>Task 2 — Add <code>batteryCapacityMul</code> SkillEffect + fold</h2></div>
+    <p class="sec-intro">Pure type / fold extension. Adds a new effect kind to <code>SkillEffect</code> + a new <code>batteryCapacity</code> field to <code>SkillMultipliers</code> + a fold case that multiplies it. No catalog node consumes it yet (Task 3 adds the notable). Default value 1 so existing islands aren't affected.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree.ts</code> &nbsp; <code>~ src/skilltree.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add the variant to the <code>SkillEffect</code> union (find the union near line 83, append after the last existing variant):</div>
+      <pre>  | { <span class="kw">readonly</span> kind: <span class="str">'batteryCapacityMul'</span> };</pre>
+
+      <div class="step"><b>Step 2.</b> Add the new field to the <code>SkillMultipliers</code> interface (around line 822). Place it next to the other generic multiplier fields like <code>routeCapacity</code>:</div>
+      <pre>  <span class="comment">/** Per-island electrical buffer capacity multiplier. Composes with the</span>
+<span class="comment">   *  per-def BATTERY_CAPACITY_WS table in economy.ts — total cap on this</span>
+<span class="comment">   *  island = Σ(building cap) × batteryCapacity. Default 1. */</span>
+  <span class="kw">readonly</span> batteryCapacity: <span class="ty">number</span>;</pre>
+
+      <div class="step"><b>Step 3.</b> Add the default to the <code>blankMultipliers</code> seed (around line 854) — add <code>batteryCapacity: 1,</code> to the returned object.</div>
+
+      <div class="step"><b>Step 4.</b> Add the fold local + the fold case + the return-object key in <code>effectiveSkillMultipliers</code>:
+        <br>&bull; Around line 898 (with the other <code>let</code> initializers), add: <code>let batteryCapacity = 1;</code>
+        <br>&bull; In the switch statement (somewhere with the other <code>case '*Mul':</code> entries), add:
+      </div>
+      <pre>      <span class="kw">case</span> <span class="str">'batteryCapacityMul'</span>:
+        batteryCapacity *= m;
+        <span class="kw">break</span>;</pre>
+      <div class="step">
+        <br>&bull; In the final return object (around line 1042-1050), add <code>batteryCapacity,</code> to the field list.
+      </div>
+
+      <div class="step"><b>Step 5.</b> Add a test in <code>src/skilltree.test.ts</code>. Find the existing describe block that tests <code>effectiveSkillMultipliers</code> with synthetic catalogs and append:</div>
+      <pre>  it(<span class="str">'batteryCapacityMul effect contributes to batteryCapacity multiplier'</span>, () =&gt; {
+    <span class="kw">const</span> LG_BAT: SkillNode[] = [
+      { id: <span class="str">'bat.1'</span>, subPath: <span class="str">'power_systems'</span>, depth: 1, cost: 1, magnitude: 0.30,
+        effect: { kind: <span class="str">'batteryCapacityMul'</span> }, description: <span class="str">''</span> },
+    ];
+    <span class="kw">const</span> s = makeState({ unlockedNodes: <span class="kw">new</span> <span class="ty">Set</span>([<span class="str">'bat.1'</span>]) });
+    <span class="kw">const</span> m = effectiveSkillMultipliers(s, LG_BAT);
+    expect(m.batteryCapacity).toBeCloseTo(1.30, 9);
+  });</pre>
+
+      <div class="step"><b>Step 6.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -3 &amp;&amp; npm test 2&gt;&amp;1 | tail -3</pre>
+      <div class="expected"><b>Expected:</b> build clean, tests +1 from baseline.</div>
+
+      <div class="step"><b>Step 7.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree.ts src/skilltree.test.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): batteryCapacityMul SkillEffect + fold
+
+Adds the type variant + SkillMultipliers.batteryCapacity field + fold
+case. Default 1 — no behaviour change until a catalog node uses it
+(Task 3 adds the Electrochemistry notable) and economy.ts consumes the
+field (Task 4 wires batteryCapacityWs(state, mul)).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 3 -->
+  <section id="task-3">
+    <div class="sec-head"><span class="num">03</span><h2>Task 3 — Add Electrochemistry notable</h2></div>
+    <p class="sec-intro">One hand-curated notable in the <code>power_systems</code> sub-path consuming the new effect kind. Mirrors the existing pattern in <code>POWER_SYSTEMS_NOTABLES</code>. No archetype filler chain — single notable is enough to expose the lever.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-catalog.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Find <code>POWER_SYSTEMS_NOTABLES</code> (export const block) in <code>src/skilltree-catalog.ts</code> and append:</div>
+      <pre>  {
+    id: <span class="str">'power_systems.notable.electrochemistry'</span> <span class="kw">as</span> NodeId,
+    subPath: <span class="str">'power_systems'</span>,
+    depth: 5,
+    cost: 5,
+    magnitude: 0.30,
+    effect: { kind: <span class="str">'batteryCapacityMul'</span> },
+    description: <span class="str">'Electrochemistry Lab — ×1.30 battery capacity (all tiers)'</span>,
+  },</pre>
+
+      <div class="step"><b>Step 2.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -3 &amp;&amp; npm test 2&gt;&amp;1 | tail -3</pre>
+      <div class="expected"><b>Expected:</b> build clean, test count likely unchanged (no new test in this task; the existing catalog-shape tests may pick up the new node).</div>
+
+      <div class="step"><b>Step 3.</b> Commit.</div>
+      <pre class="bash">git add src/skilltree-catalog.ts
+git commit -F - &lt;&lt;'EOF'
+feat(skilltree): Electrochemistry notable — batteryCapacityMul ×1.30
+
+power_systems sub-path depth 5 notable. Single hand-curated entry (no
+filler chain) — provides the player lever for scaling battery capacity
+once Task 4 wires economy.ts to read the multiplier.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 4 -->
+  <section id="task-4">
+    <div class="sec-head"><span class="num">04</span><h2>Task 4 — State rename + per-def capacity table + integrator wire</h2></div>
+    <p class="sec-intro">The meaty one. Three coupled changes that MUST land together to keep the build green: (1) rename <code>state.singularityStoredWs</code> → <code>state.batteryStoredWs</code> at every read/write site; (2) replace <code>SINGULARITY_BATTERY_CAPACITY_WS</code> + count-of-singularity-batteries code with a per-def <code>BATTERY_CAPACITY_WS</code> table summed across all operational batteries; (3) consume <code>mul.batteryCapacity</code> in the helper.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/economy.ts</code> &nbsp; <code>~ src/world.ts</code> &nbsp; <code>~ src/economy.test.ts (and any other tests touching singularityStoredWs)</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Run a grep to inventory every reference that needs renaming:</div>
+      <pre class="bash">grep -rn "singularityStoredWs" src/ --include="*.ts"</pre>
+      <p style="font-size:13px; color:var(--gray-500); padding-left:24px; margin:6px 0 12px">Expect ~5-10 hits across economy.ts, world.ts, and 1-2 test files. Persistence.ts also references it via the SerializedIslandState shape — touch it too, but the schema bump itself lands in Task 5.</p>
+
+      <div class="step"><b>Step 2.</b> In <code>src/economy.ts</code>, locate the existing <code>SINGULARITY_BATTERY_CAPACITY_WS</code> constant (around line 64) and replace it with a per-def table + helper:</div>
+      <pre><span class="kw">import type</span> { BuildingDefId } <span class="kw">from</span> <span class="str">'./building-defs.js'</span>;
+
+<span class="comment">/** Per-battery-def electrical buffer capacity in W-seconds. Summed across</span>
+<span class="comment"> *  every operational battery on an island to compute total cap. Buildings</span>
+<span class="comment"> *  not in this table contribute 0 — non-battery buildings ignore the path. */</span>
+<span class="kw">export const</span> BATTERY_CAPACITY_WS: <span class="kw">Readonly</span>&lt;<span class="kw">Partial</span>&lt;<span class="kw">Record</span>&lt;BuildingDefId, <span class="ty">number</span>&gt;&gt;&gt; = {
+  battery_bank:        5_000      * 3600,
+  capacitor_bank:      100_000    * 3600,
+  flywheel_array:      2_000_000  * 3600,
+  singularity_battery: 50_000_000 * 3600,
+};
+
+<span class="comment">/** Total per-island battery capacity in W-seconds, summed across operational</span>
+<span class="comment"> *  batteries × the skill-tree batteryCapacity multiplier. */</span>
+<span class="kw">export function</span> batteryCapacityWs(state: IslandState, mul: SkillMultipliers): <span class="ty">number</span> {
+  <span class="kw">let</span> raw = 0;
+  <span class="kw">for</span> (<span class="kw">const</span> b <span class="kw">of</span> state.buildings) {
+    <span class="kw">if</span> (!isOperationalBuilding(b)) <span class="kw">continue</span>;
+    <span class="kw">const</span> per = BATTERY_CAPACITY_WS[b.defId] ?? 0;
+    raw += per;
+  }
+  <span class="kw">return</span> raw * mul.batteryCapacity;
+}</pre>
+
+      <div class="step"><b>Step 3.</b> In <code>src/economy.ts</code> replace every read/write of <code>state.singularityStoredWs</code> with <code>state.batteryStoredWs</code>. Replace every reference to <code>SINGULARITY_BATTERY_CAPACITY_WS * batteryCount</code> (search around lines 1088-1096 and 1610-1693) with <code>batteryCapacityWs(state, mul)</code>. The <code>batteryCount</code> local can be deleted; the new helper supersedes it.</div>
+
+      <div class="step"><b>Step 4.</b> In the IslandState interface (search for it in <code>src/economy.ts</code> around line 215-280), rename the field declaration:</div>
+      <pre><span class="comment">// before:</span>
+singularityStoredWs: <span class="ty">number</span>;
+<span class="comment">// after:</span>
+<span class="kw">/** Per-island electrical energy buffer (W-seconds). Filled by power surplus,</span>
+<span class="kw"> *  drained into deficits via the §5.1 brownout path. Generalised across the</span>
+<span class="kw"> *  battery ladder (T2 battery_bank / T3 capacitor_bank / T4 flywheel_array /</span>
+<span class="kw"> *  T5 singularity_battery). Capacity = batteryCapacityWs(state, mul). */</span>
+batteryStoredWs: <span class="ty">number</span>;</pre>
+
+      <div class="step"><b>Step 5.</b> In <code>src/world.ts</code> <code>makeInitialIslandState</code> (around line 1094), rename the initializer:</div>
+      <pre><span class="comment">// before:</span>
+singularityStoredWs: 0,
+<span class="comment">// after:</span>
+batteryStoredWs: 0,</pre>
+
+      <div class="step"><b>Step 6.</b> Update any test file references. Run:</div>
+      <pre class="bash">grep -rn "singularityStoredWs" src/ --include="*.ts"</pre>
+      <p style="font-size:13px; color:var(--gray-500); padding-left:24px; margin:6px 0 12px">Each remaining hit (outside persistence.ts, which Task 5 handles) gets the rename. Persistence's SerializedIslandState shape still says <code>singularityStoredWs</code> at this point — that's intentional, it's the old serialized field name; Task 5 bumps the schema and renames the serialized field.</p>
+
+      <div class="step"><b>Step 7.</b> Build + tests. The build will likely fail first round because persistence.ts now has a type mismatch between its SerializedIslandState (still old name) and IslandState (new name). To bridge: in <code>src/persistence.ts</code>'s <code>serializeWorld</code> + <code>deserializeWorld</code>, map between the old serialized name and the new in-memory name. Search for <code>singularityStoredWs</code> in persistence.ts; both call sites need a rename of the in-memory access while keeping the serialized field name for v11 saves (Task 5 bumps to v12). Concretely: <code>serializedField: state.batteryStoredWs</code> and on load <code>state.batteryStoredWs = serializedField.singularityStoredWs</code>.</div>
+
+      <div class="step"><b>Step 8.</b> Build + tests again.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -5 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> build clean. Tests possibly some failures in persistence (Task 5 fixes); economy / world tests should pass.</div>
+
+      <div class="step"><b>Step 9.</b> Commit.</div>
+      <pre class="bash">git add -A
+git commit -F - &lt;&lt;'EOF'
+refactor(economy): generalise battery buffer to per-def capacity table
+
+Replaces the SINGULARITY_BATTERY_CAPACITY_WS constant + count-of-
+singularity-batteries logic with a per-def BATTERY_CAPACITY_WS table
+keyed by BuildingDefId. New batteryCapacityWs(state, mul) helper sums
+operational battery capacity × the skill-tree batteryCapacity
+multiplier (Tasks 2+3).
+
+Renames state.singularityStoredWs → state.batteryStoredWs at every
+read/write site. Persistence.ts bridges the old serialized field name
+to the new in-memory name; the schema bump itself + migrateV11toV12
+land in Task 5.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 5 -->
+  <section id="task-5">
+    <div class="sec-head"><span class="num">05</span><h2>Task 5 — Schema bump v11→v12 + <code>migrateV11toV12</code></h2></div>
+    <p class="sec-intro">Per the "bump = migrate" policy. The serialized field <code>singularityStoredWs</code> on v11 becomes <code>batteryStoredWs</code> on v12. Lossless rename — every island gets its existing energy carried over.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/persistence.ts</code> &nbsp; <code>~ src/persistence.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Bump constants in <code>src/persistence.ts</code>:
+        <br>&bull; <code>STORAGE_KEY</code> from <code>'robot-islands:save:v11'</code> → <code>'robot-islands:save:v12'</code>.
+        <br>&bull; <code>SCHEMA_VERSION</code> from 11 → 12.
+        <br>&bull; <code>SUPPORTED_LOAD_VERSIONS</code> extends to <code>{7, 8, 9, 10, 11, 12}</code>.
+      </div>
+
+      <div class="step"><b>Step 2.</b> Add the v11 type alias. Place near the existing <code>SerializedSnapshotV10</code> / <code>SerializedSnapshotV11</code> declarations:</div>
+      <pre><span class="comment">/** v11 top-level snapshot shape. Structurally identical to v12 (SaveSnapshot)</span>
+<span class="comment"> *  except the v literal AND the per-island state's energy-buffer field name. */</span>
+<span class="kw">export interface</span> SerializedIslandStateV11
+  <span class="kw">extends</span> <span class="kw">Omit</span>&lt;SerializedIslandState, <span class="str">'batteryStoredWs'</span>&gt; {
+  <span class="kw">readonly</span> singularityStoredWs: <span class="ty">number</span>;
+}
+
+<span class="kw">export interface</span> SerializedSnapshotV11
+  <span class="kw">extends</span> <span class="kw">Omit</span>&lt;<span class="kw">Omit</span>&lt;SaveSnapshot, <span class="str">'v'</span>&gt;, <span class="str">'islandStates'</span>&gt; {
+  <span class="kw">readonly</span> v: 11;
+  <span class="kw">readonly</span> islandStates: <span class="kw">ReadonlyArray</span>&lt;{
+    <span class="kw">readonly</span> id: <span class="ty">string</span>;
+    <span class="kw">readonly</span> state: SerializedIslandStateV11;
+  }&gt;;
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Add the migration function:</div>
+      <pre><span class="comment">/** Migrate a v11 snapshot to v12 (current). Renames the per-island energy</span>
+<span class="comment"> *  buffer field singularityStoredWs → batteryStoredWs. Lossless — every</span>
+<span class="comment"> *  island's stored energy carries over to the generalised battery system. */</span>
+<span class="kw">export function</span> migrateV11toV12(s: SerializedSnapshotV11): SaveSnapshot {
+  <span class="kw">return</span> {
+    ...s,
+    v: 12 <span class="kw">as const</span>,
+    islandStates: s.islandStates.map((entry) =&gt; {
+      <span class="kw">const</span> { singularityStoredWs, ...stateRest } = entry.state;
+      <span class="kw">return</span> {
+        id: entry.id,
+        state: {
+          ...stateRest,
+          batteryStoredWs: singularityStoredWs,
+        } <span class="kw">as unknown as</span> SerializedIslandState,
+      };
+    }),
+  } <span class="kw">as</span> SaveSnapshot;
+}</pre>
+
+      <div class="step"><b>Step 4.</b> Wire the v11 case in <code>loadWorld</code>'s migration walker (around the v10 case added earlier):</div>
+      <pre>  <span class="kw">if</span> ((snapshot <span class="kw">as unknown as</span> { v: <span class="ty">number</span> }).v === 11) {
+    snapshot = migrateV11toV12(snapshot <span class="kw">as unknown as</span> SerializedSnapshotV11);
+  }</pre>
+
+      <div class="step"><b>Step 5.</b> Now you can remove the temporary bridge code added in Task 4 step 7 — both <code>serializeWorld</code> and <code>deserializeWorld</code> work directly with <code>batteryStoredWs</code> at every layer.</div>
+
+      <div class="step"><b>Step 6.</b> Update the existing v12-version-literal assertions in <code>src/persistence.test.ts</code> (search for <code>v11</code> / <code>11</code> in version-checking tests; bump to 12). Add a new test for the migration:</div>
+      <pre>describe(<span class="str">'migrateV11toV12'</span>, () =&gt; {
+  it(<span class="str">'renames singularityStoredWs to batteryStoredWs preserving the value'</span>, () =&gt; {
+    <span class="kw">const</span> v11: SerializedSnapshotV11 = {
+      v: 11, savedAt: 0, savedAtPerf: 0, world: {} <span class="kw">as any</span>,
+      islandStates: [{
+        id: <span class="str">'home'</span>,
+        state: { id: <span class="str">'home'</span>, level: 5, xp: 100, lastTick: 0, inventory: {},
+          buildings: [], unlockedNodes: [], unlockedEdges: [], unspentSkillPoints: 4,
+          socketBindings: [], singularityStoredWs: 12345 } <span class="kw">as any</span>,
+      }],
+    } <span class="kw">as any</span>;
+    <span class="kw">const</span> v12 = migrateV11toV12(v11);
+    expect(v12.v).toBe(12);
+    expect((v12.islandStates[0]!.state <span class="kw">as any</span>).batteryStoredWs).toBe(12345);
+    expect((v12.islandStates[0]!.state <span class="kw">as any</span>).singularityStoredWs).toBeUndefined();
+  });
+});</pre>
+
+      <div class="step"><b>Step 7.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -3 &amp;&amp; npm test 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> build clean. Tests +1 (the new migration test). Any v11-literal persistence tests now expect v12.</div>
+
+      <div class="step"><b>Step 8.</b> Commit.</div>
+      <pre class="bash">git add -A
+git commit -F - &lt;&lt;'EOF'
+feat(persistence): migrateV11toV12 — rename singularityStoredWs
+
+Lossless field rename in the per-island state: singularityStoredWs →
+batteryStoredWs. v11 saves load through the chain and the energy
+buffer value carries over to the generalised battery system intact.
+
+SCHEMA_VERSION 11→12, STORAGE_KEY :v11→:v12, SUPPORTED_LOAD_VERSIONS
+extended to include 11+12, loader walker v11 case added.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 6 -->
+  <section id="task-6">
+    <div class="sec-head"><span class="num">06</span><h2>Task 6 — Integration smoke test</h2></div>
+    <p class="sec-intro">End-to-end: place a Battery Bank + a Coal Furnace producing power surplus + a Mine, advance time, assert <code>state.batteryStoredWs</code> increases proportional to the surplus and is capped at the BATTERY_CAPACITY_WS for one Battery Bank. Catches integration regressions across the whole stack.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/economy.test.ts</code> (or new <code>src/battery-ladder.test.ts</code> if economy.test.ts is too crowded)
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add an integration test. The shape:</div>
+      <pre>describe(<span class="str">'battery ladder integration'</span>, () =&gt; {
+  it(<span class="str">'Battery Bank charges from power surplus and caps at BATTERY_CAPACITY_WS'</span>, () =&gt; {
+    <span class="kw">const</span> state = makeState({
+      buildings: [
+        { id: <span class="str">'b1'</span>, defId: <span class="str">'battery_bank'</span>, x: 0, y: 0 },
+        { id: <span class="str">'f1'</span>, defId: <span class="str">'coal_furnace'</span>, x: 1, y: 0 },
+        { id: <span class="str">'m1'</span>, defId: <span class="str">'mine'</span>, x: 2, y: 0 },
+      ],
+      inventory: { ...blankInventory(), coal: 10_000, iron_ore: 0 },
+    });
+    expect(state.batteryStoredWs).toBe(0);
+    <span class="comment">// Advance ~5 minutes. Coal furnace produces W, mine consumes; if surplus &gt; 0,</span>
+    <span class="comment">// battery charges.</span>
+    advanceIsland(state, 300_000);
+    expect(state.batteryStoredWs).toBeGreaterThan(0);
+    <span class="comment">// Cap is 5 kWh × 3600 = 18_000_000 Ws for one Battery Bank.</span>
+    expect(state.batteryStoredWs).toBeLessThanOrEqual(5_000 * 3600);
+  });
+
+  it(<span class="str">'batteryCapacityWs sums across mixed battery types × batteryCapacity multiplier'</span>, () =&gt; {
+    <span class="kw">const</span> state = makeState({
+      buildings: [
+        { id: <span class="str">'b1'</span>, defId: <span class="str">'battery_bank'</span>, x: 0, y: 0 },
+        { id: <span class="str">'c1'</span>, defId: <span class="str">'capacitor_bank'</span>, x: 1, y: 0 },
+      ],
+    });
+    <span class="kw">const</span> mul = blankMultipliers();
+    <span class="kw">const</span> cap1 = batteryCapacityWs(state, mul);
+    expect(cap1).toBe((5_000 + 100_000) * 3600);
+    (mul <span class="kw">as any</span>).batteryCapacity = 1.30;
+    <span class="kw">const</span> cap2 = batteryCapacityWs(state, mul);
+    expect(cap2).toBeCloseTo((5_000 + 100_000) * 3600 * 1.30, 6);
+  });
+});</pre>
+
+      <div class="step"><b>Step 2.</b> Build + tests.</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -3 &amp;&amp; npm test 2&gt;&amp;1 | tail -3</pre>
+      <div class="expected"><b>Expected:</b> +2 tests, all green.</div>
+
+      <div class="step"><b>Step 3.</b> Commit.</div>
+      <pre class="bash">git add -A
+git commit -F - &lt;&lt;'EOF'
+test(economy): battery ladder integration — surplus → charge, sum × mul
+
+End-to-end coverage for the new battery system:
+- Battery Bank charges from a Coal Furnace's surplus, capped at its
+  5 kWh capacity.
+- batteryCapacityWs sums capacity across mixed battery types and
+  scales with the skill-tree batteryCapacity multiplier.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF</pre>
+    </div>
+  </section>
+
+  <div class="footer">
+    Battery ladder implementation plan v1 · 2026-05-24 · sources: design spec
+    <code>robot-islands/2026-05-24-battery-ladder-design</code> v1 (capacities + standby
+    SUPERSEDED by this plan) · prior precedent: skilltree-graphview-ui plan +
+    graft-socket plan (T2 schema bump pattern).
+  </div>
+
+</div>
+</body>
+</html>
