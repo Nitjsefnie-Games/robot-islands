@@ -831,7 +831,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel: 30, wood: 10 },
     glyph: '✦',
   },
-  // §X.Y T2 battery — 5 kWh power buffer. Zero standby; charges from
+  // §8.5 T2 battery — 5 kWh power buffer. Zero standby; charges from
   // any island power surplus, discharges into deficit. Capacity is set
   // via the BATTERY_CAPACITY_WS table in economy.ts (Task 4).
   battery_bank: {
@@ -840,33 +840,40 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     category: 'power',
     tier: 2,
     footprint: SHAPES.single,
-    fill: 0x4060a0,
+    fill: 0x4060a0, // slate blue
     stroke: 0x101030,
     power: { consumes: 0 },
+    // §14 placeholder — tune in Appendix A.
     placementCost: { battery: 4, wire: 3, steel_beam: 1 },
     glyph: '▭',
   },
+  // §8.5 T3 capacitor bank — 100 kWh power buffer. Zero standby; charges
+  // from any island power surplus, discharges into deficit.
   capacitor_bank: {
     id: 'capacitor_bank',
     displayName: 'Capacitor Bank',
     category: 'power',
     tier: 3,
     footprint: SHAPES.square2,
-    fill: 0x6080d0,
+    fill: 0x6080d0, // bright cobalt
     stroke: 0x202050,
     power: { consumes: 0 },
+    // §14 placeholder — tune in Appendix A.
     placementCost: { battery: 20, microchip: 12, steel_beam: 6, coolant: 2 },
     glyph: '▥',
   },
+  // §8.5 T4 flywheel array — 2 MWh power buffer. Zero standby; same
+  // charge/discharge wiring as the smaller battery_bank / capacitor_bank.
   flywheel_array: {
     id: 'flywheel_array',
     displayName: 'Flywheel Array',
     category: 'power',
     tier: 4,
     footprint: SHAPES.square3,
-    fill: 0xa0b0c0,
+    fill: 0xa0b0c0, // brushed steel
     stroke: 0x303040,
     power: { consumes: 0 },
+    // §14 placeholder — tune in Appendix A.
     placementCost: { battery: 100, microchip: 40, steel_beam: 20, coolant: 10, heavy_cable: 5 },
     glyph: '◯',
   },

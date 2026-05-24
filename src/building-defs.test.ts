@@ -926,7 +926,7 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
     expect(def.category).toBe('manufacturing');
   });
 
-  it('Singularity Battery: 2×2, power category with no resource storage, low standby draw', () => {
+  it('Singularity Battery: 2×2, power category with no resource storage, zero standby draw', () => {
     // §8.4 "effectively infinite electrical power storage (not a resource
     // storage building)" — the §4.6 categorized-storage cleanup removed the
     // earlier 10000-cap placeholder. Power-buffer mechanic per §13.3 still
