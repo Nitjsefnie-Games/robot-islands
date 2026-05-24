@@ -86,7 +86,7 @@ function makeFounderState(
     accelerationRemainingMin: 0,
     bankingEnabled: false,
     genesisTarget: null,
-    singularityStoredWs: 0,
+    batteryStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),
     lastTick: 0,

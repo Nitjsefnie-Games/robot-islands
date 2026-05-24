@@ -50,7 +50,7 @@ function makeState(id: string, level: number): IslandState {
     accelerationQueue: [],
     accelerationRemainingMin: 0,
     bankingEnabled: false,
-    singularityStoredWs: 0,
+    batteryStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),
   };

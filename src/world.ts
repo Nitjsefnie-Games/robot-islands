@@ -1094,8 +1094,8 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     bankingEnabled: false,
     // §13.3 Genesis Chamber defaults to inactive.
     genesisTarget: null,
-    // §13.3 Singularity Battery defaults to empty.
-    singularityStoredWs: 0,
+    // §13.3 Battery buffer defaults to empty.
+    batteryStoredWs: 0,
     // §12.4 Starter inventory grace cap — no kit yet delivered.
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),

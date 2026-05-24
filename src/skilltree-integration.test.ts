@@ -34,7 +34,7 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     accelerationRemainingMin: 0,
     bankingEnabled: false,
     genesisTarget: null,
-    singularityStoredWs: 0,
+    batteryStoredWs: 0,
     starterInventoryGrace: {},
     socketBindings: new Map(),
     lastTick: 0,
