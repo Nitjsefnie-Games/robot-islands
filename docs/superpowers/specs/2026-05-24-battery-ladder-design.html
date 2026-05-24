@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battery ladder — design spec · 2026-05-24</title>
+<style>
+  :root {
+    --bg:#1B1A17; --panel:#25231F; --panel2:#2E2C27; --rule:#3A3833;
+    --ink:#E9E6DC; --ink2:#CFCCC2; --muted:#8A877E;
+    --green:#8FA56E; --tan:#E0B47F; --rust:#D97757; --slate:#7DD3E8; --pink:#D38FCC; --red:#E08B7F; --oat:#3A352B;
+    --serif: ui-serif, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--ink); line-height: 1.6;
+    padding: 48px 24px 120px; }
+  .page { max-width: 1080px; margin: 0 auto; }
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 12px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 32px; color: var(--ink); margin-bottom: 12px; }
+  .lede { font-size: 14.5px; color: var(--ink2); margin-bottom: 22px; max-width: 820px; }
+  .lede code { color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 13px; font-family: var(--mono); }
+
+  .callout { background: var(--panel); border-left: 3px solid var(--slate); border-radius: 0 6px 6px 0;
+    padding: 12px 16px; margin: 14px 0 22px; font-size: 13.5px; color: var(--ink2); max-width: 880px; }
+  .callout.warn { border-left-color: var(--red); }
+  .callout b { color: var(--ink); }
+  .callout code { font-family: var(--mono); font-size: 12.5px; color: var(--tan); }
+
+  section { margin-bottom: 36px; }
+  .sec-head { display: flex; gap: 12px; align-items: baseline; padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule); margin-bottom: 14px; }
+  .sec-head .num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .sec-head h2 { font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--ink); }
+  p { margin: 10px 0; color: var(--ink2); max-width: 860px; font-size: 14px; }
+  p code, li code { font-family: var(--mono); font-size: 12.5px; color: var(--tan); background: var(--panel); padding: 1px 5px; border-radius: 3px; }
+  ul { margin: 6px 0 14px 24px; }
+  li { color: var(--ink2); font-size: 14px; margin: 4px 0; }
+  b { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 13px; }
+  th, td { border: 1px solid var(--rule); padding: 8px 11px; text-align: left; vertical-align: top; color: var(--ink2); }
+  th { background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 600; }
+  td code { font-family: var(--mono); font-size: 12px; color: var(--tan); }
+
+  pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 10px 14px; margin: 10px 0 16px; overflow-x: auto; font-family: var(--mono);
+    font-size: 12px; color: var(--ink); line-height: 1.5; max-width: 880px; }
+  .kw { color: var(--pink); } .str { color: var(--green); } .cmt { color: var(--muted); font-style: italic; }
+  .ty { color: var(--slate); } .num { color: var(--tan); }
+
+  .footer { color: var(--muted); margin-top: 56px; font-size: 12px; padding-top: 18px;
+    border-top: 1px solid var(--rule); }
+  .footer code { font-family: var(--mono); color: var(--tan); }
+
+  .toc { background: var(--panel); border-left: 3px solid var(--slate); border-radius: 0 6px 6px 0;
+    padding: 12px 18px; margin: 18px 0 24px; max-width: 880px; }
+  .toc h3 { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 8px; font-family: var(--mono); }
+  .toc ol { list-style: none; padding: 0; column-count: 2; column-gap: 28px; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--ink2); text-decoration: none; }
+  .toc a:hover { color: var(--rust); }
+  .toc .num { color: var(--muted); font-family: var(--mono); margin-right: 6px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="eyebrow">Design spec · power · battery ladder · 2026-05-24</div>
+<h1>Battery ladder — T2 / T3 / T5 power-storage progression</h1>
+<p class="lede">
+  Generalise the existing T5 <b>Singularity Battery</b> mechanic into a 3-tier ladder so solar-dependent islands can buffer day surplus into night before reaching T5. <code>SPEC.md §285</code> already promises this (<i>“plan for night-time stockpile via Battery (T2) or Singularity Battery (T5)”</i>) but only the T5 ships in code. Adds <b>Battery Bank</b> (T2) and <b>Capacitor Bank</b> (T3) as new <code>building-defs.ts</code> rows + a new <code>batteryCapacityMul</code> skill effect.
+</p>
+
+<div class="callout warn">
+  <b>Gap today:</b> on a solar-only T1/T2 island, <i>any</i> daytime power surplus is wasted — there's nowhere to store it. Night falls and production stops. The player either over-builds solar to push past night-time consumption (wasteful) or stalls. SPEC.md §285 + §433 names a T2 Battery as the intended fix; this spec defines it.
+</div>
+
+<div class="callout">
+  <b>Single mechanic, three buildings.</b> All three battery types contribute additively to one per-island energy buffer (<code>state.batteryStoredWs</code>) with one summed capacity (<code>state.batteryCapacityWs</code>). The existing charge / discharge integration in <code>economy.ts:1610-1693</code> stays the same — only the capacity computation widens to include the new building types.
+</div>
+
+<div class="toc">
+  <h3>Sections</h3>
+  <ol>
+    <li><span class="num">01</span><a href="#sec-mechanic">Generalised buffer mechanic</a></li>
+    <li><span class="num">02</span><a href="#sec-buildings">Building defs (T2 + T3 + T5)</a></li>
+    <li><span class="num">03</span><a href="#sec-recipes">Recipes + crafting</a></li>
+    <li><span class="num">04</span><a href="#sec-skills">Skill-tree integration</a></li>
+    <li><span class="num">05</span><a href="#sec-persistence">Persistence + migration</a></li>
+    <li><span class="num">06</span><a href="#sec-hud">HUD / inspector surfaces</a></li>
+    <li><span class="num">07</span><a href="#sec-balance">Balance + numerics</a></li>
+    <li><span class="num">08</span><a href="#sec-scope">Out of scope</a></li>
+  </ol>
+</div>
+
+<!-- ====================================================================== -->
+<section id="sec-mechanic">
+<div class="sec-head"><span class="num">01</span><h2>Generalised buffer mechanic</h2></div>
+<p>Today's state shape: <code>state.singularityStoredWs: number</code>, capacity computed from the count of placed Singularity Batteries × <code>SINGULARITY_BATTERY_CAPACITY_WS</code>.</p>
+<p>New shape: a single per-island buffer with capacity summed across all three battery building types.</p>
+<pre><span class="cmt">// economy.ts — replace SINGULARITY_BATTERY_CAPACITY_WS with a per-def table</span>
+<span class="kw">export const</span> BATTERY_CAPACITY_WS: <span class="kw">Readonly</span>&lt;<span class="kw">Record</span>&lt;BuildingDefId, <span class="ty">number</span>&gt;&gt; = {
+  battery_bank:         <span class="num">2_000</span> * <span class="num">3600</span>,        <span class="cmt">// 2 kWh — T2 (partial-night buffer)</span>
+  capacitor_bank:       <span class="num">60_000</span> * <span class="num">3600</span>,       <span class="cmt">// 60 kWh — T3 (short-night coverage)</span>
+  singularity_battery:  <span class="num">50_000_000</span> * <span class="num">3600</span>,   <span class="cmt">// 50 MWh — T5 (unchanged)</span>
+};
+
+<span class="kw">export function</span> batteryCapacityWs(state: IslandState, mul: SkillMultipliers): <span class="ty">number</span> {
+  <span class="kw">let</span> cap = <span class="num">0</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> b <span class="kw">of</span> state.buildings) {
+    <span class="kw">if</span> (b.constructionTime !== <span class="kw">undefined</span>) <span class="kw">continue</span>; <span class="cmt">// not yet built</span>
+    <span class="kw">const</span> per = BATTERY_CAPACITY_WS[b.defId] ?? <span class="num">0</span>;
+    <span class="kw">if</span> (per &gt; <span class="num">0</span>) cap += per;
+  }
+  <span class="kw">return</span> cap * mul.batteryCapacity;
+}</pre>
+<p>Rename <code>state.singularityStoredWs</code> → <code>state.batteryStoredWs</code> at the v8 → v9 schema bump (see §05). The charge / discharge integrator at <code>economy.ts:1610-1693</code> already operates on a single capacity value; replace the in-line capacity calc with a call to <code>batteryCapacityWs(state, mul)</code> and the rest works unchanged.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-buildings">
+<div class="sec-head"><span class="num">02</span><h2>Building defs</h2></div>
+<table>
+  <thead><tr><th>Building</th><th>Tier</th><th>Footprint</th><th>Standby</th><th>Capacity</th><th>Placement cost (placeholder)</th></tr></thead>
+  <tbody>
+    <tr><td><code>battery_bank</code> — Battery Bank</td><td>2</td><td>1×1</td><td>1 W</td><td>2 kWh</td><td>4 Battery + 3 Wire + 1 Steel beam</td></tr>
+    <tr><td><code>capacitor_bank</code> — Capacitor Bank</td><td>3</td><td>2×2</td><td>15 W</td><td>60 kWh</td><td>20 Battery + 12 Microchip + 6 Steel beam + 2 Coolant</td></tr>
+    <tr><td><code>singularity_battery</code> (unchanged)</td><td>5</td><td>2×2</td><td>100 W</td><td>50 MWh</td><td>Existing — see <code>building-defs.ts:1899</code></td></tr>
+  </tbody>
+</table>
+<p>Each entry slots into <code>BUILDING_DEFS</code> with <code>category: 'power'</code>, no <code>produces</code>, no <code>storage</code> contribution (these never raise resource caps — only the new electrical buffer). Standby draw is small and continuous, modelling self-discharge / monitoring overhead.</p>
+<p><b>Capacity ratios:</b> ×30 from T2 → T3 (Battery Bank → Capacitor Bank), ×~830 from T3 → T5 (Capacitor Bank → Singularity Battery). Total 25 000× span from cheapest to apex storage, matching the rest of the §13 tier-curve ramp.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-recipes">
+<div class="sec-head"><span class="num">03</span><h2>Recipes + crafting</h2></div>
+<p>Both new buildings have placement-time costs (paid out of inventory; no crafting chain like the Singularity Battery Factory's <code>singularity_battery_unit</code> intermediate). Rationale: T2/T3 batteries should be quick to deploy. The T5 Singularity Battery's heavy crafted-unit gate stays as-is to preserve its endgame feel.</p>
+<p>The <b>Battery</b> component recipe (SPEC §725) is already in <code>recipes.ts</code> — <code>Lithium + Electrolyte + Plastic casing → Battery</code> — and the Battery Factory (T3) already exists in <code>building-defs.ts:1232</code>. Both new battery <i>buildings</i> consume the existing Battery component, so no new recipes are needed; the recipe tree is closed.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-skills">
+<div class="sec-head"><span class="num">04</span><h2>Skill-tree integration</h2></div>
+<p>Add one new effect kind:</p>
+<pre><span class="cmt">// skilltree.ts — extend SkillEffect</span>
+| { <span class="kw">readonly</span> kind: <span class="str">'batteryCapacityMul'</span> };</pre>
+<p>The fold contributes to <code>SkillMultipliers.batteryCapacity</code> (new, default 1). Eligible nodes: at minimum a notable in <b>Power Systems</b> (refinement branch), and arguably a keystone <b>“Off-grid Capable”</b> that gates on owning at least 3 batteries of any tier. Concrete catalog additions:</p>
+<ul>
+  <li><b>powerSystems.notable.electrochemistry</b> — “Electrochemistry Lab — battery capacity ×1.30”. Stat: <code>batteryCapacityMul</code> magnitude 0.30.</li>
+  <li><b>powerSystems.notable.fastDischarge</b> — “Fast Discharge — battery discharge rate uncapped during brownout”. Removes the integrator's discharge cap when the buffer is &gt; 50% full. (Engine change in <code>economy.ts:1088-1096</code>.)</li>
+  <li><b>powerSystems.keystone.offGrid</b> — “Off-grid Capable — battery capacity ×2.00; standby draw ×0.50”. AND-prereq: own at least 3 of <code>battery_bank | capacitor_bank | singularity_battery</code> on this island.</li>
+</ul>
+<p>The keystone's AND-prereq introduces a new gate shape (count-of-building rather than count-of-node). Extend <code>KeystonePrereq</code> with an optional <code>requiresBuildingCount</code> field, or model as a synthetic “virtual node” owned-when-3-batteries-placed. Recommended: virtual node, since it keeps <code>canBuyKeystone</code> uniform.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-persistence">
+<div class="sec-head"><span class="num">05</span><h2>Persistence + migration</h2></div>
+<p>Schema bump v8 → v9 per the “bump = migrate” policy (AGENTS.md → Persistence migrations):</p>
+<ul>
+  <li><code>SerializedSnapshotV8</code> alias capturing today's shape.</li>
+  <li><code>migrateV8toV9(s) → SerializedSnapshotV9</code>: rename <code>singularityStoredWs</code> → <code>batteryStoredWs</code> in each island state (lossless; data identity preserved). No new field added at migration time.</li>
+  <li><code>SUPPORTED_LOAD_VERSIONS</code> extended to <code>{7, 8, 9}</code>; loader walker handles the chain v7 → v8 → v9.</li>
+  <li>Test: v8 fixture round-trips through the chain and produces a v9 with the renamed field.</li>
+</ul>
+<p>No effect on existing islands' gameplay — they keep their Singularity Battery buffer; the only change is the field's name + that T2/T3 battery buildings can now contribute.</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-hud">
+<div class="sec-head"><span class="num">06</span><h2>HUD / inspector surfaces</h2></div>
+<ul>
+  <li><b>Power HUD strip</b> (<code>hud.ts</code> islandBar power section): show <code>stored / capacity</code> as a percentage chip — e.g. <code>BATT 47%</code> in muted green when above 20%, amber 20-10%, red below 10%.</li>
+  <li><b>Inspector panel</b> on any battery building: detailed view with current Ws, capacity Ws, average charge rate over last 60s, projected hours-to-empty at current draw.</li>
+  <li><b>Brownout indicator</b>: when discharge is active, flash the BATT chip and add a tooltip “discharging at N W to cover deficit”.</li>
+</ul>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-balance">
+<div class="sec-head"><span class="num">07</span><h2>Balance + numerics — discussion</h2></div>
+<p><b>Partial-night coverage is the design intent for T2.</b> 2 kWh holds ~1-2 hours of a small base's draw (~1 kW). The player won't bridge the full night with one Battery Bank — that's deliberate. They'll either chain 3-5 banks for fuller coverage, OR accept tactical brownouts during the deepest part of night and rely on the buffer to keep critical paths (Workshop, Logger) ticking. Either play pattern is more interesting than "over-build solar until night doesn't matter".</p>
+<p><b>Why ×30 jump T2 → T3?</b> 60 kWh covers a multi-building T3 base across the bulk of the night even at heavy draw. Players reaching T3 are running smelters / chemistry plants and an arsenal of peripherals; the T3 step needs to feel like a real upgrade, not just "place 30 more battery banks".</p>
+<p><b>Why ×830 jump T3 → T5?</b> T5 Singularity Battery is apex — carries entire industrial loops across multi-hour offline catch-ups. Keep its scale unchanged; the design isn't to nerf endgame storage but to make pre-endgame storage <i>exist</i>.</p>
+<p><b>Crafting cost</b> sketch is placeholder — pin in <code>SPEC.md Appendix A</code> when the §14 tuning pass lands (same convention as the existing T5 Singularity Battery cost).</p>
+</section>
+
+<!-- ====================================================================== -->
+<section id="sec-scope">
+<div class="sec-head"><span class="num">08</span><h2>Out of scope</h2></div>
+<ul>
+  <li><b>Energy trade routes between islands.</b> Batteries are strictly local — no inter-island power transfer. (Spec §13.3 covers shared-inventory across networked islands but excludes power buffering, intentionally.)</li>
+  <li><b>Custom charge / discharge curves.</b> All battery types charge and discharge at the same per-Watt rate; differentiating efficiency by type would be a separate balance pass.</li>
+  <li><b>Aging / wear mechanics.</b> Batteries don't degrade with cycle count. Add only if maintenance-system playtests show low-engagement maintenance loops on power buildings (separate spec).</li>
+  <li><b>Auto-build prioritisation.</b> Players manually place batteries; no “auto-add battery when projected outage detected” helper.</li>
+  <li><b>Mirror-Sat interaction.</b> The §14.3 Mirror Sat bonus already mitigates the night problem at T6+. Battery ladder is the pre-T6 fix; no Mirror-Sat integration changes here.</li>
+</ul>
+</section>
+
+<div class="footer">
+  Battery ladder design v1 · 2026-05-24 · sources: <code>SPEC.md §285, §433, §725, §893</code>, <code>src/building-defs.ts:1882-1901</code>, <code>src/economy.ts:64-1693</code> · gap surfaced by <code>robot-islands/2026-05-24-skilltree-unfinished</code> audit.
+</div>
+
+</div>
+</body>
+</html>
