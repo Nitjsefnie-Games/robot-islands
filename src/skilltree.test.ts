@@ -467,6 +467,16 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.satFuelReserve).toBeCloseTo(1.10, 9);
     expect(m.repairDroneReliability).toBeCloseTo(1.20, 9);
   });
+
+  it('batteryCapacityMul effect contributes to batteryCapacity multiplier', () => {
+    const LG_BAT: SkillNode[] = [
+      { id: 'bat.1', subPath: 'power_systems', depth: 1, cost: 1, magnitude: 0.30,
+        effect: { kind: 'batteryCapacityMul' }, description: '' },
+    ];
+    const s = makeState({ unlockedNodes: new Set(['bat.1']) });
+    const m = effectiveSkillMultipliers(s, { nodes: LG_BAT, edges: [], bridges: [], graftSockets: [] } as Graph);
+    expect(m.batteryCapacity).toBeCloseTo(1.30, 9);
+  });
 });
 
 describe('§14.7 launchSuccessBonus', () => {
