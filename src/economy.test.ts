@@ -2991,6 +2991,12 @@ describe('Singularity Battery', () => {
     advanceIsland(state, 1000);
     expect(state.batteryStoredWs).toBe(1100);
   });
+
+  it('disabled batteries contribute 0 capacity to batteryCapacityWs', () => {
+    const state = makeState();
+    state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0, disabled: true });
+    expect(batteryCapacityWs(state, effectiveSkillMultipliers(state))).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
