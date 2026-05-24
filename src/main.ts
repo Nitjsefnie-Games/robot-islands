@@ -33,7 +33,7 @@ import {
   type Camera,
 } from './camera.js';
 import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes.js';
-import { advanceIsland, computeRates, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
+import { advanceIsland, computeRates, xpForLevel, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
 import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
 import { computeSharedNetworkState } from './network.js';
@@ -111,7 +111,7 @@ import { mountSatelliteOverlay } from './satellite-overlay.js';
 import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { tickVehicles } from './settlement.js';
-import { checkObjectives, type ObjectiveId } from './tutorial.js';
+import { checkObjectives, xpBumpPercentForCompletion, type ObjectiveId } from './tutorial.js';
 import { renderTutorialBanner } from './tutorial-ui.js';
 
 /** Pan speed for keyboard input, in screen-pixels-per-frame. */
@@ -1794,8 +1794,28 @@ async function main(): Promise<void> {
     // Task 3: tutorial objective banner — check completion after every
     // economy advance so placement / level-up events are reflected immediately.
     if (worldState.tutorialState) {
-      const newlyCompleted = checkObjectives(worldState.tutorialState, worldState);
-      const current = worldState.tutorialState.current;
+      const tut = worldState.tutorialState;
+      // Capture pre-size BEFORE checkObjectives mutates `completed`, so
+      // the 1-indexed completion index used by xpBumpPercentForCompletion
+      // reflects the original (pre-tick) count.
+      const preSize = tut.completed.size;
+      const newlyCompleted = checkObjectives(tut, worldState);
+      // Per-objective one-shot XP bump applied to the home island only.
+      // The N-th completion (1-indexed across the whole completed Set,
+      // assigned in the order newlyCompleted reports them this tick) injects
+      // N% of xpForLevel(level+1) into state.xp. levelUpIfReady on the next
+      // tick handles any level crossings the bump causes.
+      if (newlyCompleted.length > 0) {
+        const home = worldState.islandStates?.get('home');
+        if (home) {
+          for (let i = 0; i < newlyCompleted.length; i++) {
+            const completionIndex = preSize + i + 1; // 1-indexed
+            const pct = xpBumpPercentForCompletion(completionIndex);
+            home.xp += (pct / 100) * xpForLevel(home.level + 1);
+          }
+        }
+      }
+      const current = tut.current;
       const needsUpdate = newlyCompleted.length > 0 || lastRenderedObjective !== current;
 
       if (needsUpdate) {
