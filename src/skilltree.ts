@@ -19,7 +19,8 @@ import type { IslandState } from './economy.js';
 import type { Recipe, RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
-import type { Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
+import type { CrystalId, Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
+import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import {
   BRIDGE_CATALOG,
   FULL_CATALOG,
@@ -472,6 +473,72 @@ export const DEFAULT_GRAPH: Graph = {
   bridges: BRIDGE_CATALOG,
   graftSockets: GRAFT_SOCKET_CATALOG,
 };
+
+/** Return the effective graph for an island, unioning `DEFAULT_GRAPH` with the
+ *  mini-tree nodes + edges of every bound crystal. IDs are prefixed with the
+ *  socket id so multiple bindings never collide. Short-circuits to the same
+ *  `DEFAULT_GRAPH` reference when there are no bindings (the common case). */
+export function effectiveGraph(
+  state: { socketBindings?: ReadonlyMap<string, CrystalId> },
+): Graph {
+  const bindings = state.socketBindings;
+  if (!bindings || bindings.size === 0) {
+    return DEFAULT_GRAPH;
+  }
+
+  const extraNodes: SkillNode[] = [];
+  const extraEdges: Edge[] = [];
+  let edgeCounter = 0;
+
+  for (const [socketId, crystalId] of bindings) {
+    const socket = DEFAULT_GRAPH.graftSockets.find((s) => s.id === socketId);
+    if (!socket) continue;
+
+    const crystal = CRYSTAL_CATALOG.find((c) => c.id === crystalId);
+    if (!crystal) continue;
+
+    // Synthetic socket node so crystal edges have a valid endpoint in the graph.
+    extraNodes.push({
+      id: socketId,
+      subPath: socket.subPathId,
+      depth: socket.attachmentDepth,
+      cost: 0,
+      magnitude: 0,
+      effect: { kind: 'placeholder' },
+      description: '',
+    });
+
+    for (const nodeDef of crystal.nodes) {
+      extraNodes.push({
+        id: `${socketId}.${nodeDef.idSuffix}`,
+        subPath: socket.subPathId,
+        depth: 1,
+        cost: nodeDef.cost,
+        magnitude: nodeDef.magnitude,
+        effect: nodeDef.effect,
+        description: nodeDef.description,
+      });
+    }
+
+    for (const edgeDef of crystal.edges) {
+      const from = edgeDef.fromSuffix === 'socket' ? socketId : `${socketId}.${edgeDef.fromSuffix}`;
+      const to = edgeDef.toSuffix === 'socket' ? socketId : `${socketId}.${edgeDef.toSuffix}`;
+      extraEdges.push({
+        id: `${socketId}.edge.${edgeDef.fromSuffix}.${edgeDef.toSuffix}.${edgeCounter++}` as EdgeId,
+        from: from as unknown as import('./skilltree-graph.js').NodeId,
+        to: to as unknown as import('./skilltree-graph.js').NodeId,
+        cost: edgeDef.cost,
+      });
+    }
+  }
+
+  return {
+    nodes: [...DEFAULT_GRAPH.nodes, ...extraNodes],
+    edges: [...DEFAULT_GRAPH.edges, ...extraEdges],
+    bridges: DEFAULT_GRAPH.bridges,
+    graftSockets: DEFAULT_GRAPH.graftSockets,
+  };
+}
 
 /**
  * Backward-compat spend gate. The graph engine uses `costToUnlock` /
