@@ -75,9 +75,20 @@ const COLOR = {
   keystoneFill: 0xD38FCC, keystoneStroke: 0xE9E6DC,
   rootFill:     0x8FA56E, rootStroke:     0xE9E6DC,
   ownedFill:    0x8FA56E,
+  ownedStroke:  0xE9E6DC,
+  // Affordance signal — purchasable nodes get a warm clay stroke so they
+  // pop against locked nodes (dim gray, low alpha on everything).
+  affordStroke: 0xD97757,
+  lockedStroke: 0x4A4845,
   socketStroke: 0x7DD3E8,
   label:        0xE9E6DC,
 } as const;
+
+// Per-state styling for purchasable / locked / owned nodes. Locked nodes
+// drop fill alpha as well as stroke alpha so the affordance signal is
+// readable at full graph zoom-out (~500 nodes on screen).
+const FILL_ALPHA_LOCKED = 0.40;
+const STROKE_ALPHA_LOCKED = 0.55;
 
 function drawHexagon(g: Graphics, cx: number, cy: number, r: number): void {
   for (let i = 0; i < 6; i++) {
@@ -378,16 +389,18 @@ export function mountSkillGraphView(
       const a = getPos(String(e.from));
       const b = getPos(String(e.to));
       if (!a || !b) continue;
-      g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+      const cp = controlPoint(a, b, curveSign(String(e.id)));
+      g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y);
     }
     for (const e of DEFAULT_GRAPH.bridges) {
       if (e.from !== nodeId && e.to !== nodeId) continue;
       const a = getPos(String(e.from));
       const b = getPos(String(e.to));
       if (!a || !b) continue;
-      g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+      const cp = controlPoint(a, b, curveSign(String(e.id)));
+      g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y);
     }
-    g.stroke({ color: 0xD97757, width: 2.4, alpha: 1 });
+    g.stroke({ color: 0xD97757, width: 2.6, alpha: 1 });
     layers.highlight.addChild(g);
 
     const node = DEFAULT_GRAPH.nodes.find((n) => (n.id as unknown as GNodeId) === nodeId);
@@ -443,19 +456,32 @@ export function mountSkillGraphView(
       const affordable = state.unspentSkillPoints >= reachableCost;
       const purchasable = !owned && affordable && (ks ? canBuyKeystone(ks, state) : path !== null);
 
+      // State-driven palette: owned (green fill, full alpha), purchasable
+      // (kind fill + clay accent stroke, full alpha, thicker), locked
+      // (kind fill at 40% alpha, dim stroke at 55%).
+      const baseFill = kind === 'filler' ? COLOR.fillerFill
+                     : kind === 'notable' ? COLOR.notableFill
+                     : COLOR.keystoneFill;
+      const baseStrokeW = kind === 'filler' ? 1 : 1.5;
+
+      const fill = owned ? COLOR.ownedFill : baseFill;
+      const fillAlpha = owned ? 1 : (purchasable ? 1 : FILL_ALPHA_LOCKED);
+      const stroke = owned ? COLOR.ownedStroke
+                   : purchasable ? COLOR.affordStroke
+                   : COLOR.lockedStroke;
+      const strokeWidth = owned ? baseStrokeW : (purchasable ? baseStrokeW + 1 : baseStrokeW);
+      const strokeAlpha = owned ? 1 : (purchasable ? 1 : STROKE_ALPHA_LOCKED);
+
       if (kind === 'filler') {
-        const fill = owned ? COLOR.ownedFill : COLOR.fillerFill;
-        const strokeAlpha = owned ? 1 : (purchasable ? 1 : 0.4);
-        g.circle(p.x, p.y, 6).fill(fill).stroke({ color: COLOR.fillerStroke, width: 1, alpha: strokeAlpha });
+        g.circle(p.x, p.y, 6).fill({ color: fill, alpha: fillAlpha })
+          .stroke({ color: stroke, width: strokeWidth, alpha: strokeAlpha });
       } else if (kind === 'notable') {
-        const fill = owned ? COLOR.ownedFill : COLOR.notableFill;
-        const strokeAlpha = owned ? 1 : (purchasable ? 1 : 0.4);
-        g.circle(p.x, p.y, 9).fill(fill).stroke({ color: COLOR.notableStroke, width: 1.5, alpha: strokeAlpha });
+        g.circle(p.x, p.y, 9).fill({ color: fill, alpha: fillAlpha })
+          .stroke({ color: stroke, width: strokeWidth, alpha: strokeAlpha });
       } else {
-        const fill = owned ? COLOR.ownedFill : COLOR.keystoneFill;
-        const strokeAlpha = owned ? 1 : (purchasable ? 1 : 0.4);
         drawHexagon(g, p.x, p.y, 12);
-        g.fill(fill).stroke({ color: COLOR.keystoneStroke, width: 1.5, alpha: strokeAlpha });
+        g.fill({ color: fill, alpha: fillAlpha })
+          .stroke({ color: stroke, width: strokeWidth, alpha: strokeAlpha });
       }
 
       g.eventMode = 'static';
@@ -495,6 +521,26 @@ export function mountSkillGraphView(
     }
   }
 
+  // Bezier control-point offset as a fraction of edge length. Per-edge sign
+  // alternates by id hash so parallel edges curve different ways.
+  const CURVE_OFFSET = 0.18;
+  function curveSign(id: string): 1 | -1 {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+    return (h & 1) === 0 ? 1 : -1;
+  }
+  function controlPoint(a: { x: number; y: number }, b: { x: number; y: number }, sign: 1 | -1):
+    { x: number; y: number } {
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.max(1, Math.hypot(dx, dy));
+    // Perpendicular unit vector × offset × len.
+    const off = CURVE_OFFSET * len * sign;
+    return { x: mx + (-dy / len) * off, y: my + (dx / len) * off };
+  }
+
   function drawEdges(state: IslandState): void {
     if (!layers || !layout) return;
     layers.edges.removeChildren();
@@ -504,45 +550,50 @@ export function mountSkillGraphView(
     const getPos = (id: string): { x: number; y: number } | null =>
       layout!.nodes.get(id as unknown as GNodeId) ?? null;
 
-    // Standard + AND edges.
+    // Standard + AND edges as quadratic bezier curves so crossings read as
+    // distinct arcs instead of overlapping straight lines.
     const g = new Graphics();
     for (const e of DEFAULT_GRAPH.edges) {
       const a = getPos(String(e.from));
       const b = getPos(String(e.to));
       if (!a || !b) continue;
+      const cp = controlPoint(a, b, curveSign(String(e.id)));
       const owned = state.unlockedEdges.has(e.id);
       if (e.mode === 'and') {
-        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
-          color: 0xD97757, width: 1.6, alpha: 1,
-        });
+        g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y)
+         .stroke({ color: 0xD97757, width: 1.6, alpha: 0.85 });
       } else if (owned) {
-        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
-          color: 0xD97757, width: 1.6, alpha: 1,
-        });
+        g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y)
+         .stroke({ color: 0xD97757, width: 1.8, alpha: 1 });
       } else {
-        g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({
-          color: 0x3A3833, width: 1, alpha: 1,
-        });
+        g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y)
+         .stroke({ color: 0x3A3833, width: 1, alpha: 0.85 });
       }
     }
     layers.edges.addChild(g);
 
-    // Bridge edges, split into the two layers.
+    // Bridges — also curved. Dashed-via-segments along the bezier.
     const gInactive = new Graphics();
     const gActive = new Graphics();
+    const SEGMENTS = 16;
+    const sample = (a: { x: number; y: number }, cp: { x: number; y: number }, b: { x: number; y: number }, t: number) => {
+      const u = 1 - t;
+      return {
+        x: u * u * a.x + 2 * u * t * cp.x + t * t * b.x,
+        y: u * u * a.y + 2 * u * t * cp.y + t * t * b.y,
+      };
+    };
     for (const br of DEFAULT_GRAPH.bridges) {
       const a = getPos(String(br.from));
       const b = getPos(String(br.to));
       if (!a || !b) continue;
+      const cp = controlPoint(a, b, curveSign(String(br.id)));
       const active = isBridgeActiveLocal(br, state);
-      // Render as 8 dash segments along the line (Pixi 8 has no native dash).
       const target = active ? gActive : gInactive;
-      const SEGMENTS = 12;
       for (let i = 0; i < SEGMENTS; i += 2) {
-        const t0 = i / SEGMENTS;
-        const t1 = (i + 1) / SEGMENTS;
-        target.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0)
-              .lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1);
+        const p0 = sample(a, cp, b, i / SEGMENTS);
+        const p1 = sample(a, cp, b, (i + 1) / SEGMENTS);
+        target.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y);
       }
       target.stroke({
         color: active ? 0x7DD3E8 : 0x8A877E,
