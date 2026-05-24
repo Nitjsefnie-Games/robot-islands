@@ -12,12 +12,15 @@ import {
   buyNode,
   canBuyKeystone,
   costToUnlock,
+  effectiveGraph,
+  bindCrystal,
   type BranchId,
 } from './skilltree.js';
+import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import { computeSkillGraphLayout, type SkillGraphLayout } from './skilltree-layout.js';
 import type { IslandState } from './economy.js';
-import type { BridgeEdge, NodeId as GNodeId } from './skilltree-graph.js';
+import type { BridgeEdge, Graph, NodeId as GNodeId } from './skilltree-graph.js';
 
 export interface SkillGraphView {
   readonly el: HTMLDivElement;
@@ -45,18 +48,39 @@ const KEYSTONE_BY_TARGET: ReadonlyMap<string, typeof KEYSTONE_PREREQS[number]> =
   KEYSTONE_PREREQS.map((k) => [String(k.targetNode), k]),
 );
 
-function spentInBranchLocal(state: IslandState, branchId: BranchId): number {
+function spentInBranchLocal(state: IslandState, branchId: BranchId, graph: Graph): number {
   let sum = 0;
   for (const nid of state.unlockedNodes) {
-    const node = DEFAULT_GRAPH.nodes.find((n) => n.id === nid);
+    const node = graph.nodes.find((n) => n.id === nid);
     if (!node) continue;
     if (SUBPATH_BRANCH[node.subPath] === branchId) sum += node.cost;
   }
   return sum;
 }
 
-function isBridgeActiveLocal(b: BridgeEdge, state: IslandState): boolean {
-  return b.threshold.some(({ branch, minSpent }) => spentInBranchLocal(state, branch) >= minSpent);
+function isBridgeActiveLocal(b: BridgeEdge, state: IslandState, graph: Graph): boolean {
+  return b.threshold.some(({ branch, minSpent }) => spentInBranchLocal(state, branch, graph) >= minSpent);
+}
+
+function buildEffectivePosMap(layout: SkillGraphLayout, state: IslandState): Map<string, { x: number; y: number }> {
+  const map = new Map<string, { x: number; y: number }>();
+  for (const [id, p] of layout.nodes) {
+    map.set(id as unknown as string, p);
+  }
+  for (const [id, p] of layout.graftSockets) {
+    map.set(id, p);
+  }
+  for (const [socketId, crystalId] of state.socketBindings) {
+    const crystal = CRYSTAL_CATALOG.find((c) => c.id === crystalId);
+    if (!crystal) continue;
+    const sp = layout.graftSockets.get(socketId);
+    if (!sp) continue;
+    for (const nodeDef of crystal.nodes) {
+      const nid = `${socketId}.${crystalId as string}.${nodeDef.idSuffix}`;
+      map.set(nid, { x: sp.x + nodeDef.position.dx, y: sp.y + nodeDef.position.dy });
+    }
+  }
+  return map;
 }
 
 function classifyNode(id: string): NodeKind {
@@ -191,6 +215,18 @@ export function mountSkillGraphView(
   tooltip.style.lineHeight = '1.4';
   canvasWrap.appendChild(tooltip);
 
+  const pickerModal = document.createElement('div');
+  pickerModal.className = 'ri-panel';
+  pickerModal.style.position = 'absolute';
+  pickerModal.style.top = '50%';
+  pickerModal.style.left = '50%';
+  pickerModal.style.transform = 'translate(-50%, -50%)';
+  pickerModal.style.minWidth = '260px';
+  pickerModal.style.maxWidth = '360px';
+  pickerModal.style.display = 'none';
+  pickerModal.style.zIndex = '20';
+  overlay.appendChild(pickerModal);
+
   const closeBtn = document.createElement('button');
   closeBtn.className = 'ri-skillgraph-close';
   closeBtn.type = 'button';
@@ -312,6 +348,7 @@ export function mountSkillGraphView(
     visible = false;
     camera.tx = 0; camera.ty = 0; camera.zoom = 1; applyCamera();
     overlay.hidden = true;
+    closePickerModal();
   }
   function toggle(): boolean {
     if (visible) hide();
@@ -332,10 +369,11 @@ export function mountSkillGraphView(
       return;
     }
 
-    const path = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, nodeId);
+    const graph = effectiveGraph(state);
+    const path = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, nodeId);
     if (path === null) return;
     if (state.unspentSkillPoints < path.totalCost) return;
-    try { buyNode(DEFAULT_GRAPH, state, nodeId); } catch { return; }
+    try { buyNode(graph, state, nodeId); } catch { return; }
     refresh();
   }
 
@@ -353,10 +391,11 @@ export function mountSkillGraphView(
 
   function showTooltip(node: typeof DEFAULT_GRAPH.nodes[number], cx: number, cy: number): void {
     const state = deps.getState();
+    const graph = effectiveGraph(state);
     const owned = state.unlockedNodes.has(node.id as unknown as GNodeId);
     const ks = KEYSTONE_BY_TARGET.get(String(node.id));
     const reachable = owned ? 0 : ks ? ks.cost
-      : costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, node.id as unknown as GNodeId)?.totalCost ?? null;
+      : costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, node.id as unknown as GNodeId)?.totalCost ?? null;
     const costLine = owned
       ? '<span style="color:#8FA56E">OWNED</span>'
       : reachable === null
@@ -374,9 +413,13 @@ export function mountSkillGraphView(
     if (!layers || !layout) return;
     layers.highlight.removeChildren();
 
+    const state = deps.getState();
+    const graph = effectiveGraph(state);
+    const posMap = buildEffectivePosMap(layout, state);
+    const getPos = (id: string) => posMap.get(id) ?? null;
+
     const g = new Graphics();
-    const getPos = (id: string) => layout!.nodes.get(id as unknown as GNodeId);
-    for (const e of DEFAULT_GRAPH.edges) {
+    for (const e of graph.edges) {
       if (e.from !== nodeId && e.to !== nodeId) continue;
       const a = getPos(String(e.from));
       const b = getPos(String(e.to));
@@ -384,7 +427,7 @@ export function mountSkillGraphView(
       const cp = controlPoint(a, b, curveSign(String(e.id)));
       g.moveTo(a.x, a.y).quadraticCurveTo(cp.x, cp.y, b.x, b.y);
     }
-    for (const e of DEFAULT_GRAPH.bridges) {
+    for (const e of graph.bridges) {
       if (e.from !== nodeId && e.to !== nodeId) continue;
       const a = getPos(String(e.from));
       const b = getPos(String(e.to));
@@ -395,7 +438,7 @@ export function mountSkillGraphView(
     g.stroke({ color: 0xD97757, width: 2.6, alpha: 1 });
     layers.highlight.addChild(g);
 
-    const node = DEFAULT_GRAPH.nodes.find((n) => (n.id as unknown as GNodeId) === nodeId);
+    const node = graph.nodes.find((n) => (n.id as unknown as GNodeId) === nodeId);
     if (node?.aura) {
       const p = getPos(String(nodeId));
       if (p) {
@@ -415,6 +458,8 @@ export function mountSkillGraphView(
     layers.labels.removeChildren();
 
     const state = deps.getState();
+    const graph = effectiveGraph(state);
+    const posMap = buildEffectivePosMap(layout, state);
 
     // Branch roots. Only branch-root labels are rendered today (no per-node
     // labels — the spec §06 open question about zoomed-out overlap therefore
@@ -437,17 +482,20 @@ export function mountSkillGraphView(
       layers.labels.addChild(t);
     }
 
-    // Catalog nodes.
-    for (const n of DEFAULT_GRAPH.nodes) {
-      const p = layout.nodes.get(n.id as unknown as GNodeId);
+    // All nodes: catalog + bound crystal mini-trees.
+    for (const n of graph.nodes) {
+      const p = posMap.get(n.id as unknown as string);
       if (!p) continue;
+      // Skip synthetic socket nodes — they are rendered in the socket loop.
+      if (layout.graftSockets.has(String(n.id))) continue;
+
       const g = new Graphics();
       const kind = classifyNode(String(n.id));
       if (!filterOn[kind]) continue;
 
       const owned = state.unlockedNodes.has(n.id as unknown as GNodeId);
       const ks = KEYSTONE_BY_TARGET.get(String(n.id));
-      const path = ks ? null : costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, n.id as unknown as GNodeId);
+      const path = ks ? null : costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, n.id as unknown as GNodeId);
       const reachableCost = ks ? ks.cost : path?.totalCost ?? Infinity;
       const affordable = state.unspentSkillPoints >= reachableCost;
       const purchasable = !owned && affordable && (ks ? canBuyKeystone(ks, state) : path !== null);
@@ -503,7 +551,7 @@ export function mountSkillGraphView(
 
     // Graft sockets — dashed circle. PixiJS 8 Graphics doesn't support
     // native dash patterns, so draw 8 segments around the circle.
-    for (const [, p] of layout.graftSockets) {
+    for (const [socketId, p] of layout.graftSockets) {
       const g = new Graphics();
       const r = 11;
       for (let i = 0; i < 8; i++) {
@@ -513,6 +561,40 @@ export function mountSkillGraphView(
         g.lineTo(p.x + r * Math.cos(a1), p.y + r * Math.sin(a1));
       }
       g.stroke({ color: COLOR.socketStroke, width: 1.5 });
+
+      g.eventMode = 'static';
+      g.cursor = 'pointer';
+      g.hitArea = new Circle(p.x, p.y, 14);
+
+      const boundCrystalId = state.socketBindings.get(socketId);
+
+      g.on('pointertap', () => {
+        openPickerModal(socketId);
+      });
+      g.on('pointerover', (ev) => {
+        if (boundCrystalId) {
+          const crystal = CRYSTAL_CATALOG.find((c) => c.id === boundCrystalId);
+          if (crystal) {
+            const totalCost = crystal.nodes.reduce((s, n) => s + n.cost, 0);
+            tooltip.innerHTML =
+              `<div style="color:#E9E6DC;font-weight:600;margin-bottom:4px">${escapeHtml(crystal.displayName)}</div>` +
+              `<div>${crystal.nodes.length} nodes · ${totalCost} SP total</div>`;
+          }
+        } else {
+          tooltip.innerHTML =
+            `<div style="color:#E9E6DC;font-weight:600;margin-bottom:4px">Empty graft socket</div>` +
+            `<div>Craft a Skill Crystal at a Skill Forge and click to attach.</div>`;
+        }
+        tooltip.style.display = 'block';
+        positionTooltip(ev.clientX, ev.clientY);
+      });
+      g.on('pointermove', (ev) => {
+        positionTooltip(ev.clientX, ev.clientY);
+      });
+      g.on('pointerout', () => {
+        tooltip.style.display = 'none';
+      });
+
       layers.sockets.addChild(g);
     }
   }
@@ -543,13 +625,14 @@ export function mountSkillGraphView(
     layers.bridgesInactive.removeChildren();
     layers.bridgesActive.removeChildren();
 
-    const getPos = (id: string): { x: number; y: number } | null =>
-      layout!.nodes.get(id as unknown as GNodeId) ?? null;
+    const graph = effectiveGraph(state);
+    const posMap = buildEffectivePosMap(layout, state);
+    const getPos = (id: string): { x: number; y: number } | null => posMap.get(id) ?? null;
 
     // Standard + AND edges as quadratic bezier curves so crossings read as
     // distinct arcs instead of overlapping straight lines.
     const g = new Graphics();
-    for (const e of DEFAULT_GRAPH.edges) {
+    for (const e of graph.edges) {
       const a = getPos(String(e.from));
       const b = getPos(String(e.to));
       if (!a || !b) continue;
@@ -579,12 +662,12 @@ export function mountSkillGraphView(
         y: u * u * a.y + 2 * u * t * cp.y + t * t * b.y,
       };
     };
-    for (const br of DEFAULT_GRAPH.bridges) {
+    for (const br of graph.bridges) {
       const a = getPos(String(br.from));
       const b = getPos(String(br.to));
       if (!a || !b) continue;
       const cp = controlPoint(a, b, curveSign(String(br.id)));
-      const active = isBridgeActiveLocal(br, state);
+      const active = isBridgeActiveLocal(br, state, graph);
       const target = active ? gActive : gInactive;
       for (let i = 0; i < SEGMENTS; i += 2) {
         const p0 = sample(a, cp, b, i / SEGMENTS);
@@ -614,9 +697,76 @@ export function mountSkillGraphView(
   function refreshHud(): void {
     if (!visible) return;
     const state = deps.getState();
+    const graph = effectiveGraph(state);
     spLine.textContent = `Unspent SP: ${state.unspentSkillPoints}`;
-    ownedLine.textContent = `Owned: ${state.unlockedNodes.size} / ${DEFAULT_GRAPH.nodes.length}`;
+    ownedLine.textContent = `Owned: ${state.unlockedNodes.size} / ${graph.nodes.length}`;
   }
+
+  function closePickerModal(): void {
+    pickerModal.style.display = 'none';
+    pickerModal.innerHTML = '';
+    document.removeEventListener('keydown', onPickerKeydown);
+  }
+
+  function onPickerKeydown(ev: KeyboardEvent): void {
+    if (ev.key === 'Escape') {
+      closePickerModal();
+    }
+  }
+
+  function openPickerModal(socketId: string): void {
+    if (pickerModal.style.display === 'block') return;
+    const state = deps.getState();
+    const socket = DEFAULT_GRAPH.graftSockets.find((s) => s.id === socketId);
+    if (!socket) return;
+
+    pickerModal.innerHTML = '';
+    pickerModal.style.display = 'block';
+    document.addEventListener('keydown', onPickerKeydown);
+
+    const head = document.createElement('div');
+    head.className = 'ri-panel__head';
+    head.textContent = 'Attach Skill Crystal';
+    pickerModal.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'ri-panel__body';
+
+    const eligible = CRYSTAL_CATALOG.filter(
+      (c) => c.eligibleSubPaths.includes(socket.subPathId) && ((state.inventory as Record<string, number>)[c.id as string] ?? 0) > 0,
+    );
+
+    if (eligible.length === 0) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.style.color = '#CFCCC2';
+      emptyMsg.textContent = 'No eligible crystals in inventory.';
+      body.appendChild(emptyMsg);
+    } else {
+      for (const crystal of eligible) {
+        const row = document.createElement('button');
+        row.className = 'ri-btn';
+        row.style.display = 'block';
+        row.style.width = '100%';
+        row.style.marginBottom = '6px';
+        row.style.textAlign = 'left';
+        row.textContent = `${crystal.displayName} (×${(state.inventory as Record<string, number>)[crystal.id as string] ?? 0})`;
+        row.addEventListener('click', () => {
+          bindCrystal(state, socketId, crystal.id);
+          closePickerModal();
+          refresh();
+        });
+        body.appendChild(row);
+      }
+    }
+
+    pickerModal.appendChild(body);
+  }
+
+  overlay.addEventListener('click', (ev) => {
+    if (ev.target === overlay && pickerModal.style.display === 'block') {
+      closePickerModal();
+    }
+  });
 
   function refresh(): void {
     if (!visible || !app || !world || !layers) return;
