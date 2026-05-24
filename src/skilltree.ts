@@ -163,6 +163,9 @@ export type SkillEffect =
   | { readonly kind: 'tierBypass'; readonly buildings: ReadonlyArray<BuildingDefId>;
       readonly tierShift: 1 }
   | { readonly kind: 'xpGainMul'; readonly category?: RecipeCategory }
+  // Power Systems deep mechanic — Electrochemistry T2 buffer scaling →
+  //   batteryCapacityMul → economy.ts BATTERY_CAPACITY_WS sum is multiplied
+  //   by the resolved SkillMultipliers.batteryCapacity at island level.
   | { readonly kind: 'batteryCapacityMul' };
 
 /** Closed union of conditions for `conditionalBonus`. Each must be evaluable
@@ -760,6 +763,10 @@ export interface SkillMultipliers {
   /** Reduction multiplier applied to building.power.consumes — values > 1
    *  reduce draw (divide consumes by this). */
   readonly powerConsumption: number;
+  /** Per-island electrical buffer capacity multiplier. Composes with the
+   *  per-def BATTERY_CAPACITY_WS table in economy.ts — total cap on this
+   *  island = Σ(building cap) × batteryCapacity. Default 1. */
+  readonly batteryCapacity: number;
   /** Transport sub-path bonus — multiplies route per-batch capacity at the
    *  dispatching island. */
   readonly routeCapacity: number;
@@ -823,10 +830,6 @@ export interface SkillMultipliers {
   readonly xpGain: number;
   /** Per-category XP gain multiplier. */
   readonly xpGainByCategory: Record<RecipeCategory, number>;
-  /** Per-island electrical buffer capacity multiplier. Composes with the
-   *  per-def BATTERY_CAPACITY_WS table in economy.ts — total cap on this
-   *  island = Σ(building cap) × batteryCapacity. Default 1. */
-  readonly batteryCapacity: number;
 }
 
 function blankMultipliers(): SkillMultipliers {
@@ -839,6 +842,7 @@ function blankMultipliers(): SkillMultipliers {
     storageCap: 1,
     powerProduction: 1,
     powerConsumption: 1,
+    batteryCapacity: 1,
     routeCapacity: 1,
     commRange: 1,
     maintenanceThreshold: 1,
@@ -862,7 +866,6 @@ function blankMultipliers(): SkillMultipliers {
     droneScanRadius: 1,
     xpGain: 1,
     xpGainByCategory: Object.fromEntries(ALL_RECIPE_CATEGORIES.map((c) => [c, 1])) as Record<RecipeCategory, number>,
-    batteryCapacity: 1,
   };
 }
 
@@ -885,6 +888,7 @@ export function effectiveSkillMultipliers(
   let storageCap = 1;
   let powerProduction = 1;
   let powerConsumption = 1;
+  let batteryCapacity = 1;
   let routeCapacity = 1;
   let commRange = 1;
   let maintenanceThreshold = 1;
@@ -906,7 +910,6 @@ export function effectiveSkillMultipliers(
   let loggerExoticTrickleRate = 0;
   let droneScanRadius = 1;
   let xpGain = 1;
-  let batteryCapacity = 1;
   // Rare-trickle additive base rate per skill node. Continuous yield model
   // — at depth 1 each Mine produces an extra `RARE_TRICKLE_BASE × magnitude`
   // helium_3 per second; deeper nodes scale up via the magnitude ramp.
@@ -1032,6 +1035,7 @@ export function effectiveSkillMultipliers(
     storageCap,
     powerProduction,
     powerConsumption,
+    batteryCapacity,
     routeCapacity,
     commRange,
     maintenanceThreshold,
@@ -1055,7 +1059,6 @@ export function effectiveSkillMultipliers(
     droneScanRadius,
     xpGain,
     xpGainByCategory,
-    batteryCapacity,
   };
 }
 
