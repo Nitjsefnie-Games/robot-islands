@@ -355,14 +355,17 @@ export function costForDepth(depth: number): number {
 }
 
 /** Skill points granted on a single level-up. Spec §9.3 doesn't
- *  prescribe a curve; flat 1/level made the late-game tree unreachable.
- *  The 1.1^L geometric grant keeps early-game grants tiny (L1-L7 still
- *  award 1 point) and ramps so L70 grants ~790 and L100 grants ~13,780.
- *  Combined with costForDepth's slowed ramp, this lands the full tree
- *  around L75 — matching the spec's "very-late-game L70+ reaches
- *  depth 7-10" claim. */
+ *  prescribe a curve; flat 1/level made the late-game tree unreachable,
+ *  and the original 1.1^L grant overshot so hard a L100 player had
+ *  ~150K SP — far past the rebalance's per-pool caps. The 1.031^L
+ *  geometric grant slows the climb so a player only reaches one
+ *  sub-path's worth of SP (~874) around L111 and the full catalog
+ *  (~2881) around L148. L1-L22 all grant 1 SP (1.031^L stays under 2);
+ *  the grant first ticks to 2 at L23, hits 4 at L50, 8 at L70, 21 at
+ *  L100. Past saturation it keeps climbing but tames far more than
+ *  1.1^L (L150 grants 97/lvl vs the prior ~190,000). */
 export function skillPointsForLevelUp(level: number): number {
-  return Math.max(1, Math.floor(1.1 ** level));
+  return Math.max(1, Math.floor(1.031 ** level));
 }
 
 /** Cumulative skill points an island SHOULD have received from level 1
