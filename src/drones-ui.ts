@@ -40,11 +40,10 @@ import {
   type DroneTier,
 } from './drones.js';
 import { TILE_PX } from './island.js';
-import { tileToWorldPx } from './world.js';
 import { fuelForTier } from './recipes.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
-import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
+import { tileToWorldPx, VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
 
 /** Resolve the Drone Pad's footprint centre on the launching island.
  *  §11.1: drone launches originate from the Drone Pad's footprint centre,
@@ -625,8 +624,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // -------------------------------------------------------------------------
   // Pixi layer: launch-preview line/polyline. World-space (panned/zoomed
   // with camera), unlike the screen-space reticle. Color rule:
-  //   green when distance ≤ maxLaunchRange (numeric) OR adding next
-  //     waypoint stays under fuel cap (path; lands in Task 3)
+  //   green when distance ≤ maxLaunchRange (numeric)
   //   red otherwise
   const launchPreviewLayer = new Container();
   launchPreviewLayer.label = 'launch-preview';
@@ -639,16 +637,14 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   const PREVIEW_LINE_WIDTH = 2;
 
   /** Per-frame paint of the launch-preview overlay. Called from refresh().
-   *  Numeric tier: line origin → cursor, tinted by reachability.
-   *  Path tier (5-path): stub this task; Task 3 lands polyline rendering. */
+   *  Numeric tier: line origin → cursor, tinted by reachability. */
   function paintLaunchPreview(): void {
     launchPreviewGfx.clear();
     if (!launchMode || !cursorTile) return;
     const spec = deps.getOriginSpec();
     const originPx = tileToWorldPx(spec.cx, spec.cy);
     const cursorPx = tileToWorldPx(cursorTile.x, cursorTile.y);
-    // Numeric tier: single line, reachability-tinted.
-    // (Path tier rendering is added in Task 3.)
+    // Path-tier branch lands later — see plan §03.
     if (typeof selectedTier === 'number') {
       const dxTiles = cursorTile.x - spec.cx;
       const dyTiles = cursorTile.y - spec.cy;
