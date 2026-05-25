@@ -321,6 +321,18 @@ describe('dispatchDrone', () => {
     expect(result.drone.tier).toBe(3);
     expect(result.drone.scanRadius).toBe(8);
   });
+
+  it('dispatched drone has an empty scanBuffer', () => {
+    const world = freshWorld();
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    world.islands.push(makeIslandSpec({ id: 'home', cx: 0, cy: 0, populated: true, discovered: true }));
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 20, 0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.drone.scanBuffer).toBeInstanceOf(Set);
+    expect(result.drone.scanBuffer.size).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -960,6 +972,7 @@ describe('T5 path-drawn drone', () => {
       waypoints,
       darkMode: false,
       darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(),
       probabilityBias: 0,
     };
     // At launch
