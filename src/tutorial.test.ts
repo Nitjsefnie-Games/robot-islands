@@ -189,6 +189,7 @@ describe('checkObjectives', () => {
         waypoints: [],
         darkMode: false,
         darkModeDiscoveries: [],
+        scanBuffer: new Set<string>(),
         probabilityBias: 0,
       }],
     });

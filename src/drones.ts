@@ -71,6 +71,12 @@ export interface Drone {
   darkMode: boolean;
   /** Accumulated discoveries while in dark mode. */
   darkModeDiscoveries: Array<{ readonly islandId: string }>;
+  // Cell-reveal buffer (mirror of darkModeDiscoveries for cells). Every
+  // corridor cell the drone scans joins this Set unconditionally on every
+  // tick; the flush step in advanceDrones drains it into world.revealedCells
+  // when the drone enters any antenna's range OR when status reaches
+  // 'returned'. Drone destroyed in dark ('lost'): buffer GC'd with the drone.
+  readonly scanBuffer: Set<string>;
   /** §13.3 Probability Engine bias stored at dispatch time. */
   readonly probabilityBias: number;
 }
@@ -462,6 +468,7 @@ export function dispatchDrone(
     waypoints: waypoints ?? [],
     darkMode: false,
     darkModeDiscoveries: [],
+    scanBuffer: new Set<string>(),
     probabilityBias: probabilityBiasForIsland(origin),
   };
   world.drones.push(drone);

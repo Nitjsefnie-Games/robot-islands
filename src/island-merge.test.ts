@@ -373,6 +373,7 @@ describe('performMerge', () => {
       waypoints: [],
       darkMode: false,
       darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(),
       probabilityBias: 0,
     };
     world.drones.push(drone);

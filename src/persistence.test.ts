@@ -594,6 +594,7 @@ describe('id counter seeding', () => {
       waypoints: [],
       darkMode: false,
       darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(),
       probabilityBias: 0,
     });
     const snap = serializeWorld(world, new Map(), 0);
@@ -728,6 +729,7 @@ describe('drone and route timestamp remapping', () => {
       waypoints: [],
       darkMode: false,
       darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(),
       probabilityBias: 0,
     });
     const states = new Map<string, IslandState>();
@@ -833,6 +835,7 @@ describe('§11.7 tier-matched fuelResource persistence', () => {
       waypoints: [],
       darkMode: false,
       darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(),
       probabilityBias: 0,
     });
     const snap = serializeWorld(world, new Map(), 0, 0);
