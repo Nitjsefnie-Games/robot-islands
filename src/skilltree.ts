@@ -140,10 +140,18 @@ export type SkillEffect =
   //   - loggerYieldBonusMul     → per-Logger recipe rate bonus (regrowth)
   //   - loggerExoticTrickleMul  → per-Logger continuous lumber trickle
   //                               (exotic species → bonus refined output)
+  //   - drillYieldBonusMul      → per-Drill/Pump-Jack recipe rate bonus
+  //   - aquacultureYieldBonusMul→ per-Aquaculture recipe rate bonus
+  //   - patronageYieldBonusMul  → per-Patronage recipe rate bonus
+  //   - t5ExtractorYieldBonusMul→ per-T5-extractor recipe rate bonus
   | { readonly kind: 'mineYieldBonusMul' }
   | { readonly kind: 'mineRareTrickleMul' }
   | { readonly kind: 'loggerYieldBonusMul' }
   | { readonly kind: 'loggerExoticTrickleMul' }
+  | { readonly kind: 'drillYieldBonusMul' }
+  | { readonly kind: 'aquacultureYieldBonusMul' }
+  | { readonly kind: 'patronageYieldBonusMul' }
+  | { readonly kind: 't5ExtractorYieldBonusMul' }
   // Robotics tertiary axis — "drone production efficiency". Multiplies the
   // scan radius of dispatched drones for the origin island so the same fuel
   // covers more of the unknown map per round-trip.
@@ -823,6 +831,15 @@ export interface SkillMultipliers {
   /** Forestry tertiary axis — additive bonus rate (units/sec) of lumber
    *  per Logger on the island. Continuous-yield model of "exotic species". */
   readonly loggerExoticTrickleRate: number;
+  /** Drilling secondary axis — multiplies Drill/Pump-Jack recipe rates.
+   *  Stacks with the global recipeRate.extraction multiplier. */
+  readonly drillYieldBonus: number;
+  /** Aquaculture secondary axis — multiplies Aquaculture recipe rates. */
+  readonly aquacultureYieldBonus: number;
+  /** Patronage secondary axis — multiplies Patron-Hub recipe rates. */
+  readonly patronageYieldBonus: number;
+  /** Oceanography secondary axis — multiplies T5-extractor recipe rates. */
+  readonly t5ExtractorYieldBonus: number;
   /** Robotics tertiary axis — multiplies the scan radius of drones
    *  dispatched from this island. */
   readonly droneScanRadius: number;
@@ -863,6 +880,10 @@ function blankMultipliers(): SkillMultipliers {
     mineRareTrickleRate: 0,
     loggerYieldBonus: 1,
     loggerExoticTrickleRate: 0,
+    drillYieldBonus: 1,
+    aquacultureYieldBonus: 1,
+    patronageYieldBonus: 1,
+    t5ExtractorYieldBonus: 1,
     droneScanRadius: 1,
     xpGain: 1,
     xpGainByCategory: Object.fromEntries(ALL_RECIPE_CATEGORIES.map((c) => [c, 1])) as Record<RecipeCategory, number>,
@@ -908,6 +929,10 @@ export function effectiveSkillMultipliers(
   let mineRareTrickleRate = 0;
   let loggerYieldBonus = 1;
   let loggerExoticTrickleRate = 0;
+  let drillYieldBonus = 1;
+  let aquacultureYieldBonus = 1;
+  let patronageYieldBonus = 1;
+  let t5ExtractorYieldBonus = 1;
   let droneScanRadius = 1;
   let xpGain = 1;
   // Rare-trickle additive base rate per skill node. Continuous yield model
@@ -987,9 +1012,8 @@ export function effectiveSkillMultipliers(
         break;
       case 'parallelBuildCapAdd':
         // Additive — each node grants +1 concurrent slot (the magnitude
-        // doesn't scale the bonus; depth-2 contributes 1, deeper nodes
-        // contribute 1 each).
-        parallelBuildBonus += 1;
+        // Sum per-node magnitudes (spec §03: e.g. +0.667 per node).
+        parallelBuildBonus += node.magnitude;
         break;
       case 'teleporterEfficiencyMul':
         teleporterEfficiency *= m;
@@ -1007,6 +1031,18 @@ export function effectiveSkillMultipliers(
         break;
       case 'loggerExoticTrickleMul':
         loggerExoticTrickleRate += EXOTIC_TRICKLE_BASE_PER_SEC * m;
+        break;
+      case 'drillYieldBonusMul':
+        drillYieldBonus *= m;
+        break;
+      case 'aquacultureYieldBonusMul':
+        aquacultureYieldBonus *= m;
+        break;
+      case 'patronageYieldBonusMul':
+        patronageYieldBonus *= m;
+        break;
+      case 't5ExtractorYieldBonusMul':
+        t5ExtractorYieldBonus *= m;
         break;
       case 'droneScanRadiusMul':
         droneScanRadius *= m;
@@ -1056,6 +1092,10 @@ export function effectiveSkillMultipliers(
     mineRareTrickleRate,
     loggerYieldBonus,
     loggerExoticTrickleRate,
+    drillYieldBonus,
+    aquacultureYieldBonus,
+    patronageYieldBonus,
+    t5ExtractorYieldBonus,
     droneScanRadius,
     xpGain,
     xpGainByCategory,

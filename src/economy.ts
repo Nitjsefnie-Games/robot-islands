@@ -1174,7 +1174,17 @@ export function computeRates(
       buildingBonus = skillMul.mineYieldBonus;
     } else if (defId === 'logger' || defId === 'heavy_logger') {
       buildingBonus = skillMul.loggerYieldBonus;
+    } else if (defId === 'pump_jack' || defId === 'drilling_rig' || defId === 'trench_drill') {
+      buildingBonus = skillMul.drillYieldBonus;
+    } else if (defId === 'patron_hub') {
+      buildingBonus = skillMul.patronageYieldBonus;
+    } else if (defId === 'aetheric_conduit' || defId === 'spacetime_resonator'
+        || defId === 'eldritch_sieve' || defId === 'casimir_tap'
+        || defId === 'zero_point_extractor' || defId === 'neutronium_extractor') {
+      buildingBonus = skillMul.t5ExtractorYieldBonus;
     }
+    // Note: aquacultureYieldBonus has no consumer in building-defs.ts today.
+    // The multiplier folds but is dormant until aquaculture buildings land.
     const effectiveRate = te.baseRate * ia * pf * mf * accelMul * varianceFactor * toxMul * buildingBonus;
     byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate });
 

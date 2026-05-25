@@ -60,6 +60,11 @@ const LEGACY_TEST_NODES: ReadonlyArray<SkillNode> = [
   { id: 'resilience.3', subPath: 'resilience', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'repairDroneReliabilityMul' }, description: '' },
   { id: 'launch.1', subPath: 'launch', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'launchSuccessAdditive' }, description: '' },
   { id: 'launch.2', subPath: 'launch', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'padExplosionReduceMul' }, description: '' },
+  { id: 'drilling.1', subPath: 'drilling', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'drillYieldBonusMul' }, description: '' },
+  { id: 'drilling.2', subPath: 'drilling', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'drillYieldBonusMul' }, description: '' },
+  { id: 'aquaculture.1', subPath: 'aquaculture', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'aquacultureYieldBonusMul' }, description: '' },
+  { id: 'patronage.1', subPath: 'patronage', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'patronageYieldBonusMul' }, description: '' },
+  { id: 'oceanography.1', subPath: 'oceanography', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 't5ExtractorYieldBonusMul' }, description: '' },
 ];
 
 const LG = { nodes: LEGACY_TEST_NODES, edges: [], bridges: [], graftSockets: [] } as Graph;
@@ -368,7 +373,7 @@ describe('effectiveSkillMultipliers', () => {
     const s = makeState({ unlockedNodes: new Set(['robotics.1', 'robotics.2']) });
     const m = effectiveSkillMultipliers(s, LG);
     expect(m.constructionTime).toBeCloseTo(1.05, 9);
-    expect(m.parallelBuildBonus).toBe(1);
+    expect(m.parallelBuildBonus).toBeCloseTo(0.10, 9);
     expect(m.maintenanceThreshold).toBe(1);
     expect(m.recipeRate.extraction).toBe(1);
     expect(m.storageCap).toBe(1);
@@ -448,6 +453,38 @@ describe('effectiveSkillMultipliers', () => {
     const s3 = makeState({ unlockedNodes: new Set(['forestry.3']) });
     const m3 = effectiveSkillMultipliers(s3, LG);
     expect(m3.loggerExoticTrickleRate).toBeCloseTo(0.0012, 9);
+  });
+
+  it('drilling nodes fold into drillYieldBonus multiplicatively', () => {
+    const s1 = makeState({ unlockedNodes: new Set(['drilling.1']) });
+    const m1 = effectiveSkillMultipliers(s1, LG);
+    expect(m1.drillYieldBonus).toBeCloseTo(1.05, 9);
+    expect(m1.aquacultureYieldBonus).toBe(1);
+    const s2 = makeState({ unlockedNodes: new Set(['drilling.1', 'drilling.2']) });
+    const m2 = effectiveSkillMultipliers(s2, LG);
+    expect(m2.drillYieldBonus).toBeCloseTo(1.155, 9);
+  });
+
+  it('aquaculture node folds into aquacultureYieldBonus', () => {
+    const s = makeState({ unlockedNodes: new Set(['aquaculture.1']) });
+    const m = effectiveSkillMultipliers(s, LG);
+    expect(m.aquacultureYieldBonus).toBeCloseTo(1.05, 9);
+    expect(m.drillYieldBonus).toBe(1);
+    expect(m.patronageYieldBonus).toBe(1);
+  });
+
+  it('patronage node folds into patronageYieldBonus', () => {
+    const s = makeState({ unlockedNodes: new Set(['patronage.1']) });
+    const m = effectiveSkillMultipliers(s, LG);
+    expect(m.patronageYieldBonus).toBeCloseTo(1.05, 9);
+    expect(m.t5ExtractorYieldBonus).toBe(1);
+  });
+
+  it('oceanography node folds into t5ExtractorYieldBonus', () => {
+    const s = makeState({ unlockedNodes: new Set(['oceanography.1']) });
+    const m = effectiveSkillMultipliers(s, LG);
+    expect(m.t5ExtractorYieldBonus).toBeCloseTo(1.05, 9);
+    expect(m.drillYieldBonus).toBe(1);
   });
 
   it('orbital depth-2 alternates wire the secondary axes', () => {
