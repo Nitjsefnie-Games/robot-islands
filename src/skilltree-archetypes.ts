@@ -281,7 +281,7 @@ export const POWER_SYSTEMS_FILLER_ARCHETYPES: FillerArchetype[] = [
     baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
-    idPrefix: 'power_systems.batteryCapacity', effectKind: 'batteryCapacityMul',
+    idPrefix: 'powerSystems.batteryCapacity', effectKind: 'batteryCapacityMul',
     subPath: 'power_systems', baseMag: 0.2915, growth: 1.0,
     baseCost: 1, costGrowth: 1.5, count: 8,
   },
