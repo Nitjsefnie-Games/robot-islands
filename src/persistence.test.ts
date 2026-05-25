@@ -41,11 +41,13 @@ import {
   migrateV7toV8,
   migrateV8toV9,
   migrateV11toV12,
+  migrateV12toV13,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
   type SerializedSnapshotV8,
   type SerializedSnapshotV11,
+  type SerializedSnapshotV12,
   type SerializedIslandStateV11,
   type SerializedWorld,
 } from './persistence.js';
@@ -125,7 +127,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(12);
+    expect(snap.v).toBe(13);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -468,7 +470,7 @@ describe('schema version', () => {
   });
 
   it('exports STORAGE_KEY containing v11 so it does not collide with stale saves', () => {
-    expect(STORAGE_KEY).toMatch(/v12$/);
+    expect(STORAGE_KEY).toMatch(/v13$/);
   });
 
   it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
@@ -1463,7 +1465,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(12);
+    expect(snap.v).toBe(13);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -1767,8 +1769,81 @@ describe('migrateV11toV12', () => {
   });
 });
 
-describe('deserializeWorld v7 → v12 migration chain', () => {
-  it('walks v7 through v8/v9/v10/v11/v12 and refunds SP via cumulativeSkillPointsForLevel', () => {
+describe('migrateV12toV13', () => {
+  it('adds empty scanBuffer to every drone', () => {
+    const v12: SerializedSnapshotV12 = {
+      v: 12,
+      savedAt: 0,
+      savedAtPerf: 0,
+      world: {
+        islands: [],
+        drones: [
+          {
+            id: 'drone-1',
+            fromIslandId: 'home',
+            originX: 0,
+            originY: 0,
+            dirX: 1,
+            dirY: 0,
+            outboundTiles: 20,
+            scanRadius: 8,
+            launchTime: 0,
+            expectedReturnTime: 10_000,
+            tier: 2,
+            fuelLoaded: 10,
+            fuelResource: 'biofuel',
+            waypoints: [],
+            darkMode: false,
+            darkModeDiscoveries: [],
+            probabilityBias: 0,
+          } as unknown as import('./persistence.js').SerializedDroneV12,
+        ],
+        routes: [],
+        vehicles: [],
+        satellites: [],
+        repairDrones: [],
+        debrisFields: [],
+        commPackets: [],
+      },
+      islandStates: [],
+    };
+
+    const v13 = migrateV12toV13(v12);
+    expect(v13.v).toBe(13);
+    expect(v13.world.drones[0]!.scanBuffer).toEqual([]);
+  });
+
+  it('v13 round-trip: scanBuffer preserves cell ids', () => {
+    const world = makeInitialWorld(0);
+    world.drones.push({
+      id: 'drone-1',
+      fromIslandId: 'home',
+      originX: 0,
+      originY: 0,
+      dirX: 1,
+      dirY: 0,
+      outboundTiles: 20,
+      scanRadius: 8,
+      launchTime: 0,
+      expectedReturnTime: 10_000,
+      tier: 2,
+      fuelLoaded: 10,
+      fuelResource: 'biofuel',
+      waypoints: [],
+      darkMode: false,
+      darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(['2:3', '2:4', '3:3']),
+      probabilityBias: 0,
+    });
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect([...restored.drones[0]!.scanBuffer].sort()).toEqual(['2:3', '2:4', '3:3']);
+  });
+});
+
+describe('deserializeWorld v7 → v13 migration chain', () => {
+  it('walks v7 through v8/v9/v10/v11/v12/v13 and refunds SP via cumulativeSkillPointsForLevel', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
