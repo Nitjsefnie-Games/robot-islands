@@ -773,7 +773,7 @@ describe('power (§5.1)', () => {
     expect(wsRate).toBeCloseTo((1 / 33) * (50 / 60), 9);
   });
 
-  it('power_systems.notable.turbineStaging unlocked: Coal Gen produces 120W instead of 100W', () => {
+  it('power_systems.notable.turbineStaging unlocked: Coal Gen produces 107.01W instead of 100W', () => {
     const state = makeState({
       buildings: [COAL_GEN],
       inventory: { ...blankInventory(), coal: 50 },
@@ -999,7 +999,7 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
 });
 
 describe('skill-tree integration (§9.3)', () => {
-  it('mining.notable.blastOptimization unlocked: Mine produces iron_ore at 1.30× base rate', () => {
+  it('mining.notable.blastOptimization unlocked: Mine produces iron_ore at 1.0248× base rate', () => {
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
@@ -1009,7 +1009,7 @@ describe('skill-tree integration (§9.3)', () => {
     expect(production.iron_ore).toBeCloseTo(0.06028235294117647, 9);
   });
 
-  it('mining.notable.blastOptimization + deepVein stacks multiplicatively: Mine rate × 1.30 × 1.20', () => {
+  it('mining.notable.blastOptimization + deepVein stacks multiplicatively: Mine rate × 1.0248 × 1.0625', () => {
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
