@@ -410,9 +410,10 @@ export function migrateV12toV13(s: SerializedSnapshotV12): SaveSnapshot {
  *  progression. */
 export type SerializedSnapshotV13 = Omit<SaveSnapshot, 'v'> & { readonly v: 13 };
 
-/** v13 → v14: reset per-island level, xp, and skill-tree progression
- *  (unlockedNodes, unlockedEdges, socketBindings). Preserves buildings, inventory,
- *  drones, routes, satellites — everything outside the progression ladder.
+/** v13 → v14: reset per-island level, xp, unspentSkillPoints, and skill-tree
+ *  progression (unlockedNodes, unlockedEdges, socketBindings). Preserves
+ *  buildings, inventory, drones, routes, satellites — everything outside the
+ *  progression ladder.
  *  Rationale: rebalance reshapes per-node magnitudes; previously-spent SP
  *  no longer matches the new cap calculus, so a fresh allocation is the
  *  cleanest fix. Player keeps the world they built. */
@@ -426,6 +427,7 @@ export function migrateV13toV14(s: SerializedSnapshotV13): SaveSnapshot {
         ...entry.state,
         level: 1,
         xp: 0,
+        unspentSkillPoints: 0,
         unlockedNodes: [],
         unlockedEdges: [],
         socketBindings: [],
