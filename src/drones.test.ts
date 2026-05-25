@@ -218,7 +218,7 @@ describe('dispatchDrone', () => {
     expect(d.outboundTiles).toBe(30);
     // Travel time = 60 / 0.5 = 120s → return at 1000 + 120_000. (rebalanced step #19)
     expect(d.expectedReturnTime).toBe(1000 + 120_000);
-    expect(d.scanRadius).toBe(DRONE_TIER_SCAN_RADIUS[d.tier]);
+    expect(d.scanRadius).toBe(DRONE_TIER_SCAN_RADIUS[1]);
   });
 
   it('normalises a non-unit direction vector', () => {
