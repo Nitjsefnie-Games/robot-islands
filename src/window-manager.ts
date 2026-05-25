@@ -17,6 +17,16 @@ import { Z } from './ui-tokens.js';
 /** localStorage key. Bump the trailing `:v1` when changing PanelLayout shape. */
 export const LAYOUT_STORAGE_KEY = 'ri-ui-layout-v1';
 
+/** Minimum width / height (px) for a persisted panel layout entry. Entries
+ *  below either floor are dropped on load and refused at capture time —
+ *  prevents the degenerate "1×1 invisible panel" state observed in v1 saves
+ *  (settlement-panel, routes-panel) that originated when promoteToFree
+ *  captured a placeholder-CSS-sized panel before any user resize.
+ *  Floor chosen well below the 200×120 MakeDraggableOptions resize minimum
+ *  (so legitimate small saves still pass) and well above the 1×1 bug. */
+export const MIN_PANEL_W = 80;
+export const MIN_PANEL_H = 40;
+
 /** Panels in this set are skipped by makePanelDraggable — they remain
  *  zone-anchored chrome. `island-bar` also uses `transform: translateX(-50%)`
  *  for centring which any drag would have to clear; safer to leave anchored. */
@@ -71,8 +81,8 @@ export function parseLayoutBlob(raw: unknown): UiLayoutBlob | null {
     if (
       typeof x !== 'number' || !Number.isFinite(x) ||
       typeof y !== 'number' || !Number.isFinite(y) ||
-      typeof w !== 'number' || !Number.isFinite(w) || w <= 0 ||
-      typeof h !== 'number' || !Number.isFinite(h) || h <= 0 ||
+      typeof w !== 'number' || !Number.isFinite(w) || w < MIN_PANEL_W ||
+      typeof h !== 'number' || !Number.isFinite(h) || h < MIN_PANEL_H ||
       typeof zRank !== 'number' || !Number.isFinite(zRank)
     ) continue;
     panels[id] = { x, y, w, h, zRank };
@@ -265,7 +275,7 @@ export function makePanelDraggable(
     panel.dataset.riActiveMutation = '1';
 
     // First drag promotes a zone-anchored panel to free-positioned.
-    promoteToFree(panel, id, rect);
+    promoteToFree(panel, id, rect, minWidth, minHeight);
 
     const move = (ev: PointerEvent): void => {
       const x = startLeft + (ev.clientX - startX);
@@ -302,7 +312,7 @@ export function makePanelDraggable(
     const startW = rect.width, startH = rect.height;
     grip!.setPointerCapture(e.pointerId);
     panel.dataset.riActiveMutation = '1';
-    promoteToFree(panel, id, rect);
+    promoteToFree(panel, id, rect, minWidth, minHeight);
     // Bring to front on resize-start too.
     bringToFront(id);
 
@@ -369,20 +379,28 @@ function applySavedLayout(panel: HTMLElement, id: string, layout: PanelLayout): 
   setPanelFree(id, true);
 }
 
-function promoteToFree(panel: HTMLElement, id: string, rect: DOMRect): void {
+function promoteToFree(
+  panel: HTMLElement,
+  id: string,
+  rect: DOMRect,
+  minWidth: number,
+  minHeight: number,
+): void {
   if (panel.classList.contains('ri-free')) return;
+  const flooredW = Math.max(rect.width, minWidth);
+  const flooredH = Math.max(rect.height, minHeight);
   panel.style.position = 'fixed';
   panel.style.left = rect.left + 'px';
   panel.style.top = rect.top + 'px';
   panel.style.right = '';
   panel.style.bottom = '';
-  panel.style.width = rect.width + 'px';
-  panel.style.height = rect.height + 'px';
+  panel.style.width = flooredW + 'px';
+  panel.style.height = flooredH + 'px';
   panel.style.transform = '';
   panel.classList.add('ri-free');
   setPanelFree(id, true);
   updatePanelLayout(id, {
-    x: rect.left, y: rect.top, w: rect.width, h: rect.height,
+    x: rect.left, y: rect.top, w: flooredW, h: flooredH,
   });
 }
 
