@@ -1701,6 +1701,7 @@ describe('deserializeWorld v8 → v9 round-trip', () => {
     expect(home.xp).toBe(0);
     expect(home.socketBindings).toBeInstanceOf(Map);
     expect(home.socketBindings.size).toBe(0);
+    expect(home.unspentSkillPoints).toBe(0);
   });
 
   it('round-trips v9 socketBindings through serialize → JSON → deserialize', () => {
@@ -1823,6 +1824,7 @@ describe('migrateV13toV14', () => {
     const migrated = v14.islandStates[0]!.state;
     expect(migrated.level).toBe(1);
     expect(migrated.xp).toBe(0);
+    expect(migrated.unspentSkillPoints).toBe(0);
     expect(migrated.unlockedNodes).toEqual([]);
     expect(migrated.unlockedEdges).toEqual([]);
     expect(migrated.socketBindings).toEqual([]);
