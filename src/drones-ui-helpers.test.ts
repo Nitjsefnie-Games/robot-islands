@@ -87,7 +87,7 @@ describe('popTrailingDuplicate', () => {
   });
   it('returns input unchanged when last two waypoints differ', () => {
     const input = [{ x: 1, y: 1 }, { x: 5, y: 5 }, { x: 6, y: 6 }];
-    expect(popTrailingDuplicate(input)).toEqual(input);
+    expect(popTrailingDuplicate(input)).toBe(input);
   });
   it('only checks the tail, not other duplicates earlier in the path', () => {
     const input = [{ x: 5, y: 5 }, { x: 5, y: 5 }, { x: 9, y: 9 }];
