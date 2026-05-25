@@ -27,6 +27,8 @@ import {
   writeBlob,
   emptyBlob,
   LAYOUT_STORAGE_KEY,
+  MIN_PANEL_W,
+  MIN_PANEL_H,
   type UiLayoutBlob,
 } from './window-manager.js';
 
@@ -111,6 +113,67 @@ describe('parseLayoutBlob', () => {
     const out = parseLayoutBlob({ v: 1, panels: {}, globalZCounter: NaN });
     expect(out).not.toBeNull();
     expect(out!.globalZCounter).toBe(0);
+  });
+});
+
+describe('parseLayoutBlob — degenerate-dimension floor', () => {
+  it('rejects an entry with w=1, h=1 (the observed bug state)', () => {
+    const raw = {
+      v: 1,
+      panels: {
+        bad: { x: 79, y: 0, w: 1, h: 1, zRank: 294 },
+      },
+      globalZCounter: 0,
+    };
+    const result = parseLayoutBlob(raw);
+    expect(result).not.toBeNull();
+    expect(result!.panels.bad).toBeUndefined();
+  });
+
+  it('accepts an entry exactly at the floor (w=MIN_PANEL_W, h=MIN_PANEL_H)', () => {
+    const raw = {
+      v: 1,
+      panels: {
+        edge: { x: 0, y: 0, w: MIN_PANEL_W, h: MIN_PANEL_H, zRank: 0 },
+      },
+      globalZCounter: 0,
+    };
+    const result = parseLayoutBlob(raw);
+    expect(result).not.toBeNull();
+    expect(result!.panels.edge).toBeDefined();
+    expect(result!.panels.edge!.w).toBe(MIN_PANEL_W);
+    expect(result!.panels.edge!.h).toBe(MIN_PANEL_H);
+  });
+
+  it('rejects an entry one below either floor', () => {
+    const raw = {
+      v: 1,
+      panels: {
+        underW: { x: 0, y: 0, w: MIN_PANEL_W - 1, h: MIN_PANEL_H, zRank: 0 },
+        underH: { x: 0, y: 0, w: MIN_PANEL_W, h: MIN_PANEL_H - 1, zRank: 0 },
+      },
+      globalZCounter: 0,
+    };
+    const result = parseLayoutBlob(raw);
+    expect(result).not.toBeNull();
+    expect(result!.panels.underW).toBeUndefined();
+    expect(result!.panels.underH).toBeUndefined();
+  });
+
+  it('keeps valid entries when invalid ones are present in the same blob', () => {
+    const raw = {
+      v: 1,
+      panels: {
+        good: { x: 12, y: 12, w: 300, h: 200, zRank: 5 },
+        bad: { x: 79, y: 0, w: 1, h: 1, zRank: 99 },
+      },
+      globalZCounter: 5,
+    };
+    const result = parseLayoutBlob(raw);
+    expect(result).not.toBeNull();
+    expect(result!.panels.good).toBeDefined();
+    expect(result!.panels.bad).toBeUndefined();
+    expect(result!.globalZCounter).toBe(5);
   });
 });
 
