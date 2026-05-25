@@ -44,6 +44,7 @@ import {
   totalPathTiles,
   wouldExceedRange,
   fuelForPath,
+  popTrailingDuplicate,
 } from './drones-ui-helpers.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
@@ -110,6 +111,14 @@ export interface DroneUiHandle {
     ok: boolean;
     reason?: string;
   };
+  /** Pop the last waypoint in path mode (no-op otherwise). Called from
+   *  main.ts on canvas contextmenu when launch mode is armed + tier is path. */
+  popWaypoint(): void;
+  /** Finalize the path and dispatch (no-op outside path mode). Called from
+   *  main.ts on canvas dblclick when launch mode is armed. */
+  finalizePath(nowMs: number): { ok: boolean; reason?: string };
+  /** Cancel an in-progress path and disarm (Esc binding). */
+  cancelPath(): void;
   /** Container for in-flight drone dots + breadcrumb trails. Add to world. */
   readonly droneLayer: Container;
   /** Container for the launch reticle (lives in screen space, not world).
@@ -1094,11 +1103,19 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     targetWorldTileY: number,
     nowMs: number,
   ): { ok: boolean; reason?: string } {
+    if (selectedTier === '5-path') {
+      // Add waypoint; reject if would exceed fuel cap.
+      const spec = deps.getOriginSpec();
+      const origin = { x: spec.cx, y: spec.cy };
+      const next = { x: targetWorldTileX, y: targetWorldTileY };
+      if (wouldExceedRange(origin, waypointBuffer, next)) {
+        return { ok: false, reason: 'over-range' };
+      }
+      waypointBuffer.push(next);
+      return { ok: true };
+    }
     const originSpec = deps.getOriginSpec();
     const origin = deps.getOrigin();
-    if (selectedTier === '5-path') {
-      return { ok: false, reason: 'Path-mode dispatch not yet wired' };
-    }
     // §11.1: launch geometry — origin AND direction vector — both anchor on
     // the Drone Pad footprint centre. Pre-fix this used `spec.cx/cy`, so a
     // drone launched from an off-centre pad arced to a point offset from the
@@ -1132,6 +1149,57 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     return { ok: false, reason: r.reason };
   }
 
+  /** Pop the last committed waypoint (right-click in path mode). No-op
+   *  if buffer is empty or path mode isn't selected. */
+  function popWaypoint(): void {
+    if (selectedTier !== '5-path') return;
+    waypointBuffer.pop();
+  }
+
+  /** Finalize the path: drop trailing-duplicate (browser click+dblclick
+   *  artifact), then dispatch with the waypoints. No-op if buffer has
+   *  fewer than 2 points (need at least origin + 1 waypoint to fly). */
+  function finalizePath(nowMs: number): { ok: boolean; reason?: string } {
+    if (selectedTier !== '5-path') return { ok: false, reason: 'not-path-mode' };
+    const deduped = popTrailingDuplicate(waypointBuffer);
+    if (deduped.length < 1) return { ok: false, reason: 'no-waypoints' };
+    const spec = deps.getOriginSpec();
+    const origin = { x: spec.cx, y: spec.cy };
+    const fuel = fuelForPath(origin, deduped);
+    // Engine signature (drones.ts:330-346): dispatchDrone(world, origin,
+    // originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints?, selectedTier?).
+    // Direction must have magnitude > 0 (line 350 validation); the path-drawn
+    // branch at line 361-369 overrides direction internally from the waypoint
+    // array. Tests at drones.test.ts:1045-1086 pass (originX=0, originY=0,
+    // dirX=1, dirY=0) — match that convention. selectedTier omitted: line 369
+    // forces resolvedTier=5 when isPathDrawn (waypoints.length≥2).
+    const originState = deps.getOrigin();
+    const waypointsForDispatch = [origin, ...deduped];
+    const result = dispatchDrone(
+      deps.world,
+      originState,
+      spec.cx, spec.cy,
+      1, 0,
+      fuel,
+      nowMs,
+      waypointsForDispatch,
+    );
+    if (result.ok) {
+      waypointBuffer = [];
+      setLaunchMode(false);
+      return { ok: true };
+    }
+    return { ok: false, reason: result.reason };
+  }
+
+  /** Cancel an in-progress path (Esc). Clears buffer + disarms. */
+  function cancelPath(): void {
+    waypointBuffer = [];
+    if (selectedTier === '5-path') {
+      setLaunchMode(false);
+    }
+  }
+
   return {
     refresh,
     show,
@@ -1143,6 +1211,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     setReticleScreenPos,
     hideReticle: hideReticleFn,
     attemptLaunch,
+    popWaypoint,
+    finalizePath,
+    cancelPath,
     droneLayer,
     reticleLayer,
     rangeRingLayer,
