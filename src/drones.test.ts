@@ -24,6 +24,7 @@ import { dronePadCentre } from './drones-ui.js';
 import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { type IslandSpec, type WorldState } from './world.js';
+import { computeSignalRanges } from './antenna.js';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -259,6 +260,75 @@ describe('scanBuffer flush', () => {
     expect(world.revealedCells.has('9:9')).toBe(false);
     expect(world.revealedCells.has('10:9')).toBe(false);
     expect(world.revealedCells.size).toBe(revealedBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// no-antenna integration
+// ---------------------------------------------------------------------------
+
+describe('no-antenna integration', () => {
+  function makeMinimalWorldNoAntennas(): WorldState {
+    const homeSpec: IslandSpec = {
+      id: 'home',
+      name: 'home',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [], // no antenna anywhere
+      modifiers: [],
+    };
+    return {
+      islands: [homeSpec],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed: 'test-seed',
+    };
+  }
+
+  it('reveals corridor cells when origin has no antennas, drone returns safely', () => {
+    const world = makeMinimalWorldNoAntennas();
+    const origin = world.islands[0]!;
+    expect(origin.populated).toBe(true);
+    expect(computeSignalRanges(world.islands.filter((s) => s.populated))).toEqual([]);
+
+    const originState = makeIslandState({ id: 'home', level: 5 });
+    originState.inventory.diesel = 50;
+
+    const result = dispatchDrone(world, originState, 0, 0, 1, 0, 30, 0, undefined, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const d = result.drone;
+    const revealedBefore = world.revealedCells.size;
+
+    // Advance mid-flight: cells go INTO the buffer, NOT yet revealed.
+    tickDrones(world, d.launchTime + 30_000, d.launchTime);
+    expect(d.scanBuffer.size).toBeGreaterThan(0);
+    expect(world.revealedCells.size).toBe(revealedBefore);
+
+    // Advance past expected return time: drone reaches 'returned',
+    // flush drains scanBuffer regardless of antenna range.
+    tickDrones(world, d.expectedReturnTime + 2_000, d.launchTime + 30_000);
+    expect(d.scanBuffer.size).toBe(0);
+    expect(world.revealedCells.size).toBeGreaterThan(revealedBefore);
+
+    // Sanity: drone is in terminal status.
+    expect(d.status === 'returned').toBe(true);
   });
 });
 
