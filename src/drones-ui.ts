@@ -959,6 +959,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       selectedTier = islandTier as DroneTier;
     } else if (selectedTier === '5-path' && !canUsePathMode()) {
       selectedTier = islandTier as DroneTier;
+      waypointBuffer = [];
     }
     // Disable out-of-range tier options + sync the select's current value.
     // Options were built once at mount; only attribute changes here, so
@@ -983,12 +984,14 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const fuelResource = selectedTier === '5-path' ? 'plasma_charge' : fuelForTier(selectedTier);
     fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
     const onhand = inv(origin, fuelResource);
-    fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
     // Fuel auto-computed at click time. The OUTBND + FLIGHT readouts show
     // the MAX-affordable range for this island right now = min(MAX_FUEL,
     // available) units × current efficiency / 2 (round-trip). Cached on
     // the closure so attemptLaunch + the range ring agree on the limit.
-    currentEfficiency = (selectedTier === '5-path' ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY[selectedTier]) * effectiveSkillMultipliers(origin).droneFuelEfficiency;
+    const eff = selectedTier === '5-path'
+      ? DRONE_T5_EFFICIENCY
+      : DRONE_TIER_EFFICIENCY[selectedTier];
+    currentEfficiency = eff * effectiveSkillMultipliers(origin).droneFuelEfficiency;
     maxLaunchFuel = Math.floor(Math.min(MAX_FUEL_PER_DRONE, onhand));
     const maxOutbound = (maxLaunchFuel * currentEfficiency) / 2;
     fuelStat.valueEl.style.color = maxLaunchFuel > 0 ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
@@ -1005,16 +1008,19 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       distStat.labelEl.textContent = 'PATH';
       distStat.valueEl.textContent = `${pathLen.toFixed(0)} tiles`;
       fuelStat.valueEl.textContent = `${fuel} / ${MAX_FUEL_PER_DRONE} plasma_charge`;
-    } else if (cursorTile) {
-      const s = deps.getOriginSpec();
-      const dx = cursorTile.x - s.cx;
-      const dy = cursorTile.y - s.cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      distStat.labelEl.textContent = 'DIST';
-      distStat.valueEl.textContent = `${dist.toFixed(0)} tiles`;
     } else {
-      distStat.labelEl.textContent = 'DIST';
-      distStat.valueEl.textContent = '—';
+      fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
+      if (cursorTile) {
+        const s = deps.getOriginSpec();
+        const dx = cursorTile.x - s.cx;
+        const dy = cursorTile.y - s.cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        distStat.labelEl.textContent = 'DIST';
+        distStat.valueEl.textContent = `${dist.toFixed(0)} tiles`;
+      } else {
+        distStat.labelEl.textContent = 'DIST';
+        distStat.valueEl.textContent = '—';
+      }
     }
 
     // Active island must carry a Drone Pad to launch — otherwise the arm
