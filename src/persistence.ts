@@ -68,7 +68,7 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
  *  string, so a new key returns "no save" without colliding with older
  *  stores. */
-export const STORAGE_KEY = 'robot-islands:save:v13';
+export const STORAGE_KEY = 'robot-islands:save:v14';
 
 /** User-visible storage-key label. The Settings panel renders this
  *  string in the storage-key footer line. */
@@ -76,15 +76,15 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 13 as const;
+export const SCHEMA_VERSION = 14 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
- *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10 → v11 → v12 → v13.
+ *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10 → v11 → v12 → v13 → v14.
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -405,6 +405,35 @@ export function migrateV12toV13(s: SerializedSnapshotV12): SaveSnapshot {
   } as unknown as SaveSnapshot;
 }
 
+/** v13 top-level snapshot shape. Structurally identical to v14 (SaveSnapshot)
+ *  except the v literal. The v13 → v14 migration resets per-island
+ *  progression. */
+export type SerializedSnapshotV13 = Omit<SaveSnapshot, 'v'> & { readonly v: 13 };
+
+/** v13 → v14: reset per-island level, xp, and skill-tree progression
+ *  (unlockedNodes, unlockedEdges, socketBindings). Preserves buildings, inventory,
+ *  drones, routes, satellites — everything outside the progression ladder.
+ *  Rationale: rebalance reshapes per-node magnitudes; previously-spent SP
+ *  no longer matches the new cap calculus, so a fresh allocation is the
+ *  cleanest fix. Player keeps the world they built. */
+export function migrateV13toV14(s: SerializedSnapshotV13): SaveSnapshot {
+  return {
+    ...s,
+    v: 14 as const,
+    islandStates: s.islandStates.map((entry) => ({
+      ...entry,
+      state: {
+        ...entry.state,
+        level: 1,
+        xp: 0,
+        unlockedNodes: [],
+        unlockedEdges: [],
+        socketBindings: [],
+      },
+    })),
+  } as unknown as SaveSnapshot;
+}
+
 export interface SaveSnapshot {
   readonly v: typeof SCHEMA_VERSION;
   /** `Date.now()` wall-clock ms at save time. Used to compute the offline
@@ -543,7 +572,7 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Walk v7 → v8 → v9 → v10 → v11 → v12 → v13 migration chain.
+  // Walk v7 → v8 → v9 → v10 → v11 → v12 → v13 → v14 migration chain.
   if ((snapshot as unknown as { v: number }).v === 7) {
     snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7) as unknown as SaveSnapshot;
   }
@@ -561,6 +590,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 12) {
     snapshot = migrateV12toV13(snapshot as unknown as SerializedSnapshotV12);
+  }
+  if ((snapshot as unknown as { v: number }).v === 13) {
+    snapshot = migrateV13toV14(snapshot as unknown as SerializedSnapshotV13);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {

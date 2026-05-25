@@ -42,12 +42,14 @@ import {
   migrateV8toV9,
   migrateV11toV12,
   migrateV12toV13,
+  migrateV13toV14,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
   type SerializedSnapshotV8,
   type SerializedSnapshotV11,
   type SerializedSnapshotV12,
+  type SerializedSnapshotV13,
   type SerializedIslandStateV11,
   type SerializedWorld,
 } from './persistence.js';
@@ -127,7 +129,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(13);
+    expect(snap.v).toBe(14);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -469,8 +471,8 @@ describe('schema version', () => {
     expect(() => deserializeWorld(future, 0, 0)).toThrow(/not supported/);
   });
 
-  it('exports STORAGE_KEY containing v13 so it does not collide with stale saves', () => {
-    expect(STORAGE_KEY).toMatch(/v13$/);
+  it('exports STORAGE_KEY containing v14 so it does not collide with stale saves', () => {
+    expect(STORAGE_KEY).toMatch(/v14$/);
   });
 
   it('exports a STORAGE_KEY_DISPLAY decoupled from the IDB key', () => {
@@ -1465,7 +1467,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(13);
+    expect(snap.v).toBe(14);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -1673,7 +1675,7 @@ describe('migrateV8toV9', () => {
 });
 
 describe('deserializeWorld v8 → v9 round-trip', () => {
-  it('migrates a v8 snapshot and yields v9 in-memory state with empty socketBindings', () => {
+  it('migrates a v8 snapshot and yields v14 in-memory state with empty socketBindings', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
@@ -1694,8 +1696,9 @@ describe('deserializeWorld v8 → v9 round-trip', () => {
 
     const { islandStates: restored } = deserializeWorld(v8, 0, 0);
     const home = restored.get('home')!;
-    expect(home.level).toBe(5);
-    expect(home.xp).toBe(1200);
+    // v13 → v14 resets level + xp.
+    expect(home.level).toBe(1);
+    expect(home.xp).toBe(0);
     expect(home.socketBindings).toBeInstanceOf(Map);
     expect(home.socketBindings.size).toBe(0);
   });
@@ -1766,6 +1769,66 @@ describe('migrateV11toV12', () => {
     expect(v12.islandStates[0]!.state.level).toBe(5);
     expect(v12.islandStates[0]!.state.xp).toBe(100);
     expect(v12.islandStates[0]!.state.unspentSkillPoints).toBe(4);
+  });
+});
+
+describe('migrateV13toV14', () => {
+  it('resets per-island level + xp + skill-tree progression; preserves buildings/inventory', () => {
+    const v13: SerializedSnapshotV13 = {
+      v: 13,
+      savedAt: 1000,
+      savedAtPerf: 0,
+      world: {
+        islands: [],
+        drones: [],
+        routes: [],
+        vehicles: [],
+        satellites: [],
+        repairDrones: [],
+        debrisFields: [],
+        commPackets: [],
+      },
+      islandStates: [{
+        id: 'home',
+        state: {
+          id: 'home',
+          level: 128,
+          xp: 99999,
+          inventory: { iron_ore: 500 } as Record<string, number>,
+          storageCaps: {},
+          funnelPending: {},
+          starterInventoryGrace: {},
+          buildings: [{ id: 'mine-1', defId: 'mine', x: 2, y: 2 }],
+          unlockedNodes: ['mining.recipeRate.1'],
+          unlockedEdges: ['mining.0-mining.1'],
+          socketBindings: [],
+          unspentSkillPoints: 42,
+          declaredAt: null,
+          lastResetAt: null,
+          lastTick: 0,
+          aiCoreCrafted: false,
+          ascendantCoreCrafted: false,
+          timeLockBankedMin: 0,
+          accelerationQueue: [],
+          accelerationRemainingMin: 0,
+          bankingEnabled: false,
+          genesisTarget: null,
+          batteryStoredWs: 0,
+        } as unknown as import('./persistence.js').SerializedIslandState,
+      }],
+    };
+
+    const v14 = migrateV13toV14(v13);
+    expect(v14.v).toBe(14);
+    const migrated = v14.islandStates[0]!.state;
+    expect(migrated.level).toBe(1);
+    expect(migrated.xp).toBe(0);
+    expect(migrated.unlockedNodes).toEqual([]);
+    expect(migrated.unlockedEdges).toEqual([]);
+    expect(migrated.socketBindings).toEqual([]);
+    expect((migrated.inventory as Record<string, number>).iron_ore).toBe(500);
+    expect(migrated.buildings.length).toBe(1);
+    expect(migrated.buildings[0]!.defId).toBe('mine');
   });
 });
 
@@ -1842,8 +1905,8 @@ describe('migrateV12toV13', () => {
   });
 });
 
-describe('deserializeWorld v7 → v13 migration chain', () => {
-  it('walks v7 through v8/v9/v10/v11/v12/v13 and refunds SP via cumulativeSkillPointsForLevel', () => {
+describe('deserializeWorld v7 → v14 migration chain', () => {
+  it('walks v7 through v8/v9/v10/v11/v12/v13/v14 and refunds SP via cumulativeSkillPointsForLevel', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
@@ -1870,11 +1933,9 @@ describe('deserializeWorld v7 → v13 migration chain', () => {
 
     const { islandStates: restored } = deserializeWorld(v7, 0, 0);
     const home = restored.get('home')!;
-    expect(home.level).toBe(5);
-    expect(home.xp).toBe(1200);
-    // L5 cumulative under the 1.1^L curve: sum of max(1, floor(1.1^L)) for L=1..5
-    // = 1+1+1+1+1 = 5 (1.1^5 ≈ 1.61 → floor 1).
-    expect(home.unspentSkillPoints).toBe(5);
+    // v13 → v14 resets level + xp + skill-tree progression.
+    expect(home.level).toBe(1);
+    expect(home.xp).toBe(0);
     expect(home.unlockedNodes.size).toBe(0);
     expect(home.unlockedEdges.size).toBe(0);
     expect(home.socketBindings).toBeInstanceOf(Map);
