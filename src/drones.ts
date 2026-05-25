@@ -18,7 +18,7 @@
 import { computeSignalRanges, pointInSignalRange } from './antenna.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
-import { cellCenterTile, corridorCells, islandCells, parseCellKey } from './discovery.js';
+import { corridorCells, islandCells, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
@@ -565,6 +565,32 @@ function discoverRareIslands(
   }
 }
 
+/** Drain a drone's scanBuffer + darkModeDiscoveries into world state.
+ *  Idempotent — clears both buffers after draining. Called when the drone
+ *  enters antenna range OR reaches 'returned' status. */
+function flushDroneBuffers(
+  d: Drone,
+  world: WorldState,
+  newlyDiscoveredIslandIds: string[],
+): number {
+  let cellsAdded = 0;
+  for (const k of d.scanBuffer) {
+    if (world.revealedCells.has(k)) continue;
+    world.revealedCells.add(k);
+    cellsAdded++;
+  }
+  d.scanBuffer.clear();
+  for (const disc of d.darkModeDiscoveries) {
+    const isl = world.islands.find((i) => i.id === disc.islandId);
+    if (isl && !isl.discovered && !isl.populated) {
+      isl.discovered = true;
+      newlyDiscoveredIslandIds.push(isl.id);
+    }
+  }
+  d.darkModeDiscoveries = [];
+  return cellsAdded;
+}
+
 export function tickDrones(
   world: WorldState,
   nowMs: number,
@@ -650,60 +676,37 @@ export function tickDrones(
           ensureCellGenerated(world, cellX, cellY);
         }
 
-        if (d.tier === 5) {
-          // §11.6 dark-mode telemetry: check drone position at segEndMs.
-          const dronePos = droneCurrentPosition(d, segEndMs);
-          const inSignalRange = pointInSignalRange(ranges, dronePos.x, dronePos.y);
+        // Buffer every corridor cell unconditionally. Flush happens below if the
+        // drone is in any antenna range at tick end, or on return-status transition.
+        for (const k of corridor) {
+          d.scanBuffer.add(k);
+        }
 
-          if (inSignalRange) {
-            d.darkMode = false;
-            // Flush buffered discoveries.
-            for (const disc of d.darkModeDiscoveries) {
-              const isl = world.islands.find((i) => i.id === disc.islandId);
-              if (isl && !isl.discovered && !isl.populated) {
-                isl.discovered = true;
-                newlyDiscoveredIslandIds.push(isl.id);
-              }
-            }
-            d.darkModeDiscoveries = [];
-          } else {
-            d.darkMode = true;
-            // Buffer island discoveries instead of revealing cells.
-            // Use expanded corridor so Probability Engine biases toward rare islands.
-            const discoveries = islandsInCells(world.islands, expandedCorridor);
-            const seen = new Set<string>(d.darkModeDiscoveries.map((x) => x.islandId));
-            for (const disc of discoveries) {
-              if (!seen.has(disc.islandId)) {
-                seen.add(disc.islandId);
-                d.darkModeDiscoveries.push(disc);
-              }
-            }
+        // §13.3 Probability-bias rare-island discovery: STILL run on the expanded
+        // corridor regardless of buffer flush. Rare-island reveals are not gated
+        // by antenna range in the existing code; preserve that behaviour.
+        discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
+
+        // Island discoveries in this tick's corridor join darkModeDiscoveries
+        // (the flush helper drains them along with cells). Use expandedCorridor
+        // so Probability Engine bias is honoured.
+        const tickIslandDiscoveries = islandsInCells(world.islands, expandedCorridor);
+        const seenIslands = new Set<string>(d.darkModeDiscoveries.map((x) => x.islandId));
+        for (const disc of tickIslandDiscoveries) {
+          if (!seenIslands.has(disc.islandId)) {
+            seenIslands.add(disc.islandId);
+            d.darkModeDiscoveries.push(disc);
           }
-          // Per-cell antenna range check for reveals (T1–T5 all use the same rule).
-          for (const k of corridor) {
-            if (world.revealedCells.has(k)) continue;
-            const { cellX, cellY } = parseCellKey(k);
-            const center = cellCenterTile(cellX, cellY);
-            if (pointInSignalRange(ranges, center.x, center.y)) {
-              world.revealedCells.add(k);
-              cellsAddedThisTick++;
-            }
-          }
-          // Probability-bias discovery of rare islands in expanded corridor.
-          discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
+        }
+
+        // Flush trigger A: drone position in any antenna's range at tick end.
+        const dronePos = droneCurrentPosition(d, segEndMs);
+        const inSignalRange = pointInSignalRange(ranges, dronePos.x, dronePos.y);
+        if (inSignalRange) {
+          d.darkMode = false;
+          cellsAddedThisTick += flushDroneBuffers(d, world, newlyDiscoveredIslandIds);
         } else {
-          // Legacy straight-line (T1-T4/T6) per-cell antenna range check.
-          for (const k of corridor) {
-            if (world.revealedCells.has(k)) continue;
-            const { cellX, cellY } = parseCellKey(k);
-            const center = cellCenterTile(cellX, cellY);
-            if (pointInSignalRange(ranges, center.x, center.y)) {
-              world.revealedCells.add(k);
-              cellsAddedThisTick++;
-            }
-          }
-          // Probability-bias discovery of rare islands in expanded corridor.
-          discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
+          d.darkMode = true;
         }
       }
     }
@@ -770,17 +773,13 @@ export function tickDrones(
       continue;
     }
 
+    // Before marking 'returned' or flushing existing darkModeDiscoveries
+    // at the landing site, call the unified flush — drains regardless of
+    // current antenna range. This is the "survives the trip → reports
+    // everything" guarantee per SPEC §11.6 telemetry rule.
+    cellsAddedThisTick += flushDroneBuffers(d, world, newlyDiscoveredIslandIds);
     d.status = 'returned';
     returned.push(d);
-    // Flush dark-mode discoveries on successful return.
-    for (const disc of d.darkModeDiscoveries) {
-      const isl = world.islands.find((i) => i.id === disc.islandId);
-      if (isl && !isl.discovered && !isl.populated) {
-        isl.discovered = true;
-        newlyDiscoveredIslandIds.push(isl.id);
-      }
-    }
-    d.darkModeDiscoveries = [];
     remaining.push(d);
   }
 
