@@ -1491,6 +1491,7 @@ async function main(): Promise<void> {
   // tiles at any zoom. Appended (not addChildAt) so it sits above the
   // ocean/island/drone layers but below the screen-space reticle stack.
   world.addChild(dronesUi.rangeRingLayer);
+  world.addChild(dronesUi.launchPreviewLayer);
   // Wire the orbital-side forward-decl so an orbital arm-launch can disarm
   // the dronesUi panel.
   disarmDronesLaunch = () => dronesUi.setLaunchMode(false);
