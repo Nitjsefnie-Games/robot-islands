@@ -40,6 +40,7 @@ import {
   type DroneTier,
 } from './drones.js';
 import { TILE_PX } from './island.js';
+import { tileToWorldPx } from './world.js';
 import { fuelForTier } from './recipes.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
@@ -115,6 +116,10 @@ export interface DroneUiHandle {
    *  ring's distance reading is correct at any zoom). Visibility is
    *  managed internally by setLaunchMode and the fuel slider. */
   readonly rangeRingLayer: Container;
+  /** Container for the launch-preview line/polyline. Add to world (it's
+   *  in world-tile space so the green/red trajectory hint stays correct
+   *  at any zoom). Visibility managed internally by setLaunchMode. */
+  readonly launchPreviewLayer: Container;
 }
 
 /** All the bits the UI needs handed in. The main module wires this once at
@@ -153,6 +158,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // maxLaunchFuel = min(MAX_FUEL_PER_DRONE, on-hand fuel of the selected tier).
   let maxLaunchFuel = 0;
   let currentEfficiency = DRONE_TIER_EFFICIENCY[selectedTier];
+  // Last known cursor tile from setReticleScreenPos. Null when hovering
+  // off-canvas (matches reticle visibility). Drives the launch-preview line.
+  let cursorTile: { x: number; y: number } | null = null;
 
   // -------------------------------------------------------------------------
   // Side dock panel
@@ -334,6 +342,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   statBlock.appendChild(rangeStat.row);
   statBlock.appendChild(etaStat.row);
 
+  // DIST row — updated live in refresh() when cursorTile is set
+  const distStat = statRow('DIST');
+  distStat.valueEl.textContent = '—';
+  statBlock.appendChild(distStat.row);
+
   body.appendChild(statBlock);
 
   // Fuel slider removed — fuel auto-computed at click time as the exact
@@ -410,6 +423,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       armBtn.style.borderColor = 'var(--ri-warn)';
       armBtn.style.background = 'rgba(245, 167, 66, 0.08)';
       reticleLayer.visible = true;
+      launchPreviewLayer.visible = true;
       repaintRangeRing();
       rangeRingLayer.visible = true;
     } else {
@@ -418,6 +432,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       armBtn.style.borderColor = 'var(--ri-border-strong)';
       armBtn.style.background = 'var(--ri-elev)';
       reticleLayer.visible = false;
+      launchPreviewLayer.visible = false;
       rangeRingLayer.visible = false;
     }
     deps.onLaunchModeChanged?.(on);
@@ -607,6 +622,45 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   ensurePainted(RETICLE_OK);
   reticleLayer.addChild(reticleGfx);
 
+  // -------------------------------------------------------------------------
+  // Pixi layer: launch-preview line/polyline. World-space (panned/zoomed
+  // with camera), unlike the screen-space reticle. Color rule:
+  //   green when distance ≤ maxLaunchRange (numeric) OR adding next
+  //     waypoint stays under fuel cap (path; lands in Task 3)
+  //   red otherwise
+  const launchPreviewLayer = new Container();
+  launchPreviewLayer.label = 'launch-preview';
+  launchPreviewLayer.visible = false;
+  const launchPreviewGfx = new Graphics();
+  launchPreviewLayer.addChild(launchPreviewGfx);
+
+  const PREVIEW_COLOR_OK = 0x8FA56E;   // olive
+  const PREVIEW_COLOR_BAD = 0xE08B7F;  // rust
+  const PREVIEW_LINE_WIDTH = 2;
+
+  /** Per-frame paint of the launch-preview overlay. Called from refresh().
+   *  Numeric tier: line origin → cursor, tinted by reachability.
+   *  Path tier (5-path): stub this task; Task 3 lands polyline rendering. */
+  function paintLaunchPreview(): void {
+    launchPreviewGfx.clear();
+    if (!launchMode || !cursorTile) return;
+    const spec = deps.getOriginSpec();
+    const originPx = tileToWorldPx(spec.cx, spec.cy);
+    const cursorPx = tileToWorldPx(cursorTile.x, cursorTile.y);
+    // Numeric tier: single line, reachability-tinted.
+    // (Path tier rendering is added in Task 3.)
+    if (typeof selectedTier === 'number') {
+      const dxTiles = cursorTile.x - spec.cx;
+      const dyTiles = cursorTile.y - spec.cy;
+      const distTiles = Math.sqrt(dxTiles * dxTiles + dyTiles * dyTiles);
+      const maxRangeTiles = maxLaunchFuel * currentEfficiency / 2;
+      const color = distTiles <= maxRangeTiles ? PREVIEW_COLOR_OK : PREVIEW_COLOR_BAD;
+      launchPreviewGfx.moveTo(originPx.x, originPx.y)
+        .lineTo(cursorPx.x, cursorPx.y)
+        .stroke({ width: PREVIEW_LINE_WIDTH, color, alpha: 0.85 });
+    }
+  }
+
   function setReticleScreenPos(x: number, y: number): void {
     if (!launchMode) return;
     reticleGfx.position.set(x, y);
@@ -624,6 +678,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const originX = padCentre?.x ?? originSpec.cx;
     const originY = padCentre?.y ?? originSpec.cy;
     const wp = deps.screenToWorldTile(x, y);
+    cursorTile = { x: wp.x, y: wp.y };
     const dx = wp.x - originX;
     const dy = wp.y - originY;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -643,6 +698,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   }
   function hideReticleFn(): void {
     reticleGfx.position.set(-9999, -9999);
+    cursorTile = null;
   }
 
   // -------------------------------------------------------------------------
@@ -860,6 +916,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const maxFlightSec = (maxLaunchFuel * currentEfficiency) / DRONE_SPEED_TILES_PER_SEC;
     etaStat.valueEl.textContent = `${maxFlightSec.toFixed(0)}s max`;
 
+    // DIST row update
+    if (cursorTile && typeof selectedTier === 'number') {
+      const s = deps.getOriginSpec();
+      const dx = cursorTile.x - s.cx;
+      const dy = cursorTile.y - s.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      distStat.valueEl.textContent = `${dist.toFixed(0)} tiles`;
+    } else {
+      distStat.valueEl.textContent = '—';
+    }
+
     // Active island must carry a Drone Pad to launch — otherwise the arm
     // button is gated. Same `defId` discipline the settlement panel uses
     // for shipyard/helipad.
@@ -905,6 +972,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
 
     repaintLedger(nowMs);
     repaintDroneLayer(nowMs);
+    paintLaunchPreview();
   }
 
   function show(): void {
@@ -979,6 +1047,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     droneLayer,
     reticleLayer,
     rangeRingLayer,
+    launchPreviewLayer,
   };
 }
 
