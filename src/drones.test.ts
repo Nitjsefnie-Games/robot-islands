@@ -176,6 +176,104 @@ describe('pointToSegmentDistSq', () => {
 });
 
 // ---------------------------------------------------------------------------
+// scanBuffer flush
+// ---------------------------------------------------------------------------
+
+describe('scanBuffer flush', () => {
+  function makeWorldWithSingleAntenna(): WorldState {
+    const home: IslandSpec = {
+      id: 'home',
+      name: 'home',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'home-a1', defId: 'antenna_t1', x: 0, y: 0 }],
+      modifiers: [],
+    };
+    return {
+      islands: [home],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed: 'test-seed',
+    };
+  }
+
+  it('buffers corridor cells out of antenna range, flushes on re-entry', () => {
+    const world = makeWorldWithSingleAntenna();
+    const home = makeIslandState({ level: 5 });
+    home.inventory.diesel = 50;
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 50, 0, undefined, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const d = result.drone;
+
+    // Advance to mid-flight (200s, drone at 100 tiles east — out of range).
+    tickDrones(world, d.launchTime + 200_000, d.launchTime);
+    expect(d.scanBuffer.size).toBeGreaterThan(0);
+
+    // Advance through return: drone re-enters antenna range, buffer drains.
+    tickDrones(world, d.expectedReturnTime + 1_000, d.launchTime + 200_000);
+    expect(d.scanBuffer.size).toBe(0);
+    expect(world.revealedCells.size).toBeGreaterThan(0);
+  });
+
+  it('flushes on returned status even if never re-entered range', () => {
+    const world = makeWorldWithSingleAntenna();
+    const home = makeIslandState({ level: 5 });
+    home.inventory.diesel = 50;
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 50, 0, undefined, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const d = result.drone;
+    const revealedBefore = world.revealedCells.size;
+
+    d.scanBuffer.add('5:0');
+    d.scanBuffer.add('6:0');
+    d.scanBuffer.add('7:0');
+    tickDrones(world, d.expectedReturnTime + 1_000, d.launchTime);
+    expect(d.scanBuffer.size).toBe(0);
+    expect(world.revealedCells.has('5:0')).toBe(true);
+    expect(world.revealedCells.has('6:0')).toBe(true);
+    expect(world.revealedCells.has('7:0')).toBe(true);
+    expect(world.revealedCells.size).toBeGreaterThanOrEqual(revealedBefore + 3);
+  });
+
+  it('discards buffer when drone is lost in dark', () => {
+    const world = makeWorldWithSingleAntenna();
+    const home = makeIslandState({ level: 5 });
+    home.inventory.diesel = 50;
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 50, 0, undefined, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const d = result.drone;
+    const revealedBefore = world.revealedCells.size;
+
+    d.scanBuffer.add('9:9');
+    d.scanBuffer.add('10:9');
+    d.status = 'lost';
+    tickDrones(world, d.expectedReturnTime + 1_000, d.launchTime);
+    expect(world.revealedCells.has('9:9')).toBe(false);
+    expect(world.revealedCells.has('10:9')).toBe(false);
+    expect(world.revealedCells.size).toBe(revealedBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // dispatchDrone
 // ---------------------------------------------------------------------------
 
