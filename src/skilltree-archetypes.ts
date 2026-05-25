@@ -48,6 +48,10 @@ function effectLabel(kind: SkillEffect['kind'], extra?: Record<string, unknown>)
     case 'mineRareTrickleMul':         return 'mine rare-trickle';
     case 'loggerYieldBonusMul':        return 'logger yield';
     case 'loggerExoticTrickleMul':     return 'logger exotic-trickle';
+    case 'drillYieldBonusMul':         return 'drill yield';
+    case 'aquacultureYieldBonusMul':   return 'aquaculture yield';
+    case 'patronageYieldBonusMul':     return 'patronage yield';
+    case 't5ExtractorYieldBonusMul':   return 'T5-extractor yield';
     case 'teleporterEfficiencyMul':    return 'teleporter efficiency';
     case 'parallelBuildCapAdd':        return 'parallel build slots';
     case 'launchSuccessAdditive':      return 'launch success';
@@ -174,6 +178,11 @@ export const DRILLING_FILLER_ARCHETYPES: FillerArchetype[] = [
     idPrefix: 'drilling.rareTrickle', effectKind: 'mineRareTrickleMul',
     subPath: 'drilling', baseMag: 0.10, growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
   },
+  {
+    idPrefix: 'drilling.drillYield', effectKind: 'drillYieldBonusMul',
+    subPath: 'drilling', baseMag: 0.1548, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },
 ];
 export const DRILLING_FILLER_NODES = DRILLING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
@@ -271,6 +280,11 @@ export const POWER_SYSTEMS_FILLER_ARCHETYPES: FillerArchetype[] = [
     subPath: 'power_systems',
     baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
+  {
+    idPrefix: 'power_systems.batteryCapacity', effectKind: 'batteryCapacityMul',
+    subPath: 'power_systems', baseMag: 0.2915, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },
 ];
 export const POWER_SYSTEMS_FILLER_NODES = POWER_SYSTEMS_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
@@ -291,6 +305,12 @@ export const STORAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'storage.maintenance', effectKind: 'maintenanceThresholdMul',
     subPath: 'storage', baseMag: 0.05, growth: 1.08, baseCost: 2, costGrowth: 1.5, count: 5,
+  },
+  {
+    idPrefix: 'storage.manufacturing', effectKind: 'recipeRateMul',
+    effectExtra: { category: 'manufacturing' }, subPath: 'storage',
+    baseMag: 0.2915, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
 export const STORAGE_FILLER_NODES = STORAGE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -418,6 +438,11 @@ export const PATRONAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
     idPrefix: 'patronage.commRange', effectKind: 'commRangeMul',
     subPath: 'patronage', baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
+  {
+    idPrefix: 'patronage.patronageYield', effectKind: 'patronageYieldBonusMul',
+    subPath: 'patronage', baseMag: 0.1548, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },
 ];
 export const PATRONAGE_FILLER_NODES = PATRONAGE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
@@ -435,6 +460,11 @@ export const AQUACULTURE_FILLER_ARCHETYPES: FillerArchetype[] = [
     idPrefix: 'aquaculture.storageCap', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'dry_goods' }, subPath: 'aquaculture',
     baseMag: 0.05, growth: 1.08, baseCost: 1, costGrowth: 1.5, count: 6,
+  },
+  {
+    idPrefix: 'aquaculture.aquaYield', effectKind: 'aquacultureYieldBonusMul',
+    subPath: 'aquaculture', baseMag: 0.1548, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
 export const AQUACULTURE_FILLER_NODES = AQUACULTURE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -485,6 +515,11 @@ export const OCEANOGRAPHY_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'oceanography.droneScan', effectKind: 'droneScanRadiusMul',
     subPath: 'oceanography', baseMag: 0.05, growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
+  },
+  {
+    idPrefix: 'oceanography.t5ExtractorYield', effectKind: 't5ExtractorYieldBonusMul',
+    subPath: 'oceanography', baseMag: 0.1548, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
 export const OCEANOGRAPHY_FILLER_NODES = OCEANOGRAPHY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
