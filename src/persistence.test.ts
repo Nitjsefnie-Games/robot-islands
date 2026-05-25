@@ -469,7 +469,7 @@ describe('schema version', () => {
     expect(() => deserializeWorld(future, 0, 0)).toThrow(/not supported/);
   });
 
-  it('exports STORAGE_KEY containing v11 so it does not collide with stale saves', () => {
+  it('exports STORAGE_KEY containing v13 so it does not collide with stale saves', () => {
     expect(STORAGE_KEY).toMatch(/v13$/);
   });
 
@@ -1796,7 +1796,7 @@ describe('migrateV12toV13', () => {
             darkMode: false,
             darkModeDiscoveries: [],
             probabilityBias: 0,
-          } as unknown as import('./persistence.js').SerializedDroneV12,
+          },
         ],
         routes: [],
         vehicles: [],
