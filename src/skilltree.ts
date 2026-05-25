@@ -131,7 +131,7 @@ export type SkillEffect =
   // of teleporter route dispatch (a new cost added so "Network reach" has
   // something to scale; previously teleporters were free + instant).
   | { readonly kind: 'teleporterEfficiencyMul' }
-  // Mining + Forestry secondary themes — building-targeted output bonuses.
+  // Extraction-family secondary themes — per-building yield bonuses.
   //   - mineYieldBonusMul       → per-Mine recipe rate bonus (vein depth)
   //   - mineRareTrickleMul      → per-Mine continuous helium_3 trickle
   //                               (rare reveal modelled as continuous yield
@@ -1011,8 +1011,10 @@ export function effectiveSkillMultipliers(
         constructionTime *= m;
         break;
       case 'parallelBuildCapAdd':
-        // Additive — each node grants +1 concurrent slot (the magnitude
-        // Sum per-node magnitudes (spec §03: e.g. +0.667 per node).
+        // Additive — sum per-node magnitudes. Spec §03 uses ~+0.667 per node
+        // for a 6-node total of +4 (5 total concurrent build slots). The
+        // placement.ts consumer Math.floor()s, so the integer slot count is
+        // preserved.
         parallelBuildBonus += node.magnitude;
         break;
       case 'teleporterEfficiencyMul':
