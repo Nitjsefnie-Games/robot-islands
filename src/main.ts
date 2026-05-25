@@ -545,8 +545,8 @@ async function main(): Promise<void> {
     lastY = e.clientY;
     accumDrag = 0;
   });
-  // Suppress the browser context menu over the canvas so right-click can
-  // be the placement-cancel gesture without a system menu appearing.
+  // Right-click on the canvas: cancels placement OR pops the last
+  // path-mode waypoint (popWaypoint is a no-op outside path mode).
   app.canvas.addEventListener('contextmenu', (e) => {
     if (dronesUi.isLaunchMode()) {
       dronesUi.popWaypoint();
