@@ -1165,8 +1165,8 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const deduped = popTrailingDuplicate(waypointBuffer);
     if (deduped.length < 1) return { ok: false, reason: 'no-waypoints' };
     const spec = deps.getOriginSpec();
-    const origin = { x: spec.cx, y: spec.cy };
-    const fuel = fuelForPath(origin, deduped);
+    const originTile = { x: spec.cx, y: spec.cy };
+    const fuel = fuelForPath(originTile, deduped);
     // Engine signature (drones.ts:330-346): dispatchDrone(world, origin,
     // originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints?, selectedTier?).
     // Direction must have magnitude > 0 (line 350 validation); the path-drawn
@@ -1175,7 +1175,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // dirX=1, dirY=0) — match that convention. selectedTier omitted: line 369
     // forces resolvedTier=5 when isPathDrawn (waypoints.length≥2).
     const originState = deps.getOrigin();
-    const waypointsForDispatch = [origin, ...deduped];
+    const waypointsForDispatch = [originTile, ...deduped];
     const result = dispatchDrone(
       deps.world,
       originState,
