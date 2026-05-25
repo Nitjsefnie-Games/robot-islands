@@ -250,35 +250,36 @@ describe('skill tree depth', () => {
     expect(costForDepth(15)).toBe(292); // 1.5^14 = 291.93 → 292
   });
 
-  it('skillPointsForLevelUp: 1.1^L floored, min 1 to keep early-game ungated', () => {
+  it('skillPointsForLevelUp: 1.031^L floored, min 1 to keep early-game ungated', () => {
     expect(skillPointsForLevelUp(1)).toBe(1);
-    expect(skillPointsForLevelUp(7)).toBe(1); // 1.94 → 1
-    expect(skillPointsForLevelUp(8)).toBe(2); // 2.14 → 2
-    expect(skillPointsForLevelUp(20)).toBe(6); // 6.73 → 6
-    expect(skillPointsForLevelUp(50)).toBe(117);
-    expect(skillPointsForLevelUp(70)).toBe(789); // 789.7 → 789
+    expect(skillPointsForLevelUp(22)).toBe(1); // 1.96 → 1 (last level of the flat-1 plateau)
+    expect(skillPointsForLevelUp(23)).toBe(2); // 2.02 → 2 (first level that grants 2)
+    expect(skillPointsForLevelUp(50)).toBe(4); // 4.60 → 4
+    expect(skillPointsForLevelUp(70)).toBe(8); // 8.47 → 8
+    expect(skillPointsForLevelUp(100)).toBe(21); // 21.18 → 21
   });
 
   it('cumulativeSkillPointsForLevel: monotonic, matches expected sums at key levels', () => {
     expect(cumulativeSkillPointsForLevel(0)).toBe(0);
     expect(cumulativeSkillPointsForLevel(5)).toBe(5);   // five L1=1 grants
-    // L8 = 1+1+1+1+1+1+1+2 = 9
-    expect(cumulativeSkillPointsForLevel(8)).toBe(9);
-    // Higher landmarks (worked out in the slice's commit body):
-    expect(cumulativeSkillPointsForLevel(50)).toBeGreaterThan(1000);
-    expect(cumulativeSkillPointsForLevel(50)).toBeLessThan(1500);
-    expect(cumulativeSkillPointsForLevel(70)).toBeGreaterThan(7000);
-    expect(cumulativeSkillPointsForLevel(70)).toBeLessThan(10000);
+    expect(cumulativeSkillPointsForLevel(22)).toBe(22); // entire flat-1 plateau
+    // Higher landmarks under the 1.031^L curve:
+    expect(cumulativeSkillPointsForLevel(50)).toBeGreaterThan(80);
+    expect(cumulativeSkillPointsForLevel(50)).toBeLessThan(120);
+    expect(cumulativeSkillPointsForLevel(100)).toBeGreaterThan(550);
+    expect(cumulativeSkillPointsForLevel(100)).toBeLessThan(700);
   });
 
-  it('full sub-path cost (sum d1..d15) lands ~870 points, reachable by L50ish', () => {
+  it('full sub-path cost (sum d1..d15) lands ~870 points, reachable around L110', () => {
     let totalCost = 0;
     for (let d = 1; d <= 15; d++) totalCost += costForDepth(d);
     // Whole sub-path is between 800 and 950 under the 1.5 ramp.
     expect(totalCost).toBeGreaterThan(800);
     expect(totalCost).toBeLessThan(950);
-    // And L50's cumulative grant covers more than one sub-path's worth.
-    expect(cumulativeSkillPointsForLevel(50)).toBeGreaterThan(totalCost);
+    // L111's cumulative grant first covers one sub-path's worth.
+    expect(cumulativeSkillPointsForLevel(111)).toBeGreaterThan(totalCost);
+    // L100 is still short (sub-path takes ~L111 under 1.031^L).
+    expect(cumulativeSkillPointsForLevel(100)).toBeLessThan(totalCost);
   });
 
   it('effectiveSkillMultipliers with deep catalog composes correctly and ignores structural placeholders', () => {
