@@ -30,6 +30,7 @@ import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
 import {
   DRONE_SPEED_TILES_PER_SEC,
+  DRONE_T5_EFFICIENCY,
   DRONE_TIER_EFFICIENCY,
   MAX_FUEL_PER_DRONE,
   T4_PULSE_FUEL_COST,
@@ -39,6 +40,11 @@ import {
   type Drone,
   type DroneTier,
 } from './drones.js';
+import {
+  totalPathTiles,
+  wouldExceedRange,
+  fuelForPath,
+} from './drones-ui-helpers.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
@@ -152,7 +158,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // Player-selected drone tier, capped at island tier at refresh time. Defaults
   // to 1 (cheapest / biofuel) so a fresh L5 player can experience T1 drones
   // without having to first build the T2 diesel chain.
-  let selectedTier: DroneTier = 1;
+  let selectedTier: DroneTier | '5-path' = 1;
   // Cached at refresh() so attemptLaunch + range-ring see the same numbers.
   // maxLaunchFuel = min(MAX_FUEL_PER_DRONE, on-hand fuel of the selected tier).
   let maxLaunchFuel = 0;
@@ -160,6 +166,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // Last known cursor tile from setReticleScreenPos. Null when hovering
   // off-canvas (matches reticle visibility). Drives the launch-preview line.
   let cursorTile: { x: number; y: number } | null = null;
+  // T5 path-mode buffer: committed waypoints accumulated while in path-mode
+  // ARM. Cleared on disarm, Esc, finalize. See drones-ui-helpers.ts for
+  // pure math (totalPathTiles, wouldExceedRange, fuelForPath).
+  let waypointBuffer: Array<{ x: number; y: number }> = [];
 
   // -------------------------------------------------------------------------
   // Side dock panel
@@ -277,7 +287,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     ].join(';'),
   );
 
-  function statRow(labelText: string): { row: HTMLDivElement; valueEl: HTMLSpanElement } {
+  function statRow(labelText: string): { row: HTMLDivElement; labelEl: HTMLSpanElement; valueEl: HTMLSpanElement } {
     const row = document.createElement('div');
     styled(row, 'display: flex; align-items: baseline; justify-content: space-between; gap: 6px');
     const l = document.createElement('span');
@@ -296,7 +306,16 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     styled(v, `color: ${'var(--ri-fg-1)'}; font-size: 11.5px; font-weight: 600`);
     row.appendChild(l);
     row.appendChild(v);
-    return { row, valueEl: v };
+    return { row, labelEl: l, valueEl: v };
+  }
+
+  /** SPEC §11.6 gate: path mode requires L≥5, AI core crafted, foundry built. */
+  function canUsePathMode(): boolean {
+    const origin = deps.getOrigin();
+    if (tierForLevel(origin.level) < 5) return false;
+    if (!origin.aiCoreCrafted) return false;
+    if (!hasOperationalBuilding(origin.buildings, 'path_drone_foundry')) return false;
+    return true;
   }
 
   const tierStat = statRow('TIER');
@@ -322,8 +341,20 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     opt.textContent = `T${t}`;
     tierSelect.appendChild(opt);
   }
+  if (canUsePathMode()) {
+    const opt = document.createElement('option');
+    opt.value = '5-path';
+    opt.textContent = 'T5 Path';
+    tierSelect.appendChild(opt);
+  }
   tierSelect.addEventListener('change', () => {
-    selectedTier = Number(tierSelect.value) as DroneTier;
+    const v = tierSelect.value;
+    if (v === '5-path') {
+      selectedTier = '5-path';
+    } else {
+      selectedTier = Number(v) as DroneTier;
+    }
+    waypointBuffer = []; // reset buffer on any tier switch
     refresh(performance.now());
     if (launchMode) repaintRangeRing();
   });
@@ -636,25 +667,70 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   const PREVIEW_COLOR_BAD = 0xE08B7F;  // rust
   const PREVIEW_LINE_WIDTH = 2;
 
-  /** Per-frame paint of the launch-preview overlay. Called from refresh().
-   *  Numeric tier: line origin → cursor, tinted by reachability. */
   function paintLaunchPreview(): void {
     launchPreviewGfx.clear();
-    if (!launchMode || !cursorTile) return;
+    if (!launchMode) return;
     const spec = deps.getOriginSpec();
+    const originTile = { x: spec.cx, y: spec.cy };
     const originPx = tileToWorldPx(spec.cx, spec.cy);
-    const cursorPx = tileToWorldPx(cursorTile.x, cursorTile.y);
-    // Path-tier branch lands later — see plan §03.
-    if (typeof selectedTier === 'number') {
-      const dxTiles = cursorTile.x - spec.cx;
-      const dyTiles = cursorTile.y - spec.cy;
-      const distTiles = Math.sqrt(dxTiles * dxTiles + dyTiles * dyTiles);
-      const maxRangeTiles = maxLaunchFuel * currentEfficiency / 2;
-      const color = distTiles <= maxRangeTiles ? PREVIEW_COLOR_OK : PREVIEW_COLOR_BAD;
-      launchPreviewGfx.moveTo(originPx.x, originPx.y)
-        .lineTo(cursorPx.x, cursorPx.y)
-        .stroke({ width: PREVIEW_LINE_WIDTH, color, alpha: 0.85 });
+
+    if (selectedTier === '5-path') {
+      // Solid polyline through committed waypoints.
+      let prevPx = originPx;
+      for (const wp of waypointBuffer) {
+        const wpPx = tileToWorldPx(wp.x, wp.y);
+        launchPreviewGfx.moveTo(prevPx.x, prevPx.y)
+          .lineTo(wpPx.x, wpPx.y)
+          .stroke({ width: PREVIEW_LINE_WIDTH, color: PREVIEW_COLOR_OK, alpha: 0.85 });
+        prevPx = wpPx;
+      }
+      // Dashed segment from last anchor to cursor.
+      if (cursorTile) {
+        const wouldExceed = wouldExceedRange(originTile, waypointBuffer, cursorTile);
+        const color = wouldExceed ? PREVIEW_COLOR_BAD : PREVIEW_COLOR_OK;
+        const cursorPx = tileToWorldPx(cursorTile.x, cursorTile.y);
+        drawDashedSegment(launchPreviewGfx, prevPx, cursorPx, color);
+      }
+      return;
     }
+
+    // Numeric tier: single line origin → cursor (from Task 2).
+    if (!cursorTile) return;
+    const dxTiles = cursorTile.x - spec.cx;
+    const dyTiles = cursorTile.y - spec.cy;
+    const distTiles = Math.sqrt(dxTiles * dxTiles + dyTiles * dyTiles);
+    const maxRangeTiles = maxLaunchFuel * currentEfficiency / 2;
+    const color = distTiles <= maxRangeTiles ? PREVIEW_COLOR_OK : PREVIEW_COLOR_BAD;
+    const cursorPx = tileToWorldPx(cursorTile.x, cursorTile.y);
+    launchPreviewGfx.moveTo(originPx.x, originPx.y)
+      .lineTo(cursorPx.x, cursorPx.y)
+      .stroke({ width: PREVIEW_LINE_WIDTH, color, alpha: 0.85 });
+  }
+
+  /** Stroke a dashed line from `a` to `b` on the supplied Graphics.
+   *  Pattern: 8px on, 4px off (world pixels — same units as the line). */
+  function drawDashedSegment(
+    gfx: Graphics,
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+    color: number,
+  ): void {
+    const DASH = 8;
+    const GAP = 4;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return;
+    const ux = dx / len;
+    const uy = dy / len;
+    let t = 0;
+    while (t < len) {
+      const segEnd = Math.min(t + DASH, len);
+      gfx.moveTo(a.x + ux * t, a.y + uy * t)
+         .lineTo(a.x + ux * segEnd, a.y + uy * segEnd);
+      t = segEnd + GAP;
+    }
+    gfx.stroke({ width: PREVIEW_LINE_WIDTH, color, alpha: 0.85 });
   }
 
   function setReticleScreenPos(x: number, y: number): void {
@@ -879,7 +955,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // tiers. Default to the island's tier on first arming if selectedTier
     // was never explicitly chosen via the picker.
     const islandTier = tierForLevel(origin.level);
-    if (selectedTier > islandTier) selectedTier = islandTier as DroneTier;
+    if (typeof selectedTier === 'number' && selectedTier > islandTier) {
+      selectedTier = islandTier as DroneTier;
+    } else if (selectedTier === '5-path' && !canUsePathMode()) {
+      selectedTier = islandTier as DroneTier;
+    }
     // Disable out-of-range tier options + sync the select's current value.
     // Options were built once at mount; only attribute changes here, so
     // real clicks aren't disrupted by per-frame DOM rebuild (the bug we
@@ -887,16 +967,20 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     for (let i = 0; i < tierSelect.options.length; i++) {
       const opt = tierSelect.options[i];
       if (!opt) continue;
-      const tierNum = Number(opt.value);
-      opt.disabled = tierNum > islandTier;
+      if (opt.value === '5-path') {
+        opt.disabled = !canUsePathMode();
+      } else {
+        const tierNum = Number(opt.value);
+        opt.disabled = tierNum > islandTier;
+      }
     }
-    if (Number(tierSelect.value) !== selectedTier) {
+    if (tierSelect.value !== String(selectedTier)) {
       tierSelect.value = String(selectedTier);
     }
     // §11.7 tier-matched fuel — label + on-hand inventory follow the
     // PLAYER-SELECTED drone tier (T1 → BIOFUEL, T2 → DIESEL, …) not the
     // island tier, so a T5 island launching a T2 drone shows DIESEL here.
-    const fuelResource = fuelForTier(selectedTier);
+    const fuelResource = selectedTier === '5-path' ? 'plasma_charge' : fuelForTier(selectedTier);
     fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
     const onhand = inv(origin, fuelResource);
     fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
@@ -904,7 +988,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // the MAX-affordable range for this island right now = min(MAX_FUEL,
     // available) units × current efficiency / 2 (round-trip). Cached on
     // the closure so attemptLaunch + the range ring agree on the limit.
-    currentEfficiency = DRONE_TIER_EFFICIENCY[selectedTier] * effectiveSkillMultipliers(origin).droneFuelEfficiency;
+    currentEfficiency = (selectedTier === '5-path' ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY[selectedTier]) * effectiveSkillMultipliers(origin).droneFuelEfficiency;
     maxLaunchFuel = Math.floor(Math.min(MAX_FUEL_PER_DRONE, onhand));
     const maxOutbound = (maxLaunchFuel * currentEfficiency) / 2;
     fuelStat.valueEl.style.color = maxLaunchFuel > 0 ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
@@ -912,14 +996,24 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const maxFlightSec = (maxLaunchFuel * currentEfficiency) / DRONE_SPEED_TILES_PER_SEC;
     etaStat.valueEl.textContent = `${maxFlightSec.toFixed(0)}s max`;
 
-    // DIST row update
-    if (cursorTile && typeof selectedTier === 'number') {
+    // DIST / PATH row update
+    if (selectedTier === '5-path') {
+      const s = deps.getOriginSpec();
+      const originPt = { x: s.cx, y: s.cy };
+      const pathLen = totalPathTiles(originPt, waypointBuffer);
+      const fuel = fuelForPath(originPt, waypointBuffer);
+      distStat.labelEl.textContent = 'PATH';
+      distStat.valueEl.textContent = `${pathLen.toFixed(0)} tiles`;
+      fuelStat.valueEl.textContent = `${fuel} / ${MAX_FUEL_PER_DRONE} plasma_charge`;
+    } else if (cursorTile) {
       const s = deps.getOriginSpec();
       const dx = cursorTile.x - s.cx;
       const dy = cursorTile.y - s.cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      distStat.labelEl.textContent = 'DIST';
       distStat.valueEl.textContent = `${dist.toFixed(0)} tiles`;
     } else {
+      distStat.labelEl.textContent = 'DIST';
       distStat.valueEl.textContent = '—';
     }
 
@@ -996,6 +1090,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   ): { ok: boolean; reason?: string } {
     const originSpec = deps.getOriginSpec();
     const origin = deps.getOrigin();
+    if (selectedTier === '5-path') {
+      return { ok: false, reason: 'Path-mode dispatch not yet wired' };
+    }
     // §11.1: launch geometry — origin AND direction vector — both anchor on
     // the Drone Pad footprint centre. Pre-fix this used `spec.cx/cy`, so a
     // drone launched from an off-centre pad arced to a point offset from the
