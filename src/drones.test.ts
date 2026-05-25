@@ -269,36 +269,7 @@ describe('scanBuffer flush', () => {
 
 describe('no-antenna integration', () => {
   function makeMinimalWorldNoAntennas(): WorldState {
-    const homeSpec: IslandSpec = {
-      id: 'home',
-      name: 'home',
-      biome: 'plains',
-      cx: 0,
-      cy: 0,
-      majorRadius: 5,
-      minorRadius: 5,
-      populated: true,
-      discovered: true,
-      buildings: [], // no antenna anywhere
-      modifiers: [],
-    };
-    return {
-      islands: [homeSpec],
-      drones: [],
-      routes: [],
-      vehicles: [],
-      revealedCells: new Set(),
-      satellites: [],
-      repairDrones: [],
-      debrisFields: [],
-      endgameState: { achieved: new Set(), firstAchievedMs: null },
-      latticeActive: false,
-      latticeNodeIslands: [],
-      commPackets: [],
-      oceanCells: new Map(),
-      depthRevealedCells: new Set(),
-      seed: 'test-seed',
-    };
+    return makeTinyWorld();
   }
 
   it('reveals corridor cells when origin has no antennas, drone returns safely', () => {
