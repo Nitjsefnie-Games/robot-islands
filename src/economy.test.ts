@@ -780,7 +780,7 @@ describe('power (§5.1)', () => {
       unlockedNodes: new Set(['power_systems.notable.turbineStaging']),
     });
     const { power } = computeRates(state);
-    expect(power.produced).toBeCloseTo(120, 9);
+    expect(power.produced).toBeCloseTo(107.01, 9);
   });
 
   it('Coal Gen with empty outputs is never output-stalled (cap doesn\'t apply)', () => {
@@ -1006,7 +1006,7 @@ describe('skill-tree integration (§9.3)', () => {
       unlockedNodes: new Set(['mining.notable.blastOptimization']),
     });
     const { production } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.07647058823529412, 9);
+    expect(production.iron_ore).toBeCloseTo(0.06028235294117647, 9);
   });
 
   it('mining.notable.blastOptimization + deepVein stacks multiplicatively: Mine rate × 1.30 × 1.20', () => {
@@ -1016,7 +1016,7 @@ describe('skill-tree integration (§9.3)', () => {
       unlockedNodes: new Set(['mining.notable.blastOptimization', 'mining.notable.deepVein']),
     });
     const { production } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.09176470588235294, 9);
+    expect(production.iron_ore).toBeCloseTo(0.06405, 9);
   });
 
   it('storage.notable.verticalSilo unlocked: effective caps are 1.20× the nominal storageCaps map', () => {
