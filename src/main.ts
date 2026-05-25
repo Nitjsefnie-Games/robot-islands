@@ -548,6 +548,17 @@ async function main(): Promise<void> {
   // Suppress the browser context menu over the canvas so right-click can
   // be the placement-cancel gesture without a system menu appearing.
   app.canvas.addEventListener('contextmenu', (e) => {
+    if (dronesUi.isLaunchMode()) {
+      dronesUi.popWaypoint();
+    }
+    e.preventDefault();
+  });
+  app.canvas.addEventListener('dblclick', (e) => {
+    if (!dronesUi.isLaunchMode()) return;
+    const result = dronesUi.finalizePath(performance.now());
+    if (!result.ok && result.reason !== 'not-path-mode') {
+      console.warn('[path-drone] dispatch rejected:', result.reason);
+    }
     e.preventDefault();
   });
   window.addEventListener('mouseup', (e) => {
@@ -1430,6 +1441,7 @@ async function main(): Promise<void> {
     settingsUi.hide();
     orbitalUi.hide();
     placementUi.cancel();
+    dronesUi.cancelPath();
     // §4 inspector: Escape also closes the inspector + clears the
     // selection outline. Idempotent; closing while already hidden is a
     // no-op.
@@ -1497,6 +1509,9 @@ async function main(): Promise<void> {
   disarmDronesLaunch = () => dronesUi.setLaunchMode(false);
   defineAction(reg, 'toggle-drones', () => {
     dronesUi.toggle();
+  });
+  defineAction(reg, 'cancel-path-draw', () => {
+    dronesUi.cancelPath();
   });
 
   // Routes (freight-grid) side dock + screen-space route line + chevron layer.
