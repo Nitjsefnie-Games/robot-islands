@@ -68,7 +68,7 @@ import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from '.
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
  *  string, so a new key returns "no save" without colliding with older
  *  stores. */
-export const STORAGE_KEY = 'robot-islands:save:v12';
+export const STORAGE_KEY = 'robot-islands:save:v13';
 
 /** User-visible storage-key label. The Settings panel renders this
  *  string in the storage-key footer line. */
@@ -76,15 +76,15 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 12 as const;
+export const SCHEMA_VERSION = 13 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
- *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10 → v11 → v12.
+ *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10 → v11 → v12 → v13.
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -115,6 +115,11 @@ export interface SerializedIslandStateEntry {
   readonly state: SerializedIslandState;
 }
 
+/** Drone with scanBuffer projected to a JSON-safe sorted array. */
+export type SerializedDrone = Omit<Drone, 'scanBuffer'> & {
+  readonly scanBuffer: ReadonlyArray<string>;
+};
+
 /** World data minus the per-island closures. Drones, Routes, and Vehicles
  *  are already JSON-friendly (only numbers, strings, and arrays — see the
  *  respective types) and round-trip without transformation.
@@ -126,7 +131,7 @@ export interface SerializedIslandStateEntry {
 export interface SerializedWorld {
   readonly islands: ReadonlyArray<SerializedIslandSpec>;
   readonly seed?: string;
-  readonly drones: ReadonlyArray<Drone>;
+  readonly drones: ReadonlyArray<SerializedDrone>;
   readonly routes: ReadonlyArray<Route>;
   readonly vehicles: ReadonlyArray<SettlementVehicle>;
   readonly revealedCells?: ReadonlyArray<string>;
@@ -347,7 +352,59 @@ export function migrateV11toV12(s: SerializedSnapshotV11): SaveSnapshot {
         } as unknown as SerializedIslandState,
       };
     }),
-  } as SaveSnapshot;
+  } as unknown as SaveSnapshot;
+}
+
+/** v12 shape — drones lack scanBuffer field. v13 adds it. */
+export interface SerializedSnapshotV12 {
+  readonly v: 12;
+  readonly savedAt: number;
+  readonly savedAtPerf: number;
+  readonly world: {
+    readonly islands: ReadonlyArray<SerializedIslandSpec>;
+    readonly seed?: string;
+    readonly drones: ReadonlyArray<SerializedDroneV12>;
+    readonly routes: ReadonlyArray<Route>;
+    readonly vehicles: ReadonlyArray<SettlementVehicle>;
+    readonly revealedCells?: ReadonlyArray<string>;
+    readonly satellites: ReadonlyArray<import('./orbital.js').Satellite>;
+    readonly repairDrones: ReadonlyArray<import('./orbital.js').RepairDrone>;
+    readonly debrisFields: ReadonlyArray<import('./orbital.js').DebrisField>;
+    readonly tutorialState?: { completed: ObjectiveId[]; current: ObjectiveId | null };
+    readonly endgameState?: {
+      readonly achieved: ReadonlyArray<VictoryCondition>;
+      readonly firstAchievedMs: number | null;
+    };
+    readonly latticeActive?: boolean;
+    readonly latticeNodeIslands?: ReadonlyArray<string>;
+    readonly commPackets: ReadonlyArray<import('./orbital.js').CommPacket>;
+    readonly generatedCells?: ReadonlyArray<string>;
+    readonly oceanCells?: ReadonlyArray<readonly [string, OceanCellSpec]>;
+    readonly depthRevealedCells?: ReadonlyArray<string>;
+  };
+  readonly islandStates: ReadonlyArray<SerializedIslandStateEntry>;
+}
+
+/** Drone shape pre-scanBuffer. */
+export type SerializedDroneV12 = Omit<Drone, 'scanBuffer'> & {
+  readonly darkModeDiscoveries: Array<{ readonly islandId: string }>;
+};
+
+/** v12 → v13: add scanBuffer to every drone (default empty array,
+ *  deserialises to empty Set). Lossless — in-flight drones at v12 had no
+ *  buffer concept, so empty is the correct default. */
+export function migrateV12toV13(s: SerializedSnapshotV12): SaveSnapshot {
+  return {
+    ...s,
+    v: 13 as const,
+    world: {
+      ...s.world,
+      drones: s.world.drones.map((d) => ({
+        ...d,
+        scanBuffer: [],
+      })),
+    },
+  } as unknown as SaveSnapshot;
 }
 
 export interface SaveSnapshot {
@@ -410,8 +467,11 @@ export function serializeWorld(
     world: {
       islands,
       seed: world.seed,
-      // Spread to drop any read-only-array exotic-ness from the live arrays.
-      drones: [...world.drones],
+      // Project drones to serialisable shape: scanBuffer Set → sorted Array.
+      drones: world.drones.map((d) => ({
+        ...d,
+        scanBuffer: [...d.scanBuffer].sort(),
+      })),
       routes: world.routes.map((r) => ({
         ...r,
         // Defensive copy of the mutable inFlight array so post-snapshot
@@ -501,6 +561,9 @@ export function deserializeWorld(
   if ((snapshot as unknown as { v: number }).v === 11) {
     snapshot = migrateV11toV12(snapshot as unknown as SerializedSnapshotV11);
   }
+  if ((snapshot as unknown as { v: number }).v === 12) {
+    snapshot = migrateV12toV13(snapshot as unknown as SerializedSnapshotV12);
+  }
 
   if (snapshot.v !== SCHEMA_VERSION) {
     throw new Error(
@@ -572,6 +635,7 @@ export function deserializeWorld(
       ...d,
       launchTime: d.launchTime + perfShift,
       expectedReturnTime: d.expectedReturnTime + perfShift,
+      scanBuffer: new Set<string>((d as unknown as { scanBuffer?: ReadonlyArray<string> }).scanBuffer ?? []),
     })),
     routes: snapshot.world.routes.map((r) => ({
       ...r,
