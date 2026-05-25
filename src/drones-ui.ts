@@ -1157,8 +1157,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   }
 
   /** Finalize the path: drop trailing-duplicate (browser click+dblclick
-   *  artifact), then dispatch with the waypoints. No-op if buffer has
-   *  fewer than 2 points (need at least origin + 1 waypoint to fly). */
+   *  artifact), then dispatch with the waypoints. No-op if no waypoints.
+   *  The engine requires waypoints.length≥2 to enter the isPathDrawn branch;
+   *  we prepend origin to deduped, so deduped.length≥1 is the minimum. */
   function finalizePath(nowMs: number): { ok: boolean; reason?: string } {
     if (selectedTier !== '5-path') return { ok: false, reason: 'not-path-mode' };
     const deduped = popTrailingDuplicate(waypointBuffer);

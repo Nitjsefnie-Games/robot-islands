@@ -1510,9 +1510,6 @@ async function main(): Promise<void> {
   defineAction(reg, 'toggle-drones', () => {
     dronesUi.toggle();
   });
-  defineAction(reg, 'cancel-path-draw', () => {
-    dronesUi.cancelPath();
-  });
 
   // Routes (freight-grid) side dock + screen-space route line + chevron layer.
   // Lives in screen space (same discipline as the drone reticle): stroke
