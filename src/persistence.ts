@@ -386,9 +386,7 @@ export interface SerializedSnapshotV12 {
 }
 
 /** Drone shape pre-scanBuffer. */
-export type SerializedDroneV12 = Omit<Drone, 'scanBuffer'> & {
-  readonly darkModeDiscoveries: Array<{ readonly islandId: string }>;
-};
+export type SerializedDroneV12 = Omit<Drone, 'scanBuffer'>;
 
 /** v12 → v13: add scanBuffer to every drone (default empty array,
  *  deserialises to empty Set). Lossless — in-flight drones at v12 had no
@@ -545,7 +543,7 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Walk v7 → v8 → v9 → v10 → v11 → v12 migration chain.
+  // Walk v7 → v8 → v9 → v10 → v11 → v12 → v13 migration chain.
   if ((snapshot as unknown as { v: number }).v === 7) {
     snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7) as unknown as SaveSnapshot;
   }
