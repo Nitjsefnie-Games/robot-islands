@@ -181,36 +181,10 @@ describe('pointToSegmentDistSq', () => {
 
 describe('scanBuffer flush', () => {
   function makeWorldWithSingleAntenna(): WorldState {
-    const home: IslandSpec = {
-      id: 'home',
-      name: 'home',
-      biome: 'plains',
-      cx: 0,
-      cy: 0,
-      majorRadius: 5,
-      minorRadius: 5,
-      populated: true,
-      discovered: true,
-      buildings: [{ id: 'home-a1', defId: 'antenna_t1', x: 0, y: 0 }],
-      modifiers: [],
-    };
-    return {
-      islands: [home],
-      drones: [],
-      routes: [],
-      vehicles: [],
-      revealedCells: new Set(),
-      satellites: [],
-      repairDrones: [],
-      debrisFields: [],
-      endgameState: { achieved: new Set(), firstAchievedMs: null },
-      latticeActive: false,
-      latticeNodeIslands: [],
-      commPackets: [],
-      oceanCells: new Map(),
-      depthRevealedCells: new Set(),
-      seed: 'test-seed',
-    };
+    const world = makeTinyWorld();
+    const home = world.islands.find((i) => i.id === 'home')!;
+    home.buildings.push({ id: 'home-a1', defId: 'antenna_t1', x: 0, y: 0 });
+    return world as WorldState;
   }
 
   it('buffers corridor cells out of antenna range, flushes on re-entry', () => {
@@ -233,7 +207,22 @@ describe('scanBuffer flush', () => {
   });
 
   it('flushes on returned status even if never re-entered range', () => {
-    const world = makeWorldWithSingleAntenna();
+    const world = makeTinyWorld();
+    // Remote antenna exists so ranges are non-empty, but the drone's path
+    // (origin → 50 tiles east → origin) never comes within its 80-tile radius.
+    world.islands.push({
+      id: 'remote',
+      name: 'remote',
+      biome: 'plains',
+      cx: 0,
+      cy: 200,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'remote-a1', defId: 'antenna_t1', x: 0, y: 0 }],
+      modifiers: [],
+    });
     const home = makeIslandState({ level: 5 });
     home.inventory.diesel = 50;
     const result = dispatchDrone(world, home, 0, 0, 1, 0, 50, 0, undefined, 2);
@@ -638,15 +627,15 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
     expect(w.revealedCells.has('1,0')).toBe(true);
   });
 
-  it('reveals NO cells when no antenna is in range (data falls on the floor)', () => {
+  it('flushes buffered cells on return even when no antenna was ever in range', () => {
     const w = worldNoAntenna([]);
     const home = makeIslandState();
     home.inventory.biofuel = 50;
     dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
     const r = tickDrones(w, 81_000, 0);
     expect(r.returned).toHaveLength(1);
-    expect(r.revealedCellsAdded).toBe(0);
-    expect(w.revealedCells.size).toBe(0);
+    expect(r.revealedCellsAdded).toBeGreaterThan(0);
+    expect(w.revealedCells.size).toBeGreaterThan(0);
   });
 
   it('drone flies past antenna range: only the in-range portion is revealed', () => {

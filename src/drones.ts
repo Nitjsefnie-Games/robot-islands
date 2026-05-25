@@ -566,8 +566,8 @@ function discoverRareIslands(
 }
 
 /** Drain a drone's scanBuffer + darkModeDiscoveries into world state.
- *  Idempotent — clears both buffers after draining. Called when the drone
- *  enters antenna range OR reaches 'returned' status. */
+ *  Clears both buffers in place; safe to call repeatedly per tick. Called
+ *  when the drone enters antenna range OR reaches 'returned' status. */
 function flushDroneBuffers(
   d: Drone,
   world: WorldState,
@@ -627,87 +627,85 @@ export function tickDrones(
     //    point — which would silently lose reveals for the legitimate
     //    "single tick spans the whole flight" case (the cell-test goes
     //    over a one-tick flight from launch to return).
-    if (d.tier === 5 || ranges.length > 0) {
-      const segStartMs = Math.max(prevTickMs, d.launchTime);
-      const segEndMs = Math.min(nowMs, d.expectedReturnTime);
-      if (segEndMs >= segStartMs) {
-        const speed = droneSpeed(d);
-        const apexMs = d.launchTime + (d.outboundTiles / speed) * 1000;
-        const segWaypoints: Array<{ x: number; y: number }> = [];
-        segWaypoints.push(droneCurrentPosition(d, segStartMs));
-        // Include the outbound-endpoint waypoint if the apex falls strictly
-        // inside (segStartMs, segEndMs). On the boundary the linear segment
-        // to the next endpoint subsumes it.
-        if (apexMs > segStartMs && apexMs < segEndMs) {
-          segWaypoints.push(droneCurrentPosition(d, apexMs));
-        }
-        segWaypoints.push(droneCurrentPosition(d, segEndMs));
+    const segStartMs = Math.max(prevTickMs, d.launchTime);
+    const segEndMs = Math.min(nowMs, d.expectedReturnTime);
+    if (segEndMs >= segStartMs) {
+      const speed = droneSpeed(d);
+      const apexMs = d.launchTime + (d.outboundTiles / speed) * 1000;
+      const segWaypoints: Array<{ x: number; y: number }> = [];
+      segWaypoints.push(droneCurrentPosition(d, segStartMs));
+      // Include the outbound-endpoint waypoint if the apex falls strictly
+      // inside (segStartMs, segEndMs). On the boundary the linear segment
+      // to the next endpoint subsumes it.
+      if (apexMs > segStartMs && apexMs < segEndMs) {
+        segWaypoints.push(droneCurrentPosition(d, apexMs));
+      }
+      segWaypoints.push(droneCurrentPosition(d, segEndMs));
 
-        // Collect all corridor cells for this tick.
-        const corridor = new Set<string>();
+      // Collect all corridor cells for this tick.
+      const corridor = new Set<string>();
+      for (let i = 0; i + 1 < segWaypoints.length; i++) {
+        const a = segWaypoints[i]!;
+        const b = segWaypoints[i + 1]!;
+        const cells = corridorCells(a.x, a.y, b.x, b.y, d.scanRadius);
+        cells.forEach((c) => corridor.add(c));
+      }
+
+      // §13.3 Probability Engine: expanded corridor for rare-island discovery.
+      const expandedCorridor = new Set<string>(corridor);
+      if (d.probabilityBias > 0) {
+        const effectiveRadius = d.scanRadius * (1 + d.probabilityBias);
         for (let i = 0; i + 1 < segWaypoints.length; i++) {
           const a = segWaypoints[i]!;
           const b = segWaypoints[i + 1]!;
-          const cells = corridorCells(a.x, a.y, b.x, b.y, d.scanRadius);
-          cells.forEach((c) => corridor.add(c));
+          const cells = corridorCells(a.x, a.y, b.x, b.y, effectiveRadius);
+          cells.forEach((c) => expandedCorridor.add(c));
         }
+      }
 
-        // §13.3 Probability Engine: expanded corridor for rare-island discovery.
-        const expandedCorridor = new Set<string>(corridor);
-        if (d.probabilityBias > 0) {
-          const effectiveRadius = d.scanRadius * (1 + d.probabilityBias);
-          for (let i = 0; i + 1 < segWaypoints.length; i++) {
-            const a = segWaypoints[i]!;
-            const b = segWaypoints[i + 1]!;
-            const cells = corridorCells(a.x, a.y, b.x, b.y, effectiveRadius);
-            cells.forEach((c) => expandedCorridor.add(c));
-          }
+      // §2.1 lazy generation: any cell the drone's corridor touches must
+      // have its procedural islands minted before the antenna / rare-island
+      // reads below — a newly-generated rare island in `expandedCorridor`
+      // must be eligible for `discoverRareIslands` on the very same tick.
+      // Cells outside antenna range still need this hook: the drone is
+      // physically crossing them, and a later visit (or another sensor)
+      // must see the same deterministic island set.
+      for (const k of expandedCorridor) {
+        const { cellX, cellY } = parseCellKey(k);
+        ensureCellGenerated(world, cellX, cellY);
+      }
+
+      // Buffer every corridor cell unconditionally. Flush happens below if the
+      // drone is in any antenna range at tick end, or on return-status transition.
+      for (const k of corridor) {
+        d.scanBuffer.add(k);
+      }
+
+      // §13.3 Probability-bias rare-island discovery: STILL run on the expanded
+      // corridor regardless of buffer flush. Rare-island reveals are not gated
+      // by antenna range in the existing code; preserve that behaviour.
+      discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
+
+      // Island discoveries in this tick's corridor join darkModeDiscoveries
+      // (the flush helper drains them along with cells). Use expandedCorridor
+      // so Probability Engine bias is honoured.
+      const tickIslandDiscoveries = islandsInCells(world.islands, expandedCorridor);
+      const seenIslands = new Set<string>(d.darkModeDiscoveries.map((x) => x.islandId));
+      for (const disc of tickIslandDiscoveries) {
+        if (!seenIslands.has(disc.islandId)) {
+          seenIslands.add(disc.islandId);
+          d.darkModeDiscoveries.push(disc);
         }
+      }
 
-        // §2.1 lazy generation: any cell the drone's corridor touches must
-        // have its procedural islands minted before the antenna / rare-island
-        // reads below — a newly-generated rare island in `expandedCorridor`
-        // must be eligible for `discoverRareIslands` on the very same tick.
-        // Cells outside antenna range still need this hook: the drone is
-        // physically crossing them, and a later visit (or another sensor)
-        // must see the same deterministic island set.
-        for (const k of expandedCorridor) {
-          const { cellX, cellY } = parseCellKey(k);
-          ensureCellGenerated(world, cellX, cellY);
-        }
-
-        // Buffer every corridor cell unconditionally. Flush happens below if the
-        // drone is in any antenna range at tick end, or on return-status transition.
-        for (const k of corridor) {
-          d.scanBuffer.add(k);
-        }
-
-        // §13.3 Probability-bias rare-island discovery: STILL run on the expanded
-        // corridor regardless of buffer flush. Rare-island reveals are not gated
-        // by antenna range in the existing code; preserve that behaviour.
-        discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
-
-        // Island discoveries in this tick's corridor join darkModeDiscoveries
-        // (the flush helper drains them along with cells). Use expandedCorridor
-        // so Probability Engine bias is honoured.
-        const tickIslandDiscoveries = islandsInCells(world.islands, expandedCorridor);
-        const seenIslands = new Set<string>(d.darkModeDiscoveries.map((x) => x.islandId));
-        for (const disc of tickIslandDiscoveries) {
-          if (!seenIslands.has(disc.islandId)) {
-            seenIslands.add(disc.islandId);
-            d.darkModeDiscoveries.push(disc);
-          }
-        }
-
-        // Flush trigger A: drone position in any antenna's range at tick end.
-        const dronePos = droneCurrentPosition(d, segEndMs);
-        const inSignalRange = pointInSignalRange(ranges, dronePos.x, dronePos.y);
-        if (inSignalRange) {
-          d.darkMode = false;
-          cellsAddedThisTick += flushDroneBuffers(d, world, newlyDiscoveredIslandIds);
-        } else {
-          d.darkMode = true;
-        }
+      // Flush trigger A: drone position in any antenna's range at tick end.
+      const dronePos = droneCurrentPosition(d, segEndMs);
+      const inSignalRange = pointInSignalRange(ranges, dronePos.x, dronePos.y);
+      if (inSignalRange) {
+        d.darkMode = false;
+        cellsAddedThisTick += flushDroneBuffers(d, world, newlyDiscoveredIslandIds);
+      } else {
+        d.darkMode = true;
       }
     }
 
@@ -769,6 +767,7 @@ export function tickDrones(
       lost.push(d);
       // Discard dark-mode discoveries on destruction.
       d.darkModeDiscoveries = [];
+      d.scanBuffer.clear();
       remaining.push(d);
       continue;
     }
