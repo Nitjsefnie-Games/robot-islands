@@ -25,6 +25,7 @@ import { BASE_CONSTRUCTION_MS_BY_TIER } from './construction.js';
 import { TILE_PX } from './island.js';
 import { maintenanceFactor } from './maintenance.js';
 import { SHOT_DURATION_MS } from './terrain-modifier.js';
+import { effectiveSkillMultipliers } from './skilltree.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { WorldState } from './world.js';
 
@@ -57,6 +58,7 @@ export function mountBuildingAlertsOverlay(
     for (const [islandId, state] of islandStates) {
       const spec = world.islands.find((i) => i.id === islandId);
       if (!spec) continue;
+      const skillMul = effectiveSkillMultipliers(state);
       for (const b of state.buildings) {
         const def = BUILDING_DEFS[b.defId];
         const tiles = footprintTiles(def.footprint, b.x, b.y, (b.rotation ?? 0) as Rotation);
@@ -183,7 +185,7 @@ export function mountBuildingAlertsOverlay(
         // PAST construction can degrade (operatingMs doesn't accrue while
         // building) so the maintenance check is a no-op for the under-
         // construction case above; reading factor here is still safe.
-        const factor = maintenanceFactor(b, def);
+        const factor = maintenanceFactor(b, def, skillMul.maintenanceThreshold);
         if (factor >= 0.95) continue;
         const color = factor <= 0.55 ? RED : AMBER;
         const worldTx = spec.cx + maxTx;
