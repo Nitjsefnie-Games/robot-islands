@@ -5,11 +5,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { IslandState } from './economy.js';
 import {
-  DRONE_SCAN_RADIUS_TILES,
   DRONE_SPEED_TILES_PER_SEC,
   DRONE_T5_SCAN_RADIUS_TILES,
   DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
+  DRONE_TIER_SCAN_RADIUS,
   T4_PULSE_FUEL_COST,
   _resetDroneIdCounter,
   dispatchDrone,
@@ -218,7 +218,7 @@ describe('dispatchDrone', () => {
     expect(d.outboundTiles).toBe(30);
     // Travel time = 60 / 0.5 = 120s → return at 1000 + 120_000. (rebalanced step #19)
     expect(d.expectedReturnTime).toBe(1000 + 120_000);
-    expect(d.scanRadius).toBe(DRONE_SCAN_RADIUS_TILES);
+    expect(d.scanRadius).toBe(DRONE_TIER_SCAN_RADIUS[d.tier]);
   });
 
   it('normalises a non-unit direction vector', () => {
@@ -298,6 +298,28 @@ describe('dispatchDrone', () => {
     if (!r.ok) return;
     expect(r.drone.originX).toBe(100 + 5 + 0.5);
     expect(r.drone.originY).toBe(200 + 5 + 0.5);
+  });
+
+  it('dispatches a T1 drone with scan radius 2', () => {
+    const world = freshWorld();
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 20, 0, undefined, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.drone.tier).toBe(1);
+    expect(result.drone.scanRadius).toBe(2);
+  });
+
+  it('dispatches a T3 drone with scan radius 8', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 15 });
+    home.inventory.aviation_kerosene = 50;
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 30, 0, undefined, 3);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.drone.tier).toBe(3);
+    expect(result.drone.scanRadius).toBe(8);
   });
 });
 
@@ -640,7 +662,15 @@ describe('drone constants', () => {
   it('matches the documented step-6 tuning', () => {
     expect(DRONE_TIER_EFFICIENCY[1]).toBe(3);
     expect(DRONE_SPEED_TILES_PER_SEC).toBe(0.5); // rebalanced for idle-game scale, step #19 (was 2)
-    expect(DRONE_SCAN_RADIUS_TILES).toBe(8);
+  });
+
+  it('has the locked per-tier scan radius values', () => {
+    expect(DRONE_TIER_SCAN_RADIUS[1]).toBe(2);
+    expect(DRONE_TIER_SCAN_RADIUS[2]).toBe(4);
+    expect(DRONE_TIER_SCAN_RADIUS[3]).toBe(8);
+    expect(DRONE_TIER_SCAN_RADIUS[4]).toBe(0);
+    expect(DRONE_TIER_SCAN_RADIUS[5]).toBe(12);
+    expect(DRONE_TIER_SCAN_RADIUS[6]).toBe(16);
   });
 });
 

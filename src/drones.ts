@@ -83,12 +83,25 @@ export const DRONE_TIER_EFFICIENCY: Record<DroneTier, number> = {
   1: 3, 2: 6, 3: 9, 4: 12, 5: 15, 6: 18,
 };
 export const DRONE_SPEED_TILES_PER_SEC = 0.5; // rebalanced for idle-game scale, step #19 (was 2)
-export const DRONE_SCAN_RADIUS_TILES = 8;
+// §11.5 per-tier scan corridor half-width in tiles. T4 is the omni-pulse
+// (uses T4_PULSE_RADIUS_TILES below, not a corridor) — slot is 0 / unused.
+// Doubles T1 → T3 per spec ("2W" ratio); T5 unchanged from prior code;
+// T6 = 16 (design-spec locked).
+export const DRONE_TIER_SCAN_RADIUS: Record<DroneTier, number> = {
+  1: 2,
+  2: 4,
+  3: 8,
+  4: 0,
+  5: 12,
+  6: 16,
+};
+
+// Alias preserved so existing T5 tests' import stays green.
+export const DRONE_T5_SCAN_RADIUS_TILES = DRONE_TIER_SCAN_RADIUS[5];
 
 /** T5 path-drawn drone constants per §11.6. */
 export const DRONE_T5_EFFICIENCY = 8;
 export const DRONE_T5_SPEED_TILES_PER_SEC = 0.8;
-export const DRONE_T5_SCAN_RADIUS_TILES = 12;
 export const DRONE_T5_WEATHER_MULTIPLIER = 0.5;
 
 /** §2.6 weather vulnerability multiplier per drone tier. */
@@ -373,7 +386,8 @@ export function dispatchDrone(
   const fuelEffMul = originSkill.droneFuelEfficiency;
   const efficiency = (isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY[resolvedTier]) * fuelEffMul;
   const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
-  const scanRadius = (isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES) * originSkill.droneScanRadius;
+  const baseRadius = DRONE_TIER_SCAN_RADIUS[resolvedTier];
+  const scanRadius = baseRadius * originSkill.droneScanRadius;
   const tier: DroneTier = resolvedTier;
 
   let outboundTiles: number;
