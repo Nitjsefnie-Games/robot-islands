@@ -97,6 +97,8 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'sand_pit',
   'well',
   'coastal_pump',
+  // §15.6 saltwater-cell bootstrap — registered with the T1 manufacturing-adjacent block.
+  'cell_press',
   'quartz_mine',
   'lumber_mill',
   'glassworks',

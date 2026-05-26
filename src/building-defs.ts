@@ -266,6 +266,8 @@ export type BuildingDefId =
   | 'lubricant_refinery'
   | 'diesel_refinery'
   | 'metal_rolling_mill'
+  // §15.6 saltwater-cell bootstrap — T1 manufacturing slot for saltwater_cell.
+  | 'cell_press'
   | 'sheet_metal_mill'
   | 'pipe_mill'
   | 'beam_mill'
@@ -670,6 +672,21 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     adjacencyBuffs: [
       { matchKind: 'same_def', percentPerMatch: 5, maxMatches: 3 },
     ],
+  },
+  // §15.6 saltwater-cell bootstrap — T1 manufacturing slot, single tile, 20W draw.
+  // Crafts saltwater_cell (T2 component) from saltwater + iron_ingot + wire.
+  // No requiredTile, no requiresHeat — placeable anywhere on grass.
+  cell_press: {
+    id: 'cell_press',
+    displayName: 'Cell Press',
+    category: 'manufacturing',
+    tier: 1,
+    footprint: SHAPES.single,
+    fill: 0x80a0c0,       // pale electrolyte blue
+    stroke: 0x203040,
+    power: { consumes: 20 },
+    placementCost: { stone: 20, wood: 10 },
+    glyph: '◫',
   },
   solar: {
     id: 'solar',

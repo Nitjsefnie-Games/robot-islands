@@ -116,6 +116,7 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   steel: 'components',
   gear: 'components',
   wire: 'components',
+  saltwater_cell: 'components',
   microchip: 'components',
   pcb: 'components',
   circuit_board: 'components',

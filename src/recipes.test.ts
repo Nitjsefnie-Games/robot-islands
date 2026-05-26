@@ -252,6 +252,11 @@ describe('byproducts', () => {
   it('XP_WEIGHT.slag is 3', () => {
     expect(XP_WEIGHT.slag).toBe(3);
   });
+
+  it('XP_WEIGHT.saltwater_cell is 10', () => {
+    // §15.6 saltwater-cell bootstrap — T2 component weight per §9.1.
+    expect(XP_WEIGHT.saltwater_cell).toBe(10);
+  });
 });
 
 describe('§6.7 Steel Mill scrap substitution (steel_mill_from_scrap)', () => {

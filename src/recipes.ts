@@ -143,6 +143,8 @@ export type ResourceId =
   | 'lubricant'
   | 'diesel'
   | 'wire'
+  // §15.6 saltwater-cell bootstrap — T2 home-buildable battery component.
+  | 'saltwater_cell'
   // Phase 4 — T2 petrochemical byproducts (§7.4)
   | 'heavy_oil'
   | 'tar'
@@ -496,6 +498,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'lubricant',
   'diesel',
   'wire',
+  // §15.6 saltwater-cell bootstrap.
+  'saltwater_cell',
   // Phase 4 — T2 petrochemical byproducts (§7.4)
   'heavy_oil',
   'tar',
@@ -820,6 +824,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   lubricant: 10,
   diesel: 10,
   wire: 10,
+  // §15.6 saltwater-cell bootstrap — T2 component weight = 10 per §9.1.
+  saltwater_cell: 10,
   // Phase 4 — T2 petrochemical byproducts (§7.4)
   heavy_oil: 10,
   tar: 10,
@@ -1366,6 +1372,15 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 33, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
     inputs: { iron_ore: 1, coal: 1 },
     outputs: { bolt: 1 },
+    category: 'manufacturing',
+  },
+  // §15.6 saltwater-cell bootstrap — T1 manufacturing recipe. 40s cycle,
+  // home-Plains-only inputs so battery_bank no longer chains through the
+  // T3 lithium gate. Wire is the T2-chokepoint bottleneck per spec §05.
+  cell_press: {
+    cycleSec: 40,
+    inputs: { saltwater: 1, iron_ingot: 1, wire: 1 },
+    outputs: { saltwater_cell: 1 },
     category: 'manufacturing',
   },
 
