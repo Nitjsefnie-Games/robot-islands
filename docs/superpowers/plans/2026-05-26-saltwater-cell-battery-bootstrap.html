@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saltwater-cell battery bootstrap — implementation plan</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --rust:#E08B7F; --warn:#E0B47F; --info:#7DD3E8;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700);
+      line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1120px; margin:0 auto; }
+    header.page-head { margin-bottom:48px; max-width:880px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    h1 code { font-family:var(--mono); font-size:0.78em; color:var(--clay); background:none; padding:0; border:0; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box .meta-line { margin-top:8px; }
+    .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .callout { background:var(--white); border:1.5px solid var(--gray-300);
+      border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px;
+      font-size:13.5px; color:var(--gray-500); margin-bottom:48px; max-width:880px; }
+    .callout code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat);
+      color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px;
+      color:var(--slate); letter-spacing:-0.01em; }
+    .sec-head h2 code { font-family:var(--mono); font-size:21px; color:var(--clay); }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:820px; margin-bottom:28px; }
+    .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+    .summary { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:16px 18px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .summary .v.ok { color:var(--olive); }
+    .filetable { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .filetable .row { display:grid; grid-template-columns:300px 1fr; gap:0; }
+    @media (max-width:780px){ .filetable .row{grid-template-columns:1fr;} }
+    .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+    .filetable .cell { padding:13px 18px; font-size:13.5px; }
+    .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+    .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate);
+      font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .filetable .cell code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .filetable .cell.desc code { color:var(--slate); }
+    .task-card { background:var(--white); border:1.5px solid var(--gray-300);
+      border-radius:12px; padding:24px 26px; }
+    .task-blurb { font-size:13.5px; color:var(--gray-500); margin-bottom:16px; max-width:820px; }
+    .task-blurb code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .files-block { background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:8px; padding:12px 16px; margin-bottom:22px; }
+    .files-block .ft { font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .files-block ul { list-style:none; }
+    .files-block li { font-size:13px; color:var(--gray-700); padding:2px 0; }
+    .files-block li code { font-family:var(--mono); font-size:12.5px; color:var(--clay); }
+    .files-block li .tag { font-family:var(--mono); font-size:10.5px; color:var(--gray-500); }
+    .steps { display:flex; flex-direction:column; gap:18px; }
+    .step { display:grid; grid-template-columns:22px 1fr; gap:0 12px; }
+    .step .box { width:16px; height:16px; border:1.5px solid var(--clay); border-radius:4px; margin-top:3px; }
+    .step .step-body { min-width:0; }
+    .step .step-title { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:6px; }
+    .step .step-text { font-size:13.5px; color:var(--gray-500); margin-bottom:10px; }
+    .step .step-text:last-child { margin-bottom:0; }
+    .step .step-text code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .step .step-text.cmd code { color:var(--olive); }
+    .code-block { margin:4px 0 12px; }
+    .code-block .file-label { font-family:var(--mono); font-size:11.5px; color:var(--gray-500); margin-bottom:6px; }
+    .code { background:#121110; border:1px solid var(--gray-300); border-radius:10px;
+      padding:16px 18px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.6; color:#F5F3EC; white-space:pre; }
+    .code .cm { color:var(--gray-500); } .code .add { color:#8FA56E; } .code .del { color:#E08B7F; }
+    .code .acc { color:#E0B47F; } .code .kw { color:var(--clay); } .code .str { color:#8FA56E; }
+    .notes { display:flex; flex-direction:column; gap:14px; max-width:880px; }
+    .note { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive);
+      border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-500); }
+    .note.rust { border-left-color: var(--rust); }
+    .note.warn { border-left-color: var(--warn); }
+    .note.info { border-left-color: var(--info); }
+    .note code { font-family:var(--mono); font-size:12.5px; color:var(--slate); }
+    .note strong { color:var(--slate); font-weight:600; }
+    .tbl { width:100%; border:1.5px solid var(--gray-300); border-radius:10px;
+      border-collapse:separate; border-spacing:0; overflow:hidden; font-size:13px; margin:8px 0 14px; }
+    .tbl th, .tbl td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.04em;
+      color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl td.mono { font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+    .tbl td.lead { color:var(--slate); font-weight:600; }
+    .tbl td code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+    footer.page-foot { margin-top:64px; padding-top:20px; border-top:1.5px solid var(--gray-300);
+      font-size:12px; color:var(--gray-500); font-family:var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan / robot-islands · resource catalog / power buffer</div>
+      <h1>Saltwater-cell battery bootstrap — Implementation Plan</h1>
+      <div class="prompt-box">
+        <span class="label">Plan summary</span>
+        <div class="meta-line"><strong>Goal:</strong> Make <code>battery_bank</code> (T2, 5&nbsp;kWh) actually buildable from a fresh home-Plains start by introducing a new T2 component <code>saltwater_cell</code> (crafted at a new T1 building <code>cell_press</code> from home-buildable inputs only) and rewriting <code>battery_bank.placementCost</code> from <code>{ battery: 4, wire: 3, steel_beam: 1 }</code> → <code>{ saltwater_cell: 4, wire: 3, steel_beam: 1 }</code>. The T3 <code>battery</code> token stays as-is for <code>capacitor_bank</code> / <code>flywheel_array</code> / <code>singularity_battery_factory</code>.</div>
+        <div class="meta-line"><strong>Architecture:</strong> Pure additive resource-catalog + building-catalog work plus a one-line placementCost reroute. New surface: 1 <code>ResourceId</code> · 1 <code>BuildingDefId</code> · 1 <code>RecipeId</code>. Two atomic commits: <strong>Commit&nbsp;A</strong> ships the supply side (resource&nbsp;+ def&nbsp;+ recipe), <strong>Commit&nbsp;B</strong> reroutes battery_bank's cost. Each commit compiles and passes the suite independently.</div>
+        <div class="meta-line"><strong>Tech Stack:</strong> TypeScript (strict, noUncheckedIndexedAccess, noUnusedLocals), Vite 5, PixiJS 8, vitest. Pure layer only — no PixiJS, no rendering touches.</div>
+        <div class="meta-line"><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-26-saltwater-cell-battery-bootstrap-design.html</code> (v1) · <strong>Audit:</strong> <code>docs/superpowers/audits/2026-05-26-battery-bank-chain.html</code> · <strong>Reference plans:</strong> <code>2026-05-23-coal-rebalance.html</code> (closest-precedent single-feature shape).</div>
+      </div>
+    </header>
+
+    <div class="callout"><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: use <code>superpowers:subagent-driven-development</code> (recommended) or <code>superpowers:executing-plans</code> to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking. Mechanical additive-catalog work — well-suited to a Kimi K2.6 subagent brief; the implementing agent's own co-author trailer goes on each commit.</div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">2</div></div>
+      <div class="cell"><div class="k">Source files</div><div class="v">5</div></div>
+      <div class="cell"><div class="k">Test files</div><div class="v">3</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v">0</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v ok">none</div></div>
+    </div>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>File structure</h2></div>
+      <p class="sec-intro">No new files. Three source files gain catalog entries; one source file changes one literal in <code>battery_bank.placementCost</code>; three test files gain spot tests on the new resource / recipe / placement-cost. The catalog-completeness invariants already iterate <code>ALL_RESOURCES</code> / <code>KNOWN_DEF_IDS</code>, so missing-from-a-map omissions surface at the existing tests without new scaffolding.</p>
+      <div class="filetable">
+        <div class="row"><div class="cell head">File</div><div class="cell head">Change</div></div>
+        <div class="row"><div class="cell"><code>src/recipes.ts</code></div><div class="cell desc"><strong>Commit&nbsp;A:</strong> Add <code>'saltwater_cell'</code> to the <code>ResourceId</code> union (after the <code>wire</code> line, around line 145), to <code>ALL_RESOURCES</code> (around line 498, alongside <code>'wire'</code>), to <code>XP_WEIGHT</code> (around line 822, value <code>10</code>), and add the <code>cell_press</code> recipe to <code>RECIPES</code> (alongside the other T1 manufacturing recipes around line 1370 — <code>workshop</code> / <code>kit_assembler</code>). Recipe key matches the new <code>cell_press</code> defId; no synthetic <code>RecipeId</code> entry needed.</div></div>
+        <div class="row"><div class="cell"><code>src/building-defs.ts</code></div><div class="cell desc"><strong>Commit&nbsp;A:</strong> Add <code>'cell_press'</code> to the <code>BuildingDefId</code> union (alongside the T2 manufacturing-style defs, around line 268 near <code>'metal_rolling_mill'</code>) and add the <code>cell_press</code> def entry into <code>BUILDING_DEFS</code> (placed near the other T1 manufacturing defs, e.g. after <code>workshop</code> around line 673 or alongside <code>smelter</code> around line 773). <strong>Commit&nbsp;B:</strong> Rewrite the <code>placementCost</code> literal on line 847 of <code>battery_bank</code> from <code>{ battery: 4, wire: 3, steel_beam: 1 }</code> to <code>{ saltwater_cell: 4, wire: 3, steel_beam: 1 }</code>. All other <code>battery_bank</code> fields untouched. <code>BATTERY_CAPACITY_WS['battery_bank']</code> (<code>economy.ts:63</code>) stays at 5&nbsp;kWh.</div></div>
+        <div class="row"><div class="cell"><code>src/storage-categories.ts</code></div><div class="cell desc"><strong>Commit&nbsp;A:</strong> Add <code>saltwater_cell: 'components'</code> to <code>RESOURCE_STORAGE_CATEGORY</code> (around line 190, next to the existing <code>wire: 'components'</code> entry).</div></div>
+        <div class="row"><div class="cell"><code>src/inventory-ui.ts</code></div><div class="cell desc"><strong>Commit&nbsp;A:</strong> Add <code>saltwater_cell: 'components'</code> to <code>RESOURCE_CATEGORY</code> (around line 118, next to <code>wire: 'components'</code>).</div></div>
+        <div class="row"><div class="cell"><code>src/building-defs.test.ts</code></div><div class="cell desc"><strong>Commit&nbsp;A:</strong> Append <code>'cell_press'</code> to the hand-mirrored <code>KNOWN_DEF_IDS</code> list (around line 99, alongside the other ocean-pump-adjacent T1 entries; placement inside the list is purely organisational — the test iterates the whole array). The <code>ALL_BUILDING_DEF_IDS matches the BUILDING_DEFS keyset</code> test (line 289) auto-passes once the def is in the catalog.</div></div>
+        <div class="row"><div class="cell"><code>src/recipes.test.ts</code></div><div class="cell desc"><strong>Commit&nbsp;A:</strong> Add an XP_WEIGHT spot test pinning <code>XP_WEIGHT.saltwater_cell === 10</code> (matching the local convention near the existing <code>XP_WEIGHT.oxygen is 3</code> tests, line ~248).</div></div>
+        <div class="row"><div class="cell"><code>src/economy.test.ts</code></div><div class="cell desc"><strong>Commit&nbsp;A:</strong> Add a Cell Press production test mirroring the §<code>step-9 chain</code> Smelter test pattern at line 1334 — strip the def's 20W via a noPower catalog clone, stock all three inputs, advance the simulation, assert <code>saltwater_cell</code> accrues and inputs deplete at the 40s rate.</div></div>
+        <div class="row"><div class="cell"><code>src/placement.test.ts</code></div><div class="cell desc"><strong>Commit&nbsp;B:</strong> Add a placement-cost test mirroring the §<code>insufficient-resources</code> Mine test at line 522 — attempt to place <code>battery_bank</code> on an empty inventory, assert the shortfall report is <code>{ saltwater_cell: 4, wire: 3, steel_beam: 1 }</code> verbatim.</div></div>
+      </div>
+      <p class="sec-intro" style="margin-top: 18px"><strong>No other touchpoints.</strong> <code>buildingUnlocked</code> in <code>building-defs.ts:4220</code> is purely tier-driven (<code>tierForLevel</code>); a T1 def auto-unlocks at island level 1. <code>buildings-ui.ts</code> reads dynamically from <code>BUILDING_DEFS</code> via <code>unlockedDefs</code>. <code>recipe-graph.ts</code> walks <code>Object.entries(RECIPES)</code> dynamically. <code>tutorial.ts</code> hardcodes <code>'workshop' / 'smelter'</code> in tutorial checks but adding a new T1 building doesn't require a tutorial step. <code>settlement.ts:241</code> hardcodes a <code>['solar', 'workshop']</code> starter pack for settled colonies — out of scope (the spec's primary use case is home-island bootstrap). <strong>Persistence:</strong> no schema bump — old saves deserialize the missing <code>saltwater_cell</code> key as 0 via <code>inv()</code> defaulting (see <code>AGENTS.md</code> § <em>Persistence migrations — bump = migrate</em>; additive ResourceId entries don't require a bump).</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Task 1 (Commit&nbsp;A): add saltwater_cell resource + cell_press building/recipe</h2></div>
+      <div class="task-card">
+        <p class="task-blurb">Atomic commit. Introduces the <code>saltwater_cell</code> <code>ResourceId</code>, the <code>cell_press</code> <code>BuildingDefId</code>, the <code>cell_press</code> recipe, and the registration entries every catalog-completeness test iterates. <strong>Strict ordering:</strong> add the resource entries first, then the building def, then the recipe — the recipe references <code>saltwater_cell</code> as an output and <code>cell_press</code> as a recipe key, so the file won't compile if either upstream addition is missing. After Step&nbsp;6 the source compiles; tests come last. End with full suite + build green, then commit.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/recipes.ts</code> <span class="tag">— ResourceId union, ALL_RESOURCES, XP_WEIGHT, RECIPES table</span></li>
+            <li>Modify: <code>src/storage-categories.ts</code> <span class="tag">— RESOURCE_STORAGE_CATEGORY map</span></li>
+            <li>Modify: <code>src/inventory-ui.ts</code> <span class="tag">— RESOURCE_CATEGORY map</span></li>
+            <li>Modify: <code>src/building-defs.ts</code> <span class="tag">— BuildingDefId union, BUILDING_DEFS table</span></li>
+            <li>Modify: <code>src/building-defs.test.ts</code> <span class="tag">— KNOWN_DEF_IDS hand-mirror</span></li>
+            <li>Modify: <code>src/recipes.test.ts</code> <span class="tag">— XP_WEIGHT spot pin</span></li>
+            <li>Modify: <code>src/economy.test.ts</code> <span class="tag">— Cell Press production test</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Add <code>saltwater_cell</code> to the <code>ResourceId</code> union</div>
+            <p class="step-text">Edit <code>src/recipes.ts</code> at the petrochemical / refined block. Unique anchor is the single occurrence of <code>| 'wire'</code> on line 145 (the line immediately after the byproduct block of <code>diesel</code>):</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (line 145, in src/recipes.ts):</span>
+<span class="del">  | 'wire'
+  // Phase 4 — T2 petrochemical byproducts (§7.4)</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  | 'wire'
+  // §15.6 saltwater-cell bootstrap — T2 home-buildable battery component.
+  | 'saltwater_cell'
+  // Phase 4 — T2 petrochemical byproducts (§7.4)</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Add <code>saltwater_cell</code> to <code>ALL_RESOURCES</code></div>
+            <p class="step-text">Same file, around line 498. Unique anchor is <code>'wire',</code> in the petrochemical block (one occurrence in the list region):</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around line 498, src/recipes.ts):</span>
+<span class="del">  'wire',
+  // Phase 4 — T2 petrochemical byproducts (§7.4)</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  'wire',
+  // §15.6 saltwater-cell bootstrap.
+  'saltwater_cell',
+  // Phase 4 — T2 petrochemical byproducts (§7.4)</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Add <code>saltwater_cell</code> to <code>XP_WEIGHT</code></div>
+            <p class="step-text">Same file, around line 822. Unique anchor is <code>wire: 10,</code> in the XP_WEIGHT block (one occurrence):</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around line 822, src/recipes.ts):</span>
+<span class="del">  wire: 10,
+  // Phase 4 — T2 petrochemical byproducts (§7.4)</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  wire: 10,
+  // §15.6 saltwater-cell bootstrap — T2 component weight = 10 per §9.1.
+  saltwater_cell: 10,
+  // Phase 4 — T2 petrochemical byproducts (§7.4)</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Add storage-category entry in <code>src/storage-categories.ts</code></div>
+            <p class="step-text">Around line 190. Unique anchor is <code>wire: 'components',</code> followed by the <code>// T3 chemistry/electronics.</code> comment band:</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around line 190, src/storage-categories.ts):</span>
+<span class="del">  // T2 components.
+  wire: 'components',
+
+  // T3 chemistry/electronics.</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  // T2 components.
+  wire: 'components',
+  // §15.6 saltwater-cell bootstrap — same bucket as wire / bolt / gear.
+  saltwater_cell: 'components',
+
+  // T3 chemistry/electronics.</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Add inventory-UI category entry in <code>src/inventory-ui.ts</code></div>
+            <p class="step-text">Around line 118. Unique anchor is <code>wire: 'components',</code> on a line near <code>microchip: 'components',</code>:</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around line 118, src/inventory-ui.ts):</span>
+<span class="del">  wire: 'components',
+  microchip: 'components',</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  wire: 'components',
+  saltwater_cell: 'components',
+  microchip: 'components',</span></pre></div></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: Add <code>cell_press</code> to <code>BuildingDefId</code> union</div>
+            <p class="step-text">In <code>src/building-defs.ts</code>, around line 268. Unique anchor is <code>| 'metal_rolling_mill'</code> in the long Phase / Step-18 union (one occurrence):</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around line 268, src/building-defs.ts):</span>
+<span class="del">  | 'metal_rolling_mill'
+  | 'sheet_metal_mill'</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  | 'metal_rolling_mill'
+  // §15.6 saltwater-cell bootstrap — T1 manufacturing slot for saltwater_cell.
+  | 'cell_press'
+  | 'sheet_metal_mill'</span></pre></div></div>
+            <p class="step-text">(Placement inside the union is purely organisational — adjacency to <code>metal_rolling_mill</code> keeps it visually near the related wire-component tooling. The completeness test compares by set equality, not order.)</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Add the <code>cell_press</code> def in <code>BUILDING_DEFS</code></div>
+            <p class="step-text">Same file. Place the def alongside the other T1 manufacturing entries — slot it right after the <code>workshop</code> def (lines 656–673) so build-menu grouping stays sensible. Unique anchor is the closing <code>},</code> of <code>workshop</code>'s <code>adjacencyBuffs</code> block immediately preceding the <code>solar:</code> def block:</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (lines 670–675, src/building-defs.ts — end of workshop def, start of solar def):</span>
+<span class="del">    adjacencyBuffs: [
+      { matchKind: 'same_def', percentPerMatch: 5, maxMatches: 3 },
+    ],
+  },
+  solar: {</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">    adjacencyBuffs: [
+      { matchKind: 'same_def', percentPerMatch: 5, maxMatches: 3 },
+    ],
+  },
+  // §15.6 saltwater-cell bootstrap — T1 manufacturing slot, single tile, 20W draw.
+  // Crafts saltwater_cell (T2 component) from saltwater + iron_ingot + wire.
+  // No requiredTile, no requiresHeat — placeable anywhere on grass.
+  cell_press: {
+    id: 'cell_press',
+    displayName: 'Cell Press',
+    category: 'manufacturing',
+    tier: 1,
+    footprint: SHAPES.single,
+    fill: 0x80a0c0,       <span class="cm">// pale electrolyte blue</span>
+    stroke: 0x203040,
+    power: { consumes: 20 },
+    placementCost: { stone: 20, wood: 10 },
+    glyph: '◫',
+  },
+  solar: {</span></pre></div></div>
+            <p class="step-text">All other defs untouched. <code>SHAPES.single</code> is already in scope at this file location (used by <code>solar</code> immediately below).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 8: Add the <code>cell_press</code> recipe to <code>RECIPES</code></div>
+            <p class="step-text">Back in <code>src/recipes.ts</code>. Place the recipe alongside the other T1 manufacturing recipes — right after <code>workshop</code> (lines 1365–1370). Unique anchor is the closing <code>},</code> of <code>workshop</code> immediately preceding the <code>// T1 power-burn</code> comment band:</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around lines 1365–1372, src/recipes.ts):</span>
+<span class="del">  workshop: {
+    cycleSec: 33, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
+    inputs: { iron_ore: 1, coal: 1 },
+    outputs: { bolt: 1 },
+    category: 'manufacturing',
+  },
+
+  // T1 power-burn: kept at short cycles so power keeps up with consumers</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  workshop: {
+    cycleSec: 33, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
+    inputs: { iron_ore: 1, coal: 1 },
+    outputs: { bolt: 1 },
+    category: 'manufacturing',
+  },
+  // §15.6 saltwater-cell bootstrap — T1 manufacturing recipe. 40s cycle,
+  // home-Plains-only inputs so battery_bank no longer chains through the
+  // T3 lithium gate. Wire is the T2-chokepoint bottleneck per spec §05.
+  cell_press: {
+    cycleSec: 40,
+    inputs: { saltwater: 1, iron_ingot: 1, wire: 1 },
+    outputs: { saltwater_cell: 1 },
+    category: 'manufacturing',
+  },
+
+  // T1 power-burn: kept at short cycles so power keeps up with consumers</span></pre></div></div>
+            <p class="step-text">No synthetic <code>RecipeId</code> needed — <code>RecipeId = BuildingDefId | …</code>, so <code>'cell_press'</code> joins the recipe-key set automatically once it's in <code>BuildingDefId</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 9: Smoke build — verify the catalog compiles</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS clean — <code>tsc -b &amp;&amp; vite build</code>. Strict mode (<code>strict</code> + <code>noUncheckedIndexedAccess</code>) will catch any missing-from-map omission at compile time, since <code>XP_WEIGHT</code> / <code>RESOURCE_STORAGE_CATEGORY</code> / <code>RESOURCE_CATEGORY</code> are all declared as <code>Readonly&lt;Record&lt;ResourceId, …&gt;&gt;</code> (total maps). Likewise <code>BUILDING_DEFS</code> is <code>Readonly&lt;Record&lt;BuildingDefId, BuildingDef&gt;&gt;</code> — adding the union member without the def entry is a compile error. If build fails, the message will point at the missing entry; fix and re-run.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 10: Update <code>KNOWN_DEF_IDS</code> in <code>building-defs.test.ts</code></div>
+            <p class="step-text">Around line 99. Unique anchor is <code>'coastal_pump',</code> in the §8.1 T2 extraction block (one occurrence in this list):</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around line 99, src/building-defs.test.ts):</span>
+<span class="del">  'coastal_pump',
+  'quartz_mine',</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  'coastal_pump',
+  // §15.6 saltwater-cell bootstrap — registered with the T1 manufacturing-adjacent block.
+  'cell_press',
+  'quartz_mine',</span></pre></div></div>
+            <p class="step-text">(Placement inside the array is purely for readability — the catalog test compares set equality via <code>Object.keys(BUILDING_DEFS).sort()</code> vs <code>[...ALL_BUILDING_DEF_IDS].sort()</code> at line 290.)</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 11: Add the XP_WEIGHT spot test in <code>recipes.test.ts</code></div>
+            <p class="step-text">Around line 254, right after the existing <code>XP_WEIGHT.slag is 3</code> test. The pattern is one-line <code>expect</code> wrapped in an <code>it</code>:</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around lines 252–255, src/recipes.test.ts):</span>
+<span class="del">  it('XP_WEIGHT.slag is 3', () =&gt; {
+    expect(XP_WEIGHT.slag).toBe(3);
+  });
+});</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">  it('XP_WEIGHT.slag is 3', () =&gt; {
+    expect(XP_WEIGHT.slag).toBe(3);
+  });
+
+  it('XP_WEIGHT.saltwater_cell is 10', () =&gt; {
+    // §15.6 saltwater-cell bootstrap — T2 component weight per §9.1.
+    expect(XP_WEIGHT.saltwater_cell).toBe(10);
+  });
+});</span></pre></div></div>
+            <p class="step-text">The trailing <code>});</code> on the last <code>OLD</code> line closes the surrounding <code>describe('byproducts', …)</code> block at line 227 — keep it on the same position in <code>NEW</code> so the block stays balanced.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 12: Add the Cell Press production test in <code>economy.test.ts</code></div>
+            <p class="step-text">Mirror the existing Smelter pattern (line 1334). Append a new <code>it(…)</code> at the bottom of the <code>describe('step-9 chain — Smelter T1 + storage aggregation', …)</code> block, or — preferred — drop it into a new dedicated describe block right after the Smelter test for locality. Anchor on the closing <code>});</code> of the Smelter <code>it</code> (line 1353):</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (lines 1350–1355, src/economy.test.ts):</span>
+<span class="del">    expect(state.inventory.iron_ingot).toBeCloseTo(3.7037037037037033, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(46.2962962962963, 6);
+    expect(state.inventory.coal).toBeCloseTo(46.2962962962963, 6);
+  });
+
+  it('aggregateStorageCaps: Silo on an island raises only dry_goods caps to 4000', () =&gt; {</span>
+
+<span class="cm">// NEW (insert new it between the closing }); of the Smelter test and the aggregateStorageCaps Silo test):</span>
+<span class="add">    expect(state.inventory.iron_ingot).toBeCloseTo(3.7037037037037033, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(46.2962962962963, 6);
+    expect(state.inventory.coal).toBeCloseTo(46.2962962962963, 6);
+  });
+
+  it('Cell Press produces saltwater_cell at 1/40s with inputs stocked (§15.6)', () =&gt; {
+    // §15.6 saltwater-cell bootstrap — mirrors the Smelter T1 pattern
+    // above. Cell Press 1/40s = 0.025/s. Over 100s = 2.5 cells, with
+    // 2.5 each of saltwater / iron_ingot / wire consumed. Strip cell_press's
+    // 20W draw via a noPower catalog clone — same shape as `noSmelterPower`
+    // above — so production isn't gated on a Solar Panel.
+    const CELL_PRESS: PlacedBuilding = { id: 'b-cp', defId: 'cell_press', x: 0, y: 0 };
+    const noCellPressPower = ((): DefCatalog =&gt; {
+      const base = { ...BUILDING_DEFS } as Record&lt;BuildingDefId, BuildingDef&gt;;
+      const { power: _p, ...rest } = base.cell_press;
+      base.cell_press = rest as BuildingDef;
+      return base;
+    })();
+    const state = makeState({
+      buildings: [CELL_PRESS],
+      inventory: { ...blankInventory(), saltwater: 50, iron_ingot: 50, wire: 50 },
+    });
+    advanceIsland(state, 100_000, { defs: noCellPressPower });
+    expect(state.inventory.saltwater_cell).toBeCloseTo(2.5, 6);
+    expect(state.inventory.saltwater).toBeCloseTo(47.5, 6);
+    expect(state.inventory.iron_ingot).toBeCloseTo(47.5, 6);
+    expect(state.inventory.wire).toBeCloseTo(47.5, 6);
+  });
+
+  it('aggregateStorageCaps: Silo on an island raises only dry_goods caps to 4000', () =&gt; {</span></pre></div></div>
+            <p class="step-text">The <code>DefCatalog</code> / <code>BuildingDef</code> / <code>BuildingDefId</code> / <code>BUILDING_DEFS</code> / <code>PlacedBuilding</code> / <code>makeState</code> / <code>blankInventory</code> / <code>advanceIsland</code> imports are already in scope at the top of the file (the Smelter test uses all of them on line 1336–1352). No new imports needed.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 13: Run targeted tests</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/recipes.test.ts src/storage-categories.test.ts src/inventory-ui.test.ts src/building-defs.test.ts src/economy.test.ts</code></p>
+            <p class="step-text">Expected: PASS clean. Specifically:</p>
+            <ul style="margin-left:18px;font-size:13.5px;line-height:1.5;color:var(--gray-500);">
+              <li><code>recipes.test.ts</code> — the <code>every ResourceId has an XP_WEIGHT entry</code> test (line 130), the <code>every recipe input/output resource is a known ResourceId</code> test (line 114), the <code>every recipe input has at least one producer recipe</code> test (line 81), and the new <code>XP_WEIGHT.saltwater_cell is 10</code> pin all green. Recipe orphan-input check passes because <code>saltwater</code> / <code>iron_ingot</code> / <code>wire</code> all have producer recipes (<code>coastal_pump</code> / <code>smelter</code> / <code>metal_rolling_mill</code>).</li>
+              <li><code>storage-categories.test.ts</code> — the iterative <code>assigns every ResourceId to a category</code> test (line 22) auto-passes once <code>saltwater_cell: 'components'</code> is in the map.</li>
+              <li><code>inventory-ui.test.ts</code> — the iterative <code>covers every ResourceId</code> test (line 20) auto-passes.</li>
+              <li><code>building-defs.test.ts</code> — the <code>every BuildingDefId in the union has a def entry</code> test (line 281) and the <code>ALL_BUILDING_DEF_IDS matches the BUILDING_DEFS keyset</code> test (line 289) both green once <code>cell_press</code> appears in both <code>KNOWN_DEF_IDS</code> and <code>BUILDING_DEFS</code>.</li>
+              <li><code>economy.test.ts</code> — the new Cell Press production test green.</li>
+            </ul>
+            <p class="step-text">If any iterative-completeness test reports a missing key, the failure message names the offending resource / def id — fix the missing map entry and re-run.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 14: Full suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: PASS — full vitest suite green. <strong>Spec §07 coverage check</strong>: the spec's bullet (1) "resource catalog completeness" rides on the iterative tests at <code>recipes.test.ts:130</code> / <code>storage-categories.test.ts:22</code> / <code>inventory-ui.test.ts:20</code>; bullet (2) "Cell Press recipe production" is the new Step-12 test; bullet (4) "storage cap respect" rides on <code>aggregateStorageCaps</code> tests at <code>economy.test.ts:1355+</code> which iterate <code>ALL_RESOURCES</code> against <code>RESOURCE_STORAGE_CATEGORY</code> — saltwater_cell auto-included in the <code>components</code> bucket; bullet (5) "no T3+ battery consumers regression" is satisfied because no recipe/def references <code>battery</code> changes in Commit&nbsp;A. Bullet (3) "battery_bank placement" lives in Commit&nbsp;B / Task 2.</p>
+            <p class="step-text">No closed-form numeric pins outside the new tests should fail — all changes are additive. If a sibling test fails, the most likely cause is that the new def entry accidentally shadowed an existing symbol (e.g., misplaced inside the wrong <code>describe</code> block in <code>economy.test.ts</code>, or pasted as a duplicate key in <code>BUILDING_DEFS</code>).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 15: Build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS clean. Re-runs <code>tsc -b &amp;&amp; vite build</code> — strict TypeScript catches any union/map drift one last time before the commit. <strong>Do NOT</strong> restart <code>robot-islands-dev.service</code> — per <code>AGENTS.md</code>, the service serves the built <code>dist/</code> bundle; restarting is reserved for <code>vite.config.ts</code> / <code>package.json</code> changes. The live tab will pick up the new build on a manual browser reload.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 16: (Optional) Live smoke-test via Daedalus</div>
+            <p class="step-text">If the islands tab is open, reload <code>https://islands.nitjsefni.eu/</code> and open the catalog / build menu — <strong>Cell Press</strong> should appear in the Manufacturing tier-1 list with placement cost <code>20 stone + 10 wood</code> and a recipe preview reading <code>1 saltwater + 1 iron_ingot + 1 wire → 1 saltwater_cell / 40s</code>. Confirm with <code>mcp__daedalus__screenshot</code> against the active tab. Optional — verification rides on the unit tests; this only confirms the UI auto-discovery picked up the new def.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 17: Commit</div>
+            <p class="step-text">Stage the seven files and commit with a clear message + the implementing agent's co-author trailer:</p>
+            <div class="code-block"><div class="code"><pre>git add src/recipes.ts src/storage-categories.ts src/inventory-ui.ts \
+        src/building-defs.ts src/building-defs.test.ts \
+        src/recipes.test.ts src/economy.test.ts
+git commit -F /tmp/saltwater-cell-bootstrap-A.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/saltwater-cell-bootstrap-A.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(catalog): add saltwater_cell resource + cell_press T1 building
+
+Step 1 of the §15.6 saltwater-cell bootstrap. Adds a new T2 component
+saltwater_cell and a new T1 manufacturing building cell_press that
+crafts it from saltwater + iron_ingot + wire (40s cycle, 20W draw).
+All inputs are available on home Plains so the eventual battery_bank
+cost reroute (next commit) lands the player a home-bootstrappable T2
+power buffer with no biome / discovery gate.
+
+Catalog additions:
+  - ResourceId: 'saltwater_cell' (T2, components bucket, XP_WEIGHT=10)
+  - BuildingDefId: 'cell_press' (T1, manufacturing, single tile, 20W)
+  - RECIPES.cell_press: { saltwater:1, iron_ingot:1, wire:1 } -&gt; { saltwater_cell:1 } / 40s
+
+The 'battery' token (T3, Battery Factory output) is unchanged. capacitor_bank,
+flywheel_array, and singularity_battery_factory continue consuming it as
+before. battery_bank's placementCost reroute lands in the next commit.
+
+No schema bump — saltwater_cell is additive on ResourceId; old saves
+deserialize the missing key as 0 via inv() defaulting.
+
+<span class="acc">Co-Authored-By: &lt;implementing agent&gt; &lt;noreply@&lt;agent-domain&gt;&gt;</span></pre></div></div>
+            <p class="step-text">Swap the trailer literal for the actual implementing agent's identity (e.g. <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code> for a kimi subagent, <code>Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</code> for an Opus lead). <strong>The trailer is syntactic, not stylistic</strong> — scan the composed message for a <code>Co-Authored-By:</code> line before <code>git commit</code> per <code>CLAUDE.md</code>.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Task 2 (Commit&nbsp;B): reroute <code>battery_bank.placementCost</code></h2></div>
+      <div class="task-card">
+        <p class="task-blurb">One-line source change in <code>battery_bank.placementCost</code>, plus one new placement test pinning the new shortfall shape. <code>BATTERY_CAPACITY_WS['battery_bank']</code> stays at 5&nbsp;kWh; the 4 charging-discharge logic is untouched. After this commit, the home-Plains bootstrap path is: Coastal Pump → Smelter (iron_ingot) → Metal Rolling Mill (wire) → Cell Press → 4 saltwater_cell → Battery Bank.</p>
+        <div class="files-block">
+          <div class="ft">Files</div>
+          <ul>
+            <li>Modify: <code>src/building-defs.ts</code> <span class="tag">— battery_bank.placementCost literal, line 847</span></li>
+            <li>Modify: <code>src/placement.test.ts</code> <span class="tag">— new insufficient-resources assertion</span></li>
+          </ul>
+        </div>
+        <div class="steps">
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 1: Rewrite <code>battery_bank.placementCost</code></div>
+            <p class="step-text">Edit <code>src/building-defs.ts</code> line 847. Unique anchor is the literal <code>placementCost: { battery: 4, wire: 3, steel_beam: 1 },</code> (one occurrence; the <code>capacitor_bank</code> and <code>flywheel_array</code> entries use <code>battery: 20</code> / <code>battery: 100</code> respectively and stay unchanged):</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (lines 845–848, src/building-defs.ts — inside the battery_bank def):</span>
+<span class="del">    power: { consumes: 0 },
+    // §14 placeholder — tune in Appendix A.
+    placementCost: { battery: 4, wire: 3, steel_beam: 1 },
+    glyph: '▭',</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">    power: { consumes: 0 },
+    // §15.6 saltwater-cell bootstrap — was { battery: 4, wire: 3, steel_beam: 1 };
+    // rerouted off the T3 lithium chain so the T2 battery is craftable
+    // from home Plains. battery token still drives capacitor_bank /
+    // flywheel_array / singularity_battery_factory.
+    placementCost: { saltwater_cell: 4, wire: 3, steel_beam: 1 },
+    glyph: '▭',</span></pre></div></div>
+            <p class="step-text">All other <code>battery_bank</code> fields untouched. <code>SHAPES.single</code>, <code>fill</code>, <code>stroke</code>, <code>power: { consumes: 0 }</code>, tier 2 — all stay.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 2: Add the placement-cost regression test</div>
+            <p class="step-text">Append a new <code>it(…)</code> inside the existing <code>describe</code> block at <code>src/placement.test.ts</code> alongside the other <code>insufficient-resources</code> tests (line 522). Mirror the Mine pattern exactly — only the defId and shortfall record differ. Anchor on the closing <code>});</code> of the <code>validatePlacement surfaces insufficient-resources after geometry checks</code> test (line 574–575):</p>
+            <div class="code-block"><div class="code"><pre><span class="cm">// OLD (around lines 572–575, src/placement.test.ts — end of the cost-gate describe):</span>
+<span class="del">    expect(v.reason).toBe('insufficient-resources');
+    expect(v.missing).toEqual({ stone: 30, wood: 15 });
+  });
+});</span>
+
+<span class="cm">// NEW:</span>
+<span class="add">    expect(v.reason).toBe('insufficient-resources');
+    expect(v.missing).toEqual({ stone: 30, wood: 15 });
+  });
+
+  it('battery_bank placement cost is saltwater_cell-based, not battery-based (§15.6)', () =&gt; {
+    // §15.6 saltwater-cell bootstrap — battery_bank.placementCost was rerouted
+    // from { battery:4, wire:3, steel_beam:1 } to { saltwater_cell:4, wire:3,
+    // steel_beam:1 }. With zero inventory the shortfall must report the new
+    // shape verbatim — the rust would be undetected if a future revert
+    // accidentally restored the battery-token cost. battery_bank is T2, so
+    // bump the state level to clear the tier gate.
+    const spec = makeSpec();
+    const state = makeState(spec, 11);
+    state.inventory.saltwater_cell = 0;
+    state.inventory.wire = 0;
+    state.inventory.steel_beam = 0;
+    state.inventory.battery = 0; <span class="cm">// confirm the old token is NOT in the shortfall</span>
+    const v = validatePlacement(spec, state, 'battery_bank', 0, 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('insufficient-resources');
+    expect(v.missing).toEqual({ saltwater_cell: 4, wire: 3, steel_beam: 1 });
+  });
+});</span></pre></div></div>
+            <p class="step-text">The trailing <code>});</code> on the OLD line closes the surrounding <code>describe('validatePlacement', …)</code> block at line 179 — keep it in <code>NEW</code> at the same position so the block stays balanced. <code>makeSpec</code> / <code>makeState</code> / <code>validatePlacement</code> are already imported / declared at the top of the file (used by every other test in the block).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 3: Run targeted tests</div>
+            <p class="step-text cmd">Run: <code>npx vitest run src/placement.test.ts src/building-defs.test.ts src/battery-ladder.test.ts</code></p>
+            <p class="step-text">Expected: PASS clean. <code>placement.test.ts</code> picks up the new assertion; the existing <code>battery-ladder.test.ts</code> places <code>battery_bank</code> as a runtime PlacedBuilding (lines 61, 80) but doesn't pin placementCost — should pass unchanged. <code>building-defs.test.ts</code> doesn't pin <code>battery_bank.placementCost</code> either; the catalog tests cover type/structure, not value literals.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 4: Full suite</div>
+            <p class="step-text cmd">Run: <code>npm test</code></p>
+            <p class="step-text">Expected: PASS — full vitest suite green. <strong>Spec §07 bullet (3)</strong> "Battery Bank placement" is now covered by Step-2's new assertion. <strong>Bullet (5)</strong> "no T3+ regressions" rides on the existing tests for <code>capacitor_bank</code> / <code>flywheel_array</code> / <code>singularity_battery_factory</code> — none of those reference <code>battery_bank.placementCost</code>; their own <code>battery: 20</code> / <code>battery: 100</code> / recipe-input <code>battery</code> entries are untouched in this commit. If anything fails, the most likely cause is a missed import in the new test (verify <code>makeSpec</code> / <code>makeState</code> are bare top-of-file imports, not hoisted from an inner <code>describe</code>).</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 5: Build</div>
+            <p class="step-text cmd">Run: <code>npm run build</code></p>
+            <p class="step-text">Expected: PASS clean — <code>tsc -b &amp;&amp; vite build</code>. Strict mode verifies <code>'saltwater_cell'</code> is a valid <code>ResourceId</code> key in the <code>Partial&lt;Record&lt;ResourceId, number&gt;&gt;</code> placementCost record (which it is, courtesy of Commit&nbsp;A). Do <strong>not</strong> restart <code>robot-islands-dev.service</code>; live tab picks up the new bundle on browser reload.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 6: (Optional) Live smoke-test via Daedalus</div>
+            <p class="step-text">Reload <code>https://islands.nitjsefni.eu/</code>, hover the <strong>Battery Bank</strong> build button. Tooltip should display the new cost <code>4 saltwater_cell + 3 wire + 1 steel_beam</code> (not the old <code>4 battery</code>). On a fresh save with 0 saltwater_cell, the button stays disabled and the tooltip / inventory check surfaces the shortfall. Confirm with <code>mcp__daedalus__screenshot</code>. Optional — verification rides on the unit tests; this confirms the buildings-UI tooltip auto-discovered the renamed input.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="box"></div>
+          <div class="step-body">
+            <div class="step-title">Step 7: Commit</div>
+            <p class="step-text">Stage the two files and commit:</p>
+            <div class="code-block"><div class="code"><pre>git add src/building-defs.ts src/placement.test.ts
+git commit -F /tmp/saltwater-cell-bootstrap-B.txt</pre></div></div>
+            <p class="step-text">Where <code>/tmp/saltwater-cell-bootstrap-B.txt</code> contains:</p>
+            <div class="code-block"><div class="code"><pre>feat(buildings): reroute battery_bank.placementCost to saltwater_cell
+
+Step 2 of the §15.6 saltwater-cell bootstrap. battery_bank's
+placementCost moves off the T3 lithium-locked 'battery' token and onto
+the new T2 home-buildable 'saltwater_cell' component:
+
+  - { battery: 4, wire: 3, steel_beam: 1 }
+  + { saltwater_cell: 4, wire: 3, steel_beam: 1 }
+
+Capacity (BATTERY_CAPACITY_WS.battery_bank = 5 kWh) and runtime
+charge/discharge wiring untouched. T3+ buffers (capacitor_bank,
+flywheel_array) and the singularity_battery_factory recipe continue
+consuming 'battery' tokens unchanged.
+
+Player-facing impact: a fresh Plains home reaches Battery Bank by
+chaining Coastal Pump -&gt; Smelter -&gt; Metal Rolling Mill -&gt; Cell Press,
+all on home tiles. The Volcanic lithium scout / settle / level-up
+detour is no longer required for the smallest power buffer.
+
+Placement-cost test pins the new shortfall shape verbatim so a future
+revert can't quietly restore the old battery-token cost.
+
+<span class="acc">Co-Authored-By: &lt;implementing agent&gt; &lt;noreply@&lt;agent-domain&gt;&gt;</span></pre></div></div>
+            <p class="step-text">Swap the trailer for the actual implementing agent. Same rules as Task 1 Step 17.</p>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Notes &amp; spec §07 coverage</h2></div>
+      <div class="notes">
+        <div class="note info"><strong>Spec §07 test coverage map.</strong>
+          <ol style="margin-left:18px;line-height:1.55;">
+            <li><em>Resource catalog completeness</em> — auto-covered by the iterative tests at <code>recipes.test.ts:130</code> (XP_WEIGHT), <code>storage-categories.test.ts:22</code> (RESOURCE_STORAGE_CATEGORY), <code>inventory-ui.test.ts:20</code> (RESOURCE_CATEGORY). The new <code>XP_WEIGHT.saltwater_cell is 10</code> spot pin (Task 1 Step 11) adds visible documentation alongside the bulk check.</li>
+            <li><em>Cell Press recipe production</em> — new test, Task 1 Step 12 (<code>economy.test.ts</code>).</li>
+            <li><em>Battery Bank placement (saltwater_cell-based cost)</em> — new test, Task 2 Step 2 (<code>placement.test.ts</code>).</li>
+            <li><em>Storage cap respect</em> — auto-covered by <code>economy.test.ts:1355+</code> <code>aggregateStorageCaps</code> tests which iterate <code>ALL_RESOURCES</code> against <code>RESOURCE_STORAGE_CATEGORY</code>. saltwater_cell joining the <code>components</code> bucket means Component Warehouse / labeled Crate caps automatically extend to it.</li>
+            <li><em>No T3+ battery-consumer regressions</em> — Commit&nbsp;A touches no <code>battery</code> references; Commit&nbsp;B touches only <code>battery_bank.placementCost</code>. <code>capacitor_bank</code> / <code>flywheel_array</code> / <code>singularity_battery_factory</code> retain their <code>battery: 20</code> / <code>battery: 100</code> / recipe-input shapes verbatim. Existing tests for those defs pass unchanged.</li>
+          </ol>
+        </div>
+        <div class="note"><strong>Why two commits, not one.</strong> Commit&nbsp;A and Commit&nbsp;B each compile + pass tests independently. No test enforces "every produced resource has a consumer," so saltwater_cell can exist between the two commits without a downstream consumer. Splitting decouples the catalog addition (which a future spec might want to keep even if the battery_bank reroute is reverted) from the balance change (which is the actually-controversial bit). Bisects locate failures cleanly.</p></div>
+        <div class="note warn"><strong>Strict step ordering inside Task 1.</strong> The new building def references <code>saltwater_cell</code> indirectly (only its recipe does), but the recipe references both <code>saltwater_cell</code> (as output) and <code>'cell_press'</code> (as recipe key, which lives in <code>RecipeId = BuildingDefId | …</code>). Recipe definition must come AFTER both the resource enters <code>ResourceId</code> AND the def enters <code>BuildingDefId</code>. The step order in §02 (Steps 1–3 add the resource, Steps 6–7 add the def, Step 8 adds the recipe) preserves this; if you batch-edit, keep the dependency in mind — a recipe-first edit fails <code>tsc</code>.</div>
+        <div class="note"><strong>No render-layer touches.</strong> All changes in <code>recipes.ts</code> (pure data), <code>building-defs.ts</code> (pure data), <code>storage-categories.ts</code> (pure data), <code>inventory-ui.ts</code> (resource→category map — read by DOM-rendering code but the map itself is pure), and three test files. <code>buildings.ts</code> rendering picks up <code>fill</code> / <code>stroke</code> / <code>glyph</code> at runtime from the def catalog — no per-def render branch to add. The <code>cell_press</code> footprint is <code>SHAPES.single</code> (1×1), which <code>renderBuildings</code> handles via the generic single-tile path.</div>
+        <div class="note rust"><strong>What still uses the T3 <code>battery</code> token (do NOT touch).</strong>
+          <ul style="margin-left:18px;line-height:1.5;">
+            <li><code>capacitor_bank</code> (T3) placement: <code>{ battery: 20, microchip: 12, steel_beam: 6, coolant: 2 }</code> — <code>building-defs.ts:862</code>.</li>
+            <li><code>flywheel_array</code> (T4) placement: <code>{ battery: 100, microchip: 40, steel_beam: 20, coolant: 10, heavy_cable: 5 }</code> — <code>building-defs.ts:877</code>.</li>
+            <li><code>singularity_battery_factory</code> (T5) recipe inputs include <code>20 battery</code> per cycle — <code>recipes.ts:2060</code>.</li>
+          </ul>
+          The reroute is scoped narrowly to <code>battery_bank</code> (T2, 5&nbsp;kWh, the early-game starter). Higher tiers continue to gate on the lithium chain, which keeps the T3+ progression intact: the player still needs to reach Volcanic to scale beyond 5&nbsp;kWh.
+        </div>
+        <div class="note"><strong>Procgen Plains colonies without water.</strong> Per spec §09 risk table: settled Plains colonies have no water tile by default (rareTerrain may roll it, but isn't guaranteed). Cell Press can't make saltwater_cell on such a colony without imported saltwater via a route. This is intentional — the spec's primary use case is home-island bootstrap; a Plains colony that lacks water either imports saltwater via a route, or the player settles a water-bearing neighbor.</div>
+        <div class="note"><strong>Old saves load cleanly.</strong> The save format is <code>Record&lt;ResourceId, number&gt;</code>; an old v14 save lacks the <code>saltwater_cell</code> key. The persistence loader's backfill loop (or runtime <code>inv()</code> defaulting per <code>AGENTS.md</code> § <em>One responsibility per file</em> note on the <code>?? 0</code> pattern) treats missing keys as 0. The Cell Press building is open-set on the <code>BuildingDefId</code> union — existing serialized buildings (none of which are <code>cell_press</code>) keep working; new <code>cell_press</code> instances are saved going forward. No migration needed.</div>
+        <div class="note"><strong>Final verification checklist.</strong>
+          <ol style="margin-left:18px;line-height:1.55;">
+            <li><code>npx vitest run src/recipes.test.ts src/storage-categories.test.ts src/inventory-ui.test.ts src/building-defs.test.ts src/economy.test.ts src/placement.test.ts</code> — green after both commits.</li>
+            <li><code>npm test</code> — full suite green.</li>
+            <li><code>npm run build</code> — clean tsc + vite build.</li>
+            <li>(Optional) Live: catalog shows Cell Press (T1 manufacturing); Battery Bank tooltip shows <code>4 saltwater_cell + 3 wire + 1 steel_beam</code>. Daedalus screenshot for the record.</li>
+            <li>(Optional) Bootstrap walk-through: from a fresh home Plains save, place Coastal Pump → Smelter → Metal Rolling Mill → Cell Press; verify a saltwater_cell stockpile accrues; verify Battery Bank tooltip flips from "insufficient resources" to placeable once stock hits 4 / 3 / 1.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      robot-islands · implementation plan · 2026-05-26 · spec: docs/superpowers/specs/2026-05-26-saltwater-cell-battery-bootstrap-design.html · audit: docs/superpowers/audits/2026-05-26-battery-bank-chain.html · reference: docs/superpowers/plans/2026-05-23-coal-rebalance.html
+    </footer>
+
+  </div>
+</body>
+</html>
