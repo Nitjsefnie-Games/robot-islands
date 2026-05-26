@@ -151,7 +151,10 @@ export function deriveMagnitudes(
   // Emit each node with derived magnitude.
   return rawNodes.map((n): SkillNode => {
     const k = keys.get(n.id);
-    if (k === undefined) return { ...n, magnitude: 0 } as unknown as SkillNode;
+    if (k === undefined) {
+      const { tier: _tier, ...rest } = n;
+      return { ...rest, magnitude: 0 };
+    }
     const t = tiers.get(n.id)!;
     let m = 0;
     if (t === 'keystone') m = mK.get(k) ?? 0;
@@ -161,6 +164,7 @@ export function deriveMagnitudes(
       const d = fillerDepth(n.id) ?? 1;
       m = b * Math.pow(FILLER_GROWTH, d - 1);
     }
-    return { ...n, magnitude: m } as unknown as SkillNode;
+    const { tier: _tier, ...rest } = n;
+    return { ...rest, magnitude: m };
   });
 }
