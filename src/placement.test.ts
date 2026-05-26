@@ -572,6 +572,25 @@ describe('placeBuilding', () => {
     expect(v.reason).toBe('insufficient-resources');
     expect(v.missing).toEqual({ stone: 30, wood: 15 });
   });
+
+  it('battery_bank placement cost is saltwater_cell-based, not battery-based (§15.6)', () => {
+    // §15.6 saltwater-cell bootstrap — battery_bank.placementCost was rerouted
+    // from { battery:4, wire:3, steel_beam:1 } to { saltwater_cell:4, wire:3,
+    // steel_beam:1 }. With zero inventory the shortfall must report the new
+    // shape verbatim — the rust would be undetected if a future revert
+    // accidentally restored the battery-token cost. battery_bank is T2, so
+    // bump the state level to clear the tier gate.
+    const spec = makeSpec();
+    const state = makeState(spec, 11);
+    state.inventory.saltwater_cell = 0;
+    state.inventory.wire = 0;
+    state.inventory.steel_beam = 0;
+    state.inventory.battery = 0; // confirm the old token is NOT in the shortfall
+    const v = validatePlacement(spec, state, 'battery_bank', 0, 0, 0);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('insufficient-resources');
+    expect(v.missing).toEqual({ saltwater_cell: 4, wire: 3, steel_beam: 1 });
+  });
 });
 
 // ---------------------------------------------------------------------------
