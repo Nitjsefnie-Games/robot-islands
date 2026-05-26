@@ -188,6 +188,8 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
 
   // T2 components.
   wire: 'components',
+  // §15.6 saltwater-cell bootstrap — same bucket as wire / bolt / gear.
+  saltwater_cell: 'components',
 
   // T3 chemistry/electronics.
   silicon: 'components',        // §6.4: semiconductor solid → component.

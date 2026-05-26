@@ -1352,6 +1352,30 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
     expect(state.inventory.coal).toBeCloseTo(46.2962962962963, 6);
   });
 
+  it('Cell Press produces saltwater_cell at 1/40s with inputs stocked (§15.6)', () => {
+    // §15.6 saltwater-cell bootstrap — mirrors the Smelter T1 pattern
+    // above. Cell Press 1/40s = 0.025/s. Over 100s = 2.5 cells, with
+    // 2.5 each of saltwater / iron_ingot / wire consumed. Strip cell_press's
+    // 20W draw via a noPower catalog clone — same shape as `noSmelterPower`
+    // above — so production isn't gated on a Solar Panel.
+    const CELL_PRESS: PlacedBuilding = { id: 'b-cp', defId: 'cell_press', x: 0, y: 0 };
+    const noCellPressPower = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.cell_press;
+      base.cell_press = rest as BuildingDef;
+      return base;
+    })();
+    const state = makeState({
+      buildings: [CELL_PRESS],
+      inventory: { ...blankInventory(), saltwater: 50, iron_ingot: 50, wire: 50 },
+    });
+    advanceIsland(state, 100_000, { defs: noCellPressPower });
+    expect(state.inventory.saltwater_cell).toBeCloseTo(2.5, 6);
+    expect(state.inventory.saltwater).toBeCloseTo(47.5, 6);
+    expect(state.inventory.iron_ingot).toBeCloseTo(47.5, 6);
+    expect(state.inventory.wire).toBeCloseTo(47.5, 6);
+  });
+
   it('aggregateStorageCaps: Silo on an island raises only dry_goods caps to 4000', () => {
     // §4.6 categorized storage: Silo bumps dry_goods only. Other categories
     // stay at baseline 2000. (rebalanced step #19: baseline 2000 + silo 2000 = 4000)
