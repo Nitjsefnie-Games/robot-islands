@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saltwater-cell battery bootstrap — design spec · 2026-05-26</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B;
+      --olive:#8FA56E; --rust:#E08B7F; --info:#7DD3E8; --tan:#E0B47F;
+      --gray-150:#2E2C27; --gray-300:#3A3833;
+      --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px; --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700); line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 920px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 30px; line-height: 1.18; color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 28px 0 40px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 16px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay); border-radius: var(--radius); padding: 22px 26px; margin-bottom: 50px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 860px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    section { margin-bottom: 50px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate); padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 24px; color: var(--slate); letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 880px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    pre { background: var(--gray-150); border: var(--border); border-radius: 8px; padding: 12px 16px; margin: 10px 0 18px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; color: var(--gray-700); line-height: 1.5; max-width: 980px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius); border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13px; }
+    .tbl th, .tbl td { text-align: left; padding: 8px 13px; border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.num { font-family: var(--mono); text-align: right; }
+    .tbl td code { font-size: 12px; }
+    .checklist { display: flex; flex-direction: column; gap: 9px; max-width: 820px; }
+    .check { display: flex; gap: 12px; align-items: flex-start; background: var(--white); border: var(--border); border-radius: 10px; padding: 11px 16px; }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500); flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.4fr 90px 1.8fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 13px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 12px; max-width: 880px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500); border-radius: 10px; padding: 14px 20px; }
+    .defer .dt { font-weight: 600; font-size: 14.5px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--gray-300); }
+    .footer code { font-size: 12px; color: #C9B98A; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · saltwater-cell battery bootstrap · 2026-05-26</div>
+      <h1>Saltwater cell — a T2 home-buildable battery component</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Battery Bank (T2, 5 kWh) is the smallest power buffer for night-time solar bridging — yet its placement cost <code>{ battery: 4, wire: 3, steel_beam: 1 }</code> requires <code>battery</code> tokens that only come from the T3 Battery Factory, which itself needs <code>lithium</code> from the T3 Lithium Extractor, which has <code>requiredTile: ['lithium_vein']</code> — biome-locked terrain only present on Volcanic islands. To build the cheapest battery a player must reach T3, drone-scout for a lithium_vein island, settle it via the Foundation Kit chain, and level it to T3 — at which point Capacitor Bank + Geothermal Vent + alternative T3 power sources make the Battery Bank pointless. This spec introduces a new T2 component (<strong>saltwater_cell</strong>) crafted at a new T1 building (<strong>Cell Press</strong>) using only home-Plains-available inputs, and rewrites Battery Bank's placement cost to use it. The T3 <code>battery</code> token stays as-is for upstream consumers (Capacitor Bank, Flywheel Array, Singularity Battery factory).
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">New resources</div><div class="v accent">1</div></div>
+      <div class="cell"><div class="k">New buildings</div><div class="v accent">1</div></div>
+      <div class="cell"><div class="k">New recipes</div><div class="v accent">1</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v ok">none</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Add saltwater_cell (T2 component) + Cell Press (T1 building); rewrite battery_bank.placementCost from <code>battery</code> to <code>saltwater_cell</code>. Pure home-Plains buildable, zero discovery.</div>
+      <div class="d-body"><strong>New resource:</strong> <code>saltwater_cell</code> — T2 fabricated component in the <em>components</em> storage category (same bucket as Wire, Bolt, Battery, Gear).</div>
+      <div class="d-body"><strong>New building:</strong> <code>cell_press</code> — T1 manufacturing, single-tile 1×1 footprint, 20W power draw, placement cost <code>{ stone: 20, wood: 10 }</code>. No <code>requiredTile</code>, no <code>requiresHeat</code>. Placeable anywhere on grass.</div>
+      <div class="d-body"><strong>New recipe:</strong> at <code>cell_press</code>: <code>1 saltwater + 1 iron_ingot + 1 wire → 1 saltwater_cell</code>, 40s cycle, category <em>manufacturing</em>.</div>
+      <div class="d-body"><strong>Modified placement cost:</strong> <code>battery_bank.placementCost</code> changes from <code>{ battery: 4, wire: 3, steel_beam: 1 }</code> to <code>{ saltwater_cell: 4, wire: 3, steel_beam: 1 }</code>. Capacity unchanged at 5 kWh. The <code>battery</code> token is no longer referenced by any T2 building — it remains consumed by capacitor_bank (T3, 20), flywheel_array (T4, 100), and the singularity_battery factory recipes (T5).</div>
+      <div class="d-body"><strong>Out of scope:</strong> any rework of <code>battery</code> production, lithium chain, Battery Factory placement. Higher-tier batteries (capacitor_bank, flywheel_array, singularity_battery) keep their existing T3+ recipes.</div>
+    </div>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Why the inversion exists</h2></div>
+      <p class="body">Battery Bank ships at T2 (level 11+) but its <code>battery</code>-token requirement gates it behind a T3 chain. Full chain at HEAD as of <code>74cbc43</code>:</p>
+      <table class="tbl">
+        <thead><tr><th>Resource</th><th>Producer</th><th>Producer tier</th><th>Gate</th></tr></thead>
+        <tbody>
+          <tr><td><code>battery</code></td><td>Battery Factory</td><td class="num">T3</td><td>L25+ on the producer island</td></tr>
+          <tr><td><code>lithium</code></td><td>Lithium Extractor</td><td class="num">T3</td><td><code>requiredTile: ['lithium_vein']</code> — biome-locked</td></tr>
+          <tr><td><code>rigid_plastic</code></td><td>Rigid Plastic Press</td><td class="num">T2</td><td>chains through <code>naphtha</code> → Pump Jack on oil_well</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top: 14px">Lithium_vein only generates in the Volcanic biome (<code>biomes.ts:104</code> rareTerrain). Players must drone-scout, find a Volcanic island, settle it (Foundation Kit + Ship/Helicopter dispatch chain), level it to T3, then place the Lithium Extractor. By then they have Capacitor Bank (T3 buffer, 100 kWh) and Geothermal Vent (T1, day/night-independent on Volcanic). Battery Bank's 5 kWh storage is structurally obsolete by the time it's craftable.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Home Plains tile inventory (verified)</h2></div>
+      <p class="sec-intro">The home island uses a hand-placed terrain function (<code>island.ts:293</code> <code>defaultTerrainAt</code>), bypassing <code>terrainAtForBiome</code>'s rareTerrain rolling. Terrain available at game start:</p>
+      <table class="tbl">
+        <thead><tr><th>Tile</th><th>Coords</th><th>Count</th><th>Enables</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">ore</td><td><code>(-7..-5, 2..3)</code></td><td class="num">6</td><td>Mine → iron_ore</td></tr>
+          <tr><td class="slate">coal</td><td><code>(8..9, 5..6)</code></td><td class="num">4</td><td>Mine → coal</td></tr>
+          <tr><td class="slate">water</td><td><code>(-1..0, -5..-4)</code></td><td class="num">4</td><td>Well → fresh_water · Coastal Pump → saltwater</td></tr>
+          <tr><td class="slate">tree</td><td><code>(6..7, -3..-4)</code></td><td class="num">3</td><td>Logger → wood</td></tr>
+          <tr><td class="slate">stone</td><td>scattered + 2×2 cluster <code>(-11..-10, 4..5)</code></td><td class="num">10</td><td>Quarry → stone</td></tr>
+          <tr><td class="slate">oil_well</td><td><code>(-4..-3, 8..9)</code></td><td class="num">4</td><td>Pump Jack → crude_oil</td></tr>
+          <tr><td class="slate">limestone</td><td><code>(-9..-8, 7..8)</code></td><td class="num">4</td><td>Limestone Quarry → limestone</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top: 14px"><strong>Crucially:</strong> the home island has a 4-tile water cluster. The proposed Cell Press recipe uses <code>saltwater</code> (from Coastal Pump on water tile) so the entire dependency chain bottoms out on home tiles — no discovery, no settlement, no biome lockouts.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>New resource — <code>saltwater_cell</code></h2></div>
+      <p class="sec-intro">A primitive electrochemical cell. Flavor: zinc-style galvanic cell with saltwater electrolyte and iron electrodes — gameplay parallel to real-world lead-acid bootstrap before lithium-ion.</p>
+      <table class="tbl">
+        <thead><tr><th>Property</th><th>Value</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">ResourceId</td><td><code>'saltwater_cell'</code></td><td>Added to the <code>ResourceId</code> union in <code>recipes.ts:46</code></td></tr>
+          <tr><td class="slate">ALL_RESOURCES</td><td>included</td><td><code>recipes.ts:415</code> — append to the list</td></tr>
+          <tr><td class="slate">Storage category</td><td><code>'components'</code></td><td><code>storage-categories.ts:69</code> RESOURCE_STORAGE_CATEGORY map — same bucket as wire, bolt, gear, battery</td></tr>
+          <tr><td class="slate">inventory-ui category</td><td><code>'components'</code></td><td><code>inventory-ui.ts</code> resource → category map</td></tr>
+          <tr><td class="slate">XP_WEIGHT</td><td><code>10</code> (T2 standard)</td><td><code>recipes.ts:734</code> — matches battery (also <code>10</code>), wire (<code>10</code>), and other T2 components</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>New building — <code>cell_press</code></h2></div>
+      <p class="sec-intro">A primitive cell-assembly building. Lives in the T1 manufacturing tier so it can be unlocked early; uses one T2 input (<code>wire</code>) which effectively gates output until the steel chain is online — but the building itself is placeable from L1.</p>
+      <pre>cell_press: {
+  id: 'cell_press',
+  displayName: 'Cell Press',
+  category: 'manufacturing',
+  tier: 1,
+  footprint: SHAPES.single,
+  fill: 0x80a0c0,       <span style="color:var(--gray-500)">// pale electrolyte blue</span>
+  stroke: 0x203040,
+  power: { consumes: 20 },
+  placementCost: { stone: 20, wood: 10 },
+  glyph: '◫',
+}</pre>
+      <p class="body">No <code>requiredTile</code>, no <code>requiresHeat</code>, no <code>requiredBiomes</code>, no <code>gates</code>, no adjacency buffs. Plain manufacturing slot.</p>
+      <p class="body"><strong>BuildingDefId union</strong> at <code>building-defs.ts</code> gets <code>'cell_press'</code> appended.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>New recipe — saltwater cell assembly</h2></div>
+      <pre>cell_press: {
+  cycleSec: 40,
+  inputs: { saltwater: 1, iron_ingot: 1, wire: 1 },
+  outputs: { saltwater_cell: 1 },
+  category: 'manufacturing',
+}</pre>
+      <p class="body">Recipe key matches the building defId (the codebase convention). Cycle time 40s is a balance choice: short enough to feel responsive when bootstrapping (4 cells in ~160s), long enough that the player still needs a couple of Cell Press buildings (or to wait) when ramping toward the 4 needed for a Battery Bank.</p>
+      <p class="body">Throughput sanity-check: at 40s/cell and 1 Cell Press, 4 cells take 160s wall-clock. At 1 Coastal Pump (1 saltwater / 13s), 4 saltwater takes ~52s. At 1 Smelter (1 iron_ingot / 27s), 4 iron_ingot takes 108s. At 1 Metal Rolling Mill (1 wire / 133s), 4 wire takes 532s — the wire bottleneck dominates. Acceptable — wire is a known T2 chokepoint.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Modified — <code>battery_bank.placementCost</code></h2></div>
+      <pre>battery_bank: {
+  id: 'battery_bank',
+  displayName: 'Battery Bank',
+  category: 'power',
+  tier: 2,
+  footprint: SHAPES.single,
+  fill: 0x4060a0,
+  stroke: 0x101030,
+  power: { consumes: 0 },
+  <span style="color:var(--rust)">// BEFORE: placementCost: { battery: 4, wire: 3, steel_beam: 1 },</span>
+  <span style="color:var(--olive)">placementCost: { saltwater_cell: 4, wire: 3, steel_beam: 1 },</span>
+  glyph: '▭',
+}</pre>
+      <p class="body">All other fields unchanged. <code>BATTERY_CAPACITY_WS['battery_bank']</code> (<code>economy.ts:63</code>) stays at <code>5_000 * 3600</code> = 5 kWh. Operational mechanics (charge from surplus, discharge into deficit) untouched.</p>
+      <p class="body"><strong>What still uses <code>battery</code> tokens</strong> (unchanged):</p>
+      <ul style="margin: 0 0 14px 24px">
+        <li><code>capacitor_bank</code> (T3) — placement: <code>{ battery: 20, microchip: 12, steel_beam: 6, coolant: 2 }</code></li>
+        <li><code>flywheel_array</code> (T4) — placement: <code>{ battery: 100, microchip: 40, steel_beam: 20, coolant: 10, heavy_cable: 5 }</code></li>
+        <li><code>singularity_battery</code> factory (T5) — recipe inputs include <code>20 battery</code> per cycle</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Tests</h2></div>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Resource catalog completeness</strong> — assert <code>saltwater_cell</code> appears in <code>ALL_RESOURCES</code>, <code>RESOURCE_STORAGE_CATEGORY</code>, <code>XP_WEIGHT</code>, and the inventory-ui category map. Existing resource-catalog tests already enforce these invariants by iterating the union; the new entry should slot in cleanly.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Cell Press recipe production</strong> — given an IslandState with all 3 inputs available, the existing tick-loop integration tests should produce <code>saltwater_cell</code> on advance. Add one new test mirroring an existing recipe-production test (e.g. the smelter or assembler test pattern).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Battery Bank placement</strong> — the existing placement-cost validation tests already iterate every building's <code>placementCost</code>; verify that the modified <code>battery_bank</code> placement cost passes inventory-shortfall checks under a stocked-inventory fixture with 4 saltwater_cell + 3 wire + 1 steel_beam.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Storage cap respect</strong> — saltwater_cell joining the <em>components</em> bucket means a Crate / Component Warehouse labeled <em>components</em> will accept it. Existing storage-cap tests should automatically cover this by virtue of the new resource being in the union; spot-check with a test that places a Crate, labels it <em>components</em>, and verifies saltwater_cell fills it.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>No regressions on T3+ battery consumers</strong> — capacitor_bank, flywheel_array, and the singularity_battery factory recipe should continue to work exactly as before (they reference <code>battery</code> directly, not <code>saltwater_cell</code>).</div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Persistence</h2></div>
+      <p class="sec-intro">No schema bump required.</p>
+      <p class="body">Inventory is serialized as <code>Record&lt;ResourceId, number&gt;</code>. Adding <code>'saltwater_cell'</code> to the union doesn't change the serialized shape — older saves simply lack the key (which deserializes to 0 / undefined, treated as 0 by <code>inv()</code> helpers). New buildings get a defId added to the type union; existing saves don't reference it. Recipe table is in-memory only.</p>
+      <p class="body">A v14 save loaded under the new code starts seeing saltwater_cell available with 0 stock; the player can place a Cell Press immediately and begin production. Buildings table is open-set — existing serialized buildings (none of which are <code>cell_press</code>) just keep working.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">09</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row">
+          <div class="cell">Adding a new ResourceId without updating every catalog table (RESOURCE_STORAGE_CATEGORY, XP_WEIGHT, inventory-ui map) causes runtime undefined-access or missing-storage-category errors.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Existing tests iterate the ResourceId union and assert presence in each map. Adding saltwater_cell to one without the others fails tests at the catalog-completeness check. Update all four touchpoints in one commit.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Procgen Plains colonies (settled, not home) have no water tile, so Cell Press can't make saltwater_cell there without imported saltwater via routes.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Expected. The home island bootstrap is the primary use case for Battery Bank; downstream colonies typically settle on Forest or Coast biomes (both with water tiles in rareTerrain) by player choice. If a Plains colony lacks water, the player either imports saltwater via a route or settles a water-bearing neighbor.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Players who already built capacitor_bank / flywheel_array can no longer demolish-and-rebuild without the <code>battery</code> input chain. Battery Bank for those players becomes a strict downgrade.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">By the time a player has capacitor_bank online, Battery Bank's 5 kWh is irrelevant compared to 100 kWh. The change makes Battery Bank useful for new/early players without affecting end-game.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Flavor incongruity: "saltwater_cell" vs the existing realistic chemistry tree (chlor_alkali, sulfuric_acid_plant, naphtha_cracker — all named for real industrial processes). A saltwater galvanic cell is technically real but novelty.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Real-world precedent: saltwater batteries (e.g. Aquion Energy) exist as commercial products. Naming consistent with the existing "Coal Furnace" / "Coke Oven" idiom — descriptive, not branded.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">10</span><h2>Out of scope</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Reworking the <code>battery</code> token / Battery Factory tier</div>
+          <div class="dd">battery stays T3 lithium-ion. Battery Factory stays T3. Capacitor Bank + Flywheel Array + Singularity Battery factory continue consuming <code>battery</code> as before. This spec is additive — it gives the early game a path to Battery Bank without disturbing the T3+ chain.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Lithium chain de-gating</div>
+          <div class="dd">Lithium Extractor stays T3 + lithium_vein-locked. If a future spec wants to relax that gate (e.g. T2 brine extraction), it stands on its own.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Battery Bank capacity rebalance</div>
+          <div class="dd">Stays at 5 kWh. Capacitor Bank (100 kWh) remains the next upgrade tier.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Cell Press as a recipe-bearing notable</div>
+          <div class="dd">The building has one recipe (this one). No alternate recipes, rotations, or adjacency mechanics — keep it simple. Future variants (e.g. a "fluid_cell" using fresh_water + lubricant) could ship as separate recipes if needed.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · saltwater-cell battery bootstrap v1 · 2026-05-26 · supersedes the implicit "Battery Bank requires T3 lithium chain" path. Source-of-truth audit at <code>docs.nitjsefni.eu/d/robot-islands/2026-05-26-battery-bank-chain</code>. Cap structures (skill-tree pool targets, magnitudes) unaffected.</p>
+    </div>
+
+  </div>
+</body>
+</html>
