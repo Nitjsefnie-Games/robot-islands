@@ -860,8 +860,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4060a0, // slate blue
     stroke: 0x101030,
     power: { consumes: 0 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { battery: 4, wire: 3, steel_beam: 1 },
+    // §15.6 saltwater-cell bootstrap — was { battery: 4, wire: 3, steel_beam: 1 };
+    // rerouted off the T3 lithium chain so the T2 battery is craftable
+    // from home Plains. battery token still drives capacitor_bank /
+    // flywheel_array / singularity_battery_factory.
+    placementCost: { saltwater_cell: 4, wire: 3, steel_beam: 1 },
     glyph: '▭',
   },
   // §8.5 T3 capacitor bank — 100 kWh power buffer. Zero standby; charges
