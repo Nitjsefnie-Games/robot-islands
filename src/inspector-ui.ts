@@ -941,7 +941,7 @@ export function mountInspectorUi(
   // §13.3 Universe Editor — biome-reassign action. Shown only when the
   // selected building is a `universe_editor`. Cost preview + confirm
   // dialog with the spec's "real cost" wording.
-  const universeEditorSection = makeSection('Universe Editor (§13.3)');
+  const universeEditorSection = makeSection('Universe Editor');
   const ueCaption = document.createElement('span');
   styled(
     ueCaption,
@@ -957,7 +957,7 @@ export function mountInspectorUi(
   // is a `land_reclamation_hub`. Two buttons (+1 major / +1 minor) wired
   // to deps.onExpandIsland; each shows its current-radius cost or the
   // gate-failure reason inline.
-  const reclamationSection = makeSection('Reclamation (§3.4)');
+  const reclamationSection = makeSection('Reclamation');
   const reclamationCaption = document.createElement('span');
   styled(
     reclamationCaption,

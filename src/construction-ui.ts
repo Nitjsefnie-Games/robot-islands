@@ -319,7 +319,7 @@ export function mountConstructionUi(
   // -------------------------------------------------------------------------
   const handle = mountModal(parentEl, {
     title: 'CONSTRUCT',
-    subtitle: '§2.5 / platform constructor',
+    subtitle: 'platform constructor',
     onClose: () => handle.hide(),
     buildBody(body) {
       body.style.display = 'flex';
