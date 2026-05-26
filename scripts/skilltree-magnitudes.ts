@@ -4,56 +4,8 @@
 // Run: npx tsx scripts/skilltree-magnitudes.ts
 
 import { FULL_CATALOG } from '../src/skilltree-catalog.js';
-import type { SkillEffect } from '../src/skilltree.js';
-
-function effectKey(e: SkillEffect): string {
-  if (e.kind === 'recipeRateMul') return `recipeRateMul:${e.category}`;
-  if (e.kind === 'storageCategoryCapMul') return `storageCategoryCapMul:${e.category}`;
-  if (e.kind === 'xpGainMul') return `xpGainMul:${e.category ?? '(global)'}`;
-  return e.kind;
-}
-
-// Per-effect-kind product targets (from spec §03). Tolerance for the test
-// is ±0.5%, which catches a forgotten magnitude or an off-by-one count.
-export const POOL_TARGETS: Readonly<Record<string, number>> = {
-  'recipeRateMul:extraction': 3.162,
-  'recipeRateMul:chemistry': 10.0,
-  'recipeRateMul:smelting': 10.0,
-  'recipeRateMul:electronics': 10.0,
-  'recipeRateMul:manufacturing': 10.0,
-  'powerConsumptionMul': 3.162,
-  'commRangeMul': 10.0,
-  'scannerCoverageMul': 10.0,
-  'storageCategoryCapMul:dry_goods': 3.162,
-  'storageCategoryCapMul:liquid_gas': 3.162,
-  'storageCategoryCapMul:components': 3.162,
-  'storageCategoryCapMul:rare': 3.162,
-  'storageCapMul': 3.162,
-  'routeCapacityMul': 10.0,
-  'maintenanceThresholdMul': 10.0,
-  'mineYieldBonusMul': 3.162,
-  'droneScanRadiusMul': 10.0,
-  'satBufferCapMul': 10.0,
-  'powerProductionMul': 3.162,
-  'droneFuelEfficiencyMul': 10.0,
-  'airshipRangeMul': 10.0,
-  'debrisProtectionMul': 10.0,
-  'batteryCapacityMul': 10.0,
-  'mineRareTrickleMul': 10.0,
-  'constructionTimeMul': 10.0,
-  'loggerYieldBonusMul': 3.162,
-  'xpGainMul:(global)': 3.0,
-  'scannerDwellRateMul': 10.0,
-  'teleporterEfficiencyMul': 10.0,
-  'repairDroneReliabilityMul': 10.0,
-  'padExplosionReduceMul': 10.0,
-  'satFuelReserveMul': 10.0,
-  'loggerExoticTrickleMul': 10.0,
-  'drillYieldBonusMul': 3.162,
-  'aquacultureYieldBonusMul': 3.162,
-  'patronageYieldBonusMul': 3.162,
-  't5ExtractorYieldBonusMul': 3.162,
-};
+export { POOL_TARGETS } from '../src/skilltree-derive-magnitudes.js';
+import { effectKey, POOL_TARGETS } from '../src/skilltree-derive-magnitudes.js';
 
 export function computeProducts(): Map<string, number> {
   const products = new Map<string, number>();
