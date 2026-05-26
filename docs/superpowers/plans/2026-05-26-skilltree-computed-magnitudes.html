@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill-tree computed per-tier magnitudes — implementation plan</title>
+<style>
+  :root {
+    --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+    --tan:#E0B47F; --pink:#D38FCC; --red:#E08B7F; --info:#7DD3E8;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1180px; margin:0 auto; }
+  header.page-head { margin-bottom:48px; max-width:960px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:32px; line-height:1.18; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+  .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+  .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+  .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+  .callout { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-700); margin: 14px 0; max-width:960px; }
+  .callout.info { border-left-color:var(--info); }
+  .callout.warn { border-left-color:var(--red); }
+  .callout code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .callout b { color:var(--slate); }
+  .callout ul { margin-top:6px; margin-left:20px; list-style:disc; }
+  .callout li { margin:3px 0; }
+  section { margin-bottom:56px; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:24px; color:var(--slate); letter-spacing:-0.01em; }
+  .sec-head h2 code { font-family:var(--mono); font-size:18px; color:var(--clay); }
+  .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:880px; margin-bottom:20px; }
+  .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--tan); }
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:40px; max-width: 1080px; }
+  @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+  .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px; padding:14px 16px; }
+  .summary .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+  .summary .v { font-size:15px; color:var(--slate); font-weight:600; }
+  .summary .v.accent { color:var(--clay); }
+  .summary .v.ok { color:var(--olive); }
+  .filetable { border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden; background:var(--white); margin-bottom:32px; }
+  .filetable .row { display:grid; grid-template-columns:320px 100px 1fr; gap:0; }
+  @media (max-width:900px){ .filetable .row{grid-template-columns:1fr;} }
+  .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+  .filetable .cell { padding:11px 14px; font-size:13px; vertical-align:top; }
+  .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+  @media (max-width:900px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+  .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+  .filetable .cell code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+  .filetable .pill { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--mono); font-size:10.5px; font-weight:600; }
+  .filetable .pill.new { background:var(--olive); color:var(--ivory); }
+  .filetable .pill.mod { background:var(--tan); color:var(--ivory); }
+  .task-card { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 22px; margin-bottom:18px; }
+  .files-block { background:var(--gray-150); border:1px solid var(--gray-300); border-radius:8px; padding:10px 13px; margin-bottom:14px; font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+  .files-block .h { color:var(--gray-500); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .files-block code { color:var(--tan); }
+  .step { margin: 10px 0; padding-left: 24px; position: relative; font-size:14px; color:var(--gray-700); }
+  .step::before { content: "☐"; position: absolute; left: 0; top: 0; color: var(--gray-500); }
+  .step b { color: var(--slate); }
+  .step code { font-family:var(--mono); font-size:12.5px; color:var(--tan); background: var(--gray-150); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 10px 14px; margin: 8px 0 14px 24px; overflow-x: auto; font-family: var(--mono); font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 1080px; }
+  pre.bash { background: #1F1D19; color: var(--olive); }
+  pre.bash::before { content: "$ "; color: var(--gray-500); }
+  pre .comment { color: var(--gray-500); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--olive); }
+  pre .ty { color: var(--info); }
+  pre .fn { color: var(--tan); }
+  .expected { background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 0 6px 6px 0; padding: 6px 12px; margin: 6px 0 10px 24px; font-family: var(--mono); font-size: 12px; color: var(--gray-700); max-width: 1040px; }
+  .expected b { color: var(--olive); }
+  .toc { background: var(--gray-150); border-left: 3px solid var(--info); border-radius: 0 6px 6px 0; padding: 14px 22px; margin: 28px 0 36px; max-width: 1040px; }
+  .toc h3 { color: var(--gray-500); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 10px; font-family: var(--mono); }
+  .toc ol { list-style: none; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--gray-700); text-decoration: none; }
+  .toc a:hover { color: var(--clay); }
+  .toc .num { color: var(--gray-500); font-family: var(--mono); margin-right: 8px; font-size: 11.5px; }
+  .footer { color: var(--gray-500); margin-top: 64px; font-size: 12px; padding-top: 18px; border-top: 1.5px solid var(--gray-300); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · robot-islands · skilltree computed per-tier magnitudes · 2026-05-26</div>
+    <h1>Skill-tree per-tier magnitudes via runtime derivation</h1>
+    <div class="prompt-box">
+      <span class="label">For agentic workers</span>
+      <b style="color:var(--slate)">REQUIRED SUB-SKILL:</b> Use <code>superpowers:subagent-driven-development</code>. Fresh kimi subagent per task + two-stage review per task. Trailer literal on commits: <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code> (do NOT substitute Claude's trailer — you are kimi running as a subagent).<br><br>
+      <b style="color:var(--slate)">Goal:</b> replace ~316 hardcoded magnitude/baseMag literals across <code>skilltree-catalog.ts</code> and <code>skilltree-archetypes.ts</code> with a pure function that derives per-node magnitudes at module load from (tier, effect-kind counts, pool cap, filler depth). Tier hierarchy returns (keystones ≫ notables ≫ fillers) and filler chains regain per-depth progression (growth 1.10).<br>
+      <b style="color:var(--slate)">Architecture:</b> add <code>src/skilltree-derive-magnitudes.ts</code> exporting <code>deriveMagnitudes(rawNodes, archetypePrefixes) → SkillNode[]</code>. Migrate catalog + archetype sources to <code>RawSkillNode</code> (no <code>magnitude</code>). Re-route <code>FULL_CATALOG</code> through <code>deriveMagnitudes</code>. Strip stale <code>×1.XX</code> literals from descriptions. Cap targets, tier weights (0.50 / 0.30 / 0.20), and filler growth (1.10) live as named consts in the engine module.<br>
+      <b style="color:var(--slate)">Tech stack:</b> Vite 5 + TypeScript strict + PixiJS 8 + vitest. <code>strict</code> + <code>noUncheckedIndexedAccess</code> + <code>noUnusedLocals</code>.<br>
+      <b style="color:var(--slate)">Source of truth:</b> design spec at <code>docs/superpowers/specs/2026-05-26-skilltree-computed-magnitudes-design.html</code> (v1, locked 2026-05-26). Numerical formulas are reproduced below; if a number disagrees, the spec wins.
+    </div>
+  </header>
+
+  <div class="callout warn">
+    <b>Locked design choices (do NOT deviate):</b>
+    <ul>
+      <li><b>Tier weights</b>: keystone 0.50, notable 0.30, filler 0.20 (uniform across all 37 effect kinds). Empty tiers get their weight redistributed proportionally to nonzero tiers.</li>
+      <li><b>Filler growth</b>: <code>g = 1.10</code> per depth, uniform across all archetypes. <code>baseMag</code> is bisection-solved per archetype, not authored.</li>
+      <li><b>Cap targets unchanged</b> from the 2026-05-25 rebalance: ×10 singleton, √10 shared-pool side, ×3 xpGain. <code>POOL_TARGETS</code> map moves into the engine module.</li>
+      <li><b>Tier inference</b> (in order): explicit <code>tier</code> override → <code>.keystone.</code> in id → matches archetype <code>idPrefix.&lt;digit&gt;</code> → fallthrough notable.</li>
+      <li><b>Per-node magnitudes are NOT authored.</b> Catalog rows drop <code>magnitude</code>. Archetypes drop <code>baseMag</code>. Anything that needs the current ×factor reads <code>node.magnitude</code> from the derived <code>FULL_CATALOG</code> at runtime.</li>
+      <li><b>Description strings</b>: drop the embedded <code>×1.XXXX</code> literal — leave pure flavor text. The UI tooltip surface that previously read <code>node.magnitude</code> continues to work unchanged (magnitude lives on the post-derive node).</li>
+      <li><b>No schema bump.</b> No persistence change. Saves serialize <code>unlockedNodes</code> as ids; magnitudes derive fresh on every load.</li>
+    </ul>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Summary</h3>
+  <div class="summary">
+    <div class="cell"><div class="k">Files touched</div><div class="v accent">7</div></div>
+    <div class="cell"><div class="k">New files</div><div class="v">2</div></div>
+    <div class="cell"><div class="k">Tasks</div><div class="v">4</div></div>
+    <div class="cell"><div class="k">Hardcoded mags removed</div><div class="v ok">~316</div></div>
+  </div>
+
+  <div class="toc">
+    <h3>Tasks</h3>
+    <ol>
+      <li><span class="num">01</span><a href="#task-1">Engine module + tier inference + deriveMagnitudes() — no wiring yet</a></li>
+      <li><span class="num">02</span><a href="#task-2">Migrate archetypes: drop baseMag, growth=1.10, return RawSkillNode</a></li>
+      <li><span class="num">03</span><a href="#task-3">Migrate catalog: drop magnitude, wire deriveMagnitudes, strip ×1.XX from descriptions, fix tests</a></li>
+      <li><span class="num">04</span><a href="#task-4">Repoint scripts/skilltree-magnitudes.ts to engine module + invariant test sanity-check</a></li>
+    </ol>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Files touched</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Path</div><div class="cell">Status</div><div class="cell">Responsibility</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-derive-magnitudes.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Exports <code>NodeTier</code>, <code>RawSkillNode</code>, <code>POOL_TARGETS</code>, <code>TIER_WEIGHTS</code>, <code>FILLER_GROWTH</code>, <code>inferTier()</code>, <code>deriveMagnitudes()</code>. Pure: no side effects. (Task 1.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-derive-magnitudes.test.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Unit tests for tier inference + per-tier per-effect-kind magnitude derivation. (Task 1.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-archetypes.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Drop <code>baseMag</code> from <code>FillerArchetype</code> interface + every entry. Set <code>growth: 1.10</code> uniformly. <code>generateFillerNodes</code> returns <code>RawSkillNode[]</code>. (Task 2.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-catalog.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Strip <code>magnitude</code> from every hand-curated <code>SkillNode</code> literal. Strip embedded <code>×1.XXXX</code> from <code>description</code> strings. Re-wire <code>FULL_CATALOG</code> through <code>deriveMagnitudes</code>. (Task 3.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Update fold-test magnitude expectations to match derived values. (Task 3.)</div></div>
+    <div class="row"><div class="cell"><code>src/economy.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Update 3 hardcoded-magnitude numeric expectations (powerProductionMul, extraction recipeRateMul, mineYieldBonusMul stacks) to match derived values. (Task 3.)</div></div>
+    <div class="row"><div class="cell"><code>scripts/skilltree-magnitudes.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Import <code>POOL_TARGETS</code> from the engine module instead of duplicating. Keep as a pretty-printer of the derived catalog state. (Task 4.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-magnitudes.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Import <code>POOL_TARGETS</code> from the engine module. Test stays as a regression sentinel — passes by construction under the computed model. (Task 4.)</div></div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 1 -->
+  <section id="task-1">
+    <div class="sec-head"><span class="num">01</span><h2>Task 1 — Engine module + tier inference + <code>deriveMagnitudes</code></h2></div>
+    <p class="sec-intro">Create the new pure-function module. No wiring into the live catalog yet — that lands in Task 3. Just the engine + unit tests in isolation, so subsequent tasks can build on a tested foundation.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>+ src/skilltree-derive-magnitudes.ts</code> &nbsp; <code>+ src/skilltree-derive-magnitudes.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Create <code>src/skilltree-derive-magnitudes.ts</code> with full implementation:</div>
+      <pre><span class="comment">// Pure runtime-magnitude derivation for the skill catalog. Replaces the</span>
+<span class="comment">// hand-authored magnitudes that the 2026-05-25 rebalance shipped. See</span>
+<span class="comment">// docs/superpowers/specs/2026-05-26-skilltree-computed-magnitudes-design.html.</span>
+
+<span class="kw">import type</span> { SkillEffect, SkillNode } <span class="kw">from</span> <span class="str">'./skilltree.js'</span>;
+
+<span class="kw">export type</span> <span class="ty">NodeTier</span> = <span class="str">'keystone'</span> | <span class="str">'notable'</span> | <span class="str">'filler'</span>;
+
+<span class="comment">/** SkillNode pre-magnitude-derivation. The catalog authors emit these;</span>
+<span class="comment"> *  `deriveMagnitudes` returns full SkillNode shapes with magnitudes</span>
+<span class="comment"> *  filled in. `tier` is optional — inferTier() handles the standard cases. */</span>
+<span class="kw">export interface</span> <span class="ty">RawSkillNode</span> <span class="kw">extends</span> <span class="kw">Omit</span>&lt;<span class="ty">SkillNode</span>, <span class="str">'magnitude'</span>&gt; {
+  <span class="kw">readonly</span> tier?: <span class="ty">NodeTier</span>;
+}
+
+<span class="kw">export const</span> TIER_WEIGHTS = { keystone: 0.50, notable: 0.30, filler: 0.20 } <span class="kw">as const</span>;
+<span class="kw">export const</span> FILLER_GROWTH = 1.10 <span class="kw">as const</span>;
+<span class="kw">const</span> BISECTION_ITERATIONS = 80;
+
+<span class="comment">/** Per-effect-kind product cap targets. Singleton multiplier kinds cap at</span>
+<span class="comment"> *  ×10, shared-pool sides at ×√10, xpGain at ×3. Same as the 2026-05-25</span>
+<span class="comment"> *  rebalance — only the per-node distribution changes in this spec. */</span>
+<span class="kw">export const</span> POOL_TARGETS: <span class="kw">Readonly</span>&lt;<span class="kw">Record</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt;&gt; = {
+  <span class="str">'recipeRateMul:extraction'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'recipeRateMul:chemistry'</span>: 10,
+  <span class="str">'recipeRateMul:smelting'</span>: 10,
+  <span class="str">'recipeRateMul:electronics'</span>: 10,
+  <span class="str">'recipeRateMul:manufacturing'</span>: 10,
+  <span class="str">'powerConsumptionMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'commRangeMul'</span>: 10,
+  <span class="str">'scannerCoverageMul'</span>: 10,
+  <span class="str">'storageCategoryCapMul:dry_goods'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'storageCategoryCapMul:liquid_gas'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'storageCategoryCapMul:components'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'storageCategoryCapMul:rare'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'storageCapMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'routeCapacityMul'</span>: 10,
+  <span class="str">'maintenanceThresholdMul'</span>: 10,
+  <span class="str">'mineYieldBonusMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'droneScanRadiusMul'</span>: 10,
+  <span class="str">'satBufferCapMul'</span>: 10,
+  <span class="str">'powerProductionMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'droneFuelEfficiencyMul'</span>: 10,
+  <span class="str">'airshipRangeMul'</span>: 10,
+  <span class="str">'debrisProtectionMul'</span>: 10,
+  <span class="str">'batteryCapacityMul'</span>: 10,
+  <span class="str">'mineRareTrickleMul'</span>: 10,
+  <span class="str">'constructionTimeMul'</span>: 10,
+  <span class="str">'loggerYieldBonusMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'xpGainMul:(global)'</span>: 3,
+  <span class="str">'scannerDwellRateMul'</span>: 10,
+  <span class="str">'teleporterEfficiencyMul'</span>: 10,
+  <span class="str">'repairDroneReliabilityMul'</span>: 10,
+  <span class="str">'padExplosionReduceMul'</span>: 10,
+  <span class="str">'satFuelReserveMul'</span>: 10,
+  <span class="str">'loggerExoticTrickleMul'</span>: 10,
+  <span class="str">'drillYieldBonusMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'aquacultureYieldBonusMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'patronageYieldBonusMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+  <span class="str">'t5ExtractorYieldBonusMul'</span>: <span class="ty">Math</span>.<span class="fn">sqrt</span>(10),
+};
+
+<span class="comment">/** Canonical effect-key for grouping. Matches the existing scripts/</span>
+<span class="comment"> *  skilltree-magnitudes.ts logic exactly so POOL_TARGETS keys line up. */</span>
+<span class="kw">export function</span> <span class="fn">effectKey</span>(e: <span class="ty">SkillEffect</span>): <span class="ty">string</span> {
+  <span class="kw">if</span> (e.kind === <span class="str">'recipeRateMul'</span>) <span class="kw">return</span> <span class="str">`recipeRateMul:</span>${e.category}<span class="str">`</span>;
+  <span class="kw">if</span> (e.kind === <span class="str">'storageCategoryCapMul'</span>) <span class="kw">return</span> <span class="str">`storageCategoryCapMul:</span>${e.category}<span class="str">`</span>;
+  <span class="kw">if</span> (e.kind === <span class="str">'xpGainMul'</span>) <span class="kw">return</span> <span class="str">`xpGainMul:</span>${e.category ?? <span class="str">'(global)'</span>}<span class="str">`</span>;
+  <span class="kw">return</span> e.kind;
+}
+
+<span class="comment">/** Tier-inference rules in priority order. Pure: depends only on id +</span>
+<span class="comment"> *  the supplied list of known archetype prefixes. */</span>
+<span class="kw">export function</span> <span class="fn">inferTier</span>(
+  node: <span class="ty">RawSkillNode</span>,
+  archetypePrefixes: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">string</span>&gt;,
+): <span class="ty">NodeTier</span> {
+  <span class="kw">if</span> (node.tier !== <span class="kw">undefined</span>) <span class="kw">return</span> node.tier;
+  <span class="kw">if</span> (node.id.<span class="fn">includes</span>(<span class="str">'.keystone.'</span>)) <span class="kw">return</span> <span class="str">'keystone'</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> p <span class="kw">of</span> archetypePrefixes) {
+    <span class="kw">if</span> (node.id.<span class="fn">startsWith</span>(p + <span class="str">'.'</span>)) <span class="kw">return</span> <span class="str">'filler'</span>;
+  }
+  <span class="kw">return</span> <span class="str">'notable'</span>;
+}
+
+<span class="comment">/** Solve for filler baseMag such that ∏ (1 + b·g^i) for i in [0,count-1]</span>
+<span class="comment"> *  equals `target`. Bisection: monotonic, converges in ~80 iters to 1e-24. */</span>
+<span class="kw">function</span> <span class="fn">solveFillerBaseMag</span>(target: <span class="ty">number</span>, count: <span class="ty">number</span>, growth: <span class="ty">number</span>): <span class="ty">number</span> {
+  <span class="kw">if</span> (count === 0) <span class="kw">return</span> 0;
+  <span class="kw">let</span> lo = 0, hi = 1;
+  <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; BISECTION_ITERATIONS; i++) {
+    <span class="kw">const</span> mid = (lo + hi) / 2;
+    <span class="kw">let</span> p = 1;
+    <span class="kw">for</span> (<span class="kw">let</span> j = 0; j &lt; count; j++) p *= 1 + mid * <span class="ty">Math</span>.<span class="fn">pow</span>(growth, j);
+    <span class="kw">if</span> (p &lt; target) lo = mid; <span class="kw">else</span> hi = mid;
+  }
+  <span class="kw">return</span> lo;
+}
+
+<span class="comment">/** Extract the trailing numeric segment of a filler node's id (e.g.</span>
+<span class="comment"> *  'mining.recipeRate.3' → 3). Returns null for non-conforming ids. */</span>
+<span class="kw">function</span> <span class="fn">fillerDepth</span>(id: <span class="ty">string</span>): <span class="ty">number</span> | <span class="kw">null</span> {
+  <span class="kw">const</span> idx = id.<span class="fn">lastIndexOf</span>(<span class="str">'.'</span>);
+  <span class="kw">if</span> (idx &lt; 0) <span class="kw">return</span> <span class="kw">null</span>;
+  <span class="kw">const</span> n = <span class="ty">Number</span>(id.<span class="fn">slice</span>(idx + 1));
+  <span class="kw">return</span> <span class="ty">Number</span>.<span class="fn">isInteger</span>(n) &amp;&amp; n &gt; 0 ? n : <span class="kw">null</span>;
+}
+
+<span class="comment">/** Pure: takes raw nodes and returns the same nodes with derived</span>
+<span class="comment"> *  magnitudes. Idempotent. The product across all nodes of a given</span>
+<span class="comment"> *  effect kind equals its POOL_TARGETS value exactly. */</span>
+<span class="kw">export function</span> <span class="fn">deriveMagnitudes</span>(
+  rawNodes: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">RawSkillNode</span>&gt;,
+  archetypePrefixes: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">string</span>&gt;,
+): <span class="kw">ReadonlyArray</span>&lt;<span class="ty">SkillNode</span>&gt; {
+  <span class="comment">// Group by effect-key, count tiers, remember each node's bucket.</span>
+  <span class="kw">interface</span> Bucket { K: <span class="ty">number</span>; N: <span class="ty">number</span>; F: <span class="ty">number</span>; }
+  <span class="kw">const</span> buckets = <span class="kw">new</span> <span class="ty">Map</span>&lt;<span class="ty">string</span>, Bucket&gt;();
+  <span class="kw">const</span> tiers = <span class="kw">new</span> <span class="ty">Map</span>&lt;<span class="ty">string</span>, <span class="ty">NodeTier</span>&gt;();  <span class="comment">// node.id → tier</span>
+  <span class="kw">const</span> keys = <span class="kw">new</span> <span class="ty">Map</span>&lt;<span class="ty">string</span>, <span class="ty">string</span>&gt;();    <span class="comment">// node.id → effect-key</span>
+  <span class="kw">for</span> (<span class="kw">const</span> n <span class="kw">of</span> rawNodes) {
+    <span class="kw">const</span> k = <span class="fn">effectKey</span>(n.effect);
+    <span class="kw">if</span> (!(k <span class="kw">in</span> POOL_TARGETS)) <span class="kw">continue</span>;  <span class="comment">// non-multiplier kinds — magnitude irrelevant</span>
+    <span class="kw">const</span> t = <span class="fn">inferTier</span>(n, archetypePrefixes);
+    tiers.<span class="fn">set</span>(n.id, t);
+    keys.<span class="fn">set</span>(n.id, k);
+    <span class="kw">if</span> (!buckets.<span class="fn">has</span>(k)) buckets.<span class="fn">set</span>(k, { K: 0, N: 0, F: 0 });
+    <span class="kw">const</span> b = buckets.<span class="fn">get</span>(k)!;
+    <span class="kw">if</span> (t === <span class="str">'keystone'</span>) b.K++;
+    <span class="kw">else if</span> (t === <span class="str">'notable'</span>) b.N++;
+    <span class="kw">else</span> b.F++;
+  }
+
+  <span class="comment">// Per-effect-kind tier magnitudes (computed once).</span>
+  <span class="kw">const</span> mK = <span class="kw">new</span> <span class="ty">Map</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt;();
+  <span class="kw">const</span> mN = <span class="kw">new</span> <span class="ty">Map</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt;();
+  <span class="kw">const</span> fillerBase = <span class="kw">new</span> <span class="ty">Map</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt;();
+  <span class="kw">for</span> (<span class="kw">const</span> [k, b] <span class="kw">of</span> buckets) {
+    <span class="kw">const</span> C = POOL_TARGETS[k]!;
+    <span class="kw">let</span> wK = b.K &gt; 0 ? TIER_WEIGHTS.keystone : 0;
+    <span class="kw">let</span> wN = b.N &gt; 0 ? TIER_WEIGHTS.notable : 0;
+    <span class="kw">let</span> wF = b.F &gt; 0 ? TIER_WEIGHTS.filler : 0;
+    <span class="kw">const</span> sum = wK + wN + wF;
+    <span class="kw">if</span> (sum === 0) <span class="kw">continue</span>;
+    wK /= sum; wN /= sum; wF /= sum;
+    <span class="kw">if</span> (b.K &gt; 0) mK.<span class="fn">set</span>(k, <span class="ty">Math</span>.<span class="fn">pow</span>(C, wK / b.K) - 1);
+    <span class="kw">if</span> (b.N &gt; 0) mN.<span class="fn">set</span>(k, <span class="ty">Math</span>.<span class="fn">pow</span>(C, wN / b.N) - 1);
+    <span class="kw">if</span> (b.F &gt; 0) fillerBase.<span class="fn">set</span>(k, <span class="fn">solveFillerBaseMag</span>(<span class="ty">Math</span>.<span class="fn">pow</span>(C, wF), b.F, FILLER_GROWTH));
+  }
+
+  <span class="comment">// Emit each node with derived magnitude.</span>
+  <span class="kw">return</span> rawNodes.<span class="fn">map</span>((n): <span class="ty">SkillNode</span> =&gt; {
+    <span class="kw">const</span> k = keys.<span class="fn">get</span>(n.id);
+    <span class="kw">if</span> (k === <span class="kw">undefined</span>) <span class="kw">return</span> { ...n, magnitude: 0 } <span class="kw">as unknown as</span> <span class="ty">SkillNode</span>;
+    <span class="kw">const</span> t = tiers.<span class="fn">get</span>(n.id)!;
+    <span class="kw">let</span> m = 0;
+    <span class="kw">if</span> (t === <span class="str">'keystone'</span>) m = mK.<span class="fn">get</span>(k) ?? 0;
+    <span class="kw">else if</span> (t === <span class="str">'notable'</span>) m = mN.<span class="fn">get</span>(k) ?? 0;
+    <span class="kw">else</span> {
+      <span class="kw">const</span> b = fillerBase.<span class="fn">get</span>(k) ?? 0;
+      <span class="kw">const</span> d = <span class="fn">fillerDepth</span>(n.id) ?? 1;
+      m = b * <span class="ty">Math</span>.<span class="fn">pow</span>(FILLER_GROWTH, d - 1);
+    }
+    <span class="kw">return</span> { ...n, magnitude: m } <span class="kw">as unknown as</span> <span class="ty">SkillNode</span>;
+  });
+}</pre>
+      <div class="callout info"><b>Note on the <code>as unknown as SkillNode</code> cast</b>: <code>RawSkillNode</code> extends <code>Omit&lt;SkillNode, 'magnitude'&gt;</code>. Spreading <code>...n</code> + adding <code>magnitude</code> structurally satisfies <code>SkillNode</code>, but TS won't widen automatically. The double cast is the conventional escape hatch in this codebase (see <code>migrateV13toV14</code> for the same pattern).</div>
+
+      <div class="step"><b>Step 2.</b> Create <code>src/skilltree-derive-magnitudes.test.ts</code> with the test suite:</div>
+      <pre><span class="kw">import</span> { describe, it, expect } <span class="kw">from</span> <span class="str">'vitest'</span>;
+<span class="kw">import</span> {
+  inferTier,
+  deriveMagnitudes,
+  effectKey,
+  POOL_TARGETS,
+  TIER_WEIGHTS,
+  FILLER_GROWTH,
+  type <span class="ty">RawSkillNode</span>,
+} <span class="kw">from</span> <span class="str">'./skilltree-derive-magnitudes.js'</span>;
+
+<span class="kw">const</span> ARCHETYPE_PREFIXES = [<span class="str">'mining.recipeRate'</span>, <span class="str">'forestry.yieldBonus'</span>];
+
+<span class="kw">function</span> <span class="fn">node</span>(id: <span class="ty">string</span>, effect: <span class="kw">any</span>, opts: <span class="kw">Partial</span>&lt;<span class="ty">RawSkillNode</span>&gt; = {}): <span class="ty">RawSkillNode</span> {
+  <span class="kw">return</span> { id: id <span class="kw">as any</span>, subPath: <span class="str">'mining'</span> <span class="kw">as any</span>, depth: 1, cost: 1, effect, description: <span class="str">''</span>, ...opts };
+}
+
+<span class="fn">describe</span>(<span class="str">'inferTier'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'keystone via .keystone. substring'</span>, () =&gt; {
+    expect(<span class="fn">inferTier</span>(<span class="fn">node</span>(<span class="str">'mining.keystone.veinmaster'</span>, { kind: <span class="str">'mineYieldBonusMul'</span> }), ARCHETYPE_PREFIXES)).<span class="fn">toBe</span>(<span class="str">'keystone'</span>);
+  });
+  <span class="fn">it</span>(<span class="str">'filler via archetype prefix match'</span>, () =&gt; {
+    expect(<span class="fn">inferTier</span>(<span class="fn">node</span>(<span class="str">'mining.recipeRate.3'</span>, { kind: <span class="str">'recipeRateMul'</span>, category: <span class="str">'extraction'</span> }), ARCHETYPE_PREFIXES)).<span class="fn">toBe</span>(<span class="str">'filler'</span>);
+  });
+  <span class="fn">it</span>(<span class="str">'notable fallthrough'</span>, () =&gt; {
+    expect(<span class="fn">inferTier</span>(<span class="fn">node</span>(<span class="str">'deepVeinSurveying'</span>, { kind: <span class="str">'mineYieldBonusMul'</span> }), ARCHETYPE_PREFIXES)).<span class="fn">toBe</span>(<span class="str">'notable'</span>);
+  });
+  <span class="fn">it</span>(<span class="str">'explicit tier override wins'</span>, () =&gt; {
+    expect(<span class="fn">inferTier</span>(<span class="fn">node</span>(<span class="str">'mining.keystone.x'</span>, { kind: <span class="str">'mineYieldBonusMul'</span> }, { tier: <span class="str">'notable'</span> }), ARCHETYPE_PREFIXES)).<span class="fn">toBe</span>(<span class="str">'notable'</span>);
+  });
+});
+
+<span class="fn">describe</span>(<span class="str">'deriveMagnitudes — product invariant'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'cap holds for routeCapacityMul under (3K, 11N, 8F) shape'</span>, () =&gt; {
+    <span class="kw">const</span> raws: <span class="ty">RawSkillNode</span>[] = [];
+    <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; 3; i++) raws.<span class="fn">push</span>(<span class="fn">node</span>(<span class="str">`transport.keystone.k</span>${i}<span class="str">`</span>, { kind: <span class="str">'routeCapacityMul'</span> }));
+    <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; 11; i++) raws.<span class="fn">push</span>(<span class="fn">node</span>(<span class="str">`notable</span>${i}<span class="str">`</span>, { kind: <span class="str">'routeCapacityMul'</span> }));
+    <span class="kw">for</span> (<span class="kw">let</span> i = 1; i &lt;= 8; i++) raws.<span class="fn">push</span>(<span class="fn">node</span>(<span class="str">`mining.recipeRate.</span>${i}<span class="str">`</span>, { kind: <span class="str">'routeCapacityMul'</span> }));
+    <span class="kw">const</span> derived = <span class="fn">deriveMagnitudes</span>(raws, [<span class="str">'mining.recipeRate'</span>]);
+    <span class="kw">const</span> product = derived.<span class="fn">reduce</span>((acc, n) =&gt; acc * (1 + n.magnitude), 1);
+    expect(product).<span class="fn">toBeCloseTo</span>(POOL_TARGETS[<span class="str">'routeCapacityMul'</span>]!, 3);
+  });
+  <span class="fn">it</span>(<span class="str">'redistributes weight when keystone tier is empty'</span>, () =&gt; {
+    <span class="kw">const</span> raws: <span class="ty">RawSkillNode</span>[] = [<span class="fn">node</span>(<span class="str">'notable1'</span>, { kind: <span class="str">'batteryCapacityMul'</span> })];
+    <span class="kw">for</span> (<span class="kw">let</span> i = 1; i &lt;= 8; i++) raws.<span class="fn">push</span>(<span class="fn">node</span>(<span class="str">`mining.recipeRate.</span>${i}<span class="str">`</span>, { kind: <span class="str">'batteryCapacityMul'</span> }));
+    <span class="kw">const</span> derived = <span class="fn">deriveMagnitudes</span>(raws, [<span class="str">'mining.recipeRate'</span>]);
+    <span class="kw">const</span> product = derived.<span class="fn">reduce</span>((acc, n) =&gt; acc * (1 + n.magnitude), 1);
+    expect(product).<span class="fn">toBeCloseTo</span>(10, 3);
+    <span class="kw">const</span> notable = derived.<span class="fn">find</span>(n =&gt; n.id === <span class="str">'notable1'</span>)!;
+    <span class="comment">// lone notable absorbs 60% of log-budget (0.30 + 0.30/2 = 0.60) → ×10^0.6 = ×3.98</span>
+    expect(notable.magnitude).<span class="fn">toBeCloseTo</span>(3.981 - 1, 2);
+  });
+  <span class="fn">it</span>(<span class="str">'filler chain depth-1 &lt; depth-last under growth=1.10'</span>, () =&gt; {
+    <span class="kw">const</span> raws: <span class="ty">RawSkillNode</span>[] = [];
+    <span class="kw">for</span> (<span class="kw">let</span> i = 1; i &lt;= 8; i++) raws.<span class="fn">push</span>(<span class="fn">node</span>(<span class="str">`mining.recipeRate.</span>${i}<span class="str">`</span>, { kind: <span class="str">'drillYieldBonusMul'</span> }));
+    <span class="kw">const</span> derived = <span class="fn">deriveMagnitudes</span>(raws, [<span class="str">'mining.recipeRate'</span>]);
+    <span class="kw">const</span> sorted = [...derived].<span class="fn">sort</span>((a, b) =&gt; a.magnitude - b.magnitude);
+    expect(sorted[7]!.magnitude / sorted[0]!.magnitude).<span class="fn">toBeCloseTo</span>(<span class="ty">Math</span>.<span class="fn">pow</span>(FILLER_GROWTH, 7), 3);
+  });
+  <span class="fn">it</span>(<span class="str">'non-multiplier effect kinds get magnitude 0'</span>, () =&gt; {
+    <span class="kw">const</span> raws = [<span class="fn">node</span>(<span class="str">'x'</span>, { kind: <span class="str">'placeholder'</span> })];
+    <span class="kw">const</span> derived = <span class="fn">deriveMagnitudes</span>(raws, []);
+    expect(derived[0]!.magnitude).<span class="fn">toBe</span>(0);
+  });
+});
+
+<span class="fn">describe</span>(<span class="str">'effectKey'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'composes recipeRateMul + category'</span>, () =&gt; {
+    expect(<span class="fn">effectKey</span>({ kind: <span class="str">'recipeRateMul'</span>, category: <span class="str">'chemistry'</span> } <span class="kw">as any</span>)).<span class="fn">toBe</span>(<span class="str">'recipeRateMul:chemistry'</span>);
+  });
+  <span class="fn">it</span>(<span class="str">'defaults xpGain category to (global)'</span>, () =&gt; {
+    expect(<span class="fn">effectKey</span>({ kind: <span class="str">'xpGainMul'</span> } <span class="kw">as any</span>)).<span class="fn">toBe</span>(<span class="str">'xpGainMul:(global)'</span>);
+  });
+});</pre>
+
+      <div class="step"><b>Step 3.</b> Run the new tests + build:</div>
+      <pre class="bash">npx vitest run src/skilltree-derive-magnitudes.test.ts &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all new tests pass (~10 tests). <code>tsc --strict</code> clean. The new module is unused by the rest of the codebase (Task 3 wires it in) so <code>noUnusedLocals</code> is per-file-clean.</div>
+
+      <div class="step"><b>Step 4.</b> Run full suite to confirm no regressions:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -5</pre>
+      <div class="expected"><b>Expected:</b> ~2189 tests pass (2179 baseline + ~10 new). No regressions.</div>
+
+      <div class="step"><b>Step 5.</b> Commit + push:</div>
+      <pre class="bash">git add src/skilltree-derive-magnitudes.ts src/skilltree-derive-magnitudes.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(skilltree): pure deriveMagnitudes() engine + tier inference
+
+Adds src/skilltree-derive-magnitudes.ts with:
+- NodeTier type (keystone | notable | filler)
+- RawSkillNode (SkillNode minus magnitude, plus optional tier override)
+- POOL_TARGETS map (singleton ×10, shared-pool side ×√10, xpGain ×3)
+- TIER_WEIGHTS (0.50 / 0.30 / 0.20) + FILLER_GROWTH (1.10)
+- inferTier() — .keystone. in id → keystone; archetype prefix match → filler; else notable
+- deriveMagnitudes() — pure function returning SkillNode[] with magnitudes
+  filled from (tier, effect-kind catalog counts, pool cap, filler depth)
+
+Bisection-solves filler chain baseMag per-effect-kind. Redistribution
+when a tier is empty (e.g. zero keystones → 50% weight splits to notable
++ filler proportionally). Cap product holds exactly by construction.
+
+Not yet wired into FULL_CATALOG — Task 3 lands the cutover. Tests
+verify tier inference + product-invariant in isolation.
+
+Refs design spec docs/superpowers/specs/2026-05-26-skilltree-computed-magnitudes-design.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 2 -->
+  <section id="task-2">
+    <div class="sec-head"><span class="num">02</span><h2>Task 2 — Migrate archetypes to RawSkillNode</h2></div>
+    <p class="sec-intro">Drop <code>baseMag</code> from <code>FillerArchetype</code>. Set <code>growth: 1.10</code> uniformly. Update <code>generateFillerNodes</code> to return <code>RawSkillNode[]</code> (no magnitude). After this task the archetype pipeline emits raw nodes; the catalog assembly in Task 3 will pipe them through <code>deriveMagnitudes</code>.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-archetypes.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Import <code>RawSkillNode</code> from the engine module at the top of <code>src/skilltree-archetypes.ts</code>:</div>
+      <pre><span class="kw">import type</span> { RawSkillNode } <span class="kw">from</span> <span class="str">'./skilltree-derive-magnitudes.js'</span>;</pre>
+
+      <div class="step"><b>Step 2.</b> Update the <code>FillerArchetype</code> interface — remove the <code>baseMag</code> field. Add a comment that <code>baseMag</code> is now derived.</div>
+      <pre><span class="comment">// BEFORE:</span>
+<span class="kw">export interface</span> <span class="ty">FillerArchetype</span> {
+  <span class="kw">readonly</span> idPrefix: <span class="ty">string</span>;
+  <span class="kw">readonly</span> effectKind: <span class="ty">SkillEffect</span>[<span class="str">'kind'</span>];
+  <span class="kw">readonly</span> effectExtra?: <span class="kw">Record</span>&lt;<span class="ty">string</span>, <span class="kw">unknown</span>&gt;;
+  <span class="kw">readonly</span> subPath: <span class="ty">SubPathId</span>;
+  <span class="kw">readonly</span> baseMag: <span class="ty">number</span>;
+  <span class="kw">readonly</span> growth: <span class="ty">number</span>;
+  <span class="kw">readonly</span> baseCost: <span class="ty">number</span>;
+  <span class="kw">readonly</span> costGrowth: <span class="ty">number</span>;
+  <span class="kw">readonly</span> count: <span class="ty">number</span>;
+}
+
+<span class="comment">// AFTER:</span>
+<span class="kw">export interface</span> <span class="ty">FillerArchetype</span> {
+  <span class="kw">readonly</span> idPrefix: <span class="ty">string</span>;
+  <span class="kw">readonly</span> effectKind: <span class="ty">SkillEffect</span>[<span class="str">'kind'</span>];
+  <span class="kw">readonly</span> effectExtra?: <span class="kw">Record</span>&lt;<span class="ty">string</span>, <span class="kw">unknown</span>&gt;;
+  <span class="kw">readonly</span> subPath: <span class="ty">SubPathId</span>;
+  <span class="comment">/** Per-depth growth factor for the chain. Default 1.10 = each deeper</span>
+<span class="comment">   *  filler is 10% stronger than the previous. baseMag is no longer</span>
+<span class="comment">   *  authored here — deriveMagnitudes() solves it at module load so the</span>
+<span class="comment">   *  chain's product hits the filler-tier share of the pool cap. */</span>
+  <span class="kw">readonly</span> growth: <span class="ty">number</span>;
+  <span class="kw">readonly</span> baseCost: <span class="ty">number</span>;
+  <span class="kw">readonly</span> costGrowth: <span class="ty">number</span>;
+  <span class="kw">readonly</span> count: <span class="ty">number</span>;
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Update <code>generateFillerNodes</code> to return <code>RawSkillNode[]</code> (no <code>magnitude</code> field on each generated node). The current implementation populates a <code>magnitude</code> from <code>baseMag * growth^(depth-1)</code>; remove that line. The id, subPath, depth, cost, effect, description fields stay.</div>
+      <pre class="bash">grep -n "magnitude" src/skilltree-archetypes.ts | head -10</pre>
+      <p class="step" style="margin-left:24px">Identify the magnitude-assignment line inside <code>generateFillerNodes</code>. Delete it from the returned object literal. Update the function's return type to <code>RawSkillNode[]</code>.</p>
+
+      <div class="step"><b>Step 4.</b> Update every existing archetype entry to drop the <code>baseMag</code> field and ensure <code>growth: 1.10</code>. ~36 archetype entries across the 17 sub-path archetype arrays (<code>MINING_FILLER_ARCHETYPES</code>, <code>FORESTRY_FILLER_ARCHETYPES</code>, etc.). Mechanical edit: remove the <code>baseMag: ...,</code> property, set <code>growth: 1.10</code>.</div>
+      <pre><span class="comment">// EXAMPLE — BEFORE:</span>
+{
+  idPrefix: <span class="str">'mining.recipeRate'</span>, effectKind: <span class="str">'recipeRateMul'</span>,
+  effectExtra: { category: <span class="str">'extraction'</span> }, subPath: <span class="str">'mining'</span>,
+  baseMag: 0.0248, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+},
+
+<span class="comment">// AFTER:</span>
+{
+  idPrefix: <span class="str">'mining.recipeRate'</span>, effectKind: <span class="str">'recipeRateMul'</span>,
+  effectExtra: { category: <span class="str">'extraction'</span> }, subPath: <span class="str">'mining'</span>,
+  growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
+},</pre>
+
+      <div class="step"><b>Step 5.</b> Also export a flat list of every archetype's <code>idPrefix</code> for the engine's tier-inference step. Add at the bottom of the file:</div>
+      <pre><span class="kw">export const</span> ALL_ARCHETYPE_PREFIXES: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">string</span>&gt; = [
+  ...MINING_FILLER_ARCHETYPES,
+  ...FORESTRY_FILLER_ARCHETYPES,
+  <span class="comment">// ... include EVERY archetype array (17 total — verify list by grepping for FILLER_ARCHETYPES)</span>
+].<span class="fn">map</span>((a) =&gt; a.idPrefix);</pre>
+      <p class="step" style="margin-left:24px">Verify the list is complete by grep:</p>
+      <pre class="bash">grep -n "_FILLER_ARCHETYPES = " src/skilltree-archetypes.ts</pre>
+      <div class="expected"><b>Expected:</b> 17 archetype arrays (mining, forestry, drilling, robotics, smelting, chemistry, electronics, power_systems, storage, transport, network, launch, communication, discovery, patronage, aquaculture, oceanography).</div>
+
+      <div class="step"><b>Step 6.</b> Run tests + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> tsc may flag downstream consumers of <code>FillerArchetype.baseMag</code> or <code>generateFillerNodes</code> if they expect a magnitude — likely in <code>skilltree-catalog.ts</code> aggregation and in tests. The tests will fail because the magnitudes are now 0 / missing. <b>Don't fix the downstream yet</b> — Task 3 wires deriveMagnitudes into the catalog and tests get fixed there. <b>Verify ONLY that the archetype file itself compiles in isolation</b> + the only test failures are the ones tied to consumers (not internal-to-this-file).</div>
+
+      <div class="callout warn"><b>If the test failures spill beyond the planned scope</b> (e.g. unrelated tests start failing), STOP and report BLOCKED. The expectation is failures concentrated on magnitude-comparison tests that Task 3 will repair.</div>
+
+      <div class="step"><b>Step 7.</b> Commit + push:</div>
+      <pre class="bash">git add src/skilltree-archetypes.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+refactor(skilltree-archetypes): drop baseMag, growth=1.10, return RawSkillNode
+
+FillerArchetype no longer authors baseMag — deriveMagnitudes() in
+src/skilltree-derive-magnitudes.ts solves it at module load. All 36
+archetype entries get growth: 1.10 (replacing the rebalance's flat 1.0)
+so deeper filler nodes are progressively stronger within a chain.
+
+generateFillerNodes now emits RawSkillNode[] (no magnitude). The catalog
+assembly in Task 3 pipes these + hand-curated raws through
+deriveMagnitudes to produce the final FULL_CATALOG.
+
+Tests downstream of magnitude values will fail temporarily; Task 3
+restores them by wiring the derive function in.
+
+Refs design spec §05.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 3 -->
+  <section id="task-3">
+    <div class="sec-head"><span class="num">03</span><h2>Task 3 — Migrate catalog + wire deriveMagnitudes + fix tests</h2></div>
+    <p class="sec-intro">The big one. Strip <code>magnitude</code> from every hand-curated <code>SkillNode</code> literal. Strip embedded <code>×1.XXXX</code> from <code>description</code> strings. Re-route <code>FULL_CATALOG</code> through <code>deriveMagnitudes(RAW_FULL_CATALOG, ALL_ARCHETYPE_PREFIXES)</code>. Repair the downstream tests (skilltree fold + economy numeric expectations) using the new derived magnitudes.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-catalog.ts</code> &nbsp; <code>~ src/skilltree.test.ts</code> &nbsp; <code>~ src/economy.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/skilltree-catalog.ts</code>, import the engine pieces:</div>
+      <pre><span class="kw">import</span> { deriveMagnitudes, type RawSkillNode } <span class="kw">from</span> <span class="str">'./skilltree-derive-magnitudes.js'</span>;
+<span class="kw">import</span> { ALL_ARCHETYPE_PREFIXES } <span class="kw">from</span> <span class="str">'./skilltree-archetypes.js'</span>;</pre>
+
+      <div class="step"><b>Step 2.</b> Strip <code>magnitude</code> from every hand-curated <code>SkillNode</code> literal in the file. ~280 lines. Mechanical regex-edit: match <code>magnitude:\s*[\d.]+\s*,?</code> and remove. Verify by:</div>
+      <pre class="bash">grep -c "magnitude:" src/skilltree-catalog.ts</pre>
+      <div class="expected"><b>Expected before edit:</b> ~104 occurrences (the hand-curated rows). <b>After edit:</b> 0.</div>
+
+      <div class="step"><b>Step 3.</b> Strip embedded <code>×1.XXXX</code> patterns from <code>description</code> strings. The T3 nit pass on the rebalance added these. Mechanical regex: match <code>× ?\d+\.\d{4}</code> and remove the surrounding token. Example transformations:</div>
+      <pre>  <span class="comment">// BEFORE:</span>
+  description: <span class="str">'Deep Vein Surveying — ×1.0625 mine yield per Mine'</span>,
+  <span class="comment">// AFTER:</span>
+  description: <span class="str">'Deep Vein Surveying — vein-depth analysis (mine yield)'</span>,
+
+  <span class="comment">// BEFORE:</span>
+  description: <span class="str">'Blast Optimization — ×1.0248 extraction recipe rate'</span>,
+  <span class="comment">// AFTER:</span>
+  description: <span class="str">'Blast Optimization — extraction recipe rate'</span>,
+
+  <span class="comment">// BEFORE:</span>
+  description: <span class="str">'Hub Capacity — ×1.1103 route capacity'</span>,
+  <span class="comment">// AFTER:</span>
+  description: <span class="str">'Hub Capacity — route capacity'</span>,</pre>
+      <p class="step" style="margin-left:24px">Approach: for each row that has a <code>×1.XXXX</code> token in its description, strip the token (and the leading space/dash if it leaves a dangling separator). Pure mechanical. Keep the rest of the description text.</p>
+
+      <div class="step"><b>Step 4.</b> At the bottom of <code>src/skilltree-catalog.ts</code>, change the <code>FULL_CATALOG</code> aggregation to:</div>
+      <pre><span class="comment">// BEFORE (rough sketch — actual code aggregates from many arrays):</span>
+<span class="kw">export const</span> FULL_CATALOG: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">SkillNode</span>&gt; = [...HAND_CURATED, ...ALL_FILLER_NODES, ...KEYSTONES, ...etc];
+
+<span class="comment">// AFTER:</span>
+<span class="kw">const</span> RAW_FULL_CATALOG: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">RawSkillNode</span>&gt; = [...HAND_CURATED, ...ALL_FILLER_NODES, ...KEYSTONES, ...etc];
+<span class="kw">export const</span> FULL_CATALOG: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">SkillNode</span>&gt; = <span class="fn">deriveMagnitudes</span>(RAW_FULL_CATALOG, ALL_ARCHETYPE_PREFIXES);</pre>
+      <div class="callout info"><b>Re-cast the source arrays</b> from <code>SkillNode[]</code> to <code>RawSkillNode[]</code> where they're declared (now that they have no magnitude). The compiler will guide you to the exact array declarations.</div>
+
+      <div class="step"><b>Step 5.</b> Build + run tests:</div>
+      <pre class="bash">npm run build 2&gt;&amp;1 | tail -10 &amp;&amp; npm test 2&gt;&amp;1 | tail -15</pre>
+      <div class="expected"><b>Expected:</b> build clean. Tests will fail on hardcoded-magnitude comparisons in <code>src/skilltree.test.ts</code> and <code>src/economy.test.ts</code>. Capture the failure list — fix in step 6.</div>
+
+      <div class="step"><b>Step 6.</b> Fix failing tests. For each failing test that asserts a specific magnitude:</div>
+      <ul style="margin: 8px 0 16px 24px; list-style: disc">
+        <li><b>If the test uses a synthetic in-test catalog</b> (creates its own <code>SkillNode</code> literals with magnitude), leave those alone — they're not affected by derivation.</li>
+        <li><b>If the test references <code>FULL_CATALOG</code> directly</b> and reads a node's magnitude, compute the new expected value: use the same derivation logic, OR read the magnitude live from <code>FULL_CATALOG</code> at test time. Prefer the latter — it self-adapts:
+          <pre style="margin-top:6px"><span class="kw">const</span> node = FULL_CATALOG.<span class="fn">find</span>(n =&gt; n.id === <span class="str">'transport.keystone.hubCapacity'</span>)!;
+expect(skillMul.routeCapacity).<span class="fn">toBeCloseTo</span>(1 + node.magnitude, 6);</pre>
+        </li>
+        <li><b>Specific numeric expectations</b> like <code>'Coal Gen produces 107.01W instead of 100W'</code> in <code>economy.test.ts</code> need recomputation. The 107.01 came from <code>100 × 1.0701</code> with <code>powerProductionMul</code> at 0.0701. Under the new derivation: with (1K, 8N, 8F) for <code>powerProductionMul</code>, the lone keystone gets ×1.778 and the test (which unlocks a specific node) reads whichever tier that node is. Recompute by:
+          <pre class="bash" style="margin-top:6px">npx tsx -e "import('./src/skilltree-catalog.ts').then(m =&gt; { const n = m.FULL_CATALOG.find(x =&gt; x.id === 'TURBINE_STAGING_ID_HERE'); console.log(n?.magnitude); });"</pre>
+          and update the expected value.
+        </li>
+      </ul>
+      <p class="step" style="margin-left:24px">List of known affected tests (from the T3 nit on the rebalance):</p>
+      <ul style="margin: 0 0 14px 28px; font-size: 14px">
+        <li><code>economy.test.ts</code> ~L776 — 'Coal Gen produces 107.01W instead of 100W' (turbine staging notable, powerProductionMul)</li>
+        <li><code>economy.test.ts</code> ~L1002 — 'Mine produces iron_ore at 1.0248× base rate' (blast optimization, recipeRateMul:extraction)</li>
+        <li><code>economy.test.ts</code> ~L1012 — 'Mine rate × 1.0248 × 1.0625' (blast opt + deep vein stack)</li>
+        <li><code>skilltree.test.ts</code> ~L254-271 — skillPointsForLevelUp / cumulativeSkillPointsForLevel landmarks (unaffected by this change; these are SP-grant curve, not magnitude — leave alone)</li>
+      </ul>
+
+      <div class="step"><b>Step 7.</b> After tests pass, run the full suite + build to confirm nothing else broke:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -5 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. Test count comparable to baseline (no new tests added; some may need expected-value updates).</div>
+
+      <div class="step"><b>Step 8.</b> Spot-check the magnitude script still works:</div>
+      <pre class="bash">npx tsx scripts/skilltree-magnitudes.ts | head -10</pre>
+      <div class="expected"><b>Expected:</b> the per-effect-kind product table prints with ratios in [0.999, 1.001]. Sanity-check that the new derivation produces caps matching POOL_TARGETS.</div>
+
+      <div class="step"><b>Step 9.</b> Commit + push:</div>
+      <pre class="bash">git add src/skilltree-catalog.ts src/skilltree.test.ts src/economy.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+refactor(skilltree-catalog): wire deriveMagnitudes, drop hardcoded magnitudes + description ×factors
+
+Strips ~104 hand-curated `magnitude:` literals from skilltree-catalog.ts.
+Strips embedded ×1.XXXX tokens from `description` strings (leaving pure
+flavor text; the tooltip layer reads node.magnitude live).
+
+FULL_CATALOG now = deriveMagnitudes(RAW_FULL_CATALOG, ALL_ARCHETYPE_PREFIXES).
+The derived per-node magnitudes give keystones / notables / fillers the
+50/30/20 log-budget split (with empty-tier redistribution) and filler
+chains grow by 1.10 per depth.
+
+Per-effect-kind product still hits the spec §03 cap targets exactly — by
+construction now rather than by hand-shipped table. Adding a node to any
+effect kind auto-rebalances every other node of the same kind on next
+module load.
+
+Updates 3 economy.test.ts hardcoded-magnitude expectations to read live
+from FULL_CATALOG. Fold tests in skilltree.test.ts get the same fix.
+
+Refs design spec §04, §05, §06.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 4 -->
+  <section id="task-4">
+    <div class="sec-head"><span class="num">04</span><h2>Task 4 — Repoint scripts/skilltree-magnitudes.ts to engine module</h2></div>
+    <p class="sec-intro">Eliminate the duplicate <code>POOL_TARGETS</code> in <code>scripts/skilltree-magnitudes.ts</code>. The script becomes a thin pretty-printer of the derived catalog's per-effect-kind product. The vitest invariant still asserts cap targets — passes by construction under the computed model, stays as a regression sentinel.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ scripts/skilltree-magnitudes.ts</code> &nbsp; <code>~ src/skilltree-magnitudes.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>scripts/skilltree-magnitudes.ts</code> delete the local <code>POOL_TARGETS</code> + <code>effectKey</code> definitions. Re-export them from the engine module:</div>
+      <pre><span class="comment">// BEFORE (local definitions duplicated from spec §03):</span>
+<span class="kw">export const</span> POOL_TARGETS: <span class="kw">Readonly</span>&lt;<span class="kw">Record</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt;&gt; = { <span class="comment">/* 37 entries */</span> };
+<span class="kw">function</span> <span class="fn">effectKey</span>(e: <span class="ty">SkillEffect</span>): <span class="ty">string</span> { <span class="comment">/* ... */</span> }
+
+<span class="comment">// AFTER:</span>
+<span class="kw">export</span> { POOL_TARGETS } <span class="kw">from</span> <span class="str">'../src/skilltree-derive-magnitudes.js'</span>;
+<span class="kw">import</span> { effectKey, POOL_TARGETS } <span class="kw">from</span> <span class="str">'../src/skilltree-derive-magnitudes.js'</span>;</pre>
+
+      <div class="step"><b>Step 2.</b> Update <code>computeProducts</code> to use the imported <code>effectKey</code>. Leave the CLI table-printer logic intact.</div>
+
+      <div class="step"><b>Step 3.</b> In <code>src/skilltree-magnitudes.test.ts</code>, the test already imports <code>POOL_TARGETS</code> + <code>computeProducts</code> from <code>scripts/skilltree-magnitudes.js</code>. That import path still works because of the re-export. No change needed — but verify by running:</div>
+      <pre class="bash">npx vitest run src/skilltree-magnitudes.test.ts</pre>
+      <div class="expected"><b>Expected:</b> all 37 invariants still pass.</div>
+
+      <div class="step"><b>Step 4.</b> Smoke-test the script CLI:</div>
+      <pre class="bash">npx tsx scripts/skilltree-magnitudes.ts | head -10</pre>
+      <div class="expected"><b>Expected:</b> table prints with all ratios in [0.999, 1.001].</div>
+
+      <div class="step"><b>Step 5.</b> Full suite + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -5 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green.</div>
+
+      <div class="step"><b>Step 6.</b> Commit + push:</div>
+      <pre class="bash">git add scripts/skilltree-magnitudes.ts src/skilltree-magnitudes.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+refactor(scripts): repoint magnitude calculator to engine module
+
+POOL_TARGETS + effectKey are now defined in src/skilltree-derive-magnitudes.ts
+as the single source of truth. The scripts/ pretty-printer + the vitest
+invariant test both import from there.
+
+Eliminates the duplicate POOL_TARGETS table that previously lived in
+scripts/skilltree-magnitudes.ts and could drift from the engine. Under
+the computed-magnitude model, both files now share the same cap targets
+by reference.
+
+The invariant test continues to pass by construction (deriveMagnitudes
+makes deviation impossible) but stays as a regression sentinel.
+
+Refs design spec §04 (engine integration), risks §08 (tooling drift).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <section id="verification">
+    <div class="sec-head"><span class="num">05</span><h2>End-to-end verification (after all tasks land)</h2></div>
+    <p class="sec-intro">Once Task 4 commits, run the full smoke matrix.</p>
+    <div class="task-card">
+      <div class="step"><b>1.</b> Full test suite + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -5 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. Test count comparable to baseline (small additions from Task 1's derive tests).</div>
+
+      <div class="step"><b>2.</b> Magnitude probe — verify per-effect-kind product hits cap:</div>
+      <pre class="bash">npx tsx scripts/skilltree-magnitudes.ts</pre>
+      <div class="expected"><b>Expected:</b> 37 rows, every ratio in [0.999, 1.001].</div>
+
+      <div class="step"><b>3.</b> Sanity probe — spot-check tier magnitudes:</div>
+      <pre class="bash">npx tsx -e "import('./src/skilltree-catalog.ts').then(m =&gt; { const k = m.FULL_CATALOG.find(n =&gt; n.id === 'transport.keystone.hubCapacity'); const f = m.FULL_CATALOG.find(n =&gt; n.id.startsWith('transport.routeCapacity.')); console.log('keystone m:', k?.magnitude, '| filler d1 m:', f?.magnitude); });"</pre>
+      <div class="expected"><b>Expected:</b> keystone magnitude ≈ 0.468 (×1.468), depth-1 filler ≈ 0.042 (×1.042) — keystones meaningfully stronger than fillers.</div>
+
+      <div class="step"><b>4.</b> Browser smoke (optional, if a dev save exists): reload <code>https://islands.nitjsefni.eu/</code> after <code>npm run build</code>. Buy a keystone in a sub-path; verify the resulting multiplier on the panel matches the derived magnitude. Buy a depth-1 filler in the same sub-path; verify it's noticeably smaller.</div>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Plan v1 · 2026-05-26 · sliced HTML for kimi dispatch (per <code>~/.claude/prompts/dispatch-from-sliced-plan.md</code>) · source spec <code>docs/superpowers/specs/2026-05-26-skilltree-computed-magnitudes-design.html</code> · execution sub-skill <code>superpowers:subagent-driven-development</code> · trailer literal <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>.</p>
+  </div>
+
+</div>
+</body>
+</html>

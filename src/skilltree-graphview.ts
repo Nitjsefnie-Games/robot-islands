@@ -15,6 +15,7 @@ import {
   unbindCrystal,
   computeMiniTreeRefund,
   type BranchId,
+  type SkillNode,
 } from './skilltree.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
@@ -364,6 +365,15 @@ export function mountSkillGraphView(
     refresh();
   }
 
+  function formatNodeMagnitude(node: SkillNode): string {
+    if (!('magnitude' in node) || node.magnitude == null || node.magnitude === 0) return '';
+    const kind = node.effect.kind;
+    if (kind === 'parallelBuildCapAdd') return `+${node.magnitude.toFixed(3)}`;
+    if (kind === 'launchSuccessAdditive') return `+${(node.magnitude * 100).toFixed(1)} pp`;
+    // Default: multiplier-style. (1+m) is the per-node factor.
+    return `×${(1 + node.magnitude).toFixed(4)}`;
+  }
+
   function escapeHtml(s: string): string {
     return s.replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -392,9 +402,11 @@ export function mountSkillGraphView(
       : reachable === null
         ? '<span style="color:#E08B7F">UNREACHABLE</span>'
         : `<span style="color:#E0B47F">${reachable} SP</span> ${reachable <= state.unspentSkillPoints ? '' : '(insufficient)'}`;
+    const magStr = formatNodeMagnitude(node);
     tooltip.innerHTML =
       `<div style="color:#E9E6DC;font-weight:600;margin-bottom:4px">${escapeHtml(String(node.id))}</div>` +
       `<div style="margin-bottom:6px">${escapeHtml(node.description ?? '')}</div>` +
+      (magStr ? `<div style="color:#E0B47F;margin-bottom:6px">${escapeHtml(magStr)}</div>` : '') +
       `<div>${costLine}</div>`;
     tooltip.style.display = 'block';
     positionTooltip(cx, cy);

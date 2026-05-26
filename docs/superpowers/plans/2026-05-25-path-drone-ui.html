@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Path-drone UI + shared launch preview — implementation plan</title>
+<style>
+  :root {
+    --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+    --tan:#E0B47F; --pink:#D38FCC; --red:#E08B7F; --info:#7DD3E8;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1180px; margin:0 auto; }
+  header.page-head { margin-bottom:48px; max-width:920px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:32px; line-height:1.18; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+  .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+  .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+  .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+  .callout { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-700); margin: 14px 0; max-width:920px; }
+  .callout.info { border-left-color:var(--info); }
+  .callout.warn { border-left-color:var(--red); }
+  .callout code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .callout b { color:var(--slate); }
+  .callout ul { margin-top:6px; margin-left:20px; list-style:disc; }
+  .callout li { margin:3px 0; }
+
+  section { margin-bottom:56px; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:24px; color:var(--slate); letter-spacing:-0.01em; }
+  .sec-head h2 code { font-family:var(--mono); font-size:18px; color:var(--clay); }
+  .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:840px; margin-bottom:20px; }
+  .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--tan); }
+
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:40px; max-width: 1080px; }
+  @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+  .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px; padding:14px 16px; }
+  .summary .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+  .summary .v { font-size:15px; color:var(--slate); font-weight:600; }
+  .summary .v.accent { color:var(--clay); }
+  .summary .v.ok { color:var(--olive); }
+
+  .filetable { border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden; background:var(--white); margin-bottom:32px; }
+  .filetable .row { display:grid; grid-template-columns:280px 100px 1fr; gap:0; }
+  @media (max-width:900px){ .filetable .row{grid-template-columns:1fr;} }
+  .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+  .filetable .cell { padding:11px 14px; font-size:13px; vertical-align:top; }
+  .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+  @media (max-width:900px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+  .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+  .filetable .cell code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+  .filetable .pill { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--mono); font-size:10.5px; font-weight:600; }
+  .filetable .pill.new { background:var(--olive); color:var(--ivory); }
+  .filetable .pill.mod { background:var(--tan); color:var(--ivory); }
+
+  .task-card { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 22px; margin-bottom:18px; }
+  .files-block { background:var(--gray-150); border:1px solid var(--gray-300); border-radius:8px; padding:10px 13px; margin-bottom:14px; font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+  .files-block .h { color:var(--gray-500); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .files-block code { color:var(--tan); }
+
+  .step { margin: 10px 0; padding-left: 24px; position: relative; font-size:14px; color:var(--gray-700); }
+  .step::before { content: "☐"; position: absolute; left: 0; top: 0; color: var(--gray-500); }
+  .step b { color: var(--slate); }
+  .step code { font-family:var(--mono); font-size:12.5px; color:var(--tan); background: var(--gray-150); padding: 1px 5px; border-radius: 3px; }
+
+  pre { background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 10px 14px; margin: 8px 0 14px 24px; overflow-x: auto; font-family: var(--mono); font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 1000px; }
+  pre.bash { background: #1F1D19; color: var(--olive); }
+  pre.bash::before { content: "$ "; color: var(--gray-500); }
+  pre .comment { color: var(--gray-500); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--olive); }
+  pre .ty { color: var(--info); }
+  pre .fn { color: var(--tan); }
+
+  .expected { background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 0 6px 6px 0; padding: 6px 12px; margin: 6px 0 10px 24px; font-family: var(--mono); font-size: 12px; color: var(--gray-700); max-width: 980px; }
+  .expected b { color: var(--olive); }
+
+  .toc { background: var(--gray-150); border-left: 3px solid var(--info); border-radius: 0 6px 6px 0; padding: 14px 22px; margin: 28px 0 36px; max-width: 980px; }
+  .toc h3 { color: var(--gray-500); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 10px; font-family: var(--mono); }
+  .toc ol { list-style: none; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--gray-700); text-decoration: none; }
+  .toc a:hover { color: var(--clay); }
+  .toc .num { color: var(--gray-500); font-family: var(--mono); margin-right: 8px; font-size: 11.5px; }
+
+  .footer { color: var(--gray-500); margin-top: 64px; font-size: 12px; padding-top: 18px; border-top: 1.5px solid var(--gray-300); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · drones · path-drone UI + shared launch preview · 2026-05-25</div>
+    <h1>Path-drone UI + shared launch-mode preview overlay</h1>
+    <div class="prompt-box">
+      <span class="label">For agentic workers</span>
+      <b style="color:var(--slate)">REQUIRED SUB-SKILL:</b> Use <code>superpowers:subagent-driven-development</code>. Fresh kimi subagent per task + two-stage review (spec compliance reviewer → code quality reviewer) per task. Trailer literal on commits: <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>.<br><br>
+      <b style="color:var(--slate)">Goal:</b> wire the T5 path-drawn drone UI (engine is already done; UI never set <code>waypoints</code>) AND fix the missing single-click cursor-preview gap. Both fold into one shared <code>launchPreviewGfx</code> overlay rendered in world space.<br>
+      <b style="color:var(--slate)">Architecture:</b> extract pure helpers first (testable in isolation), then add the shared preview overlay for numeric mode (fixes the headline UX bug standalone), then add the "T5 Path" tier-dropdown entry + path-mode rendering, finally wire dbl-click/right-click/Esc interactions + dispatch. Each task is independently committable and pushable.<br>
+      <b style="color:var(--slate)">Tech stack:</b> Vite 5 + TypeScript strict + PixiJS 8 + vitest. Strict + <code>noUncheckedIndexedAccess</code> + <code>noUnusedLocals</code>.<br>
+      <b style="color:var(--slate)">Source of truth:</b> design spec at <code>docs/superpowers/specs/2026-05-25-path-drone-ui-design.html</code> (v1, user-approved 2026-05-25).<br>
+      <b style="color:var(--slate)">Engine assumed-in-place</b> (do NOT touch): <code>Drone.waypoints</code> field, <code>dispatchDrone(... waypoints?)</code> argument, <code>isPathDrawn</code> branch, <code>DRONE_TIER_SCAN_RADIUS[5] = 12</code>, <code>path_drone_foundry</code> building, <code>DRONE_T5_EFFICIENCY = 8</code>, <code>MAX_FUEL_PER_DRONE = 50</code>.
+    </div>
+  </header>
+
+  <div class="callout warn">
+    <b>Locked design choices (do NOT deviate):</b>
+    <ul>
+      <li>Tier dropdown gains a single new entry <code>'5-path'</code> (string value, distinct from numeric tiers). UI-side <code>selectedTier</code> widens to <code>DroneTier | '5-path'</code>.</li>
+      <li>Path-mode gate: <code>tierForLevel(origin.level) &gt;= 5 AND origin.aiCoreCrafted AND hasOperationalBuilding(origin.buildings, 'path_drone_foundry')</code>. Failing any → dropdown entry omitted.</li>
+      <li>Range gating: <code>2 × pathLength ≤ MAX_FUEL_PER_DRONE × DRONE_T5_EFFICIENCY</code> (= 200 tiles max one-way).</li>
+      <li>Fuel at finalize: <code>ceil(2 × pathLength / DRONE_T5_EFFICIENCY)</code>.</li>
+      <li>Trailing-duplicate dedup in <code>finalizePath</code> — browser <code>dblclick</code> fires after a <code>click</code>; the synthetic duplicate waypoint is popped before dispatch.</li>
+      <li>Single shared <code>launchPreviewGfx</code> overlay in the world layer; both numeric + path modes render through it.</li>
+      <li>NO engine changes. NO schema bump. NO new SkillEffects. Pure UI work.</li>
+    </ul>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Summary</h3>
+  <div class="summary">
+    <div class="cell"><div class="k">Files touched</div><div class="v accent">4</div></div>
+    <div class="cell"><div class="k">New files</div><div class="v">2</div></div>
+    <div class="cell"><div class="k">Tasks</div><div class="v">4</div></div>
+    <div class="cell"><div class="k">Engine changes</div><div class="v ok">none</div></div>
+  </div>
+
+  <div class="toc">
+    <h3>Tasks</h3>
+    <ol>
+      <li><span class="num">01</span><a href="#task-1">Pure helpers + unit tests (<code>drones-ui-helpers.ts</code>)</a></li>
+      <li><span class="num">02</span><a href="#task-2">Shared preview overlay — numeric tier (fixes single-click cursor-gap)</a></li>
+      <li><span class="num">03</span><a href="#task-3">"T5 Path" dropdown entry + path-mode render</a></li>
+      <li><span class="num">04</span><a href="#task-4">Waypoint interactions + dispatch wire (dbl-click / right-click / Esc)</a></li>
+    </ol>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Files touched</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Path</div><div class="cell">Status</div><div class="cell">Responsibility</div></div>
+    <div class="row"><div class="cell"><code>src/drones-ui-helpers.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Pure helpers: <code>totalPathTiles</code>, <code>wouldExceedRange</code>, <code>fuelForPath</code>, <code>popTrailingDuplicate</code>. No DOM/Pixi imports. Constants pulled from <code>drones.js</code> (<code>MAX_FUEL_PER_DRONE</code>, <code>DRONE_T5_EFFICIENCY</code>).</div></div>
+    <div class="row"><div class="cell"><code>src/drones-ui-helpers.test.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Vitest unit coverage for the 4 helpers. ~10-15 tests.</div></div>
+    <div class="row"><div class="cell"><code>src/drones-ui.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">New <code>launchPreviewLayer: Container</code> on the handle + <code>launchPreviewGfx: Graphics</code>; per-frame paint function; <code>selectedTier</code> widened to <code>DroneTier | '5-path'</code>; dropdown gate check + entry; <code>waypointBuffer</code> + <code>cursorTile</code> state; <code>attemptLaunch</code> branch; new handle methods <code>popWaypoint</code> / <code>finalizePath</code> / <code>cancelPath</code>; fuel-row label variants.</div></div>
+    <div class="row"><div class="cell"><code>src/main.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Add <code>launchPreviewLayer</code> to world container at the existing mount site. Add canvas <code>dblclick</code> handler → <code>droneUi.finalizePath(nowMs)</code>. Add canvas <code>contextmenu</code> handler → <code>droneUi.popWaypoint()</code> (conditional on launch mode + path-tier). Add Esc-cancel action through the existing <code>input.ts</code> action registry.</div></div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 1 -->
+  <section id="task-1">
+    <div class="sec-head"><span class="num">01</span><h2>Task 1 — Pure helpers + unit tests (<code>drones-ui-helpers.ts</code>)</h2></div>
+    <p class="sec-intro">Extract the path-math helpers into a new file with no DOM/Pixi imports so they're cleanly unit-testable. Zero behaviour change to the game — the helpers exist but nothing imports them yet. Establishes test coverage before later tasks wire them in.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>+ src/drones-ui-helpers.ts</code> &nbsp; <code>+ src/drones-ui-helpers.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Create <code>src/drones-ui-helpers.ts</code> with the 4 pure helpers + a shared point type. Import the two constants from <code>drones.js</code> (already exports them):</div>
+      <pre><span class="comment">// Pure helpers for the drone-launch UI. No DOM, no Pixi — testable</span>
+<span class="comment">// in isolation. Used by drones-ui.ts for both numeric-tier reachability</span>
+<span class="comment">// gating and T5 path-mode range gating + fuel computation.</span>
+
+<span class="kw">import</span> { DRONE_T5_EFFICIENCY, MAX_FUEL_PER_DRONE } <span class="kw">from</span> <span class="str">'./drones.js'</span>;
+
+<span class="kw">export interface</span> <span class="ty">Point</span> {
+  <span class="kw">readonly</span> x: <span class="ty">number</span>;
+  <span class="kw">readonly</span> y: <span class="ty">number</span>;
+}
+
+<span class="comment">/** Euclidean distance between two tile-coord points. */</span>
+<span class="kw">export function</span> <span class="fn">tileDist</span>(a: <span class="ty">Point</span>, b: <span class="ty">Point</span>): <span class="ty">number</span> {
+  <span class="kw">const</span> dx = b.x - a.x;
+  <span class="kw">const</span> dy = b.y - a.y;
+  <span class="kw">return</span> <span class="ty">Math</span>.sqrt(dx * dx + dy * dy);
+}
+
+<span class="comment">/** Sum of segment lengths from origin through every waypoint in order. */</span>
+<span class="kw">export function</span> <span class="fn">totalPathTiles</span>(
+  origin: <span class="ty">Point</span>,
+  waypoints: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">Point</span>&gt;,
+): <span class="ty">number</span> {
+  <span class="kw">if</span> (waypoints.length === 0) <span class="kw">return</span> 0;
+  <span class="kw">let</span> total = <span class="fn">tileDist</span>(origin, waypoints[0]!);
+  <span class="kw">for</span> (<span class="kw">let</span> i = 1; i &lt; waypoints.length; i++) {
+    total += <span class="fn">tileDist</span>(waypoints[i - 1]!, waypoints[i]!);
+  }
+  <span class="kw">return</span> total;
+}
+
+<span class="comment">/** True if adding `next` to the path would exceed the T5 fuel cap.</span>
+<span class="comment"> *  Cap rule: 2 × pathLength ≤ MAX_FUEL_PER_DRONE × DRONE_T5_EFFICIENCY</span>
+<span class="comment"> *  (factor 2 = out + back; back retraces the path in reverse). */</span>
+<span class="kw">export function</span> <span class="fn">wouldExceedRange</span>(
+  origin: <span class="ty">Point</span>,
+  waypoints: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">Point</span>&gt;,
+  next: <span class="ty">Point</span>,
+): <span class="ty">boolean</span> {
+  <span class="kw">const</span> lengthWithNext = <span class="fn">totalPathTiles</span>(origin, [...waypoints, next]);
+  <span class="kw">const</span> maxOneWay = MAX_FUEL_PER_DRONE * DRONE_T5_EFFICIENCY / 2;
+  <span class="kw">return</span> lengthWithNext &gt; maxOneWay;
+}
+
+<span class="comment">/** Fuel units required to fly the path round-trip, rounded up. */</span>
+<span class="kw">export function</span> <span class="fn">fuelForPath</span>(
+  origin: <span class="ty">Point</span>,
+  waypoints: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">Point</span>&gt;,
+): <span class="ty">number</span> {
+  <span class="kw">const</span> length = <span class="fn">totalPathTiles</span>(origin, waypoints);
+  <span class="kw">return</span> <span class="ty">Math</span>.ceil(2 * length / DRONE_T5_EFFICIENCY);
+}
+
+<span class="comment">/** If the last two waypoints share identical x/y, return a new array</span>
+<span class="comment"> *  with the trailing duplicate removed. Otherwise return the input</span>
+<span class="comment"> *  unchanged. Handles the browser click→dblclick double-add per the</span>
+<span class="comment"> *  design spec §06 resolution. Pure: returns a fresh array. */</span>
+<span class="kw">export function</span> <span class="fn">popTrailingDuplicate</span>(
+  waypoints: <span class="kw">ReadonlyArray</span>&lt;<span class="ty">Point</span>&gt;,
+): <span class="kw">ReadonlyArray</span>&lt;<span class="ty">Point</span>&gt; {
+  <span class="kw">if</span> (waypoints.length &lt; 2) <span class="kw">return</span> waypoints;
+  <span class="kw">const</span> n = waypoints.length;
+  <span class="kw">const</span> last = waypoints[n - 1]!;
+  <span class="kw">const</span> prev = waypoints[n - 2]!;
+  <span class="kw">if</span> (last.x === prev.x &amp;&amp; last.y === prev.y) {
+    <span class="kw">return</span> waypoints.slice(0, n - 1);
+  }
+  <span class="kw">return</span> waypoints;
+}</pre>
+
+      <div class="step"><b>Step 2.</b> Create <code>src/drones-ui-helpers.test.ts</code> with the unit-test suite. Vitest is the only import beyond the file under test:</div>
+      <pre><span class="kw">import</span> { describe, it, expect } <span class="kw">from</span> <span class="str">'vitest'</span>;
+<span class="kw">import</span> {
+  tileDist,
+  totalPathTiles,
+  wouldExceedRange,
+  fuelForPath,
+  popTrailingDuplicate,
+} <span class="kw">from</span> <span class="str">'./drones-ui-helpers.js'</span>;
+<span class="kw">import</span> { DRONE_T5_EFFICIENCY, MAX_FUEL_PER_DRONE } <span class="kw">from</span> <span class="str">'./drones.js'</span>;
+
+<span class="fn">describe</span>(<span class="str">'tileDist'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'returns 0 for identical points'</span>, () =&gt; {
+    expect(<span class="fn">tileDist</span>({ x: 5, y: 7 }, { x: 5, y: 7 })).toBe(0);
+  });
+  <span class="fn">it</span>(<span class="str">'returns Pythagorean distance'</span>, () =&gt; {
+    expect(<span class="fn">tileDist</span>({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5);
+  });
+});
+
+<span class="fn">describe</span>(<span class="str">'totalPathTiles'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'returns 0 for empty waypoints'</span>, () =&gt; {
+    expect(<span class="fn">totalPathTiles</span>({ x: 0, y: 0 }, [])).toBe(0);
+  });
+  <span class="fn">it</span>(<span class="str">'sums origin → wp[0] only for a single waypoint'</span>, () =&gt; {
+    expect(<span class="fn">totalPathTiles</span>({ x: 0, y: 0 }, [{ x: 3, y: 4 }])).toBe(5);
+  });
+  <span class="fn">it</span>(<span class="str">'chains origin → wp[0] → wp[1] for two waypoints'</span>, () =&gt; {
+    <span class="kw">const</span> total = <span class="fn">totalPathTiles</span>({ x: 0, y: 0 }, [{ x: 3, y: 0 }, { x: 3, y: 4 }]);
+    expect(total).toBe(7); <span class="comment">// 3 + 4</span>
+  });
+});
+
+<span class="fn">describe</span>(<span class="str">'wouldExceedRange'</span>, () =&gt; {
+  <span class="comment">// Max one-way = MAX_FUEL × T5_EFF / 2 = 50 × 8 / 2 = 200 tiles</span>
+  <span class="fn">it</span>(<span class="str">'allows a 199-tile path with one more 1-tile hop (200 exactly)'</span>, () =&gt; {
+    <span class="kw">const</span> result = <span class="fn">wouldExceedRange</span>(
+      { x: 0, y: 0 },
+      [{ x: 199, y: 0 }],
+      { x: 200, y: 0 },
+    );
+    expect(result).toBe(<span class="kw">false</span>);
+  });
+  <span class="fn">it</span>(<span class="str">'rejects when adding the next tile pushes past 200'</span>, () =&gt; {
+    <span class="kw">const</span> result = <span class="fn">wouldExceedRange</span>(
+      { x: 0, y: 0 },
+      [{ x: 199, y: 0 }],
+      { x: 201, y: 0 },
+    );
+    expect(result).toBe(<span class="kw">true</span>);
+  });
+  <span class="fn">it</span>(<span class="str">'allows the first waypoint from origin within range'</span>, () =&gt; {
+    expect(<span class="fn">wouldExceedRange</span>({ x: 0, y: 0 }, [], { x: 100, y: 0 })).toBe(<span class="kw">false</span>);
+  });
+});
+
+<span class="fn">describe</span>(<span class="str">'fuelForPath'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'returns 0 for an empty path'</span>, () =&gt; {
+    expect(<span class="fn">fuelForPath</span>({ x: 0, y: 0 }, [])).toBe(0);
+  });
+  <span class="fn">it</span>(<span class="str">'returns ceil(2 × length / efficiency)'</span>, () =&gt; {
+    <span class="comment">// length 8 → 2 × 8 = 16 / 8 = 2 fuel</span>
+    expect(<span class="fn">fuelForPath</span>({ x: 0, y: 0 }, [{ x: 8, y: 0 }])).toBe(2);
+    <span class="comment">// length 9 → 2 × 9 = 18 / 8 = 2.25 → ceil → 3 fuel</span>
+    expect(<span class="fn">fuelForPath</span>({ x: 0, y: 0 }, [{ x: 9, y: 0 }])).toBe(3);
+  });
+  <span class="fn">it</span>(<span class="str">'reports max fuel for the max-range path'</span>, () =&gt; {
+    <span class="comment">// length 200 → 2 × 200 = 400 / 8 = 50 = MAX_FUEL_PER_DRONE</span>
+    expect(<span class="fn">fuelForPath</span>({ x: 0, y: 0 }, [{ x: 200, y: 0 }])).toBe(MAX_FUEL_PER_DRONE);
+  });
+});
+
+<span class="fn">describe</span>(<span class="str">'popTrailingDuplicate'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'returns input unchanged when length &lt; 2'</span>, () =&gt; {
+    <span class="kw">const</span> empty: <span class="kw">ReadonlyArray</span>&lt;{ x: <span class="ty">number</span>; y: <span class="ty">number</span> }&gt; = [];
+    expect(<span class="fn">popTrailingDuplicate</span>(empty)).toBe(empty);
+    <span class="kw">const</span> single = [{ x: 1, y: 1 }];
+    expect(<span class="fn">popTrailingDuplicate</span>(single)).toBe(single);
+  });
+  <span class="fn">it</span>(<span class="str">'pops the tail when last two waypoints are identical'</span>, () =&gt; {
+    <span class="kw">const</span> result = <span class="fn">popTrailingDuplicate</span>([
+      { x: 1, y: 1 },
+      { x: 5, y: 5 },
+      { x: 5, y: 5 },
+    ]);
+    expect(result).toEqual([{ x: 1, y: 1 }, { x: 5, y: 5 }]);
+    expect(result.length).toBe(2);
+  });
+  <span class="fn">it</span>(<span class="str">'returns input unchanged when last two waypoints differ'</span>, () =&gt; {
+    <span class="kw">const</span> input = [{ x: 1, y: 1 }, { x: 5, y: 5 }, { x: 6, y: 6 }];
+    expect(<span class="fn">popTrailingDuplicate</span>(input)).toEqual(input);
+  });
+  <span class="fn">it</span>(<span class="str">'only checks the tail, not other duplicates earlier in the path'</span>, () =&gt; {
+    <span class="kw">const</span> input = [{ x: 5, y: 5 }, { x: 5, y: 5 }, { x: 9, y: 9 }];
+    expect(<span class="fn">popTrailingDuplicate</span>(input)).toEqual(input);
+  });
+});</pre>
+
+      <div class="step"><b>Step 3.</b> Run the new tests to confirm they pass:</div>
+      <pre class="bash">npx vitest run src/drones-ui-helpers.test.ts</pre>
+      <div class="expected"><b>Expected:</b> all green. ~13 tests pass.</div>
+
+      <div class="step"><b>Step 4.</b> Run full suite + build to confirm no regressions:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -5 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. Test count grew by ~13 vs. baseline. tsc strict clean. Note: the new file is currently unused (no importer); tsc <code>noUnusedLocals</code> is per-file not per-project, so an unused export is fine — the helpers will be imported in Task 3-4.</div>
+
+      <div class="step"><b>Step 5.</b> Commit + push:</div>
+      <pre class="bash">git add src/drones-ui-helpers.ts src/drones-ui-helpers.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(drones-ui): pure helpers for path-mode math + dedup
+
+Extract totalPathTiles, wouldExceedRange, fuelForPath, popTrailingDuplicate
+into a new isolated module with no DOM/Pixi imports. Unit-tested in
+isolation. Used by the upcoming path-drone UI wiring (drones-ui.ts) in
+Task 3-4.
+
+Range rule: 2 × pathLength ≤ MAX_FUEL_PER_DRONE × DRONE_T5_EFFICIENCY
+(= 200 tiles max one-way for T5). Fuel: ceil(2 × length / efficiency).
+
+Refs design spec docs/superpowers/specs/2026-05-25-path-drone-ui-design.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 2 -->
+  <section id="task-2">
+    <div class="sec-head"><span class="num">02</span><h2>Task 2 — Shared preview overlay, numeric-tier mode (fixes single-click cursor-gap)</h2></div>
+    <p class="sec-intro">Add the shared <code>launchPreviewLayer</code> + <code>launchPreviewGfx</code> overlay. Wire the per-frame paint function for numeric tier (1-4) only: line from origin tile centre → cursor tile centre, tinted by reachability. Also extend the panel's fuel row to show <code>DIST Y tiles</code>. Closes the bug-2 headline gap end-to-end. Path mode rendering lands in Task 3.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/drones-ui.ts</code> &nbsp; <code>~ src/main.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/drones-ui.ts</code>, add a new field to the <code>DroneUiHandle</code> interface (next to <code>reticleLayer</code> / <code>rangeRingLayer</code> at line ~109-117):</div>
+      <pre><span class="comment">/** Container for the launch-preview line/polyline. Add to world (it's</span>
+<span class="comment"> *  in world-tile space so the green/red trajectory hint stays correct</span>
+<span class="comment"> *  at any zoom). Visibility managed internally by setLaunchMode. */</span>
+<span class="kw">readonly</span> launchPreviewLayer: <span class="ty">Container</span>;</pre>
+
+      <div class="step"><b>Step 2.</b> In <code>mountDronesUi</code>, add module-level state for the cursor tile near the existing <code>launchMode</code> / <code>selectedTier</code> declarations (~line 147-155):</div>
+      <pre><span class="comment">// Last known cursor tile from setReticleScreenPos. Null when hovering</span>
+<span class="comment">// off-canvas (matches reticle visibility). Drives the launch-preview line.</span>
+<span class="kw">let</span> cursorTile: { x: <span class="ty">number</span>; y: <span class="ty">number</span> } | <span class="kw">null</span> = <span class="kw">null</span>;</pre>
+
+      <div class="step"><b>Step 3.</b> Construct the layer + graphics next to the existing <code>reticleLayer</code> setup (~line 574-591). Add right after the reticle block:</div>
+      <pre><span class="comment">// Pixi layer: launch-preview line/polyline. World-space (panned/zoomed</span>
+<span class="comment">// with camera), unlike the screen-space reticle. Color rule:</span>
+<span class="comment">//   green when distance ≤ maxLaunchRange (numeric) OR adding next</span>
+<span class="comment">//     waypoint stays under fuel cap (path; lands in Task 3)</span>
+<span class="comment">//   red otherwise</span>
+<span class="kw">const</span> launchPreviewLayer = <span class="kw">new</span> <span class="ty">Container</span>();
+launchPreviewLayer.label = <span class="str">'launch-preview'</span>;
+launchPreviewLayer.visible = <span class="kw">false</span>;
+<span class="kw">const</span> launchPreviewGfx = <span class="kw">new</span> <span class="ty">Graphics</span>();
+launchPreviewLayer.addChild(launchPreviewGfx);
+
+<span class="kw">const</span> PREVIEW_COLOR_OK = 0x8FA56E;   <span class="comment">// olive</span>
+<span class="kw">const</span> PREVIEW_COLOR_BAD = 0xE08B7F;  <span class="comment">// rust</span>
+<span class="kw">const</span> PREVIEW_LINE_WIDTH = 2;</pre>
+
+      <div class="step"><b>Step 4.</b> Add the paint function. Place it near the existing <code>paintReticle</code> helper (~line 581-595). Numeric-tier branch only this task — path mode is a stub:</div>
+      <pre><span class="comment">/** Per-frame paint of the launch-preview overlay. Called from refresh().</span>
+<span class="comment"> *  Numeric tier: line origin → cursor, tinted by reachability.</span>
+<span class="comment"> *  Path tier (5-path): stub this task; Task 3 lands polyline rendering. */</span>
+<span class="kw">function</span> <span class="fn">paintLaunchPreview</span>(): <span class="ty">void</span> {
+  launchPreviewGfx.clear();
+  <span class="kw">if</span> (!launchMode || !cursorTile) <span class="kw">return</span>;
+  <span class="kw">const</span> spec = deps.<span class="fn">getOriginSpec</span>();
+  <span class="kw">const</span> originPx = <span class="fn">tileToWorldPx</span>(spec.cx, spec.cy);
+  <span class="kw">const</span> cursorPx = <span class="fn">tileToWorldPx</span>(cursorTile.x, cursorTile.y);
+  <span class="comment">// Numeric tier: single line, reachability-tinted.</span>
+  <span class="comment">// (Path tier rendering is added in Task 3.)</span>
+  <span class="kw">if</span> (<span class="kw">typeof</span> selectedTier === <span class="str">'number'</span>) {
+    <span class="kw">const</span> dxTiles = cursorTile.x - spec.cx;
+    <span class="kw">const</span> dyTiles = cursorTile.y - spec.cy;
+    <span class="kw">const</span> distTiles = <span class="ty">Math</span>.sqrt(dxTiles * dxTiles + dyTiles * dyTiles);
+    <span class="kw">const</span> maxRangeTiles = maxLaunchFuel * currentEfficiency / 2;
+    <span class="kw">const</span> color = distTiles &lt;= maxRangeTiles ? PREVIEW_COLOR_OK : PREVIEW_COLOR_BAD;
+    launchPreviewGfx.<span class="fn">moveTo</span>(originPx.x, originPx.y)
+      .<span class="fn">lineTo</span>(cursorPx.x, cursorPx.y)
+      .<span class="fn">stroke</span>({ width: PREVIEW_LINE_WIDTH, color, alpha: 0.85 });
+  }
+}</pre>
+      <div class="callout info"><b>Note:</b> <code>tileToWorldPx</code> is already imported in this module (it's used by <code>rangeRingLayer</code> painting). If not, add the import: <code>import { tileToWorldPx } from './island.js';</code> at the top.</div>
+
+      <div class="step"><b>Step 5.</b> In the existing <code>refresh()</code> handler (the panel-update function called every frame), add a call to <code>paintLaunchPreview()</code> at the same place range-ring repaint is invoked. Search for "rangeRing" / "rangeRingGfx" — the new call sits alongside.</div>
+
+      <div class="step"><b>Step 6.</b> In <code>setLaunchMode</code> / the same toggle path that flips <code>reticleLayer.visible</code>, also flip <code>launchPreviewLayer.visible</code> with the same on/off rule:</div>
+      <pre><span class="kw">function</span> <span class="fn">setLaunchMode</span>(on: <span class="ty">boolean</span>): <span class="ty">void</span> {
+  launchMode = on;
+  reticleLayer.visible = on;
+  launchPreviewLayer.visible = on;  <span class="comment">// NEW</span>
+  rangeRingLayer.visible = on;
+  <span class="comment">// ... existing callbacks ...</span>
+}</pre>
+
+      <div class="step"><b>Step 7.</b> Update <code>setReticleScreenPos</code> to ALSO update <code>cursorTile</code> (so paintLaunchPreview has fresh data). The function already converts screen → tile to position the reticle; capture the tile into the new state:</div>
+      <pre><span class="kw">function</span> <span class="fn">setReticleScreenPos</span>(x: <span class="ty">number</span>, y: <span class="ty">number</span>): <span class="ty">void</span> {
+  <span class="kw">if</span> (!launchMode) <span class="kw">return</span>;
+  <span class="kw">const</span> tile = deps.<span class="fn">screenToWorldTile</span>(x, y);
+  cursorTile = { x: tile.x, y: tile.y };  <span class="comment">// NEW</span>
+  reticleLayer.x = x;
+  reticleLayer.y = y;
+  reticleLayer.visible = <span class="kw">true</span>;
+  <span class="comment">// ... existing reachability-color repaint of the reticle ...</span>
+}
+
+<span class="kw">function</span> <span class="fn">hideReticle</span>(): <span class="ty">void</span> {
+  reticleLayer.visible = <span class="kw">false</span>;
+  cursorTile = <span class="kw">null</span>;  <span class="comment">// NEW</span>
+}</pre>
+
+      <div class="step"><b>Step 8.</b> Extend the panel fuel-row to show <code>DIST Y tiles</code> alongside <code>FUEL X / 50 &lt;grade&gt;</code>. Locate the existing FUEL row build (search for the FUEL stat in <code>statRow</code> calls near line 295-340). After the existing fuel stat, add a sibling row:</div>
+      <pre><span class="kw">const</span> distStat = <span class="fn">statRow</span>(<span class="str">'DIST'</span>);
+distStat.valueEl.textContent = <span class="str">'—'</span>;  <span class="comment">// updated in refresh() when cursorTile is set</span>
+statBlock.<span class="fn">appendChild</span>(distStat.row);</pre>
+      <p class="step" style="margin-left:24px;">In <code>refresh()</code>, set the dist text per frame:</p>
+      <pre><span class="kw">if</span> (cursorTile &amp;&amp; <span class="kw">typeof</span> selectedTier === <span class="str">'number'</span>) {
+  <span class="kw">const</span> spec = deps.<span class="fn">getOriginSpec</span>();
+  <span class="kw">const</span> dx = cursorTile.x - spec.cx;
+  <span class="kw">const</span> dy = cursorTile.y - spec.cy;
+  <span class="kw">const</span> dist = <span class="ty">Math</span>.sqrt(dx * dx + dy * dy);
+  distStat.valueEl.textContent = <span class="str">`</span>${dist.<span class="fn">toFixed</span>(0)}<span class="str"> tiles`</span>;
+} <span class="kw">else</span> {
+  distStat.valueEl.textContent = <span class="str">'—'</span>;
+}</pre>
+
+      <div class="step"><b>Step 9.</b> Export the new layer from the handle. At the <code>return</code> of <code>mountDronesUi</code>, add:</div>
+      <pre><span class="kw">return</span> {
+  <span class="comment">// ... existing fields ...</span>
+  launchPreviewLayer,
+  <span class="comment">// ... rest ...</span>
+};</pre>
+
+      <div class="step"><b>Step 10.</b> In <code>src/main.ts</code> at the existing site where <code>droneUi.reticleLayer</code> + <code>droneUi.rangeRingLayer</code> are added to their parents, also add the preview layer to the world container. Search for "reticleLayer" + "rangeRingLayer" in main.ts:</div>
+      <pre><span class="comment">// Existing pattern (location varies — find by grep):</span>
+app.stage.<span class="fn">addChild</span>(droneUi.reticleLayer);
+world.<span class="fn">addChild</span>(droneUi.rangeRingLayer);
+world.<span class="fn">addChild</span>(droneUi.launchPreviewLayer);  <span class="comment">// NEW — world space, like rangeRingLayer</span></pre>
+
+      <div class="step"><b>Step 11.</b> Run tests + build + foreground npm test (cap is 120000ms now, so this fits):</div>
+      <pre class="bash">npx vitest run &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. No new tests added this task (rendering is browser-smoke-verified by the user); existing tests still pass. tsc strict clean.</div>
+
+      <div class="step"><b>Step 12.</b> Commit + push:</div>
+      <pre class="bash">git add src/drones-ui.ts src/main.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(drones-ui): shared launch-preview overlay — numeric-tier mode
+
+Adds launchPreviewLayer + launchPreviewGfx in the world container.
+Per-frame paint draws a line from origin tile centre to cursor tile
+centre, tinted green if distance ≤ maxLaunchRange, red otherwise.
+Closes the long-standing UX gap where the reticle showed cursor
+position but never the trajectory.
+
+Panel fuel row now also shows DIST Y tiles alongside FUEL X/50 grade.
+
+Path-mode rendering through the same overlay lands in the next task.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 3 -->
+  <section id="task-3">
+    <div class="sec-head"><span class="num">03</span><h2>Task 3 — "T5 Path" dropdown entry + path-mode render</h2></div>
+    <p class="sec-intro">Add the "T5 Path" tier-dropdown entry (gated on L≥50 + AI core + Path Drone Foundry operational), widen <code>selectedTier</code> to <code>DroneTier | '5-path'</code>, add waypoint state, and extend <code>paintLaunchPreview</code> to draw the polyline + dashed cursor segment for path mode. After this task the player can SELECT the path tier, ARM, click-to-add waypoints, see the preview — but cannot dispatch yet. Interactions land in Task 4.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/drones-ui.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> At the top of <code>src/drones-ui.ts</code>, import the new helpers:</div>
+      <pre><span class="kw">import</span> {
+  totalPathTiles,
+  wouldExceedRange,
+  fuelForPath,
+} <span class="kw">from</span> <span class="str">'./drones-ui-helpers.js'</span>;
+<span class="kw">import</span> { hasOperationalBuilding } <span class="kw">from</span> <span class="str">'./buildings.js'</span>;
+<span class="comment">// (hasOperationalBuilding existing helper — verify the import path by</span>
+<span class="comment">//  grepping for an existing use, e.g. in drones.ts firePulse.)</span></pre>
+
+      <div class="step"><b>Step 2.</b> Widen the <code>selectedTier</code> declaration in <code>mountDronesUi</code> (~line 151):</div>
+      <pre><span class="comment">// BEFORE:</span>
+<span class="kw">let</span> selectedTier: <span class="ty">DroneTier</span> = 1;
+
+<span class="comment">// AFTER:</span>
+<span class="kw">let</span> selectedTier: <span class="ty">DroneTier</span> | <span class="str">'5-path'</span> = 1;</pre>
+
+      <div class="step"><b>Step 3.</b> Add waypoint state next to <code>cursorTile</code> (declared in Task 2):</div>
+      <pre><span class="comment">// T5 path-mode buffer: committed waypoints accumulated while in path-mode</span>
+<span class="comment">// ARM. Cleared on disarm, Esc, finalize. See drones-ui-helpers.ts for</span>
+<span class="comment">// pure math (totalPathTiles, wouldExceedRange, fuelForPath).</span>
+<span class="kw">let</span> waypointBuffer: <span class="ty">Array</span>&lt;{ x: <span class="ty">number</span>; y: <span class="ty">number</span> }&gt; = [];</pre>
+
+      <div class="step"><b>Step 4.</b> Add the foundry-gate helper near the top of <code>mountDronesUi</code> (used by both the dropdown rebuild and the attemptLaunch branch):</div>
+      <pre><span class="comment">/** SPEC §11.6 gate: path mode requires L≥5, AI core crafted, foundry built. */</span>
+<span class="kw">function</span> <span class="fn">canUsePathMode</span>(): <span class="ty">boolean</span> {
+  <span class="kw">const</span> origin = deps.<span class="fn">getOrigin</span>();
+  <span class="kw">if</span> (<span class="fn">tierForLevel</span>(origin.level) &lt; 5) <span class="kw">return</span> <span class="kw">false</span>;
+  <span class="kw">if</span> (!origin.aiCoreCrafted) <span class="kw">return</span> <span class="kw">false</span>;
+  <span class="kw">if</span> (!<span class="fn">hasOperationalBuilding</span>(origin.buildings, <span class="str">'path_drone_foundry'</span>)) <span class="kw">return</span> <span class="kw">false</span>;
+  <span class="kw">return</span> <span class="kw">true</span>;
+}</pre>
+      <div class="callout info"><b>Note:</b> <code>tierForLevel</code> already imported in this file (line 26). Confirm <code>origin.aiCoreCrafted</code> is the correct field name on <code>IslandState</code> — grep for it; might be <code>aiCore</code> or similar. If the field doesn't exist as a boolean on state, use whatever the existing T5-gate check uses (e.g. there may be a shared helper <code>canBuildT5(state)</code>).</div>
+
+      <div class="step"><b>Step 5.</b> In the tier-dropdown rebuild (the for-loop that populates <code>tierSelect</code> with <code>opt</code> elements ~line 308-323), append the path entry conditionally:</div>
+      <pre><span class="comment">// After the existing numeric-tier population loop, add:</span>
+<span class="kw">if</span> (<span class="fn">canUsePathMode</span>()) {
+  <span class="kw">const</span> opt = document.<span class="fn">createElement</span>(<span class="str">'option'</span>);
+  opt.value = <span class="str">'5-path'</span>;
+  opt.textContent = <span class="str">'T5 Path'</span>;
+  tierSelect.<span class="fn">appendChild</span>(opt);
+}</pre>
+
+      <div class="step"><b>Step 6.</b> Update the <code>change</code> handler on <code>tierSelect</code> (~line 318-322) to handle the string value:</div>
+      <pre><span class="comment">// BEFORE:</span>
+tierSelect.<span class="fn">addEventListener</span>(<span class="str">'change'</span>, () =&gt; {
+  selectedTier = <span class="ty">Number</span>(tierSelect.value) <span class="kw">as</span> <span class="ty">DroneTier</span>;
+});
+
+<span class="comment">// AFTER:</span>
+tierSelect.<span class="fn">addEventListener</span>(<span class="str">'change'</span>, () =&gt; {
+  <span class="kw">const</span> v = tierSelect.value;
+  <span class="kw">if</span> (v === <span class="str">'5-path'</span>) {
+    selectedTier = <span class="str">'5-path'</span>;
+  } <span class="kw">else</span> {
+    selectedTier = <span class="ty">Number</span>(v) <span class="kw">as</span> <span class="ty">DroneTier</span>;
+  }
+  waypointBuffer = [];  <span class="comment">// reset buffer on any tier switch</span>
+});</pre>
+
+      <div class="step"><b>Step 7.</b> Extend <code>paintLaunchPreview</code> (from Task 2) to add the path-mode branch. Replace the function with the full two-branch version:</div>
+      <pre><span class="kw">function</span> <span class="fn">paintLaunchPreview</span>(): <span class="ty">void</span> {
+  launchPreviewGfx.clear();
+  <span class="kw">if</span> (!launchMode) <span class="kw">return</span>;
+  <span class="kw">const</span> spec = deps.<span class="fn">getOriginSpec</span>();
+  <span class="kw">const</span> originTile = { x: spec.cx, y: spec.cy };
+  <span class="kw">const</span> originPx = <span class="fn">tileToWorldPx</span>(spec.cx, spec.cy);
+
+  <span class="kw">if</span> (selectedTier === <span class="str">'5-path'</span>) {
+    <span class="comment">// Solid polyline through committed waypoints.</span>
+    <span class="kw">let</span> prevPx = originPx;
+    <span class="kw">for</span> (<span class="kw">const</span> wp <span class="kw">of</span> waypointBuffer) {
+      <span class="kw">const</span> wpPx = <span class="fn">tileToWorldPx</span>(wp.x, wp.y);
+      launchPreviewGfx.<span class="fn">moveTo</span>(prevPx.x, prevPx.y)
+        .<span class="fn">lineTo</span>(wpPx.x, wpPx.y)
+        .<span class="fn">stroke</span>({ width: PREVIEW_LINE_WIDTH, color: PREVIEW_COLOR_OK, alpha: 0.85 });
+      prevPx = wpPx;
+    }
+    <span class="comment">// Dashed segment from last anchor to cursor.</span>
+    <span class="kw">if</span> (cursorTile) {
+      <span class="kw">const</span> wouldExceed = <span class="fn">wouldExceedRange</span>(originTile, waypointBuffer, cursorTile);
+      <span class="kw">const</span> color = wouldExceed ? PREVIEW_COLOR_BAD : PREVIEW_COLOR_OK;
+      <span class="kw">const</span> cursorPx = <span class="fn">tileToWorldPx</span>(cursorTile.x, cursorTile.y);
+      <span class="fn">drawDashedSegment</span>(launchPreviewGfx, prevPx, cursorPx, color);
+    }
+    <span class="kw">return</span>;
+  }
+
+  <span class="comment">// Numeric tier: single line origin → cursor (from Task 2).</span>
+  <span class="kw">if</span> (!cursorTile) <span class="kw">return</span>;
+  <span class="kw">const</span> dxTiles = cursorTile.x - spec.cx;
+  <span class="kw">const</span> dyTiles = cursorTile.y - spec.cy;
+  <span class="kw">const</span> distTiles = <span class="ty">Math</span>.sqrt(dxTiles * dxTiles + dyTiles * dyTiles);
+  <span class="kw">const</span> maxRangeTiles = maxLaunchFuel * currentEfficiency / 2;
+  <span class="kw">const</span> color = distTiles &lt;= maxRangeTiles ? PREVIEW_COLOR_OK : PREVIEW_COLOR_BAD;
+  <span class="kw">const</span> cursorPx = <span class="fn">tileToWorldPx</span>(cursorTile.x, cursorTile.y);
+  launchPreviewGfx.<span class="fn">moveTo</span>(originPx.x, originPx.y)
+    .<span class="fn">lineTo</span>(cursorPx.x, cursorPx.y)
+    .<span class="fn">stroke</span>({ width: PREVIEW_LINE_WIDTH, color, alpha: 0.85 });
+}</pre>
+
+      <div class="step"><b>Step 8.</b> Add the <code>drawDashedSegment</code> helper near <code>paintLaunchPreview</code>. Pixi 8 has no native dashed-stroke; emit segments along the direction:</div>
+      <pre><span class="comment">/** Stroke a dashed line from `a` to `b` on the supplied Graphics.</span>
+<span class="comment"> *  Pattern: 8px on, 4px off (world pixels — same units as the line). */</span>
+<span class="kw">function</span> <span class="fn">drawDashedSegment</span>(
+  gfx: <span class="ty">Graphics</span>,
+  a: { x: <span class="ty">number</span>; y: <span class="ty">number</span> },
+  b: { x: <span class="ty">number</span>; y: <span class="ty">number</span> },
+  color: <span class="ty">number</span>,
+): <span class="ty">void</span> {
+  <span class="kw">const</span> DASH = 8;
+  <span class="kw">const</span> GAP = 4;
+  <span class="kw">const</span> dx = b.x - a.x;
+  <span class="kw">const</span> dy = b.y - a.y;
+  <span class="kw">const</span> len = <span class="ty">Math</span>.sqrt(dx * dx + dy * dy);
+  <span class="kw">if</span> (len === 0) <span class="kw">return</span>;
+  <span class="kw">const</span> ux = dx / len;
+  <span class="kw">const</span> uy = dy / len;
+  <span class="kw">let</span> t = 0;
+  <span class="kw">while</span> (t &lt; len) {
+    <span class="kw">const</span> segEnd = <span class="ty">Math</span>.min(t + DASH, len);
+    gfx.<span class="fn">moveTo</span>(a.x + ux * t, a.y + uy * t)
+       .<span class="fn">lineTo</span>(a.x + ux * segEnd, a.y + uy * segEnd);
+    t = segEnd + GAP;
+  }
+  gfx.<span class="fn">stroke</span>({ width: PREVIEW_LINE_WIDTH, color, alpha: 0.85 });
+}</pre>
+
+      <div class="step"><b>Step 9.</b> Update the panel fuel-row + distStat in <code>refresh()</code> to handle path-mode display. Replace the existing distStat update from Task 2 with the branched version:</div>
+      <pre><span class="kw">if</span> (selectedTier === <span class="str">'5-path'</span>) {
+  <span class="kw">const</span> spec = deps.<span class="fn">getOriginSpec</span>();
+  <span class="kw">const</span> origin = { x: spec.cx, y: spec.cy };
+  <span class="kw">const</span> pathLen = <span class="fn">totalPathTiles</span>(origin, waypointBuffer);
+  <span class="kw">const</span> fuel = <span class="fn">fuelForPath</span>(origin, waypointBuffer);
+  distStat.labelEl.textContent = <span class="str">'PATH'</span>;
+  distStat.valueEl.textContent = <span class="str">`</span>${pathLen.<span class="fn">toFixed</span>(0)}<span class="str"> tiles`</span>;
+  <span class="comment">// Replace the existing FUEL row's value text with the path-mode total:</span>
+  fuelStat.valueEl.textContent = <span class="str">`</span>${fuel}<span class="str"> / </span>${MAX_FUEL_PER_DRONE}<span class="str"> plasma_charge`</span>;
+} <span class="kw">else if</span> (cursorTile) {
+  <span class="kw">const</span> spec = deps.<span class="fn">getOriginSpec</span>();
+  <span class="kw">const</span> dx = cursorTile.x - spec.cx;
+  <span class="kw">const</span> dy = cursorTile.y - spec.cy;
+  <span class="kw">const</span> dist = <span class="ty">Math</span>.sqrt(dx * dx + dy * dy);
+  distStat.labelEl.textContent = <span class="str">'DIST'</span>;
+  distStat.valueEl.textContent = <span class="str">`</span>${dist.<span class="fn">toFixed</span>(0)}<span class="str"> tiles`</span>;
+  <span class="comment">// (existing FUEL row update for numeric mode stays unchanged)</span>
+} <span class="kw">else</span> {
+  distStat.labelEl.textContent = <span class="str">'DIST'</span>;
+  distStat.valueEl.textContent = <span class="str">'—'</span>;
+}</pre>
+      <div class="callout info"><b>Note:</b> the existing <code>statRow</code> helper probably returns <code>{ row, labelEl, valueEl }</code> — verify by grepping for its definition. If <code>labelEl</code> isn't exposed, change the dist row's structure to a fresh row that supports label-swapping, or use two separate rows (one numeric-DIST, one path-PATH) toggled by visibility based on <code>selectedTier === '5-path'</code>.</div>
+
+      <div class="step"><b>Step 10.</b> Import <code>MAX_FUEL_PER_DRONE</code> at the top of the file if not already imported (used in the path-mode fuel label):</div>
+      <pre><span class="kw">import</span> { MAX_FUEL_PER_DRONE } <span class="kw">from</span> <span class="str">'./drones.js'</span>;
+<span class="comment">// (Or merge with the existing drones.js import block — there are already</span>
+<span class="comment">//  several imports from there at the top of drones-ui.ts.)</span></pre>
+
+      <div class="step"><b>Step 11.</b> Run tests + build:</div>
+      <pre class="bash">npx vitest run &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. No new tests added in this task; the rendering is browser-smoke-verified. tsc strict clean — the widened <code>DroneTier | '5-path'</code> union must compile without leaking string into engine call sites (no dispatch is wired this task, so the leak surface is zero).</div>
+
+      <div class="step"><b>Step 12.</b> Commit + push:</div>
+      <pre class="bash">git add src/drones-ui.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(drones-ui): T5 Path tier-dropdown entry + path-mode preview render
+
+Tier dropdown gains a "T5 Path" entry, gated on tierForLevel(level)≥5
++ aiCoreCrafted + Path Drone Foundry operational. selectedTier widens
+to DroneTier | '5-path'.
+
+paintLaunchPreview now branches:
+  - numeric tier: line origin → cursor (unchanged from previous task)
+  - 5-path: solid polyline through committed waypoints + dashed
+    segment from last anchor to cursor, red if next waypoint would
+    exceed the fuel cap (helper wouldExceedRange).
+
+Panel fuel-row toggles between "DIST Y tiles" + numeric fuel and
+"PATH N tiles" + path-mode fuel total per the design spec §04.
+
+Dispatch wiring + interactions (dbl-click / right-click / Esc) land
+in the next task.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 4 -->
+  <section id="task-4">
+    <div class="sec-head"><span class="num">04</span><h2>Task 4 — Waypoint interactions + dispatch wire</h2></div>
+    <p class="sec-intro">Wire the final interaction layer: click adds a waypoint via <code>attemptLaunch</code>; right-click pops the last waypoint; double-click finalizes (dispatches); Esc cancels. After this task the path-drone UI is fully functional end-to-end.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/drones-ui.ts</code> &nbsp; <code>~ src/main.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/drones-ui.ts</code>, import the dedup helper:</div>
+      <pre><span class="kw">import</span> {
+  totalPathTiles,
+  wouldExceedRange,
+  fuelForPath,
+  popTrailingDuplicate,  <span class="comment">// NEW</span>
+} <span class="kw">from</span> <span class="str">'./drones-ui-helpers.js'</span>;</pre>
+
+      <div class="step"><b>Step 2.</b> Extend the <code>attemptLaunch</code> function in <code>mountDronesUi</code> to branch on tier. Add the path-mode branch at the top:</div>
+      <pre><span class="kw">function</span> <span class="fn">attemptLaunch</span>(
+  targetWorldTileX: <span class="ty">number</span>,
+  targetWorldTileY: <span class="ty">number</span>,
+  nowMs: <span class="ty">number</span>,
+): { ok: <span class="ty">boolean</span>; reason?: <span class="ty">string</span> } {
+  <span class="kw">if</span> (selectedTier === <span class="str">'5-path'</span>) {
+    <span class="comment">// Add waypoint; reject if would exceed fuel cap.</span>
+    <span class="kw">const</span> spec = deps.<span class="fn">getOriginSpec</span>();
+    <span class="kw">const</span> origin = { x: spec.cx, y: spec.cy };
+    <span class="kw">const</span> next = { x: targetWorldTileX, y: targetWorldTileY };
+    <span class="kw">if</span> (<span class="fn">wouldExceedRange</span>(origin, waypointBuffer, next)) {
+      <span class="kw">return</span> { ok: <span class="kw">false</span>, reason: <span class="str">'over-range'</span> };
+    }
+    waypointBuffer.<span class="fn">push</span>(next);
+    <span class="kw">return</span> { ok: <span class="kw">true</span> };
+  }
+  <span class="comment">// ... existing numeric-tier dispatch logic unchanged ...</span>
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Add three new handle methods. Place them after <code>attemptLaunch</code> but before the <code>return</code> at the end of <code>mountDronesUi</code>:</div>
+      <pre><span class="comment">/** Pop the last committed waypoint (right-click in path mode). No-op</span>
+<span class="comment"> *  if buffer is empty or path mode isn't selected. */</span>
+<span class="kw">function</span> <span class="fn">popWaypoint</span>(): <span class="ty">void</span> {
+  <span class="kw">if</span> (selectedTier !== <span class="str">'5-path'</span>) <span class="kw">return</span>;
+  waypointBuffer.<span class="fn">pop</span>();
+}
+
+<span class="comment">/** Finalize the path: drop trailing-duplicate (browser click+dblclick</span>
+<span class="comment"> *  artifact), then dispatch with the waypoints. No-op if buffer has</span>
+<span class="comment"> *  fewer than 2 points (need at least origin + 1 waypoint to fly). */</span>
+<span class="kw">function</span> <span class="fn">finalizePath</span>(nowMs: <span class="ty">number</span>): { ok: <span class="ty">boolean</span>; reason?: <span class="ty">string</span> } {
+  <span class="kw">if</span> (selectedTier !== <span class="str">'5-path'</span>) <span class="kw">return</span> { ok: <span class="kw">false</span>, reason: <span class="str">'not-path-mode'</span> };
+  <span class="kw">const</span> deduped = <span class="fn">popTrailingDuplicate</span>(waypointBuffer);
+  <span class="kw">if</span> (deduped.length &lt; 1) <span class="kw">return</span> { ok: <span class="kw">false</span>, reason: <span class="str">'no-waypoints'</span> };
+  <span class="kw">const</span> spec = deps.<span class="fn">getOriginSpec</span>();
+  <span class="kw">const</span> origin = { x: spec.cx, y: spec.cy };
+  <span class="kw">const</span> fuel = <span class="fn">fuelForPath</span>(origin, deduped);
+  <span class="comment">// dispatchDrone signature: (world, origin, dirX, dirY, ux, uy,</span>
+  <span class="comment">// outboundTiles, biasOverride, selectedTier, waypoints?). For path</span>
+  <span class="comment">// mode, dir/ux/uy/outboundTiles are computed from the path itself by</span>
+  <span class="comment">// the engine's isPathDrawn branch — pass synthetic placeholders that</span>
+  <span class="comment">// the engine ignores when waypoints.length ≥ 2.</span>
+  <span class="kw">const</span> originState = deps.<span class="fn">getOrigin</span>();
+  <span class="comment">// Engine signature (drones.ts:330-346): dispatchDrone(world, origin,</span>
+  <span class="comment">// originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints?, selectedTier?).</span>
+  <span class="comment">// Direction must have magnitude > 0 (line 350 validation); the path-drawn</span>
+  <span class="comment">// branch at line 361-369 overrides direction internally from the waypoint</span>
+  <span class="comment">// array. Tests at drones.test.ts:1045-1086 pass (originX=0, originY=0,</span>
+  <span class="comment">// dirX=1, dirY=0) — match that convention. selectedTier omitted: line 369</span>
+  <span class="comment">// forces resolvedTier=5 when isPathDrawn (waypoints.length≥2).</span>
+  <span class="kw">const</span> waypointsForDispatch = [origin, ...deduped];
+  <span class="kw">const</span> result = <span class="fn">dispatchDrone</span>(
+    deps.world,
+    originState,
+    spec.cx, spec.cy,  <span class="comment">// originX, originY (tile coords)</span>
+    1, 0,              <span class="comment">// dirX, dirY — synthetic non-zero; path branch overrides</span>
+    fuel,              <span class="comment">// fuelLoaded</span>
+    nowMs,             <span class="comment">// nowMs</span>
+    waypointsForDispatch,
+    <span class="comment">// selectedTier omitted — path-drawn forces T5 per drones.ts:369</span>
+  );
+  <span class="kw">if</span> (result.ok) {
+    waypointBuffer = [];  <span class="comment">// clear buffer on successful dispatch</span>
+    <span class="fn">setLaunchMode</span>(<span class="kw">false</span>);  <span class="comment">// disarm after launch</span>
+  }
+  <span class="kw">return</span> { ok: result.ok, reason: result.reason };
+}
+
+<span class="comment">/** Cancel an in-progress path (Esc). Clears buffer + disarms. */</span>
+<span class="kw">function</span> <span class="fn">cancelPath</span>(): <span class="ty">void</span> {
+  waypointBuffer = [];
+  <span class="kw">if</span> (selectedTier === <span class="str">'5-path'</span>) {
+    <span class="fn">setLaunchMode</span>(<span class="kw">false</span>);
+  }
+}</pre>
+      <div class="callout info"><b>Engine signature reference:</b> the call above matches the actual signature at <code>src/drones.ts:330-346</code> and the test-side path-drawn dispatches at <code>src/drones.test.ts:1045-1086</code>. Waypoints is positional argument 9; selectedTier is positional 10. Direction (dirX, dirY) must have magnitude > 0 or dispatch returns <code>{ ok: false, reason: 'invalid-direction' }</code> — using <code>1, 0</code> as the synthetic direction matches the existing test convention. The path-drawn branch at line 361-369 overrides the direction internally from the waypoint array.</div>
+
+      <div class="step"><b>Step 4.</b> Export the new methods on the handle. In the <code>return</code> of <code>mountDronesUi</code>, add:</div>
+      <pre><span class="kw">return</span> {
+  <span class="comment">// ... existing methods ...</span>
+  popWaypoint,
+  finalizePath,
+  cancelPath,
+};</pre>
+
+      <div class="step"><b>Step 5.</b> Add the corresponding entries to the <code>DroneUiHandle</code> interface at the top of the file:</div>
+      <pre><span class="comment">/** Pop the last waypoint in path mode (no-op otherwise). Called from</span>
+<span class="comment"> *  main.ts on canvas contextmenu when launch mode is armed + tier is path. */</span>
+popWaypoint(): <span class="ty">void</span>;
+
+<span class="comment">/** Finalize the path and dispatch (no-op outside path mode). Called from</span>
+<span class="comment"> *  main.ts on canvas dblclick when launch mode is armed. */</span>
+finalizePath(nowMs: <span class="ty">number</span>): { ok: <span class="ty">boolean</span>; reason?: <span class="ty">string</span> };
+
+<span class="comment">/** Cancel an in-progress path and disarm (Esc binding). */</span>
+cancelPath(): <span class="ty">void</span>;</pre>
+
+      <div class="step"><b>Step 6.</b> In <code>src/main.ts</code>, locate the canvas pointer/click handler block (search for "isLaunchMode" or "attemptLaunch" — there's an existing block that handles single-click launch). Add the <code>dblclick</code> handler beside it:</div>
+      <pre><span class="comment">// Add near the existing canvas event listeners. The canvas is whatever</span>
+<span class="comment">// element the existing single-click handler binds to (likely the Pixi</span>
+<span class="comment">// app.canvas).</span>
+canvas.<span class="fn">addEventListener</span>(<span class="str">'dblclick'</span>, (e) =&gt; {
+  <span class="kw">if</span> (!droneUi.<span class="fn">isLaunchMode</span>()) <span class="kw">return</span>;
+  <span class="comment">// Translate the dblclick screen coords to a world tile — same path as</span>
+  <span class="comment">// single-click. (The dblclick coords will match the preceding clicks.)</span>
+  <span class="kw">const</span> rect = canvas.<span class="fn">getBoundingClientRect</span>();
+  <span class="kw">const</span> screenX = e.clientX - rect.left;
+  <span class="kw">const</span> screenY = e.clientY - rect.top;
+  <span class="comment">// (Use whatever screen→tile helper the single-click site uses; reuse.)</span>
+  <span class="kw">const</span> result = droneUi.<span class="fn">finalizePath</span>(<span class="fn">performance</span>.<span class="fn">now</span>());
+  <span class="kw">if</span> (!result.ok &amp;&amp; result.reason !== <span class="str">'not-path-mode'</span>) {
+    <span class="comment">// Show on-screen toast / flash, matching the existing single-click</span>
+    <span class="comment">// rejection-feedback pattern (search for how attemptLaunch failures</span>
+    <span class="comment">// surface today and mirror).</span>
+    <span class="fn">console</span>.<span class="fn">warn</span>(<span class="str">'[path-drone] dispatch rejected:'</span>, result.reason);
+  }
+  e.<span class="fn">preventDefault</span>();
+});</pre>
+
+      <div class="step"><b>Step 7.</b> Add the right-click handler near the dblclick:</div>
+      <pre>canvas.<span class="fn">addEventListener</span>(<span class="str">'contextmenu'</span>, (e) =&gt; {
+  <span class="kw">if</span> (!droneUi.<span class="fn">isLaunchMode</span>()) <span class="kw">return</span>;
+  <span class="comment">// Only intercept when path mode is active — let the browser's context</span>
+  <span class="comment">// menu through otherwise. popWaypoint itself is a no-op when tier isn't</span>
+  <span class="comment">// '5-path' so we could skip the gate, but suppressing the menu only</span>
+  <span class="comment">// when actionable keeps right-click predictable elsewhere.</span>
+  e.<span class="fn">preventDefault</span>();
+  droneUi.<span class="fn">popWaypoint</span>();
+});</pre>
+      <div class="callout info"><b>Note:</b> the conditional intercept above relies on knowing whether path mode is active. Since <code>isLaunchMode()</code> is the only public boolean, the <code>preventDefault</code> fires even for numeric-tier modes (popWaypoint is a no-op then). To make the right-click pass through completely in numeric mode, expose a <code>isPathMode()</code> getter on the handle, or just accept the trade — right-click during armed numeric launch already has no useful semantic.</div>
+
+      <div class="step"><b>Step 8.</b> Add the Esc-cancel binding. Find the existing key-action registry usage (search for <code>defineAction</code> in <code>main.ts</code>). Add the new action + binding:</div>
+      <pre><span class="fn">defineAction</span>(reg, <span class="str">'cancel-path-draw'</span>, () =&gt; {
+  droneUi.<span class="fn">cancelPath</span>();
+});
+<span class="comment">// Bind to Escape. Verify input.ts binding convention — there may be</span>
+<span class="comment">// existing Esc bindings (modal-dismiss). If so, this needs ordering</span>
+<span class="comment">// or merging with the existing handler so both fire.</span>
+<span class="fn">bindKey</span>(reg, <span class="str">'Escape'</span>, <span class="str">'cancel-path-draw'</span>);</pre>
+
+      <div class="step"><b>Step 9.</b> Run the full test suite + build (foreground via the new 120s cap):</div>
+      <pre class="bash">npx vitest run &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. No new unit tests added (interactions are browser-smoke); existing tests still pass. tsc strict clean. The widened <code>DroneTier | '5-path'</code> union must not leak into engine call sites — the <code>finalizePath</code> dispatch passes the numeric literal <code>5</code>.</div>
+
+      <div class="step"><b>Step 10.</b> Commit + push:</div>
+      <pre class="bash">git add src/drones-ui.ts src/main.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(drones-ui): wire path-drone interactions + dispatch
+
+attemptLaunch branches on selectedTier: '5-path' adds to waypointBuffer
+(rejects if over-range); numeric falls through to existing single-click
+dispatch unchanged.
+
+New handle methods popWaypoint / finalizePath / cancelPath cover the
+right-click pop / dblclick finalize / Esc cancel interactions.
+finalizePath drops trailing-duplicate waypoints (browser click→dblclick
+artifact per design spec §06 resolution), then calls dispatchDrone with
+the waypoints array. The engine's isPathDrawn branch handles the rest.
+
+main.ts adds canvas dblclick + contextmenu handlers and an Escape key
+binding through the existing input.ts action registry.
+
+After this commit the path-drone UI is end-to-end functional: T5 island
++ Foundry + AI core → tier dropdown shows "T5 Path" → ARM → click
+waypoints → double-click → drone launches with the buffered path and
+scans the corridor per the unified buffer-and-flush shipped earlier.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Implementation plan · path-drone UI + shared launch preview v1 · 2026-05-25 · source-of-truth: <code>docs/superpowers/specs/2026-05-25-path-drone-ui-design.html</code> · canonical dispatch recipe: <code>~/.claude/prompts/dispatch-from-sliced-plan.md</code> · execution: <code>superpowers:subagent-driven-development</code>.</p>
+  </div>
+
+</div>
+</body>
+</html>

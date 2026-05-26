@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone scan rework — implementation plan</title>
+<style>
+  :root {
+    --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+    --tan:#E0B47F; --pink:#D38FCC; --red:#E08B7F; --info:#7DD3E8;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1180px; margin:0 auto; }
+  header.page-head { margin-bottom:48px; max-width:900px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:34px; line-height:1.15; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+  .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+  .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+  .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+  .callout { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-700); margin: 14px 0; max-width:900px; }
+  .callout.info { border-left-color:var(--info); }
+  .callout.warn { border-left-color:var(--red); }
+  .callout code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .callout b { color:var(--slate); }
+  .callout ul { margin-top:6px; margin-left:20px; list-style:disc; }
+  .callout li { margin:3px 0; }
+
+  section { margin-bottom:56px; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:24px; color:var(--slate); letter-spacing:-0.01em; }
+  .sec-head h2 code { font-family:var(--mono); font-size:18px; color:var(--clay); }
+  .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:840px; margin-bottom:20px; }
+  .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--tan); }
+
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:40px; max-width: 1080px; }
+  @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+  .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px; padding:14px 16px; }
+  .summary .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+  .summary .v { font-size:15px; color:var(--slate); font-weight:600; }
+  .summary .v.accent { color:var(--clay); }
+
+  .filetable { border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden; background:var(--white); margin-bottom:32px; }
+  .filetable .row { display:grid; grid-template-columns:280px 100px 1fr; gap:0; }
+  @media (max-width:900px){ .filetable .row{grid-template-columns:1fr;} }
+  .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+  .filetable .cell { padding:11px 14px; font-size:13px; vertical-align:top; }
+  .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+  @media (max-width:900px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+  .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+  .filetable .cell code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+  .filetable .pill { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--mono); font-size:10.5px; font-weight:600; }
+  .filetable .pill.new { background:var(--olive); color:var(--ivory); }
+  .filetable .pill.mod { background:var(--tan); color:var(--ivory); }
+  .filetable .pill.del { background:var(--red); color:var(--ivory); }
+
+  .task-card { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 22px; margin-bottom:18px; }
+  .files-block { background:var(--gray-150); border:1px solid var(--gray-300); border-radius:8px; padding:10px 13px; margin-bottom:14px; font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+  .files-block .h { color:var(--gray-500); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .files-block code { color:var(--tan); }
+
+  .step { margin: 10px 0; padding-left: 24px; position: relative; font-size:14px; color:var(--gray-700); }
+  .step::before { content: "☐"; position: absolute; left: 0; top: 0; color: var(--gray-500); }
+  .step b { color: var(--slate); }
+  .step code { font-family:var(--mono); font-size:12.5px; color:var(--tan); background: var(--gray-150); padding: 1px 5px; border-radius: 3px; }
+
+  pre { background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 10px 14px; margin: 8px 0 14px 24px; overflow-x: auto; font-family: var(--mono); font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 1000px; }
+  pre.bash { background: #1F1D19; color: var(--olive); }
+  pre.bash::before { content: "$ "; color: var(--gray-500); }
+  pre .comment { color: var(--gray-500); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--olive); }
+  pre .ty { color: var(--info); }
+  pre .fn { color: var(--tan); }
+
+  .expected { background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 0 6px 6px 0; padding: 6px 12px; margin: 6px 0 10px 24px; font-family: var(--mono); font-size: 12px; color: var(--gray-700); max-width: 980px; }
+  .expected b { color: var(--olive); }
+
+  .toc { background: var(--gray-150); border-left: 3px solid var(--info); border-radius: 0 6px 6px 0; padding: 14px 22px; margin: 28px 0 36px; max-width: 980px; }
+  .toc h3 { color: var(--gray-500); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 10px; font-family: var(--mono); }
+  .toc ol { list-style: none; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--gray-700); text-decoration: none; }
+  .toc a:hover { color: var(--clay); }
+  .toc .num { color: var(--gray-500); font-family: var(--mono); margin-right: 8px; font-size: 11.5px; }
+
+  .footer { color: var(--gray-500); margin-top: 64px; font-size: 12px; padding-top: 18px; border-top: 1.5px solid var(--gray-300); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · drones · scan rework · 2026-05-25</div>
+    <h1>Drone scan rework — tier-keyed corridor + survive-and-report</h1>
+    <div class="prompt-box">
+      <span class="label">For agentic workers</span>
+      <b style="color:var(--slate)">REQUIRED SUB-SKILL:</b> Use <code>superpowers:subagent-driven-development</code>. Fresh kimi subagent per task + two-stage review (spec compliance reviewer → code quality reviewer) per task. Trailer literal on commits: <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>.<br><br>
+      <b style="color:var(--slate)">Goal:</b> fix three drone-scan bugs preceding the skill-tree rebalance — tier-keyed scan radius (T1=2, T2=4, T3=8); unified buffer-and-flush so out-of-antenna-range corridor cells survive to flush on antenna entry or return; no-antenna case handled by the same buffer.<br>
+      <b style="color:var(--slate)">Architecture:</b> add per-tier radius table and <code>scanBuffer: Set&lt;string&gt;</code> on the <code>Drone</code> interface; rewrite the per-tick reveal block in <code>advanceDrones</code> so every corridor cell joins the buffer unconditionally and a separate flush step drains it when the drone is in any antenna's range OR has just reached <code>'returned'</code> status. The T5 island-discovery dark-mode buffer (<code>darkModeDiscoveries</code>) stays; its flush logic moves into the same place so cells + islands flush together.<br>
+      <b style="color:var(--slate)">Tech stack:</b> Vite 5 + TypeScript strict + PixiJS 8 + vitest. Strict + <code>noUncheckedIndexedAccess</code> + <code>noUnusedLocals</code>.<br>
+      <b style="color:var(--slate)">Source of truth:</b> design spec at <code>docs/superpowers/specs/2026-05-25-drone-scan-rework-design.html</code> (v1, user-approved 2026-05-25). T6 scan radius locked at <b>16</b> per the design's open question (proposed value confirmed by approval).
+    </div>
+  </header>
+
+  <div class="callout warn">
+    <b>Locked design choices (do NOT deviate):</b>
+    <ul>
+      <li>Per-tier scan radius: <b>T1 = 2, T2 = 4, T3 = 8, T4 = 0 (pulse-only, unused), T5 = 12 (unchanged), T6 = 16</b>.</li>
+      <li>Single unified buffer-and-flush across T1–T6. The existing T5 dark-mode island branch consolidates into the same flush.</li>
+      <li>Flush triggers: (a) drone position in any antenna range at tick end; (b) status transition to <code>'returned'</code>. Status <code>'lost'</code> drops the buffer with the drone.</li>
+      <li>Schema bump v12 → v13. <code>scanBuffer</code> serialised as sorted array (mirrors <code>revealedCells</code>); migration defaults <code>[]</code> on every drone.</li>
+      <li>NO unrelated refactors. NO changes to T4 pulse, weather rolls, fuel mechanics, route logic, or skill-effect catalog. Pure drone-scan repair.</li>
+    </ul>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:30px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Scan radius table (locked numbers)</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Tier</div><div class="cell">Scan radius (tiles)</div><div class="cell">Notes</div></div>
+    <div class="row"><div class="cell"><code>1</code></div><div class="cell"><b>2</b></div><div class="cell">Cheap entry scout; narrow per SPEC §2.2.</div></div>
+    <div class="row"><div class="cell"><code>2</code></div><div class="cell"><b>4</b></div><div class="cell">Modest per SPEC §2.2; doubling from T1.</div></div>
+    <div class="row"><div class="cell"><code>3</code></div><div class="cell"><b>8</b></div><div class="cell">Wider per SPEC §2.2 / §11.5 ("2W"); doubling from T2.</div></div>
+    <div class="row"><div class="cell"><code>4</code></div><div class="cell"><b>0</b></div><div class="cell">Omnidirectional pulse uses <code>T4_PULSE_RADIUS_TILES = 48</code> via <code>firePulse</code>, not a corridor. Slot is present but unused; included so the <code>Record&lt;DroneTier, number&gt;</code> is exhaustive.</div></div>
+    <div class="row"><div class="cell"><code>5</code></div><div class="cell"><b>12</b></div><div class="cell">Path-drawn drone. Unchanged from existing <code>DRONE_T5_SCAN_RADIUS_TILES</code>.</div></div>
+    <div class="row"><div class="cell"><code>6</code></div><div class="cell"><b>16</b></div><div class="cell">Locked per design-spec approval (proposed value confirmed).</div></div>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Summary</h3>
+  <div class="summary">
+    <div class="cell"><div class="k">Files touched</div><div class="v accent">4</div></div>
+    <div class="cell"><div class="k">Schema bump</div><div class="v">12 → 13</div></div>
+    <div class="cell"><div class="k">Tasks</div><div class="v">5</div></div>
+    <div class="cell"><div class="k">Risk</div><div class="v">Low</div></div>
+  </div>
+
+  <div class="toc">
+    <h3>Tasks</h3>
+    <ol>
+      <li><span class="num">01</span><a href="#task-1">Tier-keyed scan radius table + dispatch wire</a></li>
+      <li><span class="num">02</span><a href="#task-2">Add <code>scanBuffer: Set&lt;string&gt;</code> on Drone + dispatch init</a></li>
+      <li><span class="num">03</span><a href="#task-3">Unified buffer-and-flush in <code>advanceDrones</code> tick loop</a></li>
+      <li><span class="num">04</span><a href="#task-4">Schema bump v12 → v13 + <code>migrateV12toV13</code> + serialise / deserialise</a></li>
+      <li><span class="num">05</span><a href="#task-5">Integration smoke test (no-antenna launch, return, cells revealed)</a></li>
+    </ol>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Files touched</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Path</div><div class="cell">Status</div><div class="cell">Responsibility</div></div>
+    <div class="row"><div class="cell"><code>src/drones.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Replace <code>DRONE_SCAN_RADIUS_TILES</code> with <code>DRONE_TIER_SCAN_RADIUS</code> table; keep <code>DRONE_T5_SCAN_RADIUS_TILES = 12</code> as alias for the table entry. Add <code>scanBuffer: Set&lt;string&gt;</code> to <code>Drone</code> interface, init in <code>dispatchDrone</code>. Rewrite the per-tick reveal block in <code>advanceDrones</code> (~lines 558-688) to use unified buffer-and-flush. Add return-status flush.</div></div>
+    <div class="row"><div class="cell"><code>src/drones.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Update imports (drop <code>DRONE_SCAN_RADIUS_TILES</code>; add <code>DRONE_TIER_SCAN_RADIUS</code>). Update line ~221 to assert tier-specific radius. Update line ~643 to assert table values. Add new test cases per Tasks 1, 2, 3. Existing T5 tests at line ~885 continue to pass (T5 still = 12).</div></div>
+    <div class="row"><div class="cell"><code>src/persistence.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Bump <code>SCHEMA_VERSION</code> 12 → 13; <code>STORAGE_KEY</code> → <code>'robot-islands:save:v13'</code>; add <code>SerializedSnapshotV12</code> alias; write <code>migrateV12toV13</code>; extend <code>SUPPORTED_LOAD_VERSIONS</code>; chain v12→v13 in <code>loadWorld</code>; project drones on save (Set→sorted Array) and load (Array→Set).</div></div>
+    <div class="row"><div class="cell"><code>src/persistence.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Add v12 fixture with one in-flight drone (no <code>scanBuffer</code> field); assert loads cleanly as v13 with empty <code>scanBuffer</code> Set. Add v13 round-trip identity test with a drone whose <code>scanBuffer</code> has 3 cells.</div></div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 1 -->
+  <section id="task-1">
+    <div class="sec-head"><span class="num">01</span><h2>Task 1 — Tier-keyed scan radius table + dispatch wire</h2></div>
+    <p class="sec-intro">Replace the single <code>DRONE_SCAN_RADIUS_TILES = 8</code> constant with a per-tier table <code>DRONE_TIER_SCAN_RADIUS: Record&lt;DroneTier, number&gt;</code>. Wire <code>dispatchDrone</code> to read from the table. Keep <code>DRONE_T5_SCAN_RADIUS_TILES = 12</code> as an alias for back-compat with the existing T5 test. Pure constants + dispatch change; no behaviour change for in-range scans.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/drones.ts</code> &nbsp; <code>~ src/drones.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/drones.ts</code>, around line 86 (current site of <code>DRONE_SCAN_RADIUS_TILES</code>), replace the single constant with the per-tier table. Keep <code>DRONE_T5_SCAN_RADIUS_TILES = 12</code> as a re-export so the existing T5 test continues to import it:</div>
+      <pre><span class="comment">// §11.5 per-tier scan corridor half-width in tiles. T4 is the omni-pulse</span>
+<span class="comment">// (uses T4_PULSE_RADIUS_TILES below, not a corridor) — slot is 0 / unused.</span>
+<span class="comment">// Doubles T1 → T3 per spec ("2W" ratio); T5 unchanged from prior code;</span>
+<span class="comment">// T6 = 16 (design-spec locked).</span>
+<span class="kw">export const</span> <span class="ty">DRONE_TIER_SCAN_RADIUS</span>: <span class="ty">Record</span>&lt;<span class="ty">DroneTier</span>, <span class="ty">number</span>&gt; = {
+  1: 2,
+  2: 4,
+  3: 8,
+  4: 0,
+  5: 12,
+  6: 16,
+};
+
+<span class="comment">// Alias preserved so existing T5 tests' import stays green.</span>
+<span class="kw">export const</span> <span class="ty">DRONE_T5_SCAN_RADIUS_TILES</span> = <span class="ty">DRONE_TIER_SCAN_RADIUS</span>[5];</pre>
+
+      <div class="step"><b>Step 2.</b> Delete the old single constant at the same site:</div>
+      <pre><span class="comment">// REMOVE this line:</span>
+<span class="kw">export const</span> <span class="ty">DRONE_SCAN_RADIUS_TILES</span> = 8;</pre>
+
+      <div class="step"><b>Step 3.</b> At <code>drones.ts:376</code> in <code>dispatchDrone</code>, replace the ternary with a table read:</div>
+      <pre><span class="comment">// BEFORE:</span>
+<span class="kw">const</span> scanRadius = (isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES) * originSkill.droneScanRadius;
+
+<span class="comment">// AFTER:</span>
+<span class="kw">const</span> baseRadius = DRONE_TIER_SCAN_RADIUS[resolvedTier];
+<span class="kw">const</span> scanRadius = baseRadius * originSkill.droneScanRadius;</pre>
+      <div class="callout info"><b>Note:</b> the local <code>isPathDrawn</code> flag stays in the function for elsewhere-uses; only the radius derivation changes. <code>resolvedTier</code> is already a <code>DroneTier</code> at this point in the function.</div>
+
+      <div class="step"><b>Step 4.</b> In <code>src/drones.test.ts</code> update the imports at the top (currently lines 8 and 10 import <code>DRONE_SCAN_RADIUS_TILES</code>):</div>
+      <pre><span class="comment">// BEFORE — drop DRONE_SCAN_RADIUS_TILES, keep T5 alias, add the table:</span>
+<span class="kw">import</span> {
+  ...,
+  DRONE_SCAN_RADIUS_TILES,
+  DRONE_T5_SCAN_RADIUS_TILES,
+  ...
+} <span class="kw">from</span> <span class="str">'./drones.js'</span>;
+
+<span class="comment">// AFTER:</span>
+<span class="kw">import</span> {
+  ...,
+  DRONE_TIER_SCAN_RADIUS,
+  DRONE_T5_SCAN_RADIUS_TILES,
+  ...
+} <span class="kw">from</span> <span class="str">'./drones.js'</span>;</pre>
+
+      <div class="step"><b>Step 5.</b> At <code>drones.test.ts:221</code>, the existing assertion <code>expect(d.scanRadius).toBe(DRONE_SCAN_RADIUS_TILES)</code> must be rewritten to reference the correct tier from the dispatched drone. Look at the surrounding test: identify which drone tier is being dispatched (likely T2 — the default for the standard <code>dispatchDrone</code> test), and assert against that tier's table value:</div>
+      <pre><span class="comment">// Replace the line at ~221 with:</span>
+<span class="comment">// (Confirm which tier d is — read the dispatch call above this assertion.</span>
+<span class="comment">//  If it's T2: use DRONE_TIER_SCAN_RADIUS[2]. Adjust per actual dispatched tier.)</span>
+expect(d.scanRadius).toBe(DRONE_TIER_SCAN_RADIUS[d.tier]);</pre>
+      <div class="callout info"><b>Note:</b> using <code>d.tier</code> indirection is robust — the assertion stays correct even if the test's dispatched-tier changes later. The current <code>droneScanRadius</code> skill multiplier is 1 in the test fixture, so no further factor needed.</div>
+
+      <div class="step"><b>Step 6.</b> At <code>drones.test.ts:643</code>, the existing sanity check <code>expect(DRONE_SCAN_RADIUS_TILES).toBe(8)</code> must be replaced. The corresponding new check covers the full table:</div>
+      <pre><span class="comment">// Replace the single-value check with the table:</span>
+<span class="fn">it</span>(<span class="str">'has the locked per-tier scan radius values'</span>, () =&gt; {
+  expect(DRONE_TIER_SCAN_RADIUS[1]).toBe(2);
+  expect(DRONE_TIER_SCAN_RADIUS[2]).toBe(4);
+  expect(DRONE_TIER_SCAN_RADIUS[3]).toBe(8);
+  expect(DRONE_TIER_SCAN_RADIUS[4]).toBe(0);
+  expect(DRONE_TIER_SCAN_RADIUS[5]).toBe(12);
+  expect(DRONE_TIER_SCAN_RADIUS[6]).toBe(16);
+});</pre>
+      <div class="callout info"><b>Note:</b> the surrounding <code>describe</code> block name may need adjusting; integrate into the existing scan-radius describe if one exists, otherwise create a fresh <code>describe('DRONE_TIER_SCAN_RADIUS', ...)</code>.</div>
+
+      <div class="step"><b>Step 7.</b> Add a new test asserting the tier-specific dispatch path. Place it in the existing dispatch describe-block in <code>drones.test.ts</code>:</div>
+      <pre><span class="fn">it</span>(<span class="str">'dispatches a T1 drone with scan radius 2'</span>, () =&gt; {
+  <span class="kw">const</span> world = makeMinimalWorld();
+  <span class="kw">const</span> origin = world.islands[0]!;
+  <span class="kw">const</span> result = dispatchDrone(world, origin, { x: 1, y: 0 }, 20, 0, 1);
+  expect(result.ok).toBe(<span class="kw">true</span>);
+  expect(result.drone!.scanRadius).toBe(2);
+});
+
+<span class="fn">it</span>(<span class="str">'dispatches a T3 drone with scan radius 8'</span>, () =&gt; {
+  <span class="kw">const</span> world = makeMinimalWorld();
+  <span class="kw">const</span> origin = world.islands[0]!;
+  origin.level = 15;  <span class="comment">// T3 unlock</span>
+  <span class="kw">const</span> result = dispatchDrone(world, origin, { x: 1, y: 0 }, 30, 0, 3);
+  expect(result.ok).toBe(<span class="kw">true</span>);
+  expect(result.drone!.scanRadius).toBe(8);
+});</pre>
+      <div class="callout info"><b>Note:</b> the exact <code>dispatchDrone</code> signature + <code>makeMinimalWorld</code> helper name varies — match what's already used in <code>drones.test.ts</code>. The <code>selectedTier</code> argument is at the position the helper passes the drone tier; confirm by reading nearby dispatch calls in the same file.</div>
+
+      <div class="step"><b>Step 8.</b> Run the tests:</div>
+      <pre class="bash">npx vitest run src/drones.test.ts</pre>
+      <div class="expected"><b>Expected:</b> all green. Existing 100+ drone tests still pass; new per-tier-radius tests pass.</div>
+
+      <div class="step"><b>Step 9.</b> Run full typecheck:</div>
+      <pre class="bash">npm run build</pre>
+      <div class="expected"><b>Expected:</b> <code>tsc -b</code> clean; no unused locals; no <code>noUncheckedIndexedAccess</code> errors on the new <code>DRONE_TIER_SCAN_RADIUS[d.tier]</code> access (TypeScript proves <code>d.tier: DroneTier</code> is a key of the <code>Record</code>).</div>
+
+      <div class="step"><b>Step 10.</b> Commit:</div>
+      <pre class="bash">git add src/drones.ts src/drones.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(drones): tier-keyed scan radius table (T1=2 T2=4 T3=8 T5=12 T6=16)
+
+Replaces the single DRONE_SCAN_RADIUS_TILES=8 constant with a per-tier
+table. Fixes SPEC §2.2 tier-diversity claim (T1 narrow / T2 modest /
+T3 wider) that the prior single constant flattened.
+
+Refs design spec docs/superpowers/specs/2026-05-25-drone-scan-rework-design.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 2 -->
+  <section id="task-2">
+    <div class="sec-head"><span class="num">02</span><h2>Task 2 — Add <code>scanBuffer: Set&lt;string&gt;</code> on Drone + dispatch init</h2></div>
+    <p class="sec-intro">Add the field to the <code>Drone</code> interface and initialise it to an empty Set in <code>dispatchDrone</code>. No tick-loop or flush logic yet — the field stays empty in this task. This isolates the type change so a reviewer can verify the field is wired everywhere it needs to be before the behaviour change lands in Task 3.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/drones.ts</code> &nbsp; <code>~ src/drones.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/drones.ts</code>, locate the <code>Drone</code> interface (lines ~50-76, the export with fields <code>tier</code> / <code>scanRadius</code> / <code>darkMode</code> / <code>darkModeDiscoveries</code> / <code>probabilityBias</code>). Add the new field next to <code>darkModeDiscoveries</code>, with a comment that mirrors the existing dark-mode rationale:</div>
+      <pre><span class="comment">// Cell-reveal buffer (mirror of darkModeDiscoveries for cells). Every</span>
+<span class="comment">// corridor cell the drone scans joins this Set unconditionally on every</span>
+<span class="comment">// tick; the flush step in advanceDrones drains it into world.revealedCells</span>
+<span class="comment">// when the drone enters any antenna's range OR when status reaches</span>
+<span class="comment">// 'returned'. Drone destroyed in dark ('lost'): buffer GC'd with the drone.</span>
+<span class="kw">readonly</span> scanBuffer: <span class="ty">Set</span>&lt;<span class="ty">string</span>&gt;;</pre>
+      <div class="callout info"><b>Note:</b> <code>readonly</code> binds the field reference, not the Set's contents. We mutate the Set via <code>.add()</code> / <code>.clear()</code> at runtime, matching how <code>darkModeDiscoveries</code> is mutated despite the wrapping <code>Array</code> being assignable.</div>
+
+      <div class="step"><b>Step 2.</b> In <code>dispatchDrone</code> (the function that constructs the <code>Drone</code> object — around <code>drones.ts:440-460</code> where the existing init for <code>darkMode: false</code> / <code>darkModeDiscoveries: []</code> lives), add the buffer init alongside:</div>
+      <pre><span class="kw">const</span> d: <span class="ty">Drone</span> = {
+  <span class="comment">// ... existing fields ...</span>
+  darkMode: <span class="kw">false</span>,
+  darkModeDiscoveries: [],
+  scanBuffer: <span class="kw">new</span> <span class="ty">Set</span>&lt;<span class="ty">string</span>&gt;(),
+  <span class="comment">// ... rest ...</span>
+};</pre>
+
+      <div class="step"><b>Step 3.</b> Grep the codebase for every site that constructs a <code>Drone</code> literal — tests likely have their own factories:</div>
+      <pre class="bash">grep -rn ": Drone =\|: Drone\b\|as Drone\b" src/ | grep -v "node_modules"</pre>
+      <div class="expected"><b>Expected:</b> hits in <code>src/drones.ts</code> (the dispatch + pulse paths) and <code>src/drones.test.ts</code> (test factories / fixtures). Possibly <code>src/persistence.ts</code> (load path — handled in Task 4).</div>
+
+      <div class="step"><b>Step 4.</b> For every test-side Drone literal returned by the grep that doesn't go through <code>dispatchDrone</code>, add <code>scanBuffer: new Set&lt;string&gt;()</code>. Otherwise tsc will fail strict because the new required field is missing.</div>
+
+      <div class="step"><b>Step 5.</b> Add a sanity test asserting the field is initialised by dispatch:</div>
+      <pre><span class="fn">it</span>(<span class="str">'dispatched drone has an empty scanBuffer'</span>, () =&gt; {
+  <span class="kw">const</span> world = makeMinimalWorld();
+  <span class="kw">const</span> origin = world.islands[0]!;
+  <span class="kw">const</span> result = dispatchDrone(world, origin, { x: 1, y: 0 }, 20, 0, 1);
+  expect(result.ok).toBe(<span class="kw">true</span>);
+  expect(result.drone!.scanBuffer).toBeInstanceOf(<span class="ty">Set</span>);
+  expect(result.drone!.scanBuffer.size).toBe(0);
+});</pre>
+
+      <div class="step"><b>Step 6.</b> Run tests + build:</div>
+      <pre class="bash">npx vitest run src/drones.test.ts &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. tsc strict clean — no fixture is missing the new field.</div>
+
+      <div class="step"><b>Step 7.</b> Commit:</div>
+      <pre class="bash">git add src/drones.ts src/drones.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(drones): add scanBuffer Set on Drone + dispatch init
+
+Field is present but unused this commit — the flush logic lands in
+the next task. Splitting keeps the type change reviewable in isolation.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 3 -->
+  <section id="task-3">
+    <div class="sec-head"><span class="num">03</span><h2>Task 3 — Unified buffer-and-flush in <code>advanceDrones</code> tick loop</h2></div>
+    <p class="sec-intro">The meaty change. Rewrite the per-tick reveal block (currently two branches at <code>drones.ts:633-684</code>: T5 and "legacy T1-T4/T6"). Both branches collapse into one: every corridor cell joins <code>scanBuffer</code> unconditionally; a single flush step at tick end (drone in antenna range) AND a status-transition flush ('returned') drain the buffer + the existing <code>darkModeDiscoveries</code> together. T1-T6 share the path.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/drones.ts</code> &nbsp; <code>~ src/drones.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Read the current <code>advanceDrones</code> reveal block at <code>drones.ts:558-688</code> end-to-end so you understand the structure. Key call sites: <code>ensureCellGenerated</code> for lazy island minting; the existing T5 branch with <code>darkMode</code> toggling; the legacy non-T5 branch with the per-cell antenna check. Both paths compute <code>corridor</code> and <code>expandedCorridor</code> Sets from segment waypoints — keep that machinery.</div>
+
+      <div class="step"><b>Step 2.</b> Define a small helper for the flush — keeps the tick loop readable. Add it just before the <code>advanceDrones</code> function (or near the bottom of <code>drones.ts</code>):</div>
+      <pre><span class="comment">/** Drain a drone's scanBuffer + darkModeDiscoveries into world state.</span>
+<span class="comment"> *  Idempotent — clears both buffers after draining. Called when the drone</span>
+<span class="comment"> *  enters antenna range OR reaches 'returned' status. */</span>
+<span class="kw">function</span> <span class="fn">flushDroneBuffers</span>(
+  d: <span class="ty">Drone</span>,
+  world: <span class="ty">WorldState</span>,
+  newlyDiscoveredIslandIds: <span class="ty">string</span>[],
+): <span class="ty">number</span> {
+  <span class="kw">let</span> cellsAdded = 0;
+  <span class="kw">for</span> (<span class="kw">const</span> k <span class="kw">of</span> d.scanBuffer) {
+    <span class="kw">if</span> (world.revealedCells.has(k)) <span class="kw">continue</span>;
+    world.revealedCells.add(k);
+    cellsAdded++;
+  }
+  d.scanBuffer.clear();
+  <span class="kw">for</span> (<span class="kw">const</span> disc <span class="kw">of</span> d.darkModeDiscoveries) {
+    <span class="kw">const</span> isl = world.islands.find((i) =&gt; i.id === disc.islandId);
+    <span class="kw">if</span> (isl &amp;&amp; !isl.discovered &amp;&amp; !isl.populated) {
+      isl.discovered = <span class="kw">true</span>;
+      newlyDiscoveredIslandIds.push(isl.id);
+    }
+  }
+  d.darkModeDiscoveries = [];
+  <span class="kw">return</span> cellsAdded;
+}</pre>
+
+      <div class="step"><b>Step 3.</b> Replace the entire block from <code>drones.ts:633</code> (the <code>if (d.tier === 5) { ... } else { ... }</code> split) through the end of the corridor-loop branch with a SINGLE unified block. The replacement: after computing <code>corridor</code> and <code>expandedCorridor</code> (keep those lines unchanged above), every cell joins <code>scanBuffer</code> unconditionally; then a single flush check runs:</div>
+      <pre><span class="comment">// Buffer every corridor cell unconditionally. Flush happens below if the</span>
+<span class="comment">// drone is in any antenna range at tick end, or on return-status transition.</span>
+<span class="kw">for</span> (<span class="kw">const</span> k <span class="kw">of</span> corridor) {
+  d.scanBuffer.add(k);
+}
+
+<span class="comment">// §13.3 Probability-bias rare-island discovery: STILL run on the expanded</span>
+<span class="comment">// corridor regardless of buffer flush. Rare-island reveals are not gated</span>
+<span class="comment">// by antenna range in the existing code; preserve that behaviour.</span>
+discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
+
+<span class="comment">// Island discoveries in this tick's corridor join darkModeDiscoveries</span>
+<span class="comment">// (the flush helper drains them along with cells). Use expandedCorridor</span>
+<span class="comment">// so Probability Engine bias is honoured.</span>
+<span class="kw">const</span> tickIslandDiscoveries = <span class="fn">islandsInCells</span>(world.islands, expandedCorridor);
+<span class="kw">const</span> seenIslands = <span class="kw">new</span> <span class="ty">Set</span>&lt;<span class="ty">string</span>&gt;(d.darkModeDiscoveries.map((x) =&gt; x.islandId));
+<span class="kw">for</span> (<span class="kw">const</span> disc <span class="kw">of</span> tickIslandDiscoveries) {
+  <span class="kw">if</span> (!seenIslands.has(disc.islandId)) {
+    seenIslands.add(disc.islandId);
+    d.darkModeDiscoveries.push(disc);
+  }
+}
+
+<span class="comment">// Flush trigger A: drone position in any antenna's range at tick end.</span>
+<span class="kw">const</span> dronePos = <span class="fn">droneCurrentPosition</span>(d, segEndMs);
+<span class="kw">const</span> inSignalRange = <span class="fn">pointInSignalRange</span>(ranges, dronePos.x, dronePos.y);
+<span class="kw">if</span> (inSignalRange) {
+  d.darkMode = <span class="kw">false</span>;
+  cellsAddedThisTick += <span class="fn">flushDroneBuffers</span>(d, world, newlyDiscoveredIslandIds);
+} <span class="kw">else</span> {
+  d.darkMode = <span class="kw">true</span>;
+}</pre>
+      <div class="callout warn"><b>What changes:</b> the prior T5 branch's per-cell antenna check inside the corridor loop (drones.ts:663-671) DISAPPEARS — flushing handles it. The prior legacy branch's per-cell check (drones.ts:676-684) DISAPPEARS — same. Both replaced by the buffer + single flush call. The <code>d.tier === 5</code> branching collapses; T1-T6 take the same path. The existing <code>ensureCellGenerated</code> loop over <code>expandedCorridor</code> (lines ~628-631) STAYS UNCHANGED.</div>
+
+      <div class="step"><b>Step 4.</b> Add the return-status flush. Locate the block in <code>advanceDrones</code> that transitions a drone to <code>'returned'</code> (around <code>drones.ts:740-770</code>; search for <code>status = 'returned'</code> or similar). Before clearing the drone, call <code>flushDroneBuffers</code> one final time so any data still in the buffer (drone was out of range when it landed) gets reported:</div>
+      <pre><span class="comment">// Before marking 'returned' or flushing existing darkModeDiscoveries</span>
+<span class="comment">// at the landing site, call the unified flush — drains regardless of</span>
+<span class="comment">// current antenna range. This is the "survives the trip → reports</span>
+<span class="comment">// everything" guarantee per SPEC §11.6 telemetry rule.</span>
+cellsAddedThisTick += <span class="fn">flushDroneBuffers</span>(d, world, newlyDiscoveredIslandIds);
+d.status = <span class="str">'returned'</span>;</pre>
+      <div class="callout info"><b>Note:</b> the existing return-path block already has a loop draining <code>darkModeDiscoveries</code> (around <code>drones.ts:748-763</code>). DELETE that loop — the unified flush helper replaces it. Confirm by reading the surrounding code and removing the old island-only drain so there's no double-flush.</div>
+
+      <div class="step"><b>Step 5.</b> No special handling needed for <code>'lost'</code> status — the drone is filtered out of the remaining array, so its <code>scanBuffer</code> is garbage-collected. Verify by reading the <code>if (d.status === 'lost' || d.status === 'returned')</code> block at <code>drones.ts:568-571</code>: terminal drones are pushed to <code>remaining</code> but no longer processed.</div>
+
+      <div class="step"><b>Step 6.</b> Add tests for the buffer mechanic. Add to <code>src/drones.test.ts</code> in a new <code>describe('scanBuffer flush', ...)</code> block:</div>
+      <pre><span class="fn">describe</span>(<span class="str">'scanBuffer flush'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'buffers corridor cells out of antenna range, flushes on re-entry'</span>, () =&gt; {
+    <span class="kw">const</span> world = <span class="fn">makeWorldWithSingleAntenna</span>(); <span class="comment">// origin has T1 antenna, range ~100 tiles</span>
+    <span class="kw">const</span> origin = world.islands[0]!;
+    <span class="comment">// Dispatch a T2 drone out far enough to leave antenna range mid-flight,</span>
+    <span class="comment">// then return — natural drone path is out-and-back so the return half</span>
+    <span class="comment">// re-enters range automatically.</span>
+    <span class="kw">const</span> result = <span class="fn">dispatchDrone</span>(world, origin, { x: 1, y: 0 }, 50, 0, 2);
+    expect(result.ok).toBe(<span class="kw">true</span>);
+    <span class="kw">const</span> d = result.drone!;
+
+    <span class="comment">// Advance to mid-flight (drone is out of range).</span>
+    <span class="fn">advanceDrones</span>(world, /*nowMs=*/ d.launchTime + 20000, d.launchTime);
+    expect(d.scanBuffer.size).toBeGreaterThan(0);
+    <span class="comment">// Some cells haven't yet been revealed — they're buffered.</span>
+
+    <span class="comment">// Advance through return: drone re-enters antenna range, buffer drains.</span>
+    <span class="fn">advanceDrones</span>(world, /*nowMs=*/ d.expectedReturnTime + 1000, d.launchTime + 20000);
+    expect(d.scanBuffer.size).toBe(0);
+    expect(world.revealedCells.size).toBeGreaterThan(0);
+  });
+
+  <span class="fn">it</span>(<span class="str">'flushes on returned status even if never re-entered range'</span>, () =&gt; {
+    <span class="comment">// Single-antenna world, aim drone past antenna range so it never re-enters</span>
+    <span class="comment">// (use a path that returns to origin from a far-away direction). The</span>
+    <span class="comment">// return-status flush triggers regardless of current antenna proximity.</span>
+    <span class="kw">const</span> world = <span class="fn">makeWorldWithSingleAntenna</span>();
+    <span class="kw">const</span> origin = world.islands[0]!;
+    <span class="kw">const</span> result = <span class="fn">dispatchDrone</span>(world, origin, { x: 1, y: 0 }, 50, 0, 2);
+    expect(result.ok).toBe(<span class="kw">true</span>);
+    <span class="kw">const</span> d = result.drone!;
+    <span class="kw">const</span> revealedBefore = world.revealedCells.size;
+
+    <span class="comment">// Stub: simulate the drone returning at a point that's STILL out of range.</span>
+    <span class="comment">// Easiest path: hand-set d.status = 'returned' and call advanceDrones,</span>
+    <span class="comment">// then assert flush happened. Use whatever return-trigger pattern the</span>
+    <span class="comment">// existing return-status tests use.</span>
+    d.scanBuffer.add(<span class="str">'5:0'</span>);
+    d.scanBuffer.add(<span class="str">'6:0'</span>);
+    d.scanBuffer.add(<span class="str">'7:0'</span>);
+    <span class="comment">// Force the drone into the return-status path by advancing past its</span>
+    <span class="comment">// expectedReturnTime. The flush helper drains regardless of range.</span>
+    <span class="fn">advanceDrones</span>(world, d.expectedReturnTime + 1000, d.launchTime);
+    expect(d.scanBuffer.size).toBe(0);
+    expect(world.revealedCells.has(<span class="str">'5:0'</span>)).toBe(<span class="kw">true</span>);
+    expect(world.revealedCells.has(<span class="str">'6:0'</span>)).toBe(<span class="kw">true</span>);
+    expect(world.revealedCells.has(<span class="str">'7:0'</span>)).toBe(<span class="kw">true</span>);
+    expect(world.revealedCells.size).toBeGreaterThanOrEqual(revealedBefore + 3);
+  });
+
+  <span class="fn">it</span>(<span class="str">'discards buffer when drone is lost in dark'</span>, () =&gt; {
+    <span class="kw">const</span> world = <span class="fn">makeWorldWithSingleAntenna</span>();
+    <span class="kw">const</span> origin = world.islands[0]!;
+    <span class="kw">const</span> result = <span class="fn">dispatchDrone</span>(world, origin, { x: 1, y: 0 }, 50, 0, 2);
+    expect(result.ok).toBe(<span class="kw">true</span>);
+    <span class="kw">const</span> d = result.drone!;
+    <span class="kw">const</span> revealedBefore = world.revealedCells.size;
+
+    <span class="comment">// Seed buffer with cells the drone "scanned" mid-flight.</span>
+    d.scanBuffer.add(<span class="str">'9:9'</span>);
+    d.scanBuffer.add(<span class="str">'10:9'</span>);
+    <span class="comment">// Simulate weather destruction: force status to 'lost'. The next</span>
+    <span class="comment">// advanceDrones tick MUST NOT drain the buffer to revealedCells.</span>
+    d.status = <span class="str">'lost'</span>;
+    <span class="fn">advanceDrones</span>(world, d.expectedReturnTime + 1000, d.launchTime);
+    expect(world.revealedCells.has(<span class="str">'9:9'</span>)).toBe(<span class="kw">false</span>);
+    expect(world.revealedCells.has(<span class="str">'10:9'</span>)).toBe(<span class="kw">false</span>);
+    expect(world.revealedCells.size).toBe(revealedBefore);
+  });
+});</pre>
+      <div class="callout info"><b>Note:</b> the exact helper names (<code>makeWorldWithSingleAntenna</code>, <code>advanceDrones</code> signature) must match what's already in <code>drones.test.ts</code>. Read the existing T5 dark-mode tests for the canonical fixture pattern + advance-tick call shape — those tests already exercise dark / re-entry transitions and provide the working template.</div>
+
+      <div class="step"><b>Step 7.</b> Verify existing T5 dark-mode island-discovery tests still pass — the unified flush MUST preserve T5 island-discovery semantics:</div>
+      <pre class="bash">npx vitest run src/drones.test.ts -t "dark"</pre>
+      <div class="expected"><b>Expected:</b> existing T5 dark-mode tests green. The unified flush helper handles both cells and islands; T5 behaviour is preserved.</div>
+
+      <div class="step"><b>Step 8.</b> Run full suite + build:</div>
+      <pre class="bash">npx vitest run &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. tsc strict clean. Test count delta: roughly +3 new tests, 0 removed (the single-constant sanity from Task 1 was replaced not deleted).</div>
+
+      <div class="step"><b>Step 9.</b> Commit:</div>
+      <pre class="bash">git add src/drones.ts src/drones.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(drones): unified buffer-and-flush — T1-T6 survive-and-report
+
+Per-tick: every corridor cell joins d.scanBuffer unconditionally.
+Flush triggers (drain to world.revealedCells + island.discovered):
+  (a) drone position in any antenna range at tick end
+  (b) drone status transition to 'returned'
+Drone destroyed in dark ('lost'): buffer GC'd with the drone, matching
+SPEC §11.6 "all that data is lost".
+
+Collapses prior T5 vs T1-T4/T6 split into one path. The existing T5
+darkModeDiscoveries buffer is preserved as the island half of the
+unified flush.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 4 -->
+  <section id="task-4">
+    <div class="sec-head"><span class="num">04</span><h2>Task 4 — Schema bump v12 → v13 + <code>migrateV12toV13</code></h2></div>
+    <p class="sec-intro">Persist the new <code>scanBuffer</code>. Sets don't survive IndexedDB serialisation in this codebase (see <code>revealedCells</code> precedent at <code>persistence.ts:425, 705</code>) — serialise as a sorted array on save, deserialise to <code>new Set(arr)</code> on load. Migration <code>migrateV12toV13</code> defaults <code>scanBuffer: []</code> on every in-flight drone for backwards-compat with existing saves.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/persistence.ts</code> &nbsp; <code>~ src/persistence.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/persistence.ts</code>, bump the version constants at the top:</div>
+      <pre><span class="kw">export const</span> <span class="ty">STORAGE_KEY</span> = <span class="str">'robot-islands:save:v13'</span>;
+<span class="kw">export const</span> <span class="ty">SCHEMA_VERSION</span> = 13 <span class="kw">as const</span>;</pre>
+
+      <div class="step"><b>Step 2.</b> Update <code>SUPPORTED_LOAD_VERSIONS</code> at line ~87 to include 13:</div>
+      <pre><span class="kw">export const</span> <span class="ty">SUPPORTED_LOAD_VERSIONS</span>: <span class="ty">ReadonlySet</span>&lt;<span class="ty">number</span>&gt; = <span class="kw">new</span> <span class="ty">Set</span>([7, 8, 9, 10, 11, 12, 13]);</pre>
+
+      <div class="step"><b>Step 3.</b> Define <code>SerializedSnapshotV12</code> alias capturing the OLD shape (no <code>scanBuffer</code> on serialised drones). Place it next to the existing version aliases (look for <code>SerializedSnapshotV11</code> at <code>persistence.ts:336</code> as the pattern):</div>
+      <pre><span class="comment">/** v12 shape — drones lack scanBuffer field. v13 adds it. */</span>
+<span class="kw">export interface</span> <span class="ty">SerializedSnapshotV12</span> {
+  <span class="kw">readonly</span> v: 12;
+  <span class="kw">readonly</span> world: {
+    <span class="kw">readonly</span> drones: <span class="ty">ReadonlyArray</span>&lt;<span class="ty">SerializedDroneV12</span>&gt;;
+    <span class="comment">// ... rest of v12 world fields (copy from existing SaveSnapshot shape) ...</span>
+  };
+  <span class="comment">// ... rest of v12 top-level fields ...</span>
+}
+
+<span class="comment">/** Drone shape pre-scanBuffer. */</span>
+<span class="kw">type</span> <span class="ty">SerializedDroneV12</span> = <span class="ty">Omit</span>&lt;<span class="ty">Drone</span>, <span class="str">'scanBuffer'</span>&gt; &amp; {
+  <span class="kw">readonly</span> darkModeDiscoveries: <span class="ty">Array</span>&lt;{ <span class="kw">readonly</span> islandId: <span class="ty">string</span> }&gt;;
+};</pre>
+      <div class="callout info"><b>Note:</b> the <code>Omit</code> trick assumes the runtime <code>Drone</code> with <code>scanBuffer</code> already exists from Task 2. If your <code>Drone</code> structurally only adds <code>scanBuffer</code> compared to v12, <code>Omit</code> is precise. If there are other fields that have diverged, hand-write the full shape — match the existing <code>SerializedSnapshotV11</code> precision.</div>
+
+      <div class="step"><b>Step 4.</b> Write <code>migrateV12toV13</code> — defaults <code>scanBuffer: []</code> on every in-flight drone. Place next to the existing migrations (search for <code>migrateV11toV12</code> at <code>persistence.ts:336</code>):</div>
+      <pre><span class="comment">/** v12 → v13: add scanBuffer to every drone (default empty array,</span>
+<span class="comment"> *  deserialises to empty Set). Lossless — in-flight drones at v12 had no</span>
+<span class="comment"> *  buffer concept, so empty is the correct default. */</span>
+<span class="kw">export function</span> <span class="fn">migrateV12toV13</span>(s: <span class="ty">SerializedSnapshotV12</span>): <span class="ty">SaveSnapshot</span> {
+  <span class="kw">return</span> {
+    ...s,
+    v: 13,
+    world: {
+      ...s.world,
+      drones: s.world.drones.map((d) =&gt; ({
+        ...d,
+        scanBuffer: [],
+      })),
+    },
+  } <span class="kw">as unknown as</span> <span class="ty">SaveSnapshot</span>;
+}</pre>
+      <div class="callout info"><b>Note:</b> the <code>as unknown as SaveSnapshot</code> mirrors the existing v11→v12 pattern (see line 336). The cast is needed because <code>SaveSnapshot</code> has a serialised-drone shape with <code>scanBuffer: ReadonlyArray&lt;string&gt;</code>, not the runtime <code>Set</code>.</div>
+
+      <div class="step"><b>Step 5.</b> Wire the migration into the loader chain. At <code>persistence.ts:502</code> (after the v11→v12 line), add the v12 case:</div>
+      <pre>  <span class="kw">if</span> (snapshot.v === 11) {
+    snapshot = <span class="fn">migrateV11toV12</span>(snapshot <span class="kw">as unknown as</span> <span class="ty">SerializedSnapshotV11</span>);
+  }
+  <span class="kw">if</span> (snapshot.v === 12) {
+    snapshot = <span class="fn">migrateV12toV13</span>(snapshot <span class="kw">as unknown as</span> <span class="ty">SerializedSnapshotV12</span>);
+  }</pre>
+
+      <div class="step"><b>Step 6.</b> Update the serialised save path. At <code>persistence.ts:414</code>, the current <code>drones: [...world.drones]</code> shallow-copies <code>Drone</code> objects whose <code>scanBuffer</code> is a <code>Set</code> — won't survive IndexedDB structuredClone in this codebase's pattern. Project drones to serialisable shape:</div>
+      <pre><span class="comment">// BEFORE:</span>
+drones: [...world.drones],
+
+<span class="comment">// AFTER:</span>
+drones: world.drones.map((d) =&gt; ({
+  ...d,
+  scanBuffer: [...d.scanBuffer].sort(),  <span class="comment">// stable serialisation; matches revealedCells pattern</span>
+})),</pre>
+
+      <div class="step"><b>Step 7.</b> Update the deserialised load path. At <code>persistence.ts:571-575</code>, the current drone reconstruction needs to convert the serialised <code>scanBuffer: ReadonlyArray&lt;string&gt;</code> back to a <code>Set</code>:</div>
+      <pre><span class="comment">// BEFORE:</span>
+drones: snapshot.world.drones.map((d) =&gt; ({
+  ...d,
+  launchTime: d.launchTime + perfShift,
+  expectedReturnTime: d.expectedReturnTime + perfShift,
+})),
+
+<span class="comment">// AFTER:</span>
+drones: snapshot.world.drones.map((d) =&gt; ({
+  ...d,
+  launchTime: d.launchTime + perfShift,
+  expectedReturnTime: d.expectedReturnTime + perfShift,
+  scanBuffer: <span class="kw">new</span> <span class="ty">Set</span>&lt;<span class="ty">string</span>&gt;((d <span class="kw">as unknown as</span> { scanBuffer?: <span class="ty">ReadonlyArray</span>&lt;<span class="ty">string</span>&gt; }).scanBuffer ?? []),
+})),</pre>
+      <div class="callout info"><b>Note:</b> the <code>?? []</code> fallback covers the edge case where a v12 snapshot reaches this code path without going through the migration chain (defensive — shouldn't happen but cheap).</div>
+
+      <div class="step"><b>Step 8.</b> Add a v12 fixture test in <code>src/persistence.test.ts</code>. Find an existing <code>migrateV*</code> test as a template; add:</div>
+      <pre><span class="fn">it</span>(<span class="str">'migrates v12 → v13 — drones get empty scanBuffer'</span>, <span class="kw">async</span> () =&gt; {
+  <span class="kw">const</span> v12: <span class="ty">SerializedSnapshotV12</span> = {
+    v: 12,
+    world: {
+      drones: [
+        {
+          <span class="comment">// minimal in-flight v12 drone — fill required fields per Drone interface</span>
+          <span class="comment">// EXCEPT scanBuffer (which v12 doesn't have).</span>
+          id: 1,
+          status: <span class="str">'active'</span>,
+          tier: 2,
+          scanRadius: 4,
+          darkMode: <span class="kw">false</span>,
+          darkModeDiscoveries: [],
+          <span class="comment">// ... other required fields per Drone interface</span>
+        } <span class="kw">as</span> <span class="ty">SerializedDroneV12</span>,
+      ],
+      <span class="comment">// ... other minimum world fields per V12 shape</span>
+    },
+    <span class="comment">// ... other top-level fields</span>
+  } <span class="kw">as</span> <span class="ty">SerializedSnapshotV12</span>;
+
+  <span class="kw">const</span> v13 = <span class="fn">migrateV12toV13</span>(v12);
+  expect(v13.v).toBe(13);
+  expect(v13.world.drones[0]!.scanBuffer).toEqual([]);
+});
+
+<span class="fn">it</span>(<span class="str">'v13 round-trip: scanBuffer preserves cell ids'</span>, <span class="kw">async</span> () =&gt; {
+  <span class="kw">const</span> world: <span class="ty">WorldState</span> = <span class="fn">makeWorldWithBufferedDrone</span>([<span class="str">'2:3'</span>, <span class="str">'2:4'</span>, <span class="str">'3:3'</span>]);
+  <span class="kw">await</span> <span class="fn">saveWorld</span>(world, <span class="comment">/* ... */</span>);
+  <span class="kw">const</span> loaded = <span class="kw">await</span> <span class="fn">loadWorld</span>(<span class="comment">/* ... */</span>);
+  expect([...loaded!.drones[0]!.scanBuffer].sort()).toEqual([<span class="str">'2:3'</span>, <span class="str">'2:4'</span>, <span class="str">'3:3'</span>]);
+});</pre>
+      <div class="callout info"><b>Note:</b> the fixture-build helpers (<code>makeWorldWithBufferedDrone</code>) likely don't exist yet — adapt to the existing test-helper pattern in <code>persistence.test.ts</code>. Reuse whatever fixture builder the existing v11→v12 test uses as a starting point.</div>
+
+      <div class="step"><b>Step 9.</b> Run tests + build:</div>
+      <pre class="bash">npx vitest run src/persistence.test.ts &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. v12 fixture loads; v13 round-trip preserves the Set's contents.</div>
+
+      <div class="step"><b>Step 10.</b> Commit:</div>
+      <pre class="bash">git add src/persistence.ts src/persistence.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(persistence): schema v12 → v13 — drone scanBuffer
+
+Adds scanBuffer: Set&lt;string&gt; to Drone (runtime) / ReadonlyArray&lt;string&gt;
+(serialised). migrateV12toV13 defaults [] on every in-flight drone.
+Save path projects Set → sorted Array; load path projects Array → Set.
+Mirrors the revealedCells precedent at persistence.ts:425, 705.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 5 -->
+  <section id="task-5">
+    <div class="sec-head"><span class="num">05</span><h2>Task 5 — Integration smoke test (no-antenna launch + return)</h2></div>
+    <p class="sec-intro">End-to-end test of the headline behaviour fix: launch a T2 drone from an island with no antennas anywhere reachable, fly the corridor, return, assert the corridor cells appear in <code>world.revealedCells</code>. Confirms Bug 3 (no-antenna case) is fixed and Bug 2 (cell reveal vs antenna range) is fixed end-to-end.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/drones.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Add an integration test in <code>src/drones.test.ts</code> — place it after the Task 3 <code>scanBuffer flush</code> describe:</div>
+      <pre><span class="fn">describe</span>(<span class="str">'no-antenna integration'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'reveals corridor cells when origin has no antennas, drone returns safely'</span>, () =&gt; {
+    <span class="comment">// Construct a minimal world: one populated origin island, NO antenna</span>
+    <span class="comment">// buildings anywhere. No neighbouring populated islands either, so</span>
+    <span class="comment">// computeSignalRanges returns []. Drone is always out of range.</span>
+    <span class="kw">const</span> world = <span class="fn">makeMinimalWorldNoAntennas</span>();
+    <span class="kw">const</span> origin = world.islands[0]!;
+    expect(origin.populated).toBe(<span class="kw">true</span>);
+    expect(<span class="fn">computeSignalRanges</span>(world.islands.filter((s) =&gt; s.populated))).toEqual([]);
+
+    <span class="comment">// Dispatch a T2 drone.</span>
+    <span class="kw">const</span> result = <span class="fn">dispatchDrone</span>(world, origin, { x: 1, y: 0 }, 30, 0, 2);
+    expect(result.ok).toBe(<span class="kw">true</span>);
+    <span class="kw">const</span> d = result.drone!;
+    <span class="kw">const</span> revealedBefore = world.revealedCells.size;
+
+    <span class="comment">// Advance mid-flight: cells go INTO the buffer, NOT yet revealed.</span>
+    <span class="fn">advanceDrones</span>(world, d.launchTime + 30_000, d.launchTime);
+    expect(d.scanBuffer.size).toBeGreaterThan(0);
+    expect(world.revealedCells.size).toBe(revealedBefore);
+
+    <span class="comment">// Advance past expected return time: drone reaches 'returned',</span>
+    <span class="comment">// flush drains scanBuffer regardless of antenna range.</span>
+    <span class="fn">advanceDrones</span>(world, d.expectedReturnTime + 2_000, d.launchTime + 30_000);
+    expect(d.scanBuffer.size).toBe(0);
+    expect(world.revealedCells.size).toBeGreaterThan(revealedBefore);
+
+    <span class="comment">// Sanity: drone is in terminal status.</span>
+    expect(d.status === <span class="str">'returned'</span>).toBe(<span class="kw">true</span>);
+  });
+});</pre>
+      <div class="callout info"><b>Note:</b> if <code>makeMinimalWorldNoAntennas</code> doesn't exist as a helper, build it inline by spinning a world with one populated island that has zero antenna buildings. Look at how existing tests construct minimal worlds (search for <code>makeMinimalWorld</code> or similar in <code>drones.test.ts</code>) and adapt — usually a copy with the antenna placement stripped.</div>
+
+      <div class="step"><b>Step 2.</b> Run the new test in isolation first to confirm it passes:</div>
+      <pre class="bash">npx vitest run src/drones.test.ts -t "no-antenna integration"</pre>
+      <div class="expected"><b>Expected:</b> green. <code>scanBuffer</code> grows mid-flight (no flushes — no antenna in range); empties on return; <code>revealedCells</code> grew.</div>
+
+      <div class="step"><b>Step 3.</b> Run the full suite + build to confirm no regressions:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -20 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green; total test count up by ~5-6 vs. the v12 baseline; tsc clean.</div>
+
+      <div class="step"><b>Step 4.</b> Commit:</div>
+      <pre class="bash">git add src/drones.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+test(drones): no-antenna integration smoke — launch, fly, return, reveal
+
+End-to-end coverage of Bug 3 from the design spec: drone launched from
+an island with no antennas anywhere reachable still reveals its
+corridor cells on return. Exercises the buffer-and-flush via the
+return-status path (Bug 2 fix).
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)</pre>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Implementation plan · drone scan rework v1 · 2026-05-25 · source-of-truth: <code>docs/superpowers/specs/2026-05-25-drone-scan-rework-design.html</code> · canonical dispatch recipe: <code>~/.claude/prompts/dispatch-from-sliced-plan.md</code> · execution: <code>superpowers:subagent-driven-development</code> (kimi implementer + two-stage review per task).</p>
+  </div>
+
+</div>
+</body>
+</html>

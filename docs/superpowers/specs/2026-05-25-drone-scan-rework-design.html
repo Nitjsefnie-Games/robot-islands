@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drone scan rework — design spec · 2026-05-25</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 34px; line-height: 1.16;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 28px 0 40px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 16px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 50px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 800px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    section { margin-bottom: 52px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat);
+      color: var(--slate); padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 24px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 780px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 800px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    p.body em { color: var(--gray-700); font-style: italic; }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    pre { background: var(--gray-150); border: var(--border); border-radius: 8px;
+      padding: 12px 16px; margin: 10px 0 18px; overflow-x: auto; font-family: var(--mono);
+      font-size: 12.5px; color: var(--gray-700); line-height: 1.5; max-width: 880px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 10px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col { background: var(--white); border: var(--border); border-radius: var(--radius); overflow: hidden; }
+    .compare .col-head { padding: 11px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em; border-bottom: var(--border); }
+    .compare .col.bad .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 14px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 6px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; display: grid; grid-template-columns: 280px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .checklist { display: flex; flex-direction: column; gap: 9px; max-width: 800px; }
+    .check { display: flex; gap: 12px; align-items: flex-start; background: var(--white);
+      border: var(--border); border-radius: 10px; padding: 11px 16px; }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500);
+      flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+    .check .ck-text code { font-size: 12px; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.4fr 90px 1.8fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 13px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 12px; max-width: 880px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 14px 20px; }
+    .defer .dt { font-weight: 600; font-size: 14.5px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .question {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--olive);
+      border-radius: 10px; padding: 14px 20px; margin: 16px 0; max-width: 880px;
+    }
+    .question .qt { font-family: var(--mono); font-size: 11px; color: var(--olive);
+      letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 6px; }
+    .question .qb { font-size: 14px; color: var(--gray-700); }
+    .question .qb strong { color: var(--slate); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 56px; padding-top: 22px;
+      border-top: 1px solid var(--gray-300); }
+    .footer code { font-size: 12px; color: #C9B98A; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · drone scan rework · 2026-05-25</div>
+      <h1>Drone scan rework — tier-keyed corridor + survive-and-report</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Three drone-scan bugs surfaced while preparing the skill-tree rebalance: (1) every drone tier T1–T4/T6 uses one scan-radius constant <code>DRONE_SCAN_RADIUS_TILES = 8</code> regardless of tier, contradicting SPEC.md §2.2 (T1 narrow / T2 modest / T3 wider); (2) for T1–T4/T6 the per-tick reveal loop adds corridor cells to <code>world.revealedCells</code> only when the cell centre is in antenna range right then, so out-of-range corridor cells are silently dropped with no buffer or return-trip flush; (3) a drone launched from an island with no antennas anywhere reachable scans nothing recoverable even if it returns safely. All three must be fixed before the rebalance because they distort the cap-magnitude conversation for <code>droneScanRadiusMul</code> and <code>commRangeMul</code>.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Scope</div><div class="v accent">3 fixes</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">~5</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v">v12 → v13</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Per-tier scan-radius table + unified buffer-and-flush across all drone tiers.</div>
+      <div class="d-body">Replace the single <code>DRONE_SCAN_RADIUS_TILES = 8</code> with a per-tier lookup <code>DRONE_TIER_SCAN_RADIUS: Record&lt;DroneTier, number&gt;</code>. Tier 1 / 2 / 3 take values 2 / 4 / 8 (user-locked). Tier 4 is the omnidirectional pulse (separate disk mechanic, unaffected). Tier 5 keeps its existing <code>DRONE_T5_SCAN_RADIUS_TILES = 12</code>. Tier 6 needs a pick (proposed 16; flagged for approval below).</div>
+      <div class="d-body">Replace the per-cell antenna-range check with a per-drone <code>scanBuffer: Set&lt;string&gt;</code> of cell keys (and the existing <code>darkModeDiscoveries</code> for islands continues to do the same job). On every tick, every corridor cell goes into the buffer regardless of antenna range. A separate flush step adds cells from the buffer to <code>world.revealedCells</code> when (a) the drone re-enters antenna range, or (b) the drone reaches terminal status <code>'returned'</code>. Drone destroyed in dark (status <code>'lost'</code>) → buffer discarded. This unifies T1–T6 (the existing T5 dark-mode-islands buffer becomes the general pattern; cells join it).</div>
+      <div class="d-body">The no-antenna case (origin island has no antennas, no other populated island's antennas reach the corridor) falls out as a degenerate of (b) — the drone is always out of range, always buffering, flushes on return. No special-case code needed.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Spec citations</h2></div>
+      <p class="sec-intro">What SPEC.md says about the scan mechanic, with line numbers.</p>
+      <p class="body"><strong>§2.2 Discovery via Drones</strong> (SPEC.md:93-111). Drones scan a corridor along their path; corridor width depends on tier and scan radius. The tier list explicitly differentiates: T1 narrow, T2 modest, T3 wider, T4 omnidirectional pulse (disk).</p>
+      <p class="body"><strong>§11.5 Drone tiers</strong> (SPEC.md:1216-1222). Repeats the per-tier scan-corridor enumeration. T2 = "scan corridor radius W", T3 = "scan corridor radius 2W" — explicit 1:2 ratio between consecutive tiers. The 2/4/8 ladder doubles each step, matching the 1:2 doubling for the only adjacent pair the spec quantifies.</p>
+      <p class="body"><strong>§11.6 T5 Path-Drawn Drone, "Telemetry and dark mode"</strong> (SPEC.md:1232-1235). <em>"Within visibility range of any populated island: the drone transmits live. Discovered islands appear on the map immediately as the drone passes them. Beyond visibility range: the drone enters dark mode. It continues recording everything it scans, but transmits nothing. All findings are reported only on return."</em> This is the canonical telemetry rule and applies to <em>all</em> drone tiers per user clarification — currently only the island-discovery half of it is implemented for T5; nothing is implemented for T1–T4/T6.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Spec vs. code, before / after</h2></div>
+      <p class="sec-intro">Two-column compare for each of the three fixes.</p>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:18px;color:var(--slate);margin:18px 0 10px">Fix 1 — Tier-keyed scan radius</h3>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Current code</div>
+          <div class="col-body"><ul>
+            <li><code>DRONE_SCAN_RADIUS_TILES = 8</code> (single constant) at <code>drones.ts:86</code>.</li>
+            <li>Used uniformly for T1, T2, T3, T4, T6 at <code>drones.ts:376</code> via the ternary <code>isPathDrawn ? DRONE_T5_SCAN_RADIUS_TILES : DRONE_SCAN_RADIUS_TILES</code>.</li>
+            <li>Tier-pick is decoupled from scan width — only range (<code>DRONE_TIER_EFFICIENCY</code>) and weather vulnerability (<code>DRONE_TIER_MULTIPLIERS</code>) scale with tier.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After</div>
+          <div class="col-body"><ul>
+            <li>New <code>DRONE_TIER_SCAN_RADIUS: Record&lt;DroneTier, number&gt;</code> next to the existing tier tables.</li>
+            <li>T1 = 2, T2 = 4, T3 = 8, T4 = 0 (pulse; unused), T5 = 12 (existing), T6 = 16 (proposed; needs approval).</li>
+            <li>Dispatch reads the per-tier value; multiplies by <code>originSkill.droneScanRadius</code> as today.</li>
+          </ul></div>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:18px;color:var(--slate);margin:28px 0 10px">Fix 2 — Corridor-cell buffer + flush</h3>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Current code</div>
+          <div class="col-body"><ul>
+            <li>T1–T4/T6 branch at <code>drones.ts:674-684</code>: each corridor cell is added to <code>world.revealedCells</code> only if <code>pointInSignalRange(ranges, center.x, center.y)</code> at that moment.</li>
+            <li>Out-of-range cells: silently dropped. No buffer. No return-trip flush.</li>
+            <li>T5 branch at <code>drones.ts:663-671</code>: same per-cell antenna check applies even though the island-discovery side has dark-mode buffering.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After</div>
+          <div class="col-body"><ul>
+            <li>New <code>scanBuffer: Set&lt;string&gt;</code> field on the <code>Drone</code> interface (cell keys).</li>
+            <li>Per-tick: every corridor cell joins <code>scanBuffer</code> unconditionally.</li>
+            <li>Flush rule A: when the drone is in any antenna's range at tick end, drain <code>scanBuffer</code> + <code>darkModeDiscoveries</code> into <code>world.revealedCells</code> / island.<code>discovered</code>; clear buffers.</li>
+            <li>Flush rule B: when the drone status transitions to <code>'returned'</code>, drain unconditionally (origin antenna may or may not exist — both cases handled).</li>
+            <li>Status <code>'lost'</code> (destroyed by weather): buffer discarded with the drone. Matches spec: <em>"all that data is lost"</em> (SPEC.md:1237).</li>
+            <li>The T5 island branch's existing in-range / out-of-range split is replaced by this unified logic; the island-discovery and cell-reveal sides become two views of the same buffer-and-flush pipeline.</li>
+          </ul></div>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:18px;color:var(--slate);margin:28px 0 10px">Fix 3 — No-antenna case</h3>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Current code</div>
+          <div class="col-body"><ul>
+            <li>If no populated island has antennas in range of the corridor, <code>pointInSignalRange</code> returns false for every cell, every tick.</li>
+            <li>Result: drone flies, returns, and reveals nothing — even though it scanned a corridor.</li>
+            <li>No code path acknowledges this — the case is just the worst slice of bug 2.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After</div>
+          <div class="col-body"><ul>
+            <li>Falls out of Fix 2 with zero additional code. Drone always buffers; flushes on return; if no antenna ever helps, the return-flush still drains.</li>
+            <li>Tested explicitly: launch from an island with no antennas, no neighbours with antennas, fly out, return → buffered cells appear in <code>world.revealedCells</code>.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file touched, and the precise change.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/drones.ts:86</div>
+          <div class="what"><span class="lead">Replace single constant with per-tier table.</span> Delete <code>DRONE_SCAN_RADIUS_TILES</code>; introduce <code>DRONE_TIER_SCAN_RADIUS: Record&lt;DroneTier, number&gt;</code> with values 2 / 4 / 8 / 0 / 12 / 16 (T1-T6). Keep <code>DRONE_T5_SCAN_RADIUS_TILES = 12</code> as an alias for back-compat with any external readers (none expected; safe to delete if grep clean).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/drones.ts:376</div>
+          <div class="what"><span class="lead">Use the table at dispatch.</span> Replace the ternary with <code>const baseRadius = DRONE_TIER_SCAN_RADIUS[resolvedTier]</code> followed by the <code>* originSkill.droneScanRadius</code> multiplication.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/drones.ts (Drone interface, ~line 50-76)</div>
+          <div class="what"><span class="lead">Add scan buffer field.</span> Add <code>scanBuffer: Set&lt;string&gt;</code> alongside the existing <code>darkModeDiscoveries</code>. Initialised to an empty Set at dispatch (alongside <code>darkMode: false</code> / <code>darkModeDiscoveries: []</code> in <code>dispatchDrone</code>).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/drones.ts:558-688 (advanceDrones tick loop)</div>
+          <div class="what"><span class="lead">Replace per-cell antenna check with buffer-and-flush.</span> Inside the per-tick corridor loop, every cell goes into <code>d.scanBuffer</code> unconditionally. After corridor computation, check if the drone's current position is in any antenna range: if yes, drain buffer to <code>world.revealedCells</code>, drain <code>darkModeDiscoveries</code> to island flips, clear both. The T5 / non-T5 branches collapse — same logic runs for both. The existing T5 dark-mode island buffer is preserved as the island-discovery side; the new <code>scanBuffer</code> is its cell-reveal twin.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/drones.ts (return-status transition, ~line 740-770)</div>
+          <div class="what"><span class="lead">Flush on return.</span> When a drone reaches <code>'returned'</code> status, drain <code>scanBuffer</code> and <code>darkModeDiscoveries</code> into world state regardless of current antenna range. Drone destroyed (status <code>'lost'</code>): buffers garbage-collected with the drone.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">Schema bump v12 → v13.</span> Add <code>scanBuffer: ReadonlyArray&lt;string&gt;</code> to <code>SerializedDroneV13</code> (serialised as array, deserialised into Set). Write <code>migrateV12toV13</code> that defaults <code>scanBuffer: []</code> on every in-flight drone. Extend <code>SUPPORTED_LOAD_VERSIONS</code> to include 12 and 13.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/drones.test.ts</div>
+          <div class="what"><span class="lead">New tests.</span> (a) Per-tier scan radius: dispatch T1/T2/T3/T5/T6 drones; assert <code>d.scanRadius</code> equals 2/4/8/12/16 × skill. (b) Buffer mechanic: launch a T2 drone out of antenna range; advance to mid-flight; assert <code>scanBuffer.size &gt; 0</code> and <code>revealedCells.size === 0</code>; advance to return; assert <code>scanBuffer.size === 0</code> and <code>revealedCells</code> grew. (c) Re-entry flush: drone enters antenna range mid-flight; assert buffer drains. (d) Lost-in-dark: simulate weather loss in dark mode; assert buffer is gone. (e) No-antenna island: launch with no antennas anywhere; return; assert reveal. (f) Existing T5 island-dark-mode tests still pass.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.test.ts</div>
+          <div class="what"><span class="lead">Migration tests.</span> v12 fixture (with in-flight drone, no <code>scanBuffer</code> field) loads cleanly as v13 with empty <code>scanBuffer</code>. v13 round-trip identity test with a drone whose <code>scanBuffer</code> has 3 cells.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Reference data — per-tier scan radius</h2></div>
+      <p class="sec-intro">Final values that go into <code>DRONE_TIER_SCAN_RADIUS</code>.</p>
+      <table class="tbl">
+        <thead><tr><th>Tier</th><th>Scan radius (tiles)</th><th>Source</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">T1</td><td>2</td><td>user-locked</td><td>Cheap entry scout; narrow per SPEC §2.2.</td></tr>
+          <tr><td class="slate">T2</td><td>4</td><td>user-locked</td><td>Modest per SPEC §2.2; doubling from T1.</td></tr>
+          <tr><td class="slate">T3</td><td>8</td><td>user-locked</td><td>Wider per SPEC §2.2 / §11.5 ("2W"); doubling from T2.</td></tr>
+          <tr><td class="slate">T4</td><td>—</td><td>n/a</td><td>Omnidirectional pulse; uses <code>T4_PULSE_RADIUS_TILES = 48</code> (drones.ts:152), not a corridor. The slot in the table can be 0 / unused.</td></tr>
+          <tr><td class="slate">T5</td><td>12</td><td>existing</td><td>Already in code as <code>DRONE_T5_SCAN_RADIUS_TILES = 12</code> (drones.ts:91). Path-drawn drone; preserve.</td></tr>
+          <tr><td class="slate">T6</td><td>16</td><td><strong>proposed — needs approval</strong></td><td>SPEC doesn't quantify T6 scan corridor; previously fell back to the old constant 8. Proposed value 16 continues the ladder past T3 while staying conservative vs. T5=12 (different tier shape). See approval question below.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="question">
+        <div class="qt">Open question</div>
+        <div class="qb"><strong>T6 scan radius — pick.</strong> SPEC §11.5 only enumerates T1–T5 (T6 antimatter-fuel tier exists in the type but isn't quantified for scan corridor). Options: <strong>16</strong> (proposed, doubling-style extension), <strong>12</strong> (match T5), <strong>24</strong> (doubling from T5), <strong>other</strong>.</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Verification</h2></div>
+      <p class="sec-intro">Commands the implementer runs to confirm the change.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm test.</strong> All existing tests pass. New tests in <code>drones.test.ts</code> + <code>persistence.test.ts</code> green.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npx vitest run -t "scan radius per tier".</strong> Per-tier values match the table in §04.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npx vitest run -t "scanBuffer flush on return".</strong> Buffer mechanic works end-to-end without an antenna.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npx vitest run -t "v12 to v13".</strong> Migration round-trips cleanly.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm run build.</strong> tsc strict + noUncheckedIndexedAccess clean; no unused locals from the constant cleanup.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke (Daedalus).</strong> Open <code>https://islands.nitjsefni.eu/</code>, launch a T1 drone with no antennas on the origin island, wait for return, confirm corridor cells appear in the fog-of-war.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">T1 / T2 scouts get narrower scan corridors (was 8 for everyone; now 2 / 4). Players who relied on T1's wide scout will see a behaviour change.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Pre-release game, user knows. Spec intends tier diversity; this fix restores it. Player can dispatch a T3 if they want the prior corridor width.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Saves at v12 with in-flight drones load as v13 with empty <code>scanBuffer</code> — any cells the drone scanned pre-load are not recoverable.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Pre-fix, those cells were silently dropped anyway. Migration is no worse than current.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Buffer-flush logic added to per-tick path. Performance impact if a drone scans 1000s of cells over a long flight.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Set operations are O(1) per insert. Worst case is a T5 path drone covering thousands of cells — Set + flush is still &lt; 1ms per drone per tick. No new allocations per cell.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Test fixture for migration grows v12 → v13.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Per AGENTS.md "bump = migrate" — fixture growth is expected.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Explicitly deferred — named so the reader knows it was considered, not missed.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Skill-tree rebalance</div>
+          <div class="dd">Will resume after this ships. The pool picker at <code>docs.nitjsefni.eu/d/robot-islands/2026-05-25-skilltree-rebalance-pools</code> is paused; <code>commRangeMul</code> / <code>droneScanRadiusMul</code> caps get re-sized in that brainstorm with the honest base values.</dd>
+        </div>
+        <div class="defer">
+          <div class="dt">Graft-socket system</div>
+          <div class="dd">Paused; per-tier scan radius is unrelated.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Scanner Sat dark-mode mitigation for T5 path drones</div>
+          <div class="dd">SPEC.md:1633 mentions partial mitigation when Scanner Sat coverage overlaps a path drone's planned route. Out of scope; current code doesn't implement this either. Captured as a future audit item.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">T6 drone gameplay (beyond scan radius)</div>
+          <div class="dd">T6 drones exist as a type but the spec only enumerates T1-T5 for §11.5 mechanics. Picking a scan radius doesn't imply implementing T6 launch UX, fuel ramp, etc.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · drone scan rework v1 · 2026-05-25 · sources: <code>SPEC.md §2.2 (93-111)</code>, <code>SPEC.md §11.5-§11.6 (1216-1253)</code>, <code>src/drones.ts:50-688</code>, <code>src/antenna.ts</code> (<code>computeSignalRanges</code> / <code>pointInSignalRange</code>) · gap surfaced during skill-tree rebalance brainstorm.</p>
+    </div>
+
+  </div>
+</body>
+</html>

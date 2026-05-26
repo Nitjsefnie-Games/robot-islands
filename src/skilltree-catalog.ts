@@ -31,7 +31,7 @@ export const MINING_NOTABLES: RawSkillNode[] = [
     depth: 3,
     cost: 3,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Efficient Drillheads — Mines consume power'
+    description: 'Efficient Drillheads — reduces mine power consumption'
   },
   {
     id: 'mining.notable.blastOptimization' as NodeId,
@@ -113,7 +113,7 @@ export const DRILLING_NOTABLES: RawSkillNode[] = [
     depth: 6,
     cost: 6,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Deep-bore Thermals — drill-type mines consume power',
+    description: 'Deep-bore Thermals — reduces drill-type mine power consumption',
     aura: { radius: 2, bonus: 0.12 }
   },
 ];
@@ -175,7 +175,7 @@ export const SMELTING_NOTABLES: RawSkillNode[] = [
     depth: 5,
     cost: 5,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Heat Recapture — smelters consume power'
+    description: 'Heat Recapture — reduces smelter power consumption'
   },
   {
     id: 'smelting.notable.refractoryLining' as NodeId,
@@ -212,7 +212,7 @@ export const CHEMISTRY_NOTABLES: RawSkillNode[] = [
     depth: 5,
     cost: 5,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Pressurized Reactors — chemistry plants consume power'
+    description: 'Pressurized Reactors — reduces chemistry plant power consumption'
   },
   {
     id: 'chemistry.notable.greenChemistry' as NodeId,
@@ -249,7 +249,7 @@ export const ELECTRONICS_NOTABLES: RawSkillNode[] = [
     depth: 5,
     cost: 5,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Low-Power Design — electronics plants consume power'
+    description: 'Low-Power Design — reduces electronics plant power consumption'
   },
   {
     id: 'electronics.notable.satBandwidth' as NodeId,
@@ -286,7 +286,7 @@ export const POWER_SYSTEMS_NOTABLES: RawSkillNode[] = [
     depth: 5,
     cost: 5,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Smart Grid — power consumers draw'
+    description: 'Smart Grid — reduces power consumption'
   },
   // Structural deviation: power_systems is the first sub-path with 5 notables
   // (vs. the 4-per-sub-path convention). batteryCapacityMul is a high-impact
@@ -529,7 +529,7 @@ export const HYDROPROCESSING_NOTABLES: RawSkillNode[] = [
     depth: 5,
     cost: 5,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Osmotic Pump — hydro plants consume power'
+    description: 'Osmotic Pump — reduces hydro plant power consumption'
   },
   {
     id: 'hydroprocessing.notable.floatingTanks' as NodeId,
@@ -785,17 +785,17 @@ export const ROLE_ABSORPTION_KEYSTONES: RawSkillNode[] = [
   {
     id: 'smelting.keystone.foundryMastery' as NodeId,
     subPath: 'smelting', depth: 8, cost: 10, effect: { kind: 'recipeRateMul', category: 'smelting' },
-    description: 'Foundry Mastery — All smelters operate at rate (absorbs §9.4 Foundry role)'
+    description: 'Foundry Mastery — All smelters operate faster (absorbs §9.4 Foundry role)'
   },
   {
     id: 'chemistry.keystone.refineryMastery' as NodeId,
     subPath: 'chemistry', depth: 8, cost: 10, effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Refinery Mastery — All chemistry plants operate at rate (absorbs §9.4 Refinery role)'
+    description: 'Refinery Mastery — All chemistry plants operate faster (absorbs §9.4 Refinery role)'
   },
   {
     id: 'mining.keystone.veinmaster' as NodeId,
     subPath: 'mining', depth: 8, cost: 12, effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Veinmaster — All mines operate at extraction rate (absorbs §9.4 Veinmaster role)'
+    description: 'Veinmaster — All mines operate faster (absorbs §9.4 Veinmaster role)'
   },
   {
     id: 'transport.keystone.hubCapacity' as NodeId,
@@ -805,12 +805,12 @@ export const ROLE_ABSORPTION_KEYSTONES: RawSkillNode[] = [
   {
     id: 'storage.keystone.masterCache' as NodeId,
     subPath: 'storage', depth: 8, cost: 10, effect: { kind: 'storageCapMul' },
-    description: 'Master Cache — All storage caps (absorbs §9.4 Cache role)'
+    description: 'Master Cache — All storage caps expanded (absorbs §9.4 Cache role)'
   },
   {
     id: 'power_systems.keystone.researchBeacon' as NodeId,
     subPath: 'power_systems', depth: 8, cost: 10, effect: { kind: 'xpGainMul' },
-    description: 'Research Beacon — All XP gain (absorbs §9.4 Beacon role)'
+    description: 'Research Beacon — All XP gain boosted (absorbs §9.4 Beacon role)'
   },
 ];
 
