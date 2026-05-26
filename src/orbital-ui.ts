@@ -589,7 +589,7 @@ export function mountOrbitalUi(
 
   const modal: ModalHandle = mountModal(parentEl, {
     title: 'T6 Orbital Launch',
-    subtitle: '§14.2-14.7 satellite dispatch',
+    subtitle: 'satellite dispatch',
     buildBody(body) {
       bodyEl = body;
       bodyEl.style.cssText = `

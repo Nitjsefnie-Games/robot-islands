@@ -785,32 +785,32 @@ export const ROLE_ABSORPTION_KEYSTONES: RawSkillNode[] = [
   {
     id: 'smelting.keystone.foundryMastery' as NodeId,
     subPath: 'smelting', depth: 8, cost: 10, effect: { kind: 'recipeRateMul', category: 'smelting' },
-    description: 'Foundry Mastery — All smelters operate faster (absorbs §9.4 Foundry role)'
+    description: 'Foundry Mastery — All smelters operate faster'
   },
   {
     id: 'chemistry.keystone.refineryMastery' as NodeId,
     subPath: 'chemistry', depth: 8, cost: 10, effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Refinery Mastery — All chemistry plants operate faster (absorbs §9.4 Refinery role)'
+    description: 'Refinery Mastery — All chemistry plants operate faster'
   },
   {
     id: 'mining.keystone.veinmaster' as NodeId,
     subPath: 'mining', depth: 8, cost: 12, effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Veinmaster — All mines operate faster (absorbs §9.4 Veinmaster role)'
+    description: 'Veinmaster — All mines operate faster'
   },
   {
     id: 'transport.keystone.hubCapacity' as NodeId,
     subPath: 'transport', depth: 8, cost: 10, effect: { kind: 'routeCapacityMul' },
-    description: 'Hub Capacity — route capacity (absorbs §9.4 Logistics role)'
+    description: 'Hub Capacity — Routes carry more per batch'
   },
   {
     id: 'storage.keystone.masterCache' as NodeId,
     subPath: 'storage', depth: 8, cost: 10, effect: { kind: 'storageCapMul' },
-    description: 'Master Cache — All storage caps expanded (absorbs §9.4 Cache role)'
+    description: 'Master Cache — All storage caps expanded'
   },
   {
     id: 'power_systems.keystone.researchBeacon' as NodeId,
     subPath: 'power_systems', depth: 8, cost: 10, effect: { kind: 'xpGainMul' },
-    description: 'Research Beacon — All XP gain boosted (absorbs §9.4 Beacon role)'
+    description: 'Research Beacon — All XP gain boosted'
   },
 ];
 
@@ -819,7 +819,7 @@ export const RULE_BREAKER_KEYSTONES: RawSkillNode[] = [
   {
     id: 'robotics.keystone.parallelConstruction' as NodeId,
     subPath: 'robotics', depth: 7, cost: 8, effect: { kind: 'structural', description: 'Parallel Construction +1 slot', data: { kind: 'parallelConstruction', bonus: 1 } },
-    description: 'Parallel Construction — +1 concurrent build slot (structural rewrite)'
+    description: 'Parallel Construction — +1 concurrent build slot'
   },
   {
     id: 'forestry.keystone.charcoalUnlock' as NodeId,

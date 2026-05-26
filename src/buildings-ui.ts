@@ -108,7 +108,7 @@ export function mountBuildingsUi(
 
   const handle = mountModal(parentEl, {
     title: 'BUILDINGS',
-    subtitle: '§8 / catalog',
+    subtitle: 'catalog',
     onClose: () => handle.hide(),
     buildFilters(filters) {
       const filterLabel = document.createElement('span');
@@ -235,7 +235,7 @@ export function mountBuildingsUi(
       footerL.textContent = 'click a card to place · T rotates · esc cancels';
       footerL.className = 'ri-muted';
       const footerR = document.createElement('span');
-      footerR.textContent = 'tiers gate by island level · §9.2';
+      footerR.textContent = 'tiers gate by island level';
       footerR.className = 'ri-muted';
       footer.prepend(footerL);
       footer.appendChild(footerR);
