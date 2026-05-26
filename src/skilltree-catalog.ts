@@ -1,172 +1,157 @@
 import type { SkillNode, NodeId, BranchId } from './skilltree.js';
 import type { KeystonePrereq, BridgeEdge, GraftSocket } from './skilltree-graph.js';
-import { ALL_FILLER_NODES } from './skilltree-archetypes.js';
+import { ALL_FILLER_NODES, ALL_ARCHETYPE_PREFIXES } from './skilltree-archetypes.js';
+import { deriveMagnitudes, type RawSkillNode } from './skilltree-derive-magnitudes.js';
 
 // ---------------------------------------------------------------------------
 // Extraction branch
 // ---------------------------------------------------------------------------
 
-export const MINING_NOTABLES: SkillNode[] = [
+export const MINING_NOTABLES: RawSkillNode[] = [
   {
     id: 'mining.notable.deepVein' as NodeId,
     subPath: 'mining',
     depth: 4,
     cost: 4,
-    magnitude: 0.0625,
     effect: { kind: 'mineYieldBonusMul' },
-    description: 'Deep Vein Surveying — ×1.0625 mine yield per Mine',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Deep Vein Surveying — mine yield per Mine',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'mining.notable.heliumSeep' as NodeId,
     subPath: 'mining',
     depth: 5,
     cost: 5,
-    magnitude: 0.2915,
     effect: { kind: 'mineRareTrickleMul' },
-    description: 'Helium Seep Detection — ×1.2915 helium-3 trickle from Mines',
+    description: 'Helium Seep Detection — helium-3 trickle from Mines'
   },
   {
     id: 'mining.notable.efficientDrills' as NodeId,
     subPath: 'mining',
     depth: 3,
     cost: 3,
-    magnitude: 0.0316,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Efficient Drillheads — Mines consume ×1.0316 power',
+    description: 'Efficient Drillheads — Mines consume power'
   },
   {
     id: 'mining.notable.blastOptimization' as NodeId,
     subPath: 'mining',
     depth: 6,
     cost: 6,
-    magnitude: 0.0248,
     effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Blast Optimization — ×1.0248 extraction recipe rate',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Blast Optimization — extraction recipe rate',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const FORESTRY_NOTABLES: SkillNode[] = [
+export const FORESTRY_NOTABLES: RawSkillNode[] = [
   {
     id: 'forestry.notable.selectiveHarvest' as NodeId,
     subPath: 'forestry',
     depth: 4,
     cost: 4,
-    magnitude: 0.1788,
     effect: { kind: 'loggerYieldBonusMul' },
-    description: 'Selective Harvesting — ×1.1788 logger yield per Logger',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Selective Harvesting — logger yield per Logger',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'forestry.notable.exoticInoculation' as NodeId,
     subPath: 'forestry',
     depth: 5,
     cost: 5,
-    magnitude: 0.5849,
     effect: { kind: 'loggerExoticTrickleMul' },
-    description: 'Exotic Inoculation — ×1.5849 exotic-species trickle from Loggers',
+    description: 'Exotic Inoculation — exotic-species trickle from Loggers'
   },
   {
     id: 'forestry.notable.clearcutCoordination' as NodeId,
     subPath: 'forestry',
     depth: 3,
     cost: 3,
-    magnitude: 0.0248,
     effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Clear-cut Coordination — ×1.0248 extraction recipe rate',
+    description: 'Clear-cut Coordination — extraction recipe rate'
   },
   {
     id: 'forestry.notable.silvicultureHub' as NodeId,
     subPath: 'forestry',
     depth: 6,
     cost: 6,
-    magnitude: 0.0537,
     effect: { kind: 'storageCategoryCapMul', category: 'dry_goods' },
-    description: 'Silviculture Hub — ×1.0537 dry-goods storage cap',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Silviculture Hub — dry-goods storage cap',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const DRILLING_NOTABLES: SkillNode[] = [
+export const DRILLING_NOTABLES: RawSkillNode[] = [
   {
     id: 'drilling.notable.pressurizedRecovery' as NodeId,
     subPath: 'drilling',
     depth: 4,
     cost: 4,
-    magnitude: 0.0248,
     effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Pressurized Recovery — ×1.0248 extraction recipe rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Pressurized Recovery — extraction recipe rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'drilling.notable.reservoirMapping' as NodeId,
     subPath: 'drilling',
     depth: 5,
     cost: 5,
-    magnitude: 0.0625,
     effect: { kind: 'mineYieldBonusMul' },
-    description: 'Reservoir Mapping — ×1.0625 yield from drill-type mines',
+    description: 'Reservoir Mapping — yield from drill-type mines'
   },
   {
     id: 'drilling.notable.subseaTanks' as NodeId,
     subPath: 'drilling',
     depth: 3,
     cost: 3,
-    magnitude: 0.0746,
     effect: { kind: 'storageCategoryCapMul', category: 'liquid_gas' },
-    description: 'Subsea Tanks — ×1.0746 liquid-gas storage cap',
+    description: 'Subsea Tanks — liquid-gas storage cap'
   },
   {
     id: 'drilling.notable.deepBore' as NodeId,
     subPath: 'drilling',
     depth: 6,
     cost: 6,
-    magnitude: 0.0316,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Deep-bore Thermals — drill-type mines consume ×1.0316 power',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Deep-bore Thermals — drill-type mines consume power',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const ROBOTICS_NOTABLES: SkillNode[] = [
+export const ROBOTICS_NOTABLES: RawSkillNode[] = [
   {
     id: 'robotics.notable.swarmAssembly' as NodeId,
     subPath: 'robotics',
     depth: 4,
     cost: 4,
-    magnitude: 0.3335,
     effect: { kind: 'constructionTimeMul' },
-    description: 'Swarm Assembly — ×1.3335 faster construction',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Swarm Assembly — faster construction',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'robotics.notable.parallelFoundries' as NodeId,
     subPath: 'robotics',
     depth: 5,
     cost: 5,
-    magnitude: 0.667,
     effect: { kind: 'parallelBuildCapAdd' },
-    description: 'Parallel Foundries — ×1.6670 parallel build slots',
+    description: 'Parallel Foundries — parallel build slots'
   },
   {
     id: 'robotics.notable.droneOptics' as NodeId,
     subPath: 'robotics',
     depth: 3,
     cost: 3,
-    magnitude: 0.1288,
     effect: { kind: 'droneScanRadiusMul' },
-    description: 'Drone Optics Upgrade — ×1.1288 drone scan radius',
+    description: 'Drone Optics Upgrade — drone scan radius'
   },
   {
     id: 'robotics.notable.biofuelCell' as NodeId,
     subPath: 'robotics',
     depth: 6,
     cost: 6,
-    magnitude: 0.1548,
     effect: { kind: 'droneFuelEfficiencyMul' },
-    description: 'Biofuel Cells — ×1.1548 drone fuel efficiency',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Biofuel Cells — drone fuel efficiency',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
@@ -174,148 +159,134 @@ export const ROBOTICS_NOTABLES: SkillNode[] = [
 // Refinement branch
 // ---------------------------------------------------------------------------
 
-export const SMELTING_NOTABLES: SkillNode[] = [
+export const SMELTING_NOTABLES: RawSkillNode[] = [
   {
     id: 'smelting.notable.inductionArc' as NodeId,
     subPath: 'smelting',
     depth: 4,
     cost: 4,
-    magnitude: 0.2328,
     effect: { kind: 'recipeRateMul', category: 'smelting' },
-    description: 'Induction Arc — ×1.2328 smelting recipe rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Induction Arc — smelting recipe rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'smelting.notable.heatRecapture' as NodeId,
     subPath: 'smelting',
     depth: 5,
     cost: 5,
-    magnitude: 0.0316,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Heat Recapture — smelters consume ×1.0316 power',
+    description: 'Heat Recapture — smelters consume power'
   },
   {
     id: 'smelting.notable.refractoryLining' as NodeId,
     subPath: 'smelting',
     depth: 3,
     cost: 3,
-    magnitude: 0.1220,
     effect: { kind: 'maintenanceThresholdMul' },
-    description: 'Refractory Lining — ×1.1220 maintenance threshold for smelters',
+    description: 'Refractory Lining — maintenance threshold for smelters'
   },
   {
     id: 'smelting.notable.alloyTolerance' as NodeId,
     subPath: 'smelting',
     depth: 6,
     cost: 6,
-    magnitude: 0.2328,
     effect: { kind: 'recipeRateMul', category: 'smelting' },
-    description: 'Alloy Tolerance — ×1.2328 smelting recipe rate',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Alloy Tolerance — smelting recipe rate',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const CHEMISTRY_NOTABLES: SkillNode[] = [
+export const CHEMISTRY_NOTABLES: RawSkillNode[] = [
   {
     id: 'chemistry.notable.catalyticCracking' as NodeId,
     subPath: 'chemistry',
     depth: 4,
     cost: 4,
-    magnitude: 0.1103,
     effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Catalytic Cracking — ×1.1103 chemistry recipe rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Catalytic Cracking — chemistry recipe rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'chemistry.notable.pressurizedReactors' as NodeId,
     subPath: 'chemistry',
     depth: 5,
     cost: 5,
-    magnitude: 0.0316,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Pressurized Reactors — chemistry plants consume ×1.0316 power',
+    description: 'Pressurized Reactors — chemistry plants consume power'
   },
   {
     id: 'chemistry.notable.greenChemistry' as NodeId,
     subPath: 'chemistry',
     depth: 3,
     cost: 3,
-    magnitude: 0.0746,
     effect: { kind: 'storageCategoryCapMul', category: 'liquid_gas' },
-    description: 'Green Chemistry — ×1.0746 liquid-gas storage cap',
+    description: 'Green Chemistry — liquid-gas storage cap'
   },
   {
     id: 'chemistry.notable.polymerMatrix' as NodeId,
     subPath: 'chemistry',
     depth: 6,
     cost: 6,
-    magnitude: 0.1103,
     effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Polymer Matrix — ×1.1103 chemistry recipe rate',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Polymer Matrix — chemistry recipe rate',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const ELECTRONICS_NOTABLES: SkillNode[] = [
+export const ELECTRONICS_NOTABLES: RawSkillNode[] = [
   {
     id: 'electronics.notable.cleanRoom' as NodeId,
     subPath: 'electronics',
     depth: 4,
     cost: 4,
-    magnitude: 0.2328,
     effect: { kind: 'recipeRateMul', category: 'electronics' },
-    description: 'Clean Room — ×1.2328 electronics recipe rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Clean Room — electronics recipe rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'electronics.notable.lowPowerDesign' as NodeId,
     subPath: 'electronics',
     depth: 5,
     cost: 5,
-    magnitude: 0.0316,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Low-Power Design — electronics plants consume ×1.0316 power',
+    description: 'Low-Power Design — electronics plants consume power'
   },
   {
     id: 'electronics.notable.satBandwidth' as NodeId,
     subPath: 'electronics',
     depth: 3,
     cost: 3,
-    magnitude: 0.1365,
     effect: { kind: 'satBufferCapMul' },
-    description: 'Sat Bandwidth — ×1.1365 satellite buffer capacity',
+    description: 'Sat Bandwidth — satellite buffer capacity'
   },
   {
     id: 'electronics.notable.quantumEtching' as NodeId,
     subPath: 'electronics',
     depth: 6,
     cost: 6,
-    magnitude: 0.2328,
     effect: { kind: 'recipeRateMul', category: 'electronics' },
-    description: 'Quantum Etching — ×1.2328 electronics recipe rate',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Quantum Etching — electronics recipe rate',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const POWER_SYSTEMS_NOTABLES: SkillNode[] = [
+export const POWER_SYSTEMS_NOTABLES: RawSkillNode[] = [
   {
     id: 'power_systems.notable.turbineStaging' as NodeId,
     subPath: 'power_systems',
     depth: 4,
     cost: 4,
-    magnitude: 0.0701,
     effect: { kind: 'powerProductionMul' },
-    description: 'Turbine Staging — ×1.0701 power production',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Turbine Staging — power production',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'power_systems.notable.smartGrid' as NodeId,
     subPath: 'power_systems',
     depth: 5,
     cost: 5,
-    magnitude: 0.0316,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Smart Grid — power consumers draw ×1.0316',
+    description: 'Smart Grid — power consumers draw'
   },
   // Structural deviation: power_systems is the first sub-path with 5 notables
   // (vs. the 4-per-sub-path convention). batteryCapacityMul is a high-impact
@@ -327,28 +298,25 @@ export const POWER_SYSTEMS_NOTABLES: SkillNode[] = [
     subPath: 'power_systems',
     depth: 5,
     cost: 5,
-    magnitude: 0.2915,
     effect: { kind: 'batteryCapacityMul' },
-    description: 'Electrochemistry Lab — ×1.2915 battery capacity (all tiers)',
+    description: 'Electrochemistry Lab — battery capacity (all tiers)'
   },
   {
     id: 'power_systems.notable.xpTelemetry' as NodeId,
     subPath: 'power_systems',
     depth: 3,
     cost: 3,
-    magnitude: 0.1699,
     effect: { kind: 'xpGainMul' },
-    description: 'XP Telemetry — ×1.1699 XP gain',
+    description: 'XP Telemetry — XP gain'
   },
   {
     id: 'power_systems.notable.fusionPilot' as NodeId,
     subPath: 'power_systems',
     depth: 6,
     cost: 6,
-    magnitude: 0.0701,
     effect: { kind: 'powerProductionMul' },
-    description: 'Fusion Pilot — ×1.0701 power production',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Fusion Pilot — power production',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
@@ -356,167 +324,151 @@ export const POWER_SYSTEMS_NOTABLES: SkillNode[] = [
 // Logistics branch
 // ---------------------------------------------------------------------------
 
-export const STORAGE_NOTABLES: SkillNode[] = [
+export const STORAGE_NOTABLES: RawSkillNode[] = [
   {
     id: 'storage.notable.verticalSilo' as NodeId,
     subPath: 'storage',
     depth: 4,
     cost: 4,
-    magnitude: 0.0746,
     effect: { kind: 'storageCapMul' },
-    description: 'Vertical Silos — ×1.0746 uniform storage cap',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Vertical Silos — uniform storage cap',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'storage.notable.vaultClimate' as NodeId,
     subPath: 'storage',
     depth: 5,
     cost: 5,
-    magnitude: 0.1548,
     effect: { kind: 'storageCategoryCapMul', category: 'rare' },
-    description: 'Vault Climate Control — ×1.1548 rare-materials storage cap',
+    description: 'Vault Climate Control — rare-materials storage cap'
   },
   {
     id: 'storage.notable.componentRacks' as NodeId,
     subPath: 'storage',
     depth: 3,
     cost: 3,
-    magnitude: 0.1548,
     effect: { kind: 'storageCategoryCapMul', category: 'components' },
-    description: 'Component Racks — ×1.1548 component storage cap',
+    description: 'Component Racks — component storage cap'
   },
   {
     id: 'storage.notable.predictiveMaintenance' as NodeId,
     subPath: 'storage',
     depth: 6,
     cost: 6,
-    magnitude: 0.1220,
     effect: { kind: 'maintenanceThresholdMul' },
-    description: 'Predictive Maintenance — ×1.1220 maintenance threshold',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Predictive Maintenance — maintenance threshold',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const TRANSPORT_NOTABLES: SkillNode[] = [
+export const TRANSPORT_NOTABLES: RawSkillNode[] = [
   {
     id: 'transport.notable.heavyHaul' as NodeId,
     subPath: 'transport',
     depth: 4,
     cost: 4,
-    magnitude: 0.1103,
     effect: { kind: 'routeCapacityMul' },
-    description: 'Heavy Haul — ×1.1103 route capacity',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Heavy Haul — route capacity',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'transport.notable.jetStream' as NodeId,
     subPath: 'transport',
     depth: 5,
     cost: 5,
-    magnitude: 0.2115,
     effect: { kind: 'airshipRangeMul' },
-    description: 'Jet Stream Routing — ×1.2115 airship range',
+    description: 'Jet Stream Routing — airship range'
   },
   {
     id: 'transport.notable.droneSwarmLogistics' as NodeId,
     subPath: 'transport',
     depth: 3,
     cost: 3,
-    magnitude: 0.1548,
     effect: { kind: 'droneFuelEfficiencyMul' },
-    description: 'Drone Swarm Logistics — ×1.1548 drone fuel efficiency',
+    description: 'Drone Swarm Logistics — drone fuel efficiency'
   },
   {
     id: 'transport.notable.supplyHub' as NodeId,
     subPath: 'transport',
     depth: 6,
     cost: 6,
-    magnitude: 0.1103,
     effect: { kind: 'routeCapacityMul' },
-    description: 'Supply Hub — ×1.1103 route capacity',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Supply Hub — route capacity',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const NETWORK_NOTABLES: SkillNode[] = [
+export const NETWORK_NOTABLES: RawSkillNode[] = [
   {
     id: 'network.notable.relayAmplifier' as NodeId,
     subPath: 'network',
     depth: 4,
     cost: 4,
-    magnitude: 0.0723,
     effect: { kind: 'commRangeMul' },
-    description: 'Relay Amplifier — ×1.0723 communication range',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Relay Amplifier — communication range',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'network.notable.teleporterCoil' as NodeId,
     subPath: 'network',
     depth: 5,
     cost: 5,
-    magnitude: 0.4678,
     effect: { kind: 'teleporterEfficiencyMul' },
-    description: 'Teleporter Coil — ×1.4678 teleporter efficiency',
+    description: 'Teleporter Coil — teleporter efficiency'
   },
   {
     id: 'network.notable.scannerUplink' as NodeId,
     subPath: 'network',
     depth: 3,
     cost: 3,
-    magnitude: 0.0746,
     effect: { kind: 'scannerCoverageMul' },
-    description: 'Scanner Uplink — ×1.0746 scanner coverage',
+    description: 'Scanner Uplink — scanner coverage'
   },
   {
     id: 'network.notable.meshNetwork' as NodeId,
     subPath: 'network',
     depth: 6,
     cost: 6,
-    magnitude: 0.0723,
     effect: { kind: 'commRangeMul' },
-    description: 'Mesh Network — ×1.0723 communication range',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Mesh Network — communication range',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const PATRONAGE_NOTABLES: SkillNode[] = [
+export const PATRONAGE_NOTABLES: RawSkillNode[] = [
   {
     id: 'patronage.notable.sponsorContracts' as NodeId,
     subPath: 'patronage',
     depth: 4,
     cost: 4,
-    magnitude: 0.0248,
     effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Sponsor Contracts — ×1.0248 extraction recipe rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Sponsor Contracts — extraction recipe rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'patronage.notable.curatorVaults' as NodeId,
     subPath: 'patronage',
     depth: 5,
     cost: 5,
-    magnitude: 0.1548,
     effect: { kind: 'storageCategoryCapMul', category: 'rare' },
-    description: 'Curator Vaults — ×1.1548 rare-materials storage cap',
+    description: 'Curator Vaults — rare-materials storage cap'
   },
   {
     id: 'patronage.notable.diplomaticChannels' as NodeId,
     subPath: 'patronage',
     depth: 3,
     cost: 3,
-    magnitude: 0.0723,
     effect: { kind: 'commRangeMul' },
-    description: 'Diplomatic Channels — ×1.0723 communication range',
+    description: 'Diplomatic Channels — communication range'
   },
   {
     id: 'patronage.notable.endowmentFund' as NodeId,
     subPath: 'patronage',
     depth: 6,
     cost: 6,
-    magnitude: 0.2915,
     effect: { kind: 'recipeRateMul', category: 'manufacturing' },
-    description: 'Endowment Fund — ×1.2915 manufacturing recipe rate',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Endowment Fund — manufacturing recipe rate',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
@@ -524,167 +476,151 @@ export const PATRONAGE_NOTABLES: SkillNode[] = [
 // Ocean branch
 // ---------------------------------------------------------------------------
 
-export const AQUACULTURE_NOTABLES: SkillNode[] = [
+export const AQUACULTURE_NOTABLES: RawSkillNode[] = [
   {
     id: 'aquaculture.notable.kelpTowers' as NodeId,
     subPath: 'aquaculture',
     depth: 4,
     cost: 4,
-    magnitude: 0.0248,
     effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Kelp Towers — ×1.0248 extraction recipe rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Kelp Towers — extraction recipe rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'aquaculture.notable.brineConcentration' as NodeId,
     subPath: 'aquaculture',
     depth: 5,
     cost: 5,
-    magnitude: 0.0625,
     effect: { kind: 'mineYieldBonusMul' },
-    description: 'Brine Concentration — ×1.0625 yield from ocean extractors',
+    description: 'Brine Concentration — yield from ocean extractors'
   },
   {
     id: 'aquaculture.notable.dryStorageBarges' as NodeId,
     subPath: 'aquaculture',
     depth: 3,
     cost: 3,
-    magnitude: 0.0537,
     effect: { kind: 'storageCategoryCapMul', category: 'dry_goods' },
-    description: 'Dry-storage Barges — ×1.0537 dry-goods storage cap',
+    description: 'Dry-storage Barges — dry-goods storage cap'
   },
   {
     id: 'aquaculture.notable.maricultureGrid' as NodeId,
     subPath: 'aquaculture',
     depth: 6,
     cost: 6,
-    magnitude: 0.0248,
     effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Mariculture Grid — ×1.0248 extraction recipe rate',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Mariculture Grid — extraction recipe rate',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const HYDROPROCESSING_NOTABLES: SkillNode[] = [
+export const HYDROPROCESSING_NOTABLES: RawSkillNode[] = [
   {
     id: 'hydroprocessing.notable.desalinationCascade' as NodeId,
     subPath: 'hydroprocessing',
     depth: 4,
     cost: 4,
-    magnitude: 0.1103,
     effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Desalination Cascade — ×1.1103 chemistry recipe rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Desalination Cascade — chemistry recipe rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'hydroprocessing.notable.osmoticPump' as NodeId,
     subPath: 'hydroprocessing',
     depth: 5,
     cost: 5,
-    magnitude: 0.0316,
     effect: { kind: 'powerConsumptionMul', reduce: true },
-    description: 'Osmotic Pump — hydro plants consume ×1.0316 power',
+    description: 'Osmotic Pump — hydro plants consume power'
   },
   {
     id: 'hydroprocessing.notable.floatingTanks' as NodeId,
     subPath: 'hydroprocessing',
     depth: 3,
     cost: 3,
-    magnitude: 0.0746,
     effect: { kind: 'storageCapMul' },
-    description: 'Floating Tanks — ×1.0746 uniform storage cap',
+    description: 'Floating Tanks — uniform storage cap'
   },
   {
     id: 'hydroprocessing.notable.membraneBreakthrough' as NodeId,
     subPath: 'hydroprocessing',
     depth: 6,
     cost: 6,
-    magnitude: 0.1103,
     effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Membrane Breakthrough — ×1.1103 chemistry recipe rate',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Membrane Breakthrough — chemistry recipe rate',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const SUBMARINE_NOTABLES: SkillNode[] = [
+export const SUBMARINE_NOTABLES: RawSkillNode[] = [
   {
     id: 'submarine.notable.pressureHull' as NodeId,
     subPath: 'submarine',
     depth: 4,
     cost: 4,
-    magnitude: 0.1103,
     effect: { kind: 'routeCapacityMul' },
-    description: 'Pressure-hull Routing — ×1.1103 route capacity',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Pressure-hull Routing — route capacity',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'submarine.notable.thermalGradient' as NodeId,
     subPath: 'submarine',
     depth: 5,
     cost: 5,
-    magnitude: 0.0701,
     effect: { kind: 'powerProductionMul' },
-    description: 'Thermal-gradient Harvest — ×1.0701 power production',
+    description: 'Thermal-gradient Harvest — power production'
   },
   {
     id: 'submarine.notable.sonarMapping' as NodeId,
     subPath: 'submarine',
     depth: 3,
     cost: 3,
-    magnitude: 0.2115,
     effect: { kind: 'airshipRangeMul' },
-    description: 'Sonar Mapping — ×1.2115 airship range over ocean',
+    description: 'Sonar Mapping — airship range over ocean'
   },
   {
     id: 'submarine.notable.deepFreighter' as NodeId,
     subPath: 'submarine',
     depth: 6,
     cost: 6,
-    magnitude: 0.1103,
     effect: { kind: 'routeCapacityMul' },
-    description: 'Deep Freighter — ×1.1103 route capacity',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Deep Freighter — route capacity',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const OCEANOGRAPHY_NOTABLES: SkillNode[] = [
+export const OCEANOGRAPHY_NOTABLES: RawSkillNode[] = [
   {
     id: 'oceanography.notable.buoyArray' as NodeId,
     subPath: 'oceanography',
     depth: 4,
     cost: 4,
-    magnitude: 0.0746,
     effect: { kind: 'scannerCoverageMul' },
-    description: 'Buoy Array — ×1.0746 scanner coverage',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Buoy Array — scanner coverage',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'oceanography.notable.seafloorCable' as NodeId,
     subPath: 'oceanography',
     depth: 5,
     cost: 5,
-    magnitude: 0.0723,
     effect: { kind: 'commRangeMul' },
-    description: 'Seafloor Cable — ×1.0723 communication range',
+    description: 'Seafloor Cable — communication range'
   },
   {
     id: 'oceanography.notable.aerialSurvey' as NodeId,
     subPath: 'oceanography',
     depth: 3,
     cost: 3,
-    magnitude: 0.1288,
     effect: { kind: 'droneScanRadiusMul' },
-    description: 'Aerial Survey — ×1.1288 drone scan radius',
+    description: 'Aerial Survey — drone scan radius'
   },
   {
     id: 'oceanography.notable.tidalPrediction' as NodeId,
     subPath: 'oceanography',
     depth: 6,
     cost: 6,
-    magnitude: 0.0746,
     effect: { kind: 'scannerCoverageMul' },
-    description: 'Tidal Prediction — ×1.0746 scanner coverage',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Tidal Prediction — scanner coverage',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
@@ -692,167 +628,151 @@ export const OCEANOGRAPHY_NOTABLES: SkillNode[] = [
 // Orbital branch
 // ---------------------------------------------------------------------------
 
-export const LAUNCH_NOTABLES: SkillNode[] = [
+export const LAUNCH_NOTABLES: RawSkillNode[] = [
   {
     id: 'launch.notable.padRedundancy' as NodeId,
     subPath: 'launch',
     depth: 4,
     cost: 4,
-    magnitude: 0.100,
     effect: { kind: 'launchSuccessAdditive' },
-    description: 'Pad Redundancy — ×1.1000 launch success rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Pad Redundancy — launch success rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'launch.notable.blastDeflector' as NodeId,
     subPath: 'launch',
     depth: 5,
     cost: 5,
-    magnitude: 0.4678,
     effect: { kind: 'padExplosionReduceMul' },
-    description: 'Blast Deflector — ×1.4678 pad explosion reduction',
+    description: 'Blast Deflector — pad explosion reduction'
   },
   {
     id: 'launch.notable.satDatapool' as NodeId,
     subPath: 'launch',
     depth: 3,
     cost: 3,
-    magnitude: 0.1365,
     effect: { kind: 'satBufferCapMul' },
-    description: 'Sat Datapool — ×1.1365 satellite buffer capacity',
+    description: 'Sat Datapool — satellite buffer capacity'
   },
   {
     id: 'launch.notable.reserveTanks' as NodeId,
     subPath: 'launch',
     depth: 6,
     cost: 6,
-    magnitude: 0.5849,
     effect: { kind: 'satFuelReserveMul' },
-    description: 'Reserve Tanks — ×1.5849 satellite fuel reserve',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Reserve Tanks — satellite fuel reserve',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const COMMUNICATION_NOTABLES: SkillNode[] = [
+export const COMMUNICATION_NOTABLES: RawSkillNode[] = [
   {
     id: 'communication.notable.groundStationHub' as NodeId,
     subPath: 'communication',
     depth: 4,
     cost: 4,
-    magnitude: 0.0723,
     effect: { kind: 'commRangeMul' },
-    description: 'Ground-station Hub — ×1.0723 communication range',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Ground-station Hub — communication range',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'communication.notable.packetBurst' as NodeId,
     subPath: 'communication',
     depth: 5,
     cost: 5,
-    magnitude: 0.1365,
     effect: { kind: 'satBufferCapMul' },
-    description: 'Packet Burst — ×1.1365 satellite buffer capacity',
+    description: 'Packet Burst — satellite buffer capacity'
   },
   {
     id: 'communication.notable.scannerOverlap' as NodeId,
     subPath: 'communication',
     depth: 3,
     cost: 3,
-    magnitude: 0.0746,
     effect: { kind: 'scannerCoverageMul' },
-    description: 'Scanner Overlap — ×1.0746 scanner coverage',
+    description: 'Scanner Overlap — scanner coverage'
   },
   {
     id: 'communication.notable.relayConstellation' as NodeId,
     subPath: 'communication',
     depth: 6,
     cost: 6,
-    magnitude: 0.0723,
     effect: { kind: 'commRangeMul' },
-    description: 'Relay Constellation — ×1.0723 communication range',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Relay Constellation — communication range',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const DISCOVERY_NOTABLES: SkillNode[] = [
+export const DISCOVERY_NOTABLES: RawSkillNode[] = [
   {
     id: 'discovery.notable.dwellOptimization' as NodeId,
     subPath: 'discovery',
     depth: 4,
     cost: 4,
-    magnitude: 0.4678,
     effect: { kind: 'scannerDwellRateMul' },
-    description: 'Dwell Optimization — ×1.4678 scanner dwell rate',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Dwell Optimization — scanner dwell rate',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'discovery.notable.wideAperture' as NodeId,
     subPath: 'discovery',
     depth: 5,
     cost: 5,
-    magnitude: 0.0746,
     effect: { kind: 'scannerCoverageMul' },
-    description: 'Wide Aperture — ×1.0746 scanner coverage',
+    description: 'Wide Aperture — scanner coverage'
   },
   {
     id: 'discovery.notable.droneAstrogeology' as NodeId,
     subPath: 'discovery',
     depth: 3,
     cost: 3,
-    magnitude: 0.1288,
     effect: { kind: 'droneScanRadiusMul' },
-    description: 'Drone Astrogeology — ×1.1288 drone scan radius',
+    description: 'Drone Astrogeology — drone scan radius'
   },
   {
     id: 'discovery.notable.deepField' as NodeId,
     subPath: 'discovery',
     depth: 6,
     cost: 6,
-    magnitude: 0.0746,
     effect: { kind: 'scannerCoverageMul' },
-    description: 'Deep Field — ×1.0746 scanner coverage',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Deep Field — scanner coverage',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
-export const RESILIENCE_NOTABLES: SkillNode[] = [
+export const RESILIENCE_NOTABLES: RawSkillNode[] = [
   {
     id: 'resilience.notable.orbitalShields' as NodeId,
     subPath: 'resilience',
     depth: 4,
     cost: 4,
-    magnitude: 0.2589,
     effect: { kind: 'debrisProtectionMul' },
-    description: 'Orbital Shields — ×1.2589 debris protection',
-    aura: { radius: 1, bonus: 0.10 },
+    description: 'Orbital Shields — debris protection',
+    aura: { radius: 1, bonus: 0.10 }
   },
   {
     id: 'resilience.notable.redundantSystems' as NodeId,
     subPath: 'resilience',
     depth: 5,
     cost: 5,
-    magnitude: 0.4678,
     effect: { kind: 'repairDroneReliabilityMul' },
-    description: 'Redundant Systems — ×1.4678 repair-drone reliability',
+    description: 'Redundant Systems — repair-drone reliability'
   },
   {
     id: 'resilience.notable.hardenedInfrastructure' as NodeId,
     subPath: 'resilience',
     depth: 3,
     cost: 3,
-    magnitude: 0.1220,
     effect: { kind: 'maintenanceThresholdMul' },
-    description: 'Hardened Infrastructure — ×1.1220 maintenance threshold',
+    description: 'Hardened Infrastructure — maintenance threshold'
   },
   {
     id: 'resilience.notable.debrisWake' as NodeId,
     subPath: 'resilience',
     depth: 6,
     cost: 6,
-    magnitude: 0.2589,
     effect: { kind: 'debrisProtectionMul' },
-    description: 'Debris Wake Dispersal — ×1.2589 debris protection',
-    aura: { radius: 2, bonus: 0.12 },
+    description: 'Debris Wake Dispersal — debris protection',
+    aura: { radius: 2, bonus: 0.12 }
   },
 ];
 
@@ -861,195 +781,165 @@ export const RESILIENCE_NOTABLES: SkillNode[] = [
 // ---------------------------------------------------------------------------
 
 /** §9.4 role-absorption keystones */
-export const ROLE_ABSORPTION_KEYSTONES: SkillNode[] = [
+export const ROLE_ABSORPTION_KEYSTONES: RawSkillNode[] = [
   {
     id: 'smelting.keystone.foundryMastery' as NodeId,
-    subPath: 'smelting', depth: 8, cost: 10, magnitude: 0.2328,
-    effect: { kind: 'recipeRateMul', category: 'smelting' },
-    description: 'Foundry Mastery — All smelters operate at ×1.2328 rate (absorbs §9.4 Foundry role)',
+    subPath: 'smelting', depth: 8, cost: 10, effect: { kind: 'recipeRateMul', category: 'smelting' },
+    description: 'Foundry Mastery — All smelters operate at rate (absorbs §9.4 Foundry role)'
   },
   {
     id: 'chemistry.keystone.refineryMastery' as NodeId,
-    subPath: 'chemistry', depth: 8, cost: 10, magnitude: 0.1103,
-    effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Refinery Mastery — All chemistry plants operate at ×1.1103 rate (absorbs §9.4 Refinery role)',
+    subPath: 'chemistry', depth: 8, cost: 10, effect: { kind: 'recipeRateMul', category: 'chemistry' },
+    description: 'Refinery Mastery — All chemistry plants operate at rate (absorbs §9.4 Refinery role)'
   },
   {
     id: 'mining.keystone.veinmaster' as NodeId,
-    subPath: 'mining', depth: 8, cost: 12, magnitude: 0.0248,
-    effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Veinmaster — All mines operate at ×1.0248 extraction rate (absorbs §9.4 Veinmaster role)',
+    subPath: 'mining', depth: 8, cost: 12, effect: { kind: 'recipeRateMul', category: 'extraction' },
+    description: 'Veinmaster — All mines operate at extraction rate (absorbs §9.4 Veinmaster role)'
   },
   {
     id: 'transport.keystone.hubCapacity' as NodeId,
-    subPath: 'transport', depth: 8, cost: 10, magnitude: 0.1103,
-    effect: { kind: 'routeCapacityMul' },
-    description: 'Hub Capacity — ×1.1103 route capacity (absorbs §9.4 Logistics role)',
+    subPath: 'transport', depth: 8, cost: 10, effect: { kind: 'routeCapacityMul' },
+    description: 'Hub Capacity — route capacity (absorbs §9.4 Logistics role)'
   },
   {
     id: 'storage.keystone.masterCache' as NodeId,
-    subPath: 'storage', depth: 8, cost: 10, magnitude: 0.0746,
-    effect: { kind: 'storageCapMul' },
-    description: 'Master Cache — All storage caps ×1.0746 (absorbs §9.4 Cache role)',
+    subPath: 'storage', depth: 8, cost: 10, effect: { kind: 'storageCapMul' },
+    description: 'Master Cache — All storage caps (absorbs §9.4 Cache role)'
   },
   {
     id: 'power_systems.keystone.researchBeacon' as NodeId,
-    subPath: 'power_systems', depth: 8, cost: 10, magnitude: 0.1699,
-    effect: { kind: 'xpGainMul' },
-    description: 'Research Beacon — All XP gain ×1.1699 (absorbs §9.4 Beacon role)',
+    subPath: 'power_systems', depth: 8, cost: 10, effect: { kind: 'xpGainMul' },
+    description: 'Research Beacon — All XP gain (absorbs §9.4 Beacon role)'
   },
 ];
 
 /** Rule-breaker keystones using newly-wired effect kinds */
-export const RULE_BREAKER_KEYSTONES: SkillNode[] = [
+export const RULE_BREAKER_KEYSTONES: RawSkillNode[] = [
   {
     id: 'robotics.keystone.parallelConstruction' as NodeId,
-    subPath: 'robotics', depth: 7, cost: 8, magnitude: 1.0,
-    effect: { kind: 'structural', description: 'Parallel Construction +1 slot', data: { kind: 'parallelConstruction', bonus: 1 } },
-    description: 'Parallel Construction — +1 concurrent build slot (structural rewrite)',
+    subPath: 'robotics', depth: 7, cost: 8, effect: { kind: 'structural', description: 'Parallel Construction +1 slot', data: { kind: 'parallelConstruction', bonus: 1 } },
+    description: 'Parallel Construction — +1 concurrent build slot (structural rewrite)'
   },
   {
     id: 'forestry.keystone.charcoalUnlock' as NodeId,
-    subPath: 'forestry', depth: 7, cost: 8, magnitude: 0.0,
-    effect: { kind: 'unlockRecipe', targetBuilding: 'logger', recipe: { cycleSec: 20, inputs: { wood: 2 }, outputs: { coal: 1 }, category: 'extraction' } },
-    description: 'Charcoal Kiln — Loggers gain a charcoal output recipe',
+    subPath: 'forestry', depth: 7, cost: 8, effect: { kind: 'unlockRecipe', targetBuilding: 'logger', recipe: { cycleSec: 20, inputs: { wood: 2 }, outputs: { coal: 1 }, category: 'extraction' } },
+    description: 'Charcoal Kiln — Loggers gain a charcoal output recipe'
   },
   {
     id: 'drilling.keystone.earlyRig' as NodeId,
-    subPath: 'drilling', depth: 7, cost: 8, magnitude: 0.0,
-    effect: { kind: 'tierBypass', buildings: ['drilling_rig'], tierShift: 1 },
-    description: 'Early Rig Permit — Drilling Rig operates one tier below requirement',
+    subPath: 'drilling', depth: 7, cost: 8, effect: { kind: 'tierBypass', buildings: ['drilling_rig'], tierShift: 1 },
+    description: 'Early Rig Permit — Drilling Rig operates one tier below requirement'
   },
   {
     id: 'smelting.keystone.pyroforgeBypass' as NodeId,
-    subPath: 'smelting', depth: 7, cost: 8, magnitude: 0.0,
-    effect: { kind: 'biomeBypass', buildings: ['pyroforge'] },
-    description: 'Pyroforge License — Pyroforge can be placed off-volcanic biome',
+    subPath: 'smelting', depth: 7, cost: 8, effect: { kind: 'biomeBypass', buildings: ['pyroforge'] },
+    description: 'Pyroforge License — Pyroforge can be placed off-volcanic biome'
   },
   {
     id: 'oceanography.keystone.sonarPair' as NodeId,
-    subPath: 'oceanography', depth: 7, cost: 8, magnitude: 0.20,
-    effect: { kind: 'exoticAdjacency', description: 'Dock+Tidal pair boost', effect: { kind: 'pairBoost', pair: ['dock', 'tidal_array'], recipeRateBonus: 0.2 } },
-    description: 'Tidal Pairing — Adjacent Dock + Tidal Array boost each other ×1.2000',
+    subPath: 'oceanography', depth: 7, cost: 8, effect: { kind: 'exoticAdjacency', description: 'Dock+Tidal pair boost', effect: { kind: 'pairBoost', pair: ['dock', 'tidal_array'], recipeRateBonus: 0.2 } },
+    description: 'Tidal Pairing — Adjacent Dock + Tidal Array boost each other'
   },
   {
     id: 'network.keystone.sharedRoutes' as NodeId,
-    subPath: 'network', depth: 7, cost: 8, magnitude: 0.0,
-    effect: { kind: 'crossIslandShared', shape: { kind: 'sharedRouteCapacity' } },
-    description: 'Shared Routes — Networked T3+ islands pool route-capacity bonus',
+    subPath: 'network', depth: 7, cost: 8, effect: { kind: 'crossIslandShared', shape: { kind: 'sharedRouteCapacity' } },
+    description: 'Shared Routes — Networked T3+ islands pool route-capacity bonus'
   },
   {
     id: 'communication.keystone.networkedExtract' as NodeId,
-    subPath: 'communication', depth: 7, cost: 8, magnitude: 0.25,
-    effect: { kind: 'conditionalBonus', multiplier: 0.25, appliesTo: 'extraction', condition: { kind: 'networked-to-N-T3-islands', n: 5 } },
-    description: 'Networked Extraction — ×1.2500 extraction rate when networked to ≥5 T3 islands',
+    subPath: 'communication', depth: 7, cost: 8, effect: { kind: 'conditionalBonus', multiplier: 0.25, appliesTo: 'extraction', condition: { kind: 'networked-to-N-T3-islands', n: 5 } },
+    description: 'Networked Extraction — extraction rate when networked to ≥5 T3 islands'
   },
   {
     id: 'mining.keystone.deepCore' as NodeId,
-    subPath: 'mining', depth: 7, cost: 8, magnitude: 0.0625,
-    effect: { kind: 'mineYieldBonusMul' },
-    description: 'Deep-core Drilling — ×1.0625 mine yield',
+    subPath: 'mining', depth: 7, cost: 8, effect: { kind: 'mineYieldBonusMul' },
+    description: 'Deep-core Drilling — mine yield'
   },
   {
     id: 'forestry.keystone.silvicultureMastery' as NodeId,
-    subPath: 'forestry', depth: 7, cost: 8, magnitude: 0.1788,
-    effect: { kind: 'loggerYieldBonusMul' },
-    description: 'Silviculture Mastery — ×1.1788 logger yield',
+    subPath: 'forestry', depth: 7, cost: 8, effect: { kind: 'loggerYieldBonusMul' },
+    description: 'Silviculture Mastery — logger yield'
   },
   {
     id: 'robotics.keystone.swarmIntelligence' as NodeId,
-    subPath: 'robotics', depth: 7, cost: 8, magnitude: 0.1288,
-    effect: { kind: 'droneScanRadiusMul' },
-    description: 'Swarm Intelligence — ×1.1288 drone scan radius',
+    subPath: 'robotics', depth: 7, cost: 8, effect: { kind: 'droneScanRadiusMul' },
+    description: 'Swarm Intelligence — drone scan radius'
   },
   {
     id: 'electronics.keystone.quantumYield' as NodeId,
-    subPath: 'electronics', depth: 7, cost: 8, magnitude: 0.2328,
-    effect: { kind: 'recipeRateMul', category: 'electronics' },
-    description: 'Quantum Yield — ×1.2328 electronics recipe rate',
+    subPath: 'electronics', depth: 7, cost: 8, effect: { kind: 'recipeRateMul', category: 'electronics' },
+    description: 'Quantum Yield — electronics recipe rate'
   },
   {
     id: 'power_systems.keystone.fusionLock' as NodeId,
-    subPath: 'power_systems', depth: 7, cost: 8, magnitude: 0.0701,
-    effect: { kind: 'powerProductionMul' },
-    description: 'Fusion Lock — ×1.0701 power production',
+    subPath: 'power_systems', depth: 7, cost: 8, effect: { kind: 'powerProductionMul' },
+    description: 'Fusion Lock — power production'
   },
   {
     id: 'transport.keystone.supplyChain' as NodeId,
-    subPath: 'transport', depth: 7, cost: 8, magnitude: 0.1103,
-    effect: { kind: 'routeCapacityMul' },
-    description: 'Supply Chain Mastery — ×1.1103 route capacity',
+    subPath: 'transport', depth: 7, cost: 8, effect: { kind: 'routeCapacityMul' },
+    description: 'Supply Chain Mastery — route capacity'
   },
   {
     id: 'patronage.keystone.diplomaticImmunity' as NodeId,
-    subPath: 'patronage', depth: 7, cost: 8, magnitude: 0.0723,
-    effect: { kind: 'commRangeMul' },
-    description: 'Diplomatic Immunity — ×1.0723 communication range',
+    subPath: 'patronage', depth: 7, cost: 8, effect: { kind: 'commRangeMul' },
+    description: 'Diplomatic Immunity — communication range'
   },
   {
     id: 'aquaculture.keystone.maricultureMastery' as NodeId,
-    subPath: 'aquaculture', depth: 7, cost: 8, magnitude: 0.0248,
-    effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Mariculture Mastery — ×1.0248 ocean extraction rate',
+    subPath: 'aquaculture', depth: 7, cost: 8, effect: { kind: 'recipeRateMul', category: 'extraction' },
+    description: 'Mariculture Mastery — ocean extraction rate'
   },
   {
     id: 'hydroprocessing.keystone.desalMastery' as NodeId,
-    subPath: 'hydroprocessing', depth: 7, cost: 8, magnitude: 0.1103,
-    effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Desalination Mastery — ×1.1103 chemistry recipe rate',
+    subPath: 'hydroprocessing', depth: 7, cost: 8, effect: { kind: 'recipeRateMul', category: 'chemistry' },
+    description: 'Desalination Mastery — chemistry recipe rate'
   },
   {
     id: 'submarine.keystone.deepPressure' as NodeId,
-    subPath: 'submarine', depth: 7, cost: 8, magnitude: 0.1103,
-    effect: { kind: 'routeCapacityMul' },
-    description: 'Deep Pressure — ×1.1103 submarine route capacity',
+    subPath: 'submarine', depth: 7, cost: 8, effect: { kind: 'routeCapacityMul' },
+    description: 'Deep Pressure — submarine route capacity'
   },
   {
     id: 'launch.keystone.padMastery' as NodeId,
-    subPath: 'launch', depth: 7, cost: 8, magnitude: 0.100,
-    effect: { kind: 'launchSuccessAdditive' },
-    description: 'Pad Mastery — ×1.1000 launch success rate',
+    subPath: 'launch', depth: 7, cost: 8, effect: { kind: 'launchSuccessAdditive' },
+    description: 'Pad Mastery — launch success rate'
   },
   {
     id: 'discovery.keystone.deepScan' as NodeId,
-    subPath: 'discovery', depth: 7, cost: 8, magnitude: 0.0746,
-    effect: { kind: 'scannerCoverageMul' },
-    description: 'Deep Scan — ×1.0746 scanner coverage',
+    subPath: 'discovery', depth: 7, cost: 8, effect: { kind: 'scannerCoverageMul' },
+    description: 'Deep Scan — scanner coverage'
   },
   {
     id: 'resilience.keystone.orbitalFortress' as NodeId,
-    subPath: 'resilience', depth: 7, cost: 8, magnitude: 0.2589,
-    effect: { kind: 'debrisProtectionMul' },
-    description: 'Orbital Fortress — ×1.2589 debris protection',
+    subPath: 'resilience', depth: 7, cost: 8, effect: { kind: 'debrisProtectionMul' },
+    description: 'Orbital Fortress — debris protection'
   },
   {
     id: 'drilling.keystone.reservoirMastery' as NodeId,
-    subPath: 'drilling', depth: 7, cost: 8, magnitude: 0.0248,
-    effect: { kind: 'recipeRateMul', category: 'extraction' },
-    description: 'Reservoir Mastery — ×1.0248 extraction recipe rate',
+    subPath: 'drilling', depth: 7, cost: 8, effect: { kind: 'recipeRateMul', category: 'extraction' },
+    description: 'Reservoir Mastery — extraction recipe rate'
   },
   {
     id: 'chemistry.keystone.catalyticMastery' as NodeId,
-    subPath: 'chemistry', depth: 7, cost: 8, magnitude: 0.1103,
-    effect: { kind: 'recipeRateMul', category: 'chemistry' },
-    description: 'Catalytic Mastery — ×1.1103 chemistry recipe rate',
+    subPath: 'chemistry', depth: 7, cost: 8, effect: { kind: 'recipeRateMul', category: 'chemistry' },
+    description: 'Catalytic Mastery — chemistry recipe rate'
   },
   {
     id: 'storage.keystone.vaultMastery' as NodeId,
-    subPath: 'storage', depth: 7, cost: 8, magnitude: 0.0746,
-    effect: { kind: 'storageCapMul' },
-    description: 'Vault Mastery — ×1.0746 uniform storage cap',
+    subPath: 'storage', depth: 7, cost: 8, effect: { kind: 'storageCapMul' },
+    description: 'Vault Mastery — uniform storage cap'
   },
   {
     id: 'network.keystone.meshMastery' as NodeId,
-    subPath: 'network', depth: 7, cost: 8, magnitude: 0.0723,
-    effect: { kind: 'commRangeMul' },
-    description: 'Mesh Mastery — ×1.0723 communication range',
+    subPath: 'network', depth: 7, cost: 8, effect: { kind: 'commRangeMul' },
+    description: 'Mesh Mastery — communication range'
   },
 ];
 
 /** Combined keystones array */
-export const KEYSTONES: SkillNode[] = [
+export const KEYSTONES: RawSkillNode[] = [
   ...ROLE_ABSORPTION_KEYSTONES,
   ...RULE_BREAKER_KEYSTONES,
 ];
@@ -1059,7 +949,7 @@ function ksp(target: string, requires: string[], cost: number): KeystonePrereq {
   return {
     targetNode: target as unknown as G,
     requires: requires.map(r => r as unknown as G),
-    cost,
+    cost
   };
 }
 
@@ -1115,7 +1005,7 @@ function be(
     to: to as import('./skilltree-graph.js').NodeId,
     cost,
     mode: 'or' as import('./skilltree-graph.js').EdgePrereqMode,
-    threshold,
+    threshold
   } as BridgeEdge;
 }
 
@@ -1290,7 +1180,7 @@ export const GRAFT_SOCKET_CATALOG: GraftSocket[] = [
 // Combined catalog
 // ---------------------------------------------------------------------------
 
-export const NOTABLES: SkillNode[] = [
+export const NOTABLES: RawSkillNode[] = [
   ...MINING_NOTABLES,
   ...FORESTRY_NOTABLES,
   ...DRILLING_NOTABLES,
@@ -1314,4 +1204,5 @@ export const NOTABLES: SkillNode[] = [
 ];
 
 /** Full catalog: filler nodes + notables + keystones */
-export const FULL_CATALOG: SkillNode[] = [...ALL_FILLER_NODES, ...NOTABLES, ...KEYSTONES];
+const RAW_FULL_CATALOG: ReadonlyArray<RawSkillNode> = [...ALL_FILLER_NODES, ...NOTABLES, ...KEYSTONES];
+export const FULL_CATALOG: ReadonlyArray<SkillNode> = deriveMagnitudes(RAW_FULL_CATALOG, ALL_ARCHETYPE_PREFIXES);
