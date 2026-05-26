@@ -2,17 +2,22 @@
 //
 // Each sub-path is a depth-graded chain of nodes. Rather than hand-writing
 // ~25 nodes per sub-path, an archetype template captures the ramp pattern
-// (base magnitude, growth factor, cost curve) and `generateFillerNodes`
-// produces the `SkillNode[]` array.
+// (growth factor, cost curve) and `generateFillerNodes` produces the
+// `RawSkillNode[]` array. baseMag is no longer authored here —
+// deriveMagnitudes() solves it at module load.
 
-import type { SkillEffect, SkillNode, NodeId, SubPathId } from './skilltree.js';
+import type { SkillEffect, NodeId, SubPathId } from './skilltree.js';
+import type { RawSkillNode } from './skilltree-derive-magnitudes.js';
 
 export interface FillerArchetype {
   readonly idPrefix: string;
   readonly effectKind: SkillEffect['kind'];
   readonly effectExtra?: Record<string, unknown>;
   readonly subPath: SubPathId;
-  readonly baseMag: number;
+  /** Per-depth growth factor for the chain. Default 1.10 = each deeper
+   *  filler is 10% stronger than the previous. baseMag is no longer
+   *  authored here — deriveMagnitudes() solves it at module load so the
+   *  chain's product hits the filler-tier share of the pool cap. */
   readonly growth: number;
   readonly baseCost: number;
   readonly costGrowth: number;
@@ -60,52 +65,26 @@ function effectLabel(kind: SkillEffect['kind'], extra?: Record<string, unknown>)
   }
 }
 
-/** Format the per-node factor. Reducer effects display as ÷, additive
- *  effects as +, everything else as ×. */
-function formatFactor(magnitude: number, kind: SkillEffect['kind'], extra?: Record<string, unknown>): string {
-  const reduce = extra?.['reduce'] === true;
-  if (kind === 'launchSuccessAdditive') {
-    return `+${(magnitude * 100).toFixed(1)} pp`; // percentage points, additive
-  }
-  if (kind === 'parallelBuildCapAdd') {
-    return `+${magnitude.toFixed(2)} slot`;
-  }
-  if (reduce) {
-    return `÷${(1 + magnitude).toFixed(2)}`;
-  }
-  return `×${(1 + magnitude).toFixed(2)}`;
-}
-
 /** Generate a depth-ramped filler chain from an archetype.
  *
- *  Per-node factor follows multiplicative growth:
- *    depth-d factor = (1 + baseMag) * growth^(d-1)
- *  Magnitude is stored as the +bonus (factor - 1), matching the `SkillNode`
- *  convention (0.05 means per-node factor ×1.05).
- *
- *  Description format: `<label> <factor> per node` — e.g. `extraction recipe
- *  rate ×1.04 per node`. Reducer effects (powerConsumption + reduce:true)
- *  use ÷ notation. The fold is multiplicative across owned nodes:
- *  total = ∏ (1 + magᵢ).
+ *  Returns RawSkillNode shapes without magnitude — deriveMagnitudes()
+ *  fills that in at module load so the chain's product hits the
+ *  filler-tier share of the pool cap.
  *
  *  Cost follows geometric growth with rounding per depth. */
-export function generateFillerNodes(arch: FillerArchetype): SkillNode[] {
-  const nodes: SkillNode[] = [];
+export function generateFillerNodes(arch: FillerArchetype): RawSkillNode[] {
+  const nodes: RawSkillNode[] = [];
   const label = effectLabel(arch.effectKind, arch.effectExtra);
-  let factor = 1 + arch.baseMag;
   let cost = arch.baseCost;
   for (let d = 0; d < arch.count; d++) {
-    const magnitude = factor - 1;
     nodes.push({
       id: `${arch.idPrefix}.${d + 1}` as NodeId,
       subPath: arch.subPath,
       depth: d + 1,
       cost: Math.round(cost),
-      magnitude,
       effect: { kind: arch.effectKind, ...(arch.effectExtra ?? {}) } as SkillEffect,
-      description: `${label} ${formatFactor(magnitude, arch.effectKind, arch.effectExtra)} per node`,
+      description: `${label} per node`,
     });
-    factor *= arch.growth;
     cost *= arch.costGrowth;
   }
   return nodes;
@@ -119,20 +98,20 @@ export const MINING_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'mining.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'extraction' }, subPath: 'mining',
-    baseMag: 0.0248, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'mining.storageCap', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'dry_goods' }, subPath: 'mining',
-    baseMag: 0.0537, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
   },
   {
     idPrefix: 'mining.yieldBonus', effectKind: 'mineYieldBonusMul',
-    subPath: 'mining', baseMag: 0.0625, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'mining', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'mining.rareTrickle', effectKind: 'mineRareTrickleMul',
-    subPath: 'mining', baseMag: 0.2915, growth: 1.0, baseCost: 3, costGrowth: 1.7, count: 4,
+    subPath: 'mining', growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
   },
 ];
 export const MINING_FILLER_NODES = MINING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -141,20 +120,20 @@ export const FORESTRY_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'forestry.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'extraction' }, subPath: 'forestry',
-    baseMag: 0.0248, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'forestry.storageCap', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'dry_goods' }, subPath: 'forestry',
-    baseMag: 0.0537, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
   },
   {
     idPrefix: 'forestry.yieldBonus', effectKind: 'loggerYieldBonusMul',
-    subPath: 'forestry', baseMag: 0.1788, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'forestry', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'forestry.exoticTrickle', effectKind: 'loggerExoticTrickleMul',
-    subPath: 'forestry', baseMag: 0.5849, growth: 1.0, baseCost: 3, costGrowth: 1.7, count: 4,
+    subPath: 'forestry', growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
   },
 ];
 export const FORESTRY_FILLER_NODES = FORESTRY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -163,24 +142,24 @@ export const DRILLING_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'drilling.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'extraction' }, subPath: 'drilling',
-    baseMag: 0.0248, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'drilling.storageCap', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'liquid_gas' }, subPath: 'drilling',
-    baseMag: 0.0746, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
   },
   {
     idPrefix: 'drilling.yieldBonus', effectKind: 'mineYieldBonusMul',
-    subPath: 'drilling', baseMag: 0.0625, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'drilling', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'drilling.rareTrickle', effectKind: 'mineRareTrickleMul',
-    subPath: 'drilling', baseMag: 0.2915, growth: 1.0, baseCost: 3, costGrowth: 1.7, count: 4,
+    subPath: 'drilling', growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
   },
   {
     idPrefix: 'drilling.drillYield', effectKind: 'drillYieldBonusMul',
-    subPath: 'drilling', baseMag: 0.1548, growth: 1.0,
+    subPath: 'drilling', growth: 1.10,
     baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
@@ -189,19 +168,19 @@ export const DRILLING_FILLER_NODES = DRILLING_FILLER_ARCHETYPES.flatMap(generate
 export const ROBOTICS_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'robotics.constructionTime', effectKind: 'constructionTimeMul',
-    subPath: 'robotics', baseMag: 0.3335, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    subPath: 'robotics', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'robotics.parallelBuild', effectKind: 'parallelBuildCapAdd',
-    subPath: 'robotics', baseMag: 0.667, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'robotics', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'robotics.droneScan', effectKind: 'droneScanRadiusMul',
-    subPath: 'robotics', baseMag: 0.1288, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'robotics', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'robotics.droneFuel', effectKind: 'droneFuelEfficiencyMul',
-    subPath: 'robotics', baseMag: 0.1548, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+    subPath: 'robotics', growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
   },
 ];
 export const ROBOTICS_FILLER_NODES = ROBOTICS_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -214,16 +193,16 @@ export const SMELTING_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'smelting.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'smelting' }, subPath: 'smelting',
-    baseMag: 0.2328, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'smelting.powerConsumption', effectKind: 'powerConsumptionMul',
     effectExtra: { reduce: true }, subPath: 'smelting',
-    baseMag: 0.0316, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 7,
+    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 7,
   },
   {
     idPrefix: 'smelting.maintenance', effectKind: 'maintenanceThresholdMul',
-    subPath: 'smelting', baseMag: 0.1220, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 5,
+    subPath: 'smelting', growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 5,
   },
 ];
 export const SMELTING_FILLER_NODES = SMELTING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -232,17 +211,17 @@ export const CHEMISTRY_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'chemistry.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'chemistry' }, subPath: 'chemistry',
-    baseMag: 0.1103, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'chemistry.storageCap', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'liquid_gas' }, subPath: 'chemistry',
-    baseMag: 0.0746, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
   },
   {
     idPrefix: 'chemistry.powerConsumption', effectKind: 'powerConsumptionMul',
     effectExtra: { reduce: true }, subPath: 'chemistry',
-    baseMag: 0.0316, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
 ];
 export const CHEMISTRY_FILLER_NODES = CHEMISTRY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -251,16 +230,16 @@ export const ELECTRONICS_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'electronics.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'electronics' }, subPath: 'electronics',
-    baseMag: 0.2328, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'electronics.powerConsumption', effectKind: 'powerConsumptionMul',
     effectExtra: { reduce: true }, subPath: 'electronics',
-    baseMag: 0.0316, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'electronics.satBuffer', effectKind: 'satBufferCapMul',
-    subPath: 'electronics', baseMag: 0.1365, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'electronics', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
 ];
 export const ELECTRONICS_FILLER_NODES = ELECTRONICS_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -268,21 +247,21 @@ export const ELECTRONICS_FILLER_NODES = ELECTRONICS_FILLER_ARCHETYPES.flatMap(ge
 export const POWER_SYSTEMS_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'powerSystems.production', effectKind: 'powerProductionMul',
-    subPath: 'power_systems', baseMag: 0.0701, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    subPath: 'power_systems', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'powerSystems.consumption', effectKind: 'powerConsumptionMul',
     effectExtra: { reduce: true }, subPath: 'power_systems',
-    baseMag: 0.0316, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 7,
+    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 7,
   },
   {
     idPrefix: 'powerSystems.xpGain', effectKind: 'xpGainMul',
     subPath: 'power_systems',
-    baseMag: 0.1699, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'powerSystems.batteryCapacity', effectKind: 'batteryCapacityMul',
-    subPath: 'power_systems', baseMag: 0.2915, growth: 1.0,
+    subPath: 'power_systems', growth: 1.10,
     baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
@@ -295,21 +274,21 @@ export const POWER_SYSTEMS_FILLER_NODES = POWER_SYSTEMS_FILLER_ARCHETYPES.flatMa
 export const STORAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'storage.uniformCap', effectKind: 'storageCapMul',
-    subPath: 'storage', baseMag: 0.0746, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    subPath: 'storage', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'storage.categoryCap', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'components' }, subPath: 'storage',
-    baseMag: 0.1548, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
   },
   {
     idPrefix: 'storage.maintenance', effectKind: 'maintenanceThresholdMul',
-    subPath: 'storage', baseMag: 0.1220, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'storage', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'storage.manufacturing', effectKind: 'recipeRateMul',
     effectExtra: { category: 'manufacturing' }, subPath: 'storage',
-    baseMag: 0.2915, growth: 1.0,
+    growth: 1.10,
     baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
@@ -318,15 +297,15 @@ export const STORAGE_FILLER_NODES = STORAGE_FILLER_ARCHETYPES.flatMap(generateFi
 export const TRANSPORT_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'transport.routeCapacity', effectKind: 'routeCapacityMul',
-    subPath: 'transport', baseMag: 0.1103, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    subPath: 'transport', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'transport.airshipRange', effectKind: 'airshipRangeMul',
-    subPath: 'transport', baseMag: 0.2115, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'transport', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'transport.droneFuel', effectKind: 'droneFuelEfficiencyMul',
-    subPath: 'transport', baseMag: 0.1548, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+    subPath: 'transport', growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
   },
 ];
 export const TRANSPORT_FILLER_NODES = TRANSPORT_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -334,15 +313,15 @@ export const TRANSPORT_FILLER_NODES = TRANSPORT_FILLER_ARCHETYPES.flatMap(genera
 export const NETWORK_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'network.commRange', effectKind: 'commRangeMul',
-    subPath: 'network', baseMag: 0.0723, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    subPath: 'network', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'network.teleporter', effectKind: 'teleporterEfficiencyMul',
-    subPath: 'network', baseMag: 0.4678, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'network', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'network.scanner', effectKind: 'scannerCoverageMul',
-    subPath: 'network', baseMag: 0.0746, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'network', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
 ];
 export const NETWORK_FILLER_NODES = NETWORK_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -354,19 +333,19 @@ export const NETWORK_FILLER_NODES = NETWORK_FILLER_ARCHETYPES.flatMap(generateFi
 export const LAUNCH_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'launch.success', effectKind: 'launchSuccessAdditive',
-    subPath: 'launch', baseMag: 0.100, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    subPath: 'launch', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'launch.padSafety', effectKind: 'padExplosionReduceMul',
-    subPath: 'launch', baseMag: 0.4678, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'launch', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'launch.satBuffer', effectKind: 'satBufferCapMul',
-    subPath: 'launch', baseMag: 0.1365, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'launch', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'launch.satFuel', effectKind: 'satFuelReserveMul',
-    subPath: 'launch', baseMag: 0.5849, growth: 1.0, baseCost: 3, costGrowth: 1.7, count: 4,
+    subPath: 'launch', growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
   },
 ];
 export const LAUNCH_FILLER_NODES = LAUNCH_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -374,15 +353,15 @@ export const LAUNCH_FILLER_NODES = LAUNCH_FILLER_ARCHETYPES.flatMap(generateFill
 export const COMMUNICATION_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'communication.commRange', effectKind: 'commRangeMul',
-    subPath: 'communication', baseMag: 0.0723, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    subPath: 'communication', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'communication.satBuffer', effectKind: 'satBufferCapMul',
-    subPath: 'communication', baseMag: 0.1365, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'communication', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'communication.scanner', effectKind: 'scannerCoverageMul',
-    subPath: 'communication', baseMag: 0.0746, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'communication', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
 ];
 export const COMMUNICATION_FILLER_NODES = COMMUNICATION_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -390,15 +369,15 @@ export const COMMUNICATION_FILLER_NODES = COMMUNICATION_FILLER_ARCHETYPES.flatMa
 export const DISCOVERY_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'discovery.scannerCoverage', effectKind: 'scannerCoverageMul',
-    subPath: 'discovery', baseMag: 0.0746, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+    subPath: 'discovery', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
   {
     idPrefix: 'discovery.scannerDwell', effectKind: 'scannerDwellRateMul',
-    subPath: 'discovery', baseMag: 0.4678, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'discovery', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'discovery.droneScan', effectKind: 'droneScanRadiusMul',
-    subPath: 'discovery', baseMag: 0.1288, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'discovery', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
 ];
 export const DISCOVERY_FILLER_NODES = DISCOVERY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -406,15 +385,15 @@ export const DISCOVERY_FILLER_NODES = DISCOVERY_FILLER_ARCHETYPES.flatMap(genera
 export const RESILIENCE_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'resilience.debris', effectKind: 'debrisProtectionMul',
-    subPath: 'resilience', baseMag: 0.2589, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    subPath: 'resilience', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'resilience.repairDrone', effectKind: 'repairDroneReliabilityMul',
-    subPath: 'resilience', baseMag: 0.4678, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'resilience', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'resilience.maintenance', effectKind: 'maintenanceThresholdMul',
-    subPath: 'resilience', baseMag: 0.1220, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+    subPath: 'resilience', growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
   },
 ];
 export const RESILIENCE_FILLER_NODES = RESILIENCE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -427,20 +406,20 @@ export const PATRONAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'patronage.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'extraction' }, subPath: 'patronage',
-    baseMag: 0.0248, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'patronage.storageCap', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'rare' }, subPath: 'patronage',
-    baseMag: 0.1548, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 6,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 6,
   },
   {
     idPrefix: 'patronage.commRange', effectKind: 'commRangeMul',
-    subPath: 'patronage', baseMag: 0.0723, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'patronage', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'patronage.patronageYield', effectKind: 'patronageYieldBonusMul',
-    subPath: 'patronage', baseMag: 0.1548, growth: 1.0,
+    subPath: 'patronage', growth: 1.10,
     baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
@@ -450,20 +429,20 @@ export const AQUACULTURE_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'aquaculture.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'extraction' }, subPath: 'aquaculture',
-    baseMag: 0.0248, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'aquaculture.yieldBonus', effectKind: 'mineYieldBonusMul',
-    subPath: 'aquaculture', baseMag: 0.0625, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'aquaculture', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'aquaculture.storageCap', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'dry_goods' }, subPath: 'aquaculture',
-    baseMag: 0.0537, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 6,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 6,
   },
   {
     idPrefix: 'aquaculture.aquaYield', effectKind: 'aquacultureYieldBonusMul',
-    subPath: 'aquaculture', baseMag: 0.1548, growth: 1.0,
+    subPath: 'aquaculture', growth: 1.10,
     baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
@@ -473,16 +452,16 @@ export const HYDROPROCESSING_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'hydroprocessing.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'chemistry' }, subPath: 'hydroprocessing',
-    baseMag: 0.1103, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'hydroprocessing.powerConsumption', effectKind: 'powerConsumptionMul',
     effectExtra: { reduce: true }, subPath: 'hydroprocessing',
-    baseMag: 0.0316, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 6,
+    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 6,
   },
   {
     idPrefix: 'hydroprocessing.storageCap', effectKind: 'storageCapMul',
-    subPath: 'hydroprocessing', baseMag: 0.0746, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 5,
+    subPath: 'hydroprocessing', growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 5,
   },
 ];
 export const HYDROPROCESSING_FILLER_NODES = HYDROPROCESSING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -490,15 +469,15 @@ export const HYDROPROCESSING_FILLER_NODES = HYDROPROCESSING_FILLER_ARCHETYPES.fl
 export const SUBMARINE_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'submarine.routeCapacity', effectKind: 'routeCapacityMul',
-    subPath: 'submarine', baseMag: 0.1103, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    subPath: 'submarine', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'submarine.powerProduction', effectKind: 'powerProductionMul',
-    subPath: 'submarine', baseMag: 0.0701, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'submarine', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'submarine.airshipRange', effectKind: 'airshipRangeMul',
-    subPath: 'submarine', baseMag: 0.2115, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'submarine', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
 ];
 export const SUBMARINE_FILLER_NODES = SUBMARINE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -506,19 +485,19 @@ export const SUBMARINE_FILLER_NODES = SUBMARINE_FILLER_ARCHETYPES.flatMap(genera
 export const OCEANOGRAPHY_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
     idPrefix: 'oceanography.scannerCoverage', effectKind: 'scannerCoverageMul',
-    subPath: 'oceanography', baseMag: 0.0746, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 7,
+    subPath: 'oceanography', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
     idPrefix: 'oceanography.commRange', effectKind: 'commRangeMul',
-    subPath: 'oceanography', baseMag: 0.0723, growth: 1.0, baseCost: 2, costGrowth: 1.5, count: 5,
+    subPath: 'oceanography', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'oceanography.droneScan', effectKind: 'droneScanRadiusMul',
-    subPath: 'oceanography', baseMag: 0.1288, growth: 1.0, baseCost: 2, costGrowth: 1.6, count: 5,
+    subPath: 'oceanography', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'oceanography.t5ExtractorYield', effectKind: 't5ExtractorYieldBonusMul',
-    subPath: 'oceanography', baseMag: 0.1548, growth: 1.0,
+    subPath: 'oceanography', growth: 1.10,
     baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
@@ -528,7 +507,7 @@ export const OCEANOGRAPHY_FILLER_NODES = OCEANOGRAPHY_FILLER_ARCHETYPES.flatMap(
 // Aggregate
 // ---------------------------------------------------------------------------
 
-export const ALL_FILLER_NODES: SkillNode[] = [
+export const ALL_FILLER_NODES: RawSkillNode[] = [
   ...MINING_FILLER_NODES,
   ...FORESTRY_FILLER_NODES,
   ...DRILLING_FILLER_NODES,
@@ -550,3 +529,27 @@ export const ALL_FILLER_NODES: SkillNode[] = [
   ...SUBMARINE_FILLER_NODES,
   ...OCEANOGRAPHY_FILLER_NODES,
 ];
+
+/** Flat list of every archetype's idPrefix for tier inference. */
+export const ALL_ARCHETYPE_PREFIXES: ReadonlyArray<string> = [
+  ...MINING_FILLER_ARCHETYPES,
+  ...FORESTRY_FILLER_ARCHETYPES,
+  ...DRILLING_FILLER_ARCHETYPES,
+  ...ROBOTICS_FILLER_ARCHETYPES,
+  ...SMELTING_FILLER_ARCHETYPES,
+  ...CHEMISTRY_FILLER_ARCHETYPES,
+  ...ELECTRONICS_FILLER_ARCHETYPES,
+  ...POWER_SYSTEMS_FILLER_ARCHETYPES,
+  ...STORAGE_FILLER_ARCHETYPES,
+  ...TRANSPORT_FILLER_ARCHETYPES,
+  ...NETWORK_FILLER_ARCHETYPES,
+  ...LAUNCH_FILLER_ARCHETYPES,
+  ...COMMUNICATION_FILLER_ARCHETYPES,
+  ...DISCOVERY_FILLER_ARCHETYPES,
+  ...RESILIENCE_FILLER_ARCHETYPES,
+  ...PATRONAGE_FILLER_ARCHETYPES,
+  ...AQUACULTURE_FILLER_ARCHETYPES,
+  ...HYDROPROCESSING_FILLER_ARCHETYPES,
+  ...SUBMARINE_FILLER_ARCHETYPES,
+  ...OCEANOGRAPHY_FILLER_ARCHETYPES,
+].map((a) => a.idPrefix);
