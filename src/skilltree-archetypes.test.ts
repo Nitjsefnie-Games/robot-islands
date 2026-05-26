@@ -5,6 +5,7 @@ import {
   ALL_FILLER_NODES,
   type FillerArchetype,
 } from './skilltree-archetypes.js';
+import { FULL_CATALOG } from './skilltree-catalog.js';
 
 describe('generateFillerNodes', () => {
   it('generates a depth-ramped filler chain', () => {
@@ -13,7 +14,6 @@ describe('generateFillerNodes', () => {
       effectKind: 'recipeRateMul',
       effectExtra: { category: 'extraction' },
       subPath: 'mining',
-      baseMag: 0.04,
       growth: 1.10,
       baseCost: 1,
       costGrowth: 1.4,
@@ -21,28 +21,21 @@ describe('generateFillerNodes', () => {
     };
     const nodes = generateFillerNodes(archetype);
     expect(nodes).toHaveLength(6);
-    expect(nodes[0]!.magnitude).toBeCloseTo(0.04, 4);
-    // (1+0.04)*1.10 - 1 = 0.144
-    expect(nodes[1]!.magnitude).toBeCloseTo(0.144, 4);
     expect(nodes[0]!.cost).toBe(1);
     expect(nodes[1]!.cost).toBe(Math.round(1 * 1.4));
   });
 
-  it('produces monotonically increasing magnitudes', () => {
-    const arch: FillerArchetype = {
-      idPrefix: 'test.growth',
-      effectKind: 'recipeRateMul',
-      effectExtra: { category: 'extraction' },
-      subPath: 'mining',
-      baseMag: 0.05,
-      growth: 1.10,
-      baseCost: 1,
-      costGrowth: 1.2,
-      count: 10,
-    };
-    const nodes = generateFillerNodes(arch);
-    for (let i = 1; i < nodes.length; i++) {
-      expect(nodes[i]!.magnitude).toBeGreaterThan(nodes[i - 1]!.magnitude);
+  it('produces monotonically increasing magnitudes in derived FULL_CATALOG', () => {
+    const prefix = 'mining.recipeRate';
+    const nodes = FULL_CATALOG.filter((n) => n.id.startsWith(prefix + '.'));
+    expect(nodes.length).toBeGreaterThan(1);
+    const sorted = nodes.sort((a, b) => {
+      const da = Number(a.id.slice(a.id.lastIndexOf('.') + 1));
+      const db = Number(b.id.slice(b.id.lastIndexOf('.') + 1));
+      return da - db;
+    });
+    for (let i = 1; i < sorted.length; i++) {
+      expect(sorted[i]!.magnitude).toBeGreaterThan(sorted[i - 1]!.magnitude);
     }
   });
 
@@ -52,7 +45,6 @@ describe('generateFillerNodes', () => {
       effectKind: 'recipeRateMul',
       effectExtra: { category: 'extraction' },
       subPath: 'mining',
-      baseMag: 0.05,
       growth: 1.10,
       baseCost: 1,
       costGrowth: 1.5,
@@ -70,7 +62,6 @@ describe('generateFillerNodes', () => {
       effectKind: 'recipeRateMul',
       effectExtra: { category: 'extraction' },
       subPath: 'mining',
-      baseMag: 0.05,
       growth: 1.10,
       baseCost: 1,
       costGrowth: 1.2,
@@ -88,7 +79,6 @@ describe('generateFillerNodes', () => {
       idPrefix: 'test.noextra',
       effectKind: 'mineYieldBonusMul',
       subPath: 'mining',
-      baseMag: 0.05,
       growth: 1.10,
       baseCost: 1,
       costGrowth: 1.2,
@@ -168,9 +158,22 @@ describe('ALL_FILLER_NODES sanity', () => {
     expect(subPaths.size).toBe(20); // 20 sub-paths with filler content
   });
 
-  it('every node has a positive magnitude', () => {
-    for (const n of ALL_FILLER_NODES) {
-      expect(n.magnitude).toBeGreaterThan(0);
+  it('every multiplier-kind filler has a positive magnitude in derived FULL_CATALOG', () => {
+    const multiplierKinds = new Set([
+      'recipeRateMul', 'storageCapMul', 'storageCategoryCapMul', 'powerProductionMul',
+      'powerConsumptionMul', 'routeCapacityMul', 'commRangeMul', 'maintenanceThresholdMul',
+      'scannerCoverageMul', 'debrisProtectionMul', 'droneFuelEfficiencyMul', 'airshipRangeMul',
+      'padExplosionReduceMul', 'satBufferCapMul', 'scannerDwellRateMul', 'satFuelReserveMul',
+      'repairDroneReliabilityMul', 'constructionTimeMul', 'droneScanRadiusMul', 'mineYieldBonusMul',
+      'mineRareTrickleMul', 'loggerYieldBonusMul', 'loggerExoticTrickleMul', 'drillYieldBonusMul',
+      'aquacultureYieldBonusMul', 'patronageYieldBonusMul', 't5ExtractorYieldBonusMul',
+      'teleporterEfficiencyMul', 'batteryCapacityMul', 'xpGainMul',
+    ]);
+    const fillerIds = new Set(ALL_FILLER_NODES.map((n) => n.id));
+    for (const n of FULL_CATALOG) {
+      if (fillerIds.has(n.id) && multiplierKinds.has(n.effect.kind)) {
+        expect(n.magnitude).toBeGreaterThan(0);
+      }
     }
   });
 

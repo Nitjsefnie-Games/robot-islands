@@ -48,6 +48,7 @@ import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
+import { FULL_CATALOG } from './skilltree-catalog.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
 import { islandInscribedAny } from './island.js';
@@ -773,14 +774,15 @@ describe('power (§5.1)', () => {
     expect(wsRate).toBeCloseTo((1 / 33) * (50 / 60), 9);
   });
 
-  it('power_systems.notable.turbineStaging unlocked: Coal Gen produces 107.01W instead of 100W', () => {
+  it('power_systems.notable.turbineStaging unlocked: Coal Gen produces more than 100W', () => {
+    const node = FULL_CATALOG.find((n) => n.id === 'power_systems.notable.turbineStaging')!;
     const state = makeState({
       buildings: [COAL_GEN],
       inventory: { ...blankInventory(), coal: 50 },
       unlockedNodes: new Set(['power_systems.notable.turbineStaging']),
     });
     const { power } = computeRates(state);
-    expect(power.produced).toBeCloseTo(107.01, 9);
+    expect(power.produced).toBeCloseTo(100 * (1 + node.magnitude), 9);
   });
 
   it('Coal Gen with empty outputs is never output-stalled (cap doesn\'t apply)', () => {
@@ -999,24 +1001,29 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
 });
 
 describe('skill-tree integration (§9.3)', () => {
-  it('mining.notable.blastOptimization unlocked: Mine produces iron_ore at 1.0248× base rate', () => {
+  it('mining.notable.blastOptimization unlocked: Mine produces iron_ore at boosted base rate', () => {
+    const node = FULL_CATALOG.find((n) => n.id === 'mining.notable.blastOptimization')!;
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
       unlockedNodes: new Set(['mining.notable.blastOptimization']),
     });
     const { production } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.06028235294117647, 9);
+    // Base rate is 1/17 ≈ 0.0588235 iron_ore/s; multiply by (1 + node.magnitude)
+    expect(production.iron_ore).toBeCloseTo((1 / 17) * (1 + node.magnitude), 9);
   });
 
-  it('mining.notable.blastOptimization + deepVein stacks multiplicatively: Mine rate × 1.0248 × 1.0625', () => {
+  it('mining.notable.blastOptimization + deepVein stacks multiplicatively', () => {
+    const blast = FULL_CATALOG.find((n) => n.id === 'mining.notable.blastOptimization')!;
+    const deep = FULL_CATALOG.find((n) => n.id === 'mining.notable.deepVein')!;
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
       unlockedNodes: new Set(['mining.notable.blastOptimization', 'mining.notable.deepVein']),
     });
     const { production } = computeRates(state, { defs: POWER_FREE });
-    expect(production.iron_ore).toBeCloseTo(0.06405, 9);
+    // Base rate 1/17 × (1 + blast.magnitude) × (1 + deep.magnitude)
+    expect(production.iron_ore).toBeCloseTo((1 / 17) * (1 + blast.magnitude) * (1 + deep.magnitude), 9);
   });
 
   it('storage.notable.verticalSilo unlocked: effective caps are 1.20× the nominal storageCaps map', () => {

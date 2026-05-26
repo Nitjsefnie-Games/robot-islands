@@ -83,15 +83,20 @@ export function inferTier(
   return 'notable';
 }
 
-/** Solve for filler baseMag such that ∏ (1 + b·g^i) for i in [0,count-1]
- *  equals `target`. Bisection: monotonic, converges in ~80 iters to 1e-24. */
-function solveFillerBaseMag(target: number, count: number, growth: number): number {
-  if (count === 0) return 0;
+/** Solve for filler baseMag such that the product across all chains
+ *  ∏_{chain} ∏_{d=1}^{L_chain} (1 + b·g^{d-1}) equals `target`.
+ *  Bisection: monotonic, converges in ~80 iters to 1e-24. */
+function solveFillerBaseMag(target: number, chainLengths: number[], growth: number): number {
+  if (chainLengths.length === 0 || target <= 1) return 0;
   let lo = 0, hi = 1;
   for (let i = 0; i < BISECTION_ITERATIONS; i++) {
     const mid = (lo + hi) / 2;
     let p = 1;
-    for (let j = 0; j < count; j++) p *= 1 + mid * Math.pow(growth, j);
+    for (const len of chainLengths) {
+      for (let d = 0; d < len; d++) {
+        p *= 1 + mid * Math.pow(growth, d);
+      }
+    }
     if (p < target) lo = mid; else hi = mid;
   }
   return lo;
@@ -118,6 +123,7 @@ export function deriveMagnitudes(
   const buckets = new Map<string, Bucket>();
   const tiers = new Map<string, NodeTier>();  // node.id → tier
   const keys = new Map<string, string>();    // node.id → effect-key
+  const chainCounts = new Map<string, Map<string, number>>(); // effect-key → prefix → count
   for (const n of rawNodes) {
     const k = effectKey(n.effect);
     if (!(k in POOL_TARGETS)) continue;  // non-multiplier kinds — magnitude irrelevant
@@ -128,7 +134,13 @@ export function deriveMagnitudes(
     const b = buckets.get(k)!;
     if (t === 'keystone') b.K++;
     else if (t === 'notable') b.N++;
-    else b.F++;
+    else {
+      b.F++;
+      if (!chainCounts.has(k)) chainCounts.set(k, new Map());
+      const prefixMap = chainCounts.get(k)!;
+      const prefix = n.id.slice(0, n.id.lastIndexOf('.'));
+      prefixMap.set(prefix, (prefixMap.get(prefix) ?? 0) + 1);
+    }
   }
 
   // Per-effect-kind tier magnitudes (computed once).
@@ -145,7 +157,10 @@ export function deriveMagnitudes(
     wK /= sum; wN /= sum; wF /= sum;
     if (b.K > 0) mK.set(k, Math.pow(C, wK / b.K) - 1);
     if (b.N > 0) mN.set(k, Math.pow(C, wN / b.N) - 1);
-    if (b.F > 0) fillerBase.set(k, solveFillerBaseMag(Math.pow(C, wF), b.F, FILLER_GROWTH));
+    if (b.F > 0) {
+      const lengths = Array.from(chainCounts.get(k)!.values());
+      fillerBase.set(k, solveFillerBaseMag(Math.pow(C, wF), lengths, FILLER_GROWTH));
+    }
   }
 
   // Emit each node with derived magnitude.
