@@ -56,6 +56,18 @@ describe('deriveMagnitudes — product invariant', () => {
     const sorted = [...derived].sort((a, b) => a.magnitude - b.magnitude);
     expect(sorted[7]!.magnitude / sorted[0]!.magnitude).toBeCloseTo(Math.pow(FILLER_GROWTH, 7), 3);
   });
+  it('multi-chain product invariant: two archetype prefixes same effect kind', () => {
+    const raws: RawSkillNode[] = [];
+    for (let i = 1; i <= 4; i++) {
+      raws.push(node(`mining.recipeRate.${i}`, { kind: 'recipeRateMul', category: 'extraction' }));
+    }
+    for (let i = 1; i <= 3; i++) {
+      raws.push(node(`forestry.recipeRate.${i}`, { kind: 'recipeRateMul', category: 'extraction' }));
+    }
+    const derived = deriveMagnitudes(raws, ['mining.recipeRate', 'forestry.recipeRate']);
+    const product = derived.reduce((acc, n) => acc * (1 + n.magnitude), 1);
+    expect(product).toBeCloseTo(POOL_TARGETS['recipeRateMul:extraction']!, 3);
+  });
   it('non-multiplier effect kinds get magnitude 0', () => {
     const raws = [node('x', { kind: 'placeholder' })];
     const derived = deriveMagnitudes(raws, []);
