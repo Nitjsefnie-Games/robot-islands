@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill-tree rebalance — design spec · 2026-05-25</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B;
+      --olive:#8FA56E; --rust:#E08B7F; --gray-150:#2E2C27; --gray-300:#3A3833;
+      --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1180px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 960px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 32px; line-height: 1.18;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 28px 0 40px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 16px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 50px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 880px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    section { margin-bottom: 50px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat);
+      color: var(--slate); padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 24px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 880px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    p.body em { color: var(--gray-700); font-style: italic; }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    pre { background: var(--gray-150); border: var(--border); border-radius: 8px;
+      padding: 12px 16px; margin: 10px 0 18px; overflow-x: auto; font-family: var(--mono);
+      font-size: 12.5px; color: var(--gray-700); line-height: 1.5; max-width: 1000px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13px; }
+    .tbl th, .tbl td { text-align: left; padding: 8px 13px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.num { font-family: var(--mono); text-align: right; }
+    .tbl td code { font-size: 12px; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; display: grid; grid-template-columns: 290px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .checklist { display: flex; flex-direction: column; gap: 9px; max-width: 800px; }
+    .check { display: flex; gap: 12px; align-items: flex-start; background: var(--white);
+      border: var(--border); border-radius: 10px; padding: 11px 16px; }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500);
+      flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+    .check .ck-text code { font-size: 12px; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.4fr 90px 1.8fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 13px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 12px; max-width: 900px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 14px 20px; }
+    .defer .dt { font-weight: 600; font-size: 14.5px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 56px; padding-top: 22px;
+      border-top: 1px solid var(--gray-300); }
+    .footer code { font-size: 12px; color: #C9B98A; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · skilltree rebalance · 2026-05-25</div>
+      <h1>Skill-tree rebalance — cap-per-pool via calibrated magnitudes</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        The current catalog produces multiplier runaway: a player at L128 ends up with ×10⁹ on extraction-category recipe rates after Dijkstra threads them through 47 nodes that all carry <code>recipeRateMul:extraction</code>, plus stacking sub-path bonuses, plus <code>xpGainMul</code> compounding into the level-up loop (L30 → L129 observed in minutes). This spec rebalances every multiplier-style skill effect so each output quantity caps at <strong>×10</strong> (or ÷10 for divisors, +N for additive) via <strong>calibrated per-node magnitudes</strong> — no runtime clamp. The cap is achieved by sizing each node's <code>+X</code> bonus such that the multiplicative product of all bought-in-pool nodes hits the cap exactly. Shared effects (e.g. extraction across Mine + Logger + Drill) split their pool budget 50/50 between the shared and per-building effect kinds.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Catalog growth</div><div class="v accent">+48 nodes</div></div>
+      <div class="cell"><div class="k">New SkillEffect kinds</div><div class="v">4</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v">v13 → v14</div></div>
+      <div class="cell"><div class="k">Runtime clamp</div><div class="v ok">none</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Cap every multiplier-style pool at ×10 by re-magnitudeing every catalog node. No runtime clamp; magnitudes do all the work.</div>
+      <div class="d-body"><strong>Per-effect-kind magnitude formula:</strong> for an effect with N nodes contributing to a pool capped at <code>C</code>, with the effect's share of the pool budget = <code>w</code> (in [0,1] summing to 1 across the pool's contributing kinds), per-node magnitude is <code>m = C^(w/N) - 1</code>. The natural multiplicative product across all N bought nodes is then <code>(1+m)^N = C^w</code>, and the joint product across all contributing kinds in the pool is <code>∏ C^w_k = C^∑w_k = C^1 = C</code> exactly. No clamp needed.</div>
+      <div class="d-body"><strong>Shared pools (Mine, Logger, Drill, Aqua, Patronage, T5 extractors)</strong> each include <code>recipeRateMul:extraction</code> plus a per-building yield bonus, split 50/50. Drill, Aqua, Patronage, T5 extractors get NEW yield-bonus effect kinds (<code>drillYieldBonusMul</code>, <code>aquacultureYieldBonusMul</code>, <code>patronageYieldBonusMul</code>, <code>t5ExtractorYieldBonusMul</code>) so they have symmetric structure to Mine + Logger.</div>
+      <div class="d-body"><strong>Shrink-each pools</strong> (S3 storage, S4 power) each side caps at <code>√10 ≈ 3.162</code> so the product stays ≤ ×10 without joint-cap logic. <strong>xpGain</strong> capped tighter at <strong>×3</strong> (meta-amplifier; tighter prevents the level-up runaway from re-emerging). <strong>Divisors</strong> reach ÷10 max (matching the multiplier cap on the inverse axis). <strong>Additive</strong> caps: <code>parallelBuildCapAdd</code> tops at +4 (5 total slots), <code>launchSuccessAdditive</code> tops at +90 percentage points.</div>
+      <div class="d-body"><strong>Cost curve + SP grant: unchanged.</strong> The cap-per-pool design subsumes the runaway — infinite SP just hits cap faster. No <code>costForDepth</code> or <code>skillPointsForLevelUp</code> rework. Less change, lower risk.</div>
+      <div class="d-body"><strong>Migration v13 → v14:</strong> reset every island's <code>level=1</code>, <code>xp=0</code>, and skill-tree fields (<code>unlockedNodes=[]</code>, <code>unspentSP=0</code>, <code>totalSpent=0</code>). Preserve buildings, inventory, maintenance state, drones, routes, satellites, all other state. Player keeps their built world but starts the skill ladder fresh against the new magnitudes.</div>
+    </div>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Background — the three root causes</h2></div>
+      <p class="sec-intro">Verified via direct catalog inspection earlier this session (see <code>2026-05-25-skilltree-rebalance-pools</code> docs-hub artifact for the pool-picker that ingested these findings).</p>
+      <p class="body"><strong>(a) Over-concentration of <code>recipeRateMul:extraction</code>.</strong> 47 catalog nodes carry that exact effect, spread across mining / forestry / drilling / aquaculture / patronage sub-paths. Cheapest-path traversal sweeps in many of them, stacking multipliers like ×1.5 × ×1.3 × ×1.25... = ×10⁹ at endgame.</p>
+      <p class="body"><strong>(b) Flat per-buy cost.</strong> <code>costForDepth(d) = round(1.5^(d-1))</code> at <code>skilltree.ts:345-347</code> — cost is per-depth only, no buy-count escalation. Whole-sub-path total ~874 SP regardless of how many already bought.</p>
+      <p class="body"><strong>(c) Geometric SP grant past L~50.</strong> <code>skillPointsForLevelUp(L) = floor(1.1^L)</code> at <code>skilltree.ts:356-358</code>. At L70 a single level grants ~790 SP; at L100, ~13,780. Since max node cost = <code>1.5^11 ≈ 86</code>, every level past mid-game grants more SP than the most expensive node — every cheapest-path is affordable instantly.</p>
+      <p class="body"><strong>This spec addresses (a) directly</strong> by re-magnitudeing every node so the worst-case sum across any pool tops out at ×10. (b) and (c) become moot — even with infinite SP, the cap is the cap. Cost curve and SP grant untouched.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Cap structure</h2></div>
+      <p class="sec-intro">Per-pool cap targets. Computed as the product reached when all contributing nodes are bought, given the calibrated magnitudes.</p>
+      <table class="tbl">
+        <thead><tr><th>Pool</th><th>Cap</th><th>Shape</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">S1 Mine output</td><td class="num">×10</td><td>shared (extraction + mineYield, 50/50)</td><td>Combined product when all bought.</td></tr>
+          <tr><td class="slate">S2 Logger output</td><td class="num">×10</td><td>shared (extraction + loggerYield, 50/50)</td><td>Mirrors S1.</td></tr>
+          <tr><td class="slate">S5 Drill / Pump output</td><td class="num">×10</td><td>shared (extraction + drillYield, 50/50)</td><td>NEW: drillYieldBonusMul effect kind + archetype.</td></tr>
+          <tr><td class="slate">S6 Aquaculture output</td><td class="num">×10</td><td>shared (extraction + aquaYield, 50/50)</td><td>NEW: aquacultureYieldBonusMul effect kind + archetype.</td></tr>
+          <tr><td class="slate">S7 Patronage output</td><td class="num">×10</td><td>shared (extraction + patronageYield, 50/50)</td><td>NEW: patronageYieldBonusMul effect kind + archetype.</td></tr>
+          <tr><td class="slate">S8 T5 extractor output</td><td class="num">×10</td><td>shared (extraction + t5Yield, 50/50)</td><td>NEW: t5ExtractorYieldBonusMul effect kind + archetype in oceanography sub-path.</td></tr>
+          <tr><td class="slate">S3a Storage uniform</td><td class="num">×√10</td><td>shrink-each</td><td>S3 (per-resource cap) = uniform × per-category, each ≤√10, product ≤×10.</td></tr>
+          <tr><td class="slate">S3b Storage per category (×4)</td><td class="num">×√10</td><td>shrink-each</td><td>dry_goods / liquid_gas / components / rare.</td></tr>
+          <tr><td class="slate">S4a Power supply</td><td class="num">×√10</td><td>shrink-each</td><td>S4 (net power swing) = supply × inverse(consumption), each side ≤√10.</td></tr>
+          <tr><td class="slate">S4b Power consumption reduction (÷)</td><td class="num">÷√10</td><td>shrink-each</td><td>Divisor; cap means max ÷√10 reduction.</td></tr>
+          <tr><td class="slate">Singleton multipliers (×16)</td><td class="num">×10</td><td>per effect kind</td><td>smelting / chemistry / electronics / manufacturing / comm / scanner-cov / scanner-dwell / route / airship / drone-scan / maintenance / sat-buf / sat-fuel / battery / mine-rare / logger-exotic.</td></tr>
+          <tr><td class="slate">Singleton xpGainMul (global)</td><td class="num">×3</td><td>per effect kind, tightened</td><td>Meta-amplifier; tighter to prevent level-up runaway re-emerging.</td></tr>
+          <tr><td class="slate">Singleton divisors (×6)</td><td class="num">÷10</td><td>per effect kind</td><td>teleporter-eff / drone-fuel / repair-reliability / construction-time / pad-explosion / debris-protection.</td></tr>
+          <tr><td class="slate">parallelBuildCapAdd</td><td class="num">+4</td><td>additive</td><td>Cap of 4 added slots (= 5 total with base 1).</td></tr>
+          <tr><td class="slate">launchSuccessAdditive</td><td class="num">+0.90</td><td>additive</td><td>+90 percentage points to launch-success probability.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Per-effect-kind magnitudes (computed, locked)</h2></div>
+      <p class="sec-intro">Magnitude is the per-node <code>+X</code> (stored as a bonus, so factor = 1+X). When all <code>N</code> nodes of the effect kind are bought, their product = the pool cap × the effect's share. Computed by <code>/tmp/rebalance-magnitudes.py</code> against the live catalog survey.</p>
+      <table class="tbl">
+        <thead><tr><th>Effect kind</th><th>N nodes</th><th>m per node</th><th>m %</th><th>Constraining pool</th><th>Product when all bought</th></tr></thead>
+        <tbody>
+          <tr><td><code>recipeRateMul:extraction</code></td><td class="num">47</td><td class="num">0.0248</td><td class="num">2.48%</td><td>S1 Mine (shared 50/50 with mineYield)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>powerConsumptionMul</code></td><td class="num">37</td><td class="num">0.0316</td><td class="num">3.16%</td><td>S4b Power demand (÷)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>commRangeMul</code></td><td class="num">33</td><td class="num">0.0723</td><td class="num">7.23%</td><td>Singleton comm</td><td class="num">×10.000</td></tr>
+          <tr><td><code>scannerCoverageMul</code></td><td class="num">32</td><td class="num">0.0746</td><td class="num">7.46%</td><td>Singleton scanner-cov</td><td class="num">×10.000</td></tr>
+          <tr><td><code>storageCategoryCapMul:dry_goods</code></td><td class="num">22</td><td class="num">0.0537</td><td class="num">5.37%</td><td>S3b Storage dry_goods (shrink-each)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>recipeRateMul:chemistry</code></td><td class="num">22</td><td class="num">0.1103</td><td class="num">11.03%</td><td>Singleton chemistry</td><td class="num">×10.000</td></tr>
+          <tr><td><code>routeCapacityMul</code></td><td class="num">22</td><td class="num">0.1103</td><td class="num">11.03%</td><td>Singleton route</td><td class="num">×10.000</td></tr>
+          <tr><td><code>maintenanceThresholdMul</code></td><td class="num">20</td><td class="num">0.1220</td><td class="num">12.20%</td><td>Singleton maint</td><td class="num">×10.000</td></tr>
+          <tr><td><code>mineYieldBonusMul</code></td><td class="num">19</td><td class="num">0.0625</td><td class="num">6.25%</td><td>S1 Mine (shared 50/50 with extraction)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>droneScanRadiusMul</code></td><td class="num">19</td><td class="num">0.1288</td><td class="num">12.88%</td><td>Singleton drone-scan</td><td class="num">×10.000</td></tr>
+          <tr><td><code>satBufferCapMul</code></td><td class="num">18</td><td class="num">0.1365</td><td class="num">13.65%</td><td>Singleton sat-buffer</td><td class="num">×10.000</td></tr>
+          <tr><td><code>powerProductionMul</code></td><td class="num">17</td><td class="num">0.0701</td><td class="num">7.01%</td><td>S4a Power supply (shrink-each)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>storageCapMul</code></td><td class="num">16</td><td class="num">0.0746</td><td class="num">7.46%</td><td>S3a Storage uniform (shrink-each)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>storageCategoryCapMul:liquid_gas</code></td><td class="num">16</td><td class="num">0.0746</td><td class="num">7.46%</td><td>S3b Storage liquid_gas</td><td class="num">×3.162</td></tr>
+          <tr><td><code>droneFuelEfficiencyMul</code></td><td class="num">16</td><td class="num">0.1548</td><td class="num">15.48%</td><td>Singleton drone-fuel (÷10)</td><td class="num">×10.000</td></tr>
+          <tr><td><code>airshipRangeMul</code></td><td class="num">12</td><td class="num">0.2115</td><td class="num">21.15%</td><td>Singleton airship</td><td class="num">×10.000</td></tr>
+          <tr><td><code>recipeRateMul:smelting</code></td><td class="num">11</td><td class="num">0.2328</td><td class="num">23.28%</td><td>Singleton smelting</td><td class="num">×10.000</td></tr>
+          <tr><td><code>recipeRateMul:electronics</code></td><td class="num">11</td><td class="num">0.2328</td><td class="num">23.28%</td><td>Singleton electronics</td><td class="num">×10.000</td></tr>
+          <tr><td><code>debrisProtectionMul</code></td><td class="num">10</td><td class="num">0.2589</td><td class="num">25.89%</td><td>Singleton debris (÷10)</td><td class="num">×10.000</td></tr>
+          <tr><td><code>recipeRateMul:manufacturing</code> <b>*</b></td><td class="num">9</td><td class="num">0.2915</td><td class="num">29.15%</td><td>Singleton manufacturing</td><td class="num">×10.000</td></tr>
+          <tr><td><code>batteryCapacityMul</code> <b>*</b></td><td class="num">9</td><td class="num">0.2915</td><td class="num">29.15%</td><td>Singleton battery</td><td class="num">×10.000</td></tr>
+          <tr><td><code>mineRareTrickleMul</code></td><td class="num">9</td><td class="num">0.2915</td><td class="num">29.15%</td><td>Singleton mine-rare</td><td class="num">×10.000</td></tr>
+          <tr><td><code>drillYieldBonusMul</code> <b>★</b></td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S5 Drill (shared 50/50 with extraction)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>aquacultureYieldBonusMul</code> <b>★</b></td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S6 Aqua (shared 50/50 with extraction)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>patronageYieldBonusMul</code> <b>★</b></td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S7 Patronage (shared 50/50 with extraction)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>t5ExtractorYieldBonusMul</code> <b>★</b></td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S8 T5 (shared 50/50 with extraction)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>storageCategoryCapMul:components</code></td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S3b Storage components</td><td class="num">×3.162</td></tr>
+          <tr><td><code>storageCategoryCapMul:rare</code></td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S3b Storage rare</td><td class="num">×3.162</td></tr>
+          <tr><td><code>constructionTimeMul</code></td><td class="num">8</td><td class="num">0.3335</td><td class="num">33.35%</td><td>Singleton construct (÷10)</td><td class="num">×10.000</td></tr>
+          <tr><td><code>loggerYieldBonusMul</code></td><td class="num">7</td><td class="num">0.1788</td><td class="num">17.88%</td><td>S2 Logger (shared 50/50 with extraction)</td><td class="num">×3.162</td></tr>
+          <tr><td><code>xpGainMul:(global)</code></td><td class="num">7</td><td class="num">0.1699</td><td class="num">16.99%</td><td>Singleton xpGain (cap=3)</td><td class="num">×3.000</td></tr>
+          <tr><td><code>scannerDwellRateMul</code></td><td class="num">6</td><td class="num">0.4678</td><td class="num">46.78%</td><td>Singleton scanner-dwell</td><td class="num">×10.000</td></tr>
+          <tr><td><code>teleporterEfficiencyMul</code></td><td class="num">6</td><td class="num">0.4678</td><td class="num">46.78%</td><td>Singleton teleporter (÷10)</td><td class="num">×10.000</td></tr>
+          <tr><td><code>repairDroneReliabilityMul</code></td><td class="num">6</td><td class="num">0.4678</td><td class="num">46.78%</td><td>Singleton repair (÷10)</td><td class="num">×10.000</td></tr>
+          <tr><td><code>padExplosionReduceMul</code></td><td class="num">6</td><td class="num">0.4678</td><td class="num">46.78%</td><td>Singleton pad-explosion (÷10)</td><td class="num">×10.000</td></tr>
+          <tr><td><code>satFuelReserveMul</code></td><td class="num">5</td><td class="num">0.5849</td><td class="num">58.49%</td><td>Singleton sat-fuel</td><td class="num">×10.000</td></tr>
+          <tr><td><code>loggerExoticTrickleMul</code></td><td class="num">5</td><td class="num">0.5849</td><td class="num">58.49%</td><td>Singleton logger-exotic</td><td class="num">×10.000</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top: 14px"><b>*</b> = catalog expanded from N=1 to N=9 via new archetype (see §04). <b>★</b> = new SkillEffect kind + new archetype (see §04).</p>
+      <p class="body"><strong>Additive caps (separate pool shape):</strong></p>
+      <table class="tbl">
+        <thead><tr><th>Effect kind</th><th>N nodes</th><th>per-node add</th><th>total cap</th></tr></thead>
+        <tbody>
+          <tr><td><code>parallelBuildCapAdd</code></td><td class="num">6</td><td class="num">+0.667 (≈+⅔)</td><td class="num">+4.00 (= 5 total slots)</td></tr>
+          <tr><td><code>launchSuccessAdditive</code></td><td class="num">9</td><td class="num">+0.100 (+10 pp)</td><td class="num">+0.90 (+90 pp)</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top: 14px"><strong>Computation source.</strong> The magnitudes above came from <code>/tmp/rebalance-magnitudes.py</code> driven by the live catalog survey (<code>/tmp/catalog-pool-survey.ts</code> dumping 505 hand-curated + filler nodes). Implementer should re-run after the new archetypes (§04) land to verify the N counts and re-derive magnitudes if any shift.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Catalog expansion — 4 new effect kinds + 6 new archetypes</h2></div>
+      <p class="sec-intro">The cap structure requires N≥5 nodes per effect kind to avoid cliff per-node magnitudes. The current catalog has 2 N=1 effects (manufacturing + battery) and 4 extraction-only buildings that share extraction without a dedicated bonus. Six new archetype entries fix both classes.</p>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:17px;color:var(--slate);margin:18px 0 8px">New SkillEffect union members (4)</h3>
+      <p class="body">Add to the <code>SkillEffect</code> union in <code>src/skilltree.ts</code> (near the existing <code>mineYieldBonusMul</code> / <code>loggerYieldBonusMul</code> declarations):</p>
+      <pre>| { readonly kind: 'drillYieldBonusMul' }
+| { readonly kind: 'aquacultureYieldBonusMul' }
+| { readonly kind: 'patronageYieldBonusMul' }
+| { readonly kind: 't5ExtractorYieldBonusMul' }</pre>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:17px;color:var(--slate);margin:18px 0 8px">New archetype entries (6)</h3>
+      <p class="body">Add to <code>src/skilltree-archetypes.ts</code>. <code>count: 8</code> across the board (matches existing archetype convention). <code>baseMag</code> values per the §03 table; <code>growth: 1.10</code> (mirrors existing mid-ramp); <code>baseCost: 1</code>, <code>costGrowth: 1.5</code> (standard).</p>
+      <table class="tbl">
+        <thead><tr><th>idPrefix</th><th>effectKind</th><th>effectExtra</th><th>subPath</th><th>baseMag</th><th>count</th></tr></thead>
+        <tbody>
+          <tr><td><code>drilling.drillYield</code></td><td><code>drillYieldBonusMul</code></td><td>—</td><td><code>drilling</code></td><td class="num">0.1548</td><td class="num">8</td></tr>
+          <tr><td><code>aquaculture.aquaYield</code></td><td><code>aquacultureYieldBonusMul</code></td><td>—</td><td><code>aquaculture</code></td><td class="num">0.1548</td><td class="num">8</td></tr>
+          <tr><td><code>patronage.patronageYield</code></td><td><code>patronageYieldBonusMul</code></td><td>—</td><td><code>patronage</code></td><td class="num">0.1548</td><td class="num">8</td></tr>
+          <tr><td><code>oceanography.t5ExtractorYield</code></td><td><code>t5ExtractorYieldBonusMul</code></td><td>—</td><td><code>oceanography</code></td><td class="num">0.1548</td><td class="num">8</td></tr>
+          <tr><td><code>storage.manufacturing</code></td><td><code>recipeRateMul</code></td><td><code>{ category: 'manufacturing' }</code></td><td><code>storage</code></td><td class="num">0.2915</td><td class="num">8</td></tr>
+          <tr><td><code>power_systems.batteryCapacity</code></td><td><code>batteryCapacityMul</code></td><td>—</td><td><code>power_systems</code></td><td class="num">0.2915</td><td class="num">8</td></tr>
+        </tbody>
+      </table>
+      <p class="body"><strong>Net catalog growth:</strong> 6 × 8 = 48 new nodes (505 → ~553 total).</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Engine integration — new yield-bonus effects fold</h2></div>
+      <p class="sec-intro">Each new yield-bonus effect must fold into <code>effectiveSkillMultipliers</code> and apply per-building at the recipe-rate eval site, exactly mirroring the existing <code>mineYieldBonusMul</code> and <code>loggerYieldBonusMul</code> pattern.</p>
+      <p class="body"><strong>1. Add fields to <code>SkillMultipliers</code></strong> at <code>src/skilltree.ts</code> (around line 778-810 where the existing per-building multipliers live):</p>
+      <pre>readonly drillYieldBonus: number;
+readonly aquacultureYieldBonus: number;
+readonly patronageYieldBonus: number;
+readonly t5ExtractorYieldBonus: number;</pre>
+      <p class="body"><strong>2. Add defaults in <code>effectiveSkillMultipliers</code></strong> init (all = 1):</p>
+      <pre>drillYieldBonus: 1,
+aquacultureYieldBonus: 1,
+patronageYieldBonus: 1,
+t5ExtractorYieldBonus: 1,</pre>
+      <p class="body"><strong>3. Add fold cases in the effect-walker</strong> (the switch inside <code>effectiveSkillMultipliers</code> that iterates <code>state.unlockedNodes</code>):</p>
+      <pre>case 'drillYieldBonusMul':
+  drillYieldBonus *= (1 + node.magnitude);
+  break;
+case 'aquacultureYieldBonusMul':
+  aquacultureYieldBonus *= (1 + node.magnitude);
+  break;
+case 'patronageYieldBonusMul':
+  patronageYieldBonus *= (1 + node.magnitude);
+  break;
+case 't5ExtractorYieldBonusMul':
+  t5ExtractorYieldBonus *= (1 + node.magnitude);
+  break;</pre>
+      <p class="body"><strong>4. Apply per-building at the recipe-rate eval site</strong> in <code>src/economy.ts</code> (the per-building branch at lines ~1174-1178 currently does this for Mine + Logger). Extend with the 4 new branches:</p>
+      <pre>else if (DRILL_FAMILY.has(def.id)) {
+  buildingBonus = skillMul.drillYieldBonus;
+} else if (AQUA_FAMILY.has(def.id)) {
+  buildingBonus = skillMul.aquacultureYieldBonus;
+} else if (PATRONAGE_FAMILY.has(def.id)) {
+  buildingBonus = skillMul.patronageYieldBonus;
+} else if (T5_EXTRACTOR_FAMILY.has(def.id)) {
+  buildingBonus = skillMul.t5ExtractorYieldBonus;
+}</pre>
+      <p class="body">Define the 4 <code>*_FAMILY</code> sets near the existing <code>MINE_FAMILY</code> + <code>LOGGER_FAMILY</code> sets. Building-id membership per the agent's report earlier this session:</p>
+      <ul style="margin:8px 0 14px 24px">
+        <li><code>DRILL_FAMILY</code>: <code>pump_jack</code>, <code>drill</code></li>
+        <li><code>AQUA_FAMILY</code>: <code>aquaculture</code>, <code>aquaculture_enhancer</code>, <code>aquaculture_optimizer</code></li>
+        <li><code>PATRONAGE_FAMILY</code>: per-spec patronage building IDs (verify by grepping for <code>'patronage'</code> in <code>building-defs.ts</code>)</li>
+        <li><code>T5_EXTRACTOR_FAMILY</code>: <code>aetheric_conduit</code>, <code>spacetime_resonator</code>, <code>eldritch_sieve</code>, <code>casimir_tap</code>, <code>zero_point_extractor</code>, <code>neutronium_extractor</code></li>
+      </ul>
+      <p class="body"><strong>5. Re-magnitude EVERY existing catalog entry per §03.</strong> Hand-curated catalog rows (in <code>src/skilltree-catalog.ts</code>) get their <code>magnitude</code> values overwritten with the §03 numbers per effect kind. Archetype entries (in <code>src/skilltree-archetypes.ts</code>) get their <code>baseMag</code> + <code>growth</code> tuned so the resulting filler-chain product hits the per-effect target. Simplest tuning: <code>baseMag = m</code> from §03, <code>growth = 1.0</code> (flat per-depth magnitude). Implementer can verify by re-running <code>/tmp/rebalance-magnitudes.py</code> after the edits and checking the per-pool actual products are 1.000.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Cost curve + SP grant — leave untouched</h2></div>
+      <p class="sec-intro">Original root causes (b) and (c) become moot under the cap-pool design.</p>
+      <p class="body">The original diagnosis flagged (b) flat per-buy cost and (c) geometric SP grant past L~50 as separate issues. With per-pool caps via calibrated magnitudes, the player has a hard ceiling regardless of how much SP they accumulate. Past the cap, additional purchases give 0 marginal benefit. The "infinite SP" problem self-resolves.</p>
+      <p class="body"><strong>No changes to:</strong> <code>costForDepth</code> (skilltree.ts:345), <code>skillPointsForLevelUp</code> (skilltree.ts:356), <code>cumulativeSkillPointsForLevel</code> (skilltree.ts:366). Whole-tree cost remains ~874 SP per sub-path; SP grant remains <code>1.1^L</code>. Mid-late game still hits the cap fast, but that's the design — caps ARE the gameplay ceiling.</p>
+      <p class="body">If post-ship playtesting reveals "hit the cap too fast" feels bad, a follow-up spec can tame the SP grant. Out of scope here.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Persistence — migration v13 → v14</h2></div>
+      <p class="sec-intro">Per the AGENTS.md "bump = migrate" policy. Schema bump because every island's level + skill-tree state needs to be reset (old SP allocations no longer match the rebalanced magnitudes).</p>
+      <p class="body"><strong>Bump:</strong> <code>SCHEMA_VERSION = 14</code>, <code>STORAGE_KEY = 'robot-islands:save:v14'</code>, extend <code>SUPPORTED_LOAD_VERSIONS</code> to include 13 + 14.</p>
+      <p class="body"><strong><code>migrateV13toV14(s: SerializedSnapshotV13): SaveSnapshot</code></strong>:</p>
+      <pre>function migrateV13toV14(s: SerializedSnapshotV13): SaveSnapshot {
+  return {
+    ...s,
+    v: 14,
+    islandStates: s.islandStates.map(state =&gt; ({
+      ...state,
+      level: 1,
+      xp: 0,
+      skillTree: {
+        ...state.skillTree,
+        unlockedNodes: [],
+        unspentSP: 0,
+        totalSpent: 0,
+      },
+    })),
+  } as unknown as SaveSnapshot;
+}</pre>
+      <p class="body"><strong>Preserved fields</strong> (NOT reset): buildings, inventory, maintenance state, drones (in-flight + scanBuffer), routes, vehicles, satellites, revealedCells, generatedCells, all timestamp / phase / tutorial / settlement state. Player keeps the world they built; only the skill-progression ladder resets.</p>
+      <p class="body"><strong>Loader chain</strong> at <code>src/persistence.ts</code>:</p>
+      <pre>if (snapshot.v === 13) {
+  snapshot = migrateV13toV14(snapshot as unknown as SerializedSnapshotV13);
+}</pre>
+      <p class="body"><strong>Tests</strong> (in <code>src/persistence.test.ts</code>): v13 fixture with non-trivial level/xp/skillTree loads as v14 with level=1, xp=0, empty skillTree, but buildings/inventory preserved.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Verification</h2></div>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm test.</strong> All existing tests pass; new tests for magnitude-product invariants pass (e.g. "all extraction nodes bought → product ≈ √10").</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm run build.</strong> tsc strict + noUncheckedIndexedAccess + noUnusedLocals clean. 4 new SkillEffect union members exhaustively handled in the switch.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Re-run rebalance-magnitudes.py after edits.</strong> Compare the script's per-pool actual products to the §03 table; ratios all 1.000 ± 0.001.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke — fresh-save flow.</strong> Reset save in dev, build a Mine, level the island, watch the Mine's recipe rate cap at ×10 (currently observed ×10⁹).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke — migration flow.</strong> Save at v13 with L128 home + accumulated skill-tree; load with v14 build; confirm <code>level=1, xp=0, unlockedNodes=[]</code> but buildings + inventory intact.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Cap probe.</strong> Spend SP exhaustively on extraction-related nodes; confirm Mine recipe rate never exceeds ×10. Probe Drill, Aqua, Patronage, T5 extractors with their new yield bonuses — same ×10 cap each.</div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">09</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row">
+          <div class="cell">Magnitude calibration drift — adding any new node to an existing effect kind without re-deriving magnitudes will push the pool past ×10.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Land <code>/tmp/rebalance-magnitudes.py</code> as a permanent dev script (<code>scripts/skilltree-magnitudes.py</code> or similar) + a vitest test that re-imports the catalog at test-time and asserts per-effect product ≈ target. Adding a node fails CI until the magnitude is re-derived.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Migration nukes player's level+SP. Affected players lose progression.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Pre-release game; user accepts the reset (locked in §07). Buildings + inventory preserved keeps the bulk of effort. SP re-earned via play.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Cap might feel "anticlimactic" — hitting ×10 ends progression-feel.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Out of scope today. Follow-up specs can layer graft-socket content (in-flight in separate spec), tier-reset rewards, etc.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Building-family sets in §05 may miss a variant (e.g. forgetting <code>deep_mine</code> in MINE_FAMILY).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Cross-reference against the existing <code>MINE_FAMILY</code> / <code>LOGGER_FAMILY</code> sets and grep <code>building-defs.ts</code> for the matching prefixes during implementation. Plan stage includes a verification step.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <section>
+      <div class="sec-head"><span class="num">10</span><h2>Out of scope</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Graft-socket system</div>
+          <div class="dd">Brainstorm paused mid-session; resumes separately. Magnitude design here doesn't preclude graft content (graft fills add to the same effect kinds; magnitudes already calibrated for the post-graft pool size).</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Cost-curve / SP-grant rework</div>
+          <div class="dd">Per §06. Cap-pool design subsumes the runaway. Tunable in a follow-up if mid-late game feels too "race-to-cap".</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Renaming existing yield-bonus effects for symmetry</div>
+          <div class="dd">Current naming: <code>mineYieldBonusMul</code>, <code>loggerYieldBonusMul</code>. New: <code>drillYieldBonusMul</code>, <code>aquacultureYieldBonusMul</code>, etc. Pattern matches; no rename needed.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Per-T5-extractor specialisation</div>
+          <div class="dd">All 6 T5 extractor variants share one <code>t5ExtractorYieldBonusMul</code> effect kind. A future spec could split into per-variant bonuses for build identity (e.g. "Aetheric Conduit specialist") at the cost of 5 more effect kinds + archetypes.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Conditional-bonus + adjacency-bonus folding</div>
+          <div class="dd"><code>conditionalBonus</code> (during-storm / during-night / networked-to-N) and <code>exoticAdjacency</code> (pairBoost) effects exist but aren't pool-capped here. They modify pool products at evaluation; if they push past ×10 in edge cases, fold into the cap calculus in a follow-up. Out of scope until playtesting surfaces a problem.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · skilltree rebalance v1 · 2026-05-25 · sources: live catalog survey (<code>/tmp/catalog-pool-survey.ts</code>), magnitude computation (<code>/tmp/rebalance-magnitudes.py</code>), pool-decisions JSON (<code>docs.nitjsefni.eu/d/robot-islands/2026-05-25-skilltree-rebalance-pools</code>) · originated from runaway diagnosis on the user's L128 home save (×10⁹ effective mine multiplier observed via Daedalus).</p>
+    </div>
+
+  </div>
+</body>
+</html>

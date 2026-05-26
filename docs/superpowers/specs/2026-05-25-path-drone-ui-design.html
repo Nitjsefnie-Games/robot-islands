@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Path-drone UI + shared launch preview — design spec · 2026-05-25</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1100px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 920px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 32px; line-height: 1.18;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 28px 0 40px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 16px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 50px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    section { margin-bottom: 52px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat);
+      color: var(--slate); padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 24px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 800px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    p.body em { color: var(--gray-700); font-style: italic; }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    pre { background: var(--gray-150); border: var(--border); border-radius: 8px;
+      padding: 12px 16px; margin: 10px 0 18px; overflow-x: auto; font-family: var(--mono);
+      font-size: 12.5px; color: var(--gray-700); line-height: 1.5; max-width: 920px; }
+    .ascii { background: var(--gray-150); border: var(--border); padding: 14px 18px;
+      font-family: var(--mono); font-size: 12px; color: var(--gray-700); white-space: pre;
+      line-height: 1.4; border-radius: 8px; margin: 10px 0 18px; max-width: 920px; overflow-x: auto; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 10px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col { background: var(--white); border: var(--border); border-radius: var(--radius); overflow: hidden; }
+    .compare .col-head { padding: 11px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em; border-bottom: var(--border); }
+    .compare .col.bad .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 14px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 6px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; display: grid; grid-template-columns: 290px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .checklist { display: flex; flex-direction: column; gap: 9px; max-width: 800px; }
+    .check { display: flex; gap: 12px; align-items: flex-start; background: var(--white);
+      border: var(--border); border-radius: 10px; padding: 11px 16px; }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500);
+      flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+    .check .ck-text code { font-size: 12px; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.4fr 90px 1.8fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 13px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 12px; max-width: 900px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 14px 20px; }
+    .defer .dt { font-weight: 600; font-size: 14.5px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 56px; padding-top: 22px;
+      border-top: 1px solid var(--gray-300); }
+    .footer code { font-size: 12px; color: #C9B98A; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · drones UI · 2026-05-25</div>
+      <h1>Path-drone UI + shared launch-mode preview</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Two gaps in the drone launch UI surfaced today. <strong>(1)</strong> The T5 path-drawn drone engine (Drone.waypoints + isPathDrawn branch + Path Drone Foundry building + scan-radius=12) is fully wired in <code>drones.ts</code> + <code>building-defs.ts</code>, but no UI ever sets the <code>waypoints</code> argument when calling <code>dispatchDrone</code> — so the player can't actually trigger path-drawn launches even with the foundry built. <strong>(2)</strong> The launch reticle (<code>drones-ui.ts:583</code>) renders only a screen-space crosshair at the cursor; there's no line from origin to cursor, no trajectory preview, no distance/fuel readout while aiming. Both fit one preview-render surface, so they ship together.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Scope</div><div class="v accent">2 fixes</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">~3</div></div>
+      <div class="cell"><div class="k">Engine changes</div><div class="v ok">none</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v ok">none</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Extend the tier dropdown with "T5 Path" + add a single shared world-space preview overlay that serves both single-click and path-draw modes.</div>
+      <div class="d-body">The tier dropdown gains a new entry <code>'5-path'</code> visible only when origin meets the SPEC §11.6 gate: <code>tierForLevel(level) ≥ 5 AND aiCoreCrafted AND hasOperationalBuilding(path_drone_foundry)</code>. Selecting it switches the ARM button's pointer-event handling: instead of single-click-dispatch, clicks accumulate into a per-arm <code>waypointBuffer</code>; double-click finalizes (drops the doubled point); right-click pops the last waypoint; Escape clears + disarms.</div>
+      <div class="d-body">A single new <code>launchPreviewGfx: Graphics</code> overlay in the world container renders both modes. <strong>Numeric tier (1-4)</strong>: line from origin tile centre → cursor tile centre, tinted by reachability. <strong>T5 Path</strong>: solid polyline through committed waypoints + dashed segment from last waypoint to cursor, tinted green if the next waypoint keeps <code>2 × pathLength ≤ MAX_FUEL_PER_DRONE × DRONE_T5_EFFICIENCY</code>, red otherwise. The existing crosshair reticle stays as-is on the cursor.</div>
+      <div class="d-body">No engine changes. <code>dispatchDrone</code> already accepts <code>waypoints?: ReadonlyArray&lt;{x,y}&gt;</code> and routes via <code>isPathDrawn</code>. Path mode passes the buffered waypoints with <code>fuel = ceil(2 × pathLength / DRONE_T5_EFFICIENCY)</code>; numeric mode passes <code>undefined</code> (today's behaviour preserved).</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>What exists today (engine + UI inventory)</h2></div>
+      <p class="sec-intro">Verified via direct read of the source, not memory.</p>
+
+      <p class="body"><strong>Engine (wired, untriggered from UI):</strong></p>
+      <ul style="margin: 8px 0 16px 24px;">
+        <li><code>Drone.waypoints: ReadonlyArray&lt;{x,y}&gt;</code> field — <code>src/drones.ts:68-69</code>.</li>
+        <li><code>dispatchDrone(world, origin, dirX, dirY, ux, uy, outboundTiles, biasOverride, selectedTier, waypoints?)</code> — optional <code>waypoints</code> at <code>src/drones.ts:339</code>; <code>isPathDrawn = waypoints !== undefined &amp;&amp; waypoints.length &gt;= 2</code> at line 361.</li>
+        <li>Position interpolation walks waypoints outbound then reversed inbound — <code>src/drones.ts:266-296</code>.</li>
+        <li>Scan radius for path mode: <code>DRONE_TIER_SCAN_RADIUS[5] = 12</code> per the drone-scan rework that just shipped.</li>
+        <li>Building: <code>path_drone_foundry</code> (T5 logistics) — <code>src/building-defs.ts:2046</code>.</li>
+        <li>Constants: <code>DRONE_T5_EFFICIENCY = 8</code> (tiles per fuel unit), <code>DRONE_T5_SPEED_TILES_PER_SEC = 0.8</code>, <code>DRONE_T5_WEATHER_MULTIPLIER = 0.5</code> — <code>src/drones.ts:89-92</code>.</li>
+        <li><code>MAX_FUEL_PER_DRONE = 50</code> — <code>src/drones.ts:110</code>.</li>
+      </ul>
+
+      <p class="body"><strong>UI (single-click launch, no path support):</strong></p>
+      <ul style="margin: 8px 0 16px 24px;">
+        <li><code>DroneUiHandle.isLaunchMode() / setLaunchMode(on)</code> — global mode flag; <code>src/drones-ui.ts:90-93</code>.</li>
+        <li><code>attemptLaunch(targetWorldTileX, targetWorldTileY, nowMs)</code> — called by main.ts canvas click handler when in launch mode, fuel auto-computed from cursor distance — <code>src/drones-ui.ts:99-106</code>.</li>
+        <li>Reticle layer (screen-space crosshair only): <code>src/drones-ui.ts:574-591</code>.</li>
+        <li>Range-ring layer (world-space max-range circle around active origin): <code>src/drones-ui.ts:117</code> + paint logic.</li>
+        <li>Tier dropdown with numeric tiers 1-N capped at island tier: <code>src/drones-ui.ts:301-323</code>. No path entry.</li>
+        <li><code>onLaunchModeChanged</code> hook for placement-mode mutual exclusion — <code>src/drones-ui.ts:139</code>.</li>
+      </ul>
+
+      <p class="body"><strong>Wholly missing today:</strong> per-tile preview line (single-click), per-segment dashed preview (path mode), waypoint buffer, double-click finalize, right-click pop, Esc cancel, T5-Path dropdown entry, gate check for foundry presence.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>SPEC citations</h2></div>
+      <p class="sec-intro">What §11.6 prescribes for the UI surface.</p>
+      <p class="body"><strong>§11.6 T5 Path-Drawn Drone (SPEC.md:1224-1253).</strong> Available only on islands with Tier 5 access (level 50, AI core crafted, Path Drone Foundry built). <em>"The player draws a path on the world map as a sequence of waypoints. The path can have arbitrary length up to a fuel-imposed limit. The drone follows the path at T5 speed, scanning a wide corridor along the entire route."</em></p>
+      <p class="body">Use cases the spec calls out: systematic area sweep (zigzag), targeted long-range probe (straight line into deep unexplored space), rare-feature hunt (search remote areas). All three benefit from arbitrary-shape paths — supports the click-to-add waypoint model rather than a fixed shape.</p>
+      <p class="body">Failure modes: fuel exhausted (lost), weather destruction (lost), successful return (full data dump). The UI fuel-gating step (refuse the click if it would commit a doomed path) preserves the player's ability to abort the draw rather than commit a known-failing run — strictly an improvement over the spec's silent failure mode.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Spec vs. code, before / after</h2></div>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:18px;color:var(--slate);margin:18px 0 10px">Fix 1 — T5 path UI</h3>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Today</div>
+          <div class="col-body"><ul>
+            <li>Engine accepts <code>waypoints</code> param; UI never sets it.</li>
+            <li>Path Drone Foundry can be built but provides no player-facing affordance.</li>
+            <li>Player on a T5 island with a foundry sees zero new UI elements vs. T4.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After</div>
+          <div class="col-body"><ul>
+            <li>Tier dropdown gains <code>'5-path'</code> entry, gated on L≥50 + AI core + Foundry operational.</li>
+            <li>Selecting <code>'5-path'</code> + ARM enters path-draw mode.</li>
+            <li>Click adds waypoint, double-click finalizes, right-click pops, Esc cancels.</li>
+            <li>Dispatch wires <code>waypoints</code> through; engine handles the rest unchanged.</li>
+          </ul></div>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:18px;color:var(--slate);margin:28px 0 10px">Fix 2 — Single-click cursor preview gap</h3>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Today</div>
+          <div class="col-body"><ul>
+            <li>Reticle is a 14px screen-space crosshair on the cursor.</li>
+            <li>Range ring shows max reach around origin (world-space).</li>
+            <li>No line from origin to cursor — player can't preview the trajectory.</li>
+            <li>No live distance / fuel readout while aiming.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After</div>
+          <div class="col-body"><ul>
+            <li>New world-space <code>launchPreviewGfx</code> overlay draws a line from origin tile centre → cursor tile centre.</li>
+            <li>Line tinted green when <code>distance ≤ maxLaunchRange</code>; red otherwise.</li>
+            <li>Panel fuel row updates per-frame: <code>FUEL X / 50 &lt;grade&gt; · DIST Y tiles</code>.</li>
+            <li>Existing reticle + range ring kept (overlapping cues are fine; they reinforce each other).</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>UI surface — concrete changes</h2></div>
+      <p class="sec-intro">What the player sees and how the controls behave per mode.</p>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:16px;color:var(--slate);margin:18px 0 8px">Tier dropdown extension</h3>
+      <div class="ascii">  Numeric tier (existing):
+    TIER  [ T1 · T2 · T3 · T4 pulse ▾ ]    (capped at island tier; T4 means
+                                            firePulse, not corridor scout)
+
+  With T5 unlocked + Foundry operational (new):
+    TIER  [ T1 · T2 · T3 · T4 pulse · T5 Path ▾ ]</div>
+      <p class="body">The <code>'5-path'</code> option carries the literal label "T5 Path" and a distinct <code>value</code> string so the existing numeric <code>DroneTier</code> code path is unaffected. Selection state in the UI is widened to a union: <code>DroneTier | '5-path'</code>.</p>
+      <p class="body"><strong>Foundry gate.</strong> The dropdown rebuild logic adds the entry only when all three conditions hold: <code>tierForLevel(origin.level) &gt;= 5</code>, <code>origin.aiCoreCrafted === true</code>, and <code>hasOperationalBuilding(origin.buildings, 'path_drone_foundry')</code>. When any fail, the entry is omitted (not greyed out — keeps the dropdown tight).</p>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:16px;color:var(--slate);margin:24px 0 8px">ARM button behaviour matrix</h3>
+      <table class="tbl">
+        <thead><tr><th>Selected tier</th><th>Click world tile</th><th>Double-click</th><th>Right-click</th><th>Esc</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">1-3 (corridor scout)</td><td>Dispatch immediately (today's behaviour)</td><td>n/a</td><td>n/a</td><td>Disarm</td></tr>
+          <tr><td class="slate">4 (omni pulse)</td><td>Fire pulse from origin (today's behaviour)</td><td>n/a</td><td>n/a</td><td>Disarm</td></tr>
+          <tr><td class="slate">5-path</td><td>Add waypoint (if green-preview); flash reject (if red)</td><td>Finalize: dispatch with <code>waypoints</code>, drop doubled point</td><td>Pop last waypoint</td><td>Clear buffer + disarm</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-family:var(--serif);font-weight:500;font-size:16px;color:var(--slate);margin:24px 0 8px">Panel fuel-row variants</h3>
+      <pre>  Numeric mode (any tier, cursor over tile):
+    FUEL  22 / 50 plasma_charge   ·   DIST  88 tiles
+
+  Path mode (no waypoints yet):
+    PATH  0 tiles   ·   FUEL  0 / 50 plasma_charge
+
+  Path mode (3 waypoints committed, cursor preview):
+    PATH  87 tiles   ·   FUEL  22 / 50 plasma_charge
+    (live; updates as cursor moves)</pre>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Render layer — single shared overlay</h2></div>
+      <p class="sec-intro">Both modes route through one new <code>Graphics</code> instance to keep render code in one place.</p>
+      <p class="body">A new field on <code>DroneUiHandle</code>: <code>readonly launchPreviewLayer: Container</code>. Owns a single child <code>launchPreviewGfx: Graphics</code>. The container is added to the <em>world</em> container at mount time (same place as <code>rangeRingLayer</code>) so it pans/zooms with the camera. Visibility tied to <code>launchMode</code> — hidden when disarmed.</p>
+      <p class="body"><strong>Per-frame redraw (called from the existing drones-ui ticker hook):</strong></p>
+      <pre>function paintLaunchPreview(): void {
+  launchPreviewGfx.clear();
+  if (!launchMode) return;
+  const origin = deps.getOriginSpec();
+  const cur = cursorTile;
+  if (!cur) return;
+
+  if (selectedTier === '5-path') {
+    // Solid polyline through committed waypoints.
+    const points = [originTile(origin), ...waypointBuffer];
+    drawPolyline(launchPreviewGfx, points, COLOR_OK, /*dashed=*/false);
+    // Dashed segment from last anchor to cursor.
+    const last = points[points.length - 1]!;
+    const wouldExceed = (totalLength + dist(last, cur)) * 2 > maxLaunchFuel * DRONE_T5_EFFICIENCY;
+    drawSegment(launchPreviewGfx, last, cur, wouldExceed ? COLOR_BAD : COLOR_OK, /*dashed=*/true);
+  } else {
+    // Numeric tier — line from origin to cursor.
+    const dist01 = dist(originTile(origin), cur);
+    const outOfRange = dist01 &gt; maxLaunchRange;
+    drawSegment(launchPreviewGfx, originTile(origin), cur, outOfRange ? COLOR_BAD : COLOR_OK, /*dashed=*/false);
+  }
+}</pre>
+      <p class="body"><strong>Colors.</strong> Reuse the project palette — <code>COLOR_OK = 0x8FA56E</code> (olive), <code>COLOR_BAD = 0xE08B7F</code> (rust). Both already used elsewhere in the UI (matches the reticle color logic).</p>
+      <p class="body"><strong>Dash pattern.</strong> Approx 8px on / 4px off in world-pixel space. Pixi 8 has no native dashed-stroke API, so implement as a small helper that emits per-segment <code>moveTo</code>/<code>lineTo</code> pairs along the segment direction. ~15 lines.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Click + keyboard handling</h2></div>
+      <p class="sec-intro">Where each event hooks in, and how main.ts's existing click-disambiguation logic extends.</p>
+      <p class="body"><strong>Click (`mouseup` after a small `mousedown` movement).</strong> main.ts already gates "is this a launch click" via <code>droneUi.isLaunchMode()</code>. When true, today it calls <code>droneUi.attemptLaunch(targetTile.x, targetTile.y, nowMs)</code>. After this spec, that call branches inside <code>attemptLaunch</code>:</p>
+      <pre>attemptLaunch(tileX, tileY, nowMs) {
+  if (selectedTier === '5-path') {
+    return addWaypoint(tileX, tileY);  // returns { ok, reason }
+  }
+  return existingSingleClickDispatch(tileX, tileY, nowMs);
+}</pre>
+      <p class="body"><strong>Double-click.</strong> main.ts detects double-clicks via the standard browser <code>dblclick</code> event on the canvas. New: when fired in launch mode + path selected, call <code>droneUi.finalizePath(nowMs)</code>. The double-click implies a synthetic single-click first, which <em>will</em> add a duplicate waypoint at the same tile as the previous click. <strong>Resolution (locked):</strong> <code>finalizePath</code> drops trailing-duplicate waypoints unconditionally — if the last two buffer entries have identical <code>tx/ty</code>, pop the tail before dispatch. This works regardless of browser event ordering (Chrome / Firefox / Safari differ) and handles the rare legitimate case (player intentionally double-tapped the same tile) the same way: dispatch what they meant.</p>
+      <p class="body"><strong>Right-click.</strong> Add a <code>contextmenu</code> listener on the canvas; when in path mode, <code>preventDefault()</code> and call <code>droneUi.popWaypoint()</code>. Otherwise let the browser context menu through.</p>
+      <p class="body"><strong>Escape.</strong> Bind to the existing key-dispatch registry in <code>input.ts</code>. When path mode is armed, Esc clears the buffer and disarms; otherwise it falls through to whatever Esc does elsewhere (close modal, etc.).</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>State + helpers (drones-ui.ts)</h2></div>
+      <p class="sec-intro">New module-level state in <code>mountDronesUi</code> and pure helpers that can be unit-tested.</p>
+      <table class="tbl">
+        <thead><tr><th>Identifier</th><th>Type</th><th>Lifetime</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="slate"><code>waypointBuffer</code></td><td><code>Array&lt;{tx:number; ty:number}&gt;</code></td><td>Per-arm</td><td>Committed waypoints; cleared on disarm/Esc/finalize.</td></tr>
+          <tr><td class="slate"><code>cursorTile</code></td><td><code>{tx:number; ty:number} \| null</code></td><td>Per-pointer</td><td>Last known cursor tile from <code>setReticleScreenPos</code>. Null when hovering off-canvas.</td></tr>
+          <tr><td class="slate"><code>selectedTier</code></td><td><code>DroneTier \| '5-path'</code></td><td>Per-session</td><td>Widened from current <code>DroneTier</code>.</td></tr>
+          <tr><td class="slate"><code>pathLength</code></td><td><code>number</code> (getter)</td><td>Derived</td><td>Sum of segments from origin through committed waypoints.</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top: 14px;"><strong>Pure helpers — extract to <code>drones-ui-helpers.ts</code> so they're unit-testable independent of DOM/Pixi:</strong></p>
+      <pre>// Total ground-distance from origin through waypoints in order.
+export function totalPathTiles(
+  origin: {x: number; y: number},
+  waypoints: ReadonlyArray&lt;{tx: number; ty: number}&gt;
+): number { ... }
+
+// Would adding `next` to the buffer exceed the fuel cap?
+// Cap: 2 × pathLength ≤ MAX_FUEL_PER_DRONE × DRONE_T5_EFFICIENCY
+export function wouldExceedRange(
+  origin: {x: number; y: number},
+  waypoints: ReadonlyArray&lt;{tx: number; ty: number}&gt;,
+  next: {tx: number; ty: number}
+): boolean { ... }
+
+// Fuel needed to fly the path round-trip, ceil'd.
+export function fuelForPath(
+  origin: {x: number; y: number},
+  waypoints: ReadonlyArray&lt;{tx: number; ty: number}&gt;
+): number { ... }</pre>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Verification</h2></div>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm test.</strong> All existing tests pass; new helper unit tests in <code>drones-ui-helpers.test.ts</code> green.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm run build.</strong> tsc strict clean — the widened <code>DroneTier | '5-path'</code> union must compile without leak into the engine's <code>DroneTier</code> type.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke: numeric mode preview.</strong> Open <code>islands.nitjsefni.eu</code>, dispatch a T1 drone, ARM, hover the world — confirm green line from origin to cursor; hover beyond range, confirm red.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke: T5 Path on a T5 island with Foundry.</strong> Tier dropdown shows "T5 Path". Selecting + ARM enters path mode. Three clicks add three waypoints (polyline). Double-click finalizes — drone dispatches with waypoints; visible in the in-flight ledger.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke: T5 Path entry gated.</strong> On a T4 island OR a T5 island without Foundry, "T5 Path" is absent from the dropdown.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke: range gating.</strong> In path mode, attempt to add a waypoint that pushes path past 200 tiles (= MAX_FUEL × T5_EFFICIENCY / 2). Click rejected; cursor segment red; buffer unchanged.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke: Esc + right-click.</strong> Mid-draw Esc clears buffer + disarms; right-click pops the last waypoint.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">09</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row">
+          <div class="cell">Browser fires <code>click</code> then <code>dblclick</code> back-to-back; the click adds a duplicate waypoint that the dblclick must clean up before dispatching.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Resolved per §06 — <code>finalizePath</code> unconditionally pops a trailing-duplicate waypoint before dispatch. Browser-agnostic.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Right-click in path mode collides with default browser context menu and any future right-click affordances elsewhere.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell"><code>preventDefault</code> only when launch mode is armed + tier is 5-path. Otherwise fall through. Document the conditional in the handler.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Tier dropdown widening (DroneTier → DroneTier | '5-path') leaks string into engine-side dispatch calls.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Narrow at the dispatch boundary inside <code>attemptLaunch</code> — engine receives the numeric tier resolved from origin level for path mode (5), not the UI-side string.</div>
+        </div>
+        <div class="row">
+          <div class="cell">main.ts canvas click handler doesn't currently know about double-click. Adding it touches input wiring.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Standard browser <code>dblclick</code> event on the canvas wraps the same coords as the underlying clicks. Minimal addition; isolated to main.ts's pointer-event setup block.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">10</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Explicitly deferred — named so the reader knows it was considered, not missed.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Saved / named paths</div>
+          <div class="dd">No "Save this path as X" affordance. Each launch is fresh. Future spec could persist favorites if the systematic-sweep use case needs them.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Mid-flight cancel</div>
+          <div class="dd">Once dispatched, the drone runs to completion (or destruction). No abort button.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Scan-corridor outline around the path</div>
+          <div class="dd">Not in v1 per picker decision. The polyline + reticle is enough; corridor capsule could be added later if players want it.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">T6 drone UI</div>
+          <div class="dd">T6 (antimatter) drones exist in the type but aren't spec'd for §11.5 dispatch UI. Separate spec when T6 gameplay lands.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Scanner Sat dark-mode mitigation for path drones (SPEC.md:1633)</div>
+          <div class="dd">Engine + UI work both deferred. The unified buffer-and-flush from the drone-scan rework handles dark-mode telemetry generically.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Mobile / touch path drawing</div>
+          <div class="dd">Desktop-only at v1 (consistent with the rest of the game per drone-scan / graphview audits).</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · path-drone UI + shared launch preview v1 · 2026-05-25 · sources: <code>SPEC.md §11.5 (1216-1222)</code>, <code>SPEC.md §11.6 (1224-1253)</code>, <code>src/drones.ts:50-470</code>, <code>src/drones-ui.ts:75-600</code>, <code>src/building-defs.ts:2046</code> · gap surfaced during drone-scan rework + user observation of missing single-click cursor preview.</p>
+    </div>
+
+  </div>
+</body>
+</html>

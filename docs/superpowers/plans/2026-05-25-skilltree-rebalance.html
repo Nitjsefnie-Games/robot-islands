@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill-tree rebalance — implementation plan</title>
+<style>
+  :root {
+    --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+    --tan:#E0B47F; --pink:#D38FCC; --red:#E08B7F; --info:#7DD3E8;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1180px; margin:0 auto; }
+  header.page-head { margin-bottom:48px; max-width:960px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:32px; line-height:1.18; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+  .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+  .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+  .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+  .callout { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-700); margin: 14px 0; max-width:960px; }
+  .callout.info { border-left-color:var(--info); }
+  .callout.warn { border-left-color:var(--red); }
+  .callout code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .callout b { color:var(--slate); }
+  .callout ul { margin-top:6px; margin-left:20px; list-style:disc; }
+  .callout li { margin:3px 0; }
+
+  section { margin-bottom:56px; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:24px; color:var(--slate); letter-spacing:-0.01em; }
+  .sec-head h2 code { font-family:var(--mono); font-size:18px; color:var(--clay); }
+  .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:880px; margin-bottom:20px; }
+  .sec-intro code { font-family:var(--mono); font-size:13px; color:var(--tan); }
+
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:40px; max-width: 1080px; }
+  @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+  .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px; padding:14px 16px; }
+  .summary .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+  .summary .v { font-size:15px; color:var(--slate); font-weight:600; }
+  .summary .v.accent { color:var(--clay); }
+  .summary .v.ok { color:var(--olive); }
+
+  .filetable { border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden; background:var(--white); margin-bottom:32px; }
+  .filetable .row { display:grid; grid-template-columns:300px 100px 1fr; gap:0; }
+  @media (max-width:900px){ .filetable .row{grid-template-columns:1fr;} }
+  .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+  .filetable .cell { padding:11px 14px; font-size:13px; vertical-align:top; }
+  .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+  @media (max-width:900px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+  .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+  .filetable .cell code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+  .filetable .pill { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--mono); font-size:10.5px; font-weight:600; }
+  .filetable .pill.new { background:var(--olive); color:var(--ivory); }
+  .filetable .pill.mod { background:var(--tan); color:var(--ivory); }
+
+  .task-card { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 22px; margin-bottom:18px; }
+  .files-block { background:var(--gray-150); border:1px solid var(--gray-300); border-radius:8px; padding:10px 13px; margin-bottom:14px; font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+  .files-block .h { color:var(--gray-500); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .files-block code { color:var(--tan); }
+
+  .step { margin: 10px 0; padding-left: 24px; position: relative; font-size:14px; color:var(--gray-700); }
+  .step::before { content: "☐"; position: absolute; left: 0; top: 0; color: var(--gray-500); }
+  .step b { color: var(--slate); }
+  .step code { font-family:var(--mono); font-size:12.5px; color:var(--tan); background: var(--gray-150); padding: 1px 5px; border-radius: 3px; }
+
+  pre { background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 10px 14px; margin: 8px 0 14px 24px; overflow-x: auto; font-family: var(--mono); font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 1080px; }
+  pre.bash { background: #1F1D19; color: var(--olive); }
+  pre.bash::before { content: "$ "; color: var(--gray-500); }
+  pre .comment { color: var(--gray-500); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--olive); }
+  pre .ty { color: var(--info); }
+  pre .fn { color: var(--tan); }
+
+  table.tbl { width:100%; border:1.5px solid var(--gray-300); border-radius:10px; border-collapse:separate; border-spacing:0; overflow:hidden; font-size:12.5px; margin: 12px 0 18px; max-width: 1080px; }
+  table.tbl th, table.tbl td { text-align:left; padding:7px 12px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+  table.tbl th { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em; color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+  table.tbl tr:last-child td { border-bottom:none; }
+  table.tbl td.slate { color:var(--slate); font-weight:600; }
+  table.tbl td.num { font-family:var(--mono); text-align:right; }
+  table.tbl td code { font-size:12px; color:var(--tan); }
+
+  .expected { background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 0 6px 6px 0; padding: 6px 12px; margin: 6px 0 10px 24px; font-family: var(--mono); font-size: 12px; color: var(--gray-700); max-width: 1040px; }
+  .expected b { color: var(--olive); }
+
+  .toc { background: var(--gray-150); border-left: 3px solid var(--info); border-radius: 0 6px 6px 0; padding: 14px 22px; margin: 28px 0 36px; max-width: 1040px; }
+  .toc h3 { color: var(--gray-500); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 10px; font-family: var(--mono); }
+  .toc ol { list-style: none; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc a { color: var(--gray-700); text-decoration: none; }
+  .toc a:hover { color: var(--clay); }
+  .toc .num { color: var(--gray-500); font-family: var(--mono); margin-right: 8px; font-size: 11.5px; }
+
+  .footer { color: var(--gray-500); margin-top: 64px; font-size: 12px; padding-top: 18px; border-top: 1.5px solid var(--gray-300); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · robot-islands · skilltree rebalance · 2026-05-25</div>
+    <h1>Skill-tree rebalance — cap-per-pool via calibrated magnitudes</h1>
+    <div class="prompt-box">
+      <span class="label">For agentic workers</span>
+      <b style="color:var(--slate)">REQUIRED SUB-SKILL:</b> Use <code>superpowers:subagent-driven-development</code>. Fresh kimi subagent per task + two-stage review (spec compliance reviewer → code quality reviewer). Trailer literal on commits: <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>.<br><br>
+      <b style="color:var(--slate)">Goal:</b> reshape the skill catalog so every multiplier-style pool caps at ×10 (or ÷10 / +N) via calibrated per-node magnitudes — no runtime clamp. Eliminates the ×10⁹ Mine runaway observed on the user's L128 save while preserving the catalog topology (sub-paths, edges, costs).<br>
+      <b style="color:var(--slate)">Architecture:</b> wire 4 new <code>SkillEffect</code> kinds + matching SkillMultipliers fields end-to-end (engine wiring); add 6 new filler archetypes (4 new yield-bonus chains + 2 cliff-fill chains for N=1 effects); re-magnitude every hand-curated catalog entry per the spec §03 table; re-tune existing archetype <code>baseMag</code> values; ship a v13 → v14 migration that resets <code>level</code>/<code>xp</code>/<code>skillTree.{unlockedNodes, unspentSP, totalSpent}</code> per island while preserving buildings + inventory; lastly land the magnitude calculator as a permanent dev script + a vitest invariant that asserts per-effect product ≈ pool target (so future catalog additions fail CI until magnitudes are re-derived).<br>
+      <b style="color:var(--slate)">Tech stack:</b> Vite 5 + TypeScript strict + PixiJS 8 + vitest. <code>strict</code> + <code>noUncheckedIndexedAccess</code> + <code>noUnusedLocals</code>.<br>
+      <b style="color:var(--slate)">Source of truth:</b> design spec at <code>docs/superpowers/specs/2026-05-25-skilltree-rebalance-design.html</code> (v1, locked 2026-05-25). All magnitudes in this plan are reproduced from spec §03 + §04; if a number disagrees, the spec wins.
+    </div>
+  </header>
+
+  <div class="callout warn">
+    <b>Locked design choices (do NOT deviate):</b>
+    <ul>
+      <li><b>Caps per pool</b>: shared pools (Mine/Logger/Drill/Aqua/Patronage/T5-extractor) joint ×10, split 50/50 between <code>recipeRateMul:extraction</code> and the per-building yield bonus → each side ×√10. Singleton multipliers ×10 each. Singleton divisors ÷10 each. <code>xpGainMul</code> tightened to ×3. <code>parallelBuildCapAdd</code> +4 total. <code>launchSuccessAdditive</code> +0.90 total.</li>
+      <li><b>Per-node magnitudes</b> are computed via <code>m = C^(w/N) − 1</code> where <code>C</code> = pool cap, <code>w</code> = effect's share of the pool budget, <code>N</code> = catalog count. NO runtime clamp anywhere.</li>
+      <li><b>4 new <code>SkillEffect</code> kinds</b>: <code>drillYieldBonusMul</code>, <code>aquacultureYieldBonusMul</code>, <code>patronageYieldBonusMul</code>, <code>t5ExtractorYieldBonusMul</code>. Mirror the existing <code>mineYieldBonusMul</code> / <code>loggerYieldBonusMul</code> shape exactly (no <code>category</code> / no extra fields).</li>
+      <li><b>6 new archetype entries</b>: 4 yield-bonus chains (one per new kind) + 2 cliff-fill chains (manufacturing in storage sub-path, batteryCapacity in power_systems sub-path). All <code>count: 8</code>.</li>
+      <li><b>Migration v13 → v14</b>: reset per-island <code>level=1</code>, <code>xp=0</code>, <code>skillTree.unlockedNodes=[]</code>, <code>skillTree.unspentSP=0</code>, <code>skillTree.totalSpent=0</code>. Preserve buildings, inventory, drones, routes, satellites, all other state. <code>STORAGE_KEY</code> bumps to <code>'robot-islands:save:v14'</code>.</li>
+      <li><b>Cost curve + SP grant unchanged</b>. No edits to <code>costForDepth</code>, <code>skillPointsForLevelUp</code>, <code>cumulativeSkillPointsForLevel</code>. The cap absorbs the runaway naturally.</li>
+      <li><b>FAMILY-set membership</b>: only include building-defIDs that actually exist in <code>src/building-defs.ts</code>. Verify by grep at the time of implementation. The spec lists candidate IDs; do NOT add IDs that don't resolve. An empty FAMILY set is acceptable (the multiplier folds but no building reads it yet).</li>
+    </ul>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Summary</h3>
+  <div class="summary">
+    <div class="cell"><div class="k">Files touched</div><div class="v accent">8</div></div>
+    <div class="cell"><div class="k">New files</div><div class="v">3</div></div>
+    <div class="cell"><div class="k">Tasks</div><div class="v">6</div></div>
+    <div class="cell"><div class="k">Schema bump</div><div class="v ok">v13 → v14</div></div>
+  </div>
+
+  <div class="toc">
+    <h3>Tasks</h3>
+    <ol>
+      <li><span class="num">01</span><a href="#task-1">Engine wiring — 4 new SkillEffect kinds, multipliers, fold cases, FAMILY sets, per-building branches</a></li>
+      <li><span class="num">02</span><a href="#task-2">Catalog expansion — 6 new filler archetypes (4 yield + 2 cliff-fill)</a></li>
+      <li><span class="num">03</span><a href="#task-3">Re-magnitude every hand-curated catalog entry per §03</a></li>
+      <li><span class="num">04</span><a href="#task-4">Re-tune every existing archetype baseMag + growth=1.0 per §03</a></li>
+      <li><span class="num">05</span><a href="#task-5">Persistence migration v13 → v14 (level + skill-tree reset)</a></li>
+      <li><span class="num">06</span><a href="#task-6">Promote magnitude calculator + vitest invariant test</a></li>
+    </ol>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Files touched</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Path</div><div class="cell">Status</div><div class="cell">Responsibility</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">4 new union members in <code>SkillEffect</code>. 4 new fields in <code>SkillMultipliers</code>. 4 new initialisers in <code>blankMultipliers</code>. 4 new fold cases in <code>effectiveSkillMultipliers</code>. (Tasks 1, 6.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Folding tests for the 4 new effect kinds. (Task 1.)</div></div>
+    <div class="row"><div class="cell"><code>src/economy.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">4 new <code>*_FAMILY</code> Sets next to the existing per-defId chain. Extend the per-building bonus chain at line ~1167-1179 with 4 new <code>else if</code> branches. (Task 1.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-archetypes.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">6 new archetype entries appended to the matching sub-path archetype arrays. Re-tune existing <code>baseMag</code> + <code>growth</code> across all archetypes per §03. Extend <code>effectLabel</code> switch for 4 new kinds. (Tasks 2, 4.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-catalog.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Re-magnitude every hand-curated catalog row per the §03 magnitude table. ~280 magnitude assignments updated. (Task 3.)</div></div>
+    <div class="row"><div class="cell"><code>src/persistence.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Bump <code>SCHEMA_VERSION</code> to 14, bump <code>STORAGE_KEY</code> to <code>'robot-islands:save:v14'</code>, extend <code>SUPPORTED_LOAD_VERSIONS</code>, add <code>SerializedSnapshotV13</code> type alias, add <code>migrateV13toV14</code>, wire into loader chain. (Task 5.)</div></div>
+    <div class="row"><div class="cell"><code>src/persistence.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Migration test: v13 fixture → v14 with level=1/xp=0/empty skillTree, buildings + inventory preserved. (Task 5.)</div></div>
+    <div class="row"><div class="cell"><code>scripts/skilltree-magnitudes.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Permanent dev script: reads the live catalog, computes per-effect-kind product, prints per-pool table. Replaces <code>/tmp/rebalance-magnitudes.py</code>. (Task 6.)</div></div>
+    <div class="row"><div class="cell"><code>src/skilltree-magnitudes.test.ts</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Vitest invariant: re-imports the live catalog at test-time and asserts per-effect-kind product ≈ target from spec §03 (±0.5% tolerance). Fails CI when adding a node without re-deriving magnitudes. (Task 6.)</div></div>
+    <div class="row"><div class="cell"><code>src/persistence-fixtures/v13-save.json</code></div><div class="cell"><span class="pill new">NEW</span></div><div class="cell">Minimal v13 snapshot fixture used by the migration test. (Task 5.) Can live inline in the test file instead — implementer's call.</div></div>
+  </div>
+
+  <div class="callout info">
+    <b>Magnitude reference table (from spec §03 — keep open while editing):</b>
+    <table class="tbl" style="margin-top:8px">
+      <thead><tr><th>Effect kind</th><th>N</th><th>m per node</th><th>m %</th><th>Constraining pool</th></tr></thead>
+      <tbody>
+        <tr><td><code>recipeRateMul:extraction</code></td><td class="num">47</td><td class="num">0.0248</td><td class="num">2.48%</td><td>S1 Mine (shared 50/50)</td></tr>
+        <tr><td><code>powerConsumptionMul</code></td><td class="num">37</td><td class="num">0.0316</td><td class="num">3.16%</td><td>S4b Power demand (÷)</td></tr>
+        <tr><td><code>commRangeMul</code></td><td class="num">33</td><td class="num">0.0723</td><td class="num">7.23%</td><td>Singleton comm</td></tr>
+        <tr><td><code>scannerCoverageMul</code></td><td class="num">32</td><td class="num">0.0746</td><td class="num">7.46%</td><td>Singleton scanner-cov</td></tr>
+        <tr><td><code>storageCategoryCapMul:dry_goods</code></td><td class="num">22</td><td class="num">0.0537</td><td class="num">5.37%</td><td>S3b dry_goods</td></tr>
+        <tr><td><code>recipeRateMul:chemistry</code></td><td class="num">22</td><td class="num">0.1103</td><td class="num">11.03%</td><td>Singleton chemistry</td></tr>
+        <tr><td><code>routeCapacityMul</code></td><td class="num">22</td><td class="num">0.1103</td><td class="num">11.03%</td><td>Singleton route</td></tr>
+        <tr><td><code>maintenanceThresholdMul</code></td><td class="num">20</td><td class="num">0.1220</td><td class="num">12.20%</td><td>Singleton maint</td></tr>
+        <tr><td><code>mineYieldBonusMul</code></td><td class="num">19</td><td class="num">0.0625</td><td class="num">6.25%</td><td>S1 Mine (shared 50/50)</td></tr>
+        <tr><td><code>droneScanRadiusMul</code></td><td class="num">19</td><td class="num">0.1288</td><td class="num">12.88%</td><td>Singleton drone-scan</td></tr>
+        <tr><td><code>satBufferCapMul</code></td><td class="num">18</td><td class="num">0.1365</td><td class="num">13.65%</td><td>Singleton sat-buffer</td></tr>
+        <tr><td><code>powerProductionMul</code></td><td class="num">17</td><td class="num">0.0701</td><td class="num">7.01%</td><td>S4a Power supply</td></tr>
+        <tr><td><code>storageCapMul</code></td><td class="num">16</td><td class="num">0.0746</td><td class="num">7.46%</td><td>S3a Storage uniform</td></tr>
+        <tr><td><code>storageCategoryCapMul:liquid_gas</code></td><td class="num">16</td><td class="num">0.0746</td><td class="num">7.46%</td><td>S3b liquid_gas</td></tr>
+        <tr><td><code>droneFuelEfficiencyMul</code></td><td class="num">16</td><td class="num">0.1548</td><td class="num">15.48%</td><td>Singleton drone-fuel</td></tr>
+        <tr><td><code>airshipRangeMul</code></td><td class="num">12</td><td class="num">0.2115</td><td class="num">21.15%</td><td>Singleton airship</td></tr>
+        <tr><td><code>recipeRateMul:smelting</code></td><td class="num">11</td><td class="num">0.2328</td><td class="num">23.28%</td><td>Singleton smelting</td></tr>
+        <tr><td><code>recipeRateMul:electronics</code></td><td class="num">11</td><td class="num">0.2328</td><td class="num">23.28%</td><td>Singleton electronics</td></tr>
+        <tr><td><code>debrisProtectionMul</code></td><td class="num">10</td><td class="num">0.2589</td><td class="num">25.89%</td><td>Singleton debris</td></tr>
+        <tr><td><code>recipeRateMul:manufacturing</code></td><td class="num">9</td><td class="num">0.2915</td><td class="num">29.15%</td><td>Singleton manufacturing</td></tr>
+        <tr><td><code>batteryCapacityMul</code></td><td class="num">9</td><td class="num">0.2915</td><td class="num">29.15%</td><td>Singleton battery</td></tr>
+        <tr><td><code>mineRareTrickleMul</code></td><td class="num">9</td><td class="num">0.2915</td><td class="num">29.15%</td><td>Singleton mine-rare</td></tr>
+        <tr><td><code>drillYieldBonusMul</code> ★</td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S5 Drill (shared 50/50)</td></tr>
+        <tr><td><code>aquacultureYieldBonusMul</code> ★</td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S6 Aqua (shared 50/50)</td></tr>
+        <tr><td><code>patronageYieldBonusMul</code> ★</td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S7 Patronage (shared 50/50)</td></tr>
+        <tr><td><code>t5ExtractorYieldBonusMul</code> ★</td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S8 T5 (shared 50/50)</td></tr>
+        <tr><td><code>storageCategoryCapMul:components</code></td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S3b components</td></tr>
+        <tr><td><code>storageCategoryCapMul:rare</code></td><td class="num">8</td><td class="num">0.1548</td><td class="num">15.48%</td><td>S3b rare</td></tr>
+        <tr><td><code>constructionTimeMul</code></td><td class="num">8</td><td class="num">0.3335</td><td class="num">33.35%</td><td>Singleton construct (÷)</td></tr>
+        <tr><td><code>loggerYieldBonusMul</code></td><td class="num">7</td><td class="num">0.1788</td><td class="num">17.88%</td><td>S2 Logger (shared 50/50)</td></tr>
+        <tr><td><code>xpGainMul:(global)</code></td><td class="num">7</td><td class="num">0.1699</td><td class="num">16.99%</td><td>Singleton xpGain (cap=3)</td></tr>
+        <tr><td><code>scannerDwellRateMul</code></td><td class="num">6</td><td class="num">0.4678</td><td class="num">46.78%</td><td>Singleton scanner-dwell</td></tr>
+        <tr><td><code>teleporterEfficiencyMul</code></td><td class="num">6</td><td class="num">0.4678</td><td class="num">46.78%</td><td>Singleton teleporter</td></tr>
+        <tr><td><code>repairDroneReliabilityMul</code></td><td class="num">6</td><td class="num">0.4678</td><td class="num">46.78%</td><td>Singleton repair</td></tr>
+        <tr><td><code>padExplosionReduceMul</code></td><td class="num">6</td><td class="num">0.4678</td><td class="num">46.78%</td><td>Singleton pad-explosion</td></tr>
+        <tr><td><code>satFuelReserveMul</code></td><td class="num">5</td><td class="num">0.5849</td><td class="num">58.49%</td><td>Singleton sat-fuel</td></tr>
+        <tr><td><code>loggerExoticTrickleMul</code></td><td class="num">5</td><td class="num">0.5849</td><td class="num">58.49%</td><td>Singleton logger-exotic</td></tr>
+        <tr><td><code>parallelBuildCapAdd</code></td><td class="num">6</td><td class="num">+0.667</td><td class="num">+⅔</td><td>Additive total = +4 (5 slots)</td></tr>
+        <tr><td><code>launchSuccessAdditive</code></td><td class="num">9</td><td class="num">+0.100</td><td class="num">+10 pp</td><td>Additive total = +0.90</td></tr>
+      </tbody>
+    </table>
+    ★ = new effect kind (Task 1). N includes the +8 from new archetypes for <code>recipeRateMul:manufacturing</code> and <code>batteryCapacityMul</code> (added in Task 2).
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 1 -->
+  <section id="task-1">
+    <div class="sec-head"><span class="num">01</span><h2>Task 1 — Engine wiring: 4 new SkillEffect kinds + multipliers + fold + FAMILY sets</h2></div>
+    <p class="sec-intro">Add the 4 new <code>SkillEffect</code> kinds (<code>drillYieldBonusMul</code>, <code>aquacultureYieldBonusMul</code>, <code>patronageYieldBonusMul</code>, <code>t5ExtractorYieldBonusMul</code>), matching <code>SkillMultipliers</code> fields, init defaults, fold cases, and per-building branches. Mirror the existing <code>mineYieldBonusMul</code> / <code>loggerYieldBonusMul</code> shape exactly. Tests cover the fold. After this task the engine is wired, but no nodes in the catalog carry the new kinds yet — multipliers stay at 1 in practice. Archetypes that introduce the new nodes land in Task 2.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree.ts</code> &nbsp; <code>~ src/skilltree.test.ts</code> &nbsp; <code>~ src/economy.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/skilltree.ts</code> at the <code>SkillEffect</code> union, locate the existing <code>mineYieldBonusMul</code> / <code>loggerYieldBonusMul</code> declarations (lines 143-146) and add 4 new members directly after <code>loggerExoticTrickleMul</code> (line 146):</div>
+      <pre><span class="comment">// existing:</span>
+<span class="comment">//   | { readonly kind: 'mineYieldBonusMul' }</span>
+<span class="comment">//   | { readonly kind: 'mineRareTrickleMul' }</span>
+<span class="comment">//   | { readonly kind: 'loggerYieldBonusMul' }</span>
+<span class="comment">//   | { readonly kind: 'loggerExoticTrickleMul' }</span>
+<span class="comment">// NEW (insert after loggerExoticTrickleMul, before droneScanRadiusMul on line 150):</span>
+  | { <span class="kw">readonly</span> kind: <span class="str">'drillYieldBonusMul'</span> }
+  | { <span class="kw">readonly</span> kind: <span class="str">'aquacultureYieldBonusMul'</span> }
+  | { <span class="kw">readonly</span> kind: <span class="str">'patronageYieldBonusMul'</span> }
+  | { <span class="kw">readonly</span> kind: <span class="str">'t5ExtractorYieldBonusMul'</span> }</pre>
+
+      <div class="step"><b>Step 2.</b> Also in <code>src/skilltree.ts</code>, locate the JSDoc block listing the family of yield bonuses (lines ~133-145 — the comment block that documents <code>mineYieldBonusMul</code> + <code>loggerYieldBonusMul</code>). Extend the JSDoc to mention the 4 new kinds. Match the existing wording style. Example addition:</div>
+      <pre><span class="comment">//   - drillYieldBonusMul         → per-Drill/Pump-Jack recipe rate bonus</span>
+<span class="comment">//   - aquacultureYieldBonusMul   → per-Aquaculture recipe rate bonus</span>
+<span class="comment">//   - patronageYieldBonusMul     → per-Patronage recipe rate bonus</span>
+<span class="comment">//   - t5ExtractorYieldBonusMul   → per-T5-extractor recipe rate bonus</span></pre>
+
+      <div class="step"><b>Step 3.</b> In <code>SkillMultipliers</code> interface (lines 756-833) add 4 new fields next to the existing <code>mineYieldBonus</code> / <code>loggerYieldBonus</code> fields (around line 823-829). Use the same JSDoc shape:</div>
+      <pre>  <span class="comment">/** Drilling secondary axis — multiplies Drill/Pump-Jack recipe rates.</span>
+<span class="comment">   *  Stacks with the global recipeRate.extraction multiplier. */</span>
+  <span class="kw">readonly</span> drillYieldBonus: <span class="ty">number</span>;
+  <span class="comment">/** Aquaculture secondary axis — multiplies Aquaculture recipe rates. */</span>
+  <span class="kw">readonly</span> aquacultureYieldBonus: <span class="ty">number</span>;
+  <span class="comment">/** Patronage secondary axis — multiplies Patron-Hub recipe rates. */</span>
+  <span class="kw">readonly</span> patronageYieldBonus: <span class="ty">number</span>;
+  <span class="comment">/** Oceanography secondary axis — multiplies T5-extractor recipe rates. */</span>
+  <span class="kw">readonly</span> t5ExtractorYieldBonus: <span class="ty">number</span>;</pre>
+
+      <div class="step"><b>Step 4.</b> In <code>blankMultipliers()</code> (line 835 onward) and the <code>return { ... }</code> assembly at the bottom of <code>effectiveSkillMultipliers</code> (~line 1054), add the 4 new fields with default <code>1</code>. Match the existing pattern: declare a local <code>let</code> next to <code>let mineYieldBonus = 1;</code>, fold into it, then include in the return object.</div>
+
+      <p class="step" style="margin-left:24px"><b>4a.</b> In <code>effectiveSkillMultipliers</code> (line 879 onward), find the local variable declarations near the top (where <code>let mineYieldBonus = 1;</code> lives — search for that line). Add immediately after:</p>
+      <pre>  <span class="kw">let</span> drillYieldBonus = 1;
+  <span class="kw">let</span> aquacultureYieldBonus = 1;
+  <span class="kw">let</span> patronageYieldBonus = 1;
+  <span class="kw">let</span> t5ExtractorYieldBonus = 1;</pre>
+
+      <p class="step" style="margin-left:24px"><b>4b.</b> In the fold switch (line ~997 onward), after the existing <code>case 'loggerExoticTrickleMul':</code> block (line 1008-1010), add 4 new cases:</p>
+      <pre>      <span class="kw">case</span> <span class="str">'drillYieldBonusMul'</span>:
+        drillYieldBonus *= m;
+        <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="str">'aquacultureYieldBonusMul'</span>:
+        aquacultureYieldBonus *= m;
+        <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="str">'patronageYieldBonusMul'</span>:
+        patronageYieldBonus *= m;
+        <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="str">'t5ExtractorYieldBonusMul'</span>:
+        t5ExtractorYieldBonus *= m;
+        <span class="kw">break</span>;</pre>
+
+      <p class="step" style="margin-left:24px"><b>4c.</b> In the final <code>return { ... }</code> of <code>effectiveSkillMultipliers</code> (~line 1054 onward, after <code>loggerExoticTrickleRate,</code>), add 4 new key/value pairs:</p>
+      <pre>    drillYieldBonus,
+    aquacultureYieldBonus,
+    patronageYieldBonus,
+    t5ExtractorYieldBonus,</pre>
+
+      <p class="step" style="margin-left:24px"><b>4d.</b> In <code>blankMultipliers()</code> (line 835), add the same 4 keys with value <code>1</code>. Match the existing field ordering.</p>
+
+      <div class="step"><b>Step 5.</b> In <code>src/economy.ts</code> at the per-building bonus chain (line 1167-1179, immediately preceding the <code>effectiveRate</code> assignment), add 4 new <code>else if</code> branches. Use string equality checks like the existing Mine + Logger chain. <b>Verify each building-defId exists in <code>src/building-defs.ts</code> first via grep</b> — drop any that don't resolve.</div>
+
+      <p class="step" style="margin-left:24px"><b>5a.</b> Grep for candidate IDs:</p>
+      <pre class="bash">grep -n "^  [a-z_]*: {" src/building-defs.ts | grep -E "pump_jack|drill|aquaculture|patron|aetheric|spacetime_res|eldritch_sieve|casimir|zero_point|neutronium"</pre>
+      <div class="expected"><b>Expected (verified during plan-stage grep — re-verify):</b> <code>patron_hub</code>, <code>pump_jack</code>, <code>drilling_rig</code>, <code>aetheric_conduit</code>, <code>spacetime_resonator</code>, <code>eldritch_sieve</code>, <code>casimir_tap</code>, <code>zero_point_extractor</code>, <code>neutronium_extractor</code>. NO aquaculture buildings exist yet (only crystal resources). NO standalone <code>drill</code> building (just <code>pump_jack</code> + <code>drilling_rig</code>).</div>
+
+      <p class="step" style="margin-left:24px"><b>5b.</b> Extend the chain at <code>src/economy.ts:1167-1179</code>. Replace the existing chain with the extended version (preserving the existing Mine + Logger entries verbatim, adding 4 new branches after the Logger branch):</p>
+      <pre>    <span class="kw">const</span> defId = te.building.defId;
+    <span class="kw">let</span> buildingBonus = 1;
+    <span class="kw">if</span> (defId === <span class="str">'mine'</span> || defId === <span class="str">'deep_mine'</span> || defId === <span class="str">'copper_mine'</span>
+        || defId === <span class="str">'tin_mine'</span> || defId === <span class="str">'lead_mine'</span> || defId === <span class="str">'bauxite_mine'</span>
+        || defId === <span class="str">'quartz_mine'</span> || defId === <span class="str">'sulfur_mine'</span> || defId === <span class="str">'phosphate_mine'</span>
+        || defId === <span class="str">'graphite_mine'</span> || defId === <span class="str">'limestone_quarry'</span>
+        || defId === <span class="str">'quarry'</span> || defId === <span class="str">'uranium_mine'</span>) {
+      buildingBonus = skillMul.mineYieldBonus;
+    } <span class="kw">else if</span> (defId === <span class="str">'logger'</span> || defId === <span class="str">'heavy_logger'</span>) {
+      buildingBonus = skillMul.loggerYieldBonus;
+    } <span class="kw">else if</span> (defId === <span class="str">'pump_jack'</span> || defId === <span class="str">'drilling_rig'</span>) {
+      buildingBonus = skillMul.drillYieldBonus;
+    } <span class="kw">else if</span> (defId === <span class="str">'patron_hub'</span>) {
+      buildingBonus = skillMul.patronageYieldBonus;
+    } <span class="kw">else if</span> (defId === <span class="str">'aetheric_conduit'</span> || defId === <span class="str">'spacetime_resonator'</span>
+        || defId === <span class="str">'eldritch_sieve'</span> || defId === <span class="str">'casimir_tap'</span>
+        || defId === <span class="str">'zero_point_extractor'</span> || defId === <span class="str">'neutronium_extractor'</span>) {
+      buildingBonus = skillMul.t5ExtractorYieldBonus;
+    }
+    <span class="comment">// Note: aquacultureYieldBonus has no consumer in building-defs.ts today.</span>
+    <span class="comment">// The multiplier folds but is dormant until aquaculture buildings land.</span>
+    <span class="kw">const</span> effectiveRate = te.baseRate * ia * pf * mf * accelMul * varianceFactor * toxMul * buildingBonus;</pre>
+      <div class="callout info"><b>If grep reveals different IDs:</b> follow the grep output, not the literals above. The plan's IDs are a best-effort snapshot; if e.g. <code>drilling_rig</code> doesn't exist (or a new <code>trench_drill</code> does), substitute accordingly. <b>What matters is the chain shape, not the specific IDs.</b></div>
+
+      <div class="step"><b>Step 5c. (Additive-effect engine fix)</b> Spec §03 magnitudes-table treats <code>parallelBuildCapAdd</code> at <code>+0.667</code> per node and <code>launchSuccessAdditive</code> at <code>+0.100</code> per node — these are <i>per-node</i> add values that the engine must SUM. The current fold case for <code>parallelBuildCapAdd</code> hardcodes <code>parallelBuildBonus += 1;</code> (ignores magnitude), and <code>launchSuccessAdditive</code> is in the no-op switch group (handled at launch-site). Patch both:</div>
+      <pre>      <span class="comment">// In skilltree.ts effectiveSkillMultipliers switch — BEFORE:</span>
+      <span class="kw">case</span> <span class="str">'parallelBuildCapAdd'</span>:
+        parallelBuildBonus += 1;
+        <span class="kw">break</span>;
+
+      <span class="comment">// AFTER (read magnitude as the per-node additive bonus):</span>
+      <span class="kw">case</span> <span class="str">'parallelBuildCapAdd'</span>:
+        parallelBuildBonus += node.magnitude;
+        <span class="kw">break</span>;</pre>
+      <p class="step" style="margin-left:24px">The <code>parallelBuildBonus</code> field is then read at the construction site; verify by grepping for <code>parallelBuildBonus</code> consumers — the spec wants <code>floor(parallelBuildBonus)</code> to integer-clamp to 4 additional slots when all 6 nodes are bought (6 × 0.667 ≈ 4.002).</p>
+
+      <p class="step" style="margin-left:24px">For <code>launchSuccessAdditive</code>, grep its consumer:</p>
+      <pre class="bash">grep -rn "launchSuccessAdditive\|launchSuccess" src/ | grep -v test | head -15</pre>
+      <p class="step" style="margin-left:24px">If the consumer iterates unlocked nodes directly to sum the additive, no further engine change is needed (just ensure the per-node magnitudes are correct via Tasks 3+4). If the consumer hardcodes <code>+1</code> per node, patch it to <code>+= node.magnitude</code> in the same style. <b>If no consumer exists at all</b> (the effect is purely cosmetic in the catalog), note this in the commit — the rebalance to 0.100 magnitude is still correct in the catalog, future engine work will pick it up.</p>
+
+      <div class="step"><b>Step 6.</b> Write fold-test stubs in <code>src/skilltree.test.ts</code>. Find an existing test for <code>mineYieldBonusMul</code> folding (grep for it) — duplicate the pattern for each of the 4 new kinds. Sketch:</div>
+      <pre><span class="fn">describe</span>(<span class="str">'effectiveSkillMultipliers — new yield-bonus kinds (Task 1)'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'folds drillYieldBonusMul into skillMul.drillYieldBonus'</span>, () =&gt; {
+    <span class="kw">const</span> nodes: SkillNode[] = [
+      makeTestNode({ kind: <span class="str">'drillYieldBonusMul'</span> }, { magnitude: 0.5 }),
+    ];
+    <span class="kw">const</span> mul = <span class="fn">effectiveSkillMultipliers</span>(<span class="kw">new</span> <span class="ty">Set</span>([nodes[0]!.id]), buildLookup(nodes));
+    expect(mul.drillYieldBonus).<span class="fn">toBeCloseTo</span>(1.5, 5);
+    expect(mul.aquacultureYieldBonus).<span class="fn">toBe</span>(1);
+  });
+  <span class="comment">// Repeat for the other 3 kinds, plus a multi-node stack check (×1.5 × ×1.5 = ×2.25)</span>
+});</pre>
+      <div class="callout info"><b>Re-use whatever <code>makeTestNode</code> / <code>buildLookup</code> helpers the existing skilltree.test.ts uses</b> — grep first. If none exist (the existing fold tests construct nodes inline), follow that style instead.</div>
+
+      <div class="step"><b>Step 7.</b> Run tests + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all tests green. Test count grew by 4-6 (depending on multi-node stack tests). <code>tsc --strict</code> clean — the new fold cases are exhaustively handled. <code>noUnusedLocals</code> clean: each new <code>let</code> is read into the return object.</div>
+
+      <div class="step"><b>Step 8.</b> Commit + push:</div>
+      <pre class="bash">git add src/skilltree.ts src/skilltree.test.ts src/economy.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(skilltree): wire 4 new yield-bonus SkillEffect kinds + per-building branches
+
+Adds drillYieldBonusMul, aquacultureYieldBonusMul, patronageYieldBonusMul,
+t5ExtractorYieldBonusMul to the SkillEffect union, matching SkillMultipliers
+fields + defaults + fold cases. Extends the per-building bonus chain in
+economy.ts:1167 to route the new multipliers to Drill/Pump-Jack, Patron-Hub,
+and the 6 T5 extractors. Aquaculture branch is dormant pending aqua buildings.
+
+No nodes carry these effects yet — the catalog expansion lands in Task 2.
+
+Refs design spec docs/superpowers/specs/2026-05-25-skilltree-rebalance-design.html §04, §05.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 2 -->
+  <section id="task-2">
+    <div class="sec-head"><span class="num">02</span><h2>Task 2 — Catalog expansion: 6 new filler archetypes</h2></div>
+    <p class="sec-intro">Append 6 archetype entries in <code>src/skilltree-archetypes.ts</code> — 4 new yield-bonus chains (one per new SkillEffect kind, 8 nodes each) + 2 cliff-fill chains for the N=1 effects (<code>recipeRateMul:manufacturing</code> in storage sub-path, <code>batteryCapacityMul</code> in power_systems sub-path), 8 nodes each. Net catalog growth = 48 nodes. <code>baseMag</code> uses the §03 numbers from inception. <code>growth: 1.0</code> (flat per-depth) so the chain product matches the cap directly. Extend the <code>effectLabel</code> switch for human readouts.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-archetypes.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/skilltree-archetypes.ts</code>, extend the <code>effectLabel</code> switch (lines ~28-58) with cases for the 4 new effect kinds. Order them next to the existing yield-bonus labels for consistency:</div>
+      <pre>    <span class="kw">case</span> <span class="str">'drillYieldBonusMul'</span>:         <span class="kw">return</span> <span class="str">'drill yield'</span>;
+    <span class="kw">case</span> <span class="str">'aquacultureYieldBonusMul'</span>:   <span class="kw">return</span> <span class="str">'aquaculture yield'</span>;
+    <span class="kw">case</span> <span class="str">'patronageYieldBonusMul'</span>:     <span class="kw">return</span> <span class="str">'patronage yield'</span>;
+    <span class="kw">case</span> <span class="str">'t5ExtractorYieldBonusMul'</span>:   <span class="kw">return</span> <span class="str">'T5-extractor yield'</span>;</pre>
+
+      <div class="step"><b>Step 2.</b> In the same file, append the new archetype entry to <code>DRILLING_FILLER_ARCHETYPES</code> (currently at line 158). Add as the last element in the array, before the closing <code>];</code>:</div>
+      <pre>  {
+    idPrefix: <span class="str">'drilling.drillYield'</span>, effectKind: <span class="str">'drillYieldBonusMul'</span>,
+    subPath: <span class="str">'drilling'</span>, baseMag: 0.1548, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },</pre>
+      <div class="callout info"><b>Note on <code>growth</code>:</b> the existing archetypes use <code>growth: 1.10</code> which compounds depth-on-depth (deeper nodes have larger magnitudes). The rebalance switches to <code>growth: 1.0</code> (flat) so the per-node product is exactly <code>(1 + baseMag)^count</code>. This makes the magnitude math match §03 directly. Implementer: <code>growth</code> is applied per-depth, so flat = uniform per-node magnitudes across depths 1-8.</div>
+
+      <div class="step"><b>Step 3.</b> Add the aquaculture archetype. Locate the sub-path's filler archetype array — grep for <code>AQUACULTURE_FILLER_ARCHETYPES</code>. If it doesn't exist (the sub-path may have only hand-curated content), <b>create the new exported array</b> in the same idiom as the existing per-sub-path arrays. Add the regen of <code>AQUACULTURE_FILLER_NODES</code> too:</div>
+      <pre><span class="kw">export const</span> AQUACULTURE_FILLER_ARCHETYPES: <span class="ty">FillerArchetype</span>[] = [
+  {
+    idPrefix: <span class="str">'aquaculture.aquaYield'</span>, effectKind: <span class="str">'aquacultureYieldBonusMul'</span>,
+    subPath: <span class="str">'aquaculture'</span>, baseMag: 0.1548, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },
+];
+<span class="kw">export const</span> AQUACULTURE_FILLER_NODES = AQUACULTURE_FILLER_ARCHETYPES.<span class="fn">flatMap</span>(generateFillerNodes);</pre>
+      <div class="callout info"><b>Important — verify <code>'aquaculture'</code> exists as a <code>SubPathId</code>:</b> grep <code>SubPathId</code> definition in <code>src/skilltree.ts</code> first. If absent, the catalog has no aquaculture sub-path — the implementer should skip this archetype (note in commit message) OR pivot to the closest existing sub-path the user intended. <b>Same check applies to <code>'patronage'</code> and <code>'oceanography'</code></b>.</div>
+
+      <div class="step"><b>Step 4.</b> Locate or create <code>PATRONAGE_FILLER_ARCHETYPES</code> in the same idiom, append the patronage archetype. Then locate or create <code>OCEANOGRAPHY_FILLER_ARCHETYPES</code> for the t5-extractor archetype:</div>
+      <pre>  <span class="comment">// In PATRONAGE_FILLER_ARCHETYPES (or new array if doesn't exist):</span>
+  {
+    idPrefix: <span class="str">'patronage.patronageYield'</span>, effectKind: <span class="str">'patronageYieldBonusMul'</span>,
+    subPath: <span class="str">'patronage'</span>, baseMag: 0.1548, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },
+
+  <span class="comment">// In OCEANOGRAPHY_FILLER_ARCHETYPES (or new array if doesn't exist):</span>
+  {
+    idPrefix: <span class="str">'oceanography.t5ExtractorYield'</span>, effectKind: <span class="str">'t5ExtractorYieldBonusMul'</span>,
+    subPath: <span class="str">'oceanography'</span>, baseMag: 0.1548, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },</pre>
+
+      <div class="step"><b>Step 5.</b> Add the 2 cliff-fill archetypes. Append to <code>STORAGE_FILLER_ARCHETYPES</code> (line 281) and <code>POWER_SYSTEMS_FILLER_ARCHETYPES</code> (line 259):</div>
+      <pre>  <span class="comment">// In STORAGE_FILLER_ARCHETYPES:</span>
+  {
+    idPrefix: <span class="str">'storage.manufacturing'</span>, effectKind: <span class="str">'recipeRateMul'</span>,
+    effectExtra: { category: <span class="str">'manufacturing'</span> }, subPath: <span class="str">'storage'</span>,
+    baseMag: 0.2915, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },
+
+  <span class="comment">// In POWER_SYSTEMS_FILLER_ARCHETYPES:</span>
+  {
+    idPrefix: <span class="str">'power_systems.batteryCapacity'</span>, effectKind: <span class="str">'batteryCapacityMul'</span>,
+    subPath: <span class="str">'power_systems'</span>, baseMag: 0.2915, growth: 1.0,
+    baseCost: 1, costGrowth: 1.5, count: 8,
+  },</pre>
+
+      <div class="step"><b>Step 6.</b> If any new <code>*_FILLER_ARCHETYPES</code> arrays were created, make sure they are referenced wherever the existing arrays are aggregated. Grep for <code>MINING_FILLER_NODES</code> to find the aggregation site (likely <code>skilltree-catalog.ts</code> or a barrel file) and add the new array's <code>*_FILLER_NODES</code> there too. Without this, the new nodes won't appear in <code>FULL_CATALOG</code>.</div>
+      <pre class="bash">grep -rn "MINING_FILLER_NODES\b" src/ | head -10</pre>
+      <div class="expected"><b>Expected:</b> two or three sites referencing the existing arrays. Add the new <code>*_FILLER_NODES</code> exports to the same aggregation list(s).</div>
+
+      <div class="step"><b>Step 7.</b> Run tests + build to confirm tsc strict + exhaustive switch is still clean and existing tests still pass. The new nodes don't break anything because their magnitudes don't hit any cap yet (existing catalog still has old magnitudes — that's Task 3+4's work):</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. Test count unchanged (no new tests this task). Build clean. New nodes appear in <code>FULL_CATALOG</code>; verify with a one-liner:</div>
+      <pre class="bash">npx tsx -e "import { FULL_CATALOG } from './src/skilltree-catalog.ts'; console.log('total nodes:', FULL_CATALOG.length, 'drillYield:', FULL_CATALOG.filter(n =&gt; n.effect.kind === 'drillYieldBonusMul').length);"</pre>
+      <div class="expected"><b>Expected:</b> total nodes ≈ 553 (505 + 48). <code>drillYield: 8</code>, similarly for the other 3 new kinds.</div>
+
+      <div class="step"><b>Step 8.</b> Commit + push:</div>
+      <pre class="bash">git add src/skilltree-archetypes.ts src/skilltree-catalog.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(skilltree): 6 new filler archetypes — yield bonuses + cliff fills
+
+4 new yield-bonus archetype chains for the new SkillEffect kinds wired
+in Task 1: drilling.drillYield, aquaculture.aquaYield,
+patronage.patronageYield, oceanography.t5ExtractorYield. Each 8 nodes,
+baseMag 0.1548, growth 1.0 (flat per-depth) so the chain product hits
+×3.162 = √10 when all 8 are bought, mirroring the shared-pool 50/50
+split with recipeRateMul:extraction.
+
+2 cliff-fill archetypes for the N=1 effects: storage.manufacturing
+(recipeRateMul:manufacturing) and power_systems.batteryCapacity. Each
+8 nodes, baseMag 0.2915 (29.15% per node so (1.2915)^9 ≈ ×10).
+
+Net +48 catalog nodes (505 → 553).
+
+Refs design spec §04.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 3 -->
+  <section id="task-3">
+    <div class="sec-head"><span class="num">03</span><h2>Task 3 — Re-magnitude every hand-curated catalog entry per §03</h2></div>
+    <p class="sec-intro">Walk every hand-curated <code>SkillNode</code> in <code>src/skilltree-catalog.ts</code> and overwrite its <code>magnitude</code> field with the §03 value for that effect kind. Mechanical edit — no logic change. The §03 magnitude is per effect kind, so all nodes of e.g. <code>routeCapacityMul</code> get <code>magnitude: 0.1103</code>. Filler archetype nodes are not touched in this task (Task 4 handles those via <code>baseMag</code>).</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-catalog.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Read the catalog top-to-bottom to understand the row shape:</div>
+      <pre class="bash">grep -n "magnitude:" src/skilltree-catalog.ts | wc -l
+head -100 src/skilltree-catalog.ts</pre>
+      <div class="expected"><b>Expected:</b> ~280 <code>magnitude:</code> occurrences. Each row looks roughly like <code>{ id: ..., effect: { kind: 'routeCapacityMul' }, magnitude: 0.05, ... }</code>.</div>
+
+      <div class="step"><b>Step 2.</b> Apply the §03 magnitudes per effect kind. Use the table in the plan header (or spec §03) as the lookup. <b>Recommended approach: do this in one pass per effect kind using a sed or scripted edit, then double-check by re-reading the diff.</b> Example sed for the simpler kinds:</div>
+      <pre class="bash"><span class="comment"># DRY RUN: print which rows would change, do NOT pipe to sed directly without inspecting</span>
+grep -n "kind: 'routeCapacityMul'" src/skilltree-catalog.ts | head -5</pre>
+      <p class="step" style="margin-left:24px">For complex rows where <code>magnitude</code> isn't on the same line as <code>kind</code>, edit by hand with the Edit tool. The catalog has both compact one-line rows and multi-line rows.</p>
+
+      <div class="step"><b>Step 3.</b> Magnitude map to apply (per spec §03):</div>
+      <table class="tbl">
+        <thead><tr><th>Effect kind (catalog rows)</th><th>New magnitude</th></tr></thead>
+        <tbody>
+          <tr><td><code>recipeRateMul</code> + <code>category: 'extraction'</code></td><td class="num">0.0248</td></tr>
+          <tr><td><code>recipeRateMul</code> + <code>category: 'chemistry'</code></td><td class="num">0.1103</td></tr>
+          <tr><td><code>recipeRateMul</code> + <code>category: 'smelting'</code></td><td class="num">0.2328</td></tr>
+          <tr><td><code>recipeRateMul</code> + <code>category: 'electronics'</code></td><td class="num">0.2328</td></tr>
+          <tr><td><code>recipeRateMul</code> + <code>category: 'manufacturing'</code></td><td class="num">0.2915</td></tr>
+          <tr><td><code>powerConsumptionMul</code></td><td class="num">0.0316</td></tr>
+          <tr><td><code>commRangeMul</code></td><td class="num">0.0723</td></tr>
+          <tr><td><code>scannerCoverageMul</code></td><td class="num">0.0746</td></tr>
+          <tr><td><code>storageCategoryCapMul</code> + <code>'dry_goods'</code></td><td class="num">0.0537</td></tr>
+          <tr><td><code>storageCategoryCapMul</code> + <code>'liquid_gas'</code></td><td class="num">0.0746</td></tr>
+          <tr><td><code>storageCategoryCapMul</code> + <code>'components'</code></td><td class="num">0.1548</td></tr>
+          <tr><td><code>storageCategoryCapMul</code> + <code>'rare'</code></td><td class="num">0.1548</td></tr>
+          <tr><td><code>storageCapMul</code></td><td class="num">0.0746</td></tr>
+          <tr><td><code>routeCapacityMul</code></td><td class="num">0.1103</td></tr>
+          <tr><td><code>maintenanceThresholdMul</code></td><td class="num">0.1220</td></tr>
+          <tr><td><code>mineYieldBonusMul</code></td><td class="num">0.0625</td></tr>
+          <tr><td><code>droneScanRadiusMul</code></td><td class="num">0.1288</td></tr>
+          <tr><td><code>satBufferCapMul</code></td><td class="num">0.1365</td></tr>
+          <tr><td><code>powerProductionMul</code></td><td class="num">0.0701</td></tr>
+          <tr><td><code>droneFuelEfficiencyMul</code></td><td class="num">0.1548</td></tr>
+          <tr><td><code>airshipRangeMul</code></td><td class="num">0.2115</td></tr>
+          <tr><td><code>debrisProtectionMul</code></td><td class="num">0.2589</td></tr>
+          <tr><td><code>batteryCapacityMul</code></td><td class="num">0.2915</td></tr>
+          <tr><td><code>mineRareTrickleMul</code></td><td class="num">0.2915</td></tr>
+          <tr><td><code>constructionTimeMul</code></td><td class="num">0.3335</td></tr>
+          <tr><td><code>loggerYieldBonusMul</code></td><td class="num">0.1788</td></tr>
+          <tr><td><code>xpGainMul</code> (any category — global)</td><td class="num">0.1699</td></tr>
+          <tr><td><code>scannerDwellRateMul</code></td><td class="num">0.4678</td></tr>
+          <tr><td><code>teleporterEfficiencyMul</code></td><td class="num">0.4678</td></tr>
+          <tr><td><code>repairDroneReliabilityMul</code></td><td class="num">0.4678</td></tr>
+          <tr><td><code>padExplosionReduceMul</code></td><td class="num">0.4678</td></tr>
+          <tr><td><code>satFuelReserveMul</code></td><td class="num">0.5849</td></tr>
+          <tr><td><code>loggerExoticTrickleMul</code></td><td class="num">0.5849</td></tr>
+          <tr><td><code>parallelBuildCapAdd</code></td><td class="num">0.667</td></tr>
+          <tr><td><code>launchSuccessAdditive</code></td><td class="num">0.100</td></tr>
+        </tbody>
+      </table>
+      <p class="step" style="margin-left:24px"><b>NOT touched in this task:</b> nodes whose effect kind is not in this list (e.g. <code>placeholder</code>, <code>unlockRecipe</code>, <code>exoticAdjacency</code>, <code>biomeBypass</code>, <code>structural</code>, <code>conditionalBonus</code>, <code>crossIslandShared</code>, <code>tierBypass</code>, <code>pairBoost</code>, <code>parallelConstruction</code>, <code>sharedPowerGrid</code>). These don't fold into <code>SkillMultipliers</code> and are out of scope for the cap rebalance.</p>
+
+      <div class="step"><b>Step 4.</b> Scripted-edit recipe (Python — implementer can adapt to sed if preferred):</div>
+      <pre><span class="comment"># /tmp/rebalance-catalog.py — apply magnitude map to skilltree-catalog.ts</span>
+<span class="comment"># Pattern: for each catalog row containing 'kind: X' AND 'magnitude: Y',</span>
+<span class="comment"># replace Y with the target value. Operates row-by-row by finding</span>
+<span class="comment"># balanced { ... } blocks. Implementer should script this themselves;</span>
+<span class="comment"># the table in step 3 is the source of truth. Verify after by re-running</span>
+<span class="comment"># /tmp/rebalance-magnitudes.py against the updated catalog and observing</span>
+<span class="comment"># per-pool actual-product ratios → 1.000.</span></pre>
+      <div class="callout info"><b>Alternative safer approach</b>: open <code>src/skilltree-catalog.ts</code> in the editor; for each effect kind on the table, use Find &amp; Replace with a regex matching <code>kind: 'foo'[^}]*magnitude: \K[\d.]+</code> → new value. <b>Manually review every match before applying</b> — the catalog has variant rows (e.g. <code>recipeRateMul:extraction</code> vs <code>recipeRateMul:chemistry</code>) that share a kind but need different magnitudes; the regex must include the <code>category</code> clause.</div>
+
+      <div class="step"><b>Step 5.</b> Sanity-check the product math for one pool. For <code>routeCapacityMul</code> (singleton, N=22, m=0.1103): <code>(1.1103)^22 ≈ 10.00</code>. Verify with Python:</div>
+      <pre class="bash">python3 -c "print(round((1.1103)**22, 4))"</pre>
+      <div class="expected"><b>Expected:</b> ≈ 10.00. If much off, the magnitude in the table is wrong — flag and pause.</div>
+
+      <div class="step"><b>Step 6.</b> Run tests + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all tests pass (no test references specific magnitudes). Build clean.</div>
+
+      <div class="step"><b>Step 7.</b> Commit + push:</div>
+      <pre class="bash">git add src/skilltree-catalog.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+refactor(skilltree-catalog): re-magnitude every hand-curated entry per §03
+
+Per design spec §03 — set per-effect-kind magnitudes so each multiplier-style
+pool's product across all bought nodes lands at the cap (×10 singleton,
+×√10 each side for shared/shrink-each pools, ×3 for xpGainMul).
+
+Eliminates the runaway: routeCapacity now caps at ×10 (was unbounded),
+mine recipe rate via 47 extraction nodes caps at ×3.162 instead of ×10⁹.
+
+Refs design spec §03 magnitude table.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 4 -->
+  <section id="task-4">
+    <div class="sec-head"><span class="num">04</span><h2>Task 4 — Re-tune every existing archetype baseMag + growth=1.0</h2></div>
+    <p class="sec-intro">Walk every archetype in <code>src/skilltree-archetypes.ts</code> and set <code>baseMag</code> to the §03 magnitude for its effect kind, and set <code>growth: 1.0</code> (flat per-depth) so all <code>count</code> generated nodes share the same magnitude. After this task the filler-chain product per effect kind matches the per-pool cap. Combined with Task 3, every pool's actual product → target.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/skilltree-archetypes.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Walk every archetype array (<code>MINING_FILLER_ARCHETYPES</code>, <code>FORESTRY_FILLER_ARCHETYPES</code>, <code>DRILLING_FILLER_ARCHETYPES</code>, ..., 14 sub-paths in total). For each archetype entry, look up its <code>effectKind</code> + optional <code>effectExtra.category</code>; find the matching magnitude in the §03 table from the plan header; overwrite <code>baseMag</code>. Set <code>growth: 1.0</code> uniformly.</div>
+
+      <div class="step"><b>Step 2.</b> The 6 archetypes added in Task 2 are already at the correct values — don't re-touch them. The other ~30 existing archetypes get rewritten. Sample (mining sub-path):</div>
+      <pre>  <span class="comment">// BEFORE (current state on disk):</span>
+  {
+    idPrefix: <span class="str">'mining.recipeRate'</span>, effectKind: <span class="str">'recipeRateMul'</span>,
+    effectExtra: { category: <span class="str">'extraction'</span> }, subPath: <span class="str">'mining'</span>,
+    baseMag: 0.04, growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
+  },
+  {
+    idPrefix: <span class="str">'mining.storageCap'</span>, effectKind: <span class="str">'storageCategoryCapMul'</span>,
+    effectExtra: { category: <span class="str">'dry_goods'</span> }, subPath: <span class="str">'mining'</span>,
+    baseMag: 0.05, growth: 1.08, baseCost: 1, costGrowth: 1.5, count: 7,
+  },
+
+  <span class="comment">// AFTER (per §03):</span>
+  {
+    idPrefix: <span class="str">'mining.recipeRate'</span>, effectKind: <span class="str">'recipeRateMul'</span>,
+    effectExtra: { category: <span class="str">'extraction'</span> }, subPath: <span class="str">'mining'</span>,
+    baseMag: 0.0248, growth: 1.0, baseCost: 1, costGrowth: 1.4, count: 8,
+  },
+  {
+    idPrefix: <span class="str">'mining.storageCap'</span>, effectKind: <span class="str">'storageCategoryCapMul'</span>,
+    effectExtra: { category: <span class="str">'dry_goods'</span> }, subPath: <span class="str">'mining'</span>,
+    baseMag: 0.0537, growth: 1.0, baseCost: 1, costGrowth: 1.5, count: 7,
+  },</pre>
+      <p class="step" style="margin-left:24px"><code>baseCost</code> + <code>costGrowth</code> stay as-is (cost curve untouched per spec §06). <code>count</code> stays as-is (don't add or remove nodes per archetype).</p>
+
+      <div class="step"><b>Step 3.</b> Reference: full set of effect kinds appearing in existing archetypes (verified via grep at plan-stage). For each, use the matching §03 value:</div>
+      <table class="tbl">
+        <thead><tr><th>effectKind (+ optional category)</th><th>baseMag</th><th>growth</th></tr></thead>
+        <tbody>
+          <tr><td><code>recipeRateMul</code> + extraction</td><td class="num">0.0248</td><td class="num">1.0</td></tr>
+          <tr><td><code>recipeRateMul</code> + chemistry</td><td class="num">0.1103</td><td class="num">1.0</td></tr>
+          <tr><td><code>recipeRateMul</code> + smelting</td><td class="num">0.2328</td><td class="num">1.0</td></tr>
+          <tr><td><code>recipeRateMul</code> + electronics</td><td class="num">0.2328</td><td class="num">1.0</td></tr>
+          <tr><td><code>recipeRateMul</code> + manufacturing</td><td class="num">0.2915</td><td class="num">1.0</td></tr>
+          <tr><td><code>storageCapMul</code></td><td class="num">0.0746</td><td class="num">1.0</td></tr>
+          <tr><td><code>storageCategoryCapMul</code> + dry_goods</td><td class="num">0.0537</td><td class="num">1.0</td></tr>
+          <tr><td><code>storageCategoryCapMul</code> + liquid_gas</td><td class="num">0.0746</td><td class="num">1.0</td></tr>
+          <tr><td><code>storageCategoryCapMul</code> + components</td><td class="num">0.1548</td><td class="num">1.0</td></tr>
+          <tr><td><code>storageCategoryCapMul</code> + rare</td><td class="num">0.1548</td><td class="num">1.0</td></tr>
+          <tr><td><code>powerProductionMul</code></td><td class="num">0.0701</td><td class="num">1.0</td></tr>
+          <tr><td><code>powerConsumptionMul</code></td><td class="num">0.0316</td><td class="num">1.0</td></tr>
+          <tr><td><code>batteryCapacityMul</code></td><td class="num">0.2915</td><td class="num">1.0</td></tr>
+          <tr><td><code>routeCapacityMul</code></td><td class="num">0.1103</td><td class="num">1.0</td></tr>
+          <tr><td><code>commRangeMul</code></td><td class="num">0.0723</td><td class="num">1.0</td></tr>
+          <tr><td><code>maintenanceThresholdMul</code></td><td class="num">0.1220</td><td class="num">1.0</td></tr>
+          <tr><td><code>scannerCoverageMul</code></td><td class="num">0.0746</td><td class="num">1.0</td></tr>
+          <tr><td><code>scannerDwellRateMul</code></td><td class="num">0.4678</td><td class="num">1.0</td></tr>
+          <tr><td><code>debrisProtectionMul</code></td><td class="num">0.2589</td><td class="num">1.0</td></tr>
+          <tr><td><code>satBufferCapMul</code></td><td class="num">0.1365</td><td class="num">1.0</td></tr>
+          <tr><td><code>satFuelReserveMul</code></td><td class="num">0.5849</td><td class="num">1.0</td></tr>
+          <tr><td><code>repairDroneReliabilityMul</code></td><td class="num">0.4678</td><td class="num">1.0</td></tr>
+          <tr><td><code>droneFuelEfficiencyMul</code></td><td class="num">0.1548</td><td class="num">1.0</td></tr>
+          <tr><td><code>droneScanRadiusMul</code></td><td class="num">0.1288</td><td class="num">1.0</td></tr>
+          <tr><td><code>airshipRangeMul</code></td><td class="num">0.2115</td><td class="num">1.0</td></tr>
+          <tr><td><code>padExplosionReduceMul</code></td><td class="num">0.4678</td><td class="num">1.0</td></tr>
+          <tr><td><code>constructionTimeMul</code></td><td class="num">0.3335</td><td class="num">1.0</td></tr>
+          <tr><td><code>parallelBuildCapAdd</code></td><td class="num">0.667</td><td class="num">1.0</td></tr>
+          <tr><td><code>teleporterEfficiencyMul</code></td><td class="num">0.4678</td><td class="num">1.0</td></tr>
+          <tr><td><code>mineYieldBonusMul</code></td><td class="num">0.0625</td><td class="num">1.0</td></tr>
+          <tr><td><code>mineRareTrickleMul</code></td><td class="num">0.2915</td><td class="num">1.0</td></tr>
+          <tr><td><code>loggerYieldBonusMul</code></td><td class="num">0.1788</td><td class="num">1.0</td></tr>
+          <tr><td><code>loggerExoticTrickleMul</code></td><td class="num">0.5849</td><td class="num">1.0</td></tr>
+          <tr><td><code>xpGainMul</code> (any category)</td><td class="num">0.1699</td><td class="num">1.0</td></tr>
+          <tr><td><code>launchSuccessAdditive</code></td><td class="num">0.100</td><td class="num">1.0</td></tr>
+        </tbody>
+      </table>
+
+      <div class="step"><b>Step 4.</b> Run tests + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all tests green. Test count unchanged. Build clean.</div>
+
+      <div class="step"><b>Step 5.</b> Verify per-effect product. Run the live magnitude calculator (Task 6 promotes it; for now use the /tmp version):</div>
+      <pre class="bash">npx tsx -e "import { FULL_CATALOG } from './src/skilltree-catalog.ts'; const byKind = new Map(); for (const n of FULL_CATALOG) { const k = n.effect.kind + (n.effect.category ? ':' + n.effect.category : ''); byKind.set(k, (byKind.get(k) ?? 1) * (1 + n.magnitude)); } for (const [k, p] of [...byKind].sort()) console.log(k.padEnd(40), p.toFixed(3));"</pre>
+      <div class="expected"><b>Expected:</b> per-effect products line up with the §03 column "Product when all bought" within ±0.5%. <code>recipeRateMul:extraction</code> ≈ 3.162. <code>routeCapacityMul</code> ≈ 10.000. <code>xpGainMul:(global)</code> ≈ 3.000. <b>If significant drift on any key, re-check that key's magnitude.</b></div>
+
+      <div class="step"><b>Step 6.</b> Commit + push:</div>
+      <pre class="bash">git add src/skilltree-archetypes.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+refactor(skilltree-archetypes): re-tune every archetype baseMag + growth=1.0
+
+Per design spec §03. Sets per-archetype baseMag to the §03 magnitude for
+each effect kind, and switches growth from the previous 1.08-1.10
+depth-compounding to 1.0 (flat per-depth). With this + Task 3, every
+multiplier-style pool's product across all bought nodes hits the cap
+exactly — no runtime clamp.
+
+Verified via npx tsx one-liner: per-effect products land within ±0.5% of
+spec §03 targets.
+
+Refs design spec §03.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 5 -->
+  <section id="task-5">
+    <div class="sec-head"><span class="num">05</span><h2>Task 5 — Persistence migration v13 → v14</h2></div>
+    <p class="sec-intro">Bump schema. Reset per-island <code>level</code>, <code>xp</code>, and skill-tree fields (<code>unlockedNodes</code>, <code>unspentSP</code>, <code>totalSpent</code>). Preserve everything else (buildings, inventory, drones, routes, satellites, all timestamps). Player keeps the world they built; only the progression ladder resets.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/persistence.ts</code> &nbsp; <code>~ src/persistence.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/persistence.ts</code> bump the schema constants (lines 71-87):</div>
+      <pre><span class="comment">// BEFORE:</span>
+<span class="kw">export const</span> STORAGE_KEY = <span class="str">'robot-islands:save:v13'</span>;
+<span class="kw">export const</span> SCHEMA_VERSION = 13 <span class="kw">as const</span>;
+<span class="kw">export const</span> SUPPORTED_LOAD_VERSIONS: <span class="kw">ReadonlySet</span>&lt;<span class="ty">number</span>&gt; = <span class="kw">new</span> <span class="ty">Set</span>([7, 8, 9, 10, 11, 12, 13]);
+
+<span class="comment">// AFTER:</span>
+<span class="kw">export const</span> STORAGE_KEY = <span class="str">'robot-islands:save:v14'</span>;
+<span class="kw">export const</span> SCHEMA_VERSION = 14 <span class="kw">as const</span>;
+<span class="kw">export const</span> SUPPORTED_LOAD_VERSIONS: <span class="kw">ReadonlySet</span>&lt;<span class="ty">number</span>&gt; = <span class="kw">new</span> <span class="ty">Set</span>([7, 8, 9, 10, 11, 12, 13, 14]);</pre>
+
+      <p class="step" style="margin-left:24px">Also update the JSDoc on line 83 to mention <code>v13 → v14</code> in the chain.</p>
+
+      <div class="step"><b>Step 2.</b> Add a <code>SerializedSnapshotV13</code> type alias. Grep for the existing v12 alias pattern to see the conventional shape (likely <code>SerializedSnapshotV12 = Omit&lt;...&gt; &amp; { v: 12; ... }</code>). The v13 alias captures the current pre-v14 shape:</div>
+      <pre class="bash">grep -n "SerializedSnapshotV12\b" src/persistence.ts | head -10</pre>
+      <p class="step" style="margin-left:24px">Mirror the existing alias style. The v13 shape is the current <code>SaveSnapshot</code> at HEAD (since v13 is current). Easiest:</p>
+      <pre><span class="kw">type</span> SerializedSnapshotV13 = <span class="kw">Omit</span>&lt;SaveSnapshot, <span class="str">'v'</span>&gt; &amp; { <span class="kw">readonly</span> v: 13 };</pre>
+      <div class="callout info"><b>Important:</b> after bumping <code>SCHEMA_VERSION</code> to 14, the <code>SaveSnapshot</code> shape has <code>v: 14</code>. The v13 alias needs to capture the OLD shape. If the snapshot shape doesn't change between v13 and v14 (it doesn't — same fields), a simple <code>Omit&lt;..., 'v'&gt;</code> + <code>v: 13</code> override is enough. Verify by checking that no field on <code>SerializedIslandState</code> changed.</div>
+
+      <div class="step"><b>Step 3.</b> Add <code>migrateV13toV14</code>. Mirror the existing <code>migrateV12toV13</code> pattern (line 394). Reset per-island level + xp + skillTree fields:</div>
+      <pre><span class="comment">/** v13 → v14: reset per-island level, xp, and skill-tree progression</span>
+<span class="comment"> *  (unlockedNodes, unspentSP, totalSpent). Preserves buildings, inventory,</span>
+<span class="comment"> *  drones, routes, satellites — everything outside the progression ladder.</span>
+<span class="comment"> *  Rationale: rebalance reshapes per-node magnitudes; previously-spent SP</span>
+<span class="comment"> *  no longer matches the new cap calculus, so a fresh allocation is the</span>
+<span class="comment"> *  cleanest fix. Player keeps the world they built. */</span>
+<span class="kw">export function</span> <span class="fn">migrateV13toV14</span>(s: SerializedSnapshotV13): SaveSnapshot {
+  <span class="kw">return</span> {
+    ...s,
+    v: 14 <span class="kw">as const</span>,
+    islandStates: s.islandStates.<span class="fn">map</span>((entry) =&gt; ({
+      ...entry,
+      state: {
+        ...entry.state,
+        level: 1,
+        xp: 0,
+        unlockedNodes: [],
+        unlockedEdges: [],
+        socketBindings: [],
+      },
+    })),
+  } <span class="kw">as unknown as</span> SaveSnapshot;
+}</pre>
+      <div class="callout info"><b>Verify field names</b> — grep for the actual fields on <code>SerializedIslandState</code> in <code>src/persistence.ts</code>. The serialized shape may name fields differently from the spec (e.g. <code>unspentSP</code> may not be serialized if it's derived). The handoff says reset <code>unlockedNodes</code>, <code>unspentSP</code>, <code>totalSpent</code>; the serialized state may carry only <code>unlockedNodes</code>/<code>unlockedEdges</code>/<code>socketBindings</code>. <b>Use the fields that actually exist on <code>SerializedIslandState</code></b> — derived fields like <code>unspentSP</code> get recomputed on deserialize and don't need explicit reset here.</div>
+
+      <div class="step"><b>Step 4.</b> Wire <code>migrateV13toV14</code> into the loader chain. Find the existing chain (lines 557-563) and add the v13 step:</div>
+      <pre>  <span class="comment">// existing:</span>
+  <span class="kw">if</span> (snapshot.v === 12) {
+    snapshot = <span class="fn">migrateV12toV13</span>(snapshot <span class="kw">as unknown as</span> SerializedSnapshotV12);
+  }
+  <span class="comment">// NEW:</span>
+  <span class="kw">if</span> (snapshot.v === 13) {
+    snapshot = <span class="fn">migrateV13toV14</span>(snapshot <span class="kw">as unknown as</span> SerializedSnapshotV13);
+  }</pre>
+
+      <div class="step"><b>Step 5.</b> Add migration test in <code>src/persistence.test.ts</code>. Mirror the <code>describe('migrateV12toV13', ...)</code> block (line 1772). Test asserts: v13 fixture with non-trivial level/xp/skillTree loads as v14 with the progression fields reset, but buildings + inventory preserved.</div>
+      <pre><span class="fn">describe</span>(<span class="str">'migrateV13toV14'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'resets per-island level + xp + skill-tree progression; preserves buildings/inventory'</span>, () =&gt; {
+    <span class="kw">const</span> v13: SerializedSnapshotV13 = {
+      v: 13,
+      savedAt: 1000,
+      savedAtPerf: 0,
+      world: { <span class="comment">/* minimal valid SerializedWorld with at least one island */</span> },
+      islandStates: [{
+        id: <span class="str">'home'</span>,
+        state: {
+          <span class="comment">/* all fields of SerializedIslandState — set:</span>
+<span class="comment">             level: 128, xp: 99999, inventory: { iron_ore: 500 },</span>
+<span class="comment">             buildings: [&lt;a real building&gt;], unlockedNodes: ['mining.recipeRate.1'],</span>
+<span class="comment">             unlockedEdges: ['mining.0-mining.1'], socketBindings: [],</span>
+<span class="comment">             and every other required field</span>
+<span class="comment">          */</span>
+        },
+      }],
+    };
+    <span class="kw">const</span> v14 = <span class="fn">migrateV13toV14</span>(v13);
+    expect(v14.v).<span class="fn">toBe</span>(14);
+    <span class="kw">const</span> migrated = v14.islandStates[0]!.state;
+    expect(migrated.level).<span class="fn">toBe</span>(1);
+    expect(migrated.xp).<span class="fn">toBe</span>(0);
+    expect(migrated.unlockedNodes).<span class="fn">toEqual</span>([]);
+    expect(migrated.unlockedEdges).<span class="fn">toEqual</span>([]);
+    expect(migrated.inventory.iron_ore).<span class="fn">toBe</span>(500);
+    expect(migrated.buildings.length).<span class="fn">toBe</span>(1);
+  });
+});</pre>
+      <p class="step" style="margin-left:24px"><b>If a fixture-builder helper exists</b> (e.g. <code>makeMinimalV12Snapshot()</code> — grep for it), reuse it and override just <code>v</code>, <code>level</code>, <code>xp</code>, <code>unlockedNodes</code> on the test island. Don't hand-build a 200-line literal if a helper is available.</p>
+
+      <div class="step"><b>Step 6.</b> Also extend the <code>describe('deserializeWorld v7 → v13 migration chain', ...)</code> block (line 1845) — rename to <code>v7 → v14</code> and add the v14 step to the chain test if it has one.</div>
+
+      <div class="step"><b>Step 7.</b> Run tests + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all tests green, including the new migration test. Test count grew by 1-2. Build clean. <code>tsc --strict</code> exhaustive on <code>SaveSnapshot.v</code> = 14.</div>
+
+      <div class="step"><b>Step 8.</b> Commit + push:</div>
+      <pre class="bash">git add src/persistence.ts src/persistence.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(persistence): schema v13 → v14 — reset level + skill tree per island
+
+Migrate carries forward buildings, inventory, drones, routes, satellites,
+all timestamps. Resets per-island level=1, xp=0, unlockedNodes=[],
+unlockedEdges=[], socketBindings=[]. Rationale: rebalanced magnitudes
+make prior SP allocations stale; cleanest fix is a fresh allocation while
+preserving the world the player built.
+
+Refs design spec §07.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 6 -->
+  <section id="task-6">
+    <div class="sec-head"><span class="num">06</span><h2>Task 6 — Promote magnitude calculator + vitest invariant test</h2></div>
+    <p class="sec-intro">Land <code>/tmp/rebalance-magnitudes.py</code> as a permanent dev script + a vitest invariant test that asserts per-effect-kind product matches the §03 target. After this lands, adding a node to any existing effect kind without re-deriving magnitudes fails CI — drift mitigation per spec §09. Convert Python → TypeScript so the script can import the live catalog directly.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>+ scripts/skilltree-magnitudes.ts</code> &nbsp; <code>+ src/skilltree-magnitudes.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> Create <code>scripts/skilltree-magnitudes.ts</code>. The script reads the live catalog, computes per-effect-kind product, prints a table matching spec §03. TypeScript port of the Python original so it shares types with the engine:</div>
+      <pre><span class="comment">/* eslint-disable no-console */</span>
+<span class="comment">// scripts/skilltree-magnitudes.ts — dev script. Computes per-effect-kind</span>
+<span class="comment">// product of (1 + magnitude) across the live catalog and prints a table.</span>
+<span class="comment">// Run: npx tsx scripts/skilltree-magnitudes.ts</span>
+
+<span class="kw">import</span> { FULL_CATALOG } <span class="kw">from</span> <span class="str">'../src/skilltree-catalog.js'</span>;
+<span class="kw">import type</span> { SkillEffect } <span class="kw">from</span> <span class="str">'../src/skilltree.js'</span>;
+
+<span class="kw">function</span> <span class="fn">effectKey</span>(e: <span class="ty">SkillEffect</span>): <span class="ty">string</span> {
+  <span class="kw">if</span> (e.kind === <span class="str">'recipeRateMul'</span>) <span class="kw">return</span> <span class="str">`recipeRateMul:</span>${e.category}<span class="str">`</span>;
+  <span class="kw">if</span> (e.kind === <span class="str">'storageCategoryCapMul'</span>) <span class="kw">return</span> <span class="str">`storageCategoryCapMul:</span>${e.category}<span class="str">`</span>;
+  <span class="kw">if</span> (e.kind === <span class="str">'xpGainMul'</span>) <span class="kw">return</span> <span class="str">`xpGainMul:</span>${e.category ?? <span class="str">'(global)'</span>}<span class="str">`</span>;
+  <span class="kw">return</span> e.kind;
+}
+
+<span class="comment">// Per-effect-kind product targets (from spec §03). Tolerance for the test</span>
+<span class="comment">// is ±0.5%, which catches a forgotten magnitude or an off-by-one count.</span>
+<span class="kw">export const</span> POOL_TARGETS: <span class="kw">Readonly</span>&lt;<span class="kw">Record</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt;&gt; = {
+  <span class="str">'recipeRateMul:extraction'</span>: 3.162,
+  <span class="str">'recipeRateMul:chemistry'</span>: 10.0,
+  <span class="str">'recipeRateMul:smelting'</span>: 10.0,
+  <span class="str">'recipeRateMul:electronics'</span>: 10.0,
+  <span class="str">'recipeRateMul:manufacturing'</span>: 10.0,
+  <span class="str">'powerConsumptionMul'</span>: 3.162,
+  <span class="str">'commRangeMul'</span>: 10.0,
+  <span class="str">'scannerCoverageMul'</span>: 10.0,
+  <span class="str">'storageCategoryCapMul:dry_goods'</span>: 3.162,
+  <span class="str">'storageCategoryCapMul:liquid_gas'</span>: 3.162,
+  <span class="str">'storageCategoryCapMul:components'</span>: 3.162,
+  <span class="str">'storageCategoryCapMul:rare'</span>: 3.162,
+  <span class="str">'storageCapMul'</span>: 3.162,
+  <span class="str">'routeCapacityMul'</span>: 10.0,
+  <span class="str">'maintenanceThresholdMul'</span>: 10.0,
+  <span class="str">'mineYieldBonusMul'</span>: 3.162,
+  <span class="str">'droneScanRadiusMul'</span>: 10.0,
+  <span class="str">'satBufferCapMul'</span>: 10.0,
+  <span class="str">'powerProductionMul'</span>: 3.162,
+  <span class="str">'droneFuelEfficiencyMul'</span>: 10.0,
+  <span class="str">'airshipRangeMul'</span>: 10.0,
+  <span class="str">'debrisProtectionMul'</span>: 10.0,
+  <span class="str">'batteryCapacityMul'</span>: 10.0,
+  <span class="str">'mineRareTrickleMul'</span>: 10.0,
+  <span class="str">'constructionTimeMul'</span>: 10.0,
+  <span class="str">'loggerYieldBonusMul'</span>: 3.162,
+  <span class="str">'xpGainMul:(global)'</span>: 3.0,
+  <span class="str">'scannerDwellRateMul'</span>: 10.0,
+  <span class="str">'teleporterEfficiencyMul'</span>: 10.0,
+  <span class="str">'repairDroneReliabilityMul'</span>: 10.0,
+  <span class="str">'padExplosionReduceMul'</span>: 10.0,
+  <span class="str">'satFuelReserveMul'</span>: 10.0,
+  <span class="str">'loggerExoticTrickleMul'</span>: 10.0,
+  <span class="str">'drillYieldBonusMul'</span>: 3.162,
+  <span class="str">'aquacultureYieldBonusMul'</span>: 3.162,
+  <span class="str">'patronageYieldBonusMul'</span>: 3.162,
+  <span class="str">'t5ExtractorYieldBonusMul'</span>: 3.162,
+};
+
+<span class="kw">export function</span> <span class="fn">computeProducts</span>(): <span class="kw">Map</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt; {
+  <span class="kw">const</span> products = <span class="kw">new</span> <span class="ty">Map</span>&lt;<span class="ty">string</span>, <span class="ty">number</span>&gt;();
+  <span class="kw">for</span> (<span class="kw">const</span> n <span class="kw">of</span> FULL_CATALOG) {
+    <span class="kw">if</span> (!(<span class="str">'magnitude'</span> <span class="kw">in</span> n)) <span class="kw">continue</span>;
+    <span class="kw">const</span> key = <span class="fn">effectKey</span>(n.effect);
+    <span class="kw">if</span> (!(key <span class="kw">in</span> POOL_TARGETS)) <span class="kw">continue</span>;
+    products.<span class="fn">set</span>(key, (products.<span class="fn">get</span>(key) ?? 1) * (1 + n.magnitude));
+  }
+  <span class="kw">return</span> products;
+}
+
+<span class="comment">// CLI entry — pretty-print the table.</span>
+<span class="kw">if</span> (<span class="kw">import</span>.meta.url === <span class="str">`file://</span>${process.argv[1]}<span class="str">`</span>) {
+  <span class="kw">const</span> products = <span class="fn">computeProducts</span>();
+  <span class="kw">const</span> rows: <span class="ty">Array</span>&lt;[<span class="ty">string</span>, <span class="ty">number</span>, <span class="ty">number</span>, <span class="ty">number</span>]&gt; = [];
+  <span class="kw">for</span> (<span class="kw">const</span> [k, target] <span class="kw">of</span> <span class="ty">Object</span>.<span class="fn">entries</span>(POOL_TARGETS)) {
+    <span class="kw">const</span> actual = products.<span class="fn">get</span>(k) ?? 0;
+    <span class="kw">const</span> ratio = target === 0 ? 0 : actual / target;
+    rows.<span class="fn">push</span>([k, target, actual, ratio]);
+  }
+  console.<span class="fn">log</span>(<span class="str">'effect-kind                                target    actual    ratio'</span>);
+  console.<span class="fn">log</span>(<span class="str">'-'</span>.<span class="fn">repeat</span>(78));
+  <span class="kw">for</span> (<span class="kw">const</span> [k, t, a, r] <span class="kw">of</span> rows.<span class="fn">sort</span>((x, y) =&gt; <span class="ty">Math</span>.<span class="fn">abs</span>(1 - y[3]) - <span class="ty">Math</span>.<span class="fn">abs</span>(1 - x[3]))) {
+    console.<span class="fn">log</span>(k.<span class="fn">padEnd</span>(42), t.<span class="fn">toFixed</span>(3).<span class="fn">padStart</span>(8), a.<span class="fn">toFixed</span>(3).<span class="fn">padStart</span>(8), r.<span class="fn">toFixed</span>(4).<span class="fn">padStart</span>(8));
+  }
+}</pre>
+      <div class="callout info"><b>Note on <code>.js</code> vs <code>.ts</code> import suffixes:</b> follow the repo convention (grep one or two existing imports — likely the codebase uses <code>.js</code> suffix even for TS source). Adjust if the repo uses bare specifiers.</div>
+
+      <div class="step"><b>Step 2.</b> Run the script as a smoke test:</div>
+      <pre class="bash">npx tsx scripts/skilltree-magnitudes.ts</pre>
+      <div class="expected"><b>Expected:</b> table prints with all ratios in [0.995, 1.005] (i.e. within ±0.5% of target). If any ratio is well off, Tasks 3 or 4 missed a magnitude — go back and fix.</div>
+
+      <div class="step"><b>Step 3.</b> Create <code>src/skilltree-magnitudes.test.ts</code>. The vitest test imports the live catalog at test-time + asserts each pool target is hit. Failing this test = catalog drift, fix before merging:</div>
+      <pre><span class="kw">import</span> { describe, it, expect } <span class="kw">from</span> <span class="str">'vitest'</span>;
+<span class="kw">import</span> { POOL_TARGETS, computeProducts } <span class="kw">from</span> <span class="str">'../scripts/skilltree-magnitudes.js'</span>;
+
+<span class="fn">describe</span>(<span class="str">'skill-tree magnitude invariants (spec §03 cap-per-pool)'</span>, () =&gt; {
+  <span class="kw">const</span> products = <span class="fn">computeProducts</span>();
+  <span class="kw">const</span> TOLERANCE = 0.005; <span class="comment">// ±0.5%</span>
+
+  <span class="kw">for</span> (<span class="kw">const</span> [key, target] <span class="kw">of</span> <span class="ty">Object</span>.<span class="fn">entries</span>(POOL_TARGETS)) {
+    <span class="fn">it</span>(<span class="str">`product across all </span>${key}<span class="str"> nodes ≈ </span>${target.<span class="fn">toFixed</span>(3)}<span class="str">`</span>, () =&gt; {
+      <span class="kw">const</span> actual = products.<span class="fn">get</span>(key);
+      expect(actual, <span class="str">`no catalog nodes found for </span>${key}<span class="str">`</span>).toBeDefined();
+      <span class="kw">const</span> ratio = actual! / target;
+      expect(ratio).<span class="fn">toBeGreaterThanOrEqual</span>(1 - TOLERANCE);
+      expect(ratio).<span class="fn">toBeLessThanOrEqual</span>(1 + TOLERANCE);
+    });
+  }
+});</pre>
+      <p class="step" style="margin-left:24px">The <code>POOL_TARGETS</code> object encodes the spec §03 target column. Adding a future catalog node bumps the product past the upper bound → the test fails until the magnitudes are re-derived. <b>This is the drift mitigation the spec §09 risk row calls for.</b></p>
+
+      <div class="step"><b>Step 4.</b> Run tests + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all tests green, including the ~37 new magnitude invariants. Test count grew by ~37. Build clean.</div>
+
+      <div class="step"><b>Step 5.</b> If any magnitude invariant fails, do NOT relax the tolerance — go back and fix Tasks 3 or 4. The whole point of this invariant is to catch exactly that drift.</div>
+
+      <div class="step"><b>Step 6.</b> Commit + push:</div>
+      <pre class="bash">git add scripts/skilltree-magnitudes.ts src/skilltree-magnitudes.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+feat(scripts): promote rebalance-magnitudes calculator + vitest invariant
+
+scripts/skilltree-magnitudes.ts reads the live catalog and computes
+per-effect-kind product. CLI run: `npx tsx scripts/skilltree-magnitudes.ts`
+prints a target/actual/ratio table.
+
+src/skilltree-magnitudes.test.ts asserts the same invariant in vitest:
+per-effect-kind product ≈ spec §03 target within ±0.5%. Adding a node
+to any existing effect kind without re-deriving the magnitude fails this
+test (and CI) until the magnitude is recomputed.
+
+Replaces /tmp/rebalance-magnitudes.py. Refs design spec §09 risk mitigation.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <!-- ====================================================================== -->
+  <section id="verification">
+    <div class="sec-head"><span class="num">07</span><h2>End-to-end verification (after all tasks land)</h2></div>
+    <p class="sec-intro">Once Task 6 commits, run the full smoke matrix to verify the rebalance ships as designed.</p>
+    <div class="task-card">
+      <div class="step"><b>1.</b> Full test suite + build, expecting both green:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -8 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> test count ≈ 2137 + 4-6 (Task 1 folds) + 1-2 (Task 5 migration) + 37 (Task 6 invariants) ≈ 2180+. All green.</div>
+
+      <div class="step"><b>2.</b> Run the magnitude script:</div>
+      <pre class="bash">npx tsx scripts/skilltree-magnitudes.ts</pre>
+      <div class="expected"><b>Expected:</b> every ratio in [0.995, 1.005].</div>
+
+      <div class="step"><b>3.</b> Browser smoke — migration flow. With the user's L128 home save in localStorage at v13, build + reload the page:</div>
+      <pre class="bash">npm run build
+<span class="comment"># reload https://islands.nitjsefni.eu/ (Daedalus tab id ~571602643 if still around)</span></pre>
+      <div class="expected"><b>Expected:</b> the previously-L128 home island is now level 1, xp 0, skill tree empty. Buildings, inventory, drones, routes all preserved. Schema in storage = v14.</div>
+
+      <div class="step"><b>4.</b> Browser smoke — cap probe. Play forward a bit (or use dev cheats), buy out one extraction sub-path, observe the Mine's effective recipe rate. Cap at ×3.162 (the √10 share); product with mineYieldBonus side at full gives ×10.</div>
+
+      <div class="step"><b>5.</b> Browser smoke — xpGain cap. xpGain caps at ×3 (tightened from default ×10). Verify by buying every <code>xpGainMul</code> node and inspecting the per-level XP grant ratio.</div>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Plan v1 · 2026-05-25 · sliced HTML for kimi dispatch (per <code>~/.claude/prompts/dispatch-from-sliced-plan.md</code>) · source spec <code>docs/superpowers/specs/2026-05-25-skilltree-rebalance-design.html</code> · execution sub-skill <code>superpowers:subagent-driven-development</code> · trailer literal <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>.</p>
+  </div>
+
+</div>
+</body>
+</html>

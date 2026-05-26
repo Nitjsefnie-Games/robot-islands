@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Skill-tree rebalance — effect pools picker · 2026-05-25</title>
+<style>
+  :root {
+    --page:#1B1A17; --panel:#252420; --panel2:#2E2C27;
+    --ink:#F5F3EC; --ink2:#CFCCC2; --muted:#8F8D82; --rule:#3A3833;
+    --clay:#D97757; --clay-d:#E0916F; --tan:#E0B47F;
+    --olive:#8FA56E; --pink:#D38FCC; --slate:#7DD3E8; --red:#E08B7F; --oat:#3A352B;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--page); color:var(--ink2); font-family:var(--sans); font-size:14px; line-height:1.55; }
+  .wrap { max-width:1240px; margin:0 auto; padding:44px 28px 96px; }
+
+  header { margin-bottom:14px; }
+  .eyebrow { font-family:var(--mono); font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+  h1 { font-family:var(--serif); font-weight:500; font-size:30px; letter-spacing:-0.01em; color:var(--ink); margin:6px 0 6px; }
+  .sub { color:var(--muted); max-width:880px; margin:0; font-size:13.5px; }
+  .sub code { font-family:var(--mono); font-size:12px; color:var(--tan); background:var(--panel); padding:1px 5px; border-radius:3px; }
+
+  .toolbar {
+    position:sticky; top:0; z-index:5; background:var(--page);
+    display:flex; align-items:center; gap:14px; padding:16px 0 12px; margin:22px 0 8px;
+    border-bottom:1.5px solid var(--rule);
+  }
+  .summary { font-family:var(--mono); font-size:12px; color:var(--ink2); }
+  .summary b { color:var(--ink); font-weight:600; }
+  .summary .dot { color:var(--rule); margin:0 5px; }
+  .spacer { flex:1; }
+  .toolbar button {
+    background:var(--panel); color:var(--ink2); border:1px solid var(--rule);
+    font:600 11.5px var(--mono); letter-spacing:0.05em; text-transform:uppercase;
+    padding:6px 11px; border-radius:3px; cursor:pointer;
+  }
+  .toolbar button:hover { border-color:var(--clay); color:var(--ink); }
+
+  .toc {
+    background:var(--panel); border:1px solid var(--rule); border-left:3px solid var(--slate);
+    padding:14px 18px; border-radius:0 6px 6px 0; margin:18px 0 28px;
+  }
+  .toc h3 { color:var(--muted); font:600 11px var(--mono); text-transform:uppercase; letter-spacing:0.07em; margin:0 0 8px; }
+  .toc ul { list-style:none; padding:0; margin:0; columns:2; column-gap:32px; }
+  .toc li { margin:3px 0; font-size:13px; }
+  .toc a { color:var(--ink2); text-decoration:none; }
+  .toc a:hover { color:var(--clay-d); }
+  .toc .ct { color:var(--muted); font-family:var(--mono); font-size:11.5px; margin-left:6px; }
+
+  section { margin-bottom:30px; }
+  section h2 {
+    font-family:var(--serif); font-weight:500; font-size:20px; color:var(--ink);
+    padding-bottom:6px; border-bottom:1px solid var(--rule); margin:0 0 14px;
+    display:flex; align-items:baseline; gap:10px;
+  }
+  section h2 .badge {
+    font-family:var(--mono); font-size:10.5px; padding:2px 7px; border-radius:3px;
+    background:var(--oat); color:var(--ink); font-weight:600; letter-spacing:0.04em;
+  }
+  .secnote {
+    background:var(--panel2); border:1px solid var(--rule); border-left:3px solid var(--tan);
+    padding:10px 14px; margin:10px 0 18px; font-size:13px; color:var(--ink2);
+  }
+  .secnote b { color:var(--ink); }
+  .secnote code { font-family:var(--mono); font-size:12px; color:var(--tan); background:var(--panel); padding:1px 5px; border-radius:3px; }
+
+  /* ---------- shared-pool / tradeoff card ---------- */
+  .card {
+    background:var(--panel); border:1px solid var(--rule); border-radius:6px;
+    padding:12px 14px; margin-bottom:12px;
+    display:grid; grid-template-columns:1fr 250px; gap:14px;
+  }
+  .card[data-state="approve"]  { border-left:3px solid var(--olive); }
+  .card[data-state="merge"]    { border-left:3px solid var(--tan); }
+  .card[data-state="split"]    { border-left:3px solid var(--pink); }
+  .card[data-state="other"]    { border-left:3px solid var(--red); }
+  .card[data-state="pending"]  { border-left:3px solid var(--rule); }
+  .card-body { min-width:0; }
+  .card-id   { font-family:var(--mono); font-size:11.5px; color:var(--muted); letter-spacing:0.05em; }
+  .card-title { color:var(--ink); font-weight:600; font-size:14.5px; margin:2px 0 5px; }
+  .card-desc { color:var(--ink2); font-size:13px; }
+  .card-desc code { font-family:var(--mono); font-size:12px; color:var(--tan); background:var(--panel2); padding:1px 5px; border-radius:3px; }
+  .card-meta { margin-top:7px; font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .card-meta .tag {
+    display:inline-block; padding:1px 6px; border-radius:3px; background:var(--panel2);
+    border:1px solid var(--rule); margin-right:5px; color:var(--ink2);
+  }
+  .card-meta .tag.evalsite { color:var(--slate); border-color:var(--slate); }
+  .contributors { margin:6px 0 0; padding-left:18px; font-size:12.5px; }
+  .contributors li { color:var(--ink2); font-family:var(--mono); }
+  .contributors code { color:var(--tan); }
+  .card-actions { display:flex; flex-direction:column; gap:6px; }
+  .card-actions button {
+    background:var(--panel2); color:var(--ink2); border:1px solid var(--rule);
+    font:600 11px var(--mono); letter-spacing:0.04em; text-transform:uppercase;
+    padding:5px 9px; border-radius:3px; cursor:pointer; text-align:left;
+  }
+  .card-actions button[data-on="true"] { background:rgba(217,119,87,0.14); color:var(--clay-d); border-color:var(--clay-d); }
+  .card-actions textarea {
+    background:var(--page); color:var(--ink2); border:1px solid var(--rule);
+    font:12px var(--mono); padding:5px 7px; border-radius:3px;
+    width:100%; resize:vertical; min-height:36px;
+  }
+
+  /* ---------- tradeoff radio card ---------- */
+  .radio-row {
+    display:flex; gap:8px; padding:6px 8px; border:1px solid var(--rule);
+    border-radius:4px; margin-bottom:4px; cursor:pointer; background:var(--panel2);
+  }
+  .radio-row:hover { border-color:var(--clay); }
+  .radio-row input[type="radio"] { accent-color:var(--clay); margin-top:3px; }
+  .radio-row[data-on="true"] { background:rgba(217,119,87,0.10); border-color:var(--clay-d); }
+  .radio-row .rlabel { color:var(--ink); font-size:12.5px; font-weight:600; }
+  .radio-row .rrec { font-family:var(--mono); font-size:10px; color:var(--olive); margin-left:6px; letter-spacing:0.05em; }
+  .radio-row .rdesc { display:block; color:var(--ink2); font-size:12px; font-weight:400; margin-top:2px; }
+
+  /* ---------- compact list (singletons/divisors/additive) ---------- */
+  .listrow {
+    display:grid; grid-template-columns:200px 1fr 360px; gap:12px;
+    padding:8px 10px; border:1px solid var(--rule); border-radius:4px;
+    margin-bottom:5px; background:var(--panel); align-items:center;
+  }
+  .listrow[data-state="approve"] { border-left:3px solid var(--olive); }
+  .listrow[data-state="custom"]  { border-left:3px solid var(--tan); }
+  .listrow[data-state="drop"]    { border-left:3px solid var(--red); }
+  .listrow[data-state="pending"] { border-left:3px solid var(--rule); }
+  .lr-kind { font-family:var(--mono); font-size:12px; color:var(--tan); }
+  .lr-target { color:var(--ink2); font-size:12.5px; }
+  .lr-target .ev { font-family:var(--mono); font-size:11px; color:var(--muted); margin-left:6px; }
+  .lr-actions { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+  .lr-actions button {
+    background:var(--panel2); color:var(--ink2); border:1px solid var(--rule);
+    font:600 10.5px var(--mono); letter-spacing:0.04em; text-transform:uppercase;
+    padding:4px 8px; border-radius:3px; cursor:pointer;
+  }
+  .lr-actions button[data-on="true"] { background:rgba(217,119,87,0.16); color:var(--clay-d); border-color:var(--clay-d); }
+  .lr-actions input[type="number"] {
+    background:var(--page); color:var(--ink); border:1px solid var(--rule);
+    font:12px var(--mono); padding:3px 6px; border-radius:3px;
+    width:64px; margin-left:4px;
+  }
+  .lr-actions input[type="text"] {
+    background:var(--page); color:var(--ink); border:1px solid var(--rule);
+    font:12px var(--mono); padding:3px 6px; border-radius:3px;
+    width:140px; margin-left:4px;
+  }
+
+  /* ---------- info-only block ---------- */
+  .infolist {
+    background:var(--panel); border:1px solid var(--rule); border-radius:4px;
+    padding:10px 14px; font-size:12.5px;
+  }
+  .infolist code { font-family:var(--mono); color:var(--tan); }
+
+  /* ---------- exportbar + dialog ---------- */
+  .exportbar {
+    position:fixed; bottom:18px; right:22px; z-index:10;
+    background:var(--panel); border:1px solid var(--rule);
+    padding:10px 14px; border-radius:5px; font:11.5px var(--mono); color:var(--ink2);
+    box-shadow:0 6px 22px rgba(0,0,0,0.35); display:flex; gap:10px; align-items:center;
+  }
+  .exportbar button {
+    background:var(--clay); color:#1B1A17; border:none; padding:6px 12px; cursor:pointer;
+    font:600 11px var(--mono); letter-spacing:0.04em; text-transform:uppercase; border-radius:3px;
+  }
+  .exportbar button:hover { background:var(--clay-d); }
+  dialog.copy-dialog {
+    background:var(--panel); color:var(--ink2); border:1px solid var(--rule);
+    padding:18px; border-radius:6px; max-width:760px;
+  }
+  dialog.copy-dialog textarea {
+    width:100%; min-height:360px; background:var(--page); color:var(--ink2);
+    font:12px var(--mono); border:1px solid var(--rule); padding:8px; border-radius:3px;
+  }
+  dialog.copy-dialog::backdrop { background:rgba(0,0,0,0.6); }
+
+  footer { margin-top:48px; padding-top:18px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }
+  footer code { font-family:var(--mono); color:var(--tan); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Audit · skilltree · rebalance pools picker · 2026-05-25</div>
+  <h1>Skill-tree rebalance — effect-pool decisions</h1>
+  <p class="sub">
+    Interactive picker for the brainstorm. The user already locked: every multiplier capped at <b>×10</b> (or ÷10 for divisors / additive caps per kind).
+    Effects sharing a logical output quantity share a pool. This page enumerates every <code>SkillEffect</code> kind in the union (verified by Explore agent against
+    <code>src/skilltree.ts:83-169</code>), proposes pool assignments, and asks for per-pool decisions. Decisions cluster: <b>shared pools</b> (multiple effects compose), <b>singleton caps</b> (one effect per quantity, just cap aggregate), <b>tradeoff calls</b> (3 design tensions surfaced by the agent), and <b>additive caps</b> (different shape — bound by +N not ×N).
+  </p>
+</header>
+
+<div class="toolbar">
+  <div class="summary" id="summary">…</div>
+  <div class="spacer"></div>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<div class="toc">
+  <h3>Sections</h3>
+  <ul id="toc"></ul>
+</div>
+
+<section id="sec-shared">
+  <h2>Shared pools <span class="badge" data-count-for="sec-shared">4</span></h2>
+  <p class="secnote">
+    <b>Multiple effect kinds combine on one output.</b> Cap the <i>combined</i> multiplier at ×10. Per-card decision: <b>Approve</b> (use as drawn) · <b>Merge with X</b> (collapse with another pool — type the other pool id in the textarea) · <b>Split</b> (break this pool into per-effect caps instead — value will be ÷10 each in fallback) · <b>Other</b> (free-form in textarea).
+  </p>
+</section>
+
+<section id="sec-tradeoff">
+  <h2>Tradeoff decisions <span class="badge" data-count-for="sec-tradeoff">3</span></h2>
+  <p class="secnote">
+    <b>Three design tensions surfaced by the Explore agent</b> (with file:line citations). Pick one option per tradeoff. Recommended choice is marked <span class="rrec">REC</span>.
+  </p>
+</section>
+
+<section id="sec-singletons">
+  <h2>Singleton multipliers <span class="badge" data-count-for="sec-singletons">18</span></h2>
+  <p class="secnote">
+    Each effect kind has exactly one logical output quantity. No cross-effect coordination needed — just decide the cap. Default: ×10 aggregate (sum of all bought-node magnitudes clamps to ×10 at evaluation). Per row: <b>Approve ×10</b> · <b>Custom</b> (override cap) · <b>Drop</b> (remove this effect from the tree entirely).
+  </p>
+</section>
+
+<section id="sec-divisors">
+  <h2>Singleton divisors <span class="badge" data-count-for="sec-divisors">6</span></h2>
+  <p class="secnote">
+    Effects where larger value <i>reduces</i> the underlying quantity (cost, failure rate, fuel). Cap = ÷10 (i.e. max ÷10 reduction). Same per-row chips as singletons.
+  </p>
+</section>
+
+<section id="sec-additive">
+  <h2>Additive caps <span class="badge" data-count-for="sec-additive">2</span></h2>
+  <p class="secnote">
+    Effects that add a quantity rather than multiply. Cap is an absolute add (e.g. +N slots), not ×10. Pick an absolute max per row.
+  </p>
+</section>
+
+<section id="sec-info">
+  <h2>Out-of-pool effects (info only)</h2>
+  <p class="secnote">
+    Boolean unlocks, structural rules, conditional bonuses, and adjacency rules don't fit the cap model — there's nothing to clamp because they're either on/off or composed via another mechanism. Listed for completeness; no decision needed.
+  </p>
+  <div class="infolist" id="infolist"></div>
+</section>
+
+<div class="exportbar">
+  <span id="quickcount">0 decided</span>
+  <button id="copybtn">Copy as JSON →</button>
+</div>
+
+<dialog class="copy-dialog" id="copydialog">
+  <h3 style="color:var(--ink);margin:0 0 8px;font-family:var(--serif);font-weight:500">Pool decisions — paste back for next turn</h3>
+  <p style="color:var(--muted);font-size:12px;margin:0 0 10px">Includes every decided/annotated item; undecided items omitted. Paste into the chat for the rebalance brainstorm to ingest.</p>
+  <textarea id="copybox" readonly></textarea>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px">
+    <button onclick="document.getElementById('copydialog').close()" style="background:var(--panel2);color:var(--ink2);border:1px solid var(--rule);padding:6px 14px;font:600 11px var(--mono);text-transform:uppercase;cursor:pointer">Close</button>
+    <button onclick="navigator.clipboard.writeText(document.getElementById('copybox').value);this.textContent='Copied'" style="background:var(--clay);color:#1B1A17;border:none;padding:6px 14px;font:600 11px var(--mono);text-transform:uppercase;cursor:pointer">Copy</button>
+  </div>
+</dialog>
+
+<footer>
+  Picker v1 · 2026-05-25 · sources: <code>src/skilltree.ts:83-169</code>, <code>src/economy.ts:382-389, 948, 1089, 1093, 1174-1178, 1703</code>, <code>src/recipes.ts:1105-1123</code>, <code>src/storage-categories.ts:23-410</code>, <code>src/routes.ts:674, 782</code>, <code>src/orbital.ts:261-841</code>, <code>src/drones.ts:373-376</code>, <code>src/construction.ts:37</code>, <code>src/placement.ts:332</code> · Explore-agent report on file.
+</footer>
+
+</div>
+
+<script>
+// ====================================================================
+// SHARED POOLS — multi-effect, joint cap at ×10
+// ====================================================================
+const SHARED = [
+  { id:'S1', title:'Per-Mine recipe rate',
+    desc:'Mine output rate is the user’s named example. Both effects multiply Mine production at evaluation time — globally and per-building.',
+    evalSite:'economy.ts:948 + 1174-1178',
+    contributors:[
+      '<code>recipeRateMul:extraction</code> — multiplies any <code>category:’extraction’</code> recipe (applies to all extraction-buildings simultaneously)',
+      '<code>mineYieldBonusMul</code> — Mine/Deep_Mine/copper_mine/... family only'
+    ]
+  },
+  { id:'S2', title:'Per-Logger recipe rate',
+    desc:'Mirrors Mine. Logger recipes are <code>category:’extraction’</code> (NOT a separate forestry category). Logger-family buildings get the building-specific bonus on top.',
+    evalSite:'economy.ts:948 + 1176-1178',
+    contributors:[
+      '<code>recipeRateMul:extraction</code>',
+      '<code>loggerYieldBonusMul</code> — logger/heavy_logger only'
+    ]
+  },
+  { id:'S3', title:'Per-resource storage cap',
+    desc:'Storage caps compose multiplicatively: <code>nominal × storageCapMul × storageCategoryCapMul:&lt;cat&gt;</code>. Without a joint cap, uniform ×10 × per-category ×10 = per-resource ×100 — violates the ×10 target.',
+    evalSite:'economy.ts:382-389',
+    contributors:[
+      '<code>storageCapMul</code> — uniform across all resources',
+      '<code>storageCategoryCapMul:&lt;cat&gt;</code> — one per StorageCategory (dry_goods, liquid_gas, temp_sensitive, components, rare)'
+    ]
+  },
+  { id:'S4', title:'Power balance',
+    desc:'User’s named example. Supply (×) and demand (÷) live in different multipliers; without a joint cap, supply ×10 + demand ÷10 = net ÷100 effective swing.',
+    evalSite:'economy.ts:1089, 1093',
+    contributors:[
+      '<code>powerProductionMul</code> — multiplies <code>building.power.produces</code>',
+      '<code>powerConsumptionMul (÷)</code> — divides <code>building.power.consumes</code>'
+    ]
+  }
+];
+
+// ====================================================================
+// TRADEOFFS — design tensions surfaced by the agent
+// ====================================================================
+const TRADEOFFS = [
+  { id:'T1', title:'Power supply vs. demand — cap shape',
+    desc:'Independent ×10 caps on production and consumption let the player reach a ÷100 net swing (supply ×10, demand ÷10). Three resolutions:',
+    options:[
+      { id:'joint-ratio', label:'Joint cap on net swing', rec:true, desc:'Max effective <code>powerProd_mul / powerCons_div</code> ≤ 10. Most faithful to the ×10 intent. Requires combined evaluation logic.' },
+      { id:'shrink-each', label:'Shrink each side', desc:'Cap supply at ×√10 (≈3.16) and demand at ÷√10. Independent enforcement; product still ≤ ×10. No combined logic, but advertised caps look weird.' },
+      { id:'accept-cross', label:'Accept ÷100 swing', desc:'Independent ×10 caps each. Player CAN reach net ÷100. Simplest impl; mildly violates the ×10 target on power specifically.' }
+    ]
+  },
+  { id:'T2', title:'Storage uniform × per-category — cap shape',
+    desc:'<code>storageCapMul × storageCategoryCapMul:&lt;cat&gt;</code> compounds multiplicatively per resource. Same shape as T1 with the same three resolutions.',
+    options:[
+      { id:'joint-resource', label:'Joint cap per resource', rec:true, desc:'Compute <code>final_cap_mul = clamp(uniform × cat, 10)</code> per resource. Most faithful; requires per-resource compose.' },
+      { id:'shrink-each', label:'Shrink each side', desc:'Uniform cap at ×√10, per-category cap at ×√10. Product ≤ 10 naturally. Simple; advertised numbers look smaller.' },
+      { id:'accept-cross', label:'Accept ×100 per resource', desc:'Independent ×10 caps; player CAN reach per-resource ×100 by stacking uniform + category. Simplest impl; mildly violates ×10.' }
+    ]
+  },
+  { id:'T3', title:'<code>satFuelReserveMul</code> double-duty',
+    desc:'This effect scales satellite onboard fuel AND gates max launch distance (<code>distance = (100 × satFuelReserve) / SAT_FUEL_PER_TILE</code> at <code>orbital-ui.ts:168</code>). Capping it at ×10 caps range at ×10 too.',
+    options:[
+      { id:'accept-coupling', label:'Accept range coupling', rec:true, desc:'Range scales linearly with fuel — a launched sat that runs out of fuel mid-flight is dead anyway. ×10 cap on both keeps the game coherent.' },
+      { id:'decouple', label:'Decouple into 2 effects', desc:'Split into <code>satFuelMul</code> (capped ×10) + new <code>satRangeMul</code> (separate cap, possibly tighter). More effect kinds; more catalog redesign.' },
+      { id:'cap-fuel-let-range', label:'Cap fuel, let range exceed', desc:'Cap <code>satFuelReserveMul</code> aggregate at ×10 but exempt the range-gate calculation from the cap. Range can grow past ×10 even though fuel reserve doesn’t. Game-mechanical inconsistency.' }
+    ]
+  }
+];
+
+// ====================================================================
+// SINGLETON MULTIPLIERS — one effect kind, one output quantity
+// ====================================================================
+const SINGLETONS = [
+  // recipeRateMul singletons (extraction is in S1/S2 shared pools)
+  { key:'rrm-smelting',      kind:'recipeRateMul:smelting',      target:'Smelter / coke oven / blast furnace / steel mill / EAF / oxygen converter rate', ev:'economy.ts:948' },
+  { key:'rrm-chemistry',     kind:'recipeRateMul:chemistry',     target:'Chem Plant rate (any chemistry recipe)', ev:'economy.ts:948' },
+  { key:'rrm-electronics',   kind:'recipeRateMul:electronics',   target:'Electronics building / microchip factory / processor foundry rate', ev:'economy.ts:948' },
+  { key:'rrm-manufacturing', kind:'recipeRateMul:manufacturing', target:'Assembler / workshop / kit assembler rate', ev:'economy.ts:948' },
+  { key:'rrm-power',         kind:'recipeRateMul:power',         target:'Fuel-burn recipe rate (Coal Gen / Biomass / Nuclear / Fusion)', ev:'economy.ts:948' },
+  // ranges + caps
+  { key:'comm',              kind:'commRangeMul',                target:'Relay comm range (base 500 tiles) + ground-station (base 200 tiles)', ev:'orbital.ts:330, 375' },
+  { key:'scancov',           kind:'scannerCoverageMul',          target:'Scanner Sat coverage radius (base 400 tiles)', ev:'orbital.ts:331' },
+  { key:'scandwell',         kind:'scannerDwellRateMul',         target:'Discovery P-per-tick dwell multiplier', ev:'orbital.ts:342' },
+  { key:'routecap',          kind:'routeCapacityMul',            target:'Per-route dispatched batch capacity', ev:'routes.ts:674' },
+  { key:'airrange',          kind:'airshipRangeMul',             target:'Airship route range/capacity', ev:'routes.ts (dispatch)' },
+  { key:'dronescan',         kind:'droneScanRadiusMul',          target:'Drone per-step scan radius (tiles)', ev:'drones.ts:376' },
+  { key:'maint',             kind:'maintenanceThresholdMul',     target:'Maintenance operating-hours threshold', ev:'economy.ts:1160, 1341' },
+  { key:'satbuf',            kind:'satBufferCapMul',             target:'Sat onboard resource buffer cap', ev:'orbital.ts:341' },
+  { key:'satfuel',           kind:'satFuelReserveMul',           target:'Sat starting fuel + max-range gate (see T3)', ev:'orbital.ts:261, 267 + orbital-ui.ts:168' },
+  { key:'battery',           kind:'batteryCapacityMul',          target:'Electrical battery Ws cap (Sigma BATTERY_CAPACITY_WS)', ev:'economy.ts:71, 78' },
+  { key:'mineRareTrickle',   kind:'mineRareTrickleMul',          target:'Helium-3 trickle units/sec per Mine', ev:'skilltree.ts:1003' },
+  { key:'loggerExoticTrickle', kind:'loggerExoticTrickleMul',    target:'Lumber trickle units/sec per Logger', ev:'skilltree.ts:1009' },
+  { key:'xpgain',            kind:'xpGainMul (+ per-category)',  target:'XP per production tick — global or per RecipeCategory. <b>Meta-amplifier; probably needs tighter cap than ×10 since recursive.</b>', ev:'economy.ts:1015-1016, 1703' }
+];
+
+// ====================================================================
+// SINGLETON DIVISORS — larger value reduces underlying
+// ====================================================================
+const DIVISORS = [
+  { key:'tele',     kind:'teleporterEfficiencyMul',    target:'Biofuel cost per teleporter route tile (÷)', ev:'routes.ts:782' },
+  { key:'dronefuel',kind:'droneFuelEfficiencyMul',     target:'Drone fuel per tile (÷)', ev:'drones.ts:373' },
+  { key:'repair',   kind:'repairDroneReliabilityMul',  target:'Repair-drone failure probability (÷)', ev:'orbital.ts:655' },
+  { key:'construct',kind:'constructionTimeMul',        target:'Building placement seconds (÷)', ev:'construction.ts:37' },
+  { key:'padexp',   kind:'padExplosionReduceMul',      target:'Pad-explosion failure share — baseline 30%, divided (÷)', ev:'orbital.ts:286' },
+  { key:'debris',   kind:'debrisProtectionMul',        target:'Debris hit probability post-launch (÷)', ev:'orbital.ts:841' }
+];
+
+// ====================================================================
+// ADDITIVE CAPS — different cap shape (+N not ×N)
+// ====================================================================
+const ADDITIVE = [
+  { key:'parallel',  kind:'parallelBuildCapAdd',  target:'+N concurrent under-construction slots above base 1', ev:'placement.ts:332', defaultMax:5 },
+  { key:'launchok',  kind:'launchSuccessAdditive', target:'+% to launch success probability above base', ev:'skilltree.ts:93 (handler in orbital engine)', defaultMax:0.90 }
+];
+
+// ====================================================================
+// OUT-OF-POOL — boolean / structural / conditional / adjacency
+// ====================================================================
+const INFO = [
+  { kind:'unlockRecipe',     note:'Boolean. Unlocks a recipe on a target building. No cap concept.' },
+  { kind:'biomeBypass',      note:'Boolean. Lets a listed building ignore its biome constraint. No cap.' },
+  { kind:'tierBypass',       note:'Boolean. Operate a listed building one tier below its requirement. No cap.' },
+  { kind:'placeholder',      note:'Marker only. No economic effect.' },
+  { kind:'exoticAdjacency',  note:'Adjacency rule (e.g. pairBoost). Effect lives in the adjacency mechanic, not the multiplier stack.' },
+  { kind:'structural',       note:'One-off rule changes (<code>sharedPowerGrid</code>, <code>parallelConstruction</code>). No cap; either on or off.' },
+  { kind:'conditionalBonus', note:'Multiplier active conditionally (during-storm / during-night / networked-to-N-T3-islands). Cap inherits from the pool it targets (<code>appliesTo: RecipeCategory | ’storage’ | ’power’ | ’xp’</code>).' },
+  { kind:'crossIslandShared',note:'Resource pool / stat shared across networked T3+ islands. Structural; no cap.' }
+];
+
+// ====================================================================
+// STATE + RENDER
+// ====================================================================
+const sharedState = Object.create(null);   // {S1:{decision:'pending'|'approve'|'merge'|'split'|'other', note:''}}
+const tradeoffState = Object.create(null); // {T1:{option:'joint-ratio', note:''}}
+const singletonState = Object.create(null);// {smelting:{decision:'pending'|'approve'|'custom'|'drop', cap:10, note:''}}
+const divisorState = Object.create(null);  // same shape, cap stored as DIVISOR scalar (e.g. 10 = ÷10)
+const additiveState = Object.create(null); // {parallel:{decision:'pending'|'approve'|'custom'|'drop', cap:5, note:''}}
+
+for (const s of SHARED)     sharedState[s.id]     = { decision:'pending', note:'' };
+for (const t of TRADEOFFS)  tradeoffState[t.id]   = { option:null, note:'' };
+for (const s of SINGLETONS) singletonState[s.key] = { decision:'pending', cap:10, note:'' };
+for (const d of DIVISORS)   divisorState[d.key]   = { decision:'pending', cap:10, note:'' };
+for (const a of ADDITIVE)   additiveState[a.key]  = { decision:'pending', cap:a.defaultMax, note:'' };
+
+const SECTIONS = [
+  { id:'sec-shared',     title:'Shared pools' },
+  { id:'sec-tradeoff',   title:'Tradeoff decisions' },
+  { id:'sec-singletons', title:'Singleton multipliers' },
+  { id:'sec-divisors',   title:'Singleton divisors' },
+  { id:'sec-additive',   title:'Additive caps' },
+  { id:'sec-info',       title:'Out-of-pool (info)' }
+];
+
+function renderTOC() {
+  const counts = {
+    'sec-shared': SHARED.length,
+    'sec-tradeoff': TRADEOFFS.length,
+    'sec-singletons': SINGLETONS.length,
+    'sec-divisors': DIVISORS.length,
+    'sec-additive': ADDITIVE.length,
+    'sec-info': INFO.length
+  };
+  document.getElementById('toc').innerHTML = SECTIONS.map(s =>
+    `<li><a href="#${s.id}">${s.title}</a><span class="ct">${counts[s.id]}</span></li>`
+  ).join('');
+  for (const [id,n] of Object.entries(counts)) {
+    document.querySelectorAll(`.badge[data-count-for="${id}"]`).forEach(el => el.textContent = n);
+  }
+}
+
+function renderShared() {
+  const sec = document.getElementById('sec-shared');
+  // remove existing cards
+  [...sec.querySelectorAll('.card')].forEach(n => n.remove());
+  for (const s of SHARED) {
+    const st = sharedState[s.id];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = s.id;
+    card.dataset.state = st.decision;
+    card.innerHTML = `
+      <div class="card-body">
+        <div class="card-id">${s.id} · shared pool · cap ×10 (combined)</div>
+        <div class="card-title">${s.title}</div>
+        <div class="card-desc">${s.desc}</div>
+        <ul class="contributors">${s.contributors.map(c => `<li>${c}</li>`).join('')}</ul>
+        <div class="card-meta"><span class="tag evalsite">${s.evalSite}</span></div>
+      </div>
+      <div class="card-actions">
+        ${['approve','merge','split','other'].map(d =>
+          `<button data-act="${d}" data-on="${st.decision === d}">${d}</button>`).join('')}
+        <textarea placeholder="annotate (e.g. merge target id, split reasoning)…">${st.note}</textarea>
+      </div>`;
+    sec.appendChild(card);
+  }
+  // wire actions
+  sec.querySelectorAll('.card .card-actions button').forEach(btn => {
+    btn.addEventListener('click', ev => {
+      const card = ev.target.closest('.card');
+      const id = card.dataset.id;
+      const act = ev.target.dataset.act;
+      sharedState[id].decision = (sharedState[id].decision === act) ? 'pending' : act;
+      renderShared(); updateSummary();
+    });
+  });
+  sec.querySelectorAll('.card textarea').forEach(ta => {
+    ta.addEventListener('input', ev => {
+      const card = ev.target.closest('.card');
+      sharedState[card.dataset.id].note = ev.target.value;
+      updateSummary();
+    });
+  });
+}
+
+function renderTradeoffs() {
+  const sec = document.getElementById('sec-tradeoff');
+  [...sec.querySelectorAll('.card')].forEach(n => n.remove());
+  for (const t of TRADEOFFS) {
+    const st = tradeoffState[t.id];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.gridTemplateColumns = '1fr';
+    card.dataset.id = t.id;
+    card.dataset.state = st.option ? 'approve' : 'pending';
+    card.innerHTML = `
+      <div class="card-body">
+        <div class="card-id">${t.id} · tradeoff</div>
+        <div class="card-title">${t.title}</div>
+        <div class="card-desc" style="margin-bottom:8px">${t.desc}</div>
+        ${t.options.map(o => `
+          <label class="radio-row" data-opt="${o.id}" data-on="${st.option === o.id}">
+            <input type="radio" name="${t.id}" value="${o.id}" ${st.option === o.id ? 'checked' : ''}>
+            <div style="flex:1">
+              <span class="rlabel">${o.label}</span>${o.rec ? '<span class="rrec">REC</span>' : ''}
+              <span class="rdesc">${o.desc}</span>
+            </div>
+          </label>`).join('')}
+        <textarea placeholder="annotate (optional)…" style="background:var(--page);color:var(--ink2);border:1px solid var(--rule);font:12px var(--mono);padding:5px 7px;border-radius:3px;width:100%;resize:vertical;min-height:36px;margin-top:8px">${st.note}</textarea>
+      </div>`;
+    sec.appendChild(card);
+  }
+  sec.querySelectorAll('.card .radio-row').forEach(row => {
+    row.addEventListener('click', ev => {
+      const card = ev.target.closest('.card');
+      const id = card.dataset.id;
+      tradeoffState[id].option = row.dataset.opt;
+      renderTradeoffs(); updateSummary();
+    });
+  });
+  sec.querySelectorAll('.card textarea').forEach(ta => {
+    ta.addEventListener('input', ev => {
+      const card = ev.target.closest('.card');
+      tradeoffState[card.dataset.id].note = ev.target.value;
+      updateSummary();
+    });
+  });
+}
+
+function renderListGeneric(secId, items, state, kind) {
+  const sec = document.getElementById(secId);
+  [...sec.querySelectorAll('.listrow')].forEach(n => n.remove());
+  for (const it of items) {
+    const st = state[it.key];
+    const row = document.createElement('div');
+    row.className = 'listrow';
+    row.dataset.id = it.key;
+    row.dataset.state = st.decision;
+    const customInput = (st.decision === 'custom')
+      ? `<input type="number" data-act="cap" min="1" max="1000" step="0.5" value="${st.cap}"> ${kind === 'div' ? '(÷)' : kind === 'add' ? '(max +)' : '(×)'}`
+      : '';
+    row.innerHTML = `
+      <div class="lr-kind">${it.kind}</div>
+      <div class="lr-target">${it.target}<span class="ev">${it.ev}</span></div>
+      <div class="lr-actions">
+        <button data-act="approve" data-on="${st.decision === 'approve'}">approve ${kind === 'div' ? '÷10' : kind === 'add' ? `+${it.defaultMax}` : '×10'}</button>
+        <button data-act="custom"  data-on="${st.decision === 'custom'}">custom</button>
+        <button data-act="drop"    data-on="${st.decision === 'drop'}">drop</button>
+        ${customInput}
+        <input type="text" data-act="note" placeholder="note" value="${st.note}">
+      </div>`;
+    sec.appendChild(row);
+  }
+  sec.querySelectorAll('.listrow .lr-actions button').forEach(btn => {
+    btn.addEventListener('click', ev => {
+      const row = ev.target.closest('.listrow');
+      const id = row.dataset.id;
+      const act = ev.target.dataset.act;
+      state[id].decision = (state[id].decision === act) ? 'pending' : act;
+      renderListGeneric(secId, items, state, kind); updateSummary();
+    });
+  });
+  sec.querySelectorAll('.listrow .lr-actions input[data-act="cap"]').forEach(inp => {
+    inp.addEventListener('input', ev => {
+      const row = ev.target.closest('.listrow');
+      state[row.dataset.id].cap = parseFloat(ev.target.value);
+      updateSummary();
+    });
+  });
+  sec.querySelectorAll('.listrow .lr-actions input[data-act="note"]').forEach(inp => {
+    inp.addEventListener('input', ev => {
+      const row = ev.target.closest('.listrow');
+      state[row.dataset.id].note = ev.target.value;
+      updateSummary();
+    });
+  });
+}
+
+function renderInfo() {
+  document.getElementById('infolist').innerHTML = INFO.map(i =>
+    `<div style="padding:5px 0;border-bottom:1px dashed var(--rule)"><code>${i.kind}</code> — ${i.note}</div>`
+  ).join('');
+}
+
+function decidedCount() {
+  let n = 0;
+  for (const k of Object.values(sharedState)) if (k.decision !== 'pending') n++;
+  for (const k of Object.values(tradeoffState)) if (k.option) n++;
+  for (const k of Object.values(singletonState)) if (k.decision !== 'pending') n++;
+  for (const k of Object.values(divisorState)) if (k.decision !== 'pending') n++;
+  for (const k of Object.values(additiveState)) if (k.decision !== 'pending') n++;
+  return n;
+}
+function totalCount() {
+  return SHARED.length + TRADEOFFS.length + SINGLETONS.length + DIVISORS.length + ADDITIVE.length;
+}
+
+function updateSummary() {
+  const dec = decidedCount();
+  const tot = totalCount();
+  document.getElementById('summary').innerHTML =
+    `<b>${dec}</b> / ${tot} decided <span class="dot">·</span> ` +
+    `shared <b>${Object.values(sharedState).filter(s => s.decision !== 'pending').length}/${SHARED.length}</b> <span class="dot">·</span> ` +
+    `tradeoffs <b>${Object.values(tradeoffState).filter(s => s.option).length}/${TRADEOFFS.length}</b> <span class="dot">·</span> ` +
+    `singletons <b>${Object.values(singletonState).filter(s => s.decision !== 'pending').length}/${SINGLETONS.length}</b> <span class="dot">·</span> ` +
+    `divisors <b>${Object.values(divisorState).filter(s => s.decision !== 'pending').length}/${DIVISORS.length}</b> <span class="dot">·</span> ` +
+    `additive <b>${Object.values(additiveState).filter(s => s.decision !== 'pending').length}/${ADDITIVE.length}</b>`;
+  document.getElementById('quickcount').textContent = `${dec} / ${tot} decided`;
+}
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  for (const s of SHARED)     sharedState[s.id]     = { decision:'pending', note:'' };
+  for (const t of TRADEOFFS)  tradeoffState[t.id]   = { option:null, note:'' };
+  for (const s of SINGLETONS) singletonState[s.key] = { decision:'pending', cap:10, note:'' };
+  for (const d of DIVISORS)   divisorState[d.key]   = { decision:'pending', cap:10, note:'' };
+  for (const a of ADDITIVE)   additiveState[a.key]  = { decision:'pending', cap:a.defaultMax, note:'' };
+  renderAll();
+});
+
+document.getElementById('copybtn').addEventListener('click', () => {
+  const out = {
+    version: 'v1',
+    source: 'robot-islands/2026-05-25-skilltree-rebalance-pools',
+    summary: {
+      decided: decidedCount(),
+      total: totalCount()
+    },
+    shared_pools: {},
+    tradeoffs: {},
+    singletons: {},
+    divisors: {},
+    additive: {}
+  };
+  for (const [id,s] of Object.entries(sharedState)) {
+    if (s.decision !== 'pending' || s.note) out.shared_pools[id] = { decision: s.decision, ...(s.note ? { note: s.note } : {}) };
+  }
+  for (const [id,s] of Object.entries(tradeoffState)) {
+    if (s.option || s.note) out.tradeoffs[id] = { option: s.option, ...(s.note ? { note: s.note } : {}) };
+  }
+  for (const [k,s] of Object.entries(singletonState)) {
+    if (s.decision !== 'pending' || s.note) out.singletons[k] = { decision: s.decision, ...(s.decision === 'custom' ? { cap: s.cap } : {}), ...(s.note ? { note: s.note } : {}) };
+  }
+  for (const [k,s] of Object.entries(divisorState)) {
+    if (s.decision !== 'pending' || s.note) out.divisors[k] = { decision: s.decision, ...(s.decision === 'custom' ? { cap: s.cap } : {}), ...(s.note ? { note: s.note } : {}) };
+  }
+  for (const [k,s] of Object.entries(additiveState)) {
+    if (s.decision !== 'pending' || s.note) out.additive[k] = { decision: s.decision, ...(s.decision === 'custom' ? { max_add: s.cap } : {}), ...(s.note ? { note: s.note } : {}) };
+  }
+  document.getElementById('copybox').value = JSON.stringify(out, null, 2);
+  document.getElementById('copydialog').showModal();
+});
+
+function renderAll() {
+  renderTOC();
+  renderShared();
+  renderTradeoffs();
+  renderListGeneric('sec-singletons', SINGLETONS, singletonState, 'mul');
+  renderListGeneric('sec-divisors',   DIVISORS,   divisorState,   'div');
+  renderListGeneric('sec-additive',   ADDITIVE,   additiveState,  'add');
+  renderInfo();
+  updateSummary();
+}
+renderAll();
+</script>
+</body>
+</html>

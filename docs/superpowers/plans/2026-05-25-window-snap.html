@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Window-snap — reject degenerate panel layouts — implementation plan</title>
+<style>
+  :root {
+    --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+    --tan:#E0B47F; --pink:#D38FCC; --red:#E08B7F; --info:#7DD3E8;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1080px; margin:0 auto; }
+  header.page-head { margin-bottom:40px; max-width:900px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:30px; line-height:1.18; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+  .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+  .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+  .prompt-box code { font-family:var(--mono); font-size:13px; color:var(--slate); }
+  .callout { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--clay); border-radius:10px; padding:14px 18px; font-size:13.5px; color:var(--gray-700); margin: 14px 0; max-width:900px; }
+  .callout.info { border-left-color:var(--info); }
+  .callout.warn { border-left-color:var(--red); }
+  .callout code { font-family:var(--mono); font-size:12.5px; color:var(--tan); }
+  .callout b { color:var(--slate); }
+
+  section { margin-bottom:50px; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:22px; color:var(--slate); letter-spacing:-0.01em; }
+  .sec-head h2 code { font-family:var(--mono); font-size:17px; color:var(--clay); }
+  .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:820px; margin-bottom:18px; }
+
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:36px; max-width: 1000px; }
+  @media (max-width:900px){ .summary{grid-template-columns:repeat(2,1fr);} }
+  .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px; padding:14px 16px; }
+  .summary .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+  .summary .v { font-size:15px; color:var(--slate); font-weight:600; }
+  .summary .v.accent { color:var(--clay); }
+  .summary .v.ok { color:var(--olive); }
+
+  .filetable { border:1.5px solid var(--gray-300); border-radius:10px; overflow:hidden; background:var(--white); margin-bottom:28px; }
+  .filetable .row { display:grid; grid-template-columns:280px 100px 1fr; gap:0; }
+  @media (max-width:900px){ .filetable .row{grid-template-columns:1fr;} }
+  .filetable .row + .row { border-top:1.5px solid var(--gray-300); }
+  .filetable .cell { padding:11px 14px; font-size:13px; vertical-align:top; }
+  .filetable .cell + .cell { border-left:1.5px solid var(--gray-300); }
+  @media (max-width:900px){ .filetable .cell + .cell{border-left:none;border-top:1px dashed var(--gray-300);} }
+  .filetable .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+  .filetable .cell code { font-family:var(--mono); font-size:12px; color:var(--clay); }
+  .filetable .pill { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--mono); font-size:10.5px; font-weight:600; }
+  .filetable .pill.mod { background:var(--tan); color:var(--ivory); }
+
+  .task-card { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 22px; margin-bottom:18px; }
+  .files-block { background:var(--gray-150); border:1px solid var(--gray-300); border-radius:8px; padding:10px 13px; margin-bottom:14px; font-family:var(--mono); font-size:12px; color:var(--gray-700); }
+  .files-block .h { color:var(--gray-500); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .files-block code { color:var(--tan); }
+
+  .step { margin: 10px 0; padding-left: 24px; position: relative; font-size:14px; color:var(--gray-700); }
+  .step::before { content: "☐"; position: absolute; left: 0; top: 0; color: var(--gray-500); }
+  .step b { color: var(--slate); }
+  .step code { font-family:var(--mono); font-size:12.5px; color:var(--tan); background: var(--gray-150); padding: 1px 5px; border-radius: 3px; }
+
+  pre { background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 10px 14px; margin: 8px 0 14px 24px; overflow-x: auto; font-family: var(--mono); font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 1000px; }
+  pre.bash { background: #1F1D19; color: var(--olive); }
+  pre.bash::before { content: "$ "; color: var(--gray-500); }
+  pre .comment { color: var(--gray-500); font-style: italic; }
+  pre .kw { color: var(--pink); }
+  pre .str { color: var(--olive); }
+  pre .ty { color: var(--info); }
+  pre .fn { color: var(--tan); }
+
+  .expected { background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 0 6px 6px 0; padding: 6px 12px; margin: 6px 0 10px 24px; font-family: var(--mono); font-size: 12px; color: var(--gray-700); max-width: 980px; }
+  .expected b { color: var(--olive); }
+
+  .footer { color: var(--gray-500); margin-top: 64px; font-size: 12px; padding-top: 18px; border-top: 1.5px solid var(--gray-300); }
+  .footer code { color: var(--tan); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · ui · window-snap · 2026-05-25</div>
+    <h1>Window-snap — reject degenerate panel layouts (1-task plan)</h1>
+    <div class="prompt-box">
+      <span class="label">For agentic workers</span>
+      <b style="color:var(--slate)">REQUIRED SUB-SKILL:</b> Use <code>superpowers:subagent-driven-development</code>. Fresh kimi subagent + two-stage review (spec → code-quality) + nit-fix pass. Trailer literal on commits: <code>Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</code>.<br><br>
+      <b style="color:var(--slate)">Goal:</b> stop panels from being saved or loaded at degenerate (e.g. 1×1) dimensions. Floor = 80×40.<br>
+      <b style="color:var(--slate)">Architecture:</b> two-layer guard in <code>src/window-manager.ts</code>. Load-time validation in <code>parseLayoutBlob</code> drops below-floor entries silently (cleansing existing degenerate saves on next page load). Capture-time guard in <code>promoteToFree</code> clamps the persisted rect against the resize-floor defaults (preventing future degenerate saves).<br>
+      <b style="color:var(--slate)">Tech stack:</b> Vite 5 + TypeScript strict + vitest. Strict + <code>noUncheckedIndexedAccess</code> + <code>noUnusedLocals</code>.<br>
+      <b style="color:var(--slate)">Source of truth:</b> design spec at <code>docs/superpowers/specs/2026-05-25-window-snap-design.html</code> (v1, user-approved 2026-05-25).
+    </div>
+  </header>
+
+  <div class="callout warn">
+    <b>Locked design choices (do NOT deviate):</b>
+    <ul style="margin-top:8px;margin-left:18px;list-style:disc">
+      <li>Floor constants: <code>MIN_PANEL_W = 80</code>, <code>MIN_PANEL_H = 40</code>.</li>
+      <li>Below-floor entries in <code>parseLayoutBlob</code> are dropped SILENTLY (no warn, no throw) — matches existing pattern for malformed entries.</li>
+      <li>NO schema bump. NO new fields. NO behaviour change for above-floor saves.</li>
+      <li>Promote-time clamp uses the resolved <code>minWidth</code>/<code>minHeight</code> from <code>MakeDraggableOptions</code> (defaults 200/120), NOT the new constants — those defaults are the user-resize minimum, more generous than the rejection floor.</li>
+    </ul>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:30px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Summary</h3>
+  <div class="summary">
+    <div class="cell"><div class="k">Files touched</div><div class="v accent">2</div></div>
+    <div class="cell"><div class="k">Tasks</div><div class="v">1</div></div>
+    <div class="cell"><div class="k">Schema bump</div><div class="v ok">none</div></div>
+    <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+  </div>
+
+  <h3 style="color:var(--slate);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.04em">Files touched</h3>
+  <div class="filetable">
+    <div class="row head"><div class="cell">Path</div><div class="cell">Status</div><div class="cell">Responsibility</div></div>
+    <div class="row"><div class="cell"><code>src/window-manager.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Add <code>MIN_PANEL_W</code> / <code>MIN_PANEL_H</code> exports. Tighten <code>parseLayoutBlob</code> rejection at lines 71-77. Clamp captured rect in <code>promoteToFree</code> at lines 372-387.</div></div>
+    <div class="row"><div class="cell"><code>src/window-manager.test.ts</code></div><div class="cell"><span class="pill mod">MODIFY</span></div><div class="cell">Add 4 unit tests covering: reject w=1/h=1, accept at floor, reject one below floor, mixed valid+invalid round-trip.</div></div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- TASK 1 -->
+  <section id="task-1">
+    <div class="sec-head"><span class="num">01</span><h2>Task 1 — Two-layer guard + unit tests</h2></div>
+    <p class="sec-intro">Single self-contained task. Adds the floor constants, tightens load-time validation, clamps capture-time persistence, and lands 4 unit tests covering both new behaviors.</p>
+
+    <div class="task-card">
+      <div class="files-block">
+        <div class="h">Files</div>
+        <code>~ src/window-manager.ts</code> &nbsp; <code>~ src/window-manager.test.ts</code>
+      </div>
+
+      <div class="step"><b>Step 1.</b> In <code>src/window-manager.ts</code>, add the floor constants right after the existing <code>LAYOUT_STORAGE_KEY</code> export (around line 18). The exports must be reachable from the test file:</div>
+      <pre><span class="comment">/** Minimum width / height (px) for a persisted panel layout entry. Entries</span>
+<span class="comment"> *  below either floor are dropped on load and refused at capture time —</span>
+<span class="comment"> *  prevents the degenerate "1×1 invisible panel" state observed in v1 saves</span>
+<span class="comment"> *  (settlement-panel, routes-panel) that originated when promoteToFree</span>
+<span class="comment"> *  captured a placeholder-CSS-sized panel before any user resize.</span>
+<span class="comment"> *  Floor chosen well below the 200×120 MakeDraggableOptions resize minimum</span>
+<span class="comment"> *  (so legitimate small saves still pass) and well above the 1×1 bug. */</span>
+<span class="kw">export const</span> <span class="ty">MIN_PANEL_W</span> = 80;
+<span class="kw">export const</span> <span class="ty">MIN_PANEL_H</span> = 40;</pre>
+
+      <div class="step"><b>Step 2.</b> In <code>parseLayoutBlob</code> (around lines 71-77 currently), tighten the per-entry dimension check. Find the existing validation block (search for <code>w &lt;= 0</code>) and replace the <code>w</code>/<code>h</code> floor conditions:</div>
+      <pre><span class="comment">// BEFORE:</span>
+<span class="kw">if</span> (
+  <span class="kw">typeof</span> x !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(x) ||
+  <span class="kw">typeof</span> y !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(y) ||
+  <span class="kw">typeof</span> w !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(w) || w &lt;= 0 ||
+  <span class="kw">typeof</span> h !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(h) || h &lt;= 0 ||
+  <span class="kw">typeof</span> zRank !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(zRank)
+) <span class="kw">continue</span>;
+
+<span class="comment">// AFTER:</span>
+<span class="kw">if</span> (
+  <span class="kw">typeof</span> x !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(x) ||
+  <span class="kw">typeof</span> y !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(y) ||
+  <span class="kw">typeof</span> w !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(w) || w &lt; MIN_PANEL_W ||
+  <span class="kw">typeof</span> h !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(h) || h &lt; MIN_PANEL_H ||
+  <span class="kw">typeof</span> zRank !== <span class="str">'number'</span> || !<span class="ty">Number</span>.<span class="fn">isFinite</span>(zRank)
+) <span class="kw">continue</span>;</pre>
+      <div class="callout info"><b>Note:</b> only the <code>w</code> and <code>h</code> floors change. The other type guards stay identical. The <code>continue</code> silently drops the malformed entry — consistent with the existing behaviour for entries failing any other guard.</div>
+
+      <div class="step"><b>Step 3.</b> In <code>promoteToFree</code> (around lines 372-387 currently), clamp the captured rect dimensions against the resolved <code>minWidth</code> / <code>minHeight</code> from <code>MakeDraggableOptions</code>. Locate the existing function — it accepts <code>(panel, id, rect)</code> and currently has no access to the options.</div>
+
+      <p class="step" style="margin-left:24px;">First, widen the signature so <code>promoteToFree</code> can see the option floors. Update the function definition:</p>
+      <pre><span class="comment">// BEFORE:</span>
+<span class="kw">function</span> <span class="fn">promoteToFree</span>(panel: <span class="ty">HTMLElement</span>, id: <span class="ty">string</span>, rect: <span class="ty">DOMRect</span>): <span class="ty">void</span> {
+
+<span class="comment">// AFTER:</span>
+<span class="kw">function</span> <span class="fn">promoteToFree</span>(
+  panel: <span class="ty">HTMLElement</span>,
+  id: <span class="ty">string</span>,
+  rect: <span class="ty">DOMRect</span>,
+  minWidth: <span class="ty">number</span>,
+  minHeight: <span class="ty">number</span>,
+): <span class="ty">void</span> {</pre>
+
+      <p class="step" style="margin-left:24px;">Update the function body to floor the dimensions before persisting:</p>
+      <pre><span class="kw">function</span> <span class="fn">promoteToFree</span>(
+  panel: <span class="ty">HTMLElement</span>,
+  id: <span class="ty">string</span>,
+  rect: <span class="ty">DOMRect</span>,
+  minWidth: <span class="ty">number</span>,
+  minHeight: <span class="ty">number</span>,
+): <span class="ty">void</span> {
+  <span class="kw">if</span> (panel.classList.<span class="fn">contains</span>(<span class="str">'ri-free'</span>)) <span class="kw">return</span>;
+  <span class="kw">const</span> flooredW = <span class="ty">Math</span>.<span class="fn">max</span>(rect.width, minWidth);
+  <span class="kw">const</span> flooredH = <span class="ty">Math</span>.<span class="fn">max</span>(rect.height, minHeight);
+  panel.style.position = <span class="str">'fixed'</span>;
+  panel.style.left = rect.left + <span class="str">'px'</span>;
+  panel.style.top = rect.top + <span class="str">'px'</span>;
+  panel.style.right = <span class="str">''</span>;
+  panel.style.bottom = <span class="str">''</span>;
+  panel.style.width = flooredW + <span class="str">'px'</span>;
+  panel.style.height = flooredH + <span class="str">'px'</span>;
+  panel.style.transform = <span class="str">''</span>;
+  panel.classList.<span class="fn">add</span>(<span class="str">'ri-free'</span>);
+  <span class="fn">setPanelFree</span>(id, <span class="kw">true</span>);
+  <span class="fn">updatePanelLayout</span>(id, {
+    x: rect.left, y: rect.top, w: flooredW, h: flooredH,
+  });
+}</pre>
+
+      <p class="step" style="margin-left:24px;">Now update the two <code>promoteToFree</code> call sites in <code>makePanelDraggable</code> to pass the resolved <code>minWidth</code>/<code>minHeight</code> (locals already exist at lines 210-211 in that function). Search for <code>promoteToFree(panel, id, rect)</code> — there are two call sites (in the drag-start handler and the resize-start handler):</p>
+      <pre><span class="comment">// BEFORE (both sites):</span>
+<span class="fn">promoteToFree</span>(panel, id, rect);
+
+<span class="comment">// AFTER (both sites):</span>
+<span class="fn">promoteToFree</span>(panel, id, rect, minWidth, minHeight);</pre>
+
+      <div class="step"><b>Step 4.</b> In <code>src/window-manager.test.ts</code>, add a new describe block testing the load-time floor. Place it next to the existing <code>parseLayoutBlob</code> tests (search for that name in the file):</div>
+      <pre><span class="kw">import</span> {
+  parseLayoutBlob,
+  MIN_PANEL_W,
+  MIN_PANEL_H,
+} <span class="kw">from</span> <span class="str">'./window-manager.js'</span>;
+<span class="comment">// (Add MIN_PANEL_W + MIN_PANEL_H to the existing import block; don't duplicate.)</span>
+
+<span class="fn">describe</span>(<span class="str">'parseLayoutBlob — degenerate-dimension floor'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'rejects an entry with w=1, h=1 (the observed bug state)'</span>, () =&gt; {
+    <span class="kw">const</span> raw = {
+      v: 1,
+      panels: {
+        bad: { x: 79, y: 0, w: 1, h: 1, zRank: 294 },
+      },
+      globalZCounter: 0,
+    };
+    <span class="kw">const</span> result = <span class="fn">parseLayoutBlob</span>(raw);
+    expect(result).not.toBeNull();
+    expect(result!.panels.bad).<span class="fn">toBeUndefined</span>();
+  });
+
+  <span class="fn">it</span>(<span class="str">'accepts an entry exactly at the floor (w=MIN_PANEL_W, h=MIN_PANEL_H)'</span>, () =&gt; {
+    <span class="kw">const</span> raw = {
+      v: 1,
+      panels: {
+        edge: { x: 0, y: 0, w: MIN_PANEL_W, h: MIN_PANEL_H, zRank: 0 },
+      },
+      globalZCounter: 0,
+    };
+    <span class="kw">const</span> result = <span class="fn">parseLayoutBlob</span>(raw);
+    expect(result).not.toBeNull();
+    expect(result!.panels.edge).<span class="fn">toBeDefined</span>();
+    expect(result!.panels.edge!.w).<span class="fn">toBe</span>(MIN_PANEL_W);
+    expect(result!.panels.edge!.h).<span class="fn">toBe</span>(MIN_PANEL_H);
+  });
+
+  <span class="fn">it</span>(<span class="str">'rejects an entry one below either floor'</span>, () =&gt; {
+    <span class="kw">const</span> raw = {
+      v: 1,
+      panels: {
+        underW: { x: 0, y: 0, w: MIN_PANEL_W - 1, h: MIN_PANEL_H, zRank: 0 },
+        underH: { x: 0, y: 0, w: MIN_PANEL_W, h: MIN_PANEL_H - 1, zRank: 0 },
+      },
+      globalZCounter: 0,
+    };
+    <span class="kw">const</span> result = <span class="fn">parseLayoutBlob</span>(raw);
+    expect(result).not.toBeNull();
+    expect(result!.panels.underW).<span class="fn">toBeUndefined</span>();
+    expect(result!.panels.underH).<span class="fn">toBeUndefined</span>();
+  });
+
+  <span class="fn">it</span>(<span class="str">'keeps valid entries when invalid ones are present in the same blob'</span>, () =&gt; {
+    <span class="kw">const</span> raw = {
+      v: 1,
+      panels: {
+        good: { x: 12, y: 12, w: 300, h: 200, zRank: 5 },
+        bad: { x: 79, y: 0, w: 1, h: 1, zRank: 99 },
+      },
+      globalZCounter: 5,
+    };
+    <span class="kw">const</span> result = <span class="fn">parseLayoutBlob</span>(raw);
+    expect(result).not.toBeNull();
+    expect(result!.panels.good).<span class="fn">toBeDefined</span>();
+    expect(result!.panels.bad).<span class="fn">toBeUndefined</span>();
+    expect(result!.globalZCounter).<span class="fn">toBe</span>(5);
+  });
+});</pre>
+
+      <div class="step"><b>Step 5.</b> Run the test file in isolation to confirm green:</div>
+      <pre class="bash">npx vitest run src/window-manager.test.ts</pre>
+      <div class="expected"><b>Expected:</b> all green. Existing window-manager tests still pass; 4 new tests added.</div>
+
+      <div class="step"><b>Step 6.</b> Run the full suite + build:</div>
+      <pre class="bash">npm test 2&gt;&amp;1 | tail -10 &amp;&amp; npm run build</pre>
+      <div class="expected"><b>Expected:</b> all green. Test count up by 4 vs the 2133 baseline (→ 2137). tsc strict + noUncheckedIndexedAccess + noUnusedLocals clean. The new <code>MIN_PANEL_W</code> / <code>MIN_PANEL_H</code> exports are used in both the production code (parseLayoutBlob) and the test (via import) so noUnusedLocals doesn't flag.</div>
+
+      <div class="step"><b>Step 7.</b> Commit + push:</div>
+      <pre class="bash">git add src/window-manager.ts src/window-manager.test.ts
+git commit -F &lt;(cat &lt;&lt;'EOF'
+fix(window-manager): reject degenerate panel layouts (1x1 saved state)
+
+Two-layer guard on persisted panel dimensions:
+
+- parseLayoutBlob: tighten w/h validation from `&gt; 0` to `&gt;= MIN_PANEL_W
+  / MIN_PANEL_H` (80/40). Below-floor entries dropped silently —
+  cleanses existing degenerate saves (settlement-panel, routes-panel
+  observed at w=1, h=1) on next page load.
+- promoteToFree: clamp captured rect at the resize-floor defaults
+  (200/120) before persisting + updating inline styles. Prevents
+  the root-cause path from creating new degenerate saves when a panel
+  is dragged at placeholder-CSS-sized dimensions.
+
+Floor chosen well below the user-resize minimum so legitimate small
+saves still pass, and well above the 1x1 bug state.
+
+Refs design spec docs/superpowers/specs/2026-05-25-window-snap-design.html.
+
+Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;
+EOF
+)
+git push origin master</pre>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Implementation plan · window-snap v1 · 2026-05-25 · source-of-truth: <code>docs/superpowers/specs/2026-05-25-window-snap-design.html</code> · canonical dispatch recipe: <code>~/.claude/prompts/dispatch-from-sliced-plan.md</code> · execution: <code>superpowers:subagent-driven-development</code>.</p>
+  </div>
+
+</div>
+</body>
+</html>
