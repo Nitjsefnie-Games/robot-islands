@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battery Bank dependency chain — verified</title>
+<style>
+  :root {
+    --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B;
+    --olive:#8FA56E; --rust:#E08A7E; --info:#7DD3E8; --tan:#E0B47F;
+    --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ivory); color: var(--gray-700); font-family: var(--sans); -webkit-font-smoothing: antialiased; padding: 40px 24px 80px; }
+  .sheet { max-width: 1240px; margin: 0 auto; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 30px; letter-spacing: -0.01em; margin-bottom: 12px; color: var(--slate); }
+  .lead { font-size: 14px; line-height: 1.6; max-width: 880px; margin-bottom: 28px; }
+  .lead code { font-family: var(--mono); font-size: 12.5px; color: var(--tan); }
+
+  .canvas { border: 1.5px solid var(--gray-300); border-radius: 12px; background: #252420; padding: 24px; margin-bottom: 28px; overflow-x: auto; }
+  svg.flow { display: block; min-width: 1180px; width: 100%; height: auto; }
+
+  .flow text { font-family: var(--mono); font-size: 11px; fill: var(--slate); pointer-events: none; }
+  .flow text.title { font-size: 12px; font-weight: 600; }
+  .flow text.sub { font-size: 9.5px; fill: var(--gray-500); }
+  .flow text.tier { font-size: 9px; fill: var(--info); }
+  .flow text.qty { font-size: 11px; fill: var(--clay); font-weight: 600; }
+
+  .node rect { stroke-width: 1.5; rx: 8; }
+  .node.raw rect       { fill: rgba(143,165,110,0.18); stroke: var(--olive); }
+  .node.t1 rect        { fill: rgba(125,211,232,0.10); stroke: var(--info); }
+  .node.t2 rect        { fill: rgba(224,180,127,0.10); stroke: var(--tan); }
+  .node.new rect       { fill: rgba(217,119,87,0.18); stroke: var(--clay); stroke-dasharray: 6 3; }
+  .node.heat rect      { fill: rgba(224,138,126,0.18); stroke: var(--rust); }
+  .node.output rect    { fill: rgba(217,119,87,0.30); stroke: var(--clay); stroke-width: 2.5; }
+
+  .edge { stroke: var(--gray-500); stroke-width: 1.2; fill: none; marker-end: url(#arrow); }
+  .edge.heat { stroke: var(--rust); stroke-width: 1.5; stroke-dasharray: 4 3; marker-end: url(#arrow-rust); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 6px; }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+  .card { border: 1.5px solid var(--gray-300); border-radius: 10px; background: #252420; padding: 16px 18px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 16px; color: var(--slate); margin-bottom: 8px; }
+  .card .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; border-bottom: 1px dashed var(--gray-300); }
+  .card .row:last-child { border-bottom: none; }
+  .card .row .k { color: var(--gray-500); }
+  .card .row .v { color: var(--slate); font-family: var(--mono); font-size: 12.5px; }
+  .card .row .v.q { color: var(--clay); font-weight: 600; }
+  .card .note { font-size: 12px; color: var(--gray-500); margin-top: 10px; font-style: italic; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; font-size: 11.5px; }
+  .legend .chip { display: flex; align-items: center; gap: 6px; }
+  .legend .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+  .legend .raw    .swatch { background: rgba(143,165,110,0.18); border-color: var(--olive); }
+  .legend .t1     .swatch { background: rgba(125,211,232,0.10); border-color: var(--info); }
+  .legend .t2     .swatch { background: rgba(224,180,127,0.10); border-color: var(--tan); }
+  .legend .new    .swatch { background: rgba(217,119,87,0.18); border-color: var(--clay); border-style: dashed; }
+  .legend .heat   .swatch { background: rgba(224,138,126,0.18); border-color: var(--rust); }
+  .legend .output .swatch { background: rgba(217,119,87,0.30); border-color: var(--clay); }
+
+  .footer { color: var(--gray-500); font-size: 12px; margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--gray-300); }
+  .footer code { font-family: var(--mono); color: var(--tan); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="eyebrow">audit · robot-islands · 2026-05-26</div>
+  <h1>Battery Bank — verified dependency chain (proposed)</h1>
+  <p class="lead">
+    Smallest battery for night-time solar bridging. Current placement cost <code>{ battery: 4, wire: 3, steel_beam: 1 }</code> requires T3 Battery Factory + T3 biome-locked Lithium Extractor — an inversion that makes the cheapest battery unreachable until far past the era it solves. Proposal: introduce <strong>saltwater_cell</strong> (new T2 component) + <strong>Cell Press</strong> (new T1 building) and rewrite Battery Bank to <code>{ saltwater_cell: 4, wire: 3, steel_beam: 1 }</code>. End-to-end home-Plains buildable, no discovery, no settlement, no T3 access.
+  </p>
+
+  <div class="legend">
+    <div class="chip raw"><span class="swatch"></span>Raw extraction</div>
+    <div class="chip t1"><span class="swatch"></span>T1 building</div>
+    <div class="chip t2"><span class="swatch"></span>T2 building</div>
+    <div class="chip new"><span class="swatch"></span>NEW (this proposal)</div>
+    <div class="chip heat"><span class="swatch"></span>Requires heat source</div>
+    <div class="chip output"><span class="swatch"></span>Final output</div>
+  </div>
+
+  <div class="canvas">
+    <svg class="flow" viewBox="0 0 1180 680" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#8F8D82"/>
+        </marker>
+        <marker id="arrow-rust" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#E08A7E"/>
+        </marker>
+      </defs>
+
+      <!-- column headers -->
+      <text x="80"  y="22" class="sub" text-anchor="middle">RAW TILE</text>
+      <text x="280" y="22" class="sub" text-anchor="middle">T1 PROCESSING</text>
+      <text x="500" y="22" class="sub" text-anchor="middle">T2 SMELTING</text>
+      <text x="740" y="22" class="sub" text-anchor="middle">T2 MANUFACTURING</text>
+      <text x="990" y="22" class="sub" text-anchor="middle">FINAL</text>
+
+      <!-- ===== RAW column (left) ===== -->
+      <g class="node raw" transform="translate(20,60)">
+        <rect width="140" height="56"/>
+        <text x="70" y="22" text-anchor="middle" class="title">Mine (ore)</text>
+        <text x="70" y="38" text-anchor="middle" class="sub">on 'ore' tile · T1</text>
+        <text x="70" y="50" text-anchor="middle" class="qty">→ 12 iron_ore</text>
+      </g>
+      <g class="node raw" transform="translate(20,150)">
+        <rect width="140" height="56"/>
+        <text x="70" y="22" text-anchor="middle" class="title">Mine (coal)</text>
+        <text x="70" y="38" text-anchor="middle" class="sub">on 'coal' tile · T1</text>
+        <text x="70" y="50" text-anchor="middle" class="qty">→ 20+ coal</text>
+      </g>
+      <g class="node raw" transform="translate(20,240)">
+        <rect width="140" height="56"/>
+        <text x="70" y="22" text-anchor="middle" class="title">Coastal Pump</text>
+        <text x="70" y="38" text-anchor="middle" class="sub">on 'water' tile · T1</text>
+        <text x="70" y="50" text-anchor="middle" class="qty">→ 4 saltwater</text>
+      </g>
+
+      <!-- ===== T1 PROCESSING column ===== -->
+      <g class="node t1" transform="translate(220,90)">
+        <rect width="150" height="64"/>
+        <text x="75" y="22" text-anchor="middle" class="title">Smelter</text>
+        <text x="75" y="36" text-anchor="middle" class="sub">T1 · 50W · 2×2</text>
+        <text x="75" y="48" text-anchor="middle" class="sub">1 ore + 1 coal →</text>
+        <text x="75" y="60" text-anchor="middle" class="qty">12 iron_ingot</text>
+      </g>
+      <g class="node heat" transform="translate(220,200)">
+        <rect width="150" height="48"/>
+        <text x="75" y="22" text-anchor="middle" class="title">Coal Furnace</text>
+        <text x="75" y="36" text-anchor="middle" class="sub">T1 · heat source · 1 coal/cyc</text>
+      </g>
+      <g class="node new" transform="translate(220,290)">
+        <rect width="150" height="64"/>
+        <text x="75" y="22" text-anchor="middle" class="title">★ Cell Press</text>
+        <text x="75" y="36" text-anchor="middle" class="sub">T1 NEW · 20W · 1×1</text>
+        <text x="75" y="48" text-anchor="middle" class="sub">saltwater + iron + wire</text>
+        <text x="75" y="60" text-anchor="middle" class="qty">→ 4 saltwater_cell</text>
+      </g>
+
+      <!-- ===== T2 SMELTING column ===== -->
+      <g class="node t2 heat" transform="translate(420,90)">
+        <rect width="160" height="64"/>
+        <text x="80" y="22" text-anchor="middle" class="title">Coke Oven</text>
+        <text x="80" y="36" text-anchor="middle" class="sub">T2 · 60W · needs heat</text>
+        <text x="80" y="48" text-anchor="middle" class="sub">1 coal →</text>
+        <text x="80" y="60" text-anchor="middle" class="qty">8 coke</text>
+      </g>
+      <g class="node t2 heat" transform="translate(420,190)">
+        <rect width="160" height="64"/>
+        <text x="80" y="22" text-anchor="middle" class="title">Blast Furnace</text>
+        <text x="80" y="36" text-anchor="middle" class="sub">T2 · 100W · needs heat · 3×3</text>
+        <text x="80" y="48" text-anchor="middle" class="sub">1 ingot + 1 coke →</text>
+        <text x="80" y="60" text-anchor="middle" class="qty">8 pig_iron</text>
+      </g>
+      <g class="node t2" transform="translate(420,290)">
+        <rect width="160" height="64"/>
+        <text x="80" y="22" text-anchor="middle" class="title">Steel Mill</text>
+        <text x="80" y="36" text-anchor="middle" class="sub">T2 · 120W · 3×3</text>
+        <text x="80" y="48" text-anchor="middle" class="sub">1 pig_iron →</text>
+        <text x="80" y="60" text-anchor="middle" class="qty">8 steel</text>
+      </g>
+
+      <!-- ===== T2 MANUFACTURING column ===== -->
+      <g class="node t2" transform="translate(630,90)">
+        <rect width="170" height="64"/>
+        <text x="85" y="22" text-anchor="middle" class="title">Metal Rolling Mill</text>
+        <text x="85" y="36" text-anchor="middle" class="sub">T2 · 200W · 2×2</text>
+        <text x="85" y="48" text-anchor="middle" class="sub">1 steel →</text>
+        <text x="85" y="60" text-anchor="middle" class="qty">7 wire</text>
+      </g>
+      <g class="node t2" transform="translate(630,190)">
+        <rect width="170" height="64"/>
+        <text x="85" y="22" text-anchor="middle" class="title">Beam Mill</text>
+        <text x="85" y="36" text-anchor="middle" class="sub">T2 · 100W · 2×2</text>
+        <text x="85" y="48" text-anchor="middle" class="sub">1 steel → 2 beam</text>
+        <text x="85" y="60" text-anchor="middle" class="qty">1 steel_beam</text>
+      </g>
+
+      <!-- ===== FINAL column ===== -->
+      <g class="node output" transform="translate(880,180)">
+        <rect width="200" height="120"/>
+        <text x="100" y="32" text-anchor="middle" class="title" style="font-size:14px">BATTERY BANK</text>
+        <text x="100" y="50" text-anchor="middle" class="sub">T2 · 0W · 1×1</text>
+        <text x="100" y="70" text-anchor="middle" class="sub">5 kWh storage</text>
+        <text x="100" y="92" text-anchor="middle" class="qty">4× saltwater_cell</text>
+        <text x="100" y="106" text-anchor="middle" class="qty">3× wire · 1× steel_beam</text>
+      </g>
+
+      <!-- ===== ARROWS ===== -->
+      <!-- Mine ore → Smelter -->
+      <path class="edge" d="M 160 88 C 190 88, 195 122, 220 122"/>
+      <!-- Mine coal → Smelter -->
+      <path class="edge" d="M 160 178 C 190 178, 195 122, 220 122"/>
+      <!-- Mine coal → Coal Furnace -->
+      <path class="edge" d="M 160 178 C 190 178, 195 224, 220 224"/>
+      <!-- Mine coal → Coke Oven -->
+      <path class="edge" d="M 160 178 C 290 178, 380 122, 420 122"/>
+      <!-- Smelter → Blast Furnace (iron_ingot) -->
+      <path class="edge" d="M 370 122 C 400 122, 395 222, 420 222"/>
+      <!-- Smelter → Cell Press (iron_ingot) -->
+      <path class="edge" d="M 295 154 C 295 240, 295 290, 295 322"/>
+      <!-- Coastal Pump → Cell Press (saltwater) -->
+      <path class="edge" d="M 160 268 C 190 268, 195 322, 220 322"/>
+      <!-- Coal Furnace → Coke Oven (heat) -->
+      <path class="edge heat" d="M 370 224 C 395 224, 395 154, 420 122"/>
+      <!-- Coal Furnace → Blast Furnace (heat) -->
+      <path class="edge heat" d="M 370 224 C 395 224, 395 222, 420 222"/>
+      <!-- Coke Oven → Blast Furnace -->
+      <path class="edge" d="M 500 154 C 500 175, 500 175, 500 190"/>
+      <!-- Blast Furnace → Steel Mill -->
+      <path class="edge" d="M 500 254 C 500 275, 500 275, 500 290"/>
+      <!-- Steel Mill → Rolling Mill -->
+      <path class="edge" d="M 580 308 C 605 308, 605 122, 630 122"/>
+      <!-- Steel Mill → Beam Mill -->
+      <path class="edge" d="M 580 322 C 605 322, 605 222, 630 222"/>
+      <!-- Cell Press → Battery Bank (saltwater_cell) -->
+      <path class="edge" d="M 370 322 C 700 322, 780 240, 880 240"/>
+      <!-- Rolling Mill → Cell Press (wire feedback) -->
+      <path class="edge" d="M 800 122 C 830 122, 830 410, 295 410 L 295 354"/>
+      <!-- Rolling Mill → Battery Bank (3 wire direct) -->
+      <path class="edge" d="M 800 122 C 850 122, 855 200, 880 220"/>
+      <!-- Beam Mill → Battery Bank -->
+      <path class="edge" d="M 800 222 C 840 222, 855 250, 880 260"/>
+
+      <!-- Annotation: wire feedback loop label -->
+      <text x="600" y="430" class="lbl" style="fill:var(--gray-500); font-size:10px">wire loops back ×4 into Cell Press (for the 4 cells)</text>
+
+      <!-- ===== TOTALS PANEL ===== -->
+      <g transform="translate(20,470)">
+        <rect width="1140" height="190" fill="#1B1A17" stroke="#3A3833" stroke-width="1.5" rx="10"/>
+        <text x="20" y="28" class="title" style="fill:var(--slate); font-size:13px">RAW EXTRACTION TOTALS (one-shot Battery Bank build)</text>
+        <text x="20" y="56" class="sub">iron_ore</text>
+        <text x="160" y="56" class="qty">12</text>
+        <text x="220" y="56" class="sub">from Mine (ore tile) · home has 6 ore tiles seeded</text>
+        <text x="20" y="78" class="sub">coal</text>
+        <text x="160" y="78" class="qty">20+</text>
+        <text x="220" y="78" class="sub">from Mine (coal tile) · plus continuous Coal Furnace fuel · home has 4 coal tiles</text>
+        <text x="20" y="100" class="sub">saltwater</text>
+        <text x="160" y="100" class="qty">4</text>
+        <text x="220" y="100" class="sub">from Coastal Pump · home has 4 water tiles seeded at (-1,-5)/(0,-5)/(-1,-4)/(0,-4)</text>
+
+        <text x="20" y="134" class="title" style="fill:var(--slate); font-size:13px">GATES + DISCOVERY REQUIRED</text>
+        <text x="20" y="158" class="sub" style="fill:var(--olive)">✓ Zero biome-locked inputs</text>
+        <text x="280" y="158" class="sub" style="fill:var(--olive)">✓ Zero settlement / Foundation Kit chain</text>
+        <text x="600" y="158" class="sub" style="fill:var(--olive)">✓ Zero T3+ access required</text>
+        <text x="900" y="158" class="sub" style="fill:var(--olive)">✓ Zero drone discovery</text>
+        <text x="20" y="178" class="sub" style="fill:var(--rust)">⚠ Coke Oven + Blast Furnace each need an adjacent Coal Furnace (heat-source hard gate, §5.2)</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Proposed changes</h3>
+      <div class="row"><span class="k">NEW resource</span> <span class="v">saltwater_cell</span></div>
+      <div class="row"><span class="k">NEW building</span> <span class="v">cell_press</span> (T1 mfg, 1×1, 20W)</div>
+      <div class="row"><span class="k">NEW recipe</span> <span class="v">1 saltwater + 1 iron + 1 wire → 1 cell @ 40s</span></div>
+      <div class="row"><span class="k">MODIFIED</span> <span class="v">battery_bank.placementCost</span></div>
+      <div class="row"><span class="k">BEFORE</span> <span class="v">{ battery:4, wire:3, steel_beam:1 }</span></div>
+      <div class="row"><span class="k">AFTER</span> <span class="v q">{ saltwater_cell:4, wire:3, steel_beam:1 }</span></div>
+    </div>
+    <div class="card">
+      <h3>Home Plains tile inventory (verified)</h3>
+      <div class="row"><span class="k">ore</span> <span class="v">6 tiles · (-7..-5, 2..3)</span></div>
+      <div class="row"><span class="k">coal</span> <span class="v">4 tiles · (8..9, 5..6)</span></div>
+      <div class="row"><span class="k">water</span> <span class="v">4 tiles · (-1..0, -5..-4)</span></div>
+      <div class="row"><span class="k">tree</span> <span class="v">3 tiles · (6..7, -3..-4)</span></div>
+      <div class="row"><span class="k">stone</span> <span class="v">6 scattered + 2×2 cluster (-11..-10, 4..5)</span></div>
+      <div class="row"><span class="k">oil_well</span> <span class="v">4 tiles · (-4..-3, 8..9)</span></div>
+      <div class="row"><span class="k">limestone</span> <span class="v">4 tiles · (-9..-8, 7..8)</span></div>
+      <p class="note">Source: <code>island.ts:293-358</code> defaultTerrainAt — hand-placed terrain. Procgen Plains colonies do NOT have water tiles (see <code>biomes.ts:64</code> rareTerrain).</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    Audit · battery-bank dependency chain · 2026-05-26 · verified via grep against
+    <code>building-defs.ts</code>, <code>recipes.ts</code>, <code>biomes.ts</code>,
+    <code>island.ts</code>, <code>world.ts</code>. Proposal not yet implemented; placement cost still
+    references <code>battery</code> (T3 lithium-ion) at master HEAD.
+  </div>
+
+</div>
+</body>
+</html>
