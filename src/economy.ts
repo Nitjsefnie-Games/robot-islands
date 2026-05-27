@@ -234,10 +234,14 @@ export interface IslandState {
   level: number;
   /** Skill points granted by level-ups but not yet spent. */
   unspentSkillPoints: number;
-  /** Set of unlocked skill-tree node ids (§9.3). */
+  /** Set of unlocked skill-tree node ids (§9.3).
+   *  Mutations must bump `auraAmpVersion` — see §05 of the
+   *  adjacency-cache spec for the enumerated mutation sites. */
   unlockedNodes: Set<NodeId>;
   /** Set of owned graph edge ids. An edge can be owned even when its endpoint
-   *  is reached via another path (redundant unlocks are allowed). */
+   *  is reached via another path (redundant unlocks are allowed).
+   *  Mutations must bump `auraAmpVersion` — see §05 of the
+   *  adjacency-cache spec for the enumerated mutation sites. */
   unlockedEdges: Set<EdgeId>;
   /** §perf-2026-05-27 adjacency-cache Layer 2: bumped on every mutation
    *  of `unlockedNodes` / `unlockedEdges`. Cache key for
@@ -247,7 +251,8 @@ export interface IslandState {
   /** Memoized `computeAuraAmplifiers` result. Null on cold start /
    *  post-load (seeded by deserialize). Valid iff
    *  `auraAmpCacheVersion === auraAmpVersion`. NOT persisted — stripped on
-   *  serialize. */
+   *  serialize. Callers MUST treat the returned `Map` as read-only — mutating
+   *  it poisons the cache for all subsequent reads. */
   auraAmpCache: Map<NodeId, number> | null;
   auraAmpCacheVersion: number;
   /** Pending bonus XP credits per resource per §10 (Funneling). When a route

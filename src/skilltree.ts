@@ -1143,6 +1143,19 @@ export function skillUnlockedAdjacencyRules(
  *  An aura with bonus=0.15 on a node X amplifies adjacent owned nodes' factors
  *  by ×1.15. Multiple auras stack multiplicatively, capped at ×1.50 per node. */
 function computeAuraAmplifiers(state: IslandState, graph: Graph): Map<NodeId, number> {
+  // Layer 2 cache hit — gated on DEFAULT_GRAPH because the version counter
+  // tracks `state.unlockedNodes` / `unlockedEdges` mutation, not graph
+  // identity. UI paths that pass a crystal-bound transient graph must NOT
+  // hit the per-state cache (they'd see stale results). Layer 1
+  // (buildAdjacency + graphById WeakMap) still helps those callers.
+  if (
+    graph === DEFAULT_GRAPH
+    && state.auraAmpCache !== null
+    && state.auraAmpCacheVersion === state.auraAmpVersion
+  ) {
+    return state.auraAmpCache;
+  }
+
   const amp = new Map<NodeId, number>();
   const neighbours = buildAdjacency(graph);
   const byId = graphById(graph);
@@ -1158,6 +1171,10 @@ function computeAuraAmplifiers(state: IslandState, graph: Graph): Map<NodeId, nu
       const next = Math.min(1.5, cur * (1 + bonus));
       amp.set(r, next);
     }
+  }
+  if (graph === DEFAULT_GRAPH) {
+    state.auraAmpCache = amp;
+    state.auraAmpCacheVersion = state.auraAmpVersion;
   }
   return amp;
 }
