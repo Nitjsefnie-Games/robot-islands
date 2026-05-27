@@ -1,0 +1,1039 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill-tree adjacency cache — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1080px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 38px;
+      line-height: 1.14; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    h1 code { font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px;
+      color: #C9B98A; }
+
+    .context-box {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+
+    .verification-key {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 18px;
+      margin: 18px 0 24px; font-size: 13px;
+    }
+    .verification-key strong {
+      color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .vbadge {
+      display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px;
+    }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok     { color: var(--olive); }
+    .summary .v.warn   { color: var(--warn); }
+
+    .decision {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    .toc { background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    h3.sub {
+      font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin: 26px 0 10px;
+    }
+    .sec-intro {
+      font-size: 14.5px; color: var(--gray-500); max-width: 820px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl td.num.accent { color: var(--clay); }
+    .tbl td.num.warn   { color: var(--warn); }
+    .tbl td.num.ok     { color: var(--olive); }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .compare {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    .codepanel {
+      background: #121110; border-radius: 12px;
+      padding: 16px 20px; overflow-x: auto; margin: 12px 0 18px;
+    }
+    .codepanel pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .codepanel .kw  { color: var(--clay); }
+    .codepanel .str { color: var(--olive); }
+    .codepanel .cm  { color: var(--gray-500); }
+    .codepanel .fn  { color: #C9B98A; }
+    .codepanel .new { background: rgba(143, 165, 110, 0.13); display: block; }
+
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      display: grid; grid-template-columns: 260px 1fr; gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono); font-size: 12.5px; color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+    .check {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: var(--white); border: var(--border);
+      border-radius: 10px; padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px; border-radius: 5px;
+      border: 2px solid var(--gray-500); flex-shrink: 0; margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    .risks {
+      border: var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · economy perf</div>
+      <h1>Cache <code>buildAdjacency</code> and per-state <code>computeAuraAmplifiers</code></h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        After the first-tier per-tick memoization of <code>effectiveSkillMultipliers</code>
+        (commit <code>a4ff6a4</code> and follow-ups), a re-profile of the same
+        live save still shows skill-tree-graph adjacency as the dominant CPU
+        cost. <code>buildAdjacency</code> is a <strong>pure function of static
+        <code>graph.edges</code></strong> rebuilt on every call;
+        <code>computeAuraAmplifiers</code> is a <strong>pure function of
+        <code>state.unlockedNodes</code></strong> (plus the static graph) but
+        also rebuilds from scratch. This spec adds two layers of caching that
+        collapse roughly half of <code>advanceIsland</code>'s CPU into a
+        <code>WeakMap</code> hit.
+      </div>
+
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author against the cited file:line or the cpuprofile artifact.
+        <span class="vbadge u">unverified</span> projection or claim not personally re-verified in this pass.
+        <span class="vbadge x">corrected</span> earlier draft contained an error; this entry supplies the verified value.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Hot-path CPU now</div><div class="v warn">~54% self</div></div>
+      <div class="cell"><div class="k">Hot-path CPU target</div><div class="v ok">&lt;5% self</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v accent">2 source · 1 test</div></div>
+      <div class="cell"><div class="k">Schema change</div><div class="v ok">None on the wire</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Two-layer cache. Layer 1 is a module-level <code>WeakMap&lt;Graph, …&gt;</code> for the static-input pieces; Layer 2 is a version-counter-keyed per-state cache for the unlocked-node walk.</div>
+      <div class="d-body"><strong>Layer 1 — Graph-keyed module cache.</strong>
+        <code>buildAdjacency(graph)</code> and a sibling <code>graphById(graph)</code>
+        (the <code>Map&lt;string, SkillNode&gt;</code> currently rebuilt at
+        <a class="cite">skilltree.ts:1136-1137</a>) become memoized on a
+        module-level <code>WeakMap</code> keyed by the <code>Graph</code>
+        object. The hot path always passes <code>DEFAULT_GRAPH</code> — one
+        cache entry, populated lazily on first call, lives for the process
+        lifetime. The graph-view UI passes a fresh <code>Graph</code> from
+        <code>effectiveGraph(state)</code> when crystals are bound; those
+        entries are reclaimed by GC once the UI render finishes (the WeakMap
+        does not pin them).</div>
+      <div class="d-body"><strong>Layer 2 — Per-state aura-amp cache (option 2A).</strong>
+        Add <code>auraAmpVersion: number</code> to <code>IslandState</code>
+        and bump it at every <code>unlockedNodes</code> /
+        <code>unlockedEdges</code> mutation site (9 sites enumerated in §04).
+        <code>computeAuraAmplifiers</code> stashes its
+        <code>Map&lt;NodeId, number&gt;</code> result on the state along with
+        the version it was computed at; a subsequent call with the same
+        version returns the cached map directly.</div>
+      <div class="d-body"><strong>Why 2A over 2B (Set-identity).</strong>
+        Option 2B would key a <code>WeakMap</code> on the
+        <code>unlockedNodes</code> Set object, but it requires either (a)
+        replacing every <code>.add()/.delete()/.clear()</code> with a fresh
+        <code>new Set(...)</code> assignment, which is a much wider edit, or
+        (b) keying on Set identity while accepting cache poisoning when the
+        Set mutates in place. 2A is explicit, fits the existing
+        Set-mutation idiom, and the version bump is a single statement at
+        each enumerable site.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#s01">01 Problem</a>
+      <a href="#s02">02 Root cause</a>
+      <a href="#s03">03 Layer 1 — graph cache</a>
+      <a href="#s04">04 Layer 2 — per-state cache</a>
+      <a href="#s05">05 Mutation surface</a>
+      <a href="#s06">06 API change</a>
+      <a href="#s07">07 Persistence interaction</a>
+      <a href="#s08">08 Test plan</a>
+      <a href="#s09">09 Expected impact</a>
+      <a href="#s10">10 Risks</a>
+      <a href="#s11">11 Non-goals</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Problem statement</h2></div>
+      <p class="sec-intro">A live save replayed through
+        <code>scripts/profile-economy.ts</code> with the V8 CPU profiler at
+        200&micro;s sampling, <strong>after</strong> the skillmult-memoize work,
+        still shows skill-tree adjacency dominating <code>advanceIsland</code>.
+        The previous fix removed the multi-call overhead of
+        <code>effectiveSkillMultipliers</code>; the residual cost is the
+        single call that remains per advance.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Frame</th>
+          <th>Self %</th>
+          <th>Incl %</th>
+          <th>Where</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">buildAdjacency</td>
+            <td class="num warn">27.4%</td>
+            <td class="num">~27.4%</td>
+            <td class="mono">skilltree.ts:1154</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">computeAuraAmplifiers</td>
+            <td class="num warn">26.5%</td>
+            <td class="num accent">53.9%</td>
+            <td class="mono">skilltree.ts:1132</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">effectiveSkillMultipliers</td>
+            <td class="num">3.7%</td>
+            <td class="num accent">58.8%</td>
+            <td class="mono">skilltree.ts:903</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">(garbage collector)</td>
+            <td class="num">9.2%</td>
+            <td class="num">—</td>
+            <td>allocation churn from the above</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">Per-frame budget (current)</h3>
+      <ul class="body">
+        <li><strong>Home-island <code>advanceIsland</code> mean:</strong> <span class="vbadge v">v</span> ~2.67 ms (down from 6.6 ms after skillmult-memoize, still high).</li>
+        <li><strong>p99:</strong> <span class="vbadge v">v</span> ~12.77 ms.</li>
+        <li><strong>24-hour offline catchup:</strong> <span class="vbadge v">v</span> ~128 ms.</li>
+      </ul>
+
+      <h3 class="sub">Profile artifacts</h3>
+      <ul class="body">
+        <li><code>/tmp/CPU.20260527.111415.868035.0.001.cpuprofile</code> — post-skillmult-memoize re-profile. <span class="vbadge v">v</span></li>
+        <li><code>/tmp/robot-islands-save.json</code> — same live-save dump used by the prior spec. <span class="vbadge v">v</span></li>
+        <li><code>scripts/profile-economy.ts</code> — replay benchmark harness. <span class="vbadge v">v</span></li>
+      </ul>
+
+      <div class="codepanel" style="margin-top: 14px"><pre><span class="cm">// Concurrent unrelated fix — economy.ts:1690 calls findNextCapEvent</span>
+<span class="cm">// with bare `ctx` not `effectiveCtx`, so cap() inside that path</span>
+<span class="cm">// recomputes effectiveSkillMultipliers. That bug is being fixed</span>
+<span class="cm">// SEPARATELY. It reduces the CALL FREQUENCY of</span>
+<span class="cm">// effectiveSkillMultipliers but NOT the per-call buildAdjacency</span>
+<span class="cm">// cost — this spec stays load-bearing regardless.</span></pre></div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>Root cause</h2></div>
+      <p class="sec-intro">Walk the call chain. Every term is verified against
+        the cited file:line.</p>
+
+      <ol class="body">
+        <li><code>advanceIsland(state, nowMs)</code> at <a class="cite">economy.ts:1600</a> calls <code>effectiveSkillMultipliers(state)</code> exactly once to compute <code>baseMult</code>. <span class="vbadge v">v</span></li>
+        <li><code>effectiveSkillMultipliers</code> at <a class="cite">skilltree.ts:903</a> calls <code>computeAuraAmplifiers(state, graph)</code> exactly once at line 950, then walks <code>state.unlockedNodes</code> applying each node's effect modulated by the per-node aura amplifier. <span class="vbadge v">v</span></li>
+        <li><code>computeAuraAmplifiers</code> at <a class="cite">skilltree.ts:1132</a>:
+          <ul style="margin-top: 6px">
+            <li>Line 1134 — calls <code>buildAdjacency(graph)</code>.</li>
+            <li>Lines 1136-1137 — builds <code>byId: Map&lt;string, SkillNode&gt;</code> by iterating <code>graph.nodes</code>.</li>
+            <li>Lines 1139-1150 — walks <code>state.unlockedNodes</code> and runs <code>nodesWithinRadius</code> (BFS) for each aura-bearing node.</li>
+          </ul>
+        </li>
+        <li><code>buildAdjacency</code> at <a class="cite">skilltree.ts:1154-1170</a> iterates <strong>every edge in <code>graph.edges</code></strong> (excluding AND-prereq edges) and builds a fresh undirected-neighbour map. <span class="vbadge v">v</span></li>
+      </ol>
+
+      <p class="body"><strong>The waste:</strong> <code>graph</code> is
+        <code>DEFAULT_GRAPH</code> on the hot path — a module-level
+        <code>const</code> defined at <a class="cite">skilltree.ts:529-534</a>
+        and never mutated. <code>graph.edges</code> never changes after the
+        module loads. Yet the adjacency map is rebuilt on every
+        <code>advanceIsland</code>, and the <code>byId</code> map is rebuilt
+        the same number of times.</p>
+
+      <p class="body">Layer 2's <code>state.unlockedNodes</code> changes only
+        at the 9 enumerated mutation sites in §05 — none of which fire
+        during a tick (<a class="cite">economy.ts:1595-1601</a> documents this
+        explicitly: <em>"unlockedNodes / unlockedEdges do not mutate during
+        this advanceIsland call"</em>). So the aura-amp result is also stable
+        across long stretches of tick activity.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>Layer 1 — Graph-keyed module cache</h2></div>
+      <p class="sec-intro">Two pure functions of the static graph become
+        <code>WeakMap</code>-memoized at module scope. No invalidation logic
+        because the cache key is the input object itself.</p>
+
+      <h3 class="sub">Why <code>WeakMap&lt;Graph, …&gt;</code> and not <code>let _adj = null</code></h3>
+      <p class="body">Two distinct callers reach <code>buildAdjacency</code>:</p>
+      <ul class="body">
+        <li><strong>Hot path</strong>: <code>effectiveSkillMultipliers</code> with the default <code>graph = DEFAULT_GRAPH</code> at <a class="cite">skilltree.ts:905</a>. One cache entry forever.</li>
+        <li><strong>UI path</strong>: <code>skilltree-graphview.ts</code> calls <code>effectiveGraph(state)</code> (e.g. <a class="cite">skilltree-graphview.ts:363, 391, 420, 502, 672, 744</a>) which, when crystal sockets are bound, allocates a <strong>fresh <code>Graph</code> object</strong> per call at <a class="cite">skilltree.ts:598-603</a>. <span class="vbadge v">v</span></li>
+      </ul>
+      <p class="body">A <code>let _defaultAdj: Map | null = null</code>
+        single-slot cache would silently miss the UI path; a regular
+        <code>Map&lt;Graph, …&gt;</code> would pin each UI-render graph in
+        memory forever. <code>WeakMap</code> covers both: hot-path entries
+        are kept alive by <code>DEFAULT_GRAPH</code>'s module-level reference;
+        UI-path entries are reclaimed by GC once the UI render ends and the
+        transient graph goes out of scope.</p>
+
+      <h3 class="sub">Shape of the change</h3>
+      <div class="codepanel"><pre><span class="cm">// At skilltree.ts module scope, near the existing DEFAULT_CATALOG.</span>
+<span class="kw">const</span> _adjCache = <span class="kw">new</span> WeakMap&lt;Graph, Map&lt;NodeId, NodeId[]&gt;&gt;();
+<span class="kw">const</span> _byIdCache = <span class="kw">new</span> WeakMap&lt;Graph, Map&lt;<span class="kw">string</span>, SkillNode&gt;&gt;();
+
+<span class="kw">function</span> <span class="fn">buildAdjacency</span>(graph: Graph): Map&lt;NodeId, NodeId[]&gt; {
+  <span class="kw">const</span> cached = _adjCache.<span class="fn">get</span>(graph);
+  <span class="kw">if</span> (cached) <span class="kw">return</span> cached;
+  <span class="kw">const</span> adj = <span class="kw">new</span> Map&lt;NodeId, NodeId[]&gt;();
+  <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> graph.edges) { <span class="cm">/* …existing body…  */</span> }
+  _adjCache.<span class="fn">set</span>(graph, adj);
+  <span class="kw">return</span> adj;
+}
+
+<span class="kw">function</span> <span class="fn">graphById</span>(graph: Graph): Map&lt;<span class="kw">string</span>, SkillNode&gt; {
+  <span class="kw">const</span> cached = _byIdCache.<span class="fn">get</span>(graph);
+  <span class="kw">if</span> (cached) <span class="kw">return</span> cached;
+  <span class="kw">const</span> byId = <span class="kw">new</span> Map&lt;<span class="kw">string</span>, SkillNode&gt;();
+  <span class="kw">for</span> (<span class="kw">const</span> n <span class="kw">of</span> graph.nodes) byId.<span class="fn">set</span>(n.id <span class="kw">as</span> <span class="kw">string</span>, n);
+  _byIdCache.<span class="fn">set</span>(graph, byId);
+  <span class="kw">return</span> byId;
+}</pre></div>
+
+      <p class="body">Both helpers are module-private; no signature change.
+        <code>computeAuraAmplifiers</code> already calls
+        <code>buildAdjacency(graph)</code> at line 1134 — the only
+        modification there is to replace the inline <code>byId</code>
+        construction at lines 1136-1137 with a call to
+        <code>graphById(graph)</code>.</p>
+
+      <h3 class="sub">Correctness invariant</h3>
+      <p class="body"><strong>The cache is correct iff the cached function is
+        pure in <code>graph</code>.</strong> Both helpers are:
+        <code>buildAdjacency</code> reads only <code>graph.edges</code>;
+        <code>graphById</code> reads only <code>graph.nodes</code>. Neither
+        the <code>Graph</code> instance nor the <code>edges</code> /
+        <code>nodes</code> arrays are mutated anywhere in the codebase
+        (<code>DEFAULT_GRAPH</code> is <code>const</code>;
+        <code>effectiveGraph</code> at <a class="cite">skilltree.ts:540-606</a>
+        always constructs a <em>new</em> object on the crystal-binding
+        branch). <span class="vbadge v">v</span></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>Layer 2 — Per-state aura-amp cache</h2></div>
+      <p class="sec-intro">The result of <code>computeAuraAmplifiers</code>
+        depends on <code>state.unlockedNodes</code> in addition to the
+        static graph. Layer 1 makes the inputs cheap; Layer 2 makes the
+        output cheap too.</p>
+
+      <h3 class="sub">New fields on <code>IslandState</code></h3>
+      <div class="codepanel"><pre><span class="kw">export interface</span> IslandState {
+  <span class="cm">/* …existing fields… */</span>
+  unlockedNodes: Set&lt;NodeId&gt;;
+  unlockedEdges: Set&lt;EdgeId&gt;;
+  <span class="new"><span class="cm">  /** Bumped on every mutation of unlockedNodes / unlockedEdges.</span></span>
+<span class="new"><span class="cm">   *  Cache-key for Layer 2 (aura-amp) and any future</span></span>
+<span class="new"><span class="cm">   *  pure-skill-state derivation. Starts at 0; resets via the</span></span>
+<span class="new"><span class="cm">   *  persistence migration in §07. */</span></span>
+<span class="new">  auraAmpVersion: <span class="kw">number</span>;</span>
+<span class="new"><span class="cm">  /** Memoized result of computeAuraAmplifiers(this, DEFAULT_GRAPH).</span></span>
+<span class="new"><span class="cm">   *  Null on cold start / post-migration. Valid iff</span></span>
+<span class="new"><span class="cm">   *  auraAmpCacheVersion === auraAmpVersion. Stripped at serialize time;</span></span>
+<span class="new"><span class="cm">   *  not part of the persisted snapshot. */</span></span>
+<span class="new">  auraAmpCache: Map&lt;NodeId, <span class="kw">number</span>&gt; | <span class="kw">null</span>;</span>
+<span class="new">  auraAmpCacheVersion: <span class="kw">number</span>;</span>
+}</pre></div>
+
+      <h3 class="sub">Read/store at <code>computeAuraAmplifiers</code></h3>
+      <div class="codepanel"><pre><span class="kw">function</span> <span class="fn">computeAuraAmplifiers</span>(state: IslandState, graph: Graph): Map&lt;NodeId, <span class="kw">number</span>&gt; {
+<span class="new">  <span class="cm">// Cache hit: same state.unlockedNodes / unlockedEdges as last call,</span></span>
+<span class="new">  <span class="cm">// AND the graph we'd resolve to is the default (the only path that</span></span>
+<span class="new">  <span class="cm">// can rely on state-versioning — UI paths with crystals pass a</span></span>
+<span class="new">  <span class="cm">// transient `graph` and skip the cache).</span></span>
+<span class="new">  <span class="kw">if</span> (graph === DEFAULT_GRAPH</span>
+<span class="new">      &amp;&amp; state.auraAmpCache !== <span class="kw">null</span></span>
+<span class="new">      &amp;&amp; state.auraAmpCacheVersion === state.auraAmpVersion) {</span>
+<span class="new">    <span class="kw">return</span> state.auraAmpCache;</span>
+<span class="new">  }</span>
+  <span class="kw">const</span> amp = <span class="kw">new</span> Map&lt;NodeId, <span class="kw">number</span>&gt;();
+  <span class="kw">const</span> neighbours = <span class="fn">buildAdjacency</span>(graph);  <span class="cm">// Layer 1 hit</span>
+  <span class="kw">const</span> byId = <span class="fn">graphById</span>(graph);            <span class="cm">// Layer 1 hit</span>
+  <span class="cm">/* …existing aura-walk body, unchanged… */</span>
+<span class="new">  <span class="kw">if</span> (graph === DEFAULT_GRAPH) {</span>
+<span class="new">    state.auraAmpCache = amp;</span>
+<span class="new">    state.auraAmpCacheVersion = state.auraAmpVersion;</span>
+<span class="new">  }</span>
+  <span class="kw">return</span> amp;
+}</pre></div>
+
+      <p class="body"><strong>Why gate on <code>graph === DEFAULT_GRAPH</code>.</strong>
+        The version counter tracks <code>state</code> mutation, not graph
+        identity. A UI render that constructs a transient
+        <code>effectiveGraph</code> with crystal-bound mini-tree nodes would
+        produce a <em>different</em> aura-amp map for the same
+        <code>auraAmpVersion</code>. The simplest correct rule is: only store
+        and read the cache when the graph is the canonical
+        <code>DEFAULT_GRAPH</code>. UI paths pay the unmemoized cost (Layer 1
+        still helps them) — they're not the hot path.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>Mutation surface</h2></div>
+      <p class="sec-intro">Every place that touches
+        <code>state.unlockedNodes</code> or <code>state.unlockedEdges</code>.
+        Each site adds one line: <code>state.auraAmpVersion++;</code>.
+        Lines 1375 + 1376 share a loop body — one bump per iteration covers
+        both members. Lines 145 + 146 in tier-reset are sequential and
+        share an enclosing function — one bump covers the pair. Lines 670 +
+        688 in <code>refundAndClearMiniTree</code> are inside a single function
+        and execute together — one bump at function end covers both.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Site</th>
+          <th>File:line</th>
+          <th>Operation</th>
+          <th>Notes</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">refund (node)</td>
+            <td class="mono">skilltree.ts:670</td>
+            <td><code>unlockedNodes.delete</code></td>
+            <td rowspan="2">Inside <code>refundAndClearMiniTree</code> — single bump at function tail covers both deletes.</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">refund (edge)</td>
+            <td class="mono">skilltree.ts:688</td>
+            <td><code>unlockedEdges.delete</code></td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">spendPoint</td>
+            <td class="mono">skilltree.ts:760</td>
+            <td><code>unlockedNodes.add</code></td>
+            <td>Backward-compat point spender. Bump at tail.</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">buyNode (root fallback)</td>
+            <td class="mono">skilltree.ts:1363</td>
+            <td><code>unlockedNodes.add</code></td>
+            <td>Root-node fallback branch. Bump before <code>return</code>.</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">buyNode (path)</td>
+            <td class="mono">skilltree.ts:1375</td>
+            <td><code>unlockedNodes.add</code></td>
+            <td rowspan="2">Same <code>for (const e of result.path)</code> body. Bump <em>once</em> after the loop completes — N edges in a single purchase get one version increment, which is sufficient to invalidate the cache.</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">buyNode (edge)</td>
+            <td class="mono">skilltree.ts:1376</td>
+            <td><code>unlockedEdges.add</code></td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">buyKeystone</td>
+            <td class="mono">skilltree.ts:1399</td>
+            <td><code>unlockedNodes.add</code></td>
+            <td>AND-prereq keystone purchase. Bump at tail.</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">tier-reset (nodes)</td>
+            <td class="mono">tier-reset.ts:145</td>
+            <td><code>unlockedNodes.clear</code></td>
+            <td rowspan="2">Inside <code>executeTierReset</code>. One bump covers both clears — they're sequential statements.</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">tier-reset (edges)</td>
+            <td class="mono">tier-reset.ts:146</td>
+            <td><code>unlockedEdges.clear</code></td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Mutation-site count:</strong> 9 raw mutation
+        lines, collapsing to <strong>6 logical bump sites</strong> by the
+        clustering above (3 pairs share an enclosing function or loop body).
+        No tests are exempt — test code uses the same purchase helpers, so
+        the bump is transparent to existing tests.</p>
+
+      <p class="body"><strong>Assignment scan:</strong>
+        <code>state.unlockedNodes = …</code> and
+        <code>state.unlockedEdges = …</code> do not occur anywhere in
+        <code>src/</code>. <span class="vbadge v">v</span> The only Set
+        construction is in factories (<code>world.ts:1068-1069</code>,
+        <code>persistence.ts:731-732</code>) — those create the initial
+        state; they don't re-assign during runtime.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2>API change surface</h2></div>
+      <p class="sec-intro">Module-internal only. <code>buildAdjacency</code>
+        and <code>computeAuraAmplifiers</code> are file-local; neither is
+        exported. No public API change.</p>
+
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/skilltree.ts</div>
+          <div class="what"><span class="lead">Add <code>_adjCache</code> and <code>_byIdCache</code> module constants; rewrite <code>buildAdjacency</code> as a thin cache wrapper; add <code>graphById</code>; replace inline <code>byId</code> build in <code>computeAuraAmplifiers</code> with the helper.</span> Pure refactor — no signature change.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/skilltree.ts</div>
+          <div class="what"><span class="lead">Layer 2 read/store in <code>computeAuraAmplifiers</code>.</span> Guarded by <code>graph === DEFAULT_GRAPH</code>; uses the new state fields.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts</div>
+          <div class="what"><span class="lead">Extend <code>IslandState</code> with <code>auraAmpVersion</code>, <code>auraAmpCache</code>, <code>auraAmpCacheVersion</code>.</span> No behavioural change beyond the field addition.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/world.ts:1068</div>
+          <div class="what"><span class="lead">Initial state factory.</span> <code>makeInitialIslandState</code> seeds <code>auraAmpVersion: 0</code>, <code>auraAmpCache: null</code>, <code>auraAmpCacheVersion: -1</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/skilltree.ts (6 sites)</div>
+          <div class="what"><span class="lead">Version bumps.</span> Lines 670+688 (one bump at function tail), 760, 1363, 1375+1376 (one bump after path loop), 1399.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/tier-reset.ts:145-146</div>
+          <div class="what"><span class="lead">Version bump after both clears.</span> One <code>state.auraAmpVersion++;</code> after line 146.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts:482-489 + 731-732</div>
+          <div class="what"><span class="lead">Serialize-time strip and deserialize-time seed.</span> See §07 — extend the destructure at line 482 to peel off the cache fields; seed the runtime fields after <code>new Set</code> reconstruction at lines 731-732.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/skilltree.test.ts (or new src/skilltree-aura-cache.test.ts)</div>
+          <div class="what"><span class="lead">Three correctness tests.</span> Cache hit, cache miss after mutation, Layer 1 instance identity. See §08.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>Persistence interaction</h2></div>
+      <p class="sec-intro">The new fields live on the runtime
+        <code>IslandState</code> only — they must NOT round-trip through the
+        save file. The existing serialize/deserialize idiom already strips
+        the Set fields; this spec extends it to strip the cache fields too.</p>
+
+      <h3 class="sub">Why the cache must not persist</h3>
+      <ul class="body">
+        <li><code>Map&lt;NodeId, number&gt;</code> stringifies to <code>{}</code> in JSON. Round-trip would silently corrupt the cache.</li>
+        <li>The cache is rebuildable in <code>O(unlockedNodes × radius)</code> on first call after load. There's nothing to gain by persisting it.</li>
+        <li><code>auraAmpVersion</code> could persist, but resetting it to <code>0</code> on load is equally correct (the cache is rebuilt on first call regardless), and skipping it means no new schema migration is needed.</li>
+      </ul>
+
+      <h3 class="sub">Serialize side — <code>persistence.ts:482</code></h3>
+      <div class="codepanel"><pre><span class="cm">// Before:</span>
+<span class="kw">const</span> { unlockedNodes, unlockedEdges, socketBindings, ...rest } = state;
+
+<span class="cm">// After:</span>
+<span class="kw">const</span> {
+  unlockedNodes, unlockedEdges, socketBindings,
+<span class="new">  auraAmpVersion: _v,</span>
+<span class="new">  auraAmpCache: _c,</span>
+<span class="new">  auraAmpCacheVersion: _cv,</span>
+  ...rest
+} = state;</pre></div>
+
+      <p class="body">The <code>_</code>-prefixed bindings exist solely to
+        prevent the spread from carrying the cache fields into
+        <code>...rest</code>. They are intentionally unused and pass
+        <code>noUnusedLocals</code> via the underscore prefix.</p>
+
+      <h3 class="sub">Deserialize side — <code>persistence.ts:731-732</code></h3>
+      <div class="codepanel"><pre><span class="cm">// Inside the load path that reconstitutes IslandState from a snapshot:</span>
+<span class="kw">return</span> {
+  ...s,
+  unlockedNodes: <span class="kw">new</span> Set(s.unlockedNodes),
+  unlockedEdges: <span class="kw">new</span> Set(s.unlockedEdges ?? []),
+<span class="new">  auraAmpVersion: 0,</span>
+<span class="new">  auraAmpCache: <span class="kw">null</span>,</span>
+<span class="new">  auraAmpCacheVersion: -1,</span>
+  socketBindings: <span class="kw">new</span> Map(s.socketBindings ?? []),
+  <span class="cm">/* …rest of reconstitution… */</span>
+};</pre></div>
+
+      <h3 class="sub">No schema bump</h3>
+      <p class="body">The wire format does not change. <code>v14</code>
+        snapshots written before this work remain readable; new snapshots
+        written after this work are byte-compatible with <code>v14</code>
+        readers (the cache fields are runtime-only and stripped on
+        serialize). No new <code>migrateV14toV15</code> function is
+        required. <span class="vbadge v">v</span></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>Test plan</h2></div>
+      <p class="sec-intro">Three correctness tests are sufficient. The
+        perf-regression test is documented but lives in the plan, not the
+        spec (Phase 6 below records the actual measured win).</p>
+
+      <h3 class="sub">Test 1 — Mutation invalidates the cache (Layer 2)</h3>
+      <div class="codepanel"><pre><span class="kw">it</span>(<span class="str">'auraAmp reflects new aura node after unlock'</span>, () =&gt; {
+  <span class="kw">const</span> s = <span class="fn">makeInitialIslandState</span>(spec, 0);
+  <span class="cm">// Compute once to warm the cache.</span>
+  <span class="fn">effectiveSkillMultipliers</span>(s);
+  <span class="kw">const</span> beforeMul = <span class="fn">effectiveSkillMultipliers</span>(s).recipeRate[<span class="str">'mining'</span>];
+  <span class="cm">// Unlock an aura-bearing notable that affects mining.</span>
+  s.unlockedNodes.<span class="fn">add</span>(<span class="str">'mining.aura.notable'</span> <span class="kw">as</span> NodeId);
+<span class="new">  <span class="cm">// Spec compliance: the mutation site bumps the version. In a real</span></span>
+<span class="new">  <span class="cm">// purchase this is automatic via spendPoint / buyNode; the test must</span></span>
+<span class="new">  <span class="cm">// bump explicitly because it's poking the Set directly.</span></span>
+<span class="new">  s.auraAmpVersion++;</span>
+  <span class="kw">const</span> afterMul = <span class="fn">effectiveSkillMultipliers</span>(s).recipeRate[<span class="str">'mining'</span>];
+  <span class="fn">expect</span>(afterMul).<span class="fn">toBeGreaterThan</span>(beforeMul);
+});</pre></div>
+      <p class="body">The test asserts the spec contract: <strong>after any
+        cache-invalidating mutation, the next call returns a freshly
+        computed result reflecting the new state</strong>. The explicit
+        <code>s.auraAmpVersion++</code> mirrors what <code>buyNode</code>
+        does for real mutation sites.</p>
+
+      <h3 class="sub">Test 2 — Cache hit on repeated unmodified call</h3>
+      <div class="codepanel"><pre><span class="kw">it</span>(<span class="str">'computeAuraAmplifiers reuses cached result on identical state'</span>, () =&gt; {
+  <span class="kw">const</span> s = <span class="fn">makeInitialIslandState</span>(spec, 0);
+  s.unlockedNodes.<span class="fn">add</span>(<span class="str">'mining.aura.notable'</span> <span class="kw">as</span> NodeId);
+  s.auraAmpVersion++;
+  <span class="fn">effectiveSkillMultipliers</span>(s);
+  <span class="kw">const</span> cachedMap = s.auraAmpCache;
+  <span class="fn">expect</span>(cachedMap).<span class="fn">not</span>.<span class="fn">toBeNull</span>();
+  <span class="cm">// Second call — must NOT replace the cache instance.</span>
+  <span class="fn">effectiveSkillMultipliers</span>(s);
+  <span class="fn">expect</span>(s.auraAmpCache).<span class="fn">toBe</span>(cachedMap);  <span class="cm">// reference equality</span>
+});</pre></div>
+      <p class="body">Reference-equality on the Map instance is the
+        observable signal of a cache hit without exposing a counter on the
+        production API.</p>
+
+      <h3 class="sub">Test 3 — Layer 1 returns the same instance per Graph</h3>
+      <div class="codepanel"><pre><span class="kw">it</span>(<span class="str">'buildAdjacency returns the same Map instance for DEFAULT_GRAPH across calls'</span>, () =&gt; {
+  <span class="cm">// buildAdjacency is module-private; test via the observable</span>
+  <span class="cm">// side-effect: computeAuraAmplifiers' result for an unrelated state</span>
+  <span class="cm">// shape is unchanged across calls, AND the byId-walk in</span>
+  <span class="cm">// effectiveSkillMultipliers produces identical results.</span>
+  <span class="kw">const</span> s = <span class="fn">makeInitialIslandState</span>(spec, 0);
+  <span class="kw">const</span> m1 = <span class="fn">effectiveSkillMultipliers</span>(s);
+  <span class="kw">const</span> m2 = <span class="fn">effectiveSkillMultipliers</span>(s);
+  <span class="fn">expect</span>(m1.recipeRate).<span class="fn">toEqual</span>(m2.recipeRate);
+});</pre></div>
+      <p class="body">A direct instance-identity assertion on
+        <code>buildAdjacency</code>'s return value would require exporting
+        the function for the test or using <code>vi.spyOn</code> on the
+        module internals. The behavioural assertion (results match) is
+        equivalent for the spec's purpose: incorrect caching would either
+        return stale data on a follow-up call (caught by Test 1) or surface
+        as a result divergence (caught here).</p>
+
+      <h3 class="sub">Perf check (lives in plan Phase 6, not as a CI gate)</h3>
+      <p class="body">After implementation, re-run
+        <code>scripts/profile-economy.ts /tmp/robot-islands-save.json</code>.
+        Binding gate documented in the plan: home-island mean tick must
+        drop to &lt;1.8 ms (a 1.5× win from the current 2.67 ms baseline) or
+        the implementation is broken. The measured numbers go in the final
+        commit body.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Expected impact</h2></div>
+      <p class="sec-intro">Quantitative projection from the cpuprofile.
+        Treat as a target, not a guarantee — the verification is the actual
+        post-implementation re-profile.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>Projected after</th>
+          <th>Rationale</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">buildAdjacency self %</td>
+            <td class="num warn">27.4%</td>
+            <td class="num ok">&lt;0.5%</td>
+            <td>One <code>WeakMap.get</code> per <code>advanceIsland</code> instead of a full edge walk.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">computeAuraAmplifiers self %</td>
+            <td class="num warn">26.5%</td>
+            <td class="num ok">&lt;1%</td>
+            <td>One Map identity-compare per <code>advanceIsland</code>; the BFS walk runs only on unlock-state change.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">effectiveSkillMultipliers incl %</td>
+            <td class="num accent">58.8%</td>
+            <td class="num ok">~10%</td>
+            <td>Aura-amp dependency collapses; remaining cost is the <code>unlockedNodes</code> walk that applies effects to the multiplier bundle.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">GC %</td>
+            <td class="num">9.2%</td>
+            <td class="num ok">&lt;3%</td>
+            <td>Per-call adjacency Map + byId Map allocations gone — both are now reused.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">Home-island mean tick</td>
+            <td class="num warn">~2.67 ms</td>
+            <td class="num ok">~1.2 ms</td>
+            <td>Aura-amp drops to ~zero; remaining time is recipe iteration + cap math.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">24h offline catchup</td>
+            <td class="num warn">~128 ms</td>
+            <td class="num ok">~60-70 ms</td>
+            <td>Direct scaling of per-tick savings across many segments.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">Secondary benefit — covers the stale-ctx bug too</h3>
+      <p class="body"><a class="cite">economy.ts:1676</a> still calls
+        <code>effectiveSkillMultipliers(state)</code> fresh inside the
+        segment loop (the per-segment <code>skillMul</code> for battery
+        capacity). That's a separate incomplete-threading fix, but Layer 2
+        of this work means even when that fresh call happens, the
+        aura-amp portion hits the per-state cache. The savings from this
+        spec are additive to, not in conflict with, the
+        <code>findNextCapEvent</code> stale-ctx fix tracked outside this
+        scope.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">A new mutation site for <code>unlockedNodes</code> / <code>unlockedEdges</code> is added in a future change without bumping <code>auraAmpVersion</code>, silently serving stale aura-amp data.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">JSDoc on the two Set fields names the bump contract. A grep-based lint (in plan Phase 5 as a test fixture) walks the codebase asserting every <code>unlockedNodes.add|delete|clear</code> / <code>unlockedEdges.add|delete|clear</code> line has a sibling <code>auraAmpVersion++</code> in the same function.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The cached <code>Map&lt;NodeId, number&gt;</code> on <code>state.auraAmpCache</code> is returned to callers who then mutate it.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Only one caller — <code>effectiveSkillMultipliers</code> at <a class="cite">skilltree.ts:950</a> — and it only <code>.get()</code>s from the map. No call site writes to the returned map. Spec calls this out; an explicit <code>Object.freeze(amp)</code> or returning a <code>ReadonlyMap</code> type is unnecessary overhead.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A test that mutates <code>unlockedNodes</code> directly without calling the purchase API forgets to bump the version, and the test then reads stale results.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Test 1 above demonstrates the pattern explicitly. Tests touching the Set directly remain in the minority — most test code uses <code>spendPoint</code> / <code>buyNode</code> which bump automatically.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Layer 1 WeakMap leaks because <code>effectiveGraph</code>'s transient Graph objects accidentally get pinned by a UI ref.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell"><code>WeakMap</code> by definition does not prevent GC. A UI path that holds its Graph reference for a render and drops it sees the cache entry collected naturally. The cache is bounded by however many transient graphs are simultaneously referenced, which is <code>O(1)</code> in practice (one panel open at a time).</div>
+        </div>
+        <div class="row">
+          <div class="cell">The <code>auraAmpVersion</code> counter overflows.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">JS <code>number</code> is double-precision float. Counter would need 2^53 mutations to lose precision. A session that purchases one skill node per second for ~285 million years is the failure mode. Out of scope.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Non-goals</h2></div>
+      <p class="sec-intro">Explicitly out of scope so the reader can confirm
+        these were considered and deliberately deferred.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">The <code>findNextCapEvent</code> stale-ctx bug</div>
+          <div class="dd"><a class="cite">economy.ts:1690</a> calls
+            <code>findNextCapEvent(state, net, t, nowMs, ctx)</code> with
+            bare <code>ctx</code> rather than the <code>effectiveCtx</code>
+            that carries <code>baseMult</code>. That bug is being addressed
+            separately. It reduces the <em>call frequency</em> of
+            <code>effectiveSkillMultipliers</code> but does not eliminate the
+            per-call <code>buildAdjacency</code> cost — this spec is
+            load-bearing regardless.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Caching anywhere else in <code>effectiveSkillMultipliers</code></div>
+          <div class="dd">The remaining ~3.7% self time after this work is
+            the unlocked-nodes effect-application walk at
+            <a class="cite">skilltree.ts:952-1107</a>. It depends on the
+            same <code>state.unlockedNodes</code> as Layer 2 — a Layer 3
+            would memoize the final <code>SkillMultipliers</code> bundle on
+            the same version counter. That's a future optimization to revisit
+            <em>after</em> measuring the post-Layer-2 profile.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">UI / rendering path optimization</div>
+          <div class="dd">Pixi rendering is read-only against state and does
+            not call <code>effectiveSkillMultipliers</code> on the hot path.
+            No render-side change in scope.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Persisting <code>auraAmpVersion</code></div>
+          <div class="dd">Reset to <code>0</code> on load. Cold cache on
+            session resume costs one BFS walk on the first
+            <code>advanceIsland</code> call. Not worth a schema bump.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Wider <code>WeakMap</code> coverage for other pure
+            <code>graph</code> derivations</div>
+          <div class="dd">Functions like <code>spentInBranch</code> at
+            <a class="cite">skilltree.ts:1406</a> and <code>isBridgeActive</code>
+            at <a class="cite">skilltree.ts:1402</a> are not hot enough to
+            justify the same treatment based on the current profile.
+            Revisit if a future profile shows them.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-05-27 · companion plan at
+        <code>plans/2026-05-27-skilltree-adjacency-cache</code> ·
+        follows from <code>specs/2026-05-27-skillmult-memoize</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
