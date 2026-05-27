@@ -4062,3 +4062,27 @@ describe('effectiveSkillMultipliers memoization', () => {
     spy.mockRestore();
   });
 });
+
+// Experimental wall-clock timing test. Skipped in CI because container
+// load makes it flaky; run locally when investigating regressions.
+describe.skip('advanceIsland perf-regression gate', () => {
+  it('completes one frame on a 50-building L25 island in <5ms', () => {
+    const state = makeState({
+      level: 25,
+      buildings: Array.from({ length: 50 }, (_, i) => ({
+        id: `b-${i}`,
+        defId: 'mine' as BuildingDefId,
+        x: i,
+        y: 0,
+      })),
+      inventory: { ...blankInventory(), iron_ore: 50 },
+    });
+
+    // Warm-up — first call pays catalog-build cost.
+    advanceIsland(state, state.lastTick + 16, { defs: POWER_FREE });
+    const warm = performance.now();
+    advanceIsland(state, state.lastTick + 16, { defs: POWER_FREE });
+    const dt = performance.now() - warm;
+    expect(dt).toBeLessThan(5);  // generous 3× projected mean
+  });
+});
