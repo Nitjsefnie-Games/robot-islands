@@ -16,13 +16,12 @@
 //     aviation kerosene, etc. No fallback to lower grades.
 
 import { computeSignalRanges, pointInSignalRange } from './antenna.js';
-import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
+import { hasOperationalBuilding } from './buildings.js';
 import { corridorCells, islandCells, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
-import { shapeHeight, shapeWidth } from './shape-mask.js';
+
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { rasterizePath, rollVehicleDestruction } from './weather.js';
 import { CELL_SIZE_TILES, ensureCellGenerated } from './world.js';
@@ -432,29 +431,11 @@ export function dispatchDrone(
   // this branch is not expected to fire in practice. When multiple Drone
   // Pads exist on one island, we pick the first one in placement order
   // (deterministic; the dispatch flow only launches one drone at a time).
-  // §11.1 alignment (post-fix): drones-ui.ts now passes the pad footprint
-  // centre as `originX/originY` AND uses it as the basis for the direction
-  // vector, so the UI's apex prediction matches the actual flight geometry.
-  // The internal lookup below therefore agrees with the caller-supplied
-  // origin in normal play — the fallback path stays alive only as defence
-  // against a hypothetical future caller that drifts back to island centre.
-  let spawnX = originX;
-  let spawnY = originY;
-  const originSpec = world.islands.find((i) => i.id === origin.id);
-  if (originSpec) {
-    const dronepad = findOperationalBuilding(origin.buildings, 'dronepad');
-    if (dronepad) {
-      const dpDef = BUILDING_DEFS[dronepad.defId as BuildingDefId];
-      spawnX = originSpec.cx + dronepad.x + shapeWidth(dpDef.footprint) / 2;
-      spawnY = originSpec.cy + dronepad.y + shapeHeight(dpDef.footprint) / 2;
-    }
-  }
-
   const drone: Drone = {
     id: nextDroneId(),
     fromIslandId: origin.id,
-    originX: spawnX,
-    originY: spawnY,
+    originX,
+    originY,
     dirX: ux,
     dirY: uy,
     outboundTiles,
