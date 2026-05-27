@@ -698,6 +698,7 @@ function refundAndClearMiniTree(state: IslandState, socketId: string, crystalId:
   for (const edgeId of edgesToRemove) {
     state.unlockedEdges.delete(edgeId);
   }
+  state.auraAmpVersion++;
 }
 
 /** Bind a crystal to a socket, consuming it from inventory.
@@ -769,6 +770,7 @@ export function spendPoint(
   if (!node) throw new Error(`spendPoint: unknown node ${nodeId}`);
   state.unspentSkillPoints -= node.cost;
   state.unlockedNodes.add(nodeId);
+  state.auraAmpVersion++;
 }
 
 // ---------------------------------------------------------------------------
@@ -1373,6 +1375,7 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
     }
     state.unspentSkillPoints -= node.cost;
     state.unlockedNodes.add(target);
+    state.auraAmpVersion++;
     return;
   }
 
@@ -1387,6 +1390,7 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
     state.unlockedNodes.add(e.to as NodeId);
     state.unlockedEdges.add(e.id as EdgeId);
   }
+  state.auraAmpVersion++;
 }
 
 /** Gate predicate for AND-prereq keystones. True when all required upstream
@@ -1409,6 +1413,7 @@ export function buyKeystone(ks: KeystonePrereq, state: IslandState): void {
   }
   state.unspentSkillPoints -= ks.cost;
   state.unlockedNodes.add(ks.targetNode as NodeId);
+  state.auraAmpVersion++;
 }
 
 function isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Graph): boolean {

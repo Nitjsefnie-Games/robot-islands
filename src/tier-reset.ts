@@ -144,6 +144,7 @@ export function executeTierReset(state: IslandState, nowMs: number): void {
   state.unspentSkillPoints += refund;
   state.unlockedNodes.clear();
   state.unlockedEdges.clear();
+  state.auraAmpVersion++;
   state.declaredAt = null;
   state.level = 1;
   state.xp = 0;
