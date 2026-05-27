@@ -826,21 +826,73 @@ Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre>
             should be impossible without a regression elsewhere).</li>
         </ul>
 
+        <h4>Measured impact (2026-05-27)</h4>
+        <p class="body"><strong>Binding gate met.</strong> The spec's wall-clock gate
+          (home mean &lt; 1.8 ms) was already satisfied by Phase 0 baseline
+          (1.32 ms post Fix-1, before this rework) — the meaningful gate
+          became the cpuprofile-based one the advisor recommended:
+          <code>buildAdjacency</code> self-% drops &lt; 5 %. <strong>Actual
+          result: both <code>buildAdjacency</code> and
+          <code>computeAuraAmplifiers</code> dropped below the V8 sampling
+          threshold (not in the top-30 self-time table).</strong>
+          Re-profile against
+          <code>/tmp/robot-islands-save.json</code>:</p>
+        <table class="tbl" style="margin-top: 10px">
+          <thead><tr>
+            <th>Metric</th>
+            <th>Phase 0 baseline</th>
+            <th>Phase 6 post-impl</th>
+            <th>Δ</th>
+          </tr></thead>
+          <tbody>
+            <tr><td class="slate">Home mean tick (16 ms frame)</td><td class="mono">1.32 ms</td><td class="mono ok">0.88 ms</td><td class="mono ok">−33 %</td></tr>
+            <tr><td class="slate">Home p99 (16 ms frame)</td><td class="mono">5.65 ms</td><td class="mono ok">3.70 ms</td><td class="mono ok">−35 %</td></tr>
+            <tr><td class="slate">Home 1 s mean</td><td class="mono">1.38 ms</td><td class="mono ok">0.79 ms</td><td class="mono ok">−43 %</td></tr>
+            <tr><td class="slate">Home 24 h offline catchup</td><td class="mono">95 ms</td><td class="mono ok">67 ms</td><td class="mono ok">−29 %</td></tr>
+            <tr><td class="slate">buildAdjacency self %</td><td class="mono">19.56 %</td><td class="mono ok">below sampling threshold</td><td class="mono ok">collapsed</td></tr>
+            <tr><td class="slate">computeAuraAmplifiers self %</td><td class="mono">18.71 %</td><td class="mono ok">below sampling threshold</td><td class="mono ok">collapsed</td></tr>
+            <tr><td class="slate">effectiveSkillMultipliers self %</td><td class="mono">2.38 %</td><td class="mono ok">0.87 %</td><td class="mono ok">−63 %</td></tr>
+            <tr><td class="slate">effectiveSkillMultipliers inclusive %</td><td class="mono">41.53 %</td><td class="mono ok">2.38 %</td><td class="mono ok">−94 %</td></tr>
+            <tr><td class="slate">GC self %</td><td class="mono">7.91 %</td><td class="mono ok">4.80 %</td><td class="mono ok">−39 %</td></tr>
+            <tr><td class="slate">Profiler script total wall time</td><td class="mono">~13 s</td><td class="mono ok">5.7 s</td><td class="mono ok">−56 %</td></tr>
+          </tbody>
+        </table>
+        <p class="body"><strong>New top hot-path:</strong>
+          <code>computeRates</code> at 28.55 % self (the real economy logic).
+          The cache work shifted CPU away from skill-tree-graph support
+          infrastructure onto the genuine recipe-resolution + cap-event
+          loop, which is the right outcome.</p>
+        <p class="body"><strong>Test suite:</strong> 2204 / 2204 passing (2201 prior +
+          three new aura-amp cache tests from Phase 5). Note: the
+          pre-existing perf-regression test
+          (<code>advanceIsland perf-regression gate</code> at
+          <code>economy.test.ts:4108</code>) is environment-jitter-sensitive
+          and flakes occasionally; not a regression from this work — the
+          cache strictly reduces its wall-clock time.</p>
+
         <h4>Final commit message</h4>
         <div class="code"><pre>perf(skilltree): document measured adjacency-cache impact
 
 Phases 1-5 land the two-layer cache. Re-profile against
-/tmp/robot-islands-save.json shows:
+/tmp/robot-islands-save.json (live save, 18 islands, home L25/59 buildings):
 
-  metric              before    after    delta
-  ----                ------    -----    -----
-  mean tick (home)    2.67 ms   X.XX ms  -YY%
-  p99 (home)         12.77 ms   X.XX ms  -YY%
-  24h catchup        128 ms    XX ms     -YY%
-  buildAdjacency      27.4% self  &lt;1%   collapsed
-  computeAuraAmp      26.5% self  &lt;1%   collapsed
+  metric                      before    after     delta
+  ----                        ------    -----     -----
+  mean tick (home, 16ms)      1.32 ms   0.88 ms   -33%
+  p99 (home, 16ms)            5.65 ms   3.70 ms   -35%
+  mean tick (home, 1s)        1.38 ms   0.79 ms   -43%
+  24h offline catchup (home)  95 ms     67 ms     -29%
+  buildAdjacency self %       19.56%    &lt;sampling  collapsed
+  computeAuraAmps self %      18.71%    &lt;sampling  collapsed
+  effectiveSkillMul self %    2.38%     0.87%     -63%
+  effectiveSkillMul incl %    41.53%    2.38%     -94%
+  GC self %                   7.91%     4.80%     -39%
 
-Binding gate (mean &lt; 1.8 ms): met / unmet.
+Binding gate (buildAdjacency self &lt; 5%): MET. Spec's wall-clock
+gate (home mean &lt; 1.8 ms) was already met by Phase 0 baseline
+post-Fix-1; the cpuprofile-based gate is the binding signal.
+
+Tests: 2204/2204 passing.
 
 Spec: docs/superpowers/specs/2026-05-27-skilltree-adjacency-cache
 
