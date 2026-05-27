@@ -1,0 +1,895 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill-multiplier memoization — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #252420;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: #1B1A17;
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+
+    h1 {
+      font-family: var(--serif); font-weight: 500;
+      font-size: 38px; line-height: 1.15;
+      color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .prompt-box {
+      background: var(--gray-150); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--gray-500); display: block; margin-bottom: 6px;
+    }
+
+    section { margin-bottom: 56px; scroll-margin-top: 24px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px; color: var(--gray-500);
+      max-width: 880px; margin-bottom: 24px;
+    }
+    p.body { font-size: 14px; max-width: 880px; margin-bottom: 12px; color: var(--gray-700); }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14px; max-width: 880px; margin: 0 0 14px 22px; color: var(--gray-700); }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+
+    .toc {
+      background: var(--gray-150); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px;
+    }
+    .toc .lbl {
+      font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center;
+    }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    .milestones { display: flex; flex-direction: column; gap: 0; }
+    .milestone {
+      display: grid; grid-template-columns: 140px 28px 1fr;
+      gap: 0 18px; position: relative;
+    }
+    .milestone .when {
+      text-align: right; font-family: var(--mono);
+      font-size: 12px; color: var(--gray-500); padding-top: 4px;
+    }
+    .milestone .dot-col {
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .milestone .dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--white); border: 3px solid var(--clay);
+      margin-top: 4px; flex-shrink: 0;
+    }
+    .milestone .dot.done {
+      background: var(--olive); border-color: var(--olive);
+    }
+    .milestone .line {
+      width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0;
+    }
+    .milestone:last-child .line { display: none; }
+    .milestone .body { padding-bottom: 28px; }
+    .milestone .body h3 {
+      font-family: var(--serif); font-weight: 500; font-size: 19px;
+      color: var(--slate); margin-bottom: 4px;
+    }
+    .milestone .body p { font-size: 13.5px; color: var(--gray-500); margin-bottom: 10px; max-width: 760px; }
+    .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+    .milestone .tag {
+      font-family: var(--mono); font-size: 11.5px;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+    }
+    .milestone .tag.est { background: #232A1C; color: var(--olive); border-color: transparent; }
+
+    .phase-card {
+      background: var(--white); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 18px 22px; margin: 14px 0;
+    }
+    .phase-card h4 {
+      font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin-bottom: 6px;
+    }
+    .phase-card .sub-label {
+      font-family: var(--mono); font-size: 10.5px;
+      color: var(--gray-500); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-top: 14px; margin-bottom: 4px;
+    }
+    .phase-card p { font-size: 13.5px; color: var(--gray-700); margin: 6px 0; }
+    .phase-card ul { font-size: 13.5px; margin: 6px 0 6px 20px; color: var(--gray-700); }
+    .phase-card ul li { margin-bottom: 4px; }
+    .phase-card .files { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+    .phase-card .files .file {
+      font-family: var(--mono); font-size: 12px; color: var(--clay);
+    }
+    .phase-card .verify {
+      background: var(--gray-150); border-left: 3px solid var(--olive);
+      padding: 10px 14px; border-radius: 6px; margin-top: 10px;
+      font-size: 13px; color: var(--gray-700);
+    }
+    .phase-card .verify strong { color: var(--olive); font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; }
+    .phase-card .rollback {
+      background: var(--gray-150); border-left: 3px solid var(--warn);
+      padding: 10px 14px; border-radius: 6px; margin-top: 8px;
+      font-size: 13px; color: var(--gray-700);
+    }
+    .phase-card .rollback strong { color: var(--warn); font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; }
+
+    .code {
+      background: #121110; border-radius: 12px;
+      padding: 18px 20px; overflow-x: auto; margin: 10px 0;
+    }
+    .code pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .code .kw  { color: var(--clay); }
+    .code .str { color: var(--olive); }
+    .code .cm  { color: var(--gray-500); }
+    .code .fn  { color: #C9B98A; }
+    .code .new { background: rgba(143, 165, 110, 0.13); display: block; }
+
+    .tbl {
+      width: 100%; border: 1.5px solid var(--gray-300); border-radius: 12px;
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; }
+    .tbl td.ok { color: var(--olive); }
+    .tbl td.accent { color: var(--clay); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .callout {
+      background: var(--white); border: 1.5px solid var(--gray-300);
+      border-left: 4px solid var(--warn);
+      border-radius: 12px; padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px;
+    }
+    .callout .ct {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px;
+    }
+    .callout.crit { border-left-color: var(--rust); }
+    .callout.crit .ct { color: var(--rust); }
+    .callout.ok { border-left-color: var(--olive); }
+    .callout.ok .ct { color: var(--olive); }
+
+    .risks {
+      border: 1.5px solid var(--gray-300); border-radius: 12px;
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; gap: 0; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: 1.5px solid var(--gray-300); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat); color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan &middot; robot-islands &middot; economy perf</div>
+      <h1>Memoize <code style="font-size:0.78em">effectiveSkillMultipliers</code> per <code style="font-size:0.78em">advanceIsland</code> &mdash; Option A</h1>
+      <div class="prompt-box">
+        <span class="label">Spec</span>
+        Companion spec at <code>specs/2026-05-27-skillmult-memoize</code>.
+        This plan tracks Option A (RatesContext threading). If the user
+        flips the spec picker to Option B, see the Option-B addendum in
+        Phase&nbsp;1.B and replace Phase 2's call-site list with the
+        copy-then-mutate refactor of <code>layerConditionalBonuses</code>.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Effort</div><div class="v accent">~3-4 hours</div></div>
+      <div class="cell"><div class="k">Phases</div><div class="v">6 (Phase 0&ndash;5)</div></div>
+      <div class="cell"><div class="k">Commits</div><div class="v">5</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v ok">1 source &middot; 1&ndash;2 tests</div></div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Phases</span>
+      <a href="#p0">Phase 0 &mdash; Baseline</a>
+      <a href="#p1">Phase 1 &mdash; Memoize at top of advanceIsland</a>
+      <a href="#p2">Phase 2 &mdash; Thread through cap() callers</a>
+      <a href="#p3">Phase 3 &mdash; Invalidation test</a>
+      <a href="#p4">Phase 4 &mdash; Re-profile</a>
+      <a href="#p5">Phase 5 &mdash; Perf-regression test</a>
+      <a href="#vmatrix">Verification matrix</a>
+      <a href="#risks">Risks</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">00</span><h2>Milestone timeline</h2></div>
+      <p class="sec-intro">Five commits, each independently revertable. The
+        last two are validation, not source change.</p>
+
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">step 0</div>
+          <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 0 &mdash; Baseline (no commit)</h3>
+            <p>Run the existing test suite, capture pre-fix profile timing. Establishes the diff target.</p>
+            <div class="tags"><span class="tag est">~15 min</span><span class="tag">npm test</span><span class="tag">npx tsx scripts/profile-economy.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 1</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 1 &mdash; <code>baseMult</code> on RatesContext + top-of-advanceIsland compute</h3>
+            <p>Single source-file change. Adds the cache slot, computes it once. Inner callers still pay the cost &mdash; this commit just establishes the plumbing.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">economy.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 2</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 2 &mdash; Thread <code>baseMult</code> through inner callers</h3>
+            <p>5 hot-path opt-ins inside <code>economy.ts</code>: <code>cap()</code>, <code>outputAvail</code>, <code>findNextCapEvent</code>, <code>applyRates</code>, <code>clearGraceIfRedundant</code>, plus the maintenance-threshold read.</p>
+            <div class="tags"><span class="tag est">~45 min</span><span class="tag">economy.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 3</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 3 &mdash; Invalidation-correctness test</h3>
+            <p>Append to <code>economy.test.ts</code>. Asserts cap reflects new multiplier after <code>unlockedNodes</code> mutation across two <code>advanceIsland</code> calls + the non-pollution test from spec §07.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">economy.test.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 4</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 4 &mdash; Re-profile and document the actual win</h3>
+            <p>Run <code>scripts/profile-economy.ts</code>; capture before/after in a commit-body comment. Verification gate: <code>effectiveSkillMultipliers</code> inclusive % must drop below 15% (target &lt;10%, slack for sampling noise).</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">profile artifact</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 5</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 5 &mdash; Optional perf-regression gate</h3>
+            <p>Synthetic fixture test asserting <code>advanceIsland</code> for one frame on a 50-building L25 island completes in &lt;5 ms. Trips on regressions, generous threshold to avoid CI noise.</p>
+            <div class="tags"><span class="tag est">~45 min</span><span class="tag">economy.test.ts</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p0">
+      <div class="sec-head"><span class="num">01</span><h2>Phase 0 &mdash; Baseline</h2></div>
+      <p class="sec-intro">No code change. Establish the numbers we're trying
+        to beat and confirm the suite is green before touching anything.</p>
+
+      <div class="phase-card">
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Run the full test suite. Confirm <strong>2197/2197</strong> green (post drone-pad work baseline).
+            <div class="code"><pre>npm test</pre></div>
+          </li>
+          <li>Run the economy profiler against the live save dump.
+            <div class="code"><pre>npx tsx scripts/profile-economy.ts /tmp/robot-islands-save.json</pre></div>
+            Expected output: home-island mean ~6.6 ms, p99 ~21 ms, 24h catchup ~418 ms. Record the numbers actually observed; minor drift from the spec's table is OK as long as the order-of-magnitude matches (the cpuprofile and the timing benchmark were captured at different times).
+          </li>
+          <li>If the suite is not green, stop and fix that first. Do not start Phase 1 on a red baseline.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;npm test exits 0 with all suites reported passed. Profile output prints the four headline metrics. No git changes yet.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;N/A &mdash; no changes made.</div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p1">
+      <div class="sec-head"><span class="num">02</span><h2>Phase 1 &mdash; <code>baseMult</code> on RatesContext + top-of-<code>advanceIsland</code></h2></div>
+      <p class="sec-intro">Plumbing only. Computes the cache once per tick;
+        does not yet wire it into any caller. Verify by running the suite &mdash;
+        no perf change yet, but no regressions either.</p>
+
+      <div class="phase-card">
+        <h4>Edits</h4>
+        <div class="files">
+          <span class="file">src/economy.ts</span>
+        </div>
+
+        <div class="sub-label">A) Add field to RatesContext (line ~108)</div>
+        <div class="code"><pre><span class="kw">export interface</span> RatesContext {
+  <span class="cm">// ... existing fields ...</span>
+<span class="new">  <span class="cm">/** Pre-computed base SkillMultipliers for this advanceIsland call.
+   *  Read-only. Populated by advanceIsland at the top of the call;
+   *  threaded into cap() (and its inner-loop callers) so we don't
+   *  recompute the skill-mul fold per cap() invocation. Consumers
+   *  must NOT layer conditional bonuses onto this object &mdash;
+   *  that's a separate per-segment local in computeRates. */</span>
+  <span class="kw">readonly</span> baseMult?: SkillMultipliers;</span>
+}</pre></div>
+
+        <div class="sub-label">B) Compute at top of advanceIsland (line ~1586)</div>
+        <p class="body">After the early-exit at line 1567 (<code>if (nowMs &lt;= state.lastTick)</code>)
+          and before the Time-Lock banking block at line 1574, compute once
+          and freeze:</p>
+        <div class="code"><pre>  <span class="kw">const</span> wallOffset = (wallClockNowMs ?? nowMs) - nowMs;
+  <span class="kw">if</span> (nowMs &lt;= state.lastTick) {
+    state.lastTick = nowMs;
+    <span class="kw">return</span>;
+  }
+<span class="new">  <span class="cm">// Per-tick base skill multiplier. unlockedNodes / unlockedEdges
+  // do not mutate during this advanceIsland call (level-ups don't
+  // auto-spend points; spend paths are UI-driven outside the tick),
+  // so this object is constant for the duration. Freeze to catch
+  // accidental mutation in dev.</span>
+  <span class="kw">const</span> baseMult = effectiveSkillMultipliers(state);
+  Object.freeze(baseMult);  <span class="cm">// shallow &mdash; covers all primitive fields</span></span>
+  <span class="cm">// §13.3 Time Lock banking ...</span></pre></div>
+
+        <div class="sub-label">C) Inject into the per-segment ctx (line ~1610)</div>
+        <div class="code"><pre>    <span class="kw">const</span> effectiveCtx: RatesContext = {
+      ...ctx,
+      accelerationMul: state.accelerationRemainingMin &gt; 0 ? 3 : 1,
+<span class="new">      baseMult,</span>
+    };</pre></div>
+
+        <p class="body">Phase 1 stops here. Inner callers still recompute. The
+          point of stopping mid-refactor is so the diff in Phase 2 is purely
+          "wire up callers" and reviewable as a separate logical step.</p>
+
+        <div class="verify"><strong>VERIFY</strong>
+          <ul style="margin:6px 0 0 18px;">
+            <li><code>npm test</code> &mdash; 2197/2197 still green.</li>
+            <li><code>npx tsc --noEmit</code> &mdash; clean under strict.</li>
+            <li>No perf change expected (and the baseline profiler confirms it). Phase 2 is where the win lands.</li>
+          </ul>
+        </div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert HEAD</code>. The change is additive; no migration to undo.</div>
+        <div style="margin-top:12px;font-size:12.5px;color:var(--gray-500);"><strong>Commit message:</strong>
+          <code>perf(economy): add baseMult cache slot on RatesContext (no-op plumbing)</code>
+        </div>
+      </div>
+
+      <div class="callout crit">
+        <div class="ct">Option B fork &mdash; do NOT take this branch unless spec picker is flipped to B</div>
+        Option B replaces this entire phase with: (1) add <code>_skillMulVersion: number</code> and <code>_skillMulCache: SkillMultipliers | null</code> to <code>IslandState</code>; (2) bump version on every <code>unlocked*</code> / <code>socketBindings</code> mutation (~9 sites enumerated in spec §4); (3) <strong>refactor <code>layerConditionalBonuses</code> to copy-then-mutate</strong> &mdash; this is the load-bearing prerequisite without which Option B silently corrupts cap reads. (4) Bump persistence to v14 with no-op migrate that strips the cache fields. Effort: ~6&ndash;8 hours instead of 3&ndash;4.
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p2">
+      <div class="sec-head"><span class="num">03</span><h2>Phase 2 &mdash; Thread <code>baseMult</code> through hot-path callers</h2></div>
+      <p class="sec-intro">The actual win lands here. Six call sites in
+        <code>economy.ts</code> opt into reading from <code>ctx?.baseMult</code>
+        instead of recomputing.</p>
+
+      <div class="phase-card">
+        <h4>Edits &mdash; 6 sites in src/economy.ts</h4>
+
+        <table class="tbl">
+          <thead><tr>
+            <th>Site</th><th>Current</th><th>After</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="mono slate">cap() &mdash; line 373</td>
+              <td>Signature has 4 args; computes <code>const mult = effectiveSkillMultipliers(state)</code> at line 381.</td>
+              <td>Add 5th optional arg <code>mult?: SkillMultipliers</code>; use <code>mult ?? effectiveSkillMultipliers(state)</code>.</td>
+            </tr>
+            <tr>
+              <td class="mono slate">clearGraceIfRedundant &mdash; line 397</td>
+              <td>Calls <code>cap(state, r, undefined, { ignoreGrace: true })</code>.</td>
+              <td>Add <code>baseMult?: SkillMultipliers</code> arg; pass through to <code>cap()</code>. Caller in <code>advanceIsland</code> at line 1583 passes <code>baseMult</code>.</td>
+            </tr>
+            <tr>
+              <td class="mono slate">outputAvail &mdash; line 442</td>
+              <td>Calls <code>cap(state, id, caps)</code> per output resource.</td>
+              <td>Add <code>baseMult?: SkillMultipliers</code> arg; pass as 5th arg to <code>cap()</code>. Both pass-1 and pass-4 call sites in <code>computeRates</code> already have <code>skillMul</code> in scope &mdash; but skillMul has been layered. <strong>Important:</strong> outputAvail must receive the <em>unlayered</em> base. Either: (a) capture <code>baseMult</code> in <code>computeRates</code>'s closure and pass to outputAvail, or (b) thread via <code>RatesContext</code>. Pick (a) &mdash; cleaner closure.</td>
+            </tr>
+            <tr>
+              <td class="mono slate">findNextCapEvent &mdash; line 1297</td>
+              <td>Already receives <code>ctx?</code>. Calls <code>cap(state, r, ctx?.caps)</code> at line 1323. Calls <code>effectiveSkillMultipliers(state).maintenanceThreshold</code> at line 1351.</td>
+              <td>Replace both: <code>cap(state, r, ctx?.caps, undefined, ctx?.baseMult)</code> and <code>(ctx?.baseMult ?? effectiveSkillMultipliers(state)).maintenanceThreshold</code>.</td>
+            </tr>
+            <tr>
+              <td class="mono slate">applyRates &mdash; line 1382</td>
+              <td>Takes <code>(state, net, dtSec, caps?)</code>. Calls <code>cap(state, r, caps)</code>.</td>
+              <td>Extend signature: <code>(state, net, dtSec, caps?, baseMult?)</code>. Pass <code>baseMult</code> as 5th arg to <code>cap()</code>. <code>advanceIsland</code> caller at line 1712 passes <code>baseMult</code>.</td>
+            </tr>
+            <tr>
+              <td class="mono slate">advanceIsland maintenance read &mdash; line 1593</td>
+              <td><code>const maintenanceThresholdMul = effectiveSkillMultipliers(state).maintenanceThreshold;</code></td>
+              <td><code>const maintenanceThresholdMul = baseMult.maintenanceThreshold;</code> (already computed at top in Phase 1).</td>
+            </tr>
+            <tr>
+              <td class="mono">Genesis cap check &mdash; line 1105</td>
+              <td><code>cap(state, state.genesisTarget)</code> inside <code>computeRates</code>'s pass-1 loop.</td>
+              <td>Pass-1 has <code>skillMul</code> (layered) in scope. Need to use <code>baseMult</code> instead. Either thread via the <code>ctx</code> already in this function, or compute a separate local at the top of <code>computeRates</code>: <code>const baseMultLocal = ctx?.baseMult ?? effectiveSkillMultipliers(state);</code> and use that here.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="sub-label">Critical: do NOT touch lines 733 and 1644</div>
+        <p class="body"><a class="acode" style="color:var(--clay);font-family:var(--mono)">economy.ts:733</a>
+          and <a style="color:var(--clay);font-family:var(--mono)">economy.ts:1644</a>
+          both do <code>const skillMul = effectiveSkillMultipliers(state);
+          layerConditionalBonuses(skillMul, ...);</code> &mdash; they need a
+          <em>fresh, mutable</em> copy because <code>layerConditionalBonuses</code>
+          mutates in place
+          (<a style="color:var(--clay);font-family:var(--mono)">economy.ts:588-613</a>). Reusing
+          <code>baseMult</code> here would corrupt the cache and pollute every
+          subsequent <code>cap()</code> read with the per-segment conditional
+          bonus factor. Keep both lines exactly as they are.</p>
+
+        <div class="callout">
+          <div class="ct">Code-review checklist</div>
+          For every modified call site:
+          <ul style="margin:6px 0 0 18px;">
+            <li>Does it pass the <em>base</em> (unlayered) multiplier? &mdash; not a per-segment <code>skillMul</code> that has been through <code>layerConditionalBonuses</code>.</li>
+            <li>Is the optional <code>?</code> preserved on the new arg? &mdash; legacy callers (UI / orbital / drones) must keep working.</li>
+            <li>If the function receives <code>ctx</code>, it reads <code>ctx?.baseMult</code>; otherwise the cached value is passed positionally.</li>
+          </ul>
+        </div>
+
+        <div class="sub-label">Pseudocode &mdash; cap() body</div>
+        <div class="code"><pre><span class="kw">export function</span> <span class="fn">cap</span>(
+  state: IslandState,
+  r: ResourceId,
+  override?: Record&lt;ResourceId, <span class="kw">number</span>&gt;,
+  opts?: { ignoreGrace?: <span class="kw">boolean</span> },
+<span class="new">  passedMult?: SkillMultipliers,</span>
+): <span class="kw">number</span> {
+  <span class="kw">const</span> nominal = override?.[r] ?? state.storageCaps[r] ?? 0;
+  <span class="kw">if</span> (nominal === 0) <span class="kw">return</span> 0;
+<span class="new">  <span class="kw">const</span> mult = passedMult ?? <span class="fn">effectiveSkillMultipliers</span>(state);</span>
+  <span class="kw">const</span> skillMul = mult.storageCap;
+  <span class="kw">const</span> cat = RESOURCE_STORAGE_CATEGORY[r];
+  <span class="kw">const</span> catMul = cat ? mult.storageCategoryCap[cat] ?? 1 : 1;
+  <span class="kw">const</span> computedCap = nominal * skillMul * catMul;
+  <span class="kw">if</span> (opts?.ignoreGrace) <span class="kw">return</span> computedCap;
+  <span class="kw">const</span> grace = state.starterInventoryGrace[r] ?? 0;
+  <span class="kw">return</span> Math.max(computedCap, grace);
+}</pre></div>
+
+        <div class="verify"><strong>VERIFY</strong>
+          <ul style="margin:6px 0 0 18px;">
+            <li><code>npm test</code> &mdash; 2197/2197 green. Critical: storage-cap, battery-ladder, and conditional-bonus tests must pass unchanged.</li>
+            <li><code>npx tsc --noEmit</code> &mdash; clean.</li>
+            <li><strong>Smoke profile (informal):</strong> <code>npx tsx scripts/profile-economy.ts /tmp/robot-islands-save.json</code>. Home-island mean should drop sharply (target ~1&ndash;2 ms). Full CPU profile capture is Phase 4.</li>
+          </ul>
+        </div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert HEAD</code>. Phase 2 is a single commit; revert restores Phase-1 plumbing-only state. The suite remains green at Phase 1.</div>
+        <div style="margin-top:12px;font-size:12.5px;color:var(--gray-500);"><strong>Commit message:</strong>
+          <code>perf(economy): thread baseMult through cap() &amp; inner callers</code>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p3">
+      <div class="sec-head"><span class="num">04</span><h2>Phase 3 &mdash; Invalidation-correctness test</h2></div>
+      <p class="sec-intro">Pin the load-bearing invariant: when
+        <code>unlockedNodes</code> changes between two <code>advanceIsland</code>
+        calls, the second call sees the new multiplier. Belt + suspenders
+        against future "let's promote baseMult to a per-state cache" drift.</p>
+
+      <div class="phase-card">
+        <h4>Edit: src/economy.test.ts</h4>
+
+        <div class="sub-label">Test 1 &mdash; invalidation across advanceIsland calls</div>
+        <div class="code"><pre>describe(<span class="str">'effectiveSkillMultipliers memoization'</span>, () =&gt; {
+  it(<span class="str">'picks up new unlocked nodes between advanceIsland calls'</span>, () =&gt; {
+    <span class="kw">const</span> state = makeBaselineIsland({ level: 10 });
+    <span class="kw">const</span> storageNode = NODE_CATALOG.find((n) =&gt;
+      n.effect.kind === <span class="str">'storageCapMul'</span>)!;
+
+    <span class="cm">// Tick once without the node. Cap reflects the base.</span>
+    <span class="fn">advanceIsland</span>(state, state.lastTick + 1000);
+    <span class="kw">const</span> baseCap = <span class="fn">cap</span>(state, <span class="str">'iron_ore'</span>);
+
+    <span class="cm">// Unlock the storage node; tick again.</span>
+    state.unlockedNodes.<span class="fn">add</span>(storageNode.id);
+    <span class="fn">advanceIsland</span>(state, state.lastTick + 1000);
+    <span class="kw">const</span> boostedCap = <span class="fn">cap</span>(state, <span class="str">'iron_ore'</span>);
+
+    <span class="cm">// Second cap MUST reflect the new multiplier &mdash; no stale cache.</span>
+    expect(boostedCap).<span class="fn">toBeGreaterThan</span>(baseCap);
+    expect(boostedCap / baseCap).<span class="fn">toBeCloseTo</span>(1 + storageNode.magnitude, 3);
+  });
+});</pre></div>
+
+        <div class="sub-label">Test 2 &mdash; conditional bonuses do not pollute baseMult</div>
+        <div class="code"><pre>  it(<span class="str">'cap() reads the unlayered base, not the conditional-layered mult'</span>, () =&gt; {
+    <span class="kw">const</span> state = makeBaselineIsland({
+      level: 30,
+      conditionalBonusUnlocked: <span class="kw">true</span>,   <span class="cm">// helper unlocks a storage cb node</span>
+    });
+
+    <span class="cm">// Tick once &mdash; advanceIsland computes baseMult AND computeRates
+    // layers conditional bonuses on its own copy.</span>
+    <span class="fn">advanceIsland</span>(state, state.lastTick + 1000);
+
+    <span class="cm">// External UI-style cap call (no ctx, no mult): should see the
+    // base storageCap, not the conditional-bonus-layered storageCap.</span>
+    <span class="kw">const</span> baseMult = <span class="fn">effectiveSkillMultipliers</span>(state);
+    <span class="kw">const</span> expectedCap = state.storageCaps.iron_ore * baseMult.storageCap;
+    expect(<span class="fn">cap</span>(state, <span class="str">'iron_ore'</span>)).<span class="fn">toBeCloseTo</span>(expectedCap, 3);
+  });</pre></div>
+
+        <div class="sub-label">Test 3 (optional) &mdash; call-count assertion via spy</div>
+        <div class="code"><pre>  it(<span class="str">'computes effectiveSkillMultipliers at most a small bounded number of times per tick'</span>, () =&gt; {
+    <span class="kw">const</span> state = makeBaselineIsland({ level: 25, buildings: 50 });
+    <span class="kw">const</span> spy = vi.<span class="fn">spyOn</span>(skilltreeModule, <span class="str">'effectiveSkillMultipliers'</span>);
+    <span class="fn">advanceIsland</span>(state, state.lastTick + 1000);
+    <span class="cm">// Bound: top-of-advance + per-segment computeRates + per-segment
+    // battery block. For a 1-segment frame: 3. Pin a generous upper
+    // bound so unrelated future reads don't trip the test.</span>
+    expect(spy.mock.calls.length).<span class="fn">toBeLessThanOrEqual</span>(8);
+    spy.<span class="fn">mockRestore</span>();
+  });</pre></div>
+
+        <div class="verify"><strong>VERIFY</strong>
+          <ul style="margin:6px 0 0 18px;">
+            <li>All three new tests pass.</li>
+            <li>Existing suite still 2197/2197. Total: ~2200.</li>
+            <li>Single-test run: <code>npx vitest run -t 'memoization'</code>.</li>
+          </ul>
+        </div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert HEAD</code>. Pure test-only commit.</div>
+        <div style="margin-top:12px;font-size:12.5px;color:var(--gray-500);"><strong>Commit message:</strong>
+          <code>test(economy): pin baseMult memoization invariants</code>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p4">
+      <div class="sec-head"><span class="num">05</span><h2>Phase 4 &mdash; Re-profile and capture the actual win</h2></div>
+      <p class="sec-intro">No source change. Re-run the profiler against the
+        same save dump, capture the after-numbers, document the actual delta
+        in a commit-body comment.</p>
+
+      <div class="phase-card">
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Run profiler against the live save dump:
+            <div class="code"><pre>npx tsx scripts/profile-economy.ts /tmp/robot-islands-save.json \
+  --cpuprofile /tmp/CPU-after.cpuprofile</pre></div>
+          </li>
+          <li>Flatten the cpuprofile:
+            <div class="code"><pre>python3 /tmp/analyze-cpuprofile.py /tmp/CPU-after.cpuprofile</pre></div>
+          </li>
+          <li>Capture: <code>effectiveSkillMultipliers</code> inclusive %, <code>advanceIsland</code> mean / p99, 24h catchup, GC self %.</li>
+          <li>If <code>effectiveSkillMultipliers</code> inclusive &gt; 15% after fix &mdash; <strong>stop and investigate</strong>. Either a hot-path caller was missed (re-grep <code>cap(</code> inside economy.ts and confirm every call passes a <code>mult</code> arg) or the cache isn't being populated (debug-log the <code>ctx?.baseMult</code> presence in <code>cap()</code>).</li>
+          <li>Commit a perf-notes entry (commit body, not new file): before/after table, profile file paths.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &mdash; the targets from spec §08:
+          <ul style="margin:6px 0 0 18px;">
+            <li><code>effectiveSkillMultipliers</code> inclusive: 72.8% &rarr; &lt;15% (target &lt;10%).</li>
+            <li>Home-island mean: 6.6 ms &rarr; &lt;3 ms (target ~1.5 ms).</li>
+            <li>Home-island p99: 21 ms &rarr; &lt;10 ms (under 60 FPS budget).</li>
+            <li>24h catchup: 418 ms &rarr; &lt;200 ms (target ~100 ms).</li>
+            <li>GC self: 10.7% &rarr; &lt;6%.</li>
+          </ul>
+        </div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;If targets are missed, revert Phase 2 and re-evaluate. Phase 1 plumbing alone is harmless and can stay.</div>
+        <div style="margin-top:12px;font-size:12.5px;color:var(--gray-500);"><strong>Commit message:</strong>
+          <code>docs(perf): capture skill-mul memo before/after numbers</code>
+          (empty-tree commit acceptable, or attach the profiler output as a tracked artifact under <code>docs/perf/</code> if you want it browsable.)
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p5">
+      <div class="sec-head"><span class="num">06</span><h2>Phase 5 (optional) &mdash; Perf-regression test</h2></div>
+      <p class="sec-intro">Trip-wire for future regressions. Generous wall-clock
+        budget so it doesn't flake on CI; specific enough that the spike-back
+        from accidentally re-adding a per-cap recompute would breach it.</p>
+
+      <div class="phase-card">
+        <h4>Edit: src/economy.test.ts (append at bottom)</h4>
+
+        <div class="code"><pre>describe(<span class="str">'advanceIsland perf-regression gate'</span>, () =&gt; {
+  it(<span class="str">'completes one frame on a 50-building L25 island in &lt;5ms'</span>, () =&gt; {
+    <span class="kw">const</span> state = <span class="fn">makeSyntheticHomeIsland</span>({
+      level: 25,
+      buildings: 50,
+      inventoryKeys: 200,
+    });
+
+    <span class="cm">// Warm-up &mdash; first call pays catalog-build cost.</span>
+    <span class="fn">advanceIsland</span>(state, state.lastTick + 16);
+    <span class="kw">const</span> warm = performance.<span class="fn">now</span>();
+    <span class="fn">advanceIsland</span>(state, state.lastTick + 16);
+    <span class="kw">const</span> dt = performance.<span class="fn">now</span>() - warm;
+    expect(dt).<span class="fn">toBeLessThan</span>(5);  <span class="cm">// generous 3&times; projected mean</span>
+  });
+});</pre></div>
+
+        <p class="body"><strong>Why optional.</strong> CI timing tests are
+          flaky in containers under load. If the project already has a
+          performance-fixture convention, follow it (search
+          <code>src/*.test.ts</code> for <code>perf-regression</code> /
+          <code>performance.now</code>). If it doesn't, treat this as
+          experimental and skip in CI with <code>.skip</code>; run locally
+          when investigating regressions.</p>
+
+        <div class="verify"><strong>VERIFY</strong> &mdash;
+          <ul style="margin:6px 0 0 18px;">
+            <li>Test passes locally on a quiescent machine.</li>
+            <li>Test still passes when run 10&times; in a row (no flake).</li>
+            <li>If the test flakes, mark it <code>.skip</code> and document why; do not lower the threshold.</li>
+          </ul>
+        </div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert HEAD</code>. Test-only commit.</div>
+        <div style="margin-top:12px;font-size:12.5px;color:var(--gray-500);"><strong>Commit message:</strong>
+          <code>test(economy): perf-regression gate for advanceIsland tick</code>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="vmatrix">
+      <div class="sec-head"><span class="num">07</span><h2>Verification matrix</h2></div>
+      <p class="sec-intro">Every spec requirement &rarr; phase that delivers it
+        &rarr; test or check that verifies it.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Spec requirement</th>
+          <th>Phase</th>
+          <th>Verification</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">Compute base mult once per advanceIsland</td>
+            <td>Phase 1</td>
+            <td class="mono">single <code>effectiveSkillMultipliers(state)</code> call at top of advanceIsland; spy-based test in Phase 3 caps it at &lt;=8 calls/tick</td>
+          </tr>
+          <tr>
+            <td class="slate">cap() reads from cache when present, recomputes when not</td>
+            <td>Phase 2</td>
+            <td class="mono">cap() signature has optional 5th arg; UI callers (no ctx) still work &mdash; existing test suite covers this</td>
+          </tr>
+          <tr>
+            <td class="slate">findNextCapEvent, outputAvail, applyRates pass baseMult through</td>
+            <td>Phase 2</td>
+            <td class="mono">verified by re-profile (Phase 4) &mdash; inclusive % drops below 15</td>
+          </tr>
+          <tr>
+            <td class="slate">No call-site changes for non-economy callers (UI, orbital, routes, drones)</td>
+            <td>Phase 2</td>
+            <td class="mono">grep <code>effectiveSkillMultipliers</code> outside economy.ts &mdash; should still show 16 sites unchanged</td>
+          </tr>
+          <tr>
+            <td class="slate">Conditional bonuses do not pollute baseMult</td>
+            <td>Phase 1 + Phase 2 (line 733/1644 left untouched)</td>
+            <td class="mono">Phase 3 Test 2 asserts cap() reads the unlayered base</td>
+          </tr>
+          <tr>
+            <td class="slate">Skill-tree mutation between ticks invalidates the cache</td>
+            <td>Phase 1 (cache scope = one tick)</td>
+            <td class="mono">Phase 3 Test 1 asserts the new multiplier is visible after <code>unlockedNodes.add</code></td>
+          </tr>
+          <tr>
+            <td class="slate">Per-island Lattice non-interference</td>
+            <td>Phase 1 (per-state, per-tick)</td>
+            <td class="mono">existing Lattice / NC tests in economy.test.ts unchanged</td>
+          </tr>
+          <tr>
+            <td class="slate">Existing 2197 tests pass</td>
+            <td>after Phase 1, 2, 3, 5</td>
+            <td class="mono"><code>npm test</code> &mdash; required to be green at each commit boundary</td>
+          </tr>
+          <tr>
+            <td class="slate">Home-island advanceIsland &lt;3 ms mean / &lt;10 ms p99</td>
+            <td>Phase 4 verification</td>
+            <td class="mono"><code>scripts/profile-economy.ts</code> output</td>
+          </tr>
+          <tr>
+            <td class="slate">24h catchup &lt;200 ms</td>
+            <td>Phase 4 verification</td>
+            <td class="mono"><code>scripts/profile-economy.ts</code> output</td>
+          </tr>
+          <tr>
+            <td class="slate">No schema bump</td>
+            <td>by construction (Option A)</td>
+            <td class="mono"><code>SCHEMA_VERSION</code> in persistence.ts unchanged</td>
+          </tr>
+          <tr>
+            <td class="slate">Defensive Object.freeze on baseMult</td>
+            <td>Phase 1</td>
+            <td class="mono">accidental mutation throws in dev; in prod, freeze is a single-instruction noop on the hot path</td>
+          </tr>
+          <tr>
+            <td class="slate">Optional perf-regression trip-wire</td>
+            <td>Phase 5</td>
+            <td class="mono">synthetic L25 50-building island, &lt;5 ms wall-clock</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="risks">
+      <div class="sec-head"><span class="num">08</span><h2>Risks &amp; mitigations</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 2 accidentally passes a layered mult (post-<code>layerConditionalBonuses</code>) instead of <code>baseMult</code> &rarr; cap inflated by conditional bonus.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Phase 3 Test 2 catches this directly. The variable naming convention &mdash; <code>baseMult</code> (raw) vs <code>skillMul</code> (layered) &mdash; carries the intent at the call site. Code review checklist explicitly flags this.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Hot-path call site missed &rarr; suboptimal speedup, no correctness impact.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Phase 4 re-profile gates the merge: if <code>effectiveSkillMultipliers</code> inclusive &gt; 15%, do not merge until the missed site is found.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 1's <code>Object.freeze</code> turns out to be unsafe (mutates expected somewhere).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Existing 2197-test suite at end of Phase 1 catches any unintended mutation. If a test fails, the diff is small enough to localize. Worst case: drop the freeze and rely on the <code>readonly</code> TypeScript marker.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 5 perf test flakes on CI.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Threshold is 3&times; projected mean &mdash; generous. If still flaky, mark <code>.skip</code> with a comment pointing back to this plan; run locally during investigation. Do NOT lower the threshold; defeats the trip-wire purpose.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Future contributor reads <code>ctx.baseMult</code> AND layers conditional bonuses, polluting the cache mid-tick.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Two defenses: (1) <code>readonly</code> on the interface field; (2) <code>Object.freeze</code> at Phase 1. The freeze turns the mutation into a runtime TypeError in dev.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Spec picker flipped to Option B mid-implementation.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">If user picks B, abandon this plan and start over from the Option-B addendum in Phase 1. The two implementations are not mergeable mid-stream &mdash; B requires the <code>layerConditionalBonuses</code> copy-then-mutate refactor as a prerequisite, which A doesn't.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">09</span><h2>Effort total</h2></div>
+      <table class="tbl" style="max-width: 600px">
+        <thead><tr><th>Phase</th><th>Estimated time</th></tr></thead>
+        <tbody>
+          <tr><td>Phase 0 baseline</td><td class="mono">~15 min</td></tr>
+          <tr><td>Phase 1 plumbing</td><td class="mono">~30 min</td></tr>
+          <tr><td>Phase 2 wire callers</td><td class="mono">~45 min</td></tr>
+          <tr><td>Phase 3 invalidation tests</td><td class="mono">~30 min</td></tr>
+          <tr><td>Phase 4 re-profile</td><td class="mono">~30 min</td></tr>
+          <tr><td>Phase 5 (optional)</td><td class="mono">~45 min</td></tr>
+          <tr><td class="slate">Total (with Phase 5)</td><td class="mono accent">~3-4 hours</td></tr>
+          <tr><td class="slate">Total (without Phase 5)</td><td class="mono ok">~2.5-3 hours</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan &middot; generated 2026-05-27 &middot; companion spec: <code>specs/2026-05-27-skillmult-memoize</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
