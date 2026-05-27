@@ -460,6 +460,77 @@ describe('dispatchDrone', () => {
   });
 });
 
+describe('per-pad concurrency cap (§11 multi-pad selection)', () => {
+  function freshWorld(): WorldState {
+    return {
+      islands: [],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed: 'test-seed',
+    };
+  }
+
+  it('rejects a second launch from the SAME pad', () => {
+    const world = freshWorld();
+    const home = makeIslandState();
+    home.inventory.biofuel = 100;
+    // Two launches from the same coords (0, 0).
+    expect(dispatchDrone(world, home, 0, 0, 1, 0, 10, 0).ok).toBe(true);
+    const r2 = dispatchDrone(world, home, 0, 0, 0, 1, 10, 0);
+    expect(r2.ok).toBe(false);
+    if (r2.ok) return;
+    expect(r2.reason).toBe('already-in-flight');
+  });
+
+  it('ALLOWS a second launch from a DIFFERENT pad on the same island', () => {
+    const world = freshWorld();
+    const home = makeIslandState();
+    home.inventory.biofuel = 100;
+    // Pad-A at (10.5, 10.5), Pad-B at (20.5, 20.5) — 1 tile apart on the diagonal.
+    expect(dispatchDrone(world, home, 10.5, 10.5, 1, 0, 10, 0).ok).toBe(true);
+    const r2 = dispatchDrone(world, home, 20.5, 20.5, 1, 0, 10, 0);
+    expect(r2.ok).toBe(true);
+    expect(world.drones).toHaveLength(2);
+    expect(world.drones[0]!.originX).toBe(10.5);
+    expect(world.drones[1]!.originX).toBe(20.5);
+  });
+
+  it('cap is based on origin coords, not fromIslandId alone', () => {
+    // Regression guard: a future refactor that re-introduces the per-island
+    // cap would break this case.
+    const world = freshWorld();
+    const home = makeIslandState();
+    home.inventory.biofuel = 100;
+    dispatchDrone(world, home, 5.5, 5.5, 1, 0, 10, 0);
+    expect(dispatchDrone(world, home, 6.5, 5.5, 1, 0, 10, 0).ok).toBe(true);
+    expect(world.drones).toHaveLength(2);
+  });
+
+  it('sub-epsilon-different pad centres are treated as the same pad', () => {
+    // Documents the PAD_MATCH_EPS contract: coords within 0.5 of each
+    // other count as the same launch site.
+    const world = freshWorld();
+    const home = makeIslandState();
+    home.inventory.biofuel = 100;
+    dispatchDrone(world, home, 5.5, 5.5, 1, 0, 10, 0);
+    const r2 = dispatchDrone(world, home, 5.6, 5.5, 1, 0, 10, 0);
+    expect(r2.ok).toBe(false);
+    if (r2.ok) return;
+    expect(r2.reason).toBe('already-in-flight');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // dronePadCentre (UI helper that aligns range / reticle / auto-fuel origin
 // with the same pad centre `dispatchDrone` uses for the spawn — §11.1)
