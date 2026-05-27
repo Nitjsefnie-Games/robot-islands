@@ -1504,6 +1504,7 @@ async function main(): Promise<void> {
   // ocean/island/drone layers but below the screen-space reticle stack.
   world.addChild(dronesUi.rangeRingLayer);
   world.addChild(dronesUi.launchPreviewLayer);
+  world.addChild(dronesUi.selectedPadHighlightLayer);
   // Wire the orbital-side forward-decl so an orbital arm-launch can disarm
   // the dronesUi panel.
   disarmDronesLaunch = () => dronesUi.setLaunchMode(false);
