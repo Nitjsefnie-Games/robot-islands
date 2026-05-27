@@ -673,7 +673,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // §11.1: range ring centres on the Drone Pad footprint centre (the actual
     // drone launch origin) — falling back to island centre only when no pad
     // is placed, matching the pre-fix behaviour for that null-safe edge.
-    const padCentre = dronePadCentre(originSpec, origin);
+    const padCentre = selectedPadCentre(originSpec, origin, selectedPadId);
     const originX = padCentre?.x ?? originSpec.cx;
     const originY = padCentre?.y ?? originSpec.cy;
     const cx = originX * TILE_PX;
@@ -754,7 +754,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // range ring and the actual flight geometry. Pre-fix used `spec.cx/cy`
     // (island centre), so the drawn flight path didn't match the path the
     // drone actually flies.
-    const padCentre = dronePadCentre(spec, deps.getOrigin());
+    const padCentre = selectedPadCentre(spec, deps.getOrigin(), selectedPadId);
     const ox = padCentre?.x ?? spec.cx;
     const oy = padCentre?.y ?? spec.cy;
     const originTile = { x: ox, y: oy };
@@ -832,7 +832,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // null-safe scaffolding only).
     const originSpec = deps.getOriginSpec();
     const origin = deps.getOrigin();
-    const padCentre = dronePadCentre(originSpec, origin);
+    const padCentre = selectedPadCentre(originSpec, origin, selectedPadId);
     const originX = padCentre?.x ?? originSpec.cx;
     const originY = padCentre?.y ?? originSpec.cy;
     const wp = deps.screenToWorldTile(x, y);
@@ -1129,7 +1129,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // centre, so the readouts match the preview line and the actual flight.
     if (selectedTier === '5-path') {
       const s = deps.getOriginSpec();
-      const pc = dronePadCentre(s, origin);
+      const pc = selectedPadCentre(s, origin, selectedPadId);
       const originPt = { x: pc?.x ?? s.cx, y: pc?.y ?? s.cy };
       const pathLen = totalPathTiles(originPt, waypointBuffer);
       const fuel = fuelForPath(originPt, waypointBuffer);
@@ -1140,7 +1140,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
       if (cursorTile) {
         const s = deps.getOriginSpec();
-        const pc = dronePadCentre(s, origin);
+        const pc = selectedPadCentre(s, origin, selectedPadId);
         const ox = pc?.x ?? s.cx;
         const oy = pc?.y ?? s.cy;
         const dx = cursorTile.x - ox;
@@ -1230,7 +1230,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       // Add waypoint; reject if would exceed fuel cap. §11.1: range check
       // anchors on the Drone Pad footprint centre, not the island centre.
       const spec = deps.getOriginSpec();
-      const pc = dronePadCentre(spec, deps.getOrigin());
+      const pc = selectedPadCentre(spec, deps.getOrigin(), selectedPadId);
       const origin = { x: pc?.x ?? spec.cx, y: pc?.y ?? spec.cy };
       const next = { x: targetWorldTileX, y: targetWorldTileY };
       if (wouldExceedRange(origin, waypointBuffer, next)) {
@@ -1249,7 +1249,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // centre so the UI agrees with `drones.ts`'s internal pad lookup (the
     // params are kept on the API as defence against future UI drift —
     // `drones.ts` independently resolves the pad centre for the spawn).
-    const padCentre = dronePadCentre(originSpec, origin);
+    const padCentre = selectedPadCentre(originSpec, origin, selectedPadId);
     const ox = padCentre?.x ?? originSpec.cx;
     const oy = padCentre?.y ?? originSpec.cy;
     const dx = targetWorldTileX - ox;
@@ -1295,7 +1295,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // this used `spec.cx/cy` (island centre); the waypoint list prepended an
     // island-centre point, so the drone's actual path differed from the
     // preview by `(padCentre − islandCentre)` on the first leg.
-    const pc = dronePadCentre(spec, originState);
+    const pc = selectedPadCentre(spec, originState, selectedPadId);
     const ox = pc?.x ?? spec.cx;
     const oy = pc?.y ?? spec.cy;
     const originTile = { x: ox, y: oy };
