@@ -340,6 +340,25 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     return true;
   }
 
+  const padStat = statRow('PAD');
+  const padSelect = document.createElement('select');
+  padSelect.style.cssText = [
+    'background: var(--ri-elev)',
+    'color: var(--ri-accent)',
+    'border: 1px solid var(--ri-border)',
+    'font: inherit',
+    'font-size: 11px',
+    'padding: 1px 4px',
+    'cursor: pointer',
+    'border-radius: 3px',
+  ].join(';');
+  padSelect.addEventListener('change', () => {
+    selectedPadId = padSelect.value || null;
+    refresh(performance.now());
+    if (launchMode) repaintRangeRing();
+  });
+  padStat.valueEl.appendChild(padSelect);
+
   const tierStat = statRow('TIER');
   // Tier picker — a compact `<select>` rather than a chip row. With 6
   // possible tiers a chip row overflowed the narrow dock; the dropdown
@@ -389,6 +408,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   const rangeStat = statRow('OUTBND');
   const etaStat = statRow('FLIGHT');
 
+  statBlock.appendChild(padStat.row);
   statBlock.appendChild(tierStat.row);
   statBlock.appendChild(fuelStat.row);
   statBlock.appendChild(rangeStat.row);
@@ -979,6 +999,45 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // Stat block always tracks the current slider.
     const origin = deps.getOrigin();
     const originSpec = deps.getOriginSpec();
+
+    // 1. Operational-pad list (filtered, in placement order).
+    const operationalPads = originSpec.buildings.filter(
+      (b) => b.defId === 'dronepad' && isOperationalBuilding(b),
+    );
+
+    // 2. Active-island switch → reset to first pad.
+    if (origin.id !== prevOriginId) {
+      selectedPadId = operationalPads[0]?.id ?? null;
+      prevOriginId = origin.id;
+    }
+
+    // 3. Selected pad no longer operational → fall back.
+    if (selectedPadId && !operationalPads.some((p) => p.id === selectedPadId)) {
+      selectedPadId = operationalPads[0]?.id ?? null;
+    }
+
+    // 4. First-show default.
+    if (!selectedPadId && operationalPads.length > 0) {
+      selectedPadId = operationalPads[0]!.id;
+    }
+
+    // 5. Rebuild <option> list whenever the set of operational pads changes.
+    //    Cheap signature: ids joined. Avoids per-frame DOM rebuild.
+    const padSig = operationalPads.map((p) => p.id).join(',');
+    if (padSelect.dataset.sig !== padSig) {
+      padSelect.replaceChildren();
+      operationalPads.forEach((p, i) => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `Pad #${i + 1}`;
+        padSelect.appendChild(opt);
+      });
+      padSelect.dataset.sig = padSig;
+    }
+    if (selectedPadId && padSelect.value !== selectedPadId) {
+      padSelect.value = selectedPadId;
+    }
+
     // Clamp the selectedTier to the island's current max-tier so a high-tier
     // island that downgrades (tier reset) doesn't keep launching invalid
     // tiers. Default to the island's tier on first arming if selectedTier
