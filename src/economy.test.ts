@@ -50,6 +50,7 @@ import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
 import * as skilltreeModule from './skilltree.js';
+import * as economyModule from './economy.js';
 import { FULL_CATALOG } from './skilltree-catalog.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
@@ -4016,29 +4017,37 @@ describe('effectiveSkillMultipliers memoization', () => {
     expect(boostedCap / baseCap).toBeCloseTo(1 + storageNode.magnitude, 3);
   });
 
-  it('cap() reads the unlayered base, not the conditional-layered mult', () => {
+  it('effectiveSkillMultipliers returns unlayered base, not conditional-layered mult', () => {
     const state = makeState({
       level: 25,
       buildings: [MINE],
       inventory: { ...blankInventory(), iron_ore: 50 },
       unlockedNodes: new Set([
-        // Unlock a couple of storageCapMul nodes so the base mult is != 1.
-        'storage.notable.verticalSilo' as any,
-        'storage.notable.vaultClimate' as any,
+        // Unlock the live extraction conditionalBonus node.
+        'communication.keystone.networkedExtract' as any,
       ]),
     });
 
-    // Compute expected cap from the base multiplier before any tick.
+    // Compute expected extraction rate multiplier from the base before any tick.
     const baseMult = effectiveSkillMultipliers(state);
-    const expectedCap = state.storageCaps.iron_ore * baseMult.storageCap;
+    const expectedExtractionRate = baseMult.recipeRate.extraction;
+
+    // Force the conditional to evaluate as true so layerConditionalBonuses
+    // actually fires inside advanceIsland (the real networked-to-N-T3-islands
+    // condition is too heavy for a unit test).
+    vi.spyOn(economyModule, 'evaluateConditionalEffectCondition').mockReturnValue(true);
 
     // Tick once — advanceIsland computes baseMult AND computeRates
     // layers conditional bonuses on its own copy.
     advanceIsland(state, state.lastTick + 1000, { defs: POWER_FREE });
 
-    // External UI-style cap call (no ctx, no mult): should see the
-    // base storageCap, not a conditional-bonus-layered storageCap.
-    expect(cap(state, 'iron_ore')).toBeCloseTo(expectedCap, 3);
+    vi.restoreAllMocks();
+
+    // A fresh effectiveSkillMultipliers call must return the base value,
+    // NOT the conditional-bonus-layered value. If baseMult were polluted,
+    // this would be 1.25× the base.
+    const freshMult = effectiveSkillMultipliers(state);
+    expect(freshMult.recipeRate.extraction).toBe(expectedExtractionRate);
   });
 
   it('computes effectiveSkillMultipliers at most a small bounded number of times per tick', () => {
