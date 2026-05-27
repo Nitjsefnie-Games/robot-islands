@@ -4074,6 +4074,8 @@ describe('effectiveSkillMultipliers memoization', () => {
 
 // Experimental wall-clock timing test. Skipped in CI because container
 // load makes it flaky; run locally when investigating regressions.
+// See plan: docs/superpowers/plans/2026-05-27-skillmult-memoize-plan.html
+//   §Phase 5 / risks — why this is skipped and when to run it.
 describe.skip('advanceIsland perf-regression gate', () => {
   it('completes one frame on a 50-building L25 island in <5ms', () => {
     const state = makeState({
