@@ -136,6 +136,13 @@ export interface RatesContext {
    *  `cap()` reads from this map instead of the local island storageCaps,
    *  enabling summed caps across the Lattice network. */
   readonly caps?: Record<ResourceId, number>;
+  /** Pre-computed base SkillMultipliers for this advanceIsland call.
+   *  Read-only. Populated by advanceIsland at the top of the call;
+   *  threaded into cap() (and its inner-loop callers) so we don't
+   *  recompute the skill-mul fold per cap() invocation. Consumers
+   *  must NOT layer conditional bonuses onto this object —
+   *  that's a separate per-segment local in computeRates. */
+  readonly baseMult?: SkillMultipliers;
   /** §5.3 Inter-island cable network balance for THIS island's connected-
    *  cable component this tick. When `cableComponent.unified === true`,
    *  Pass 3 replaces this island's local `producedW / consumedW` brownout
@@ -1568,6 +1575,13 @@ export function advanceIsland(
     state.lastTick = nowMs;
     return;
   }
+  // Per-tick base skill multiplier. unlockedNodes / unlockedEdges
+  // do not mutate during this advanceIsland call (level-ups don't
+  // auto-spend points; spend paths are UI-driven outside the tick),
+  // so this object is constant for the duration. Freeze to catch
+  // accidental mutation in dev.
+  const baseMult = effectiveSkillMultipliers(state);
+  Object.freeze(baseMult);  // shallow — covers all primitive fields
   // §13.3 Time Lock banking: if the island has at least one Time Lock and
   // banking is enabled, accumulate offline time into the bank instead of
   // advancing production.
@@ -1610,6 +1624,7 @@ export function advanceIsland(
     const effectiveCtx: RatesContext = {
       ...ctx,
       accelerationMul: state.accelerationRemainingMin > 0 ? 3 : 1,
+      baseMult,
     };
     // §2.7: pass `t` so the solar multiplier reflects this segment's
     // quadrant, not start-of-tick. Without this, a 24h offline gap would
