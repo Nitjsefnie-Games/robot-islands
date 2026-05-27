@@ -31,6 +31,7 @@ import {
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import type { EdgeId, Graph, KeystonePrereq } from './skilltree-graph.js';
 import { DEFAULT_GRAPH } from './skilltree.js';
+import { executeTierReset } from './tier-reset.js';
 
 /** Minimal legacy-style nodes so multiplier-folding tests don't depend on the
  *  live catalog (which uses `.notable.` / `.keystone.` ids). */
@@ -778,6 +779,87 @@ describe('computeAuraAmplifiers — cache', () => {
     const m1 = effectiveSkillMultipliers(s);
     const m2 = effectiveSkillMultipliers(s);
     expect(m1.recipeRate).toEqual(m2.recipeRate);
+  });
+
+  it('does not poison auraAmpCache when called with a transient graph (UI path)', () => {
+    const s = makeState();
+    s.unlockedNodes.add('mining.recipeRate.5' as import('./skilltree.js').NodeId);
+    s.unlockedNodes.add('mining.notable.blastOptimization' as import('./skilltree.js').NodeId);
+
+    // Warm the cache with DEFAULT_GRAPH first.
+    effectiveSkillMultipliers(s);
+    const warmCache = s.auraAmpCache;
+    const warmVersion = s.auraAmpCacheVersion;
+    expect(warmCache).not.toBeNull();
+
+    // Now construct a transient Graph (NOT DEFAULT_GRAPH identity).
+    const transient: Graph = {
+      nodes: DEFAULT_GRAPH.nodes,
+      edges: DEFAULT_GRAPH.edges,
+      bridges: DEFAULT_GRAPH.bridges,
+      graftSockets: DEFAULT_GRAPH.graftSockets,
+    };
+    expect(transient).not.toBe(DEFAULT_GRAPH); // sanity: different reference
+
+    // Compute via the transient graph — must NOT touch state.auraAmpCache.
+    effectiveSkillMultipliers(s, transient);
+
+    expect(s.auraAmpCache).toBe(warmCache);              // still same instance
+    expect(s.auraAmpCacheVersion).toBe(warmVersion);     // still same version stamp
+  });
+
+  it('post-deserialize state starts with cold cache (auraAmpCache=null, cacheVersion=-1)', () => {
+    // Build a populated state, warm its cache.
+    const s = makeState();
+    s.unlockedNodes.add('mining.notable.blastOptimization' as import('./skilltree.js').NodeId);
+    effectiveSkillMultipliers(s);
+    expect(s.auraAmpCache).not.toBeNull();
+
+    // Round-trip through persistence via the same destructure pattern used in serializeWorld / deserializeWorld.
+    const { unlockedNodes, unlockedEdges, socketBindings,
+            auraAmpVersion: _v, auraAmpCache: _c, auraAmpCacheVersion: _cv,
+            ...rest } = s;
+    const serialized = {
+      ...rest,
+      unlockedNodes: [...unlockedNodes],
+      unlockedEdges: [...unlockedEdges],
+      socketBindings: [...socketBindings.entries()],
+    };
+    const restored = {
+      ...serialized,
+      unlockedNodes: new Set(serialized.unlockedNodes),
+      unlockedEdges: new Set(serialized.unlockedEdges),
+      socketBindings: new Map(serialized.socketBindings),
+      auraAmpVersion: 0,
+      auraAmpCache: null,
+      auraAmpCacheVersion: -1,
+    } as IslandState;
+
+    // The restored state must have a cold cache.
+    expect(restored.auraAmpCache).toBeNull();
+    expect(restored.auraAmpCacheVersion).toBe(-1);
+
+    // First call after load: must compute fresh (cache miss), then store.
+    effectiveSkillMultipliers(restored);
+    expect(restored.auraAmpCache).not.toBeNull();
+    expect(restored.auraAmpCacheVersion).toBe(restored.auraAmpVersion);
+  });
+
+  it('executeTierReset bumps the cache version so post-reset reads recompute', () => {
+    const s = makeState();
+    s.unlockedNodes.add('mining.recipeRate.5' as import('./skilltree.js').NodeId);
+    s.unlockedNodes.add('mining.notable.blastOptimization' as import('./skilltree.js').NodeId);
+
+    // Warm: post-unlock recipeRate.extraction should be elevated.
+    const beforeReset = effectiveSkillMultipliers(s).recipeRate.extraction;
+    const baseline = effectiveSkillMultipliers(makeState()).recipeRate.extraction;
+    expect(beforeReset).toBeGreaterThan(baseline);
+
+    // Reset. The function clears unlockedNodes + unlockedEdges and bumps.
+    executeTierReset(s, /* nowMs */ 0);
+
+    const afterReset = effectiveSkillMultipliers(s).recipeRate.extraction;
+    expect(afterReset).toBe(baseline);
   });
 });
 
