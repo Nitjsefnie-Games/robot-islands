@@ -245,8 +245,19 @@
     </div>
 
     <div class="verdict green">
-      <div class="vt">Verdict / Pitch · revision 15 (2026-05-27) · ALL PICKERS CLOSED · T2 COHORT MASS-BALANCED · MAGNET SCALE CORRECTED</div>
+      <div class="vt">Verdict / Pitch · revision 16 (2026-05-27) · ALL PICKERS CLOSED · T2 COHORT MASS-BALANCED · MAGNET SCALE CORRECTED</div>
       <div class="vh">All 16 §10 pickers resolved. §10.15 resolved to Option A (BOTH water_wheel + windmill_t0 ship as parallel T0 power options — different tile gates, complementary). All rev-6/rev-7 implementation-time decisions resolved to recommended defaults and moved to the resolved-list. NEW §12.9 sizes the starter inventory to reach 1× battery_bank within ~30-45 min along the full real-chemistry chain. Anchors locked: <strong>1 unit coal = 1 kg</strong>, <strong>1 unit power = 100 kW</strong>.</div>
+      <div class="vb"><strong>Rev-16 precision pass (2 follow-up corrections from rev-15 review):</strong>
+        (1) <code>bearing</code> recipe restored to cohort discipline (mill_scale by-product):
+        <code>27 steel + 3 lubricant → 100 bearing</code> (rev-15, no swarf, idealized)
+        → <code>28 steel + 3 lubricant → 100 bearing + 1 mill_scale</code> (rev-16,
+        exact closure 31 = 31, swarf 3.2 % of in-mass). Adds honest machining waste
+        in the real industrial 1-3 % range; lubricant 9.7 % and bearing 96.8 %
+        remain within real grease + product ranges. (2) §3.8 audit summary no longer
+        groups <code>cell_press</code> among the "5 declared exogenous flows" —
+        cell_press is a unit-mass anchor calibration for saltwater_cell (~2.5 kg
+        assembled), not an exogenous-flow mechanism. Audit summary rephrased to
+        keep the two categories separate.</div>
       <div class="vb"><strong>Rev-15 precision pass (3 follow-up corrections to rev-14):</strong>
         (1) <code>magnet</code> unit-mass bumped 2 → 50 kg (industrial electromagnet
         scale, matching fusion_core / particle_accelerator / tidal_array consumer
@@ -1016,9 +1027,9 @@
         rounded 51 carries +0.2 kg drift, so the hand-derived 50 wins). Bearing
         is hand-derived (assembly, not pure rolling).</p>
       <table class="tbl">
-        <caption>Cohort recipes (rev-14 for rolling products · rev-15 bearing corrected). All seven close mass under §2.2 unit-mass anchors with the 1-steel = 1-kg cascade. <span class="vbadge v">verified</span> via <code>scripts/recalc-rolling-mill.py</code> for the six rolling products; bearing derived by hand from the 90:10 steel:lubricant assembly ratio (rev-15 exact closure).</caption>
+        <caption>Cohort recipes (rev-14 for rolling products · rev-16 bearing corrected). All seven close mass under §2.2 unit-mass anchors with the 1-steel = 1-kg cascade. <span class="vbadge v">verified</span> via <code>scripts/recalc-rolling-mill.py</code> for the six rolling products; bearing derived by hand from the ~90:10 steel:lubricant assembly ratio (rev-16 exact closure with mill_scale).</caption>
         <thead>
-          <tr><th>Building / cohort</th><th>§2.2 unit mass</th><th>Before (broken)</th><th>After (rev-14 / rev-15, mass-balanced)</th><th>Yield · notes</th></tr>
+          <tr><th>Building / cohort</th><th>§2.2 unit mass</th><th>Before (broken)</th><th>After (rev-14 / rev-16, mass-balanced)</th><th>Yield · notes</th></tr>
         </thead>
         <tbody>
           <tr>
@@ -1067,8 +1078,8 @@
             <td class="slate">bearing_assembler (bearing) <span class="badge amber">assembly, not rolling</span></td>
             <td class="mono">0.3 kg/bearing</td>
             <td class="mono">1 steel + 1 lubricant → 2 bearing</td>
-            <td class="mono">27 steel + 3 lubricant → 100 bearing (kg in/out: 30/30 ✓)</td>
-            <td>Assembly: ~90 % steel + 10 % lubricant by mass. <code>100 × 0.3 = 30 kg bearing-mass (= 27 kg steel + 3 kg lubricant)</code>; exact mass closure 30 = 30 ✓. No exogenousFlow drift tag needed.</td>
+            <td class="mono">28 steel + 3 lubricant → 100 bearing + 1 mill_scale (kg in/out: 31/31 ✓)</td>
+            <td>Assembly: ~90 % steel + 10 % lubricant by mass. <code>100 × 0.3 + 1 = 31 kg out (= 30 kg bearing-mass + 1 kg mill_scale)</code>; exact mass closure 31 = 31 ✓. Cohort discipline: bearing machining produces 1-3 % swarf (WorldSteel / IspatGuru hot-rolling by-products fact sheet); 3.2 % of in-mass is at the top of the real range. Lubricant fraction 9.7 % (real bearing grease 5-15 % range ✓).</td>
           </tr>
         </tbody>
       </table>
@@ -1099,7 +1110,7 @@
         exogenousFlow tag are bugs. Phase 2 implementation runs this same audit
         as a vitest assertion against every recipe in <code>recipes.ts</code>.</p>
       <table class="tbl">
-        <caption>Per-recipe mass-balance audit (rev-13 base · rev-15 extended with the seven T2 cohort recipes from §3.9, bearing corrected to exact closure). Δ ≠ 0 requires <code>exogenousFlow</code> tag. <span class="vbadge v">verified</span> arithmetic reproducible by reading the recipe row above.</caption>
+        <caption>Per-recipe mass-balance audit (rev-13 base · rev-16 extended with the seven T2 cohort recipes from §3.9, bearing corrected to exact closure with mill_scale). Δ ≠ 0 requires <code>exogenousFlow</code> tag. <span class="vbadge v">verified</span> arithmetic reproducible by reading the recipe row above.</caption>
         <thead><tr><th>Recipe</th><th>Σ inputs (kg)</th><th>Σ outputs (kg)</th><th>Δ (out − in)</th><th>Exogenous flow</th><th>Balanced?</th></tr></thead>
         <tbody>
           <tr><td class="slate">smelter (rev-13)</td><td class="right mono">10 + 3 = 13</td><td class="right mono">6 + 2 + 5 = 13</td><td class="right">0</td><td>—</td><td class="ok">✓</td></tr>
@@ -1126,14 +1137,16 @@
           <tr><td class="slate">pipe_mill / pipe (rev-14)</td><td class="right mono">42</td><td class="right mono">10 × 4 + 2 = 42</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 2</code> = +7 mass-positive)</td></tr>
           <tr><td class="slate">metal_rolling_mill / wire (rev-14)</td><td class="right mono">11</td><td class="right mono">20 × 0.5 + 1 = 11</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 1</code> = −0.5 mass-negative)</td></tr>
           <tr><td class="slate">spring_press / spring (rev-14)</td><td class="right mono">11</td><td class="right mono">50 × 0.2 + 1 = 11</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 3</code> = +0.4 mass-positive but in fact pre-rev-14 carried integer mismatch — hand-derived 50 wins over script's rounded 51)</td></tr>
-          <tr><td class="slate">bearing_assembler / bearing (rev-15)</td><td class="right mono">27 + 3 = 30</td><td class="right mono">100 × 0.3 = 30</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-15 exact closure; rev-14 had +0.9 kg drift via exogenousFlow)</td></tr>
+          <tr><td class="slate">bearing_assembler / bearing (rev-16)</td><td class="right mono">28 + 3 = 31</td><td class="right mono">100 × 0.3 + 1 = 31</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-16 exact closure with mill_scale; rev-15 had no swarf, rev-14 had +0.9 kg drift)</td></tr>
         </tbody>
       </table>
-      <p class="body" style="margin-top:14px"><strong>Audit findings (rev-15 extended):</strong>
-        20 of 25 recipes balance exactly (Δ = 0). 5 have declared exogenous flows
+      <p class="body" style="margin-top:14px"><strong>Audit findings (rev-16 extended):</strong>
+        20 of 25 recipes balance exactly (Δ = 0). 4 have declared exogenous flows
         (BF top-gas trace, EAF electrode graphite, concrete evaporation, refinery
-        light-ends, cell_press mass-anchor). <strong>cell_press</strong> was the
-        only pre-rev-14 audit-flagged anomaly; rev-12 corrected the anchor to
+        light-ends) plus 1 unit-mass anchor calibration (<strong>cell_press</strong>,
+        saltwater_cell ≈ 2.5 kg assembled). cell_press is NOT an exogenous-flow
+        declaration — it is a unit-mass anchor calibration. <strong>cell_press</strong>
+        was the only pre-rev-14 audit-flagged anomaly; rev-12 corrected the anchor to
         2.5 kg/unit (was 3 kg in rev-10/11, overshooting by 0.5 kg) — Phase 2
         implementation should apply the 2.5 kg calibration. <strong>3 recipes rev-9
         reported as "verified" actually had silent mass-balance failures</strong>
@@ -1143,11 +1156,13 @@
         recipes (steel_beam, heavy_cable, sheet_metal, pipe, wire, spring) were
         silently mass-broken under §2.2's industrial-scale unit-mass anchors and
         now balance exactly under the new mill-scale-routing recipes.
-        <strong>Rev-15 bearing correction:</strong> bearing recipe refined from
-        <code>9 + 1 → 33 + 1 mill_scale</code> (+0.9 kg drift) to
-        <code>27 + 3 → 100 bearing</code> (exact closure 30 = 30 ✓), closing the
-        last cohort gap. The Phase 4 mass-balance auditor specification now has
-        25 worked examples to encode.</p>
+        <strong>Rev-16 bearing correction:</strong> bearing recipe restored to
+        cohort discipline with 1 mill_scale by-product:
+        <code>28 steel + 3 lubricant → 100 bearing + 1 mill_scale</code>
+        (exact closure 31 = 31 ✓, swarf 3.2 % of in-mass). Rev-15 had
+        <code>27 + 3 → 100 bearing</code> (no swarf, idealized); rev-14 had
+        <code>9 + 1 → 33 + 1 mill_scale</code> (+0.9 kg drift). The Phase 4
+        mass-balance auditor specification now has 25 worked examples to encode.</p>
     </section>
 
     <!-- ============================================================ -->
@@ -1709,7 +1724,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
         <li><span class="vbadge x">corrected</span> <strong>spaceport "narrative cost rules; mass-realism ignored"</strong> → now <strong>real launch-pad mass (≈ 265 t of concrete + steel + tankage)</strong>. Antimatter and reality_anchor are still inputs but no longer dominate the cost.</li>
         <li><span class="vbadge x">corrected</span> <strong>mercury_well "dead-canary cheap"</strong> → now <strong>real BOM (≈ 480 kg)</strong>. Plus mercury is no longer a "dead" resource per the §3.5 orphan-tagging principle; it's an <code>expansion-hook</code>. Player decision is informed.</li>
         <li><span class="vbadge x">corrected</span> <strong>lighthouse_t1 early-game-token cheap</strong> → now <strong>real stone-tower mass (≈ 392 kg)</strong>. Meaningful sourcing investment by realism, not by subsidy.</li>
-        <li><span class="vbadge x">corrected rev-14</span> <strong>T2 mechanical-components cohort silent mass-imbalance</strong>: six rolling recipes (steel_beam, heavy_cable, sheet_metal, pipe, wire, spring) carried trivial <code>1 steel → N component</code> ratios that were 100×/16×/10×/8× mass-positive or mass-negative under §2.2's realistic unit-mass anchors. Replaced with script-derived mass-balanced recipes per §3.9 (e.g. <code>105 steel → 2 steel_beam + 5 mill_scale</code>, <code>11 steel → 20 wire + 1 mill_scale</code>). New T1 resource <code>mill_scale</code> introduced for the hot-rolling oxidation losses. 22 §4.3 BOM parentheticals recomputed against §2.2 anchors. §12.9.1 chain walk + §12.9.4 timing recomputed. <code>gear</code> + <code>glass_panel</code> still lack producer recipes — deferred to Phase 2. <span class="vbadge x">corrected rev-15</span> <strong>bearing</strong> refined from <code>9 + 1 → 33 + 1 mill_scale</code> (+0.9 kg drift) to <code>27 + 3 → 100 bearing</code> (exact closure 30 = 30 ✓).</li>
+        <li><span class="vbadge x">corrected rev-14</span> <strong>T2 mechanical-components cohort silent mass-imbalance</strong>: six rolling recipes (steel_beam, heavy_cable, sheet_metal, pipe, wire, spring) carried trivial <code>1 steel → N component</code> ratios that were 100×/16×/10×/8× mass-positive or mass-negative under §2.2's realistic unit-mass anchors. Replaced with script-derived mass-balanced recipes per §3.9 (e.g. <code>105 steel → 2 steel_beam + 5 mill_scale</code>, <code>11 steel → 20 wire + 1 mill_scale</code>). New T1 resource <code>mill_scale</code> introduced for the hot-rolling oxidation losses. 22 §4.3 BOM parentheticals recomputed against §2.2 anchors. §12.9.1 chain walk + §12.9.4 timing recomputed. <code>gear</code> + <code>glass_panel</code> still lack producer recipes — deferred to Phase 2. <span class="vbadge x">corrected rev-15</span> <strong>bearing</strong> refined from <code>9 + 1 → 33 + 1 mill_scale</code> (+0.9 kg drift) to <code>27 + 3 → 100 bearing</code> (exact closure 30 = 30, no swarf, idealized). <span class="vbadge x">corrected rev-16</span> Restored 1 mill_scale by-product for cohort discipline: <code>28 + 3 → 100 bearing + 1 mill_scale</code> (exact closure 31 = 31 ✓, swarf 3.2 %).</li>
       </ul>
 
       <h3 class="sub">9.3 Gameplay risks from realism-first costs</h3>
@@ -2617,7 +2632,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
     </div>
 
     <div class="footer">
-      <p>Robot Islands · SI-units rework foundation · revision 15 · 2026-05-27 ·
+      <p>Robot Islands · SI-units rework foundation · revision 16 · 2026-05-27 ·
         based on commit <code>f825ba8</code> · references the v3 audit at
         <a class="cite">docs/superpowers/audits/2026-05-26-physics-balance-audit.html</a>.
         Rev-4 standard: every numerical claim is either backed by a direct
