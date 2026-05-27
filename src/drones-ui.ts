@@ -24,7 +24,7 @@
 import { Container, Graphics } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { findOperationalBuilding, hasOperationalBuilding, isOperationalBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
