@@ -1154,25 +1154,43 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       }
     }
 
-    // Active island must carry a Drone Pad to launch — otherwise the arm
-    // button is gated. Same `defId` discipline the settlement panel uses
-    // for shipyard/helipad.
-    const hasDronePad = hasOperationalBuilding(originSpec.buildings, 'dronepad');
-    const inFlight = deps.world.drones.some(
-      (d) => d.fromIslandId === origin.id && (d.status === 'active' || d.status === undefined),
-    );
-    const canLaunch = hasDronePad && maxLaunchFuel > 0 && !inFlight;
+    // Per-pad arm gating.
+    function padBusyState(): 'no-pad' | 'free' | 'selected-busy' | 'all-busy' {
+      if (operationalPads.length === 0) return 'no-pad';
+      const active = deps.world.drones.filter(
+        (d) => d.fromIslandId === origin.id &&
+               (d.status === 'active' || d.status === undefined),
+      );
+      const busyPadIds = new Set<string>();
+      for (const p of operationalPads) {
+        const def = BUILDING_DEFS[p.defId as BuildingDefId];
+        const px = originSpec.cx + p.x + shapeWidth(def.footprint) / 2;
+        const py = originSpec.cy + p.y + shapeHeight(def.footprint) / 2;
+        if (active.some((d) => Math.abs(d.originX - px) < 0.5
+                                && Math.abs(d.originY - py) < 0.5)) {
+          busyPadIds.add(p.id);
+        }
+      }
+      if (busyPadIds.size === operationalPads.length) return 'all-busy';
+      if (selectedPadId && busyPadIds.has(selectedPadId)) return 'selected-busy';
+      return 'free';
+    }
+
+    const padBusy = padBusyState();
+    const canLaunch = padBusy === 'free' && maxLaunchFuel > 0;
     armBtn.disabled = !canLaunch;
     armBtn.style.opacity = canLaunch ? '1' : '0.5';
     armBtn.style.cursor = canLaunch ? 'pointer' : 'not-allowed';
-    // Auto-disarm BEFORE recomputing button text — `setLaunchMode(false)`
-    // writes its own "◇ ARM LAUNCH" string, and a no-drone-pad active
-    // island would otherwise flicker between "NO DRONE PAD" (this branch)
-    // and "ARM LAUNCH" (the disarm) on the same frame.
     if (!canLaunch && launchMode) setLaunchMode(false);
-    if (!hasDronePad) {
+    if (padBusy === 'no-pad') {
       armBtn.textContent = '◇ NO DRONE PAD';
       armBtn.title = 'Active island has no Drone Pad';
+    } else if (padBusy === 'selected-busy') {
+      armBtn.textContent = '◇ PAD BUSY';
+      armBtn.title = 'This pad is launching a drone; pick another pad';
+    } else if (padBusy === 'all-busy') {
+      armBtn.textContent = '◇ ALL PADS BUSY';
+      armBtn.title = 'Every Drone Pad on this island is busy';
     } else if (!launchMode) {
       armBtn.textContent = '◇ ARM LAUNCH';
       armBtn.title = '';
