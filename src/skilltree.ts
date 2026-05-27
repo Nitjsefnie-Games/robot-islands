@@ -424,6 +424,16 @@ export const NODE_CATALOG = FULL_CATALOG;
 
 const DEFAULT_CATALOG: Catalog = buildCatalog(NODE_CATALOG);
 const _adjCache = new WeakMap<Graph, Map<NodeId, NodeId[]>>();
+const _byIdCache = new WeakMap<Graph, Map<string, SkillNode>>();
+
+function graphById(graph: Graph): Map<string, SkillNode> {
+  const cached = _byIdCache.get(graph);
+  if (cached !== undefined) return cached;
+  const byId = new Map<string, SkillNode>();
+  for (const n of graph.nodes) byId.set(n.id as string, n);
+  _byIdCache.set(graph, byId);
+  return byId;
+}
 
 // ---------------------------------------------------------------------------
 // Standard edges — filler chains + keystone AND-prereqs
@@ -1133,9 +1143,7 @@ export function skillUnlockedAdjacencyRules(
 function computeAuraAmplifiers(state: IslandState, graph: Graph): Map<NodeId, number> {
   const amp = new Map<NodeId, number>();
   const neighbours = buildAdjacency(graph);
-  // O(n) map build replaces O(n·m) repeated .find() scans.
-  const byId = new Map<string, SkillNode>();
-  for (const n of graph.nodes) byId.set(n.id as string, n);
+  const byId = graphById(graph);
 
   for (const nodeId of state.unlockedNodes) {
     const node = byId.get(nodeId as string);
