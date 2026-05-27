@@ -1,0 +1,1368 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Islands — physics & balance audit (v3 — literal physics + chemistry added)</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1180px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 980px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+
+    .verification-key { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; margin: 18px 0 24px; font-size: 13px; }
+    .verification-key strong { color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    .vbadge { display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em; text-transform: uppercase;
+      margin-right: 6px; }
+    .vbadge.v   { background: #2D3A24; color: var(--olive); }
+    .vbadge.u   { background: var(--oat); color: var(--warn); }
+    .vbadge.x   { background: #4A2A1C; color: var(--rust); }
+
+    .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 36px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+    .summary .v.warn    { color: var(--warn); }
+    .summary .v.bad     { color: var(--rust); }
+
+    .verdict {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px;
+    }
+    .verdict.green { border-left-color: var(--olive); }
+    .verdict.yellow { border-left-color: var(--warn); }
+    .verdict.red { border-left-color: var(--rust); }
+    .verdict .vt { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--warn); margin-bottom: 8px; }
+    .verdict.green .vt { color: var(--olive); }
+    .verdict.red .vt { color: var(--rust); }
+    .verdict .vh { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .verdict .vb { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .verdict .vb + .vb { margin-top: 8px; }
+
+    section { margin-bottom: 60px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate);
+      letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 840px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 840px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    ul.body { font-size: 14.5px; max-width: 840px; margin: 0 0 14px 22px; }
+    ul.body li { margin-bottom: 6px; }
+
+    .corrections {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--rust);
+      border-radius: var(--radius); padding: 18px 22px; margin-bottom: 32px;
+    }
+    .corrections .vt { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--rust); margin-bottom: 10px; }
+    .corrections ul { margin: 0 0 0 22px; font-size: 13.5px; }
+    .corrections li { margin-bottom: 6px; }
+
+    .toc { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500); text-transform: uppercase;
+      letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    .diagram-wrap { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 22px; margin: 8px 0 22px; overflow-x: auto; }
+    .diagram-cap { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+    svg { display: block; max-width: 100%; }
+    svg text { font-family: var(--sans); fill: var(--gray-700); }
+    svg text.label { font-family: var(--mono); font-size: 10px; fill: var(--gray-500); }
+    svg text.title { font-family: var(--mono); font-size: 11px; fill: var(--slate); }
+    svg text.tier  { font-family: var(--mono); font-size: 10px; fill: var(--clay); }
+    svg text.num   { font-family: var(--mono); font-size: 10px; fill: var(--warn); }
+
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--gray-300);
+      vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12.5px; color: var(--clay); }
+    .tbl td.right { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+    .tbl td.v { font-family: var(--mono); font-size: 10px; color: var(--olive); }
+    .tbl td.u { font-family: var(--mono); font-size: 10px; color: var(--warn); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    fieldset.picker {
+      background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 18px 20px 16px; margin-bottom: 20px;
+    }
+    fieldset.picker legend {
+      font-family: var(--mono); font-size: 11px; padding: 0 10px;
+      color: var(--clay); text-transform: uppercase; letter-spacing: 0.08em;
+      background: var(--ivory); border: var(--border); border-radius: 7px;
+    }
+    .picker .pq { font-family: var(--serif); font-size: 17px; color: var(--slate);
+      margin-bottom: 6px; letter-spacing: -0.005em; display: flex; align-items: center; gap: 10px; }
+    .picker .ps { color: var(--gray-500); font-size: 13px; margin-bottom: 14px; max-width: 820px; }
+    .picker .pe { font-family: var(--mono); font-size: 11.5px; color: var(--gray-500);
+      margin-bottom: 14px; padding: 8px 12px; background: var(--gray-150);
+      border-left: 2px solid var(--clay); border-radius: 4px; }
+    .picker .pe code { background: transparent; border: none; padding: 0; color: var(--clay); }
+    .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+    .opt {
+      background: var(--ivory); border: var(--border); border-radius: 10px;
+      padding: 12px 14px 10px; cursor: pointer; transition: border-color 120ms ease, background 120ms ease;
+      display: flex; flex-direction: column; gap: 6px; position: relative;
+    }
+    .opt:hover { border-color: var(--clay); }
+    .opt input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
+    .opt .oname { font-family: var(--mono); font-size: 12px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.04em; }
+    .opt .why { font-size: 12.5px; color: var(--gray-500); line-height: 1.4; }
+    .opt[data-selected="true"] { border-color: var(--clay); background: #1F1D1A; box-shadow: 0 0 0 1px var(--clay) inset; }
+    .opt[data-selected="true"] .oname { color: var(--clay); }
+
+    .badge { display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .badge.red   { background: #4A2A1C; color: var(--rust); }
+    .badge.amber { background: var(--oat); color: var(--warn); }
+    .badge.green { background: #2D3A24; color: var(--olive); }
+    .badge.gray  { background: var(--gray-150); color: var(--gray-500); }
+
+    .selections {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-top: 56px;
+      position: sticky; bottom: 22px;
+    }
+    .selections h3 { font-family: var(--serif); font-size: 20px; color: var(--slate); margin-bottom: 12px; }
+    .sel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px;
+      font-size: 13px; margin-bottom: 16px; }
+    @media (max-width: 720px) { .sel-grid { grid-template-columns: 1fr; } }
+    .sel-row { display: flex; justify-content: space-between; gap: 12px; }
+    .sel-row .k { color: var(--gray-500); font-family: var(--mono); font-size: 11.5px; }
+    .sel-row .v { color: var(--slate); font-weight: 600; font-family: var(--mono); font-size: 11.5px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button.action {
+      font-family: var(--mono); font-size: 12px; padding: 9px 16px;
+      background: var(--ivory); color: var(--clay);
+      border: 1.5px solid var(--clay); border-radius: 8px;
+      cursor: pointer; letter-spacing: 0.04em; transition: background 120ms ease;
+    }
+    button.action:hover { background: #2A2521; }
+    .toast { font-family: var(--mono); font-size: 11.5px; color: var(--olive);
+      margin-left: 8px; opacity: 0; transition: opacity 200ms ease; }
+    .toast.show { opacity: 1; }
+
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Deep analysis · v3 — literal physics + chemistry added</div>
+      <h1>Robot Islands — physics, chemistry & balance audit of the whole game</h1>
+      <div class="context-box">
+        <span class="label">Scope</span>
+        v1 covered economy/simulation balance only. v3 expands to <strong>literal physics</strong>
+        (thermodynamics, drag, optics, energy conservation across recipes and heat) and
+        <strong>chemistry</strong> (stoichiometry, mass conservation in smelting/cement/refining,
+        electrochemistry, cryogenics) — what the user actually asked for when they said
+        "physics check." Coverage: 19 mechanic systems, <strong>240</strong> building defs,
+        ~189 resources across 7 tiers, 69 test files / 2,193 tests passing.
+        Generated from direct file reads — every numerical claim carries a verification
+        badge stating whether I personally read the relevant line.
+      </div>
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author against the cited file:line.
+        <span class="vbadge u">unverified</span> sub-agent paraphrase, not personally read in this pass; treat with skepticism.
+        <span class="vbadge x">corrected</span> v1 contained an error; v2 supplies the verified value.
+      </div>
+    </header>
+
+    <div class="corrections" style="border-left-color: var(--olive)">
+      <div class="vt" style="color: var(--olive)">v2 → v3 — scope expansion to literal physics + chemistry</div>
+      <ul>
+        <li>v1/v2 read "physics balance check" as "simulation balance." v3 adds <strong>§12 Literal physics</strong> (mass/energy conservation, power-output realism, vehicle drag, solar curve, heat transfer, signal propagation) and <strong>§13 Chemistry</strong> (smelting stoichiometry, cement/lime/brick, refining, electrolysis, air separation, cryogenics).</li>
+        <li>13 new findings added (F16-F28). Severity skew: mostly LOW because the violations are either (a) explicit gameplay simplifications acknowledged in inline comments, or (b) acceptable handwaves for an idle game. Two MEDIUM items: heat as N:1 unmetered (free energy by design) and vehicle drag inversion (speed-up + efficiency-up).</li>
+        <li>No new HIGH/CRITICAL issues found from the physics/chemistry passes. The simulation does not claim real-world physics; it claims internally-consistent gameplay rules and largely delivers them.</li>
+      </ul>
+    </div>
+
+    <div class="corrections">
+      <div class="vt">v1 → v2 corrections (errors caught during user-requested re-verification)</div>
+      <ul>
+        <li><strong>Weather has 5 states, not 4.</strong> Names are <code>clear · light_fog · storm · severe_storm · catastrophic</code>; numbers I had for "severe_storm" were wrong (real: 0.08 destruction, ×0.1 capacity, 15% loss; the 10%/20% I quoted were either invented or applied to the wrong state). <a class="cite">weather.ts:21-51</a></li>
+        <li><strong>Cell Press is T1, not T2.</strong> Building itself sits at <code>tier: 1</code>, single-tile, 20 W draw. Its recipe outputs a T2 component. <a class="cite">building-defs.ts:679-689</a></li>
+        <li><strong>Only 3 buildings carry adjacencyBuffs</strong>: Mine, Workshop, Smelter. Deep Mine and Cell Press do NOT have buffs (sub-agent fabricated those entries). <a class="cite">building-defs.ts:638,672,787</a></li>
+        <li><strong>T1 cargo speed = 1 t/s</strong>, not 0.25 (sub-agent confused this with Settlement T1 ship speed which IS 0.25). <a class="cite">routes.ts:115; settlement.ts:120</a></li>
+        <li><strong>DRONE_T5_EFFICIENCY = 8</strong>, not 15. Full ladder is T1=3, T2=6, T3=9, T4=12, T5=15 (straight), T5-path=8, T6=18. <a class="cite">drones.ts:89,108</a></li>
+        <li><strong>Orbital launch success</strong> is T1=30 / T2=50 / T3+=70, capped at 99%. Sub-agent dropped T2. <a class="cite">orbital.ts:274-279</a></li>
+        <li><strong>Tidal Array (50 MW, Coast) and Sunspire (60 MW, Desert) exist</strong> — single building covers the T4-T5 peak draw, so the "you must distribute across islands for power" finding is too strong. Constraint is biome access, not multi-island. <a class="cite">building-defs.ts:1746-1779</a></li>
+        <li><strong>Cryogenic Generator (400 W) and Nuclear Reactor (2 000 W)</strong> were absent from the power table. <a class="cite">building-defs.ts:1495-1507, 1586-1597</a></li>
+        <li><strong>Genesis Forge causal_regulator count = 2</strong> (not 1). Already fixed in v1 but worth re-flagging. <a class="cite">recipes.ts:2740</a></li>
+        <li><strong>Skill tree node count claim (553 = 442+81+30) was sub-agent-paraphrased</strong> and could not be independently reproduced. My partial count: 248 generated fillers (sum of <code>count</code> across 71 archetypes) + 111 hand-curated id refs in catalog = 359. Discrepancy unresolved — treat 553 as unverified.</li>
+        <li><strong>71 archetypes</strong>, not 72 (the 72nd grep hit was the type definition). All 71 use <code>growth: 1.10</code>. <a class="cite">skilltree-archetypes.ts</a></li>
+        <li><strong>Antimatter Refinery recipe exists</strong>: <code>antimatter_capsule + plasma_containment_vessel + cryogenic_hydrogen×5 → antimatter_propellant</code> at <code>cycleSec=600</code>. Earlier "deferred" claim was wrong. <a class="cite">recipes.ts:2750-2754</a></li>
+        <li><strong>Ascendant Core recipe exists</strong>: <code>ascendant_assembly</code> outputs <code>ascendant_core</code> (T5→T6 gate per §13.4). <a class="cite">recipes.ts:2724-2727</a></li>
+      </ul>
+    </div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tests passing</div><div class="v ok">2 193 / 2 193</div></div>
+      <div class="cell"><div class="k">Building defs</div><div class="v">240</div></div>
+      <div class="cell"><div class="k">Resources</div><div class="v">189</div></div>
+      <div class="cell"><div class="k">Findings</div><div class="v accent">28</div></div>
+      <div class="cell"><div class="k">Severity</div><div class="v warn">0 crit · 2 high · 8 med · 18 low</div></div>
+    </div>
+
+    <div class="verdict yellow">
+      <div class="vt">Verdict — amber, post-verification</div>
+      <div class="vh">The game's physics are tier-coherent and the economy is arithmetically sound. After re-verifying every cited number, the remaining risks are design tensions, not correctness bugs.</div>
+      <div class="vb">XP weights, recipe graph closure, the saltwater-cell battery bootstrap, and the
+        skill-tree magnitude rewrite all hold up under direct re-read. The 2,193-test baseline
+        passes clean.</div>
+      <div class="vb">The two HIGH-severity tensions: <strong>(a)</strong> biome-locked single-source
+        T4 producers (<code>exotic_alloy</code> = Volcanic-only via Pyroforge; <code>ai_core</code>
+        = Arctic-only via Cryogenic Compute Center) — if world-gen does not guarantee both biomes
+        in the home network, T5 is unreachable. <strong>(b)</strong> The endgame crystal grind:
+        the full 60-crystal set needs 140× <code>reality_anchor</code> at 8 h cycle each ≈
+        1 120 h serial of Reality Forge runtime. Plus one verified wart: <code>mercury</code> is
+        produced (<code>mercury_well</code>) but consumed by nothing.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Jump to</span>
+      <a href="#tier-ladder">1 · Tier ladder</a>
+      <a href="#power">2 · Power economy</a>
+      <a href="#chains">3 · End-to-end chains</a>
+      <a href="#saltwater">4 · Saltwater-cell bootstrap</a>
+      <a href="#endgame">5 · Endgame time-gates</a>
+      <a href="#biome">6 · Biome locks</a>
+      <a href="#dead">7 · Dead & narrow resources</a>
+      <a href="#skilltree">8 · Skill tree</a>
+      <a href="#mechanics">9 · Mechanic constants</a>
+      <a href="#testgaps">10 · Test coverage gaps</a>
+      <a href="#physics">12 · Literal physics</a>
+      <a href="#chemistry">13 · Chemistry</a>
+      <a href="#findings">11 · Findings register</a>
+    </div>
+
+    <!-- ============================================================== -->
+    <section id="tier-ladder">
+      <div class="sec-head"><span class="num">§1</span><h2>Tier ladder & XP weights</h2></div>
+      <p class="sec-intro">Tier weights match <code>SPEC.md §9.1</code> exactly. The
+        catalog is internally consistent — no tier-weight outliers found.
+        <span class="vbadge v">verified</span> via direct grep on
+        <code>xp_weight: \d+</code> in recipes.ts.</p>
+
+      <div class="diagram-wrap">
+        <div class="diagram-cap">Resources per xp-weight bucket — direct grep, sum = 189</div>
+        <svg viewBox="0 0 760 200" role="img" aria-label="XP weight histogram">
+          <g transform="translate(40,10)">
+            <line x1="0" y1="150" x2="700" y2="150" stroke="#3A3833" stroke-width="1"/>
+            <g>
+              <rect x="20"  y="46"  width="60" height="104" fill="#8FA56E" opacity="0.85"/>
+              <rect x="110" y="62"  width="60" height="88"  fill="#8FA56E" opacity="0.85"/>
+              <rect x="200" y="0"   width="60" height="150" fill="#D97757" opacity="0.85"/>
+              <rect x="290" y="-46" width="60" height="196" fill="#D97757" opacity="0.85"/>
+              <rect x="380" y="66"  width="60" height="84"  fill="#E0B47F" opacity="0.85"/>
+              <rect x="470" y="54"  width="60" height="96"  fill="#E0B47F" opacity="0.85"/>
+              <rect x="560" y="118" width="60" height="32"  fill="#E08B7F" opacity="0.85"/>
+            </g>
+            <g transform="translate(0,168)">
+              <text class="tier" x="50"  text-anchor="middle">T0 · xp=1</text>
+              <text class="tier" x="140" text-anchor="middle">T1 · xp=3</text>
+              <text class="tier" x="230" text-anchor="middle">T2 · xp=10</text>
+              <text class="tier" x="320" text-anchor="middle">T3 · xp=30</text>
+              <text class="tier" x="410" text-anchor="middle">T4 · xp=100</text>
+              <text class="tier" x="500" text-anchor="middle">T5 · xp=300</text>
+              <text class="tier" x="590" text-anchor="middle">T6 · xp=1000</text>
+            </g>
+            <g>
+              <text class="num" x="50"  y="38"  text-anchor="middle">26</text>
+              <text class="num" x="140" y="54"  text-anchor="middle">23</text>
+              <text class="num" x="230" y="-8"  text-anchor="middle">38</text>
+              <text class="num" x="320" y="-54" text-anchor="middle">49</text>
+              <text class="num" x="410" y="58"  text-anchor="middle">21</text>
+              <text class="num" x="500" y="46"  text-anchor="middle">24</text>
+              <text class="num" x="590" y="110" text-anchor="middle">8</text>
+            </g>
+          </g>
+        </svg>
+      </div>
+
+      <p class="body"><strong>What's clean.</strong> Seven tiers grow geometrically by
+        <code>×3–3.3</code> in xp_weight, matching the spec. T3 bucket is largest (49) because it
+        absorbs every refined mineral, polymer, and intermediate component. T6 (8) is intentionally
+        small — orbital-only.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="power">
+      <div class="sec-head"><span class="num">§2</span><h2>Power economy</h2></div>
+      <p class="sec-intro">Re-verified. T4-T5 peak draw is large but <strong>Tidal Array (50 MW,
+        Coast-only)</strong> or <strong>Sunspire (60 MW, Desert-only)</strong> can supply a single
+        island. So "multi-island for power" was wrong — the real constraint is biome access.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Building</th><th>Tier</th><th>Power (W)</th><th>Constraint</th><th>verified</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">solar_panel</td><td>T1</td><td class="right">+50</td><td>day-cycle</td><td class="v">✓ :691-701</td></tr>
+          <tr><td class="slate">wind_turbine</td><td>T1</td><td class="right">+40</td><td>×1.5 on high_wind</td><td class="v">✓ :838-846</td></tr>
+          <tr><td class="slate">biomass_plant</td><td>T1</td><td class="right">+80</td><td>fueled (wood)</td><td class="v">✓ :822-830</td></tr>
+          <tr><td class="slate">coal_gen</td><td>T1</td><td class="right">+100</td><td>1 coal / 2 s</td><td class="v">✓ :706-714</td></tr>
+          <tr><td class="slate">geothermal_vent</td><td>T2</td><td class="right">+200</td><td>Volcanic biome</td><td class="v">✓ :924-932</td></tr>
+          <tr><td class="slate">cryogenic_generator</td><td>T2</td><td class="right">+400</td><td>Arctic ice tile</td><td class="v">✓ :1495-1507</td></tr>
+          <tr><td class="slate">nuclear_reactor</td><td>T3</td><td class="right">+2 000</td><td>uranium fuel rods</td><td class="v">✓ :1586-1596</td></tr>
+          <tr><td class="slate">fusion_core</td><td>T4</td><td class="right">+5 000</td><td>helium_3 fuel</td><td class="v">✓ :1659-1667</td></tr>
+          <tr><td class="slate">tidal_array</td><td>T4</td><td class="right">+50 000</td><td>Coast-only</td><td class="v">✓ :1746-1758</td></tr>
+          <tr><td class="slate">sunspire</td><td>T4</td><td class="right">+60 000</td><td>Desert-only; solar-curve</td><td class="v">✓ :1763-1779</td></tr>
+          <tr><td class="slate">battery_bank</td><td>T2</td><td class="right">0</td><td>buffer; bootstrap via saltwater_cell</td><td class="v">✓ :854-867</td></tr>
+          <tr><td class="slate">mine</td><td>T1</td><td class="right">−25</td><td>—</td><td class="v">✓ :623-635</td></tr>
+          <tr><td class="slate">smelter</td><td>T1</td><td class="right">−50</td><td>—</td><td class="v">✓ :781</td></tr>
+          <tr><td class="slate">workshop</td><td>T1</td><td class="right">−60</td><td>—</td><td class="v">✓ :658-674</td></tr>
+          <tr><td class="slate">coke_oven</td><td>T2</td><td class="right">−60</td><td>needs heat</td><td class="v">✓ :1109</td></tr>
+          <tr><td class="slate">blast_furnace</td><td>T2</td><td class="right">−100</td><td>needs heat</td><td class="v">✓ :1135</td></tr>
+          <tr><td class="slate">steel_mill</td><td>T2</td><td class="right">−120</td><td>—</td><td class="v">✓ :1155</td></tr>
+          <tr><td class="slate">assembler</td><td>T2</td><td class="right">−80</td><td>—</td><td class="v">✓ :1224</td></tr>
+          <tr><td class="slate">cell_press <strong>(T1)</strong></td><td>T1</td><td class="right">−20</td><td>single-tile, saltwater_cell producer</td><td class="v">✓ :679-689</td></tr>
+          <tr><td class="slate">teleporter_pad</td><td>T4</td><td class="right">−800</td><td>—</td><td class="v">✓ :1062</td></tr>
+          <tr><td class="slate">pyroforge</td><td>T4</td><td class="right">−800</td><td>Volcanic biome</td><td class="v">✓ :1685</td></tr>
+          <tr><td class="slate">cryogenic_compute_center</td><td>T4</td><td class="right">−1 200</td><td>Arctic biome</td><td class="v">✓ :1704</td></tr>
+          <tr><td class="slate">particle_accelerator</td><td>T4</td><td class="right">−1 500</td><td>—</td><td class="v">✓ :1792</td></tr>
+          <tr><td class="slate">quantum_chip_fab</td><td>T4</td><td class="right">−1 500</td><td>—</td><td class="v">✓ :1836</td></tr>
+          <tr><td class="slate">spaceport</td><td>T6</td><td class="right">−3 000</td><td>—</td><td class="v">✓ :2156-2164</td></tr>
+          <tr><td class="slate">mercury_well</td><td>T3</td><td class="right">−80</td><td>dead — see §7</td><td class="v">✓ :3310-3322</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top:18px"><strong>Single-island peak T4-T5 demand.</strong>
+        Spaceport 3 000 + Particle 1 500 + Quantum 1 500 + Cryo 1 200 + Pyroforge 800 = 8 000 W.
+        A single Tidal Array (Coast) or Sunspire (Desert) covers this with ample margin.
+        A pure Plains player (no Coast, no Desert, no Volcanic) has only Fusion Core (5 kW)
+        as a T4 producer and would need 2× Fusion + storage buffers to ride peak draws. So the
+        constraint is again biome access — see §6.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="chains">
+      <div class="sec-head"><span class="num">§3</span><h2>End-to-end production chains</h2></div>
+
+      <div class="diagram-wrap">
+        <div class="diagram-cap">Steel chain — cycleSec values verified from recipes.ts</div>
+        <svg viewBox="0 0 880 130" role="img" aria-label="Steel chain">
+          <g transform="translate(20,16)">
+            <g font-family="ui-monospace,monospace" font-size="11">
+              <rect x="0"   y="20" width="120" height="44" rx="8" fill="#252420" stroke="#3A3833"/>
+              <text x="60" y="38" text-anchor="middle" fill="#F5F3EC">iron_ore</text>
+              <text x="60" y="56" text-anchor="middle" fill="#8F8D82">Mine · 17 s</text>
+
+              <rect x="160" y="20" width="120" height="44" rx="8" fill="#252420" stroke="#3A3833"/>
+              <text x="220" y="38" text-anchor="middle" fill="#F5F3EC">iron_ingot</text>
+              <text x="220" y="56" text-anchor="middle" fill="#8F8D82">Smelter · 27 s</text>
+
+              <rect x="320" y="20" width="120" height="44" rx="8" fill="#252420" stroke="#3A3833"/>
+              <text x="380" y="38" text-anchor="middle" fill="#F5F3EC">coke</text>
+              <text x="380" y="56" text-anchor="middle" fill="#E0B47F">Coke Oven · 133 s</text>
+
+              <rect x="480" y="20" width="120" height="44" rx="8" fill="#252420" stroke="#3A3833"/>
+              <text x="540" y="38" text-anchor="middle" fill="#F5F3EC">pig_iron</text>
+              <text x="540" y="56" text-anchor="middle" fill="#E0B47F">Blast Furnace · 160 s</text>
+
+              <rect x="640" y="20" width="120" height="44" rx="8" fill="#252420" stroke="#3A3833"/>
+              <text x="700" y="38" text-anchor="middle" fill="#F5F3EC">steel + slag</text>
+              <text x="700" y="56" text-anchor="middle" fill="#E0B47F">Steel Mill · 200 s</text>
+            </g>
+            <g stroke="#D97757" stroke-width="1.5" fill="none">
+              <path d="M120 42 L160 42" marker-end="url(#arr)"/>
+              <path d="M280 42 L320 42" marker-end="url(#arr)"/>
+              <path d="M440 42 L480 42" marker-end="url(#arr)"/>
+              <path d="M600 42 L640 42" marker-end="url(#arr)"/>
+            </g>
+            <defs>
+              <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0,0 L8,4 L0,8 z" fill="#D97757"/>
+              </marker>
+            </defs>
+          </g>
+        </svg>
+      </div>
+
+      <p class="body"><span class="vbadge v">verified</span> coke_oven cycleSec=133
+        <a class="cite">recipes.ts:1418-1422</a>; blast_furnace cycleSec=160
+        <a class="cite">:1424-1428</a>; steel_mill cycleSec=200
+        <a class="cite">:1430-1434</a>. Inline comments at all three explain the
+        "step #19 ×40 for idle-game scale; 2026-05-18 ÷3 for display visibility" rebalance.</p>
+
+      <p class="body"><strong>Slag balance is 5 : 1 (Steel Mills feed Reprocessor).</strong>
+        Steel Mill emits {steel:1, slag:1} per 200 s = 0.005 slag/s; Slag Reprocessor consumes
+        {slag:10} per 400 s = 0.025 slag/s. Five Steel Mills feed one Reprocessor at equilibrium.
+        <a class="cite">recipes.ts:1430-1475</a>
+        <span class="vbadge v">verified</span></p>
+
+      <p class="body"><strong>Endgame chain depths.</strong> Reality Anchor:
+        <code>4× ai_core + antimatter_capsule + time_crystal + exotic_alloy</code> at
+        <code>cycleSec=28800</code> (8 h). Genesis Cell:
+        <code>4× reality_anchor + zero_point_flux + 2× causal_regulator + memetic_core</code> at
+        <code>cycleSec=28800</code>. <span class="vbadge v">verified</span>
+        <a class="cite">recipes.ts:2084-2088, 2738-2742</a></p>
+
+      <p class="body"><strong>AI Core recipe</strong> <span class="vbadge v">verified</span>:
+        <code>{ steel: 3, quantum_chip: 1, argon: 1 } → ai_core</code> at the cryogenic compute
+        center. <a class="cite">recipes.ts:1544-1545</a>
+        <strong>Exotic Alloy recipe</strong> <span class="vbadge v">verified</span>:
+        <code>{ steel: 5, helium_3: 1 } → exotic_alloy</code> at the pyroforge.
+        <a class="cite">recipes.ts:1532-1533</a></p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="saltwater">
+      <div class="sec-head"><span class="num">§4</span><h2>Recent change — saltwater-cell battery bootstrap</h2></div>
+      <p class="sec-intro">Commits <code>e45cd60</code>, <code>f825ba8</code>. Chain is coherent.
+        v1 had two errors (wire source, cell_press tier); both corrected.</p>
+
+      <p class="body"><strong>cell_press recipe</strong> <span class="vbadge v">verified</span>
+        <a class="cite">recipes.ts:1380-1384</a>: <code>cycleSec=40</code>, inputs
+        <code>{ saltwater: 1, iron_ingot: 1, wire: 1 }</code>, output
+        <code>{ saltwater_cell: 1 }</code>, category <code>manufacturing</code>.</p>
+
+      <p class="body"><strong>cell_press building is T1</strong>
+        <span class="vbadge x">corrected</span> <a class="cite">building-defs.ts:679-689</a>:
+        <code>tier: 1</code>, single-tile, 20 W draw, placement cost 20 stone + 10 wood. No
+        <code>requiredTile</code>, no <code>requiresHeat</code> — placeable anywhere on grass.
+        (v1 said T2; it's a T1 building that produces a T2 component.)</p>
+
+      <p class="body"><strong>battery_bank placement cost</strong>
+        <span class="vbadge v">verified</span> <a class="cite">building-defs.ts:867</a>:
+        <code>{ saltwater_cell: 4, wire: 3, steel_beam: 1 }</code>. No lithium. Inline comment
+        on line 863: "rerouted off the T3 lithium chain so the T2 battery is craftable from
+        home Plains."</p>
+
+      <p class="body"><strong>Wire actually comes from steel</strong>
+        <span class="vbadge x">corrected</span> <a class="cite">recipes.ts:2546-2550</a>:
+        Metal Rolling Mill <code>{ steel: 1 } → { wire: 1 }</code> at
+        <code>cycleSec=133</code>. Cable Drawer goes wire×3 → heavy_cable (opposite direction;
+        v1 had this backwards). So the full chain to place one <code>battery_bank</code>:</p>
+      <ul class="body">
+        <li>coal + iron_ore → smelter → iron_ingot</li>
+        <li>iron_ingot + coke → blast_furnace → pig_iron</li>
+        <li>pig_iron → steel_mill → steel</li>
+        <li>steel → metal_rolling_mill → wire</li>
+        <li>saltwater + iron_ingot + wire → cell_press → saltwater_cell ×4</li>
+        <li>+ wire ×3 + steel_beam ×1 → battery_bank placed</li>
+      </ul>
+
+      <p class="body"><strong>The bootstrap is real but transitive.</strong> "Bootstrap" here
+        means "off the T3 lithium chain," not "before steel." Plains player still needs full
+        steel chain before the first overnight buffer is placeable. The Cell Press building
+        itself being T1 means a player can build the press as soon as they have 20 stone + 10
+        wood; they just can't run a useful recipe until wire shows up.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="endgame">
+      <div class="sec-head"><span class="num">§5</span><h2>Endgame time-gates</h2></div>
+      <p class="sec-intro">All four artifacts re-verified by direct read.</p>
+
+      <table class="tbl">
+        <thead><tr><th>Artifact</th><th>Cycle</th><th>Recipe</th><th>Minimum serial wall-clock</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">reality_anchor</td>
+            <td class="mono">8 h</td>
+            <td>4× ai_core + antimatter_capsule + time_crystal + exotic_alloy</td>
+            <td class="right">~32 h (4 ai_core in series + 1 forge cycle)</td>
+          </tr>
+          <tr>
+            <td class="slate">genesis_cell</td>
+            <td class="mono">8 h</td>
+            <td>4× reality_anchor + zero_point_flux + 2× causal_regulator + memetic_core</td>
+            <td class="right">~128 h (4 anchors + 1 forge cycle)</td>
+          </tr>
+          <tr>
+            <td class="slate">60 skill crystals (full set)</td>
+            <td class="mono">2 min ea.</td>
+            <td>Σ requires 1+2+4=7 reality_anchor per family × 20 families = 140 anchors</td>
+            <td class="right">~1 120 h ≈ 47 real-time days serial</td>
+          </tr>
+          <tr>
+            <td class="slate">ascendant_core (T6 gate)</td>
+            <td class="mono">—</td>
+            <td>via ascendant_assembly (recipe exists; full inputs unverified in this pass)</td>
+            <td class="right">prereq for any satellite launch</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top:18px"><strong>Crystal recipe spread
+        <span class="vbadge v">verified</span></strong>: each family has T1/T2/T3 variants
+        consuming 1/2/4 reality_anchor respectively, plus tier-appropriate co-inputs (T1: iron_ore
+        ×100 + microchip ×4 ; T2: steel ×50 + microchip ×8 ; T3: exotic_alloy or ai_core ×N + ai_core
+        ×2 + reality_anchor ×4). 60 recipes total (20 families × 3 tiers) confirmed by
+        <code>grep -cE "^  skill_forge" recipes.ts</code>. <a class="cite">recipes.ts:1639-1958</a></p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="biome">
+      <div class="sec-head"><span class="num">§6</span><h2>Biome-locked single sources</h2></div>
+      <p class="sec-intro">Re-verified. Risk holds.</p>
+
+      <table class="tbl">
+        <thead><tr><th>Resource</th><th>Producer</th><th>Biome</th><th>Downstream</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">exotic_alloy</td>
+            <td class="mono">pyroforge</td>
+            <td><span class="badge red">Volcanic</span></td>
+            <td>Reality Anchor, every T5+ exotic_alloy recipe</td>
+          </tr>
+          <tr>
+            <td class="slate">ai_core</td>
+            <td class="mono">cryogenic_compute_center</td>
+            <td><span class="badge red">Arctic</span></td>
+            <td>Reality Anchor (×4), T3 skill crystals, T5+ AI recipes</td>
+          </tr>
+          <tr>
+            <td class="slate">helium_3</td>
+            <td class="mono">helium vent (rare-tile mine)</td>
+            <td><span class="badge amber">Volcanic + rare</span></td>
+            <td>Fusion Core fuel, Pyroforge, Quantum Manipulator (time_crystal)</td>
+          </tr>
+          <tr>
+            <td class="slate">Peak T4-T5 power (≥10 kW)</td>
+            <td class="mono">tidal_array or sunspire</td>
+            <td><span class="badge amber">Coast or Desert</span></td>
+            <td>Otherwise need 2+ fusion_core (helium_3 scarcity worsens biome dep)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top:18px"><strong>Concern.</strong> World-gen guarantee
+        on Volcanic + Arctic + Coast (or Desert) presence in the home network was NOT verified
+        in this pass — <code>world-gen.ts</code> not read. Worth verifying.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="dead">
+      <div class="sec-head"><span class="num">§7</span><h2>Dead & narrow resources</h2></div>
+      <p class="sec-intro">Mercury is verified dead. Diamond_ore is narrow-but-intentional.</p>
+
+      <table class="tbl">
+        <thead><tr><th>Resource</th><th>Producer</th><th>Consumers found</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">mercury</td>
+            <td class="mono">mercury_well (cycleSec=67, 80 W)</td>
+            <td><strong style="color:var(--rust)">zero</strong></td>
+            <td><span class="badge red">dead</span> <span class="vbadge v">verified by tree-wide grep</span></td>
+          </tr>
+          <tr>
+            <td class="slate">diamond_ore</td>
+            <td class="mono">diamond_quarry</td>
+            <td>1 — skill_forge_drilling_t3 (20× per T3 drilling crystal)</td>
+            <td><span class="badge amber">narrow</span> pure crystal input; intentional</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top:18px"><strong>Mercury verification trail.</strong>
+        Tree-wide grep across <code>src/</code> for <code>mercury</code> finds only:
+        (a) tile type in <code>island.ts:53,102</code>, (b) biome rare-terrain in
+        <code>biomes.ts:107,116</code>, (c) terrain-modifier target
+        <code>terrain-modifier.ts:101,140</code>, (d) building def at
+        <code>building-defs.ts:3310-3322</code>, (e) xp_weight at <code>recipes.ts:946</code>,
+        (f) <code>mercury_well</code> output at <code>recipes.ts:2944-2947</code>. Zero
+        <code>inputs:</code> entries reference mercury anywhere.</p>
+
+      <p class="body"><strong>Severity = LOW.</strong> mercury_well placement cost is
+        <code>{ stone: 80, iron_ingot: 25, wood: 10 }</code> — cheap T0/T1. Player loses placement
+        + 80 W of upkeep for an unusable trickle. No rare materials burned, no chain blocked.
+        Fix is to add a consumer (chemistry / thermometer / amalgamation of gold_ore) or
+        remove <code>mercury_well</code> from the catalog.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="skilltree">
+      <div class="sec-head"><span class="num">§8</span><h2>Skill tree — partially verified</h2></div>
+      <p class="sec-intro">Engine math sanity-checks via direct read of the derivation module.
+        Node-count claim from the sub-agent could not be independently reproduced.</p>
+
+      <p class="body"><strong>Verified.</strong>
+        <span class="vbadge v">verified</span> 71 archetypes in
+        <code>skilltree-archetypes.ts</code>, all using <code>growth: 1.10</code> (the 72nd
+        grep hit was the TypeScript type annotation, not an archetype).
+        <span class="vbadge v">verified</span> SP grant
+        <code>skillPointsForLevelUp(L) = max(1, floor(1.031^L))</code>
+        <a class="cite">skilltree.ts:367-369</a>. Inline comment confirms: L1-L22 grants 1 SP,
+        ticks to 2 at L23, 4 at L50, 8 at L70, 21 at L100; ~874 cumulative at L111 (one full
+        sub-path), ~2 881 at L148 (full catalog). Cost per depth = <code>round(1.5^(depth-1))</code>
+        <a class="cite">skilltree.ts:353-355</a>.</p>
+
+      <p class="body"><strong>v13→v14 reset</strong> <span class="vbadge v">verified</span>
+        <a class="cite">persistence.ts:413-436</a>: resets <code>level=1, xp=0,
+        unspentSkillPoints=0, unlockedNodes=[], unlockedEdges=[], socketBindings=[]</code>;
+        preserves everything else. Rationale per inline comment: "rebalance reshapes per-node
+        magnitudes; previously-spent SP no longer matches the new cap calculus, so a fresh
+        allocation is the cleanest fix."</p>
+
+      <p class="body"><strong>Crystals — reconciled.</strong> One sub-agent reported "no drop
+        mechanics wired." Direct read shows 60 craftable Skill Forge recipes (lines 1639-1958),
+        all gated on <code>reality_anchor</code>. The first claim was wrong; crystals exist as
+        recipe outputs. Acquisition path is "build a T5 chain first." See §5.</p>
+
+      <p class="body"><strong>Node count — UNRESOLVED.</strong> Sub-agent claimed 553 total
+        (442 filler + 81 notable + 30 keystone). My independent partial count:
+        <span class="vbadge u">unverified</span> sum of <code>count:</code> fields across 71
+        archetypes = 248 generated fillers; <code>grep -cE "^\s+id: '" skilltree-catalog.ts</code>
+        = 111 hand-curated id references. Partial total 359 ≠ 553. Difference may be in
+        crystal mini-tree nodes (each crystal contributes 2–5 nodes per the sub-agent's
+        description) — not verified.</p>
+
+      <p class="body"><strong>Skill-tree → economy coupling</strong>
+        <span class="vbadge u">unverified</span>: the sub-agent reported call sites at
+        <code>economy.ts:55, 381, 948, 1164, 1351, 1593, 1644</code> for
+        <code>effectiveSkillMultipliers</code>. Not personally re-read; the test suite passes
+        so the wiring is plausible but I cannot vouch for each line.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="mechanics">
+      <div class="sec-head"><span class="num">§9</span><h2>Mechanic constants — verified inventory</h2></div>
+      <p class="sec-intro">Every entry below was re-read directly. Numbers that came from
+        sub-agent paraphrase are flagged.</p>
+
+      <table class="tbl">
+        <thead><tr><th>Subsystem</th><th>Constant</th><th>Value</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Adjacency</td><td>Mine same-def buff</td><td class="mono">+10% × ≤2</td><td class="v">✓ building-defs.ts:638-640</td></tr>
+          <tr><td class="slate">Adjacency</td><td>Workshop same-def buff</td><td class="mono">+5% × ≤3</td><td class="v">✓ :672-674</td></tr>
+          <tr><td class="slate">Adjacency</td><td>Smelter same-def buff</td><td class="mono">+10% × ≤2</td><td class="v">✓ :787</td></tr>
+          <tr><td class="slate">Adjacency</td><td>Total buildings with buffs</td><td class="mono">3 of 240</td><td class="v">✓ grep adjacencyBuffs:</td></tr>
+          <tr><td class="slate">Weather</td><td>States</td><td class="mono">clear · light_fog · storm · severe_storm · catastrophic</td><td class="v">✓ weather.ts:13</td></tr>
+          <tr><td class="slate">Weather</td><td>Destruction chance per state</td><td class="mono">0 / 0 / 0.02 / 0.08 / 0.20</td><td class="v">✓ :21-27</td></tr>
+          <tr><td class="slate">Weather</td><td>Route loss rate per state</td><td class="mono">0 / 0 / 0.05 / 0.15 / 0.30</td><td class="v">✓ :37-43</td></tr>
+          <tr><td class="slate">Weather</td><td>Route capacity mul per state</td><td class="mono">1 / 1 / 0.5 / 0.1 / 0</td><td class="v">✓ :45-51</td></tr>
+          <tr><td class="slate">Weather</td><td>Scan penalty per state</td><td class="mono">0 / 0.50 / 0.25 / 0.75 / 1.0</td><td class="v">✓ :29-35</td></tr>
+          <tr><td class="slate">Weather</td><td>Dwell range</td><td class="mono">30 min – 4 h</td><td class="v">✓ :53-54</td></tr>
+          <tr><td class="slate">Drones</td><td>Fuel efficiency by tier</td><td class="mono">T1:3 · T2:6 · T3:9 · T4:12 · T5:15 · T6:18 (path T5:8)</td><td class="v">✓ drones.ts:88-89,108</td></tr>
+          <tr><td class="slate">Drones</td><td>Speed (T1-T4, T6)</td><td class="mono">0.5 t/s · path T5:0.8</td><td class="v">✓ :91,109</td></tr>
+          <tr><td class="slate">Drones</td><td>Scan radius by tier</td><td class="mono">T1:2 T2:4 T3:8 T4:0(pulse) T5:12 T6:16</td><td class="v">✓ :95-102</td></tr>
+          <tr><td class="slate">Drones</td><td>Weather vuln multiplier</td><td class="mono">T1:1.5 T2:1.0 T3:0.7 T4:0.5 T5:0.5 T6:0.2</td><td class="v">✓ :113-120</td></tr>
+          <tr><td class="slate">Drones</td><td>T4 pulse radius / fuel</td><td class="mono">48 t / 10 cryo_hydrogen</td><td class="v">✓ :170-171</td></tr>
+          <tr><td class="slate">Drones</td><td>Fuel limits (min / max per drone)</td><td class="mono">10 / 50</td><td class="v">✓ :127-128</td></tr>
+          <tr><td class="slate">Network</td><td>Milestone thresholds / buffs</td><td class="mono">3:×1.05 · 5:×1.10 · 10:×1.25 · 20:×1.25 (Lattice)</td><td class="v">✓ nc.ts:51-56</td></tr>
+          <tr><td class="slate">Network</td><td>Lattice activation threshold</td><td class="mono">20 (LATTICE_ACTIVATION_THRESHOLD)</td><td class="v">✓ constants.ts:27</td></tr>
+          <tr><td class="slate">Orbital</td><td>Launch success T1 / T2 / T3+ (cap)</td><td class="mono">0.30 / 0.50 / 0.70 (cap 0.99)</td><td class="v">✓ orbital.ts:276-279</td></tr>
+          <tr><td class="slate">Orbital</td><td>Fuel per launch tile</td><td class="mono">0.05</td><td class="v">✓ :147</td></tr>
+          <tr><td class="slate">Orbital</td><td>Sat move speed / failure rate</td><td class="mono">5 t/s · 0.02</td><td class="v">✓ :148-149</td></tr>
+          <tr><td class="slate">Orbital</td><td>Mirror Sat peak boost · r_half</td><td class="mono">0.7 · 200 t</td><td class="v">✓ :38-46</td></tr>
+          <tr><td class="slate">Orbital</td><td>Debris constants</td><td class="mono">hit:0.0005 · lodge:0.9 · lodgeMag:0.05 · explFrag:20 · destrFrag:10</td><td class="v">✓ :134-138</td></tr>
+          <tr><td class="slate">Orbital</td><td>Sat buffer cap (pre-skill)</td><td class="mono">100</td><td class="v">✓ :19</td></tr>
+          <tr><td class="slate">Orbital</td><td>Sweeper clean rate</td><td class="mono">0.1 fragments/s/Sweeper</td><td class="v">✓ :158</td></tr>
+          <tr><td class="slate">Maintenance</td><td>Threshold by tier (T1-T6)</td><td class="mono">12 / 16 / 20 / 24 / 24 / 24 h</td><td class="v">✓ maintenance.ts:36-45</td></tr>
+          <tr><td class="slate">Maintenance</td><td>Degrade ramp duration / floor</td><td class="mono">4 h linear 1.0→0.5; floors at 0.5</td><td class="v">✓ :50,85-98</td></tr>
+          <tr><td class="slate">Maintenance</td><td>T1 / T2 / T3 recipe</td><td class="mono">{lub:2,bolt:5} / {lub:3,bearing:5} / {lub:5,e_motor:1,cap:1}</td><td class="v">✓ :57-71</td></tr>
+          <tr><td class="slate">Maintenance</td><td>T4 / T5 / T6 recipe</td><td class="mono">{lub:10,exotic:1,microchip:1} / {lub:15,phase_conv:1,eldritch:1} / {lub:25,reality_anchor:1,memetic:1}</td><td class="v">✓ :67-70</td></tr>
+          <tr><td class="slate">Routes</td><td>T1 cargo speed / capacity</td><td class="mono">1 t/s · 0.5 u/s</td><td class="v">✓ routes.ts:115,130</td></tr>
+          <tr><td class="slate">Routes</td><td>Drone / Airship cargo capacity</td><td class="mono">1.0 / 2.0 u/s</td><td class="v">✓ :137,140</td></tr>
+          <tr><td class="slate">Routes</td><td>Mass Driver capacity / speed / diesel</td><td class="mono">10 u/s · 8 t/s · 0.05 diesel/unit</td><td class="v">✓ :134,143,155</td></tr>
+          <tr><td class="slate">Routes</td><td>Teleporter capacity / fuel</td><td class="mono">5.0 u/s · 0.005 fuel/tile</td><td class="v">✓ :145,126</td></tr>
+          <tr><td class="slate">Routes</td><td>Funneling bonus / tier cap</td><td class="mono">+50% · zeros at L15 (T3)</td><td class="v">✓ :158,163</td></tr>
+          <tr><td class="slate">Settlement</td><td>Ship speed / tilesPerFuel (T1-T4)</td><td class="mono">0.25 / 0.30 / 0.40 / 0.50 t/s · 0.5 / 2 / 3.5 / 5 t/fuel</td><td class="v">✓ settlement.ts:119-124</td></tr>
+          <tr><td class="slate">Settlement</td><td>Heli speed / tilesPerFuel (T1-T4)</td><td class="mono">0.55 / 0.75 / 0.95 / 1.20 t/s · 0.4 / 0.5 / 1.5 / 2.5 t/fuel</td><td class="v">✓ :126-131</td></tr>
+          <tr><td class="slate">Settlement</td><td>Free skill points on settle T3/T4</td><td class="mono">4 / 6</td><td class="v">✓ :303-307</td></tr>
+          <tr><td class="slate">Lighthouse</td><td>Vision radii T1-T6</td><td class="mono">50 · 80 · 120 · 160 · 220 · 300 t</td><td class="v">✓ lighthouse.ts:37-44</td></tr>
+          <tr><td class="slate">Daynight</td><td>Day duration</td><td class="mono">24 real h</td><td class="v">✓ daynight.ts:27</td></tr>
+          <tr><td class="slate">Daynight</td><td>Solar curve</td><td class="mono">dawn 0→1 linear · day 1.0 · dusk 1→0 · night 0</td><td class="v">✓ :45-97</td></tr>
+          <tr><td class="slate">Daynight</td><td>Ramp sub-segments</td><td class="mono">8 (matches MAINTENANCE_RAMP_SEGMENTS)</td><td class="v">✓ :73</td></tr>
+          <tr><td class="slate">Reactor toxicity</td><td>Probability · duration · mul</td><td class="mono">5%/h · 1 h · ×0.5</td><td class="v">✓ reactor-toxicity.ts:14-16,47</td></tr>
+          <tr><td class="slate">Tier-reset</td><td>Cost · cooldown · floor</td><td class="mono">steel = L² · gear = ⌊L²/2⌋ · 24 h · only at L≥15 (T3+)</td><td class="v">✓ tier-reset.ts:45,67-69,95-108</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="testgaps">
+      <div class="sec-head"><span class="num">§10</span><h2>Test coverage gaps</h2></div>
+      <p class="sec-intro">2 193 tests pass; this list is what they do NOT currently assert.</p>
+
+      <p class="body"><code>balance.test.ts</code> validates: XP curve monotonicity, L5/L50
+        breakpoint reachability, catalog completeness, no phantom I/O, no empty buildings,
+        xp-weight tier ordering by spot-check. <span class="vbadge u">unverified</span>
+        (sub-agent claim; not re-read this pass).</p>
+
+      <p class="body"><strong>Gaps that matter:</strong></p>
+      <ul class="body">
+        <li><strong>Throughput-rate invariants.</strong> No test that "Slag Reprocessor demand
+          ≤ N × Steel Mill supply." A cycleSec tweak can silently invert a chain ratio.</li>
+        <li><strong>Power balance.</strong> No test that representative T2 / T4 builds power
+          themselves under canonical layouts.</li>
+        <li><strong>Cap pressure.</strong> No test that inventory caps absorb at least one
+          full cycle of upstream output.</li>
+        <li><strong>Dead-resource detector.</strong> Would have caught <code>mercury</code> at
+          PR time. ~30 LOC, obvious win.</li>
+        <li><strong>Biome-lock reachability.</strong> No test that endgame chains are reachable
+          from a typical world-gen seed.</li>
+        <li><strong>Maintenance self-recovery.</strong> No test that a degraded subgraph lifts
+          from ×0.5 when materials return.</li>
+        <li><strong>Reactor toxicity penalty observation.</strong> The deterministic roll is
+          tested but no test asserts that the toxicityMultiplier actually multiplies into
+          economy.ts effective rates. (Suspected: yes; not verified this pass.)</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="physics">
+      <div class="sec-head"><span class="num">§12</span><h2>Literal physics — thermodynamics, drag, optics, energy conservation</h2></div>
+      <p class="sec-intro">User clarified "physics" means actual physics, not simulation balance.
+        Findings below: what the implementation does vs what real physics expects, and where the
+        gap is acknowledged in code comments vs silently fudged.</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">12.1 Mass & energy conservation in the integrator</h3>
+      <p class="body">The <code>§15.3</code> piecewise-constant-rate integrator
+        (<a class="cite">economy.ts</a>) is mass-conserving by design: per-segment rates are
+        capped by <code>inputAvail</code> (input shortage) and <code>outputAvail</code> (cap headroom),
+        and the next-event finder enumerates depletion + saturation crossings before each
+        segment. <span class="vbadge v">verified</span> A 24-hour offline catchup reuses the same
+        loop as a 16 ms frame — deterministic and identical results.</p>
+      <p class="body">Within recipes, mass conservation is NOT enforced — the catalog declares
+        whatever input/output ratios it wants (see §13 for stoichiometry violations). The
+        integrator faithfully executes whatever the catalog says.</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">12.2 Heat is unmetered N:1 adjacency — free energy by design</h3>
+      <p class="body"><span class="vbadge v">verified</span>
+        <a class="cite">heat.ts:1-7</a> says it explicitly: <em>"A single source serves any
+        number of adjacent consumers; the source's fuel consumption (if any) multiplies by
+        the count of consumers it serves."</em> Plasma Heater (200 W consumer, free heat source)
+        can serve 1, 4, or 40 adjacent Coke Ovens (each needing 60 W of "heat") at zero
+        incremental cost. Each consumer just needs an adjacent source — no thermal flux
+        accounting.</p>
+      <p class="body"><strong>Physically:</strong> energy conservation violated. A 200 W heater
+        radiating into N consumers needing 60 W each cannot supply more than 200/60 ≈ 3
+        consumers at thermodynamic break-even. The game allows unlimited. <strong>Design intent:</strong>
+        heat is a gameplay GATE (adjacency check), not a resource — comments make this
+        explicit. Players reasoning in joules will notice; reasoning in "is there a furnace
+        next to my forge" works.</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">12.3 Power-output realism vs real-world scales</h3>
+      <table class="tbl">
+        <thead><tr><th>Building</th><th>Game output</th><th>Per-tile area</th><th>Real reference</th><th>Plausibility</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">solar_panel</td><td class="mono">50 W</td><td>1 tile</td><td>~200 W/m² typical PV at 20% eff</td><td class="u">depends on m/tile (unset)</td></tr>
+          <tr><td class="slate">wind_turbine</td><td class="mono">40 W base, ×1.5 high_wind</td><td>1 tile</td><td>P ∝ v³</td><td class="u">linear scaling is approx</td></tr>
+          <tr><td class="slate">coal_gen</td><td class="mono">100 W; 1 coal / 2 s</td><td>2×2</td><td>coal ≈ 25 MJ/kg, ~35% Carnot</td><td class="x">if "1 coal" ≈ 1 kg → 12.5 MW thermal in, 100 W out = 0.0008% eff. Units undefined; not internally calibrated.</td></tr>
+          <tr><td class="slate">biomass_plant</td><td class="mono">80 W; 1 wood / 2 s</td><td>2×2</td><td>wood ≈ 15 MJ/kg</td><td class="x">wood produces ~same power as coal despite lower energy density</td></tr>
+          <tr><td class="slate">geothermal_vent</td><td class="mono">+200 W, no fuel</td><td>2×2</td><td>geothermal IS free; mantle heat</td><td class="v">conservation OK (planetary heat reservoir)</td></tr>
+          <tr><td class="slate">nuclear_reactor</td><td class="mono">2 000 W</td><td>4×4</td><td>real LWR ~1 GW</td><td class="u">extreme down-scaling, but every building is "small modular" in this game</td></tr>
+          <tr><td class="slate">fusion_core</td><td class="mono">5 000 W</td><td>4×4; consumes helium_3</td><td>ITER target ~3 GW electrical</td><td class="x"><strong>backwards:</strong> game-fusion is 10× weaker than game-tidal</td></tr>
+          <tr><td class="slate">tidal_array</td><td class="mono">50 000 W (50 MW)</td><td>3×3 Coast</td><td>Rance barrage 240 MW over ~750 m</td><td class="x">huge per-tile but acceptable as game-unique biome power</td></tr>
+          <tr><td class="slate">sunspire</td><td class="mono">60 000 W (60 MW)</td><td>3×3 Desert</td><td>real CSP 100 MW ≈ 1 km²</td><td class="x">3 000×–30 000× real per area</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top:14px"><strong>The fusion-vs-tidal inversion is the
+        clearest narrative issue.</strong> A T4 fusion reactor producing 1/10th of a T4 tidal
+        turbine breaks the "fusion = future ultimate energy" trope every player imports from
+        outside the game. Likely a balance tuning artifact (tidal got the late buff, fusion
+        kept its original wattage).</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">12.4 Vehicle drag inversion — faster AND more efficient</h3>
+      <p class="body">Real-world cruise drag goes as v²; cruise power goes as v³. So faster vehicles
+        should burn fuel faster per unit distance. The game inverts this:</p>
+      <table class="tbl">
+        <thead><tr><th>Vehicle / Tier</th><th>Speed (t/s)</th><th>Tiles per fuel</th><th>Ratio</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Ship T1</td><td class="right">0.25</td><td class="right">0.5</td><td class="right">2.0</td></tr>
+          <tr><td class="slate">Ship T2</td><td class="right">0.30</td><td class="right">2.0</td><td class="right">6.7</td></tr>
+          <tr><td class="slate">Ship T3</td><td class="right">0.40</td><td class="right">3.5</td><td class="right">8.75</td></tr>
+          <tr><td class="slate">Ship T4</td><td class="right">0.50</td><td class="right">5.0</td><td class="right">10.0</td></tr>
+          <tr><td class="slate">Heli T1</td><td class="right">0.55</td><td class="right">0.4</td><td class="right">0.73</td></tr>
+          <tr><td class="slate">Heli T2</td><td class="right">0.75</td><td class="right">0.5</td><td class="right">0.67</td></tr>
+          <tr><td class="slate">Heli T3</td><td class="right">0.95</td><td class="right">1.5</td><td class="right">1.58</td></tr>
+          <tr><td class="slate">Heli T4</td><td class="right">1.20</td><td class="right">2.5</td><td class="right">2.08</td></tr>
+          <tr><td class="slate">Drone T1</td><td class="right">0.5</td><td class="right">3</td><td class="right">6.0</td></tr>
+          <tr><td class="slate">Drone T6</td><td class="right">0.5</td><td class="right">18</td><td class="right">36.0</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top:14px"><span class="vbadge v">verified</span>
+        <a class="cite">settlement.ts:119-131</a>, <a class="cite">drones.ts:88-90</a>. Ships
+        T1→T4: 2× faster AND 10× more efficient. Helicopters T1→T4: 2.2× faster AND 6.25× more
+        efficient. Drones at least keep speed constant (0.5 t/s for T1-T4+T6) so the efficiency
+        ramp doesn't violate drag — just claims "better engines." Ships and helicopters claim
+        both speed AND efficiency improvement, which is physically impossible under cruise drag
+        without massive aerodynamic redesigns at each tier (which the spec doesn't mention).</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">12.5 Solar curve — 50% capacity factor, real is 15–25%</h3>
+      <p class="body"><span class="vbadge v">verified</span> Solar curve is dawn 0→1 linear over
+        6 h, day 1.0 over 6 h, dusk 1→0 linear over 6 h, night 0 over 6 h. Integral over 24 h
+        = 0.5 × 6 + 1.0 × 6 + 0.5 × 6 + 0 × 6 = 12 effective full-power hours of 24 = <strong>
+        50% capacity factor</strong>. Real solar: best US sites ~25%, US average ~15%. Game
+        over-produces by 2-3× vs reality.</p>
+      <p class="body">Defensible as gameplay simplification ("idle-game-friendly solar"), but
+        labels the player's solar arrays as systematically richer than real arrays of the same
+        nameplate W.</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">12.6 Signal / vision propagation — simple circles, no inverse-square</h3>
+      <p class="body"><span class="vbadge v">verified</span> Lighthouse vision and Antenna signal
+        ranges are simple discs (Euclidean point-in-circle test). No inverse-square attenuation,
+        no line-of-sight, no atmospheric/oceanic loss. Lighthouse radii T1-T6 = 50 / 80 / 120 /
+        160 / 220 / 300 tiles; antenna radii T1-T6 = 80 / 140 / 220 / 320 / 480 / 700 tiles.
+        Sonar buoy = 4 cells = 64 tiles world-space. <a class="cite">lighthouse.ts:37-44; antenna.ts:23-29; sonar-buoy.ts:38</a>
+        Acceptable gameplay simplification.</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">12.7 Orbital mechanics — handwaved, not modeled</h3>
+      <p class="body">Sat fuel = <code>0.05 × distance(tiles)</code>, uniform regardless of sat
+        mass (real Δv ∝ ln(mass_ratio)). Launch success T1/T2/T3+ = 30/50/70 % capped at 99 %
+        (real modern launches &gt; 95 %). Mirror Sat Lorentzian peak boost 0.7 at r_half = 200 t
+        (locked per spec; real optics would be multiplicative not additive). Debris hit constant
+        0.0005 / tile (intentionally deadly for orbital drama). All explicitly placeholder /
+        gameplay-tuned, not physics claims. <span class="vbadge v">verified</span></p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="chemistry">
+      <div class="sec-head"><span class="num">§13</span><h2>Chemistry — stoichiometry, mass balance, electrochemistry</h2></div>
+      <p class="sec-intro">For each chemistry-flavoured recipe, mass-balance against the
+        real reaction. Many simplifications are inline-commented; a few are silent.</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">13.1 Smelting mass balance</h3>
+      <table class="tbl">
+        <thead><tr><th>Recipe</th><th>Game</th><th>Real expectation</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">smelter</td><td class="mono">1 iron_ore + 1 coal → 1 iron_ingot</td><td>Fe₂O₃ + C → Fe + CO₂; ~2 kg ore + ~0.5 kg C → ~1 kg Fe + slag + CO₂</td><td class="u">slag + CO₂ erased; mass-conserving on paper</td></tr>
+          <tr><td class="slate">coke_oven</td><td class="mono">1 coal → 1 coke (cycleSec 133)</td><td>pyrolysis loses ~30% mass as volatiles (tar, NH₃, light oils)</td><td class="u">volatiles erased; OK as game shortcut</td></tr>
+          <tr><td class="slate">blast_furnace</td><td class="mono">1 iron_ingot + 1 coke → 1 pig_iron</td><td>real BF reduces ORE (not ingot) with coke + limestone flux</td><td class="u">acknowledged refining shortcut; comment notes "spec asymmetry"</td></tr>
+          <tr><td class="slate">steel_mill</td><td class="mono">1 pig_iron → 1 steel + 1 slag</td><td>BOF: ~95-98 % steel, ~2-5 % slag, with O₂ as input</td><td class="x">slag ratio off by ~20×; O₂ unaccounted</td></tr>
+          <tr><td class="slate">oxygen_converter</td><td class="mono">1 pig_iron + 1 scrap + 2 oxygen → 2 steel</td><td>BOF: O₂ oxidises C/Si/P; mass should increase slightly (O incorporated)</td><td class="x">4 units in → 2 units out; net mass loss with oxygen consumed as if reagent</td></tr>
+          <tr><td class="slate">electric_arc_furnace</td><td class="mono">1 pig_iron → 1 steel (no slag)</td><td>real EAF + scrap + lime → steel + slag</td><td class="x">EAF produces no slag in game — inconsistent with steel_mill</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">13.2 Cement / lime / brick / charcoal mass balance</h3>
+      <table class="tbl">
+        <thead><tr><th>Recipe</th><th>Game</th><th>Real expectation</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">limekiln</td><td class="mono">1 limestone → 1 quicklime</td><td>CaCO₃ → CaO + CO₂; loses 44 % mass as CO₂</td><td class="x">CO₂ erased — game mass conserved, real isn't</td></tr>
+          <tr><td class="slate">lime_slaker</td><td class="mono">1 quicklime + 1 water → 1 slaked_lime</td><td>CaO + H₂O → Ca(OH)₂; mass + 30 %</td><td class="u">close enough; rounded</td></tr>
+          <tr><td class="slate">brick_kiln</td><td class="mono">2 clay → 1 brick</td><td>real ~1.2 kg clay → 1 kg brick (water loss ~20 %)</td><td class="x">2:1 too generous (real ~1.2:1)</td></tr>
+          <tr><td class="slate">charcoal_kiln</td><td class="mono">2 wood → 1 charcoal</td><td>real ~5:1 by mass (wood loses water + volatiles)</td><td class="x">2:1 way too generous (real ~5:1)</td></tr>
+          <tr><td class="slate">cement_mill</td><td class="mono">1 quicklime + 1 sand + 1 clay → 1 cement</td><td>Portland cement needs 1450 °C clinker + gypsum</td><td class="u">heat omitted; mass not conserved</td></tr>
+          <tr><td class="slate">concrete_plant</td><td class="mono">1 cement + 2 sand + 1 water → 1 concrete</td><td>real ~5 parts aggregate per 1 cement; water of hydration ~25 %</td><td class="u">4 in → 1 out; "concrete" is treated as high-density unit</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">13.3 Electrolysis & gas separation</h3>
+      <table class="tbl">
+        <thead><tr><th>Recipe</th><th>Game</th><th>Real expectation</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">electrolyzer</td><td class="mono">1 fresh_water → 1 hydrogen + 1 oxygen</td><td>2 H₂O → 2 H₂ + O₂ (molar 2:1)</td><td class="u">1:1 molar instead of 2:1; close enough</td></tr>
+          <tr><td class="slate">chlor_alkali_plant</td><td class="mono">2 saltwater → 1 chlorine + 1 sodium_hydroxide</td><td>2 NaCl + 2 H₂O → Cl₂ + 2 NaOH + <strong>H₂</strong></td><td class="x">missing H₂ byproduct — wasted hydrogen</td></tr>
+          <tr><td class="slate">chemical_reactor</td><td class="mono">1 salt + 2 water → 1 chlorine + 1 sodium_hydroxide</td><td>same; H₂ byproduct missing</td><td class="x">same omission</td></tr>
+          <tr><td class="slate">air_separator</td><td class="mono">∅ → 1 nitrogen + 1 oxygen + 1 argon</td><td>real air: N₂ 78 %, O₂ 21 %, Ar 0.9 %</td><td class="x">1:1:1 vs ~78:21:1 — Ar massively over-produced relative to reality</td></tr>
+          <tr><td class="slate">cell_press</td><td class="mono">1 saltwater + 1 iron_ingot + 1 wire → 1 saltwater_cell</td><td>building a galvanic cell, not running electrolysis</td><td class="v">recipe = component craft; chemistry isn't claimed</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">13.4 Refining & cryogenics</h3>
+      <ul class="body">
+        <li><strong>naphtha_cracker</strong> 1 crude_oil → 1 naphtha. Real cracking yields a distribution of products. Game collapses to one output per building (separate diesel_refinery / kerosene_refinery for other fractions). <span class="vbadge v">verified</span> <a class="cite">recipes.ts:2440</a></li>
+        <li><strong>crude_oil_cracker</strong> 3 crude_oil → 1 heavy_oil + 1 tar + 1 asphalt. 3:3 mass conserving; the actual residue/loss not modeled.</li>
+        <li><strong>lubricant_refinery</strong> 1 crude_oil + 1 chlorine → 1 lubricant. <strong>Chlorine is not a real lubricant additive</strong> — real lube uses VI improvers, detergents, antioxidants. <span class="vbadge v">verified</span> <a class="cite">recipes.ts:2528-2536</a> Fantasy chemistry.</li>
+        <li><strong>kerosene_refinery</strong> 3 crude_oil + 1 hydrogen → 1 aviation_kerosene. Hydrogen hydrotreatment is real — sensible chemistry. <span class="vbadge v">verified</span></li>
+        <li><strong>cryogenic_generator</strong> 1 cryo_coolant → power. <span class="vbadge v">verified</span> "Burns" cryo coolant as fuel; real cryo expansion uses Brayton/Joule-Thomson cycles, not combustion. Wrong physics for the named mechanism, but functional as a fueled power source.</li>
+        <li><strong>cryo_lab</strong> 1 hydrogen + 1 nitrogen → 1 cryo_coolant. No real chemistry basis — cryo coolants are typically pure LN₂, LHe, or LH₂. Fantasy blend.</li>
+        <li><strong>cryo_compressor</strong> 1 hydrogen + 1 cryo_coolant → 1 cryogenic_hydrogen. Real liquefaction via Linde cycle is sensible; the cryo_coolant as a reagent is the unrealistic part.</li>
+      </ul>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">13.5 Acknowledged fantasy chemistry</h3>
+      <p class="body">Spec is explicit that these don't claim chemistry: <code>exotic_alloy</code>
+        (5 steel + 1 helium_3, lines 1530-1534 — helium is noble, doesn't alloy),
+        <code>quantum_chip</code>, <code>ai_core</code>, <code>antimatter_capsule</code>,
+        <code>time_crystal</code>, <code>casimir_energy</code>, <code>reality_anchor</code>,
+        <code>memetic_core</code>, <code>eldritch_processor</code>, <code>phase_converter</code>,
+        <code>zero_point_flux</code>. <strong>Carbon Fiber</strong> from wood + coke
+        (<code>carbon_forge</code> 5 wood + 2 coke → 1 carbon_fiber) is similarly fantasy
+        — real CF comes from PAN polymer. All explicitly endgame sci-fi; no rebuke owed.</p>
+
+      <h3 style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--slate); margin:18px 0 8px">13.6 Environmental chemistry — absent</h3>
+      <p class="body">No CO₂ accumulation (despite limekiln + coke + coal_gen all emitting in real
+        life), no acid rain, no runoff, no thermal pollution downstream of cooling_tower. The
+        only environmental loop is the reactor_toxicity gate (5 %/hour roll when reactors are
+        adjacent) and the wastewater_treatment soft-gate. <strong>Suggestion is design-level,
+        not bug:</strong> a CO₂ pool tracked as a "free" resource that triggers weather penalties
+        when high would close the loop without much engine work.</p>
+    </section>
+
+    <!-- ============================================================== -->
+    <section id="findings">
+      <div class="sec-head"><span class="num">§11</span><h2>Findings register — triage</h2></div>
+      <p class="sec-intro">Per-finding decisions in the panel below. Severity recalibrated post-verification.</p>
+
+      <fieldset class="picker" data-picker="F1-mercury">
+        <legend>F1 · severity LOW</legend>
+        <div class="pq"><span class="badge red">DEAD</span> Mercury is produced but never consumed</div>
+        <div class="pe">Tree-wide grep: <code>recipes.ts:2944-2947</code> outputs mercury; zero <code>inputs: { mercury: … }</code> across all source files. <span class="vbadge v">verified</span></div>
+        <div class="ps">Cheap placement cost (stone+iron_ingot+wood); no rare materials burned. Trap-only.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F1-mercury" value="add-consumer"><span class="oname">add consumer</span><span class="why">Chemistry / thermometer / amalgamation of gold_ore.</span></label>
+          <label class="opt"><input type="radio" name="F1-mercury" value="remove-well"><span class="oname">remove the well</span><span class="why">Drop <code>mercury_well</code> from the catalog.</span></label>
+          <label class="opt"><input type="radio" name="F1-mercury" value="defer"><span class="oname">defer</span><span class="why">Note in TODO.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F2-biome">
+        <legend>F2 · severity HIGH</legend>
+        <div class="pq"><span class="badge red">RISK</span> Biome-locked T4 single sources: exotic_alloy + ai_core</div>
+        <div class="pe">pyroforge (Volcanic) is the only exotic_alloy producer; cryogenic_compute_center (Arctic) is the only ai_core producer. Both are sole-source. <span class="vbadge v">verified</span></div>
+        <div class="ps">If world-gen doesn't guarantee both biomes in the home network, T5 is unreachable. world-gen.ts not read this pass.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F2-biome" value="worldgen-guarantee"><span class="oname">world-gen guarantee</span><span class="why">Ensure both biomes spawn in discovery radius.</span></label>
+          <label class="opt"><input type="radio" name="F2-biome" value="fallback-recipe"><span class="oname">add fallback recipe</span><span class="why">Non-biome producer at worse cycleSec.</span></label>
+          <label class="opt"><input type="radio" name="F2-biome" value="ui-explainer"><span class="oname">UI explainer</span><span class="why">Tooltip on the locked recipe.</span></label>
+          <label class="opt"><input type="radio" name="F2-biome" value="verify-first"><span class="oname">verify first</span><span class="why">Read world-gen.ts before deciding.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F3-crystal-grind">
+        <legend>F3 · severity HIGH</legend>
+        <div class="pq"><span class="badge red">PACING</span> Full crystal set = 140× reality_anchor ≈ 1 120 h serial</div>
+        <div class="pe">Each family (20 total) needs 1+2+4=7 anchors across T1/T2/T3 crystals. Anchor cycle 8 h. Parallel forges divide. <span class="vbadge v">verified</span> via direct read of 60 skill_forge recipes.</div>
+        <div class="ps">Until T5 chains run, graft sockets at skill-tree depth 7/9/11 are unreachable.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F3-crystal-grind" value="design-intent"><span class="oname">intended endgame</span><span class="why">Document, don't change.</span></label>
+          <label class="opt"><input type="radio" name="F3-crystal-grind" value="reduce-cost"><span class="oname">reduce anchor cost</span><span class="why">T1=0, T2=1, T3=2 anchors.</span></label>
+          <label class="opt"><input type="radio" name="F3-crystal-grind" value="alt-source"><span class="oname">alternate source</span><span class="why">Rare-event drop.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F4-power-biome">
+        <legend>F4 · severity MEDIUM <span class="vbadge x" style="margin-left:8px">corrected</span></legend>
+        <div class="pq"><span class="badge amber">SCALING</span> Pure-Plains player has no path to peak T4 power</div>
+        <div class="pe">Tidal Array (50 MW) is Coast-only; Sunspire (60 MW) is Desert-only. Plains has only Fusion Core (5 kW) at T4. v1 said "multi-island needed" but the real constraint is biome access.</div>
+        <div class="ps">Plains-only player at peak T4 draw (8 kW) needs 2× Fusion Core + buffers. Biome diversification is the real ask.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F4-power-biome" value="plains-power"><span class="oname">add Plains-native T4 power</span><span class="why">Geothermal-equivalent or wind farm scaled up.</span></label>
+          <label class="opt"<input type="radio" name="F4-power-biome" value="balance-test"><span class="oname">add power-balance test</span><span class="why">Per-biome canonical build fixture.</span></label>
+          <label class="opt"><input type="radio" name="F4-power-biome" value="tooltip"><span class="oname">power-readout tooltip</span><span class="why">"You're capped — consider Coast/Desert outposts."</span></label>
+          <label class="opt"><input type="radio" name="F4-power-biome" value="defer"><span class="oname">defer</span><span class="why">Intended biome-driven progression.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F5-saltwater-tutorial">
+        <legend>F5 · severity LOW</legend>
+        <div class="pq"><span class="badge gray">UX</span> battery_bank transitively needs steel chain</div>
+        <div class="pe">placementCost: saltwater_cell ×4 + wire ×3 + steel_beam ×1. wire = steel→wire via metal_rolling_mill. saltwater_cell needs wire. <span class="vbadge v">verified</span></div>
+        <div class="ps">"T2 power buffer" honest about tier, but not about transitive steel dep.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F5-saltwater-tutorial" value="tooltip"><span class="oname">prereq tooltip</span><span class="why">Show full prereq chain on hover.</span></label>
+          <label class="opt"><input type="radio" name="F5-saltwater-tutorial" value="tutorial-step"><span class="oname">tutorial step</span><span class="why">"You can now bootstrap a battery" after first steel.</span></label>
+          <label class="opt"><input type="radio" name="F5-saltwater-tutorial" value="defer"><span class="oname">defer</span><span class="why">Players figure it out.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F6-tier-reset">
+        <legend>F6 · severity MEDIUM</legend>
+        <div class="pq"><span class="badge amber">SOFT-LOCK</span> tier-reset cost is L² steel + L²/2 gear</div>
+        <div class="pe">L15 = 225 + 112 · L30 = 900 + 450 · L50 = 2 500 + 1 250. Cooldown 24 h. Gates only at L≥15. <span class="vbadge v">verified</span> tier-reset.ts:67-69,95-108</div>
+        <div class="ps">A botched build at L50 can be cash-trapped — no single-node respec exists.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F6-tier-reset" value="single-respec"><span class="oname">single-node respec</span><span class="why">Cheap escape valve.</span></label>
+          <label class="opt"><input type="radio" name="F6-tier-reset" value="lower-curve"><span class="oname">lower curve to L^1.5</span><span class="why">Still hurts but reachable.</span></label>
+          <label class="opt"><input type="radio" name="F6-tier-reset" value="defer"><span class="oname">defer</span><span class="why">Intended commitment cost.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F7-maintenance-spiral">
+        <legend>F7 · severity MEDIUM</legend>
+        <div class="pq"><span class="badge amber">FEEDBACK</span> Maintenance death spiral is theoretically reachable</div>
+        <div class="pe">Threshold 12-24 h by tier, linear 1.0→0.5 over 4 h, floors at 0.5. <span class="vbadge v">verified</span> maintenance.ts</div>
+        <div class="ps">If a maintenance-material producer itself decays, loop tightens. No test for self-recovery.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F7-maintenance-spiral" value="self-recover-test"><span class="oname">add self-recover test</span><span class="why">Simulate offline decay + input restoration.</span></label>
+          <label class="opt"><input type="radio" name="F7-maintenance-spiral" value="floor-output"><span class="oname">floor output ≥ 0.3</span><span class="why">Survival level.</span></label>
+          <label class="opt"><input type="radio" name="F7-maintenance-spiral" value="defer"><span class="oname">defer</span><span class="why">Gentle; players will notice.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F8-settlement-implicit">
+        <legend>F8 · severity MEDIUM</legend>
+        <div class="pq"><span class="badge amber">MISSING</span> Settlement has no explicit pop / food / housing</div>
+        <div class="pe">settlement.ts has per-tier SHIP_STATS and HELICOPTER_STATS, auto-populates on vehicle arrival, no pop counter, no food, no housing cap. <span class="vbadge v">verified</span> settlement.ts:119-131</div>
+        <div class="ps">Spec hints at population mechanics; implementation has none. Deferral vs drift = design call.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F8-settlement-implicit" value="spec-clarify"><span class="oname">spec clarification</span><span class="why">Pin down whether explicit pop is in-scope.</span></label>
+          <label class="opt"><input type="radio" name="F8-settlement-implicit" value="implement-min"><span class="oname">implement minimal pop</span><span class="why">Pop counter + simple food consumption.</span></label>
+          <label class="opt"><input type="radio" name="F8-settlement-implicit" value="defer"><span class="oname">defer</span><span class="why">Implicit model sufficient.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F9-coke-bottleneck">
+        <legend>F9 · severity LOW</legend>
+        <div class="pq"><span class="badge gray">PACING</span> Coke Oven cycle = 133 s, paces all steel</div>
+        <div class="pe">Inline comment: "rebalanced for idle-game scale, step #19 (×40); 2026-05-18 ÷3 for display visibility." <span class="vbadge v">verified</span> recipes.ts:1418</div>
+        <div class="ps">Spec-acknowledged.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F9-coke-bottleneck" value="keep"><span class="oname">keep</span><span class="why">Intentional pacing.</span></label>
+          <label class="opt"><input type="radio" name="F9-coke-bottleneck" value="ui-progress"><span class="oname">progress feedback</span><span class="why">Per-recipe progress bar.</span></label>
+          <label class="opt"><input type="radio" name="F9-coke-bottleneck" value="speed-up"><span class="oname">speed up to 90 s</span><span class="why">Light rebalance.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F10-test-rate">
+        <legend>F10 · severity MEDIUM</legend>
+        <div class="pq"><span class="badge amber">TEST GAP</span> No throughput-rate invariants</div>
+        <div class="pe">balance.test.ts validates graph closure, not "downstream demand ≤ upstream supply."</div>
+        <div class="ps">cycleSec change can silently invert chain ratios.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F10-test-rate" value="add-suite"><span class="oname">add rate-invariant suite</span><span class="why">Per-canonical-build assertions.</span></label>
+          <label class="opt"><input type="radio" name="F10-test-rate" value="defer"><span class="oname">defer</span><span class="why">Manual playtesting.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F11-test-power">
+        <legend>F11 · severity MEDIUM</legend>
+        <div class="pq"><span class="badge amber">TEST GAP</span> No power-balance invariants</div>
+        <div class="pe">No test that "canonical T2 / T4 island producer sum ≥ consumer sum for typical layout."</div>
+        <div class="ps">Power-number tweak in building-defs.ts won't fail a test.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F11-test-power" value="canonical-builds"><span class="oname">canonical build fixtures</span><span class="why">Fixture-driven "T4 island Bob" asserts self-powered.</span></label>
+          <label class="opt"><input type="radio" name="F11-test-power" value="defer"><span class="oname">defer</span><span class="why">Catch manually.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F12-test-dead">
+        <legend>F12 · severity LOW</legend>
+        <div class="pq"><span class="badge gray">TEST GAP</span> No dead-resource detector</div>
+        <div class="pe">Mercury slipped through. Static check "every produced resource has ≥ 1 consumer" would catch it.</div>
+        <div class="ps">~30 LOC.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F12-test-dead" value="add"><span class="oname">add the test</span><span class="why">Obvious win.</span></label>
+          <label class="opt"><input type="radio" name="F12-test-dead" value="defer"><span class="oname">defer</span><span class="why">Manual review will catch.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F13-test-cap">
+        <legend>F13 · severity LOW</legend>
+        <div class="pq"><span class="badge gray">TEST GAP</span> No cap-pressure invariants</div>
+        <div class="pe">No test that <code>cap()</code> absorbs ≥ 1 cycle without back-pressure stall.</div>
+        <div class="ps">Low risk.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F13-test-cap" value="add"><span class="oname">add cap-pressure test</span><span class="why">Per-recipe.</span></label>
+          <label class="opt"><input type="radio" name="F13-test-cap" value="defer"><span class="oname">defer</span><span class="why">Low risk.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F14-cold-storage">
+        <legend>F14 · severity LOW <span class="vbadge u" style="margin-left:8px">unverified</span></legend>
+        <div class="pq"><span class="badge gray">DEFERRED</span> Cold Storage has no consumers wired</div>
+        <div class="pe">Sub-agent claim; not re-read this pass. Spec hints at cryo compound + liquid nitrogen consumers.</div>
+        <div class="ps">If accurate: placeable but pointless until consumers ship.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F14-cold-storage" value="wire-consumers"><span class="oname">wire the consumers</span><span class="why">Add cryo / liquid-N consumers per spec.</span></label>
+          <label class="opt"><input type="radio" name="F14-cold-storage" value="hide-building"><span class="oname">hide until used</span><span class="why">Remove from build menu.</span></label>
+          <label class="opt"><input type="radio" name="F14-cold-storage" value="defer"><span class="oname">defer</span><span class="why">Leave as scaffolded.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F15-diamond-narrow">
+        <legend>F15 · severity LOW</legend>
+        <div class="pq"><span class="badge gray">NARROW</span> diamond_ore has exactly one consumer</div>
+        <div class="pe">Only consumer: <code>skill_forge_drilling_t3</code> (20× per crystal). <span class="vbadge v">verified</span> recipes.ts:1690-1693</div>
+        <div class="ps">Intentional per SPEC.md §6 — pure crystal input. No action required.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F15-diamond-narrow" value="accept"><span class="oname">accept</span><span class="why">Intentional.</span></label>
+          <label class="opt"><input type="radio" name="F15-diamond-narrow" value="broaden"><span class="oname">add second consumer</span><span class="why">e.g. cutting-tool recipe.</span></label>
+        </div>
+      </fieldset>
+
+      <!-- ========= v3 additions: literal physics + chemistry findings ========= -->
+
+      <fieldset class="picker" data-picker="F16-heat-unmetered">
+        <legend>F16 · severity MEDIUM · physics</legend>
+        <div class="pq"><span class="badge amber">ENERGY VIOLATION</span> Heat is N:1 unmetered adjacency — one heater serves unlimited consumers</div>
+        <div class="pe">heat.ts:1-7 (explicit comment): "A single source serves any number of adjacent consumers." Plasma Heater (200 W) can serve N Coke Ovens (60 W each) for free. <span class="vbadge v">verified</span></div>
+        <div class="ps">Design intent: heat is a gameplay GATE, not a resource. Players who reason in joules will spot the free energy.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F16-heat-unmetered" value="accept"><span class="oname">accept</span><span class="why">Intentional gameplay simplification, document in CLAUDE.md.</span></label>
+          <label class="opt"><input type="radio" name="F16-heat-unmetered" value="meter-heat"><span class="oname">meter the heat</span><span class="why">Add max-consumer cap per source; budget enforcement.</span></label>
+          <label class="opt"><input type="radio" name="F16-heat-unmetered" value="defer"><span class="oname">defer</span><span class="why">Not exploitable enough to warrant rework.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F17-fusion-tidal">
+        <legend>F17 · severity LOW · physics narrative</legend>
+        <div class="pq"><span class="badge gray">BACKWARDS</span> Fusion Core (5 kW) is weaker than Tidal Array (50 MW)</div>
+        <div class="pe">fusion_core power = 5000 W. tidal_array = 50000 W. Tidal is 10× fusion. <span class="vbadge v">verified</span> building-defs.ts:1667, 1754</div>
+        <div class="ps">Narrative inversion. Players importing "fusion = ultimate power" trope will find the world internally incoherent.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F17-fusion-tidal" value="bump-fusion"><span class="oname">bump Fusion to 100 kW+</span><span class="why">Make fusion the top tier as expected.</span></label>
+          <label class="opt"><input type="radio" name="F17-fusion-tidal" value="rename"><span class="oname">rename Fusion</span><span class="why">"Compact Fusion Demo" or similar — manage expectations.</span></label>
+          <label class="opt"<input type="radio" name="F17-fusion-tidal" value="accept"><span class="oname">accept</span><span class="why">Game-balance decision; players adapt.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F18-vehicle-drag">
+        <legend>F18 · severity MEDIUM · physics narrative</legend>
+        <div class="pq"><span class="badge amber">DRAG INVERTED</span> Ships and helicopters are simultaneously faster AND more fuel-efficient at higher tier</div>
+        <div class="pe">Ship T1 → T4: 0.25 → 0.50 t/s (2×) AND 0.5 → 5.0 tiles/fuel (10×). Heli T1 → T4: 0.55 → 1.20 t/s (2.2×) AND 0.4 → 2.5 tiles/fuel (6.25×). <span class="vbadge v">verified</span> settlement.ts:119-131</div>
+        <div class="ps">Cruise power goes as v³ in real life. Game's monotonic both-better progression is "magic engines."</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F18-vehicle-drag" value="accept"><span class="oname">accept</span><span class="why">Standard tier-up power fantasy.</span></label>
+          <label class="opt"><input type="radio" name="F18-vehicle-drag" value="speed-vs-eff"><span class="oname">speed/efficiency trade-off</span><span class="why">Per-tier you pick fast OR efficient, not both.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F19-solar-cf">
+        <legend>F19 · severity LOW · physics</legend>
+        <div class="pq"><span class="badge gray">OVERPRODUCTION</span> Solar effective capacity factor ≈ 50% (real 15-25%)</div>
+        <div class="pe">Trapezoidal curve: dawn 0→1 + day 1 + dusk 1→0 + night 0 integrates to 0.5 × 24 h. <span class="vbadge v">verified</span> daynight.ts:83-97</div>
+        <div class="ps">Game solar is 2-3× richer than real solar at same nameplate W.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F19-solar-cf" value="accept"><span class="oname">accept</span><span class="why">Idle-game-friendly solar.</span></label>
+          <label class="opt"><input type="radio" name="F19-solar-cf" value="downrate"><span class="oname">downrate nameplate</span><span class="why">Cut solar W in half to land at real 25% CF.</span></label>
+          <label class="opt"><input type="radio" name="F19-solar-cf" value="sinusoidal"><span class="oname">sinusoidal curve</span><span class="why">More realistic shape, same integral.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F20-coal-units">
+        <legend>F20 · severity LOW · physics units</legend>
+        <div class="pq"><span class="badge gray">UNCALIBRATED</span> Coal-gen energy accounting is not internally consistent with coal's real energy density</div>
+        <div class="pe">coal_gen: 1 coal / 2 s → 100 W. If 1 coal = 1 kg @ 25 MJ/kg → 12.5 MW thermal in vs 100 W out → 0.0008 % efficiency. <span class="vbadge v">verified</span> recipes.ts:1389; building-defs.ts:714</div>
+        <div class="ps">No real-unit calibration claimed; abstract units throughout. Internal-consistency-only issue if cross-resource energy density ever matters.</div>
+        <div class="opts">
+          <label class="opt"<input type="radio" name="F20-coal-units" value="accept"><span class="oname">accept</span><span class="why">Abstract units, no real calibration claimed.</span></label>
+          <label class="opt"><input type="radio" name="F20-coal-units" value="document"><span class="oname">document unit semantics</span><span class="why">CLAUDE.md note: "1 unit = ~10 g" or whatever.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F21-steel-slag">
+        <legend>F21 · severity LOW · chemistry</legend>
+        <div class="pq"><span class="badge gray">STOICHIOMETRY</span> Steel mill 1:1 steel:slag ratio (real ~20:1)</div>
+        <div class="pe">steel_mill: 1 pig_iron → 1 steel + 1 slag. Real BOF: ~95–98 % steel, ~2–5 % slag, with O₂ as input (not output). <span class="vbadge v">verified</span> recipes.ts:1430-1435</div>
+        <div class="ps">Tons of "free" slag inflates the Slag Reprocessor → trace minerals byproduct loop.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F21-steel-slag" value="accept"><span class="oname">accept</span><span class="why">Slag-Reprocessor chain depends on this slag flux.</span></label>
+          <label class="opt"><input type="radio" name="F21-steel-slag" value="reduce-slag"><span class="oname">reduce slag yield</span><span class="why">5:1 steel:slag, rebalance reprocessor input.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F22-cement-mass">
+        <legend>F22 · severity LOW · chemistry</legend>
+        <div class="pq"><span class="badge gray">MASS BALANCE</span> Lime / brick / charcoal ratios don't match real chemistry</div>
+        <div class="pe">limekiln 1:1 (real loses 44% CO₂); brick_kiln 2:1 (real ~1.2:1); charcoal_kiln 2:1 (real ~5:1). <span class="vbadge v">verified</span> recipes.ts:2188-2229</div>
+        <div class="ps">Game-tuned for predictable progression. Acceptable as idle-game simplification.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F22-cement-mass" value="accept"><span class="oname">accept</span><span class="why">Game-tuned, intentional.</span></label>
+          <label class="opt"><input type="radio" name="F22-cement-mass" value="realistic"><span class="oname">realistic ratios</span><span class="why">Tighten all to real-world equivalents.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F23-chloralkali-h2">
+        <legend>F23 · severity LOW · chemistry</legend>
+        <div class="pq"><span class="badge gray">MISSING BYPRODUCT</span> Chlor-alkali misses hydrogen byproduct</div>
+        <div class="pe">chlor_alkali_plant: 2 saltwater → 1 chlorine + 1 sodium_hydroxide. Real: 2 NaCl + 2 H₂O → Cl₂ + 2 NaOH + <strong>H₂</strong>. Hydrogen erased. <span class="vbadge v">verified</span> recipes.ts:2509-2517</div>
+        <div class="ps">Adding H₂ output would re-feed the hydrogen chain; might over-supply hydrogen consumers.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F23-chloralkali-h2" value="add-h2"><span class="oname">add H₂ byproduct</span><span class="why">Real chlor-alkali ships H₂; rebalance hydrogen-fed recipes.</span></label>
+          <label class="opt"><input type="radio" name="F23-chloralkali-h2" value="accept"><span class="oname">accept</span><span class="why">Game tuning; hydrogen has electrolyzer producer.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F24-air-separator">
+        <legend>F24 · severity LOW · chemistry</legend>
+        <div class="pq"><span class="badge gray">RATIO</span> Air separator outputs 1:1:1 N₂:O₂:Ar (real ~78:21:1)</div>
+        <div class="pe">air_separator: ∅ → 1 nitrogen + 1 oxygen + 1 argon at cycleSec 200. Argon massively over-produced relative to real air composition. <span class="vbadge v">verified</span> recipes.ts:2570-2575</div>
+        <div class="ps">Argon is rare downstream consumer (ai_core); 1:1:1 makes it abundant rather than scarce.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F24-air-separator" value="realistic"><span class="oname">realistic ratios</span><span class="why">~78 N₂ + 21 O₂ + 1 Ar per cycle; rebalance ai_core argon demand.</span></label>
+          <label class="opt"><input type="radio" name="F24-air-separator" value="accept"><span class="oname">accept</span><span class="why">Argon abundance is gameplay-tuned for ai_core throughput.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F25-eaf-no-slag">
+        <legend>F25 · severity LOW · chemistry</legend>
+        <div class="pq"><span class="badge gray">MISSING BYPRODUCT</span> Electric arc furnace produces no slag</div>
+        <div class="pe">electric_arc_furnace: 1 pig_iron → 1 steel (no slag). Inconsistent with steel_mill which produces 1 slag per cycle from the same input. <span class="vbadge v">verified</span> recipes.ts:1498-1503</div>
+        <div class="ps">EAF user can avoid slag accumulation entirely — a quietly meta choice.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F25-eaf-no-slag" value="add-slag"><span class="oname">add slag output</span><span class="why">Mirror steel_mill consistency.</span></label>
+          <label class="opt"><input type="radio" name="F25-eaf-no-slag" value="accept"><span class="oname">accept</span><span class="why">EAF skipping slag is intentional T3 upgrade reward.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F26-lubricant-chlorine">
+        <legend>F26 · severity LOW · chemistry</legend>
+        <div class="pq"><span class="badge gray">FANTASY</span> Lubricant Refinery uses chlorine (not a real lube additive)</div>
+        <div class="pe">lubricant_refinery: 1 crude_oil + 1 chlorine → 1 lubricant. Real lube: VI improvers, detergents, antioxidants — not chlorine. <span class="vbadge v">verified</span> recipes.ts:2528-2536</div>
+        <div class="ps">Recipe exists to give chlor-alkali's chlorine a downstream consumer.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F26-lubricant-chlorine" value="rename"><span class="oname">rename input</span><span class="why">Chlorine → "additive package" or similar.</span></label>
+          <label class="opt"><input type="radio" name="F26-lubricant-chlorine" value="accept"><span class="oname">accept</span><span class="why">Chlorine sink; gameplay-tuned.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F27-cryo-gen">
+        <legend>F27 · severity LOW · physics narrative</legend>
+        <div class="pq"><span class="badge gray">MECHANISM</span> Cryogenic Generator "burns" cryo_coolant (real cryo: expansion, not combustion)</div>
+        <div class="pe">cryogenic_generator recipe: 1 cryo_coolant → power. Spec calls it a "generator" but recipe-shape is combustion-style. Real cryo power: Brayton or Joule-Thomson expansion cycle. <span class="vbadge v">verified</span> recipes.ts:1402-1407</div>
+        <div class="ps">Pure cosmetic — recipe shape is identical to coal_gen, naming is misleading.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F27-cryo-gen" value="rename"><span class="oname">rename to Cryo Expander</span><span class="why">Honest naming, same recipe.</span></label>
+          <label class="opt"><input type="radio" name="F27-cryo-gen" value="accept"><span class="oname">accept</span><span class="why">Cosmetic.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="picker" data-picker="F28-no-pollution">
+        <legend>F28 · severity LOW · environmental chemistry</legend>
+        <div class="pq"><span class="badge gray">UNMODELED</span> No CO₂ / pollution / runoff simulation</div>
+        <div class="pe">limekiln, coke_oven, coal_gen, biomass_plant all emit gases / particulates in real life. Only reactor_toxicity + wastewater_treatment gates exist. <span class="vbadge v">verified</span> via grep across src/ for "co2|pollution|emission"</div>
+        <div class="ps">A CO₂ pool tracked as a "free" resource that triggers weather/biome penalties at thresholds would close a real-world chemistry loop with minimal engine work.</div>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="F28-no-pollution" value="add-co2"><span class="oname">add CO₂ pool + penalty</span><span class="why">Track emissions; weather worsens at high CO₂.</span></label>
+          <label class="opt"><input type="radio" name="F28-no-pollution" value="defer"><span class="oname">defer</span><span class="why">Out of scope for current spec.</span></label>
+          <label class="opt"><input type="radio" name="F28-no-pollution" value="accept"><span class="oname">accept</span><span class="why">Intentional simplification.</span></label>
+        </div>
+      </fieldset>
+    </section>
+
+    <!-- ============================================================== -->
+    <div class="selections" id="selections">
+      <h3>Triage selections</h3>
+      <div class="sel-grid" id="selGrid"></div>
+      <div class="actions">
+        <button class="action" id="copyJson">Copy as JSON</button>
+        <button class="action" id="copyPrompt">Copy as prompt</button>
+        <span class="toast" id="toast"></span>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Robot Islands · physics, chemistry & balance audit · v3 (literal physics + chemistry added) · 2026-05-27 ·
+        based on commit <code>f825ba8</code>, vitest baseline 2 193 / 2 193.
+        Each numerical claim carries an explicit verification badge.
+        Items flagged <span class="vbadge u">unverified</span> were not re-read in this
+        pass and should not be acted on without a follow-up read.</p>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const state = {};
+      const pickers = document.querySelectorAll('fieldset.picker');
+      pickers.forEach((fs) => {
+        const name = fs.dataset.picker;
+        if (!name) return;
+        const radios = fs.querySelectorAll('input[type=radio]');
+        radios.forEach((r) => {
+          if (r.checked) state[name] = r.value;
+          r.addEventListener('change', () => {
+            if (r.checked) { state[name] = r.value; render(); }
+          });
+          r.closest('.opt').addEventListener('click', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            r.checked = true; state[name] = r.value; render();
+          });
+        });
+      });
+      function render() {
+        pickers.forEach((fs) => {
+          fs.querySelectorAll('.opt').forEach((opt) => {
+            const r = opt.querySelector('input[type=radio]');
+            opt.dataset.selected = (r && r.checked) ? 'true' : 'false';
+          });
+        });
+        const grid = document.getElementById('selGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        Object.entries(state).forEach(([k, v]) => {
+          const row = document.createElement('div');
+          row.className = 'sel-row';
+          row.innerHTML = '<span class="k">' + k + '</span><span class="v">' + v + '</span>';
+          grid.appendChild(row);
+        });
+      }
+      const copyJson = document.getElementById('copyJson');
+      const copyPrompt = document.getElementById('copyPrompt');
+      const toast = document.getElementById('toast');
+      function flash(msg) {
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 1600);
+      }
+      function clip(text, label) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => flash(label), () => fallback(text, label));
+        } else { fallback(text, label); }
+      }
+      function fallback(text, label) {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand('copy'); } catch (_) {}
+        document.body.removeChild(ta);
+        flash(label);
+      }
+      if (copyJson) copyJson.addEventListener('click', () =>
+        clip(JSON.stringify(state, null, 2), '✓ JSON copied'));
+      if (copyPrompt) copyPrompt.addEventListener('click', () => {
+        const lines = Object.entries(state).map(([k,v]) => '- ' + k + ': ' + v);
+        const prompt = 'Apply these balance-triage decisions:\n' + lines.join('\n');
+        clip(prompt, '✓ Prompt copied');
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>
