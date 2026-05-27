@@ -382,17 +382,18 @@ export function cap(
   r: ResourceId,
   override?: Record<ResourceId, number>,
   opts?: { ignoreGrace?: boolean },
+  mult?: SkillMultipliers,
 ): number {
   const nominal = override?.[r] ?? state.storageCaps[r] ?? 0;
   if (nominal === 0) return 0;
-  const mult = effectiveSkillMultipliers(state);
-  const skillMul = mult.storageCap;
+  const resolvedMult = mult ?? effectiveSkillMultipliers(state);
+  const skillMul = resolvedMult.storageCap;
   // Storage sub-path (depth ≥ 2): per-category cap multiplier on top of the
   // uniform skill mul. Looks up the resource's storage category — if it
   // hasn't been categorised yet (forward-compat with new resources) the
   // lookup returns undefined and the category-mul defaults to 1.
   const cat = RESOURCE_STORAGE_CATEGORY[r];
-  const catMul = cat ? mult.storageCategoryCap[cat] ?? 1 : 1;
+  const catMul = cat ? resolvedMult.storageCategoryCap[cat] ?? 1 : 1;
   const computedCap = nominal * skillMul * catMul;
   if (opts?.ignoreGrace) return computedCap;
   const grace = state.starterInventoryGrace[r] ?? 0;
@@ -401,10 +402,14 @@ export function cap(
 
 /** §12.4: clear starter inventory grace for a single resource when its
  *  normal cap meets or exceeds current inventory. */
-export function clearGraceIfRedundant(state: IslandState, r: ResourceId): void {
+export function clearGraceIfRedundant(
+  state: IslandState,
+  r: ResourceId,
+  baseMult?: SkillMultipliers,
+): void {
   const grace = state.starterInventoryGrace[r] ?? 0;
   if (grace <= 0) return;
-  const normalCap = cap(state, r, undefined, { ignoreGrace: true });
+  const normalCap = cap(state, r, undefined, { ignoreGrace: true }, baseMult);
   if (normalCap >= (state.inventory[r] ?? 0)) {
     state.starterInventoryGrace[r] = 0;
   }
@@ -446,11 +451,17 @@ export type DefCatalog = Readonly<Record<BuildingDefId, BuildingDef>>;
  * If any of the recipe's outputs is at or above cap, the building stalls
  * entirely (no inputs consumed, no outputs produced, no XP).
  */
-function outputAvail(state: IslandState, recipe: Recipe, nowMs: number, caps?: Record<ResourceId, number>): number {
+function outputAvail(
+  state: IslandState,
+  recipe: Recipe,
+  nowMs: number,
+  caps?: Record<ResourceId, number>,
+  baseMult?: SkillMultipliers,
+): number {
   const outputs = resolveRotatingOutput(recipe, nowMs);
   for (const [r, _yield] of Object.entries(outputs)) {
     const id = r as ResourceId;
-    if (inv(state, id) >= cap(state, id, caps)) return 0;
+    if (inv(state, id) >= cap(state, id, caps, undefined, baseMult)) return 0;
   }
   return 1;
 }
@@ -866,7 +877,7 @@ export function computeRates(
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: 0 });
         continue;
       }
-      const oa = outputAvail(state, syntheticRecipe, t, ctx?.caps);
+      const oa = outputAvail(state, syntheticRecipe, t, ctx?.caps, ctx?.baseMult);
       if (oa === 0) {
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: gateResult.effectiveMul });
         continue;
@@ -943,7 +954,7 @@ export function computeRates(
       tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 0 });
       continue;
     }
-    const oa = outputAvail(state, recipe, t, ctx?.caps);
+    const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
     if (oa === 0) {
       tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: gateResult.effectiveMul });
       continue;
@@ -1080,7 +1091,7 @@ export function computeRates(
       const idx = tentative.findIndex((t) => t.building === b);
       const ia = idx >= 0 ? (inputAvailByIdx[idx] ?? 0) : 0;
       active = ia > 0;
-      const oa = outputAvail(state, recipe, t, ctx?.caps);
+      const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
       nominalThroughputFrac = gateResult.effectiveMul * ia * oa;
     }
     if (!active) continue;
@@ -1109,7 +1120,7 @@ export function computeRates(
     const targetTier = tierForResource(state.genesisTarget);
     if (targetTier < 1 || targetTier > 4) continue;
     // Output-stalled chambers don't draw power (no production = no load).
-    if (inv(state, state.genesisTarget) >= cap(state, state.genesisTarget)) continue;
+    if (inv(state, state.genesisTarget) >= cap(state, state.genesisTarget, undefined, undefined, ctx?.baseMult)) continue;
     powerConsumed += (GENESIS_POWER_KW[targetTier]! * 1000) / skillMul.powerConsumption;
   }
 
@@ -1327,7 +1338,7 @@ export function findNextCapEvent(
       // a production-freeze bug. The 1-unit threshold is for next-event
       // purposes only; applyRates retains float storage so slow producers
       // still accumulate fractional units across segments.
-      const capVal = cap(state, r, ctx?.caps);
+      const capVal = cap(state, r, ctx?.caps, undefined, ctx?.baseMult);
       const headroom = capVal - current;
       if (headroom < 1) continue;
       timeToEventSec = headroom / rate;
@@ -1355,7 +1366,7 @@ export function findNextCapEvent(
   // Robotics skill: stretches the maintenance threshold. The boundary
   // walker must see the same threshold the per-segment integrator does,
   // otherwise long offline catchup splits at the wrong moment.
-  const thresholdMul = effectiveSkillMultipliers(state).maintenanceThreshold;
+  const thresholdMul = (ctx?.baseMult ?? effectiveSkillMultipliers(state)).maintenanceThreshold;
   for (const b of state.buildings) {
     if (b.disabled === true) continue;
     const def = defs[b.defId];
@@ -1386,12 +1397,18 @@ export function findNextCapEvent(
  * integration segment ends exactly when the boundary is hit, but the
  * clamp guarantees no NaN-cascade if a rate calculation drifts.
  */
-function applyRates(state: IslandState, net: Record<ResourceId, number>, dtSec: number, caps?: Record<ResourceId, number>): void {
+function applyRates(
+  state: IslandState,
+  net: Record<ResourceId, number>,
+  dtSec: number,
+  caps?: Record<ResourceId, number>,
+  baseMult?: SkillMultipliers,
+): void {
   for (const r of Object.keys(net) as ResourceId[]) {
     const rate = net[r] ?? 0;
     if (rate === 0) continue;
     const next = inv(state, r) + rate * dtSec;
-    const clamped = Math.min(cap(state, r, caps), Math.max(0, next));
+    const clamped = Math.min(cap(state, r, caps, undefined, baseMult), Math.max(0, next));
     state.inventory[r] = clamped;
   }
 }
@@ -1595,7 +1612,7 @@ export function advanceIsland(
   }
   // §12.4: shrink starter inventory grace as normal caps catch up.
   for (const r of Object.keys(state.starterInventoryGrace) as ResourceId[]) {
-    clearGraceIfRedundant(state, r);
+    clearGraceIfRedundant(state, r, baseMult);
   }
   let t = state.lastTick;
   if (ctx?.worldSeed) {
@@ -1604,7 +1621,7 @@ export function advanceIsland(
   // Robotics sub-path bonus: stretches maintenance thresholds (longer
   // operating-time budget before degradation begins). Read once and reused
   // across every maintenance check in this advanceIsland call.
-  const maintenanceThresholdMul = effectiveSkillMultipliers(state).maintenanceThreshold;
+  const maintenanceThresholdMul = baseMult.maintenanceThreshold;
   // §4.7: attempt auto-maintain BEFORE the first segment too — a save loaded
   // with materials in inventory and an over-threshold building should
   // self-heal on the next tick without waiting for the next inventory
@@ -1724,7 +1741,7 @@ export function advanceIsland(
     const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextSolarMs, nextAccelMs, nextBatteryMs, nextRotationMs, nextShotMs, nowMs);
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
-      applyRates(state, net, dtSec, ctx?.caps);
+      applyRates(state, net, dtSec, ctx?.caps, baseMult);
       accrueXp(state, production, consumption, dtSec, 1, skillMul.xpGain);
       // §13.3 Battery buffer — apply charge/discharge over the segment.
       if (rawBalance > 0 && maxCap > 0) {
