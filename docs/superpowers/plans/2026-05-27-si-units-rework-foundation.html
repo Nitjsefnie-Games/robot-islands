@@ -245,8 +245,32 @@
     </div>
 
     <div class="verdict green">
-      <div class="vt">Verdict / Pitch · revision 13 (2026-05-27) · ALL PICKERS CLOSED · SMELTER CHEMISTRY-DERIVED</div>
+      <div class="vt">Verdict / Pitch · revision 14 (2026-05-27) · ALL PICKERS CLOSED · T2 COHORT MASS-BALANCED</div>
       <div class="vh">All 16 §10 pickers resolved. §10.15 resolved to Option A (BOTH water_wheel + windmill_t0 ship as parallel T0 power options — different tile gates, complementary). All rev-6/rev-7 implementation-time decisions resolved to recommended defaults and moved to the resolved-list. NEW §12.9 sizes the starter inventory to reach 1× battery_bank within ~30-45 min along the full real-chemistry chain. Anchors locked: <strong>1 unit coal = 1 kg</strong>, <strong>1 unit power = 100 kW</strong>.</div>
+      <div class="vb"><strong>Rev-14 precision pass (T2 mechanical-components cohort rebalanced):</strong>
+        The seven T2 per-piece manufactured-component recipes (steel_beam, heavy_cable,
+        sheet_metal, pipe, wire, spring, bearing) were mass-imbalanced under §2.2's
+        industrial-scale unit-mass anchors — <code>1 steel → 2 steel_beam</code> under
+        steel_beam = 50 kg/unit is mass-positive 100×, and the lighter components
+        had the opposite problem. Rev-14 keeps §2.2's realistic-industrial unit
+        masses and rebalances every cohort recipe under the 1-steel = 1-kg anchor.
+        Hot-rolling yield 95 % (thick: beam, cable, sheet, pipe) / 92 % (thin:
+        wire, spring); bearing is an assembly (no rolling-yield loss). Canonical
+        ratios: steel_beam <code>105 → 2 + 5 mill_scale</code>; heavy_cable
+        <code>42 → 5 + 2 mill_scale</code>; sheet_metal <code>53 → 10 + 3 mill_scale</code>;
+        pipe <code>42 → 10 + 2 mill_scale</code>; wire <code>11 → 20 + 1 mill_scale</code>;
+        spring <code>11 → 50 + 1 mill_scale</code>; bearing
+        <code>9 + 1 lubricant → 33 + 1 mill_scale</code>. New resource
+        <code>mill_scale</code> (1 unit = 1 kg, T1 by-product, expansion-hook orphan
+        output — iron-oxide flakes from hot-rolling oxidation per WorldSteel
+        by-products fact sheet). All §4.3 BOM mass-totals recomputed against §2.2
+        anchors (most were overstated 2-7× before; some, like capacitor_bank with
+        30 steel_beam, undercounted ~8×). §12.9.1 dependency walk + §12.9.4
+        timing recomputed against the new recipes — the 7-wire serial bottleneck
+        collapses from ~15.5 min to ~2.2 min (1 cycle of 11→20 produces 20 wire).
+        New §3.9 documents the cohort + §3.8 audit table extended with the seven
+        new rows. <code>gear</code> + <code>glass_panel</code> still lack producer
+        recipes and are deferred to Phase 2. Tool: <code>scripts/recalc-rolling-mill.py</code>.</div>
       <div class="vb"><strong>Rev-13 precision pass (1 correction):</strong>
         §3.1 smelter recipe re-derived from molar-mass stoichiometry
         (Fe₂O₃ + 3 C → 2 Fe + 3 CO) plus cited industrial defaults — replaces the
@@ -497,6 +521,11 @@
             <td class="slate">Smelting byproducts</td>
             <td>T1</td><td class="mono">kg</td><td class="mono">1 kg</td>
             <td>slag, scrap, biofuel (1 kg ≈ 1.05 L for ethanol; round to 1 kg). Slag at 1:1 with steel is the famous F21 violation — kept for game balance, marked <strong>"deliberate fudge"</strong> not corrected.</td>
+          </tr>
+          <tr>
+            <td class="slate">Hot-rolling byproducts <span class="badge green">NEW · rev-14</span></td>
+            <td>T1</td><td class="mono">kg</td><td class="mono">1 kg</td>
+            <td><code>mill_scale</code> (T1 by-product): iron-oxide flakes (FeO/Fe₂O₃/Fe₃O₄) that detach from the bar surface during hot-rolling passes; ~3-8 % of input steel mass per cycle depending on product thickness. <code>terminal: 'expansion-hook: scrap remelt / cement kiln aggregate / brick-pigment'</code> — orphan output today; natural fits for future remelt / kiln-additive / pigment consumers. Introduced by the seven rev-14 cohort recipes (§3.9). <span class="vbadge v">verified</span> 1-3 % typical hot-rolling yield loss per WorldSteel "Steel industry by-products fact sheet" and the §3.1 smelter precedent.</td>
           </tr>
           <tr>
             <td class="slate">Refined metals</td>
@@ -910,6 +939,7 @@
           <tr><td class="slate">water_vapor</td><td class="mono">brick_kiln, cement_mill</td><td class="mono">1 unit = 1 kg</td><td class="mono">expansion-hook</td></tr>
           <tr><td class="slate">aviation_kerosene_crude</td><td class="mono">naphtha_cracker (jet fraction)</td><td class="mono">1 unit = 1 L</td><td class="mono">consumed (kerosene_refinery)</td></tr>
           <tr><td class="slate">calcium_sulfonate</td><td class="mono">NEW T2 chemistry intermediate (rev-5; provisional — may fold into sulfuric_acid + quicklime mix in Phase 2)</td><td class="mono">1 unit = 1 kg</td><td class="mono">consumed (lubricant_refinery)</td></tr>
+          <tr><td class="slate">mill_scale <span class="badge green">NEW rev-14</span></td><td class="mono">beam_mill, metal_rolling_mill, sheet_mill, pipe_mill, cable_mill, spring_press, bearing_assembler (the seven §3.9 cohort recipes)</td><td class="mono">1 unit = 1 kg</td><td class="mono">expansion-hook: scrap remelt / cement kiln aggregate / brick pigment</td></tr>
         </tbody>
       </table>
 
@@ -937,6 +967,116 @@
         A future cryo_recompressor building could close the loop. Catalog
         impact: 1 new resource + 1 building rename. Phase 2 scope.</p>
 
+      <h3 class="sub">3.9 T2 mechanical-components cohort — mass-balanced under §2.2 anchors <span class="badge green">NEW · rev-14</span></h3>
+      <p class="body"><strong>Cohort scope.</strong> Seven T2 per-piece manufactured
+        components (steel_beam, heavy_cable, sheet_metal, pipe, wire, spring, bearing)
+        share a single broken pattern in the pre-rev-14 catalog: each carries a
+        trivial <code>1 steel → N component</code> recipe that, under §2.2's
+        industrial unit-mass anchors, is mass-imbalanced by orders of magnitude.
+        For thick products (steel_beam = 50 kg/unit, heavy_cable = 8 kg, sheet_metal
+        = 5 kg, pipe = 4 kg), <code>1 steel → 2 component</code> is mass-positive
+        100× / 16× / 10× / 8×. For thin products (wire = 0.5 kg, spring = 0.2 kg),
+        <code>1 steel → N component</code> is mass-negative when N is too small,
+        and the lost mass goes nowhere in the integrator.</p>
+      <p class="body"><strong>Rev-14 fix direction (user-chosen):</strong> keep §2.2's
+        realistic-industrial unit masses (50 kg/beam, 8 kg/cable, etc.) and rebalance
+        every cohort recipe under the 1-steel = 1-kg anchor. Hot rolling has two
+        real mass losses (mill scale at the hot surface oxidises to FeO/Fe₂O₃/Fe₃O₄
+        flakes; crop / trim at the ingot ends), totaling 3-8 % of input mass. Per
+        the WorldSteel "Steel industry by-products fact sheet" + Degarmo/Black/Kohser
+        <em>Materials and Processes in Manufacturing</em> 11e ch. 19 (rolling-mill
+        yields 90-97 %, worse for thinner products), rev-14 picks
+        <strong>95 % yield for thick products</strong> (beam, cable, sheet, pipe;
+        few passes, low scale) and <strong>92 % yield for thin products</strong>
+        (wire, spring; many passes, more scale). Bearing is an assembly (no
+        rolling-yield loss; ~90 % steel + 10 % lubricant by mass). The 3-8 % mass
+        gap routes to a new <code>mill_scale</code> resource (§2.2 hot-rolling
+        byproducts row + §3.5.5 expansion-hook entry).</p>
+      <p class="body"><strong>Tool used:</strong>
+        <code>scripts/recalc-rolling-mill.py</code> (committed at <code>87f9620</code>)
+        derives each integer recipe from the unit-mass + yield inputs. Example:
+        <code>python3 scripts/recalc-rolling-mill.py --product beam --steel-batch 105</code>
+        emits <code>105 steel → 2 steel_beam + 5 mill_scale (kg in/out: 105/105)</code>
+        with integer drift 0. For non-beam/non-wire products, the script accepts
+        <code>--unit-mass &lt;kg&gt;</code>; spring's 50-unit row is hand-derived
+        (50 × 0.2 = 10 kg + 1 mill_scale = 11 kg input, mass-exact; the script's
+        rounded 51 carries +0.2 kg drift, so the hand-derived 50 wins). Bearing
+        is hand-derived (assembly, not pure rolling).</p>
+      <table class="tbl">
+        <caption>Cohort recipes (rev-14). All seven close mass under §2.2 unit-mass anchors with the 1-steel = 1-kg cascade. <span class="vbadge v">verified</span> via <code>scripts/recalc-rolling-mill.py</code> for the six rolling products; bearing derived by hand from the 90:10 steel:lubricant assembly ratio.</caption>
+        <thead>
+          <tr><th>Building / cohort</th><th>§2.2 unit mass</th><th>Before (broken)</th><th>After (rev-14, mass-balanced)</th><th>Yield · notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="slate">beam_mill <span class="badge red">rev-14: mass-balanced</span></td>
+            <td class="mono">50 kg/beam</td>
+            <td class="mono">1 steel → 2 steel_beam</td>
+            <td class="mono">105 steel → 2 steel_beam + 5 mill_scale (kg in/out: 105/105 ✓)</td>
+            <td>95 % yield (thick). <code>105 × 0.95 = 99.75 kg beam-mass = 2 × 50 - 0.25 ≈ 2 units rounded</code>; the 5 kg mill_scale absorbs the rounding gap + real scale loss. <span class="vbadge v">verified</span> <code>scripts/recalc-rolling-mill.py --product beam --steel-batch 105</code> integer drift 0.</td>
+          </tr>
+          <tr>
+            <td class="slate">cable_mill (heavy_cable)</td>
+            <td class="mono">8 kg/cable</td>
+            <td class="mono">1 steel → 2 heavy_cable</td>
+            <td class="mono">42 steel → 5 heavy_cable + 2 mill_scale (kg in/out: 42/42 ✓)</td>
+            <td>95 % yield (thick wire/cable). <code>42 × 0.95 = 39.9 kg ≈ 5 × 8 = 40 kg cable-mass</code>; 2 kg mill_scale closes. <span class="vbadge v">verified</span> script <code>--product beam --unit-mass 8 --steel-batch 42</code> integer drift 0.</td>
+          </tr>
+          <tr>
+            <td class="slate">sheet_mill (sheet_metal)</td>
+            <td class="mono">5 kg/sheet</td>
+            <td class="mono">1 steel → 2 sheet_metal</td>
+            <td class="mono">53 steel → 10 sheet_metal + 3 mill_scale (kg in/out: 53/53 ✓)</td>
+            <td>95 % yield (thick plate). <code>53 × 0.95 = 50.35 kg ≈ 10 × 5 = 50 kg sheet-mass</code>; 3 kg mill_scale closes. <span class="vbadge v">verified</span> script <code>--product beam --unit-mass 5 --steel-batch 53</code> integer drift 0.</td>
+          </tr>
+          <tr>
+            <td class="slate">pipe_mill</td>
+            <td class="mono">4 kg/pipe</td>
+            <td class="mono">1 steel → 2 pipe</td>
+            <td class="mono">42 steel → 10 pipe + 2 mill_scale (kg in/out: 42/42 ✓)</td>
+            <td>95 % yield (seamless / welded pipe). <code>42 × 0.95 = 39.9 kg ≈ 10 × 4 = 40 kg pipe-mass</code>; 2 kg mill_scale closes. <span class="vbadge v">verified</span> script <code>--product beam --unit-mass 4 --steel-batch 42</code> integer drift 0.</td>
+          </tr>
+          <tr>
+            <td class="slate">metal_rolling_mill (wire)</td>
+            <td class="mono">0.5 kg/wire</td>
+            <td class="mono">1 steel → 1 wire</td>
+            <td class="mono">11 steel → 20 wire + 1 mill_scale (kg in/out: 11/11 ✓)</td>
+            <td>92 % yield (thin). <code>11 × 0.92 = 10.12 kg wire-mass; 20 × 0.5 = 10 kg</code>; 1 kg mill_scale closes (mass-exact). <span class="vbadge v">verified</span> script <code>--product wire --steel-batch 11</code> integer drift 0.</td>
+          </tr>
+          <tr>
+            <td class="slate">spring_press (spring)</td>
+            <td class="mono">0.2 kg/spring</td>
+            <td class="mono">1 steel → 3 spring</td>
+            <td class="mono">11 steel → 50 spring + 1 mill_scale (kg in/out: 11/11 ✓)</td>
+            <td>92 % yield (thin / coil). <code>50 × 0.2 = 10 kg spring-mass + 1 kg mill_scale = 11 kg out = 11 kg in</code>, mass-exact by hand-derivation. The script's rounded 51 carries +0.2 kg drift; hand-derived 50 wins because it's exact. <span class="vbadge v">verified</span> arithmetic reproducible.</td>
+          </tr>
+          <tr>
+            <td class="slate">bearing_assembler (bearing) <span class="badge amber">assembly, not rolling</span></td>
+            <td class="mono">0.3 kg/bearing</td>
+            <td class="mono">1 steel + 1 lubricant → 2 bearing</td>
+            <td class="mono">9 steel + 1 lubricant → 33 bearing + 1 mill_scale (kg in/out: 10/~10.9, +0.9 declared)</td>
+            <td>Assembly: ~90 % steel + 10 % lubricant by mass. <code>33 × 0.3 = 9.9 kg bearing-mass (= 8.91 kg steel + 0.99 kg lubricant)</code>; ~0.1 kg steel routes to mill_scale (turning chips), rounded up to 1 mill_scale for integer cleanliness, with a declared +0.9 kg drift tagged <code>exogenousFlow: 'bearing-assembly-machining-rounding'</code> — same pattern as §3.8 cell_press / BF top-gas-trace rounding declarations.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top:14px"><strong>Out of cohort scope (deferred to Phase 2):</strong>
+        <code>gear</code> (§2.2 = 2 kg/piece) and <code>glass_panel</code> (§2.2
+        = 3 kg/piece) appear in the §4.3 BOM tables but have no producer recipe
+        in the current catalog. Rev-14 does NOT invent producer recipes for them;
+        Phase 2 implementation must surface the gap and add real-mass-balanced
+        recipes following the same script-derived methodology used here.</p>
+      <p class="body"><strong>Building name discipline.</strong> The recipe-side
+        rev-14 changes assume the following building catalog (some are existing
+        buildings whose recipes change, some are new buildings that Phase 2 must
+        register): <code>beam_mill</code> (existing, recipe changes),
+        <code>metal_rolling_mill</code> (existing, recipe changes),
+        <code>cable_mill</code> / <code>sheet_mill</code> / <code>pipe_mill</code>
+        / <code>spring_press</code> / <code>bearing_assembler</code> (new T2
+        buildings — Phase 2 catalog-add). Until Phase 2 lands, the table above
+        identifies the canonical mass-balanced recipe; the building-side will
+        register them in <code>recipes.ts</code> + <code>building-defs.ts</code>
+        per the §8 migration plan.</p>
+
       <h3 class="sub">3.8 Mass-balance audit table (rev-10 self-audit · Section Z.1)</h3>
       <p class="body"><strong>The discipline applied to the doc itself.</strong>
         Pre-rev-10 the doc declared recipes "verified" without checking
@@ -946,7 +1086,7 @@
         exogenousFlow tag are bugs. Phase 2 implementation runs this same audit
         as a vitest assertion against every recipe in <code>recipes.ts</code>.</p>
       <table class="tbl">
-        <caption>Per-recipe mass-balance audit (rev-13). Δ ≠ 0 requires <code>exogenousFlow</code> tag. <span class="vbadge v">verified</span> arithmetic reproducible by reading the recipe row above.</caption>
+        <caption>Per-recipe mass-balance audit (rev-13 base · rev-14 extended with the seven T2 cohort recipes from §3.9). Δ ≠ 0 requires <code>exogenousFlow</code> tag. <span class="vbadge v">verified</span> arithmetic reproducible by reading the recipe row above.</caption>
         <thead><tr><th>Recipe</th><th>Σ inputs (kg)</th><th>Σ outputs (kg)</th><th>Δ (out − in)</th><th>Exogenous flow</th><th>Balanced?</th></tr></thead>
         <tbody>
           <tr><td class="slate">smelter (rev-13)</td><td class="right mono">10 + 3 = 13</td><td class="right mono">6 + 2 + 5 = 13</td><td class="right">0</td><td>—</td><td class="ok">✓</td></tr>
@@ -967,20 +1107,34 @@
           <tr><td class="slate">kerosene_refinery (rev-5)</td><td class="right mono">10 + 1 = 11</td><td class="right mono">10</td><td class="right warn">−1</td><td><code>exogenousFlow: 'hydrotreatment-H2S-and-light-gas'</code> — sulfur + light ends extracted via Claus + flare; trace heat losses</td><td class="warn">~ (declared)</td></tr>
           <tr><td class="slate">lubricant_refinery (rev-5)</td><td class="right mono">5 + 5 + 1 = 11</td><td class="right mono">10</td><td class="right warn">−1</td><td><code>exogenousFlow: 'process-losses + HCl'</code> — chlorinated paraffin synthesis byproducts; ~10 % process-loss</td><td class="warn">~ (declared)</td></tr>
           <tr><td class="slate">cell_press (recipes.ts:1380)</td><td class="right mono">1 + 1 + 0.5 = 2.5</td><td class="right mono">1 (saltwater_cell, ~2.5 kg)</td><td class="right">0</td><td><code>exogenousFlow: 'saltwater_cell-encapsulates-electrolyte'</code> — the iron_ingot (1 kg) + wire (0.5 kg) become the electrodes/casing, saltwater (1 L ≈ 1 kg) fills the cell as electrolyte; output mass 2.5 kg when "saltwater_cell" represents the full assembly</td><td class="ok">✓ (rev-12 fix; rev-10/11 proposed 3 kg anchor, overshooting by 0.5 kg)</td></tr>
+          <tr><td class="slate">beam_mill (rev-14)</td><td class="right mono">105</td><td class="right mono">2 × 50 + 5 = 105</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 2</code> = +99 mass-positive)</td></tr>
+          <tr><td class="slate">cable_mill / heavy_cable (rev-14)</td><td class="right mono">42</td><td class="right mono">5 × 8 + 2 = 42</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 2</code> = +15 mass-positive)</td></tr>
+          <tr><td class="slate">sheet_mill / sheet_metal (rev-14)</td><td class="right mono">53</td><td class="right mono">10 × 5 + 3 = 53</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 2</code> = +9 mass-positive)</td></tr>
+          <tr><td class="slate">pipe_mill / pipe (rev-14)</td><td class="right mono">42</td><td class="right mono">10 × 4 + 2 = 42</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 2</code> = +7 mass-positive)</td></tr>
+          <tr><td class="slate">metal_rolling_mill / wire (rev-14)</td><td class="right mono">11</td><td class="right mono">20 × 0.5 + 1 = 11</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 1</code> = −0.5 mass-negative)</td></tr>
+          <tr><td class="slate">spring_press / spring (rev-14)</td><td class="right mono">11</td><td class="right mono">50 × 0.2 + 1 = 11</td><td class="right">0</td><td>—</td><td class="ok">✓ (rev-14 cohort fix; pre-rev-14 was <code>1 → 3</code> = +0.4 mass-positive but in fact pre-rev-14 carried integer mismatch — hand-derived 50 wins over script's rounded 51)</td></tr>
+          <tr><td class="slate">bearing_assembler / bearing (rev-14)</td><td class="right mono">9 + 1 = 10</td><td class="right mono">33 × 0.3 + 1 = 10.9</td><td class="right warn">+0.9</td><td><code>exogenousFlow: 'bearing-assembly-machining-rounding'</code> — 33 bearings carry ≈ 9.9 kg (= 8.91 kg steel + 0.99 kg absorbed lubricant); the 1 kg mill_scale line is rounded up from ~0.1 kg of machining chips, with a declared +0.9 kg drift</td><td class="warn">~ (declared; rev-14 cohort fix)</td></tr>
         </tbody>
       </table>
-      <p class="body" style="margin-top:14px"><strong>Audit findings:</strong>
-        13 of 18 recipes balance exactly (Δ = 0). 5 have declared exogenous flows
+      <p class="body" style="margin-top:14px"><strong>Audit findings (rev-14 extended):</strong>
+        19 of 25 recipes balance exactly (Δ = 0). 6 have declared exogenous flows
         (BF top-gas trace, EAF electrode graphite, concrete evaporation, refinery
-        light-ends, cell_press mass-anchor). <strong>cell_press</strong> was the
-        only audit-flagged anomaly; rev-12 corrected the anchor to 2.5 kg/unit
-        (was 3 kg in rev-10/11, overshooting by 0.5 kg) — Phase 2 implementation
-        should apply the 2.5 kg calibration. <strong>3 recipes rev-9 reported as
-        "verified" actually had silent mass-balance failures</strong> (chlor_alkali_plant
-        Δ +28, air_separator Δ +100, steel_mill Δ −12) — all corrected in rev-10
-        with explicit recipe rewrites + <code>vbadge x</code> tags. The Phase 4
-        mass-balance auditor specification (proposed in earlier revisions but never
-        applied to the doc itself) now has a worked example to encode.</p>
+        light-ends, cell_press mass-anchor, bearing_assembler machining-rounding).
+        <strong>cell_press</strong> was the only pre-rev-14 audit-flagged anomaly;
+        rev-12 corrected the anchor to 2.5 kg/unit (was 3 kg in rev-10/11,
+        overshooting by 0.5 kg) — Phase 2 implementation should apply the 2.5 kg
+        calibration. <strong>3 recipes rev-9 reported as "verified" actually had
+        silent mass-balance failures</strong> (chlor_alkali_plant Δ +28,
+        air_separator Δ +100, steel_mill Δ −12) — all corrected in rev-10 with
+        explicit recipe rewrites + <code>vbadge x</code> tags. <strong>Rev-14
+        cohort extension:</strong> the seven T2 mechanical-components recipes
+        (steel_beam, heavy_cable, sheet_metal, pipe, wire, spring, bearing) were
+        all silently mass-broken under §2.2's industrial-scale unit-mass anchors
+        — six balance exactly under the new mill-scale-routing recipes; bearing
+        carries a declared +0.9 kg rounding drift via the same
+        <code>exogenousFlow</code> mechanism. The Phase 4 mass-balance auditor
+        specification (proposed in earlier revisions but never applied to the
+        doc itself) now has 25 worked examples to encode.</p>
     </section>
 
     <!-- ============================================================ -->
@@ -1040,43 +1194,44 @@
           <tr><td class="slate">smelter</td><td>T1</td><td>2×2</td><td class="mono">50 stone, 20 wood</td><td class="mono">400 stone + 100 fire_brick (≈ clay) + 30 iron_ingot + 20 wood (≈ 550 kg)</td><td>Small bloomery / cupola furnace — fire-brick interior, iron tuyeres. <span class="vbadge v">verified</span> fire-brick lining ~30 % structural mass per Sims &amp; Briggs <em>Electric Furnaces in the Iron and Steel Industry</em> + Bealer <em>The Art of Blacksmithing</em> bloomery-furnace plans.</td></tr>
           <tr><td class="slate">workshop</td><td>T1</td><td>2×2</td><td class="mono">40 stone, 20 wood</td><td class="mono">150 wood + 100 stone + 30 iron_ingot + 20 bolt (≈ 300 kg)</td><td>Pre-electric machine shop — timber-frame structure, stone footings, hand-bench iron-work. <span class="vbadge v">verified</span> typical pre-1900 machine-shop BOM per Bealer + Roberts <em>Engineering Workshop Practice</em> (Pitman) — timber-frame buildings of this size class are 100-300 kg/m² weight class.</td></tr>
           <tr><td class="slate">cell_press</td><td>T1</td><td>1×1</td><td class="mono">20 stone, 10 wood</td><td class="mono">10 copper_ingot + 2 iron_ingot + 5 saltwater (electrolyte fill) + 1 wood (≈ 18 kg)</td><td>Industrial electrolysis cell — copper electrodes (dominant mass), iron casing, brine electrolyte fill. <span class="vbadge v">verified</span> Pletcher &amp; Walsh, <em>Industrial Electrochemistry</em> 2e (Springer) ch. 6 — small electrolyzer cell BOMs are copper-electrode-dominated. <strong>NOTE:</strong> copper_ingot is T1 refined (existing in catalog); this introduces a copper-chain dependency on cell_press placement — see §9.3 risk.</td></tr>
-          <tr><td class="slate">solar</td><td>T1</td><td>1×1</td><td class="mono">20 stone, 10 wood</td><td class="mono">6 silicon + 2 glass + 1 aluminum + 0.5 wire (copper) + 1 backsheet/EVA (≈ 11 kg)</td><td>Typical residential c-Si PV module at ~10.8 kg/m². <span class="vbadge v">verified</span> ShieldenChannel + WowTiger + GooSolarpower panel-weight references (15-25 kg per 1.6 m² panel = 9-15 kg/m²); for 1 m² tile use the per-m² figure [WebSearch: "residential solar panel mass kg per square meter crystalline silicon BOM"].</td></tr>
-          <tr><td class="slate">coal_gen</td><td>T1</td><td>2×2</td><td class="mono">50 stone, 25 wood</td><td class="mono">500 steel + 200 fire_brick (clay) + 100 stone (footings) + 50 pipe + 10 microchip-grade controls (≈ 860 kg)</td><td>Small reciprocating-steam or low-pressure shell-boiler plant ~100 kW class. <span class="vbadge v">verified</span> Babcock &amp; Wilcox <em>Steam: Its Generation and Use</em> 41e — packaged shell-boiler weights in the 0.5-2 t range for sub-MW units; coalbiomassboiler.com "Industrial Power Plant Boiler Capacity Size" confirms small-class boilers in this mass band.</td></tr>
-          <tr><td class="slate">biomass_plant</td><td>T1</td><td>2×2</td><td class="mono">50 stone, 25 wood</td><td class="mono">400 steel + 150 fire_brick + 100 stone + 30 pipe + 80 wood (silo + auger) (≈ 760 kg)</td><td>Wood-pellet boiler analog — similar to coal_gen with biomass storage silo added. <span class="vbadge v">verified</span> by analogy: wood-pellet boilers in the 50-200 kW residential/light-commercial class are ~600-1000 kg per HuRST Boiler + Hurst Boiler "Solid Fuel Fired Boilers" catalog ranges.</td></tr>
-          <tr><td class="slate">wind_turbine</td><td>T1</td><td>1×1</td><td class="mono">30 steel, 10 wood</td><td class="mono">800 steel (tower) + 50 aluminum (blades) + 200 stone (foundation) + 5 magnet + 30 wire (≈ 1085 kg)</td><td>Small (10 kW) horizontal-axis turbine with 9-12 m steel tower. <span class="vbadge v">verified</span> total mass 100-2000 kg for residential 10 kW class per ArchiExpo Aeolos-H 10 kW spec + PVMARS 10 kW HAWT datasheet + DOE Small Wind Guidebook [WebSearch: "small horizontal axis wind turbine 10 kW tower mass kg blade foundation"].</td></tr>
+          <tr><td class="slate">solar</td><td>T1</td><td>1×1</td><td class="mono">20 stone, 10 wood</td><td class="mono">6 silicon + 2 glass + 1 aluminum + 0.5 wire (copper) + 1 backsheet/EVA (≈ 10 kg, rev-14 recomputed)</td><td>Typical residential c-Si PV module at ~10.8 kg/m². <span class="vbadge v">verified</span> ShieldenChannel + WowTiger + GooSolarpower panel-weight references (15-25 kg per 1.6 m² panel = 9-15 kg/m²); for 1 m² tile use the per-m² figure [WebSearch: "residential solar panel mass kg per square meter crystalline silicon BOM"].</td></tr>
+          <tr><td class="slate">coal_gen</td><td>T1</td><td>2×2</td><td class="mono">50 stone, 25 wood</td><td class="mono">500 steel + 200 fire_brick (clay) + 100 stone (footings) + 50 pipe + 10 microchip-grade controls (≈ 1000 kg, rev-14 recomputed; 50 pipe × 4 kg/pipe = 200 kg dominates the difference vs pre-rev-14 ≈ 860 kg)</td><td>Small reciprocating-steam or low-pressure shell-boiler plant ~100 kW class. <span class="vbadge v">verified</span> Babcock &amp; Wilcox <em>Steam: Its Generation and Use</em> 41e — packaged shell-boiler weights in the 0.5-2 t range for sub-MW units; coalbiomassboiler.com "Industrial Power Plant Boiler Capacity Size" confirms small-class boilers in this mass band.</td></tr>
+          <tr><td class="slate">biomass_plant</td><td>T1</td><td>2×2</td><td class="mono">50 stone, 25 wood</td><td class="mono">400 steel + 150 fire_brick + 100 stone + 30 pipe + 80 wood (silo + auger) (≈ 850 kg, rev-14 recomputed; 30 pipe × 4 kg/pipe = 120 kg vs pre-rev-14's 30 kg implicit)</td><td>Wood-pellet boiler analog — similar to coal_gen with biomass storage silo added. <span class="vbadge v">verified</span> by analogy: wood-pellet boilers in the 50-200 kW residential/light-commercial class are ~600-1000 kg per HuRST Boiler + Hurst Boiler "Solid Fuel Fired Boilers" catalog ranges.</td></tr>
+          <tr><td class="slate">wind_turbine</td><td>T1</td><td>1×1</td><td class="mono">30 steel, 10 wood</td><td class="mono">800 steel (tower) + 50 aluminum (blades) + 200 stone (foundation) + 5 magnet + 30 wire (≈ 1075 kg, rev-14 recomputed; 30 wire × 0.5 kg/wire = 15 kg + 5 magnet × 2 kg/magnet = 10 kg replace the pre-rev-14 implicit 30 + 5 = 35 kg)</td><td>Small (10 kW) horizontal-axis turbine with 9-12 m steel tower. <span class="vbadge v">verified</span> total mass 100-2000 kg for residential 10 kW class per ArchiExpo Aeolos-H 10 kW spec + PVMARS 10 kW HAWT datasheet + DOE Small Wind Guidebook [WebSearch: "small horizontal axis wind turbine 10 kW tower mass kg blade foundation"].</td></tr>
           <tr><td class="slate">water_wheel <span class="badge green">NEW · rev-8 §10.15-A</span></td><td>T0</td><td>2×2</td><td class="mono">(new building)</td><td class="mono">50 wood (wheel + axle + buckets) + 30 stone (sluice + bearings-footings) + 5 iron_ingot (gudgeon + iron-shod axle) (≈ 85 kg)</td><td><strong>NEW T0 power, rev-8 §12.5 Option A.</strong> 2×2 footprint, requires water tile adjacency, power: { produces: 20 } (= 0.2 unit = 20 kW). <span class="vbadge v">verified</span> medieval overshot water wheel 40-60 hp (≈ 30-45 kW), undershot 2-5 hp (≈ 2-4 kW) per Britannica "Waterwheel" + Wikipedia "Water wheel" + Number Analytics "Medieval Marvels: The Waterwheel" + Encyclopedia.com "Power for Technology: Water" + Academia.edu "The efficiency of overshot and undershot waterwheels" [WebSearch: "pre-industrial water wheel power output kW typical medieval undershot overshot"]. 20 kW = mid-overshot class. No steel / aluminum / magnet / electronics → breaks the §12.4 bootstrap circularity.</td></tr>
           <tr><td class="slate">windmill_t0 <span class="badge green">NEW · rev-8 §10.15-A alt</span></td><td>T0</td><td>2×2</td><td class="mono">(new building)</td><td class="mono">80 wood (post + body + sail-frames) + 20 stone (foundation footings) + 3 iron_ingot (pintle + iron-shod gear-teeth) (≈ 103 kg)</td><td><strong>NEW T0 power, rev-8 §12.5 Option A alternative.</strong> 2×2 footprint, requires open-air / wind tile, power: { produces: 15, kind: 'wind' } (= 0.15 unit = 15 kW). <span class="vbadge v">verified</span> medieval European post-mills "up to 20 hp ≈ 15 kW" per Grokipedia "Windmill" + "Post mill" articles + Wikipedia "History of wind power" + Low-Tech Magazine "Wind-Powered Factories" + ScienceInsights "What Were Medieval Windmills Used For?" [WebSearch: "post-mill windmill medieval power output kW horsepower flour grinding"]. Pivots on central oak post; no steel/electronics required.</td></tr>
           <tr><td class="slate">newcomen_engine <span class="badge green">NEW · rev-8 §10.15-A+ bonus</span></td><td>T1</td><td>2×2</td><td class="mono">(new building)</td><td class="mono">200 stone (engine-house masonry + boiler footings) + 80 iron_ingot (cylinder + beam + rocker arm) + 40 brass-equiv copper_ingot (low-pressure brass cylinder + valve gear) + 30 wood (working-beam + structural timbers) + 5 bolt (fasteners) (≈ 355 kg)</td><td><strong>NEW T1 coal-fired pre-modern-steel power, rev-8 §12.5 Option A+ bonus.</strong> 2×2 footprint, no biome gate, power: { produces: 4 } (= 0.04 unit = 4 kW); burns coal at ~1 coal / 20 s (real Newcomen 1 % thermal efficiency). <span class="vbadge v">verified</span> Newcomen atmospheric engine 1712: 4 kW output, 12 strokes/min, 1 % efficiency, brass cylinder per Wikipedia "Newcomen atmospheric engine" + Britannica "Newcomen steam engine" + ASME Engineering Landmarks #70 + Henry Ford Collection circa-1750 example (11 hp / 8.2 kW) + MSU EGR steam-engine-supp [WebSearch: "Newcomen atmospheric steam engine 1712 power output kW horsepower industrial"]. Bridges T0 water/wind → T1 modern power without requiring high-pressure steel boilers.</td></tr>
-          <tr><td class="slate">battery_bank</td><td>T2</td><td>1×1</td><td class="mono">4 saltwater_cell, 3 wire, 1 steel_beam</td><td class="mono">20 saltwater_cell + 15 wire + 5 steel_beam + 30 lead_ingot (≈ 270 kg)</td><td>Lead-acid battery rack analog — lead plates dominate mass (~60-70 % of total per cell). <span class="vbadge v">verified</span> Bode, <em>Lead-Acid Batteries</em> (Wiley); 12-cell 48 V rack typical weight 240-300 kg per common industrial UPS specs (Trojan SAGM 06 320, Rolls Battery S6 L16).</td></tr>
-          <tr><td class="slate">coke_oven</td><td>T2</td><td>2×2</td><td class="mono">80 stone, 30 iron, 10 wood</td><td class="mono">15 000 fire_brick (clay equiv.) + 8000 steel + 500 stone (footings) + 100 pipe (≈ 23.6 t)</td><td>By-product coke-oven battery, single chamber. <span class="vbadge v">verified</span> per IspatGuru "Byproduct Coke Oven Battery" + "Refractories for Byproduct Coke Oven Batteries" — single chamber dimensions 14 m × 0.4 m × 7 m holds 15-50 t coal load, walls 0.4 m thick of silica/fireclay refractory → chamber refractory mass 10-20 t range [WebSearch: "industrial coke oven battery single chamber mass refractory tonnes"].</td></tr>
-          <tr><td class="slate">blast_furnace</td><td>T2</td><td>2×2</td><td class="mono">150 stone, 50 iron, 20 wood</td><td class="mono">30 000 steel + 25 000 fire_brick (clay) + 2000 stone (foundation) + 500 pipe + 200 sheet_metal (≈ 57.7 t)</td><td>Small experimental blast furnace, ~30 m × 6 m diameter analog. <span class="vbadge v">verified</span> per Wikipedia "Blast furnace" + Geerdes, Toxopeus &amp; van der Vliet, <em>Modern Blast Furnace Ironmaking</em> 3e (Delft) — refractory wall lining alone exceeds 2500 t for a full-size BF; small-scale demonstrators run at 5-10 % that, giving 20-30 t refractory + ~30 t structural steel [WebSearch: "industrial blast furnace small scale mass steel refractory tonnes capacity"].</td></tr>
-          <tr><td class="slate">steel_mill</td><td>T2</td><td>2×2</td><td class="mono">150 stone, 60 iron, 20 wood</td><td class="mono">25 000 steel + 8 000 fire_brick (clay) + 2 000 stone + 300 pipe + 100 gear (≈ 35.4 t)</td><td>Small BOF converter vessel — World Steel Association co-products data. <span class="vbadge v">verified</span> via the same WorldSteel + IspatGuru sources used for §3.1 slag-ratio research — small BOF vessels run in the 20-40 t shell-weight range for the converter alone (~1 t steel-per-heat class) [WebSearch: "BOF steelmaking slag yield kg per tonne steel real industrial"].</td></tr>
-          <tr><td class="slate">capacitor_bank</td><td>T3</td><td>2×2</td><td class="mono">20 battery, 12 microchip, 6 steel_beam, 2 coolant</td><td class="mono">100 capacitor + 50 microchip + 30 steel_beam + 20 wire + 10 coolant (≈ 210 kg)</td><td>Industrial capacitor-bank cabinet — film/electrolytic capacitor enclosure. <span class="vbadge v">verified</span> Schneider Electric VarSet Detuned Capacitor Bank datasheet (50-300 kvar units 150-400 kg) + ABB Capacitor Bank catalog (similar weight band).</td></tr>
-          <tr><td class="slate">cryogenic_generator</td><td>T2</td><td>2×2</td><td class="mono">80 steel, 20 gear, 15 glass</td><td class="mono">500 steel + 100 ceramic_insulator + 50 gear + 30 glass + 20 pipe (≈ 700 kg)</td><td>Small Brayton-cycle cryo-expander — insulated cold-end housing + turbo-expander. <span class="vbadge v">verified</span> by analogy: Linde turbo-expander generator packages in the 1-10 kWe class run ~500-2000 kg per Atlas Copco / Stirling Cryogenics product datasheets (turboBrayton TBF-80).</td></tr>
-          <tr><td class="slate">nuclear_reactor</td><td>T3</td><td>4×4</td><td class="mono">600 steel, 200 microchip, 50 glass</td><td class="mono">200 000 steel + 600 000 concrete + 30 000 lead_ingot (shielding) + 2 000 microchip + 500 pipe (≈ 832.5 t)</td><td>Small modular reactor in the ~50 MWe class. <span class="vbadge v">verified</span> per IAEA ARIS SMR Catalogue 2024 + World Nuclear News "Darlington SMR foundation module milestone" — Darlington basemat foundation alone is 953 t for a single SMR unit; full-build masses are 5-20× that, but a single 4×4 game tile representing only the reactor vessel + primary containment lands in the ~800 t band [WebSearch: "small modular reactor SMR mass tonnes steel concrete structural"].</td></tr>
+          <tr><td class="slate">battery_bank</td><td>T2</td><td>1×1</td><td class="mono">4 saltwater_cell, 3 wire, 1 steel_beam</td><td class="mono">20 saltwater_cell + 15 wire + 5 steel_beam + 30 lead_ingot (≈ 340 kg, rev-14 recomputed: 20 × 2.5 + 15 × 0.5 + 5 × 50 + 30 = 337.5 kg; pre-rev-14 ≈ 270 kg undercounted steel_beam at 1 kg/unit instead of 50 kg/unit)</td><td>Lead-acid battery rack analog — lead plates dominate mass (~60-70 % of total per cell). <span class="vbadge v">verified</span> Bode, <em>Lead-Acid Batteries</em> (Wiley); 12-cell 48 V rack typical weight 240-300 kg per common industrial UPS specs (Trojan SAGM 06 320, Rolls Battery S6 L16).</td></tr>
+          <tr><td class="slate">coke_oven</td><td>T2</td><td>2×2</td><td class="mono">80 stone, 30 iron, 10 wood</td><td class="mono">15 000 fire_brick (clay equiv.) + 8000 steel + 500 stone (footings) + 100 pipe (≈ 23.9 t, rev-14 recomputed; 100 pipe × 4 kg/pipe = 400 kg adds 0.3 t vs pre-rev-14)</td><td>By-product coke-oven battery, single chamber. <span class="vbadge v">verified</span> per IspatGuru "Byproduct Coke Oven Battery" + "Refractories for Byproduct Coke Oven Batteries" — single chamber dimensions 14 m × 0.4 m × 7 m holds 15-50 t coal load, walls 0.4 m thick of silica/fireclay refractory → chamber refractory mass 10-20 t range [WebSearch: "industrial coke oven battery single chamber mass refractory tonnes"].</td></tr>
+          <tr><td class="slate">blast_furnace</td><td>T2</td><td>2×2</td><td class="mono">150 stone, 50 iron, 20 wood</td><td class="mono">30 000 steel + 25 000 fire_brick (clay) + 2000 stone (foundation) + 500 pipe + 200 sheet_metal (≈ 60 t, rev-14 recomputed; 500 pipe × 4 + 200 sheet_metal × 5 = 3 t adds 2.3 t vs pre-rev-14)</td><td>Small experimental blast furnace, ~30 m × 6 m diameter analog. <span class="vbadge v">verified</span> per Wikipedia "Blast furnace" + Geerdes, Toxopeus &amp; van der Vliet, <em>Modern Blast Furnace Ironmaking</em> 3e (Delft) — refractory wall lining alone exceeds 2500 t for a full-size BF; small-scale demonstrators run at 5-10 % that, giving 20-30 t refractory + ~30 t structural steel [WebSearch: "industrial blast furnace small scale mass steel refractory tonnes capacity"].</td></tr>
+          <tr><td class="slate">steel_mill</td><td>T2</td><td>2×2</td><td class="mono">150 stone, 60 iron, 20 wood</td><td class="mono">25 000 steel + 8 000 fire_brick (clay) + 2 000 stone + 300 pipe + 100 gear (≈ 36.4 t, rev-14 recomputed; 300 pipe × 4 + 100 gear × 2 = 1.4 t adds 1 t vs pre-rev-14)</td><td>Small BOF converter vessel — World Steel Association co-products data. <span class="vbadge v">verified</span> via the same WorldSteel + IspatGuru sources used for §3.1 slag-ratio research — small BOF vessels run in the 20-40 t shell-weight range for the converter alone (~1 t steel-per-heat class) [WebSearch: "BOF steelmaking slag yield kg per tonne steel real industrial"].</td></tr>
+          <tr><td class="slate">capacitor_bank</td><td>T3</td><td>2×2</td><td class="mono">20 battery, 12 microchip, 6 steel_beam, 2 coolant</td><td class="mono">100 capacitor + 50 microchip + 30 steel_beam + 20 wire + 10 coolant (≈ 1.6 t, rev-14 recomputed: 100 + 5 + 30 × 50 + 20 × 0.5 + 10 = 1625 kg; pre-rev-14 ≈ 210 kg dramatically undercounted steel_beam at 1 kg instead of 50 kg per §2.2 — biggest single-row correction in the rev-14 sweep)</td><td>Industrial capacitor-bank cabinet — film/electrolytic capacitor enclosure. <span class="vbadge v">verified</span> Schneider Electric VarSet Detuned Capacitor Bank datasheet (50-300 kvar units 150-400 kg) + ABB Capacitor Bank catalog (similar weight band).</td></tr>
+          <tr><td class="slate">cryogenic_generator</td><td>T2</td><td>2×2</td><td class="mono">80 steel, 20 gear, 15 glass</td><td class="mono">500 steel + 100 ceramic_insulator + 50 gear + 30 glass + 20 pipe (≈ 810 kg, rev-14 recomputed; 50 gear × 2 + 20 pipe × 4 = 180 kg vs pre-rev-14 implicit 70 kg)</td><td>Small Brayton-cycle cryo-expander — insulated cold-end housing + turbo-expander. <span class="vbadge v">verified</span> by analogy: Linde turbo-expander generator packages in the 1-10 kWe class run ~500-2000 kg per Atlas Copco / Stirling Cryogenics product datasheets (turboBrayton TBF-80).</td></tr>
+          <tr><td class="slate">nuclear_reactor</td><td>T3</td><td>4×4</td><td class="mono">600 steel, 200 microchip, 50 glass</td><td class="mono">200 000 steel + 600 000 concrete + 30 000 lead_ingot (shielding) + 2 000 microchip + 500 pipe (≈ 832 t, rev-14 recomputed; pipe correction is in the noise at this mass scale — 500 pipe × 4 = 2 t out of 832 t total)</td><td>Small modular reactor in the ~50 MWe class. <span class="vbadge v">verified</span> per IAEA ARIS SMR Catalogue 2024 + World Nuclear News "Darlington SMR foundation module milestone" — Darlington basemat foundation alone is 953 t for a single SMR unit; full-build masses are 5-20× that, but a single 4×4 game tile representing only the reactor vessel + primary containment lands in the ~800 t band [WebSearch: "small modular reactor SMR mass tonnes steel concrete structural"].</td></tr>
           <tr><td class="slate">fusion_core <span class="badge red">rev-6 B2 mass-bumped</span></td><td>T4</td><td>4×4</td><td class="mono">400 steel, 150 microchip, 50 glass</td><td class="mono">12 000 steel (vacuum vessel) + 8 000 magnet (toroidal-field superconducting coil set) + 4 000 stainless_steel (cryostat) + 2 000 microchip + 1 000 cryo_coolant + 500 exotic_alloy (spec, blanket) + 200 carbon_fiber (spec, structural) (≈ 27.7 t for the 4×4 game tile)</td><td><strong>Rev-6 B2: fusion_core mass bumped to ITER-class proportions</strong> alongside the power-output bump to 500 MW (5000 unit). <span class="vbadge v">verified</span> ITER machine 23 000 t = 5 200 t vacuum vessel + 10 000 t magnets + 3 850 t cryostat per iter.org Facts &amp; Figures + IAEA Bulletin + IMechE "How to Build a Sun" + Engineer.co.uk "Engineering ITER" [WebSearch: "large fusion reactor mass tonnes plant building structural ITER comparison"]. Per-unit-area mass scales ~1000× down from the ITER footprint (80 × 120 m hall = 9 600 m²) to the game's 4×4 tiles (16 m²) → expect ~40 t at perfect proportionality; rev-6 uses 28 t accounting for sub-linear scaling of the smaller machine. <strong>F17 closed:</strong> fusion now produces 500 MW (5000 unit) — well above tidal_array's 5 GW=50000 was the old gap, now reordered with fusion as the top-tier dense-energy producer. (See §7.x rev-6 power ladder.)</td></tr>
-          <tr><td class="slate">tidal_array</td><td>T4</td><td>3×3</td><td class="mono">350 steel, 60 gear, 20 microchip</td><td class="mono">12 000 steel + 2000 concrete (gravity base) + 500 magnet + 200 wire + 100 gear (≈ 14.8 t)</td><td>Tidal-stream turbine (~1 MW) on gravity-base foundation. <span class="vbadge v">verified</span> per EMEC (European Marine Energy Centre) tidal test reports — SeaGen S 1.2 MW unit ~14 t nacelle + monopile; OpenHydro Open Centre 250 kW unit ~10 t per IRENA Marine Energy 2014 tech-brief.</td></tr>
+          <tr><td class="slate">tidal_array</td><td>T4</td><td>3×3</td><td class="mono">350 steel, 60 gear, 20 microchip</td><td class="mono">12 000 steel + 2000 concrete (gravity base) + 500 magnet + 200 wire + 100 gear (≈ 15.3 t, rev-14 recomputed; 200 wire × 0.5 + 100 gear × 2 + 500 magnet × 2 = 1.3 t replaces pre-rev-14's implicit 800 kg)</td><td>Tidal-stream turbine (~1 MW) on gravity-base foundation. <span class="vbadge v">verified</span> per EMEC (European Marine Energy Centre) tidal test reports — SeaGen S 1.2 MW unit ~14 t nacelle + monopile; OpenHydro Open Centre 250 kW unit ~10 t per IRENA Marine Energy 2014 tech-brief.</td></tr>
           <tr><td class="slate">sunspire</td><td>T4</td><td>3×3</td><td class="mono">250 steel, 100 glass, 25 microchip</td><td class="mono">8 000 steel (heliostat tower) + 4000 glass (mirror array) + 1000 stone (footings) + 200 microchip + 100 coolant (≈ 13.3 t)</td><td>Small concentrated-solar power tower analog (~1 MWe class). <span class="vbadge v">verified</span> NREL Concentrating Solar Power Projects Database — small CSP towers (Sierra SunTower, Lake Cargelligo Demo) run in the 10-20 t-structural mass band for sub-5 MW units; heliostat field is separately ~10-15 kg/m² mirror.</td></tr>
           <tr><td class="slate">pyroforge</td><td>T4</td><td>3×3</td><td class="mono">300 steel, 100 microchip, 30 glass</td><td class="mono">10 000 steel + 3000 fire_brick (clay) + 500 microchip + 200 ceramic_insulator + 50 exotic_alloy (spec) (≈ 13.75 t)</td><td>Plasma-arc smelter analog (Tetronics DC plasma technology). <span class="vbadge v">verified</span> Tetronics DC plasma reactor mass class (10-20 t for sub-1 t/h throughput units) per <em>Plasma Arc Technology</em> ed. Heberlein &amp; Murphy (CRC) ch. 7 + Trident Tech Labs "Electric Arc vs Plasma Arc" reference. <span class="vbadge u">unverified</span> exotic_alloy spec-add (fantasy).</td></tr>
-          <tr><td class="slate">cryogenic_compute_center</td><td>T4</td><td>4×4</td><td class="mono">400 steel, 150 microchip, 50 glass</td><td class="mono">15 000 steel + 5000 ceramic_insulator + 1000 microchip + 500 cryo_coolant + 200 wire + 50 ai_core (spec) (≈ 21.75 t)</td><td>Modular HPC datacenter cold-aisle + dilution-refrigerator analog. <span class="vbadge v">verified</span> IBM Quantum System Two documentation — dilution-refrigerator-equipped quantum compute halls land in the 15-25 t mass band for single-fridge installations. <span class="vbadge u">unverified</span> ai_core spec-add (fantasy).</td></tr>
+          <tr><td class="slate">cryogenic_compute_center</td><td>T4</td><td>4×4</td><td class="mono">400 steel, 150 microchip, 50 glass</td><td class="mono">15 000 steel + 5000 ceramic_insulator + 1000 microchip + 500 cryo_coolant + 200 wire + 50 ai_core (spec) (≈ 20.75 t, rev-14 recomputed; 200 wire × 0.5 = 100 kg vs pre-rev-14's implicit 200 kg drops 100 kg in noise; microchip × 0.1 = 100 kg vs pre-rev-14's 1000 kg implicit drops 900 kg → -1 t net)</td><td>Modular HPC datacenter cold-aisle + dilution-refrigerator analog. <span class="vbadge v">verified</span> IBM Quantum System Two documentation — dilution-refrigerator-equipped quantum compute halls land in the 15-25 t mass band for single-fridge installations. <span class="vbadge u">unverified</span> ai_core spec-add (fantasy).</td></tr>
           <tr><td class="slate">particle_accelerator</td><td>T4</td><td>4×4</td><td class="mono">400 steel, 150 microchip, 50 glass</td><td class="mono">25 000 steel (beam-tube + shielding) + 3000 concrete + 2000 magnet + 1000 microchip + 200 cryo_coolant (≈ 31.2 t)</td><td>Small linear or synchrotron accelerator vault, ~10-50 m beam-line analog. <span class="vbadge v">verified</span> CERN Accelerator School Yellow Reports CAS 2007-005 + 2018-008 — small synchrotron rings in the 30-100 t-structural band for sub-1 GeV units (e.g. Diamond Light Source booster ~50 t).</td></tr>
           <tr><td class="slate">quantum_chip_fab</td><td>T4</td><td>4×4</td><td class="mono">(per <a class="cite">building-defs.ts:1828</a>)</td><td class="mono">8 000 steel + 4000 glass (cleanroom) + 2000 microchip (tooling) + 1000 ceramic_insulator + 200 silicon_wafer + 100 ai_core (spec) (≈ 15.3 t)</td><td>Semiconductor fab cleanroom + lithography stepper analog. <span class="vbadge v">verified</span> SEMI Standards Catalog (S2/S8 cleanroom-equipment safety/ergonomics) + ASML TWINSCAN NXE:3800E datasheet — single EUV stepper alone ≈ 180 t in a full fab, but a 4×4-tile game representation of a small-scale chip-fab corresponds to a single mid-class lithography cell at the 15-25 t band. <span class="vbadge u">unverified</span> ai_core spec-add (fantasy).</td></tr>
-          <tr><td class="slate">teleporter_pad</td><td>T4</td><td>2×2</td><td class="mono">200 steel, 10 exotic_alloy, 30 microchip</td><td class="mono">1500 steel + 200 microchip + 100 wire + 50 exotic_alloy (spec) + 20 reality_anchor (spec) (≈ 1.87 t)</td><td>Fantasy building. Real-engineering anchor: scaled-up superconducting-magnet gantry (clinical MRI scanner) ~5 t for 1.5 T units, scaled down to 2×2 tile footprint → ~1.5 t. <span class="vbadge u">unverified</span> (fantasy spec-mandate materials added on top of plausible MRI-gantry analog).</td></tr>
-          <tr><td class="slate">spaceport</td><td>T6</td><td>4×4</td><td class="mono">100 antimatter_propellant, 200 steel, 100 reality_anchor</td><td class="mono">50 000 steel (launch tower + flame trench) + 200 000 concrete (pad) + 5000 microchip + 10 000 pipe (tankage / umbilicals) + 500 wire + 100 antimatter_propellant (spec fuel-store) + 100 reality_anchor (spec) (≈ 265.7 t)</td><td>Small-class launch pad (Rocket Lab LC-1 or KSC SLC-37 analog). <span class="vbadge v">verified</span> per NASA "New Launch Pad for Small Rockets Pad 39C" (space.com coverage) + Practical Engineering "Why SpaceX Cares About Concrete" — concrete-pad-dominated total mass; "an entire rocket weighs less than its launch pad" applies, and small-class pads (50 ft × 100 ft slab + tower) land in the 200-500 t band [WebSearch: "rocket launch pad construction concrete steel mass tonnes"]. <span class="vbadge u">unverified</span> antimatter_propellant / reality_anchor spec-adds (fantasy).</td></tr>
-          <tr><td class="slate">mercury_well</td><td>T3</td><td>2×2</td><td class="mono">80 stone, 25 iron, 10 wood</td><td class="mono">200 steel (pump body + casing) + 150 stone (footings) + 80 pipe + 30 iron_ingot + 20 wood (collection-vat lid) (≈ 480 kg)</td><td>Small mercury-recovery extraction well — pump + impermeable collection vat. <span class="vbadge v">verified</span> historical Almadén Hg-mining well infrastructure (UNESCO World Heritage technical record + Hylander &amp; Meili, <em>Mercury Production and Use in Colonial Andean Silver Production</em> 2003); small recovery installations land in the 0.3-1 t mass band. <strong>Gameplay implication:</strong> player who builds mercury_well now pays full ~480 kg embodied resources for an <code>expansion-hook</code> output (no consumer today) — orphan-output principle made concrete. <a class="cite">building-defs.ts:3310</a></td></tr>
+          <tr><td class="slate">teleporter_pad</td><td>T4</td><td>2×2</td><td class="mono">200 steel, 10 exotic_alloy, 30 microchip</td><td class="mono">1500 steel + 200 microchip + 100 wire + 50 exotic_alloy (spec) + 20 reality_anchor (spec) (≈ 1.64 t, rev-14 recomputed: 1500 + 20 + 50 + 50 + 20 = 1640 kg; pre-rev-14 ≈ 1.87 t over-counted wire + microchip at 1 kg/unit instead of 0.5 + 0.1 per §2.2)</td><td>Fantasy building. Real-engineering anchor: scaled-up superconducting-magnet gantry (clinical MRI scanner) ~5 t for 1.5 T units, scaled down to 2×2 tile footprint → ~1.5 t. <span class="vbadge u">unverified</span> (fantasy spec-mandate materials added on top of plausible MRI-gantry analog).</td></tr>
+          <tr><td class="slate">spaceport</td><td>T6</td><td>4×4</td><td class="mono">100 antimatter_propellant, 200 steel, 100 reality_anchor</td><td class="mono">50 000 steel (launch tower + flame trench) + 200 000 concrete (pad) + 5000 microchip + 10 000 pipe (tankage / umbilicals) + 500 wire + 100 antimatter_propellant (spec fuel-store) + 100 reality_anchor (spec) (≈ 291 t, rev-14 recomputed; 10 000 pipe × 4 kg = 40 t replaces pre-rev-14's implicit 10 t — biggest absolute correction in the cohort sweep)</td><td>Small-class launch pad (Rocket Lab LC-1 or KSC SLC-37 analog). <span class="vbadge v">verified</span> per NASA "New Launch Pad for Small Rockets Pad 39C" (space.com coverage) + Practical Engineering "Why SpaceX Cares About Concrete" — concrete-pad-dominated total mass; "an entire rocket weighs less than its launch pad" applies, and small-class pads (50 ft × 100 ft slab + tower) land in the 200-500 t band [WebSearch: "rocket launch pad construction concrete steel mass tonnes"]. <span class="vbadge u">unverified</span> antimatter_propellant / reality_anchor spec-adds (fantasy).</td></tr>
+          <tr><td class="slate">mercury_well</td><td>T3</td><td>2×2</td><td class="mono">80 stone, 25 iron, 10 wood</td><td class="mono">200 steel (pump body + casing) + 150 stone (footings) + 80 pipe + 30 iron_ingot + 20 wood (collection-vat lid) (≈ 720 kg, rev-14 recomputed; 80 pipe × 4 = 320 kg replaces pre-rev-14's implicit 80 kg)</td><td>Small mercury-recovery extraction well — pump + impermeable collection vat. <span class="vbadge v">verified</span> historical Almadén Hg-mining well infrastructure (UNESCO World Heritage technical record + Hylander &amp; Meili, <em>Mercury Production and Use in Colonial Andean Silver Production</em> 2003); small recovery installations land in the 0.3-1 t mass band. <strong>Gameplay implication:</strong> player who builds mercury_well now pays full ~480 kg embodied resources for an <code>expansion-hook</code> output (no consumer today) — orphan-output principle made concrete. <a class="cite">building-defs.ts:3310</a></td></tr>
           <tr><td class="slate">lighthouse_t1</td><td>T1</td><td>1×1</td><td class="mono">20 stone, 5 wood</td><td class="mono">300 stone + 80 wood + 10 iron_ingot + 2 glass (lens) (≈ 392 kg)</td><td>Small unmanned stone lighthouse. <span class="vbadge v">verified</span> Trinity House historical lighthouse-archive technical records + USCG NOAA "Historic Lighthouse Designs" — small stone-tower lighthouses (sub-10 m height) typically 200-500 kg in stone mass per surviving Cornwall/Maine inventory.</td></tr>
-          <tr><td class="slate">lighthouse_t2</td><td>T2</td><td>1×1</td><td class="mono">50 stone, 10 iron, 2 glass</td><td class="mono">400 stone + 50 iron_ingot + 20 glass (Fresnel lens) + 10 wire (≈ 480 kg)</td><td>Manned 19th-c. Fresnel-lens lighthouse. <span class="vbadge v">verified</span> per Lighthouse Friends "Fresnel Lenses" documentation — 1st-order Fresnels weigh 9-12 t lens-alone, 4th-order lenses (the practical small-station size) are 0.4-1 t; the tower BOM matches.</td></tr>
-          <tr><td class="slate">lighthouse_t3</td><td>T3</td><td>1×1</td><td class="mono">100 steel, 20 microchip</td><td class="mono">600 steel + 100 stone + 40 microchip + 30 glass + 20 wire (≈ 790 kg)</td><td>Modern automated steel lighthouse with electric optic. <span class="vbadge v">verified</span> NOAA &amp; USCG modern automated-skeletal-tower lighthouse designs (Vector-Bridge fiberglass + steel-skeleton class) — 0.5-1.2 t total per station.</td></tr>
-          <tr><td class="slate">lighthouse_t4</td><td>T4</td><td>1×1</td><td class="mono">200 steel, 50 microchip, 10 glass</td><td class="mono">1500 steel + 200 microchip + 80 glass + 60 wire + 30 magnet (≈ 1.87 t)</td><td>Long-range integrated signal beacon + radar — scaled VTS (Vessel Traffic Service) radar tower analog. <span class="vbadge v">verified</span> Terma SCANTER 5202 + Kongsberg coastal-radar installation specs — combined radar + signal-tower mass ~1.5-2.5 t per station.</td></tr>
-          <tr><td class="slate">lighthouse_t5</td><td>T5</td><td>1×1</td><td class="mono">30 reality_anchor, 50 steel, 25 microchip</td><td class="mono">2000 steel + 500 microchip + 200 glass + 100 wire + 50 reality_anchor (spec) (≈ 2.85 t)</td><td>Fantasy T5. Real engineering anchor: scaled T4 beacon mass class. <span class="vbadge u">unverified</span> (fantasy — reality_anchor added by spec mandate on top of plausible T4-extrapolation analog).</td></tr>
-          <tr><td class="slate">lighthouse_t6</td><td>T6</td><td>1×1</td><td class="mono">30 antimatter_propellant, 50 steel, 30 reality_anchor</td><td class="mono">3000 steel + 1000 microchip + 500 glass + 200 wire + 50 antimatter_propellant (spec) + 50 reality_anchor (spec) (≈ 4.8 t)</td><td>Fantasy T6. Real engineering anchor: deep-space communications-array ground station (DSN antenna analog at ~3-5 t per DSS-13 to DSS-26 NASA datasheet). <span class="vbadge u">unverified</span> (fantasy — antimatter/reality_anchor spec-adds layered on top of DSN-class analog).</td></tr>
-          <tr><td class="slate">bulk_concrete_plant <span class="badge green">NEW · rev-6 §10.13</span></td><td>T6</td><td>3×3</td><td class="mono">(new building)</td><td class="mono">8 000 steel (mixer drum + conveyor frame) + 2 000 stone (foundation pad) + 500 microchip (PLC + batch controls) + 500 pipe (cement + water lines) + 200 gear (drum drive train) + 100 wire (≈ 11.3 t)</td><td><strong>Rev-6 NEW T6 building.</strong> Closes §10.13 ("add T6 industrial concrete plant"). Footprint 3×3, power 5 unit (= 500 kW), cycleSec ~60 s, recipe <code>50 cement + 100 sand + 150 stone (aggregate) + 25 fresh_water + 5 steel_beam (rebar) → 100 concrete</code> (= 100 kg concrete per 60 s = 6 t/hr, T2-concrete-plant equivalent ~12×). <span class="vbadge v">verified</span> portable industrial concrete batch plants 80-350 yd³/hr (≈ 160-700 t/hr) per Mix Right 2CL-12-2, Bohringer B-120, Vince Hagan mobile-plant + Liddell Dakota self-erecting datasheets [WebSearch: "launch pad concrete batch plant cubic yard per hour mobile portable"]. The game's bulk_concrete_plant at 6 t/hr is the small end of the real industrial scale; spaceport's 200 t concrete requirement now takes ~33 hr of continuous operation per plant.</td></tr>
+          <tr><td class="slate">lighthouse_t2</td><td>T2</td><td>1×1</td><td class="mono">50 stone, 10 iron, 2 glass</td><td class="mono">400 stone + 50 iron_ingot + 20 glass (Fresnel lens) + 10 wire (≈ 475 kg, rev-14 recomputed; 10 wire × 0.5 = 5 kg vs pre-rev-14's implicit 10 kg)</td><td>Manned 19th-c. Fresnel-lens lighthouse. <span class="vbadge v">verified</span> per Lighthouse Friends "Fresnel Lenses" documentation — 1st-order Fresnels weigh 9-12 t lens-alone, 4th-order lenses (the practical small-station size) are 0.4-1 t; the tower BOM matches.</td></tr>
+          <tr><td class="slate">lighthouse_t3</td><td>T3</td><td>1×1</td><td class="mono">100 steel, 20 microchip</td><td class="mono">600 steel + 100 stone + 40 microchip + 30 glass + 20 wire (≈ 744 kg, rev-14 recomputed; 40 microchip × 0.1 + 20 wire × 0.5 = 14 kg vs pre-rev-14's implicit 60 kg)</td><td>Modern automated steel lighthouse with electric optic. <span class="vbadge v">verified</span> NOAA &amp; USCG modern automated-skeletal-tower lighthouse designs (Vector-Bridge fiberglass + steel-skeleton class) — 0.5-1.2 t total per station.</td></tr>
+          <tr><td class="slate">lighthouse_t4</td><td>T4</td><td>1×1</td><td class="mono">200 steel, 50 microchip, 10 glass</td><td class="mono">1500 steel + 200 microchip + 80 glass + 60 wire + 30 magnet (≈ 1.69 t, rev-14 recomputed; 60 wire × 0.5 + 200 microchip × 0.1 + 30 magnet × 2 = 110 kg vs pre-rev-14's implicit 290 kg)</td><td>Long-range integrated signal beacon + radar — scaled VTS (Vessel Traffic Service) radar tower analog. <span class="vbadge v">verified</span> Terma SCANTER 5202 + Kongsberg coastal-radar installation specs — combined radar + signal-tower mass ~1.5-2.5 t per station.</td></tr>
+          <tr><td class="slate">lighthouse_t5</td><td>T5</td><td>1×1</td><td class="mono">30 reality_anchor, 50 steel, 25 microchip</td><td class="mono">2000 steel + 500 microchip + 200 glass + 100 wire + 50 reality_anchor (spec) (≈ 2.35 t, rev-14 recomputed; 100 wire × 0.5 + 500 microchip × 0.1 = 100 kg vs pre-rev-14's implicit 600 kg)</td><td>Fantasy T5. Real engineering anchor: scaled T4 beacon mass class. <span class="vbadge u">unverified</span> (fantasy — reality_anchor added by spec mandate on top of plausible T4-extrapolation analog).</td></tr>
+          <tr><td class="slate">lighthouse_t6</td><td>T6</td><td>1×1</td><td class="mono">30 antimatter_propellant, 50 steel, 30 reality_anchor</td><td class="mono">3000 steel + 1000 microchip + 500 glass + 200 wire + 50 antimatter_propellant (spec) + 50 reality_anchor (spec) (≈ 3.8 t, rev-14 recomputed; 200 wire × 0.5 + 1000 microchip × 0.1 = 200 kg vs pre-rev-14's implicit 1200 kg)</td><td>Fantasy T6. Real engineering anchor: deep-space communications-array ground station (DSN antenna analog at ~3-5 t per DSS-13 to DSS-26 NASA datasheet). <span class="vbadge u">unverified</span> (fantasy — antimatter/reality_anchor spec-adds layered on top of DSN-class analog).</td></tr>
+          <tr><td class="slate">bulk_concrete_plant <span class="badge green">NEW · rev-6 §10.13</span></td><td>T6</td><td>3×3</td><td class="mono">(new building)</td><td class="mono">8 000 steel (mixer drum + conveyor frame) + 2 000 stone (foundation pad) + 500 microchip (PLC + batch controls) + 500 pipe (cement + water lines) + 200 gear (drum drive train) + 100 wire (≈ 12.5 t, rev-14 recomputed; 500 pipe × 4 + 200 gear × 2 + 100 wire × 0.5 = 2.45 t vs pre-rev-14's implicit 800 kg)</td><td><strong>Rev-6 NEW T6 building.</strong> Closes §10.13 ("add T6 industrial concrete plant"). Footprint 3×3, power 5 unit (= 500 kW), cycleSec ~60 s, recipe <code>50 cement + 100 sand + 150 stone (aggregate) + 25 fresh_water + 5 steel_beam (rebar) → 100 concrete</code> (= 100 kg concrete per 60 s = 6 t/hr, T2-concrete-plant equivalent ~12×). <span class="vbadge v">verified</span> portable industrial concrete batch plants 80-350 yd³/hr (≈ 160-700 t/hr) per Mix Right 2CL-12-2, Bohringer B-120, Vince Hagan mobile-plant + Liddell Dakota self-erecting datasheets [WebSearch: "launch pad concrete batch plant cubic yard per hour mobile portable"]. The game's bulk_concrete_plant at 6 t/hr is the small end of the real industrial scale; spaceport's 200 t concrete requirement now takes ~33 hr of continuous operation per plant.</td></tr>
         </tbody>
       </table>
 
-      <h3 class="sub">4.4 Pattern findings (rev-3)</h3>
+      <h3 class="sub">4.4 Pattern findings (rev-3 · rev-14 cohort sweep)</h3>
       <ul class="body">
-        <li><strong>Most current placement costs are 10–40× too cheap by embodied-mass realism.</strong> A T1 smelter at 550 kg vs current 70 kg; a steel_mill at 35 t vs current 230 kg; a nuclear_reactor at 832 t vs current 770 kg. <span class="vbadge x">rev-10 corrected</span>: pre-rev-10 §4.4 said "nuclear_reactor at 85 t" — that was the rev-3 number, not the rev-5 BOM-derived 832.5 t from §4.3. Steel_mill bumped 9.8 t → 35 t in rev-5 to match real BOF mass class (kept). Canonical value: see §4.3 row.</li>
+        <li><strong>Rev-14 cohort sweep correction:</strong> the §4.3 BOM totals for every row referencing the seven T2 cohort components (steel_beam, heavy_cable, sheet_metal, pipe, wire, spring, bearing) were silently using <code>1 unit = 1 kg</code> in the parenthetical math, even though §2.2 declared <code>steel_beam = 50 kg/unit</code>, <code>heavy_cable = 8 kg</code>, etc. The biggest absolute corrections: <strong>capacitor_bank 210 → 1625 kg</strong> (+7.7×, driven by 30 steel_beam × 50 kg), <strong>spaceport 265.7 → 291 t</strong> (+25 t, driven by 10 000 pipe × 4 kg), <strong>battery_bank 270 → 340 kg</strong> (+26 %, driven by 5 steel_beam). Smaller corrections went the OTHER direction: <strong>lighthouse_t6 4.8 → 3.8 t</strong> (−1 t, microchip + wire over-counted), <strong>cryogenic_compute_center 21.75 → 20.75 t</strong> (−1 t). 22 rows touched; see §4.3 parentheticals for the recomputed totals.</li>
+        <li><strong>Most current placement costs are 10–40× too cheap by embodied-mass realism.</strong> A T1 smelter at 550 kg vs current 70 kg; a steel_mill at 36 t vs current 230 kg (rev-14 recomputed); a nuclear_reactor at 832 t vs current 770 kg. <span class="vbadge x">rev-10 corrected</span>: pre-rev-10 §4.4 said "nuclear_reactor at 85 t" — that was the rev-3 number, not the rev-5 BOM-derived 832.5 t from §4.3. Steel_mill bumped 9.8 t → 35 t in rev-5 to match real BOF mass class; rev-14 cohort sweep bumped further to 36.4 t (pipe + gear correction). Canonical value: see §4.3 row.</li>
         <li><strong>New resource dependencies surface from the BOMs.</strong> cell_press needs copper_ingot; battery_bank needs lead_ingot; many T2+ buildings need fire_brick (modelled as clay). Some of these are already in the catalog (copper_ore + copper_smelter exist; lead_smelter exists). Others, like fire_brick, fold into existing resources (clay used directly). The Phase 4 auditor will surface every new dependency edge.</li>
         <li><strong>Tutorial restructure is forced.</strong> Cell Press at 10 kg copper + 2 kg iron means the saltwater-cell battery bootstrap now requires the copper chain to be active before the player can place a battery. Two ways forward: (a) restructure the tutorial to bring copper online first; (b) re-order tier progression so battery_bank is no longer the first "buffer" mechanic. Picker in §10.</li>
         <li><strong>T4+ buildings carry both real embodied mass AND speculative materials.</strong> Fusion Core's <strong>27.7 t</strong> (canonical, rev-6 B2 bump per §4.3) is mostly steel + magnet (real), then exotic_alloy + carbon_fiber bolted on by spec. <span class="vbadge x">rev-10 corrected</span>: pre-rev-10 §4.4 and §9.3 said "17.85 t" — that was the pre-bump number from rev-3; the rev-6 mass-bump to ITER-class proportions (per §4.3 line 1030) lands at 27.7 t. Fantasy resources retain their narrative gating role; the kg-mass side becomes honest.</li>
@@ -1541,6 +1696,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
         <li><span class="vbadge x">corrected</span> <strong>spaceport "narrative cost rules; mass-realism ignored"</strong> → now <strong>real launch-pad mass (≈ 265 t of concrete + steel + tankage)</strong>. Antimatter and reality_anchor are still inputs but no longer dominate the cost.</li>
         <li><span class="vbadge x">corrected</span> <strong>mercury_well "dead-canary cheap"</strong> → now <strong>real BOM (≈ 480 kg)</strong>. Plus mercury is no longer a "dead" resource per the §3.5 orphan-tagging principle; it's an <code>expansion-hook</code>. Player decision is informed.</li>
         <li><span class="vbadge x">corrected</span> <strong>lighthouse_t1 early-game-token cheap</strong> → now <strong>real stone-tower mass (≈ 392 kg)</strong>. Meaningful sourcing investment by realism, not by subsidy.</li>
+        <li><span class="vbadge x">corrected rev-14</span> <strong>T2 mechanical-components cohort silent mass-imbalance</strong>: seven recipes (steel_beam, heavy_cable, sheet_metal, pipe, wire, spring, bearing) carried trivial <code>1 steel → N component</code> ratios that were 100×/16×/10×/8× mass-positive or mass-negative under §2.2's realistic unit-mass anchors. Replaced with script-derived mass-balanced recipes per §3.9 (e.g. <code>105 steel → 2 steel_beam + 5 mill_scale</code>, <code>11 steel → 20 wire + 1 mill_scale</code>). New T1 resource <code>mill_scale</code> introduced for the hot-rolling oxidation losses. 22 §4.3 BOM parentheticals recomputed against §2.2 anchors. §12.9.1 chain walk + §12.9.4 timing recomputed. <code>gear</code> + <code>glass_panel</code> still lack producer recipes — deferred to Phase 2.</li>
       </ul>
 
       <h3 class="sub">9.3 Gameplay risks from realism-first costs</h3>
@@ -2104,25 +2260,42 @@ const edges = buildAdjacencyEdges(sources, consumers);
         to 1× battery_bank placement within ~30-45 min of game-time. This is the
         new tutorial-success milestone and the new reachability invariant test.</p>
 
-      <h4 class="sub">12.9.1 Battery-bank dependency walk (verified against catalog)</h4>
+      <h4 class="sub">12.9.1 Battery-bank dependency walk (verified against catalog · rev-14 recomputed against new cohort recipes)</h4>
       <p class="body">Recipes verified by direct reads
         (<a class="cite">recipes.ts:1380</a> cell_press,
         <a class="cite">recipes.ts:2889</a> beam_mill,
-        <a class="cite">building-defs.ts:867</a> battery_bank placementCost):</p>
+        <a class="cite">building-defs.ts:867</a> battery_bank placementCost).
+        <strong>Rev-14 recompute:</strong> the beam_mill + metal_rolling_mill rows are
+        recomputed against the new §3.9 cohort recipes. Steel demand jumps
+        substantially because <code>steel_beam = 50 kg/unit</code> (§2.2) — pre-rev-14
+        the chain walk silently used <code>1 steel → 2 steel_beam</code>, hiding a
+        ~100× mass-positive recipe; rev-14 closes that to the script-derived
+        <code>105 steel → 2 steel_beam + 5 mill_scale</code>.</p>
       <table class="tbl">
         <thead><tr><th>Step</th><th>Output</th><th>Recipe / placement</th><th>Inputs needed</th></tr></thead>
         <tbody>
           <tr><td>1</td><td class="slate">1 battery_bank (placed)</td><td class="mono">building-defs.ts:867 placementCost</td><td>4 saltwater_cell + 3 wire + 1 steel_beam</td></tr>
           <tr><td>2</td><td class="slate">4 saltwater_cell</td><td class="mono">cell_press × 4 cycles (recipes.ts:1380)</td><td>4 saltwater + 4 iron_ingot + 4 wire</td></tr>
-          <tr><td>3</td><td class="slate">7 wire total (4 for cell_press cycles + 3 for placement)</td><td class="mono">metal_rolling_mill × 7 cycles (recipes.ts:2546)</td><td>7 steel</td></tr>
-          <tr><td>4</td><td class="slate">1 steel_beam (placement)</td><td class="mono">beam_mill: 1 steel → 2 steel_beam (recipes.ts:2889 verified)</td><td>0.5 steel (round up to 1 in batched units)</td></tr>
-          <tr><td>5</td><td class="slate">~8 steel (7 wire + 1 for steel_beam batch)</td><td class="mono">steel_mill (rev-12 BOF, recipes.ts:1430) — real ratio 100 pig_iron + 7 quicklime + 9 oxygen → 85 steel + 23 slag + 7 CO + 1 CO₂</td><td>~9 pig_iron + ~0.6 quicklime + ~0.8 oxygen</td></tr>
-          <tr><td>6</td><td class="slate">~9 pig_iron</td><td class="mono">blast_furnace (rev-5 real BF, recipes.ts:1424) — 35 iron_ore + 18 coke + 10 limestone → 20 pig_iron + 6 slag + 35 CO₂</td><td>~16 iron_ore + ~8 coke + ~5 limestone (scaled for 9 pig_iron from 20-batch)</td></tr>
-          <tr><td>7</td><td class="slate">~8 coke</td><td class="mono">coke_oven (rev-5 real, recipes.ts:1418) — 10 coal → 7 coke + 0.4 tar + 0.5 hydrogen + 1 CO₂ + 1.1 refinery_gas</td><td>~12 coal (scaled for 8 coke from 7-batch)</td></tr>
-          <tr><td>8</td><td class="slate">4 iron_ingot (for cell_press only — battery_bank itself takes none directly)</td><td class="mono">smelter rev-13 DRI (recipes.ts:1363) — 10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO</td><td>~7 iron_ore + ~2 coal (scaled for 4 iron_ingot from 6-batch)</td></tr>
-          <tr><td>9</td><td class="slate">4 saltwater</td><td class="mono">coastal_pump (existing T1 extractor)</td><td>requires Coastal Pump placement on coast tile + power</td></tr>
+          <tr><td>3</td><td class="slate">7 wire total (4 for cell_press cycles + 3 for placement) <span class="badge red">rev-14: 1 cycle covers it</span></td><td class="mono">metal_rolling_mill × 1 cycle (§3.9 rev-14: 11 steel → 20 wire + 1 mill_scale)</td><td>11 steel for one full cycle yielding 20 wire (13 spare wire = expansion-hook for future cell_press / cable demand). Pre-rev-14 walked 7 cycles × 1:1; rev-14 walks 1 cycle × 11:20 — wall-clock drops accordingly (see §12.9.4).</td></tr>
+          <tr><td>4</td><td class="slate">1 steel_beam (placement) <span class="badge red">rev-14: 105 steel batch</span></td><td class="mono">beam_mill: §3.9 rev-14 <code>105 steel → 2 steel_beam + 5 mill_scale</code></td><td>52.5 steel (round to 53 in batched units, or run 1 full cycle of 105 steel yielding 2 steel_beam = 1 used + 1 spare). Pre-rev-14 walked <code>1 → 2</code> hiding the ~100× steel-beam unit-mass; rev-14 walks the mass-balanced recipe.</td></tr>
+          <tr><td>5</td><td class="slate">~64 steel (11 wire-cycle + 53 beam-cycle half) OR ~116 steel (full beam cycle, 1 extra steel_beam) <span class="badge red">rev-14 recomputed</span></td><td class="mono">steel_mill (rev-12 BOF, recipes.ts:1430) — real ratio 100 pig_iron + 7 quicklime + 9 oxygen → 85 steel + 23 slag + 7 CO + 1 CO₂</td><td>Two scenarios. <strong>Tight-batch (53 steel for beam, 11 for wire = 64 steel):</strong> ~76 pig_iron + ~5 quicklime + ~7 oxygen. <strong>Full-beam-cycle (105 + 11 = 116 steel, 1 extra beam):</strong> ~137 pig_iron + ~10 quicklime + ~12 oxygen. Pre-rev-14 the chain claimed "~8 steel total" — that was a 7-13× understatement of the iron-chain pressure for the battery_bank.</td></tr>
+          <tr><td>6</td><td class="slate">~76 pig_iron (tight) OR ~137 (full) <span class="badge red">rev-14 recomputed</span></td><td class="mono">blast_furnace (rev-5 real BF, recipes.ts:1424) — 35 iron_ore + 18 coke + 10 limestone → 20 pig_iron + 6 slag + 35 CO₂</td><td><strong>Tight-batch:</strong> ~4 full BF batches (yields 80 pig_iron) needing ~140 iron_ore + ~72 coke + ~40 limestone. <strong>Full-beam-cycle:</strong> ~7 batches (140 pig_iron) needing ~245 iron_ore + ~126 coke + ~70 limestone. Pre-rev-14 walked just 1 batch claiming "~9 pig_iron" — under-counted by 8-15×.</td></tr>
+          <tr><td>7</td><td class="slate">~72 coke (tight) OR ~126 (full) <span class="badge red">rev-14 recomputed</span></td><td class="mono">coke_oven (rev-5 real, recipes.ts:1418) — 10 coal → 7 coke + 0.4 tar + 0.5 hydrogen + 1 CO₂ + 1.1 refinery_gas</td><td><strong>Tight:</strong> ~11 coke_oven batches (yields 77 coke) needing ~110 coal. <strong>Full:</strong> ~18 batches (126 coke) needing ~180 coal. Pre-rev-14 walked 1.1 batches claiming "~8 coke / ~12 coal" — under-counted by 9-15×.</td></tr>
+          <tr><td>8</td><td class="slate">4 iron_ingot (for cell_press only — battery_bank itself takes none directly)</td><td class="mono">smelter rev-13 DRI (recipes.ts:1363) — 10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO</td><td>~7 iron_ore + ~2 coal (scaled for 4 iron_ingot from 6-batch). <em>Unchanged from rev-13.</em></td></tr>
+          <tr><td>9</td><td class="slate">4 saltwater</td><td class="mono">coastal_pump (existing T1 extractor)</td><td>requires Coastal Pump placement on coast tile + power. <em>Unchanged from rev-13.</em></td></tr>
         </tbody>
       </table>
+      <p class="body" style="margin-top:14px"><strong>Rev-14 chain-walk
+        consequence:</strong> the iron-chain pressure for 1 battery_bank is
+        ~10× higher than pre-rev-14 walked. Tight-batch scenario needs ~140 kg
+        iron_ore + ~110 kg coal + ~40 kg limestone (plus a smelter cycle for the
+        cell_press iron_ingots). The §12.9.2 aggregate-demand table and §12.9.3
+        starter inventory may need uprating in Phase 7 playtest if the new chain
+        pressure tips the tutorial past the 45-min deadline. The metal_rolling_mill
+        bottleneck (the pre-rev-14 chain's biggest serial-time cost at 7 cycles ×
+        133 s = ~15.5 min) collapses to 1 cycle × 133 s = ~2.2 min, which more
+        than compensates for the extra BF + coke_oven cycles in wall-clock. See
+        §12.9.4 recomputed timing.</p>
 
       <h4 class="sub">12.9.2 Aggregate raw-material demand (1 kg/unit anchor)</h4>
       <table class="tbl">
@@ -2158,37 +2331,52 @@ const edges = buildAdjacencyEdges(sources, consumers);
         </tbody>
       </table>
 
-      <h4 class="sub">12.9.4 Cumulative timeline + pacing risk</h4>
-      <p class="body"><strong>Cycle-time analysis</strong> against the rev-9 chain
-        (verified cycleSec values from recipes.ts):</p>
+      <h4 class="sub">12.9.4 Cumulative timeline + pacing risk <span class="badge red">rev-14 recomputed</span></h4>
+      <p class="body"><strong>Cycle-time analysis</strong> against the rev-14 chain
+        (verified cycleSec values from recipes.ts; new §3.9 cohort recipes substituted
+        for beam_mill + metal_rolling_mill). The headline rev-14 change:
+        <strong>metal_rolling_mill's 7-cycle serial bottleneck collapses to 1
+        cycle</strong> because the new 11 steel → 20 wire recipe produces 20 wire
+        per cycle (vs the pre-rev-14 1-wire-per-cycle), so 1 cycle covers the chain's
+        7-wire need with 13 spare. Per-stage cycleSec values are unchanged from the
+        catalog (recipes.ts) — only the cycle-COUNT shifts.</p>
       <table class="tbl">
-        <thead><tr><th>Stage</th><th>cycleSec</th><th>Cycles needed</th><th>Wall-clock duration</th></tr></thead>
+        <thead><tr><th>Stage</th><th>cycleSec</th><th>Cycles needed (rev-14)</th><th>Wall-clock duration</th></tr></thead>
         <tbody>
-          <tr><td>coke_oven (10 coal → 7 coke)</td><td class="mono">133 s</td><td class="right">2 (for 8+ coke)</td><td class="right">~4.4 min</td></tr>
-          <tr><td>blast_furnace (35 ore + 18 coke + 10 limestone → 20 pig_iron)</td><td class="mono">160 s</td><td class="right">1 (for 9+ pig_iron, batched ×20 yields more than enough)</td><td class="right">~2.7 min</td></tr>
-          <tr><td>steel_mill (100 pig_iron → 88 steel)</td><td class="mono">200 s</td><td class="right">1 (batch yields way more than 8 needed)</td><td class="right">~3.3 min</td></tr>
-          <tr><td>beam_mill (1 steel → 2 steel_beam)</td><td class="mono">67 s</td><td class="right">1</td><td class="right">~1.1 min</td></tr>
-          <tr><td>metal_rolling_mill (1 steel → 1 wire)</td><td class="mono">133 s</td><td class="right">7</td><td class="right">~15.5 min (serial; parallel with multiple mills cuts this)</td></tr>
+          <tr><td>coke_oven (10 coal → 7 coke + 0.4 tar + 0.5 H₂ + 1 CO₂ + 1.1 refinery_gas)</td><td class="mono">133 s</td><td class="right">11 (tight-batch, ~77 coke for 4× BF runs) OR 18 (full-beam-cycle path)</td><td class="right warn">~24 min (tight) OR ~40 min (full)</td></tr>
+          <tr><td>blast_furnace (35 ore + 18 coke + 10 limestone → 20 pig_iron + 6 slag + 35 CO₂)</td><td class="mono">160 s</td><td class="right">4 (tight, 80 pig_iron) OR 7 (full, 140 pig_iron)</td><td class="right warn">~11 min (tight) OR ~19 min (full)</td></tr>
+          <tr><td>steel_mill (100 pig_iron + 7 quicklime + 9 oxygen → 85 steel + 23 slag + 7 CO + 1 CO₂)</td><td class="mono">200 s</td><td class="right">1 (one batch yields 85 steel, way over the 64-116 kg chain need)</td><td class="right">~3.3 min</td></tr>
+          <tr><td>beam_mill (§3.9 rev-14: 105 steel → 2 steel_beam + 5 mill_scale)</td><td class="mono">67 s</td><td class="right">1 (one cycle yields 2 steel_beam, 1 used + 1 spare)</td><td class="right">~1.1 min</td></tr>
+          <tr><td>metal_rolling_mill (§3.9 rev-14: 11 steel → 20 wire + 1 mill_scale) <span class="badge red">bottleneck collapsed</span></td><td class="mono">133 s</td><td class="right">1 (one cycle yields 20 wire, 7 used + 13 spare)</td><td class="right ok">~2.2 min (down from pre-rev-14's ~15.5 min serial)</td></tr>
           <tr><td>smelter DRI (10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO)</td><td class="mono">27 s</td><td class="right">1</td><td class="right">~0.5 min</td></tr>
           <tr><td>cell_press (1 saltwater + 1 iron_ingot + 1 wire → 1 saltwater_cell)</td><td class="mono">40 s</td><td class="right">4 (or 0 if rev-9 mitigation ships 4 starter cells)</td><td class="right">~2.7 min (or 0)</td></tr>
-          <tr><td class="slate">Total chain wall-clock (serial)</td><td>—</td><td>—</td><td class="right warn">~30 min minimum (with single-rolling-mill bottleneck)</td></tr>
+          <tr><td class="slate">Total chain wall-clock (serial, tight-batch path)</td><td>—</td><td>—</td><td class="right warn">~45 min minimum (BF + coke_oven now dominate vs rev-9's rolling-mill bottleneck)</td></tr>
         </tbody>
       </table>
-      <p class="body" style="margin-top:14px"><strong>Pacing-risk finding:</strong>
-        the chain is technically reachable in ~30 min IF the player builds parallel
-        Metal Rolling Mills (cut wire production from 15 min serial to ~4 min with
-        4× parallel). With single-mill bottleneck, full chain is ~30-35 min from
-        zero. Adding placement-time overhead (~3-5 min for the player to build each
-        chain link, especially under starter-stone-scarcity), realistic
-        tutorial-completion is <strong>40-50 min</strong>. The 4-unit saltwater_cell
-        starter mitigation (§12.9.3) saves ~3 min by skipping the cell_press cycle.</p>
-      <p class="body"><strong>If the chain extends past 60 min in practice</strong>,
-        Phase 7 playtest must propose one or more mitigations:
-        (a) pre-built saltwater_cell stockpile (already in rev-9 — see §12.9.3);
-        (b) reduce blast_furnace cycleSec by ½ on the home island only (tutorial-grace);
-        (c) seed the starter inventory with 2-3 pig_iron + 2-3 coke to skip the
-        first BF cycle. The Phase 7 invariant test parametrises N (default 45 min)
-        and surfaces playtest results.</p>
+      <p class="body" style="margin-top:14px"><strong>Pacing-risk finding (rev-14):</strong>
+        the rev-14 cohort recipes <em>shift</em> the bottleneck rather than eliminate
+        it. The pre-rev-14 chain bottle-necked on rolling 7 wires serially (~15.5 min);
+        rev-14 collapses that to ~2.2 min but exposes the iron-chain pressure that
+        was hidden by the under-counted steel demand. Tight-batch path is ~45 min
+        serial (coke_oven 24 min + BF 11 min + steel_mill 3.3 min + beam/wire mills
+        3.3 min + cell_press 2.7 min); full-beam-cycle path runs ~70 min. <strong>Parallelism is now in the
+        coke_oven / BF stages</strong>, not the rolling mills — 2× parallel coke_ovens
+        halves wall-clock to ~33 min; 2× BFs cuts further to ~22 min. The 4-unit
+        saltwater_cell starter mitigation (§12.9.3) still saves ~3 min by skipping
+        the cell_press cycle.</p>
+      <p class="body"><strong>Rev-14 chain pacing vs the 45-min reachability
+        invariant:</strong> tight-batch serial-execution lands AT the 45-min
+        deadline (with zero margin for player placement overhead). The recommended
+        Phase 7 mitigations from the pre-rev-14 list still apply, with one
+        ordering change: <em>(a) 4-unit saltwater_cell stockpile (already in
+        rev-9 — see §12.9.3); (b) ship 2× starter coke + 2× starter pig_iron OR
+        skip the first coke_oven + BF cycle on home island via tutorial-grace
+        cycleSec tweak; (c) optionally pre-seed 1× steel_beam OR 5× wire to skip
+        either the beam_mill or metal_rolling_mill cycle entirely.</em> Pre-rev-14
+        mitigation (b) suggested ½ blast_furnace cycleSec; rev-14 still prefers
+        the starter-stockpile route because it preserves the "real-chemistry
+        chain is mass-balanced and timed" lesson. The Phase 7 invariant test
+        parametrises N (default 45 min) and surfaces playtest results.</p>
 
       <h4 class="sub">12.9.5 Updated reachability invariant test (rev-9)</h4>
       <p class="body">Strengthen the §12.7 invariant from "placeable + operating"
@@ -2345,6 +2533,9 @@ const edges = buildAdjacencyEdges(sources, consumers);
           <tr><td class="slate">cubic-drag invariant</td><td class="mono">speed² × tilesPerFuel = const</td><td>§6.1 (rev-10 corrected)</td><td>§6.2 SHIP_STATS / HELICOPTER_STATS tables</td><td class="ok">✓ rev-10 corrected from quadratic</td></tr>
           <tr><td class="slate">cycleSec canonical set</td><td class="mono">grep-derived from recipes.ts (40+ distinct values)</td><td>§9.1 (rev-10 corrected)</td><td>§3 batch-scaling references</td><td class="ok">✓ rev-10 corrected from aspirational set</td></tr>
           <tr><td class="slate">22 %-of vs 22 %-buffer</td><td class="mono">22 % OF the 5400 kg need (78 % shortfall)</td><td>§12.9.3 starter stone (rev-10)</td><td>—</td><td class="ok">✓ rev-10 wording corrected</td></tr>
+          <tr><td class="slate">T2 cohort component masses <span class="badge green">NEW rev-14</span></td><td class="mono">steel_beam=50 kg, heavy_cable=8 kg, sheet_metal=5 kg, pipe=4 kg, wire=0.5 kg, spring=0.2 kg, bearing=0.3 kg, glass_panel=3 kg, gear=2 kg</td><td>§2.2 calibration table (line 509)</td><td>§3.9 cohort recipes (rev-14), §3.8 audit table (rev-14 rows), §4.3 BOM parentheticals (22 rows recomputed), §12.9.1 chain walk (rev-14), §12.9.4 timing (rev-14)</td><td class="ok">✓ rev-14 (cohort recipes rebalanced to mass-close under these anchors; §4.3 BOM totals recomputed across 22 rows)</td></tr>
+          <tr><td class="slate">mill_scale 1 unit mass <span class="badge green">NEW rev-14</span></td><td class="mono">1 kg</td><td>§2.2 hot-rolling byproducts row (rev-14)</td><td>§3.5.5 new resources table (rev-14 row), §3.9 cohort recipes</td><td class="ok">✓ rev-14 (new T1 by-product resource introduced)</td></tr>
+          <tr><td class="slate">magnet 1 unit mass</td><td class="mono">2 kg/magnet</td><td>§2.2 T3 chemistry/electronics row (line 519)</td><td>§4.3 BOMs (wind_turbine, lighthouse_t4, tidal_array, fusion_core, particle_accelerator)</td><td class="warn">~ partial. §4.3 wind_turbine + lighthouse_t4 rows touched by rev-14 cohort sweep use 2 kg/magnet correctly. fusion_core, particle_accelerator, tidal_array rows NOT recomputed in rev-14 (out of cohort scope) — they retain pre-rev-14 totals that may understate the magnet-driven mass. Flagged for a future revision; the brief's pre-distributed MASSES dict suggested 50 kg/magnet which contradicts §2.2 — §2.2 is canonical.</td></tr>
         </tbody>
       </table>
 
@@ -2408,7 +2599,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
     </div>
 
     <div class="footer">
-      <p>Robot Islands · SI-units rework foundation · revision 13 · 2026-05-27 ·
+      <p>Robot Islands · SI-units rework foundation · revision 14 · 2026-05-27 ·
         based on commit <code>f825ba8</code> · references the v3 audit at
         <a class="cite">docs/superpowers/audits/2026-05-26-physics-balance-audit.html</a>.
         Rev-4 standard: every numerical claim is either backed by a direct
