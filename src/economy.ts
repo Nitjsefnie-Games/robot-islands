@@ -239,6 +239,17 @@ export interface IslandState {
   /** Set of owned graph edge ids. An edge can be owned even when its endpoint
    *  is reached via another path (redundant unlocks are allowed). */
   unlockedEdges: Set<EdgeId>;
+  /** §perf-2026-05-27 adjacency-cache Layer 2: bumped on every mutation
+   *  of `unlockedNodes` / `unlockedEdges`. Cache key for
+   *  computeAuraAmplifiers' per-state aura-amp memoization. Starts at 0;
+   *  monotonically increases. See spec §05 for the enumerated bump sites. */
+  auraAmpVersion: number;
+  /** Memoized `computeAuraAmplifiers` result. Null on cold start /
+   *  post-load (seeded by deserialize). Valid iff
+   *  `auraAmpCacheVersion === auraAmpVersion`. NOT persisted — stripped on
+   *  serialize. */
+  auraAmpCache: Map<NodeId, number> | null;
+  auraAmpCacheVersion: number;
   /** Pending bonus XP credits per resource per §10 (Funneling). When a route
    *  delivers `r` to this island and the island is below the funneling tier
    *  cap, `r × xp_weight[r] × funneling_bonus_percent` accumulates here. The

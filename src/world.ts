@@ -1067,6 +1067,9 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     unspentSkillPoints: 0,
     unlockedNodes: new Set(),
     unlockedEdges: new Set(),
+    auraAmpVersion: 0,
+    auraAmpCache: null,
+    auraAmpCacheVersion: -1,   // -1 forces miss on first computeAuraAmplifiers call
     funnelPending: startingFunnelPending(),
     declaredAt: null,
     // §13.1 T5 access gate. Defaults to false on every fresh island — T5

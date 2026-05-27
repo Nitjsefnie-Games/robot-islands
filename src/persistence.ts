@@ -100,7 +100,7 @@ export type SerializedIslandSpec = Omit<IslandSpec, 'terrainAt'>;
 
 /** IslandState with Set and Map fields converted to arrays for JSON. */
 export interface SerializedIslandState
-  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings'> {
+  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings' | 'auraAmpVersion' | 'auraAmpCache' | 'auraAmpCacheVersion'> {
   readonly unlockedNodes: ReadonlyArray<NodeId>;
   readonly unlockedEdges: ReadonlyArray<EdgeId>;
   readonly socketBindings: ReadonlyArray<[string, CrystalId]>;
@@ -479,7 +479,13 @@ export function serializeWorld(
   });
   const stateEntries: SerializedIslandStateEntry[] = [];
   for (const [id, state] of islandStates) {
-    const { unlockedNodes, unlockedEdges, socketBindings, ...rest } = state;
+    const {
+      unlockedNodes, unlockedEdges, socketBindings,
+      auraAmpVersion: _v,
+      auraAmpCache: _c,
+      auraAmpCacheVersion: _cv,
+      ...rest
+    } = state;
     const serialized: SerializedIslandState = {
       ...rest,
       unlockedNodes: [...unlockedNodes],
@@ -730,6 +736,9 @@ export function deserializeWorld(
       starterInventoryGrace: { ...s.starterInventoryGrace },
       unlockedNodes: new Set(s.unlockedNodes),
       unlockedEdges: new Set(s.unlockedEdges ?? []),
+      auraAmpVersion: 0,
+      auraAmpCache: null,
+      auraAmpCacheVersion: -1,
       socketBindings: new Map(s.socketBindings ?? []),
       // §9.7 cooldown anchors. Both fields were minted in the saved
       // session's `performance.now()` domain (matching `lastTick`); apply
