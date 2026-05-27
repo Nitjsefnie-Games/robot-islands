@@ -245,8 +245,15 @@
     </div>
 
     <div class="verdict green">
-      <div class="vt">Verdict / Pitch · revision 12 (2026-05-27) · ALL PICKERS CLOSED · PRECISION PASS APPLIED</div>
+      <div class="vt">Verdict / Pitch · revision 13 (2026-05-27) · ALL PICKERS CLOSED · SMELTER CHEMISTRY-DERIVED</div>
       <div class="vh">All 16 §10 pickers resolved. §10.15 resolved to Option A (BOTH water_wheel + windmill_t0 ship as parallel T0 power options — different tile gates, complementary). All rev-6/rev-7 implementation-time decisions resolved to recommended defaults and moved to the resolved-list. NEW §12.9 sizes the starter inventory to reach 1× battery_bank within ~30-45 min along the full real-chemistry chain. Anchors locked: <strong>1 unit coal = 1 kg</strong>, <strong>1 unit power = 100 kW</strong>.</div>
+      <div class="vb"><strong>Rev-13 precision pass (1 correction):</strong>
+        §3.1 smelter recipe re-derived from molar-mass stoichiometry
+        (Fe₂O₃ + 3 C → 2 Fe + 3 CO) plus cited industrial defaults — replaces the
+        informal <code>10 + 4 → 7 + 1 + 6</code> ratio with the chemistry-derived
+        <code>10 + 3 → 6 + 2 + 5</code>. §2.1 illustrative example + §12.9 chain-walk
+        recipe-context updated to match. §3.8 audit table smelter row updated. Tool:
+        <code>scripts/recalc-smelter.py</code>.</div>
       <div class="vb"><strong>Rev-12 precision pass (6 corrections):</strong>
         BOF element-balance gap relabeled mass-only (steel 88→85, slag 12→23, off-gas 16→8; total-mass closes, element routing is estimate). cell_press anchor arithmetic corrected (3 kg→2.5 kg, matching wire at 0.5 kg). §2.1 smelter illustrative example rebuilt to CO + balanced + 6+1+8-consistent. §12.9 chain walk CO₂→CO. coal_gen CO₂ factor reconciled 2.5→2.42 kg/kg across §7.2 and Phase 2 §8. §10.7 drag formula label corrected speed×→speed²×. All internal revision markers bumped 10/11→12.</div>
       <div class="vb"><strong>Rev-10 precision pass (user-flagged ~12 concrete errors):</strong>
@@ -442,7 +449,7 @@
       <ul class="body">
         <li><strong>Bulk minerals + ores</strong> (T0 raw): 1 unit = <strong>1 kg</strong>. Anchor-locked at coal; all other ores match.</li>
         <li><strong>Fluids billed by volume</strong> (saltwater, fresh_water, crude_oil, natural_gas): 1 unit = <strong>1 L</strong>. Saltwater density 1.03 kg/L (game rounds to 1.0; &lt; 3 % error per CRC Handbook of Chemistry &amp; Physics 95e seawater density table).</li>
-        <li><strong>Refined metals + ingots</strong> (T1): 1 unit = <strong>1 kg</strong>. Mass-conservation through the smelting chain becomes trivial to check (10 iron_ore + 5 coal → 6 iron_ingot + 1 slag + 8 CO kg balances at 15 = 15, see §3.1).</li>
+        <li><strong>Refined metals + ingots</strong> (T1): 1 unit = <strong>1 kg</strong>. Mass-conservation through the smelting chain becomes trivial to check (10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO kg balances at 13 = 13, see §3.1).</li>
         <li><strong>Components</strong> (T2+ gear, bolt, microchip): 1 unit = <strong>characteristic mass of one part</strong>. <span class="vbadge x">rev-10 contradiction reconciled:</span> §2.1 and §2.2 had drifted apart (§2.1 said "1 bolt = 80 g, 1 microchip = 0.1 kg"; §2.2 said "bolt = 0.05 kg, microchip = 1 kg adjusted"). Canonical values for rev-10 (matching §2.2 table at line 496): <strong>bolt = 0.05 kg</strong> (single small fastener, ~M12 industrial machine bolt mass per ISO 4014 weight tables — slightly lighter than M16's 80 g; the 50 g number was the §2.2 choice and is now canonical), <strong>gear = 2 kg</strong> (industrial spur ~150 mm pitch dia, AGMA 9005), <strong>microchip = 0.1 kg</strong> (silicon-die + IHS per Intel Xeon datasheet — the §2.2 "1 kg adjusted-for-player-friendliness" was an over-write that mis-anchored the audit; §13.4 vault-capacity arithmetic is recomputed against 0.1 kg). §13 storage-cap arithmetic for "20 microchips = 2 kg" stays correct (20 × 0.1 = 2). Cross-reference: §14 self-audit matrix.</li>
         <li><strong>Power buffer resources</strong> (battery, capacitor, flywheel, casimir_energy): 1 unit = <strong>1 kWh</strong> stored. Aligns with the existing <code>BATTERY_CAPACITY_WS</code> table.</li>
         <li><strong>Fantasy resources</strong> (ai_core, exotic_alloy, reality_anchor, plasma_charge): 1 unit = <strong>nominal "one assembly"</strong>; flagged <code>speculative: true</code>, no mass-balance audit.</li>
@@ -597,11 +604,24 @@
             <td class="slate">smelter <span class="badge red">rev-10: CO not CO₂; mass-balance corrected</span></td>
             <td class="mono">1 iron_ore + 1 coal → 1 iron_ingot</td>
             <td><strong>Real direct-reduced iron (DRI / sponge iron):</strong> Fe₂O₃ + 3 C → 2 Fe + 3 <strong>CO</strong> (carbon monoxide, NOT CO₂ — the reductant is C, not C+O₂). Per mol: 160 g Fe₂O₃ + 36 g C → 112 g Fe + 84 g CO. Mass-balance: 196 in = 196 out ✓. Real small-scale shaft furnaces (Midrex, HYL, coal-based rotary kilns) yield 1 t DRI from ~1.55 t ore (64 % Fe content) + ~0.6-0.8 t coal-reductant.</td>
-            <td class="mono">10 iron_ore + 4 coal → 7 iron_ingot + 1 slag + 6 CO + (exogenous CO₂ from coal-volatile pyrolysis, not stoichiometric) (kg)</td>
-            <td><span class="vbadge x">corrected</span> <strong>Rev-9 recipe listed "8 CO₂" but DRI reductant chemistry produces <em>CO</em>, not CO₂.</strong> Molar mass difference: CO = 28 g/mol, CO₂ = 44 g/mol — calling 8 kg of off-gas "CO₂" undercounts mass-conservation arithmetic by ~57 %. Rev-10 fix:
-              (a) recipe outputs <strong>CO</strong> (new orphan-output resource, terminal: 'expansion-hook: CO oxidation in atmosphere → eventual CO₂; future syngas / methanol-synthesis chain candidate');
-              (b) mass-balance: 10 + 4 = 14 in; 7 + 1 + 6 = 14 out ✓.
-              The §7.2 CO₂ pool table does <em>not</em> double-count smelter CO as CO₂ — separate tracking. Atmospheric CO oxidises to CO₂ on ~year timescale (real chem), but the game's CO₂ tracker would accrue it only if a future "atmospheric chemistry" mechanic ships. <a class="cite">recipes.ts:1363</a> <span class="vbadge v">verified</span> Fe₂O₃ + 3 C → 2 Fe + 3 CO stoichiometry per Wikipedia "Iron(III) oxide" + USGS "Mineral Commodity Summaries: Iron Ore" + IspatGuru "Direct Reduced Iron" (CO is the dominant DRI off-gas, not CO₂); <span class="vbadge v">verified</span> 1.55 t ore + 0.6-0.8 t coal per tonne DRI per IspatGuru + Metal Zenith + TERI "Energy-Efficient Technology Options for Direct Reduction of Iron Process" [WebSearch from rev-5: "direct reduced iron DRI mass balance kg per tonne reductant ore"].</td>
+            <td class="mono">10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO (kg)</td>
+            <td><span class="vbadge x">corrected</span> <strong>Rev-13 re-derivation:</strong>
+              rev-10/11/12 recipe of <code>10 + 4 → 7 + 1 + 6</code> was internally balanced
+              (14 = 14) but came from informal ratios, not stoichiometry. Rev-13 derives
+              the recipe from <strong>Fe₂O₃ + 3 C → 2 Fe + 3 CO</strong> plus four cited industrial
+              defaults: ore Fe = 64 %, coal C = 70 %, coal ash = 10 %, Fe→ingot yield =
+              95 %. The script at <code>scripts/recalc-smelter.py</code> (committed at
+              <code>0436a25</code>) computes the exact mass flow (100 ore + 28.5 coal → 60.8 ingot
+              + 15.5 slag + 46.5 CO + 5.7 volatiles, closure 0) and rounds to integer
+              kg at 10-kg ore basis with volatiles lumped into the CO line. <span class="vbadge v">verified</span>
+              the stoichiometric balance: 10 + 3 = 13 in; 6 + 2 + 5 = 13 out. <span class="vbadge v">verified</span>
+              CO (not CO₂) as the dominant DRI off-gas species per Wikipedia "Direct
+              reduced iron" + IspatGuru. <span class="vbadge v">verified</span> ore 62-64 %
+              Fe per Wikipedia "Iron ore" DSO export-grade range. The trace coal volatiles
+              (~0.57 kg per 10 kg ore at default constants) are absorbed into the CO line
+              for integer cleanliness; a future split into a separate
+              <code>smelter_volatile_offgas</code> resource is an expansion-hook, not a Phase 2
+              blocker.</td>
           </tr>
           <tr>
             <td class="slate">coke_oven</td>
@@ -926,10 +946,10 @@
         exogenousFlow tag are bugs. Phase 2 implementation runs this same audit
         as a vitest assertion against every recipe in <code>recipes.ts</code>.</p>
       <table class="tbl">
-        <caption>Per-recipe mass-balance audit (rev-12). Δ ≠ 0 requires <code>exogenousFlow</code> tag. <span class="vbadge v">verified</span> arithmetic reproducible by reading the recipe row above.</caption>
+        <caption>Per-recipe mass-balance audit (rev-13). Δ ≠ 0 requires <code>exogenousFlow</code> tag. <span class="vbadge v">verified</span> arithmetic reproducible by reading the recipe row above.</caption>
         <thead><tr><th>Recipe</th><th>Σ inputs (kg)</th><th>Σ outputs (kg)</th><th>Δ (out − in)</th><th>Exogenous flow</th><th>Balanced?</th></tr></thead>
         <tbody>
-          <tr><td class="slate">smelter (rev-10)</td><td class="right mono">10 + 4 = 14</td><td class="right mono">7 + 1 + 6 = 14</td><td class="right">0</td><td>—</td><td class="ok">✓</td></tr>
+          <tr><td class="slate">smelter (rev-13)</td><td class="right mono">10 + 3 = 13</td><td class="right mono">6 + 2 + 5 = 13</td><td class="right">0</td><td>—</td><td class="ok">✓</td></tr>
           <tr><td class="slate">coke_oven (rev-5)</td><td class="right mono">10</td><td class="right mono">7 + 0.4 + 0.5 + 1 + 1.1 = 10.0</td><td class="right">0</td><td>—</td><td class="ok">✓</td></tr>
           <tr><td class="slate">blast_furnace (rev-5)</td><td class="right mono">35 + 18 + 10 = 63</td><td class="right mono">20 + 6 + 35 = 61</td><td class="right warn">−2</td><td><code>exogenousFlow: 'BF-top-gas-trace'</code> — small CO + dust losses to atmosphere beyond the 35 CO₂; balance within ~3 %, acceptable rounding for batch ×20</td><td class="warn">~ (declared)</td></tr>
           <tr><td class="slate">steel_mill (rev-12)</td><td class="right mono">100 + 7 + 9 = 116</td><td class="right mono">85 + 23 + 7 + 1 = 116</td><td class="right">0</td><td>—</td><td class="ok">✓ total-mass only; element-balance NOT verified</td></tr>
@@ -1341,7 +1361,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
           <tr><td class="slate">coke_oven</td><td class="mono">0.10 × coal (volatiles + flue gas)</td><td><span class="vbadge v">verified</span> 25-30 % mass loss as off-gas; ~⅓ of carbon escapes as CO₂ at modern recovery rates per IspatGuru "Carbonization of Coal in Heat Recovery Coke Oven Battery".</td></tr>
           <tr><td class="slate">coal_gen</td><td class="mono">2.42 × coal_in (full bituminous combustion)</td><td><span class="vbadge v">verified</span> 2.42 kg CO₂/kg bituminous coal per Global Energy Monitor coal-plant CO₂ calculator + EPA Greenhouse Gas Equivalencies Calculator references [WebSearch: "coal combustion CO2 emission factor kg per kg coal burned"]. Anthracite is 3.3, lignite is 1.5; rev-4 uses bituminous as catalog default.</td></tr>
           <tr><td class="slate">biomass_plant</td><td class="mono">1.83 × wood_in (biogenic)</td><td><span class="vbadge v">verified</span> wood is ~50 % carbon by mass (oven-dry basis), full burn → 0.50 × 44/12 = 1.83 kg CO₂ per kg dry wood per IPCC AR6 WG-III Annex A.III.10. <strong>Biogenic — tracked separately</strong> from coal CO₂ (net-zero over forest regrowth cycle).</td></tr>
-          <tr><td class="slate">smelter (DRI)</td><td class="mono">~1.6 × coal_in (Fe₂O₃ reduction by C)</td><td><span class="vbadge v">verified</span> per §3.1 rev-5 smelter recipe: 5 coal → ~8 CO₂ per 6 iron_ingot output ≈ 1.6 kg CO₂/kg coal in. Bituminous coal ~66 % C × (44/12 CO₂/C ratio) = 2.4 kg CO₂/kg coal at full combustion; smelter is partial (CO escapes), so ~1.6 net.</td></tr>
+          <tr><td class="slate">smelter (DRI)</td><td class="mono">— (CO, not CO₂; exogenous-fuel CO₂ tracked separately)</td><td><span class="vbadge v">verified</span> per §3.1 rev-13 smelter recipe: 3 coal → 5 CO per 6 iron_ingot output. Pure-C combustion would yield 2.4 kg CO₂/kg coal (bituminous 66 % C × 44/12 ratio); smelter produces CO not CO₂ (partial reduction), so the CO₂-factor accounting comes from coal-volatile pyrolysis (exogenous-fuel emission, ~2.42 kg CO₂/kg coal at full combustion when off-gas eventually oxidises — but in the game the smelter species is CO and the CO₂ accounting accrues separately via the §7.2 atmosphere mechanic if/when an oxidation chain ships).</td></tr>
           <tr><td class="slate">blast_furnace</td><td class="mono">~1.75 × pig_iron_out (real BF burden)</td><td><span class="vbadge v">verified</span> per §3.1 rev-5 BF recipe + IPCC 2006 Guidelines Vol-3 Ch-4 "Metal Industry Emissions" + USEA CCC/193 "CO2 abatement in the iron and steel industry": 35 CO₂ per 20 pig_iron output = 1.75 kg CO₂/kg pig_iron. Of which ~1.5 from coke combustion and ~0.25 from limestone calcination in-furnace [WebSearch: "blast furnace burden mass balance per tonne pig iron coke limestone CO2"].</td></tr>
           <tr><td class="slate">cement_mill</td><td class="mono">0.4 × cement_out (fuel CO₂ only)</td><td><span class="vbadge v">verified</span> per §3.2; process CO₂ (~0.5 kg/kg cement) already accrued at limekiln, fuel-side CO₂ ~0.4 kg/kg cement adds here per IEA Cement Sustainability Initiative GNR data.</td></tr>
           <tr><td class="slate">steel_mill (BOF)</td><td class="mono">~0.04 × pig_iron (BOF off-gas)</td><td><span class="vbadge v">verified</span> per §3.1; BOF off-gas yields ~40 kg CO₂/t steel after CO afterburn per WorldSteel Co-Product Methodology.</td></tr>
@@ -1511,7 +1531,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
         <li><span class="vbadge x">corrected</span> <strong>chlor_alkali_plant missing H₂</strong> → now ships H₂ as <code>terminal: 'consumed'</code> (electrolyzer's existing consumer drains it). F23 closed. <a class="cite">recipes.ts:2509</a></li>
         <li><span class="vbadge x">corrected</span> <strong>charcoal_kiln 2:1</strong> → now <strong>4:1 (real industrial)</strong>. Wood demand 2×; Phase 2 balance retune absorbs.</li>
         <li><span class="vbadge x">corrected</span> <strong>blast_furnace "ingot-as-charge" simplification</strong> → now <strong>real ore + coke + limestone burden</strong> producing pig_iron + slag + CO₂ (rev-5). The "content-design choice" label is rescinded. Smelter is reshaped as DRI (sponge iron) under §10.14. <a class="cite">recipes.ts:1424</a></li>
-        <li><span class="vbadge x">corrected</span> <strong>smelter 1:1:1 → 1 iron_ingot collapse</strong> → now <strong>real DRI mass balance</strong> (10 ore + 5 coal → 6 iron_ingot + 1 slag + 8 CO₂, rev-5). Same Fe-yield ratio (~64 % Fe-content ore) used in real Midrex / coal-DRI rotary-kiln plants.</li>
+        <li><span class="vbadge x">corrected</span> <strong>smelter 1:1:1 → 1 iron_ingot collapse</strong> → now <strong>real DRI mass balance</strong> (10 ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO, rev-13). Same Fe-yield ratio (~64 % Fe-content ore) used in real Midrex / coal-DRI rotary-kiln plants.</li>
         <li><span class="vbadge x">corrected</span> <strong>cement_mill 1:1:1 simplification</strong> → now <strong>real Portland clinker 80:20 limestone:clay + small silica corrector</strong> (rev-5). Sand becomes minor additive, not equimolar. <a class="cite">recipes.ts:2212</a></li>
         <li><span class="vbadge x">corrected</span> <strong>electric_arc_furnace zero-slag</strong> → now <strong>10-20 kg slag/t steel (real EAF)</strong> + scrap as primary input (rev-5). F25 closed.</li>
         <li><span class="vbadge x">corrected</span> <strong>lubricant_refinery "fantasy chemistry" flag</strong> → now <strong>real chlorinated-paraffin EP lubricant chemistry</strong>. Chlor-paraffin EP additives are genuine industrial lubricant chemistry per US patents 4844825 + EP0195674 + INEOS Cereclor 51L (commercial product). F26 closed by real chemistry, not by renaming. <a class="cite">recipes.ts:2528-2536</a></li>
@@ -1780,8 +1800,8 @@ const edges = buildAdjacencyEdges(sources, consumers);
           <tr><td class="slate">stone</td><td class="mono">60</td><td class="mono">500</td><td>1× Mine (200) + 1× Workshop (100) + 1× Coal Furnace (50) + 1× Crate (8) + 1× Logger (15) = ~373 kg. Buffer for ~125 kg → Quarry placement (next Mine) or 2× Mine.</td></tr>
           <tr><td class="slate">wood</td><td class="mono">40</td><td class="mono">300</td><td>1× Mine (80) + 1× Workshop (150) + 1× Logger (5) + 1× Crate (15) = 250 kg. Buffer for biomass_plant (~80 kg wood needed) OR initial fuel for Coal Furnace.</td></tr>
           <tr><td class="slate">iron_ingot</td><td class="mono">0</td><td class="mono">60</td><td><strong>Breaks the circular dep:</strong> Mine needs 20 iron_ingot, Workshop needs 30 iron_ingot — 60 covers both first-builds. Once Mine + Smelter are placed, smelter cycles refill iron_ingot from ore + coal.</td></tr>
-          <tr><td class="slate">iron_ore</td><td class="mono">0</td><td class="mono">50</td><td>1-2 smelter cycle buffer to bootstrap. Smelter consumes 10 iron_ore + 5 coal → 6 iron_ingot per batch (rev-5 §3.1). 50 kg ore = 5 cycles = 30 iron_ingot continuous flow before depending on Mine output.</td></tr>
-          <tr><td class="slate">coal</td><td class="mono">0</td><td class="mono">50</td><td>Smelter input (5 per cycle) + Coal Furnace fuel (1 per 30 s heat-source cycle). 50 kg = 10 smelter cycles or ~25 minutes of Coal Furnace heat.</td></tr>
+          <tr><td class="slate">iron_ore</td><td class="mono">0</td><td class="mono">50</td><td>1-2 smelter cycle buffer to bootstrap. Smelter consumes 10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO per batch (rev-13 §3.1). 50 kg ore = 5 cycles = 30 iron_ingot continuous flow before depending on Mine output.</td></tr>
+          <tr><td class="slate">coal</td><td class="mono">0</td><td class="mono">50</td><td>Smelter input (3 per cycle) + Coal Furnace fuel (1 per 30 s heat-source cycle). 50 kg = ~16 smelter cycles or ~25 minutes of Coal Furnace heat.</td></tr>
           <tr><td class="slate">bolt</td><td class="mono">0</td><td class="mono">25</td><td>Workshop placement needs 20 bolt. 25 starter buffer lets Workshop place before bolt production is up; Workshop itself produces bolts (1 bolt per cycle) for downstream gear/Assembler.</td></tr>
           <tr><td class="slate">steel</td><td class="mono">30</td><td class="mono">0</td><td><strong>Removed</strong>: under rev-6 BOM, Wind Turbine needs 800 steel + aluminum + magnet — 30 steel was a placeholder for a pre-rev-6 80-steel Wind Turbine catalog cost. Bootstrap path is now copper/iron chain → wire → cell_press → battery (per §10.11 restructure-tutorial), not steel/wind.</td></tr>
           <tr><td class="slate">foundation_kit</td><td class="mono">1</td><td class="mono">1</td><td>Unchanged. §12.3 first settlement dispatch.</td></tr>
@@ -2099,7 +2119,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
           <tr><td>5</td><td class="slate">~8 steel (7 wire + 1 for steel_beam batch)</td><td class="mono">steel_mill (rev-12 BOF, recipes.ts:1430) — real ratio 100 pig_iron + 7 quicklime + 9 oxygen → 85 steel + 23 slag + 7 CO + 1 CO₂</td><td>~9 pig_iron + ~0.6 quicklime + ~0.8 oxygen</td></tr>
           <tr><td>6</td><td class="slate">~9 pig_iron</td><td class="mono">blast_furnace (rev-5 real BF, recipes.ts:1424) — 35 iron_ore + 18 coke + 10 limestone → 20 pig_iron + 6 slag + 35 CO₂</td><td>~16 iron_ore + ~8 coke + ~5 limestone (scaled for 9 pig_iron from 20-batch)</td></tr>
           <tr><td>7</td><td class="slate">~8 coke</td><td class="mono">coke_oven (rev-5 real, recipes.ts:1418) — 10 coal → 7 coke + 0.4 tar + 0.5 hydrogen + 1 CO₂ + 1.1 refinery_gas</td><td>~12 coal (scaled for 8 coke from 7-batch)</td></tr>
-          <tr><td>8</td><td class="slate">4 iron_ingot (for cell_press only — battery_bank itself takes none directly)</td><td class="mono">smelter rev-5 DRI (recipes.ts:1363) — 10 iron_ore + 5 coal → 6 iron_ingot + 1 slag + 8 CO</td><td>~7 iron_ore + ~3.5 coal (scaled for 4 iron_ingot from 6-batch)</td></tr>
+          <tr><td>8</td><td class="slate">4 iron_ingot (for cell_press only — battery_bank itself takes none directly)</td><td class="mono">smelter rev-13 DRI (recipes.ts:1363) — 10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO</td><td>~7 iron_ore + ~2 coal (scaled for 4 iron_ingot from 6-batch)</td></tr>
           <tr><td>9</td><td class="slate">4 saltwater</td><td class="mono">coastal_pump (existing T1 extractor)</td><td>requires Coastal Pump placement on coast tile + power</td></tr>
         </tbody>
       </table>
@@ -2109,7 +2129,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
         <thead><tr><th>Resource</th><th>For chain (kg)</th><th>For placements (kg)</th><th>Total (kg)</th><th>Source</th></tr></thead>
         <tbody>
           <tr><td class="slate">iron_ore</td><td class="right">23</td><td>—</td><td class="right">23</td><td>16 (BF path) + 7 (DRI path for cell_press iron_ingot) = ~23 kg</td></tr>
-          <tr><td class="slate">coal</td><td class="right">~16</td><td>+15 (Coal Furnace fuel for ~25 min × 1 coal / 30 s)</td><td class="right">~31</td><td>12 (coke_oven inputs) + 3.5 (smelter DRI inputs) + 15 (Coal Furnace fuel buffer)</td></tr>
+          <tr><td class="slate">coal</td><td class="right">~16</td><td>+15 (Coal Furnace fuel for ~25 min × 1 coal / 30 s)</td><td class="right">~31</td><td>12 (coke_oven inputs) + 2 (smelter DRI inputs) + 15 (Coal Furnace fuel buffer)</td></tr>
           <tr><td class="slate">limestone</td><td class="right">~5</td><td>—</td><td class="right">~5</td><td>BF flux. Home has limestone cluster — verified <a class="cite">island.ts:342-344</a></td></tr>
           <tr><td class="slate">saltwater</td><td class="right">4</td><td>—</td><td class="right">4</td><td>cell_press × 4. Coastal Pump extracts at runtime — small buffer to bridge</td></tr>
           <tr><td class="slate">quicklime</td><td class="right">~0.6</td><td>—</td><td class="right">~1 (round up)</td><td>steel_mill flux. Reachable via limekiln (rev-5 §3.2: 25 limestone → 14 quicklime)</td></tr>
@@ -2128,7 +2148,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
           <tr><td class="slate">stone</td><td class="mono">500</td><td class="mono">1200</td><td>Covers full chain: water_wheel + Mine + Logger + Smelter + Coal Furnace + Coke Oven + BF + Steel Mill + Beam Mill + Rolling Mill + Cell Press + battery_bank ≈ 5400 kg under §4.3 BOM. <span class="vbadge x">rev-10 corrected</span>: pre-rev-10 said "provides ~22 % buffer" — that's the wrong direction. 1200 / 5400 = 22 % <strong>of</strong> the chain's stone demand, NOT a 22 % buffer <em>above</em> it. Player starts with 22 % of needed stone; the remaining 78 % must come from in-game Quarry production within the tutorial-time budget (~30-45 min per §12.9.4). Mine starts producing ore (and the Quarry produces stone) within ~5 min of game start with water_wheel powering them.</td></tr>
           <tr><td class="slate">wood</td><td class="mono">300</td><td class="mono">600</td><td>Covers Logger placement (5) + Mine (80) + Smelter (20) + Coal Furnace (30) + Crate (15) + water_wheel (50) + Workshop (150) ≈ 350 kg, with ~250 kg buffer for biomass_plant or Cell Press timber + slag-reprocessor wood demand.</td></tr>
           <tr><td class="slate">iron_ore</td><td class="mono">50</td><td class="mono">30</td><td>Reduced (rev-7 50 → rev-9 30): under §10.15 rev-9 the Mine starts operating immediately via water_wheel power, so the iron_ore starter buffer only needs to cover the first 3-5 cycles before Mine's output replenishes the buffer. 30 kg = ~3 smelter DRI batches = bootstrap to ~18 iron_ingot.</td></tr>
-          <tr><td class="slate">coal</td><td class="mono">50</td><td class="mono">80</td><td>Up from 50 (rev-7): supports both Coal Furnace continuous burn (1 coal/30 s × 25 min = 50 coal) + coke_oven inputs (12 coal for first batch) + smelter DRI (3.5 coal for first batch). 80 kg = ~1 hr Coal Furnace + 2 coke batches + 4 smelter cycles.</td></tr>
+          <tr><td class="slate">coal</td><td class="mono">50</td><td class="mono">80</td><td>Up from 50 (rev-7): supports both Coal Furnace continuous burn (1 coal/30 s × 25 min = 50 coal) + coke_oven inputs (12 coal for first batch) + smelter DRI (2 coal for first 4-iron_ingot batch). 80 kg = ~1 hr Coal Furnace + 2 coke batches + 4 smelter cycles.</td></tr>
           <tr><td class="slate">iron_ingot</td><td class="mono">60</td><td class="mono">60</td><td>Unchanged. Covers Workshop placement (30) + Mine placement (20) + 10 buffer for early Smelter / Coke Oven setup.</td></tr>
           <tr><td class="slate">bolt</td><td class="mono">25</td><td class="mono">25</td><td>Unchanged. Workshop placement bolt requirement.</td></tr>
           <tr><td class="slate">limestone</td><td class="mono">0</td><td class="mono">15</td><td><strong>NEW:</strong> BF flux (~5 kg for 1 battery_bank chain) + limekiln input for steel_mill quicklime (~3 kg) + buffer. Home has limestone cluster (verified), but pre-mining buffer accelerates the chain by ~3 min.</td></tr>
@@ -2149,7 +2169,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
           <tr><td>steel_mill (100 pig_iron → 88 steel)</td><td class="mono">200 s</td><td class="right">1 (batch yields way more than 8 needed)</td><td class="right">~3.3 min</td></tr>
           <tr><td>beam_mill (1 steel → 2 steel_beam)</td><td class="mono">67 s</td><td class="right">1</td><td class="right">~1.1 min</td></tr>
           <tr><td>metal_rolling_mill (1 steel → 1 wire)</td><td class="mono">133 s</td><td class="right">7</td><td class="right">~15.5 min (serial; parallel with multiple mills cuts this)</td></tr>
-          <tr><td>smelter DRI (10 iron_ore + 5 coal → 6 iron_ingot)</td><td class="mono">27 s</td><td class="right">1</td><td class="right">~0.5 min</td></tr>
+          <tr><td>smelter DRI (10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO)</td><td class="mono">27 s</td><td class="right">1</td><td class="right">~0.5 min</td></tr>
           <tr><td>cell_press (1 saltwater + 1 iron_ingot + 1 wire → 1 saltwater_cell)</td><td class="mono">40 s</td><td class="right">4 (or 0 if rev-9 mitigation ships 4 starter cells)</td><td class="right">~2.7 min (or 0)</td></tr>
           <tr><td class="slate">Total chain wall-clock (serial)</td><td>—</td><td>—</td><td class="right warn">~30 min minimum (with single-rolling-mill bottleneck)</td></tr>
         </tbody>
@@ -2366,7 +2386,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
         <li><strong>Coal CO₂ factor in §7.2 (2.42 kg/kg)</strong> assumes full combustion. Smelter DRI partial-combustion produces CO (not CO₂) at lower mass-CO₂-equivalent. The §7.2 row didn't explicitly note this; rev-10 §3.1 smelter row now says CO not CO₂, and §7.2 should add a footnote "smelter CO is tracked separately from coal-combustion CO₂."</li>
       </ul>
 
-      <h3 class="sub">14.4 Future-revision discipline (rev-12+)</h3>
+      <h3 class="sub">14.4 Future-revision discipline (rev-13+)</h3>
       <p class="body">Every future revision must:</p>
       <ol class="body">
         <li><strong>Apply §3.8 mass-balance audit</strong> to any new recipe added. Δ ≠ 0 requires explicit <code>exogenousFlow</code> tag with rationale.</li>
@@ -2388,7 +2408,7 @@ const edges = buildAdjacencyEdges(sources, consumers);
     </div>
 
     <div class="footer">
-      <p>Robot Islands · SI-units rework foundation · revision 12 · 2026-05-27 ·
+      <p>Robot Islands · SI-units rework foundation · revision 13 · 2026-05-27 ·
         based on commit <code>f825ba8</code> · references the v3 audit at
         <a class="cite">docs/superpowers/audits/2026-05-26-physics-balance-audit.html</a>.
         Rev-4 standard: every numerical claim is either backed by a direct
