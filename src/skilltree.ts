@@ -423,6 +423,7 @@ function buildCatalog(nodes: ReadonlyArray<SkillNode>): Catalog {
 export const NODE_CATALOG = FULL_CATALOG;
 
 const DEFAULT_CATALOG: Catalog = buildCatalog(NODE_CATALOG);
+const _adjCache = new WeakMap<Graph, Map<NodeId, NodeId[]>>();
 
 // ---------------------------------------------------------------------------
 // Standard edges — filler chains + keystone AND-prereqs
@@ -1152,6 +1153,8 @@ function computeAuraAmplifiers(state: IslandState, graph: Graph): Map<NodeId, nu
 }
 
 function buildAdjacency(graph: Graph): Map<NodeId, NodeId[]> {
+  const cached = _adjCache.get(graph);
+  if (cached !== undefined) return cached;
   const adj = new Map<NodeId, NodeId[]>();
   for (const e of graph.edges) {
     // AND-prereq edges represent purchase gates, not spatial proximity.
@@ -1166,6 +1169,7 @@ function buildAdjacency(graph: Graph): Map<NodeId, NodeId[]> {
     tList.push(from);
     adj.set(to, tList);
   }
+  _adjCache.set(graph, adj);
   return adj;
 }
 
