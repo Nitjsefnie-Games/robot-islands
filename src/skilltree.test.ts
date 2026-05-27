@@ -737,6 +737,50 @@ describe('effectiveSkillMultipliers — graph mode + auras', () => {
   });
 });
 
+// Picked these IDs from the catalog because mining.notable.blastOptimization
+// has an aura (radius 2, bonus 0.12) and anchors to the mining.recipeRate
+// chain, making mining.recipeRate.5 its spatial neighbour. Unlocking the
+// notable therefore both adds its own recipeRateMul and amplifies the
+// adjacent filler node's factor, producing a measurable change in
+// recipeRate.extraction.
+describe('computeAuraAmplifiers — cache', () => {
+  it('reflects new aura node after unlock + version bump', () => {
+    const s = makeState();
+    s.unlockedNodes.add('mining.recipeRate.5' as import('./skilltree.js').NodeId);
+    // Warm the cache.
+    const beforeMul = effectiveSkillMultipliers(s).recipeRate.extraction;
+    // Mutate directly — explicit version bump simulates what spendPoint /
+    // buyNode do automatically in production. (The spec's risk analysis
+    // notes this pattern.)
+    s.unlockedNodes.add('mining.notable.blastOptimization' as import('./skilltree.js').NodeId);
+    s.auraAmpVersion++;
+    const afterMul = effectiveSkillMultipliers(s).recipeRate.extraction;
+    expect(afterMul).toBeGreaterThan(beforeMul);
+  });
+
+  it('returns the same Map instance on repeat calls without mutation', () => {
+    const s = makeState();
+    s.unlockedNodes.add('mining.recipeRate.5' as import('./skilltree.js').NodeId);
+    s.unlockedNodes.add('mining.notable.blastOptimization' as import('./skilltree.js').NodeId);
+    // Warm.
+    effectiveSkillMultipliers(s);
+    const cachedMap = s.auraAmpCache;
+    expect(cachedMap).not.toBeNull();
+    // Second call — no mutation, no bump → cache hit.
+    effectiveSkillMultipliers(s);
+    expect(s.auraAmpCache).toBe(cachedMap); // reference equality
+  });
+
+  it('returns deep-equal effectiveSkillMultipliers on repeat calls', () => {
+    const s = makeState();
+    s.unlockedNodes.add('mining.recipeRate.5' as import('./skilltree.js').NodeId);
+    s.unlockedNodes.add('mining.notable.blastOptimization' as import('./skilltree.js').NodeId);
+    const m1 = effectiveSkillMultipliers(s);
+    const m2 = effectiveSkillMultipliers(s);
+    expect(m1.recipeRate).toEqual(m2.recipeRate);
+  });
+});
+
 describe('canBuyKeystone / buyKeystone', () => {
   it('requires all AND-prereqs to be owned', () => {
     const ks: KeystonePrereq = {
