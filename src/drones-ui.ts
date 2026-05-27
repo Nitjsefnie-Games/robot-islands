@@ -24,7 +24,7 @@
 import { Container, Graphics } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
+import { findOperationalBuilding, hasOperationalBuilding, isOperationalBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
@@ -63,17 +63,28 @@ import { tileToWorldPx, VISION_BLUE, type IslandSpec, type WorldState } from './
  *  Drone Pads exist on one island the first in placement order is used —
  *  same deterministic policy `dispatchDrone` applies for its internal
  *  fallback spawn lookup. */
-export function dronePadCentre(
+export function selectedPadCentre(
   spec: IslandSpec,
   state: IslandState,
+  padId: string | null,
 ): { x: number; y: number } | null {
-  const pad = findOperationalBuilding(state.buildings, 'dronepad');
-  if (!pad) return null;
+  const ops = state.buildings.filter(
+    (b) => b.defId === 'dronepad' && isOperationalBuilding(b),
+  );
+  if (ops.length === 0) return null;
+  const pad = ops.find((b) => b.id === padId) ?? ops[0]!;
   const def = BUILDING_DEFS[pad.defId as BuildingDefId];
   return {
     x: spec.cx + pad.x + shapeWidth(def.footprint) / 2,
     y: spec.cy + pad.y + shapeHeight(def.footprint) / 2,
   };
+}
+
+// Legacy entry point — keeps drones.test.ts:472-488 green.
+export function dronePadCentre(
+  spec: IslandSpec, state: IslandState,
+): { x: number; y: number } | null {
+  return selectedPadCentre(spec, state, null);
 }
 
 function styled(el: HTMLElement, css: string): void {
@@ -168,6 +179,8 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // to 1 (cheapest / biofuel) so a fresh L5 player can experience T1 drones
   // without having to first build the T2 diesel chain.
   let selectedTier: DroneTier | '5-path' = 1;
+  let selectedPadId: string | null = null;
+  let prevOriginId: string | null = null;
   // Cached at refresh() so attemptLaunch + range-ring see the same numbers.
   // maxLaunchFuel = min(MAX_FUEL_PER_DRONE, on-hand fuel of the selected tier).
   let maxLaunchFuel = 0;
@@ -680,8 +693,15 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     launchPreviewGfx.clear();
     if (!launchMode) return;
     const spec = deps.getOriginSpec();
-    const originTile = { x: spec.cx, y: spec.cy };
-    const originPx = tileToWorldPx(spec.cx, spec.cy);
+    // §11.1: preview line origin = Drone Pad footprint centre, same as the
+    // range ring and the actual flight geometry. Pre-fix used `spec.cx/cy`
+    // (island centre), so the drawn flight path didn't match the path the
+    // drone actually flies.
+    const padCentre = dronePadCentre(spec, deps.getOrigin());
+    const ox = padCentre?.x ?? spec.cx;
+    const oy = padCentre?.y ?? spec.cy;
+    const originTile = { x: ox, y: oy };
+    const originPx = tileToWorldPx(ox, oy);
 
     if (selectedTier === '5-path') {
       // Solid polyline through committed waypoints.
@@ -705,8 +725,8 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
 
     // Numeric tier: single line origin → cursor (from Task 2).
     if (!cursorTile) return;
-    const dxTiles = cursorTile.x - spec.cx;
-    const dyTiles = cursorTile.y - spec.cy;
+    const dxTiles = cursorTile.x - ox;
+    const dyTiles = cursorTile.y - oy;
     const distTiles = Math.sqrt(dxTiles * dxTiles + dyTiles * dyTiles);
     const maxRangeTiles = maxLaunchFuel * currentEfficiency / 2;
     const color = distTiles <= maxRangeTiles ? PREVIEW_COLOR_OK : PREVIEW_COLOR_BAD;
@@ -1008,10 +1028,13 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const maxFlightSec = (maxLaunchFuel * currentEfficiency) / DRONE_SPEED_TILES_PER_SEC;
     etaStat.valueEl.textContent = `${maxFlightSec.toFixed(0)}s max`;
 
-    // DIST / PATH row update
+    // DIST / PATH row update. §11.1: distance + path length measured from the
+    // Drone Pad footprint centre — the actual launch origin — not the island
+    // centre, so the readouts match the preview line and the actual flight.
     if (selectedTier === '5-path') {
       const s = deps.getOriginSpec();
-      const originPt = { x: s.cx, y: s.cy };
+      const pc = dronePadCentre(s, origin);
+      const originPt = { x: pc?.x ?? s.cx, y: pc?.y ?? s.cy };
       const pathLen = totalPathTiles(originPt, waypointBuffer);
       const fuel = fuelForPath(originPt, waypointBuffer);
       distStat.labelEl.textContent = 'PATH';
@@ -1021,8 +1044,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
       if (cursorTile) {
         const s = deps.getOriginSpec();
-        const dx = cursorTile.x - s.cx;
-        const dy = cursorTile.y - s.cy;
+        const pc = dronePadCentre(s, origin);
+        const ox = pc?.x ?? s.cx;
+        const oy = pc?.y ?? s.cy;
+        const dx = cursorTile.x - ox;
+        const dy = cursorTile.y - oy;
         const dist = Math.sqrt(dx * dx + dy * dy);
         distStat.labelEl.textContent = 'DIST';
         distStat.valueEl.textContent = `${dist.toFixed(0)} tiles`;
@@ -1104,9 +1130,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     nowMs: number,
   ): { ok: boolean; reason?: string } {
     if (selectedTier === '5-path') {
-      // Add waypoint; reject if would exceed fuel cap.
+      // Add waypoint; reject if would exceed fuel cap. §11.1: range check
+      // anchors on the Drone Pad footprint centre, not the island centre.
       const spec = deps.getOriginSpec();
-      const origin = { x: spec.cx, y: spec.cy };
+      const pc = dronePadCentre(spec, deps.getOrigin());
+      const origin = { x: pc?.x ?? spec.cx, y: pc?.y ?? spec.cy };
       const next = { x: targetWorldTileX, y: targetWorldTileY };
       if (wouldExceedRange(origin, waypointBuffer, next)) {
         return { ok: false, reason: 'over-range' };
@@ -1165,7 +1193,15 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const deduped = popTrailingDuplicate(waypointBuffer);
     if (deduped.length < 1) return { ok: false, reason: 'no-waypoints' };
     const spec = deps.getOriginSpec();
-    const originTile = { x: spec.cx, y: spec.cy };
+    const originState = deps.getOrigin();
+    // §11.1: path origin anchors on the Drone Pad footprint centre. Pre-fix
+    // this used `spec.cx/cy` (island centre); the waypoint list prepended an
+    // island-centre point, so the drone's actual path differed from the
+    // preview by `(padCentre − islandCentre)` on the first leg.
+    const pc = dronePadCentre(spec, originState);
+    const ox = pc?.x ?? spec.cx;
+    const oy = pc?.y ?? spec.cy;
+    const originTile = { x: ox, y: oy };
     const fuel = fuelForPath(originTile, deduped);
     // Engine signature (drones.ts:330-346): dispatchDrone(world, origin,
     // originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints?, selectedTier?).
@@ -1174,12 +1210,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // array. Tests at drones.test.ts:1045-1086 pass (originX=0, originY=0,
     // dirX=1, dirY=0) — match that convention. selectedTier omitted: line 369
     // forces resolvedTier=5 when isPathDrawn (waypoints.length≥2).
-    const originState = deps.getOrigin();
     const waypointsForDispatch = [originTile, ...deduped];
     const result = dispatchDrone(
       deps.world,
       originState,
-      spec.cx, spec.cy,
+      ox, oy,
       1, 0,
       fuel,
       nowMs,
