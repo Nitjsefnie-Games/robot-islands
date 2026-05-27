@@ -1487,7 +1487,8 @@ async function main(): Promise<void> {
   });
   // Drone dots live in world space (above ocean + islands + fog overlay,
   // below the cell grid).
-  world.addChildAt(dronesUi.droneLayer, 4);
+  world.addChildAt(dronesUi.selectedPadHighlightLayer, 4);
+  world.addChildAt(dronesUi.droneLayer, 5);
   // §14 orbital launch reticle + range ring — mounted alongside the drone
   // reticle. Reticle in screen space (fixed pixel size); range ring in
   // world space (radius reads in tiles regardless of zoom).
@@ -1504,7 +1505,6 @@ async function main(): Promise<void> {
   // ocean/island/drone layers but below the screen-space reticle stack.
   world.addChild(dronesUi.rangeRingLayer);
   world.addChild(dronesUi.launchPreviewLayer);
-  world.addChild(dronesUi.selectedPadHighlightLayer);
   // Wire the orbital-side forward-decl so an orbital arm-launch can disarm
   // the dronesUi panel.
   disarmDronesLaunch = () => dronesUi.setLaunchMode(false);
@@ -1552,7 +1552,7 @@ async function main(): Promise<void> {
     },
     onInstantSettled: () => { rebuildWorldLayers(); },
   });
-  world.addChildAt(settlementUi.vehicleLayer, 5);
+  world.addChildAt(settlementUi.vehicleLayer, 6);
   app.stage.addChild(settlementUi.reticleLayer);
   world.addChild(settlementUi.rangeRingLayer);
   // Hook the forward-declared cross-panel disarm callback to the now-
