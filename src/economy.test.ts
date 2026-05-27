@@ -48,9 +48,8 @@ import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
-import { effectiveSkillMultipliers } from './skilltree.js';
+import { effectiveSkillMultipliers, type SkillMultipliers, type NodeId, type SkillNode } from './skilltree.js';
 import * as skilltreeModule from './skilltree.js';
-import * as economyModule from './economy.js';
 import { FULL_CATALOG } from './skilltree-catalog.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
@@ -4017,35 +4016,62 @@ describe('effectiveSkillMultipliers memoization', () => {
     expect(boostedCap / baseCap).toBeCloseTo(1 + storageNode.magnitude, 3);
   });
 
-  it('effectiveSkillMultipliers returns unlayered base, not conditional-layered mult', () => {
+  it('layerConditionalBonuses mutation does not pollute baseMult cache', () => {
+    // Build a minimal custom graph with a night-time conditional bonus on extraction.
+    const conditionalNode: SkillNode = {
+      id: 'test.conditional.nightExtract' as NodeId,
+      subPath: 'mining',
+      depth: 1,
+      cost: 1,
+      magnitude: 0,
+      effect: {
+        kind: 'conditionalBonus',
+        multiplier: 0.25,
+        appliesTo: 'extraction',
+        condition: { kind: 'during-night' },
+      },
+      description: 'Test night extraction bonus',
+    };
+    const customGraph: Graph = {
+      nodes: [conditionalNode],
+      edges: [],
+      bridges: [],
+      graftSockets: [],
+    };
+
     const state = makeState({
-      level: 25,
       buildings: [MINE],
       inventory: { ...blankInventory(), iron_ore: 50 },
-      unlockedNodes: new Set([
-        // Unlock the live extraction conditionalBonus node.
-        'communication.keystone.networkedExtract' as any,
-      ]),
     });
 
-    // Compute expected extraction rate multiplier from the base before any tick.
+    // Base multiplier before any conditional layering.
     const baseMult = effectiveSkillMultipliers(state);
     const expectedExtractionRate = baseMult.recipeRate.extraction;
 
-    // Force the conditional to evaluate as true so layerConditionalBonuses
-    // actually fires inside advanceIsland (the real networked-to-N-T3-islands
-    // condition is too heavy for a unit test).
-    vi.spyOn(economyModule, 'evaluateConditionalEffectCondition').mockReturnValue(true);
+    // Deep-copy so we can mutate independently.
+    const skillMul: SkillMultipliers = {
+      ...baseMult,
+      recipeRate: { ...baseMult.recipeRate },
+      storageCategoryCap: { ...baseMult.storageCategoryCap },
+      xpGainByCategory: { ...baseMult.xpGainByCategory },
+    };
 
-    // Tick once — advanceIsland computes baseMult AND computeRates
-    // layers conditional bonuses on its own copy.
-    advanceIsland(state, state.lastTick + 1000, { defs: POWER_FREE });
+    // Unlock the conditional node and land in night phase.
+    state.unlockedNodes.add(conditionalNode.id as any);
+    const NIGHT_MS = 12 * 60 * 60 * 1000; // 12h → night quadrant
 
-    vi.restoreAllMocks();
+    // Layer conditional bonuses onto the copy.
+    layerConditionalBonuses(skillMul, state, undefined, customGraph, NIGHT_MS);
 
-    // A fresh effectiveSkillMultipliers call must return the base value,
-    // NOT the conditional-bonus-layered value. If baseMult were polluted,
-    // this would be 1.25× the base.
+    // The copy MUST have absorbed the bonus.
+    expect(skillMul.recipeRate.extraction).toBe(expectedExtractionRate * 1.25);
+
+    // The original base MUST be untouched.
+    expect(baseMult.recipeRate.extraction).toBe(expectedExtractionRate);
+
+    // A fresh effectiveSkillMultipliers call must also return the base value,
+    // confirming no shared mutable cache between the per-segment skillMul and
+    // the memoized baseMult.
     const freshMult = effectiveSkillMultipliers(state);
     expect(freshMult.recipeRate.extraction).toBe(expectedExtractionRate);
   });
