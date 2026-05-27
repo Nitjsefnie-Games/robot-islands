@@ -1,0 +1,1144 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>routes-ui render-perf — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1080px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 38px;
+      line-height: 1.14; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    h1 code { font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px;
+      color: #C9B98A; }
+
+    .context-box {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+
+    .verification-key {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 18px;
+      margin: 18px 0 24px; font-size: 13px;
+    }
+    .verification-key strong {
+      color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .vbadge {
+      display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px;
+    }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok     { color: var(--olive); }
+    .summary .v.warn   { color: var(--warn); }
+
+    .decision {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    .toc { background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    h3.sub {
+      font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin: 26px 0 10px;
+    }
+    .sec-intro {
+      font-size: 14.5px; color: var(--gray-500); max-width: 820px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl td.num.accent { color: var(--clay); }
+    .tbl td.num.warn   { color: var(--warn); }
+    .tbl td.num.ok     { color: var(--olive); }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .compare {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    .codepanel {
+      background: #121110; border-radius: 12px;
+      padding: 16px 20px; overflow-x: auto; margin: 12px 0 18px;
+    }
+    .codepanel pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .codepanel .kw  { color: var(--clay); }
+    .codepanel .str { color: var(--olive); }
+    .codepanel .cm  { color: var(--gray-500); }
+    .codepanel .fn  { color: #C9B98A; }
+    .codepanel .new { background: rgba(143, 165, 110, 0.13); display: block; }
+
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      display: grid; grid-template-columns: 260px 1fr; gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono); font-size: 12.5px; color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+    .check {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: var(--white); border: var(--border);
+      border-radius: 10px; padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px; border-radius: 5px;
+      border: 2px solid var(--gray-500); flex-shrink: 0; margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    .risks {
+      border: var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .phase-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 900px) { .phase-grid { grid-template-columns: 1fr; } }
+    .phase {
+      background: var(--white); border: var(--border);
+      border-top: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .phase .ph-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 6px;
+    }
+    .phase .ph-head {
+      font-family: var(--serif); font-size: 17px; font-weight: 500;
+      color: var(--slate); margin-bottom: 8px; letter-spacing: -0.01em;
+    }
+    .phase .ph-body { font-size: 13.5px; color: var(--gray-700); margin-bottom: 10px; }
+    .phase .ph-gate {
+      font-family: var(--mono); font-size: 11.5px;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 6px; padding: 6px 10px; color: var(--warn);
+    }
+    .phase.done { border-top-color: var(--olive); }
+    .phase.done .ph-tag, .phase.done .ph-gate { color: var(--olive); }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · render perf</div>
+      <h1>routes-ui <code>paintLayer</code> — skip-gate, world-space migration, texture-stroked dash</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        A CDP CPU profile of the live tab at <code>islands.nitjsefni.eu</code>
+        (post-cache rework, source maps on) shows
+        <code>routes-ui.refresh</code> at <strong>31.14 % inclusive</strong> CPU
+        and <code>paintLayer</code> at <strong>3.65 % self / 29.51 % inclusive</strong>.
+        The chain bottoms out in Pixi <code>GraphicsContext</code> primitives —
+        <code>stroke</code> 11.55 % self, <code>buildLine</code> 7.36 % self,
+        <code>triangulateWithHoles</code> 3.12 %,
+        <code>Color._normalize</code> 2.82 %,
+        <code>handleFillObject</code> 3.34 % — with <strong>9.15 % GC</strong>
+        on top, attributable to per-frame allocations.
+        <code>paintLayer</code> clears two <code>Graphics</code> instances and
+        unconditionally rebuilds every route's line, chevrons, and pulses
+        every frame; <code>refresh</code> is called every frame from
+        <code>main.ts:2034</code> unconditionally. The DOM ledger already has
+        signature-based caching — the render side has none.
+      </div>
+
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author against the cited file:line or the cpuprofile artifact.
+        <span class="vbadge u">unverified</span> projection or claim not personally re-verified in this pass.
+        <span class="vbadge x">corrected</span> earlier draft contained an error; this entry supplies the verified value.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">paintLayer self now</div><div class="v warn">3.65 %</div></div>
+      <div class="cell"><div class="k">paintLayer self target</div><div class="v ok">&lt; 1 %</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v accent">3 modified · 4 new</div></div>
+      <div class="cell"><div class="k">Schema change</div><div class="v ok">None on the wire</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Three independently revertable phases. Skip-gate first, world-space migration second, texture-tiled dash stroke third. All other render hotspots stay out of scope.</div>
+      <div class="d-body"><strong>Phase 1 — Skip-gate.</strong> Cache a
+        per-frame <code>routesCacheKey(routes)</code> string. When the key
+        matches the last invocation, <code>paintLayer</code> bails before
+        touching any Pixi <code>Graphics</code>. Still screen-space; still
+        per-frame redraw on changes. Expected to idle ~30-40 % of frames
+        (any frame where camera, routes, and in-flight counts haven't moved).</div>
+      <div class="d-body"><strong>Phase 2 — World-space migration + static/animated split.</strong>
+        Two new sibling <code>Container</code>s parented under the existing
+        <code>world</code> container: <code>routesStaticLayer</code> (built
+        once per route from <code>tileToWorldPx(building.x, building.y)</code>)
+        and <code>routesAnimatedLayer</code> (dashed overlay). Pixi's stage
+        transform on <code>world</code> handles pan/zoom, so the cache
+        survives camera moves. <code>resolveScreenPos</code> is removed from
+        the renderer's geometry path.</div>
+      <div class="d-body"><strong>Phase 3 — Texture-tiled stroke + UV animation.</strong>
+        Dashed lines use a small <code>PIXI.Texture</code> per route type as
+        the stroke fill. Each frame, <code>paintLayer</code> advances
+        <code>tilePosition.x</code> on the animated <code>Graphics</code>
+        (one number-write per route) — zero geometry rebuild during
+        animation. This is the phase that lands the <strong>&lt; 1 % self</strong>
+        binding gate.</div>
+      <div class="d-body"><strong>Why texture-tiled stroke, not a GLSL shader.</strong>
+        A GLSL custom shader can move dash phase to a uniform write — even
+        cheaper than a texture UV update — but pulls in a per-route Mesh /
+        Filter, custom shader source, and a feature-flag for WebGL fallback.
+        At the live save's ~10 routes the texture-stroke path's per-route
+        UV write is negligible (Risk 4 below). Shader-uniform fallback is
+        named in §10 as a future option if a re-profile at 100+ routes
+        demands it.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#s00">00 Problem</a>
+      <a href="#s01">01 Architecture</a>
+      <a href="#s02">02 Components</a>
+      <a href="#s03">03 Data flow</a>
+      <a href="#s04">04 Cache key &amp; correctness</a>
+      <a href="#s05">05 Phase deliverables</a>
+      <a href="#s06">06 API change</a>
+      <a href="#s07">07 Test plan</a>
+      <a href="#s08">08 Z-order &amp; lifecycle</a>
+      <a href="#s09">09 Expected impact</a>
+      <a href="#s10">10 Risks</a>
+      <a href="#s11">11 Non-goals</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="s00">
+      <div class="sec-head"><span class="num">00</span><h2>Problem statement</h2></div>
+      <p class="sec-intro">A CDP CPU profile captured against the live tab at
+        <code>islands.nitjsefni.eu</code>, post-cache-rework, with source
+        maps enabled. Numbers below are read off the profile artifact.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Frame</th>
+          <th>Self %</th>
+          <th>Incl %</th>
+          <th>Where</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">refresh</td>
+            <td class="num">—</td>
+            <td class="num warn">31.14 %</td>
+            <td class="mono">src/routes-ui.ts:1192</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">paintLayer</td>
+            <td class="num warn">3.65 %</td>
+            <td class="num warn">29.51 %</td>
+            <td class="mono">src/routes-ui.ts:1032</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">GraphicsContext.stroke</td>
+            <td class="num warn">11.55 %</td>
+            <td class="num">—</td>
+            <td class="mono">pixi.js (GraphicsContext.mjs)</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">buildLine</td>
+            <td class="num warn">7.36 %</td>
+            <td class="num">—</td>
+            <td class="mono">pixi.js (buildLine.mjs)</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">handleFillObject</td>
+            <td class="num">3.34 %</td>
+            <td class="num">—</td>
+            <td class="mono">pixi.js</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">triangulateWithHoles</td>
+            <td class="num">3.12 %</td>
+            <td class="num">—</td>
+            <td class="mono">pixi.js</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">Color._normalize</td>
+            <td class="num">2.82 %</td>
+            <td class="num">—</td>
+            <td class="mono">pixi.js (Color.mjs)</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">(garbage collector)</td>
+            <td class="num">9.15 %</td>
+            <td class="num">—</td>
+            <td>cascade from the above allocations</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">Diagnostic findings</h3>
+      <ul class="body">
+        <li><code>paintLayer</code> clears two Pixi <code>Graphics</code> objects (line + chevrons/pulses) at the top of every call. <span class="vbadge v">v</span></li>
+        <li>For every route in <code>world.routes</code>, it redraws line, chevrons, and pulses unconditionally — no per-route caching. <span class="vbadge v">v</span></li>
+        <li><code>refresh</code> is called every frame from the ticker at <a class="cite">src/main.ts:2034</a> with no gate. <span class="vbadge v">v</span></li>
+        <li>DOM ledger inside <code>refresh</code> already has signature-based caching; render side has <strong>none</strong>. <span class="vbadge v">v</span></li>
+        <li>Routes are drawn in <strong>screen space</strong> via per-route <code>resolveScreenPos</code> calls — meaning every camera pan invalidates by definition. <span class="vbadge v">v</span></li>
+      </ul>
+
+      <h3 class="sub">Profile artifact</h3>
+      <ul class="body">
+        <li><code>/tmp/ri-real-hw-v2.cpuprofile</code> — CDP capture against the live tab. The file lives on disk for traceability; not preserved in the repo. <span class="vbadge v">v</span></li>
+      </ul>
+
+      <div class="codepanel" style="margin-top: 14px"><pre><span class="cm">// The animation that must NOT regress (gameplay-load-bearing):</span>
+<span class="cm">// the dashed-stroke scroll along each route line — direction +</span>
+<span class="cm">// speed encode route type / activity. Preserved verbatim across</span>
+<span class="cm">// all three phases; only the *mechanism* changes (per-frame</span>
+<span class="cm">// re-draw → tilePosition.x advance on a texture-tiled stroke).</span></pre></div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Architecture</h2></div>
+      <p class="sec-intro">Three PixiJS scene-graph layers, two of them new.
+        Routes leave screen-space and live under the existing
+        <code>world</code> container so the Pixi stage transform handles
+        pan/zoom for free.</p>
+
+      <div class="codepanel"><pre>world (existing)
+├── … existing children (islands, buildings, ocean, drones)
+├── <span class="kw">routesStaticLayer</span>    <span class="cm">← new, built once per route, cached</span>
+└── <span class="kw">routesAnimatedLayer</span>  <span class="cm">← new, texture-stroked dashed lines, UV animates</span>
+
+<span class="cm">(label / chevron / pulse overlay that depends on screen-space</span>
+<span class="cm"> positioning stays in the existing screen-space UI container —</span>
+<span class="cm"> unchanged. The chevron *count* is a route-cache-key field; the</span>
+<span class="cm"> chevron *placement* remains screen-space.)</span></pre></div>
+
+      <p class="body">Per route, one entry in <code>Map&lt;RouteId, RouteRenderState&gt;</code> living on the <code>RouteRenderer</code> instance:</p>
+      <ul class="body">
+        <li>the static <code>Graphics</code> object (world-coord line geometry, built once)</li>
+        <li>the animated <code>Graphics</code> object (texture-tiled stroke, <code>tilePosition.x</code> animates)</li>
+        <li>a reference to the shared dashed-stroke <code>Texture</code> for this route type</li>
+        <li>the last-applied <code>cacheKey</code> for invalidation</li>
+        <li>(optional) a reference to a screen-space chevron container — built / torn down with the route, but positioned in the UI container at paint time</li>
+      </ul>
+
+      <p class="body"><strong>What is NOT in the new architecture.</strong>
+        The route line geometry is the only path being moved; everything
+        else in <code>routes-ui.ts</code> retains its current call shape.
+        Other per-frame routes-panel work is out of scope (see §11).</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>Components</h2></div>
+      <p class="sec-intro">One new module owns the new layers and the cache.
+        Two existing files lose code; one existing file gains a JSDoc'd
+        helper export.</p>
+
+      <h3 class="sub"><code>RouteRenderer</code> — <code>src/routes-renderer.ts</code> (new, ~150 LOC)</h3>
+      <p class="body">Owns the two new <code>PIXI.Container</code> instances
+        (<code>routesStaticLayer</code>, <code>routesAnimatedLayer</code>) and
+        the per-route cache <code>Map&lt;RouteId, RouteRenderState&gt;</code>.
+        Public surface:</p>
+      <div class="codepanel"><pre><span class="kw">export class</span> <span class="fn">RouteRenderer</span> {
+  <span class="kw">readonly</span> staticLayer: PIXI.Container;    <span class="cm">// addChild'd into world</span>
+  <span class="kw">readonly</span> animatedLayer: PIXI.Container;  <span class="cm">// addChild'd into world</span>
+
+  <span class="fn">constructor</span>(world: PIXI.Container, world: WorldState);
+  <span class="fn">update</span>(routes: <span class="kw">readonly</span> Route[], nowMs: <span class="kw">number</span>): <span class="kw">void</span>;
+  <span class="fn">dispose</span>(): <span class="kw">void</span>;
+}</pre></div>
+
+      <h3 class="sub"><code>RouteRenderState</code> — same file, plain interface</h3>
+      <div class="codepanel"><pre><span class="kw">interface</span> RouteRenderState {
+  staticGraphics: PIXI.Graphics;
+  animatedGraphics: PIXI.Graphics;
+  cacheKey: <span class="kw">string</span>;
+  chevronContainer?: PIXI.Container;  <span class="cm">// optional UI-container overlay</span>
+}</pre></div>
+
+      <h3 class="sub"><code>getDashedStrokeTexture(routeType)</code> — <code>src/routes-dash-texture.ts</code> (new, ~25 LOC)</h3>
+      <p class="body">Module-scope cache of <strong>one <code>PIXI.Texture</code> per route type</strong>.
+        Built lazily on first request (drawn into a small <code>PIXI.RenderTexture</code>
+        — dash length + gap pattern in the route-type colour). Held at module
+        scope for the session lifetime; never destroyed. With the current
+        route-type catalogue, the pool is 3-5 textures (see §10 Risk 3).</p>
+      <div class="codepanel"><pre><span class="kw">export function</span> <span class="fn">getDashedStrokeTexture</span>(
+  renderer: PIXI.Renderer,
+  routeType: RouteType,
+): PIXI.Texture;</pre></div>
+
+      <h3 class="sub"><code>routesCacheKey(routes)</code> — <code>src/routes.ts</code> (new export, ~10 LOC)</h3>
+      <p class="body">Pure function next to the <code>Route</code> type
+        declaration. Walks <code>routes</code> once, joins
+        <code>`${routeType}|${fromBuildingId}|${toBuildingId}|${inFlight.length}`</code>
+        for each route with a <code>"&#x1f;"</code> separator (any
+        non-overlapping codepoint works; the separator is invisible and
+        chosen so it can never appear in an id). Returns the joined string.</p>
+      <div class="codepanel"><pre><span class="cm">/**</span>
+<span class="cm"> * Render cache-key for the routes-renderer. Encodes every Route field</span>
+<span class="cm"> * that affects rendered geometry / chevron count.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Fields included:</span>
+<span class="cm"> *   - route.type           (selects dashed-stroke texture + colour)</span>
+<span class="cm"> *   - route.from           (building id → world-coord endpoint)</span>
+<span class="cm"> *   - route.to             (building id → world-coord endpoint)</span>
+<span class="cm"> *   - route.inFlight.length  (chevron count; items themselves NOT keyed)</span>
+<span class="cm"> *</span>
+<span class="cm"> * If you add a visual field to Route, you MUST update this function</span>
+<span class="cm"> * AND the not-visual whitelist in routes-renderer.test.ts. The</span>
+<span class="cm"> * whitelist test fails the build for unclassified fields.</span>
+<span class="cm"> */</span>
+<span class="kw">export function</span> <span class="fn">routesCacheKey</span>(routes: <span class="kw">readonly</span> Route[]): <span class="kw">string</span>;</pre></div>
+
+      <h3 class="sub"><code>paintLayer</code> body in <code>routes-ui.ts</code></h3>
+      <p class="body">Collapses to the delegating shape below — ~5 lines.
+        <code>resolveScreenPos</code> import removed.</p>
+      <div class="codepanel"><pre><span class="kw">function</span> <span class="fn">paintLayer</span>(nowMs: <span class="kw">number</span>): <span class="kw">void</span> {
+  routeRenderer.<span class="fn">update</span>(world.routes, nowMs);
+}</pre></div>
+
+      <p class="body"><strong>Why one module, not three.</strong>
+        <code>RouteRenderer</code>, <code>RouteRenderState</code>, and the
+        per-route paint logic share a private cache and ticker contract.
+        Splitting across files forces an export surface that doesn't pay
+        for itself at this size. The dashed-texture factory is split out
+        because it has a different lifecycle (module-scope singleton pool,
+        never disposed) than the per-route Graphics (created/destroyed with
+        routes).</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>Data flow</h2></div>
+      <p class="sec-intro">Single entry point. Fast path = one cache-key
+        compare + one number write per route. Slow path = diff against the
+        cache and rebuild only changed entries.</p>
+
+      <div class="codepanel"><pre>nowMs ──► RouteRenderer.<span class="fn">update</span>(routes, nowMs)
+            │
+            ├─ key = <span class="fn">routesCacheKey</span>(routes)
+            ├─ <span class="kw">if</span> key === <span class="kw">this</span>.lastKey:
+            │     <span class="kw">for each</span> anim entry: anim.tilePosition.x = nowMs * SCROLL_SPEED_PX_PER_MS
+            │     <span class="kw">return</span>                              <span class="cm">← FAST PATH (90 %+ of frames)</span>
+            │
+            ├─ key !== <span class="kw">this</span>.lastKey: diff
+            │   ├─ <span class="kw">for</span> route <span class="kw">in</span> routes not in cache:        BUILD static + animated
+            │   ├─ <span class="kw">for</span> route <span class="kw">in</span> cache not in routes:        DESTROY entry
+            │   ├─ <span class="kw">for</span> route <span class="kw">in</span> both with changed key:      REBUILD static, adjust animated
+            │   └─ <span class="kw">for</span> route <span class="kw">in</span> both unchanged:             NO-OP
+            │
+            ├─ update anim UV offset (same as fast path)
+            └─ <span class="kw">this</span>.lastKey = key</pre></div>
+
+      <h3 class="sub">What invalidates the cache</h3>
+      <ul class="body">
+        <li><code>route.type</code> changes (different dashed texture)</li>
+        <li><code>route.from</code> or <code>route.to</code> changes (different building endpoint → different world-coord line)</li>
+        <li>a route is added or removed from <code>world.routes</code></li>
+        <li><code>route.inFlight.length</code> changes (chevron count — items themselves are NOT in the key because only the count is rendered)</li>
+      </ul>
+
+      <h3 class="sub">What does NOT invalidate the cache</h3>
+      <ul class="body">
+        <li>camera pan / zoom (handled by Pixi stage transform on <code>world</code>)</li>
+        <li><code>nowMs</code> advancing (animation is UV-offset, not geometry)</li>
+        <li>routes panel visibility toggle (the layers exist regardless of panel state; panel toggle does not enter <code>RouteRenderer.update</code>)</li>
+        <li>DOM ledger refresh inside <code>routes-ui.ts</code> (out of scope, separate signature-cache)</li>
+      </ul>
+
+      <p class="body"><strong>First-frame behaviour.</strong>
+        <code>this.lastKey</code> initialises to <code>null</code>. The first
+        <code>update()</code> call short-circuits the equality check, falls
+        through to the diff path, builds every route from scratch, and sets
+        <code>this.lastKey</code>. No special case in the code.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>Cache key &amp; correctness</h2></div>
+      <p class="sec-intro">The cache is correct iff
+        <code>routesCacheKey</code> captures every <code>Route</code> field
+        that affects the rendered output. The contract is enforced two ways
+        — by JSDoc + a grep-able marker, and by an automated whitelist test.</p>
+
+      <h3 class="sub">Cache-key completeness</h3>
+      <p class="body">JSDoc on <code>routesCacheKey</code> (§02) explicitly
+        lists the four cache-key fields. A grep-able comment on the
+        <code>Route</code> type declaration in <code>src/routes.ts</code>
+        reminds maintainers that adding a visual field requires touching
+        the key:</p>
+      <div class="codepanel"><pre><span class="cm">// VISUAL-FIELD-MARKER: any new field on this interface that</span>
+<span class="cm">// affects rendered route geometry, dash style, or chevron count</span>
+<span class="cm">// MUST be added to routesCacheKey() AND classified in the</span>
+<span class="cm">// not-visual whitelist in routes-renderer.test.ts.</span>
+<span class="kw">export interface</span> Route {
+  id: RouteId;
+  type: RouteType;
+  from: BuildingId;
+  to: BuildingId;
+  inFlight: ReadonlyArray&lt;Batch&gt;;
+  <span class="cm">/* …other fields… */</span>
+}</pre></div>
+
+      <h3 class="sub">Whitelist enforcement test</h3>
+      <p class="body">A test (§07 row "Whitelist") iterates
+        <code>Object.keys(routes[0])</code> for a representative live route
+        and asserts every key is either in the cache-key set or on a
+        not-visual whitelist (e.g. <code>id</code> — used for cache lookup
+        but not rendered; <code>throughput</code> stats; any future
+        non-visual metadata). A new field on <code>Route</code> that's
+        neither in the cache key nor on the whitelist fails the test.</p>
+
+      <h3 class="sub">No in-place mutation surface</h3>
+      <p class="body"><strong>Routes are wholesale added / removed /
+        replaced</strong>; they are not mutated in place. The only
+        sub-array that is mutated is <code>inFlight</code>, and its
+        <strong>length</strong> is in the cache key. Items pushed or popped
+        from <code>inFlight</code> change the key; mutations to an item's
+        internal fields do not — that is correct, because item internals
+        do not affect rendering.</p>
+
+      <h3 class="sub">Optional debug flag — <code>?routes-debug=1</code></h3>
+      <p class="body">When the URL carries <code>?routes-debug=1</code>, the
+        fast path additionally recomputes <code>routesCacheKey</code> against
+        a structured-clone snapshot of the previous <code>routes</code> input
+        and <code>console.warn</code>s on divergence. This catches the case
+        where a real mutation slips past the cache key. Off by default — the
+        snapshot has non-trivial cost. <span class="vbadge u">u</span></p>
+
+      <h3 class="sub">Fast-path UV-write ceiling</h3>
+      <p class="body">At the live save's ~10 routes the per-route
+        <code>tilePosition.x =</code> write is negligible (one numeric
+        assignment per route per frame). At 100+ routes a single shader
+        uniform replaces the per-route writes — out of scope for this spec,
+        called out as a future fallback in §10 Risk 4.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>Phase deliverables</h2></div>
+      <p class="sec-intro">Each phase is a single shippable commit with its
+        own measurable gate. Phase 3 is the only one with a binding gate
+        (paintLayer self &lt; 1 %); the earlier phases are observability
+        + foundation. Sequencing details (commit order, exact edit
+        locations) are the writing-plans skill's job — the spec defines
+        the artifacts each phase must deliver.</p>
+
+      <div class="phase-grid">
+        <div class="phase">
+          <div class="ph-tag">Phase 1</div>
+          <div class="ph-head">Skip-gate</div>
+          <div class="ph-body">
+            <code>routesCacheKey(routes)</code> exists and is called once per
+            frame. <code>paintLayer</code> caches the last key and bails
+            before any Pixi <code>Graphics.clear</code> / redraw when the key
+            matches. Drawing is still screen-space; <code>resolveScreenPos</code>
+            still in the code path. Cache survives only frames where
+            nothing relevant changed.
+          </div>
+          <div class="ph-gate">
+            Gate: <code>Graphics.clear</code> called at most once across two
+            <code>update()</code>s with identical inputs. Visual smoke-test
+            shows zero behavioural change.
+          </div>
+        </div>
+        <div class="phase">
+          <div class="ph-tag">Phase 2</div>
+          <div class="ph-head">World-space + static/animated split</div>
+          <div class="ph-body">
+            <code>RouteRenderer</code> exists. <code>routesStaticLayer</code>
+            and <code>routesAnimatedLayer</code> are <code>addChild</code>'d
+            into <code>world</code> (not the screen-space UI container).
+            Line endpoints built from <code>tileToWorldPx(building.x,
+            building.y)</code>; no <code>resolveScreenPos</code> in the
+            geometry path. Per-route static <code>Graphics</code> built once
+            and reused across camera moves.
+          </div>
+          <div class="ph-gate">
+            Gate: panning the camera does NOT call <code>Graphics.clear</code>
+            on any route's static layer. Z-order verified by Daedalus
+            screenshot — routes above buildings, below drones.
+          </div>
+        </div>
+        <div class="phase done">
+          <div class="ph-tag">Phase 3 — binding</div>
+          <div class="ph-head">Texture-tiled stroke + UV animation</div>
+          <div class="ph-body">
+            Dashed lines are drawn with a <code>PIXI.Texture</code>-filled
+            stroke (one shared texture per route type, fetched from
+            <code>getDashedStrokeTexture</code>). Per frame,
+            <code>animatedGraphics.tilePosition.x</code> is the only mutated
+            field on the route's Pixi state. Zero <code>Graphics.clear</code>
+            during steady-state animation.
+          </div>
+          <div class="ph-gate">
+            Gate: <strong>paintLayer self &lt; 1 %</strong> on the live save
+            re-profile. Secondary observation: <code>refresh</code>
+            inclusive &lt; 10 %. Dashed-scroll visually identical to
+            baseline.
+          </div>
+        </div>
+      </div>
+
+      <p class="body"><strong>Phase ordering rationale.</strong> Phase 1 is
+        the cheapest reversible win and unblocks measurement of "how often
+        does the renderer actually need to run." Phase 2 detaches the cache
+        from camera state — without it, every pan re-invalidates and the
+        cache is useless. Phase 3 is where the Pixi geometry cost
+        disappears. Reverting Phase 3 keeps Phases 1 + 2 productive;
+        reverting Phase 2 collapses to Phase 1; reverting Phase 1 returns
+        the file to HEAD.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2>API change surface</h2></div>
+      <p class="sec-intro">Mostly internal. Two new files house the renderer;
+        one existing file gains a public-export helper; one existing file
+        loses a body; one bootstrap file gains an init line.</p>
+
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/routes-renderer.ts (new)</div>
+          <div class="what"><span class="lead">Adds <code>RouteRenderer</code> class + <code>RouteRenderState</code> interface.</span> Owns the two new world-parented Containers + per-route cache. Public surface: constructor, <code>update(routes, nowMs)</code>, <code>dispose()</code>. ~150 LOC.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/routes-dash-texture.ts (new)</div>
+          <div class="what"><span class="lead">Adds <code>getDashedStrokeTexture(renderer, routeType)</code>.</span> Module-scope pool, one Texture per route type, never destroyed. ~25 LOC.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/routes.ts</div>
+          <div class="what"><span class="lead">Adds <code>routesCacheKey(routes): string</code> export + JSDoc.</span> Adds the <code>VISUAL-FIELD-MARKER</code> comment on the <code>Route</code> type declaration. ~10 LOC of new code; no behavioural change.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/routes-ui.ts</div>
+          <div class="what"><span class="lead"><code>paintLayer</code> body deleted, replaced by <code>routeRenderer.update(world.routes, nowMs)</code>.</span> <code>resolveScreenPos</code> import removed. The two screen-space <code>Graphics</code> previously cleared at the top of <code>paintLayer</code> are removed; the chevron / pulse overlay (if it keeps a screen-space surface) is migrated to <code>RouteRenderer</code>'s optional <code>chevronContainer</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/main.ts</div>
+          <div class="what"><span class="lead">Bootstrap wiring.</span> Construct <code>RouteRenderer(world, worldState)</code> after <code>world</code> is ready; <code>addChild</code> its two layers in the documented z-order (§08). Pass the renderer instance to <code>routes-ui.ts</code> (replaces the existing UI-container handle).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/routes-renderer.test.ts (new)</div>
+          <div class="what"><span class="lead">Correctness tests.</span> One test per phase contract + whitelist enforcement. See §07.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/routes-renderer.perf.test.ts (new)</div>
+          <div class="what"><span class="lead">Perf-gate test.</span> 50 routes, steady-state frames, per-update wall-clock &lt; 0.5 ms. Un-skipped (runs in normal <code>npm test</code>). See §07.</div>
+        </div>
+      </div>
+
+      <p class="body"><strong>No persistence change.</strong> The renderer is
+        runtime-only. No fields land on <code>WorldState</code> /
+        <code>IslandState</code>; no schema bump; <code>persistence.ts</code>
+        untouched.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>Test plan</h2></div>
+      <p class="sec-intro">Per-phase correctness in
+        <code>src/routes-renderer.test.ts</code>; perf gate in
+        <code>src/routes-renderer.perf.test.ts</code> (un-skipped). Manual
+        binding-gate via real-hardware re-profile after Phase 3.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Phase</th>
+          <th>Test</th>
+          <th>Pattern</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">1</td>
+            <td><code>paintLayer with unchanged routes does not call Graphics.clear() on second invocation</code></td>
+            <td>Mock Pixi <code>Graphics</code>; spy on <code>.clear</code>; two <code>update()</code> calls with the same <code>routes</code> array; assert <code>.clear</code> called only on the first.</td>
+          </tr>
+          <tr>
+            <td class="slate">1</td>
+            <td><code>paintLayer rebuilds when route.inFlight.length changes</code></td>
+            <td>Mutate <code>inFlight.push(batch)</code> between calls; assert <code>.clear</code> called twice (once on first call, once on rebuild).</td>
+          </tr>
+          <tr>
+            <td class="slate">2</td>
+            <td><code>RouteRenderer builds line endpoints in world coords, NOT screen coords</code></td>
+            <td>Static-analysis: no <code>resolveScreenPos</code> import or call inside <code>routes-renderer.ts</code>. Behavioural: endpoint coords equal <code>tileToWorldPx(building.x, building.y)</code> exactly.</td>
+          </tr>
+          <tr>
+            <td class="slate">2</td>
+            <td><code>route Graphics is attached to world container, not UI container</code></td>
+            <td>Assert <code>renderer.staticLayer.parent === worldContainer</code> and <code>renderer.animatedLayer.parent === worldContainer</code>.</td>
+          </tr>
+          <tr>
+            <td class="slate">3</td>
+            <td><code>dashed texture tilePosition advances frame-to-frame WITHOUT calling .clear()</code></td>
+            <td>Spy on <code>.clear</code>; 10 successive <code>update()</code> calls with increasing <code>nowMs</code>; assert <code>tilePosition.x</code> strictly increases AND <code>.clear</code> called zero times after the first invocation.</td>
+          </tr>
+          <tr>
+            <td class="slate">Whitelist</td>
+            <td><code>every Route field is either in routesCacheKey or on the not-visual whitelist</code></td>
+            <td>Iterate <code>Object.keys(routes[0])</code> for a representative live route fixture; assert membership in <code>cacheKeyFields ∪ notVisualWhitelist</code>; fail with a directive message if an unclassified field is found.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">Perf-gate test (un-skipped)</h3>
+      <div class="codepanel"><pre><span class="kw">it</span>(<span class="str">'paintLayer with 50 routes stays under 0.5 ms wall-clock on steady-state frames'</span>, () =&gt; {
+  <span class="kw">const</span> routes = <span class="fn">makeNRoutes</span>(50);
+  <span class="kw">const</span> renderer = <span class="kw">new</span> <span class="fn">RouteRenderer</span>(...);
+  renderer.<span class="fn">update</span>(routes, 0);              <span class="cm">// warm</span>
+  <span class="kw">const</span> t0 = performance.<span class="fn">now</span>();
+  <span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; 100; i++) renderer.<span class="fn">update</span>(routes, i * 16);
+  <span class="kw">const</span> dt = (performance.<span class="fn">now</span>() - t0) / 100;
+  <span class="fn">expect</span>(dt).<span class="fn">toBeLessThan</span>(0.5);
+});</pre></div>
+
+      <h3 class="sub">Real-hardware re-profile (out-of-suite, manual)</h3>
+      <p class="body">After Phase 3 lands, re-run a CDP CPU profile against
+        the live tab on the same save. Binding-gate assertions, recorded in
+        the Phase 3 commit body:</p>
+      <ul class="body">
+        <li><strong><code>paintLayer</code> self &lt; 1 %</strong> (down from 3.65 %)</li>
+        <li><strong><code>refresh</code> inclusive &lt; 10 %</strong> (down from 31.14 %)</li>
+      </ul>
+
+      <h3 class="sub">Visual smoke-test (plan-step)</h3>
+      <p class="body">Daedalus screenshot at baseline, after each phase, and
+        after all phases. Verify: no z-order regressions (routes above
+        islands + buildings, below drones); dashed-line scroll animates at
+        the same visual speed and direction as baseline; chevron count
+        matches <code>inFlight.length</code> for representative routes.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>Z-order &amp; lifecycle</h2></div>
+      <p class="sec-intro">Concrete <code>addChild</code> order in
+        <code>main.ts</code> and the texture / Graphics lifecycle rules.</p>
+
+      <h3 class="sub">Z-order inside the <code>world</code> container</h3>
+      <p class="body">Pixi child order is paint order. Bottom → top:</p>
+      <ol class="body">
+        <li>ocean / fog (existing)</li>
+        <li>islands + buildings (existing)</li>
+        <li><strong><code>routesStaticLayer</code></strong> (new — Phase 2)</li>
+        <li><strong><code>routesAnimatedLayer</code></strong> (new — Phase 2)</li>
+        <li>drones (existing — kept on top so chevrons and dashes never occlude active swarm visuals)</li>
+      </ol>
+      <p class="body">The plan must specify the exact <code>addChild</code>
+        call sequence in <code>main.ts</code>. Visually verifiable per the
+        §07 visual smoke-test.</p>
+
+      <h3 class="sub">Texture lifecycle</h3>
+      <ul class="body">
+        <li>3-5 <code>PIXI.Texture</code> instances held at module scope inside <code>routes-dash-texture.ts</code> (one per route type).</li>
+        <li>Built lazily on first call to <code>getDashedStrokeTexture</code> for a given route type.</li>
+        <li><strong>Never destroyed</strong> during the session — they are session-singletons. <code>RouteRenderer.dispose()</code> does NOT touch them.</li>
+        <li>Memory ceiling is bounded by route-type count. With the current catalogue this is &lt; 1 MB of GPU memory total (small dash patterns at low resolution).</li>
+      </ul>
+
+      <h3 class="sub">Per-route <code>Graphics</code> lifecycle</h3>
+      <ul class="body">
+        <li>Built on first appearance of a route in <code>world.routes</code> inside the slow-path diff (§03).</li>
+        <li>Destroyed (<code>graphics.destroy()</code>) when a route disappears from <code>world.routes</code> in the slow-path diff.</li>
+        <li>Rebuilt (destroy + build) on cache-key change for an existing route id (e.g. its <code>from</code> or <code>to</code> changed).</li>
+        <li><code>RouteRenderer.dispose()</code> iterates the cache, destroys every per-route Graphics, then removes the two layers from the world container. Used at app teardown only.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Expected impact</h2></div>
+      <p class="sec-intro">Quantitative projection from
+        <code>/tmp/ri-real-hw-v2.cpuprofile</code>. "Before" rows are
+        directly measured; "after" rows are projections, tagged
+        <span class="vbadge u">u</span>, to be verified post-Phase-3 by the
+        re-profile (§07).</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>Projected after</th>
+          <th>Rationale</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">paintLayer self %</td>
+            <td class="num warn">3.65 %</td>
+            <td class="num ok">&lt; 1 %</td>
+            <td>Steady-state frames hit the fast path; only per-route <code>tilePosition.x</code> write remains.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">refresh inclusive %</td>
+            <td class="num warn">31.14 %</td>
+            <td class="num ok">&lt; 10 %</td>
+            <td>Side effect of paintLayer collapsing; remaining inclusive cost is DOM ledger refresh which already has its own cache.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">buildLine self %</td>
+            <td class="num warn">7.36 %</td>
+            <td class="num ok">&lt; 1 %</td>
+            <td>Per-frame line tessellation gone; texture-stroke draws lines as quads with a UV-scrolled fill.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">GraphicsContext.stroke self %</td>
+            <td class="num warn">11.55 %</td>
+            <td class="num ok">&lt; 2 %</td>
+            <td>Most calls eliminated (only on cache-miss slow-path frames); texture-stroke path is cheaper than per-frame line buildup.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">triangulateWithHoles self %</td>
+            <td class="num">3.12 %</td>
+            <td class="num ok">&lt; 0.5 %</td>
+            <td>Direct downstream of <code>stroke</code> + <code>buildLine</code>; eliminated for the same reason.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">handleFillObject self %</td>
+            <td class="num">3.34 %</td>
+            <td class="num ok">&lt; 0.5 %</td>
+            <td>Per-frame fill-object allocation gone; texture-stroke holds its fill object on the cached Graphics.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">Color._normalize self %</td>
+            <td class="num">2.82 %</td>
+            <td class="num ok">&lt; 0.5 %</td>
+            <td>Colours are baked into the dashed-stroke texture at build time, not re-normalised per frame.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">GC self %</td>
+            <td class="num">9.15 %</td>
+            <td class="num ok">&lt; 3 %</td>
+            <td>Per-frame Pixi internal allocations (line buffers, fill objects, colour temporaries) gone — all reside on the cached Graphics.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">paintLayer wall-clock @ 50 routes</td>
+            <td class="num warn">TBM</td>
+            <td class="num ok">&lt; 0.5 ms</td>
+            <td>Perf-gate test (§07). Baseline to-be-measured during Phase 1 implementation as a sanity reference; gate is on the after-Phase-3 value.</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>"TBM" reading.</strong> Wall-clock at 50 routes
+        is not in the cpuprofile — it's measured in-test during
+        implementation. The before-value column reads "TBM" (to be measured
+        in Phase 1) because the cpuprofile is sampled CPU %, not direct
+        wall-clock. The after-value is the perf-gate threshold.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Stale geometry from a missed cache-key field. A future change adds a visual <code>Route</code> field without updating <code>routesCacheKey</code>, so the renderer silently serves stale geometry until the next non-visual change happens to bump the key.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">JSDoc on <code>routesCacheKey</code> lists the four key fields. <code>VISUAL-FIELD-MARKER</code> comment on the <code>Route</code> type. Whitelist enforcement test (§07) fails the build for unclassified fields. Optional <code>?routes-debug=1</code> flag (§04) re-runs the key against a deep snapshot and warns on divergence.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Z-order regression. Phase 2 moves routes from a screen-space UI container into <code>world</code>; getting the <code>addChild</code> order wrong causes routes to occlude drones or sit underneath buildings.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">§08 specifies the exact addChild order. Daedalus visual smoke-test per phase. The Phase 2 commit body must include a screenshot diff against the baseline.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Texture upload memory creep. <code>PIXI.Texture</code> instances accumulate at module scope and are never destroyed.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Texture pool is bounded by route-type count (3-5 today). Small dash patterns at low resolution — total GPU footprint &lt; 1 MB. Module-scope retention is intentional and documented in <code>routes-dash-texture.ts</code>'s file header. <code>RouteRenderer.dispose()</code> does not touch them; they survive session lifetime.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Fast-path UV-write cost at high route counts. At 100+ routes the per-route <code>tilePosition.x</code> write becomes measurable.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Live save is ~10 routes today. Fallback documented: replace the per-route writes with a single shader uniform on a custom <code>PIXI.Filter</code> or <code>PIXI.Mesh</code>. Implementation deferred until a re-profile shows the regression; out of scope for this spec.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Animation phase desync — routes that share a texture but should animate at different speeds or colours look identical.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">One <code>PIXI.Texture</code> per <code>routeType</code> (not one shared across all types). Per-type <code>SCROLL_SPEED</code> constant in <code>routes-renderer.ts</code> drives the UV-offset multiplication; different types get different speeds without rebuilding geometry.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 3 lands but the gate is missed — paintLayer self stays &gt; 1 %.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Phases are independently revertable. If the binding gate fails, the diagnostic surface is small (one new module + one bootstrap change); the next step is the shader-uniform fallback named in Risk 4. The phase ordering ensures Phases 1 + 2 remain productive even if Phase 3 is reverted.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Non-goals</h2></div>
+      <p class="sec-intro">Explicitly out of scope so the reader can confirm
+        these were considered and deliberately deferred.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt"><code>refreshStats</code>, <code>refreshFormReadout</code>, <code>repaintLedger</code></div>
+          <div class="dd">Per-frame DOM-side caching for the routes-panel ledger
+            and stats readouts is a separate thread. Those functions are
+            called from inside <code>refresh</code> alongside
+            <code>paintLayer</code>; this spec only touches the Pixi geometry
+            path. The remaining ~10 % inclusive on <code>refresh</code> after
+            this work is exactly where that follow-up will land.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">WebGL instancing rewrite of the route renderer</div>
+          <div class="dd">A custom <code>PIXI.Mesh</code> + instanced
+            attributes would push all routes into a single draw call.
+            Rejected as overengineering for the current scope (~10 routes
+            steady-state). If a future re-profile at 100+ routes shows the
+            texture-stroke path saturating, this is the next radical step.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">GLSL custom-shader dash animation</div>
+          <div class="dd">Moving dash phase to a shader uniform write is
+            cheaper than a texture <code>tilePosition</code> update, but
+            adds a custom <code>PIXI.Filter</code> / <code>Mesh</code> + a
+            WebGL feature-flag fallback. Texture-tiled stroke meets the
+            &lt; 1 % gate at current route counts. Shader path noted in §10
+            Risk 4 as a future fallback.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Other CPU hotspots in the cpuprofile</div>
+          <div class="dd"><code>inFlightSumFor</code> @ <code>routes.ts:410</code> at 1.31 % self,
+            <code>effectiveTierShift</code> @ <code>skilltree.ts:1253</code>
+            at 1.14 % self, and other &lt; 2 %-self callsites are tracked
+            separately. They sit outside the routes-renderer path; fixing
+            them is a different commit chain.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">New buildings or game-design changes</div>
+          <div class="dd">This spec is render-perf only. Visual output of
+            the routes is preserved verbatim — same colours, same dash
+            patterns, same scroll direction and speed. Players see no
+            change.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-05-27 · companion plan at
+        <code>plans/2026-05-27-routes-ui-render-perf</code> ·
+        follows from the post-cache-rework CDP capture at
+        <code>/tmp/ri-real-hw-v2.cpuprofile</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
