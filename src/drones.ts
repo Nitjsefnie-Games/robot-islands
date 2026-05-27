@@ -350,9 +350,14 @@ export function dispatchDrone(
   const ux = dirX / mag;
   const uy = dirY / mag;
 
-  // 2. one-pad cap — reject if any active drone shares this origin
+  // 2. per-pad cap — reject only when an active drone from the same pad
+  //    (matched by origin coords within epsilon) is already in flight.
+  const PAD_MATCH_EPS = 0.5; // pads are SHAPES.single at integer tiles → centres differ by ≥ 1.0
   for (const d of world.drones) {
-    if (d.fromIslandId === origin.id && (d.status === 'active' || d.status === undefined)) {
+    if (d.fromIslandId !== origin.id) continue;
+    if (d.status !== 'active' && d.status !== undefined) continue;
+    if (Math.abs(d.originX - originX) < PAD_MATCH_EPS &&
+        Math.abs(d.originY - originY) < PAD_MATCH_EPS) {
       return { ok: false, reason: 'already-in-flight' };
     }
   }
