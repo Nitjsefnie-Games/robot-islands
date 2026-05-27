@@ -145,6 +145,10 @@ export interface DroneUiHandle {
    *  in world-tile space so the green/red trajectory hint stays correct
    *  at any zoom). Visibility managed internally by setLaunchMode. */
   readonly launchPreviewLayer: Container;
+  /** Container for the selected-pad highlight outline. Add to world (world-tile
+   *  space so it pans/zooms with the camera). Visibility managed internally by
+   *  refresh(). */
+  readonly selectedPadHighlightLayer: Container;
 }
 
 /** All the bits the UI needs handed in. The main module wires this once at
@@ -626,6 +630,39 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   rangeRingLayer.visible = false;
   const rangeRingGfx = new Graphics();
   rangeRingLayer.addChild(rangeRingGfx);
+
+  // -------------------------------------------------------------------------
+  // Pixi layer: selected-pad highlight (WORLD space)
+  // -------------------------------------------------------------------------
+  const selectedPadHighlightLayer = new Container();
+  selectedPadHighlightLayer.label = 'selected-pad-highlight';
+  selectedPadHighlightLayer.visible = false;
+  const selectedPadHighlightGfx = new Graphics();
+  selectedPadHighlightLayer.addChild(selectedPadHighlightGfx);
+
+  function repaintSelectedPadHighlight(): void {
+    selectedPadHighlightGfx.clear();
+    if (!visible || !selectedPadId) {
+      selectedPadHighlightLayer.visible = false;
+      return;
+    }
+    const spec = deps.getOriginSpec();
+    const state = deps.getOrigin();
+    const pad = state.buildings.find((b) => b.id === selectedPadId);
+    if (!pad || !isOperationalBuilding(pad)) {
+      selectedPadHighlightLayer.visible = false;
+      return;
+    }
+    const def = BUILDING_DEFS[pad.defId as BuildingDefId];
+    const w = shapeWidth(def.footprint) * TILE_PX;
+    const h = shapeHeight(def.footprint) * TILE_PX;
+    const px = (spec.cx + pad.x) * TILE_PX - TILE_PX / 2 + 1;
+    const py = (spec.cy + pad.y) * TILE_PX - TILE_PX / 2 + 1;
+    selectedPadHighlightGfx.roundRect(px, py, w - 2, h - 2, 3)
+      .stroke({ width: 2, color: VISION_BLUE, alpha: 0.85 });
+    selectedPadHighlightLayer.visible = true;
+  }
+
   function repaintRangeRing(): void {
     rangeRingGfx.clear();
     const originSpec = deps.getOriginSpec();
@@ -1163,6 +1200,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     repaintLedger(nowMs);
     repaintDroneLayer(nowMs);
     paintLaunchPreview();
+    repaintSelectedPadHighlight();
   }
 
   function show(): void {
@@ -1313,6 +1351,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     reticleLayer,
     rangeRingLayer,
     launchPreviewLayer,
+    selectedPadHighlightLayer,
   };
 }
 
