@@ -1,0 +1,1087 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill-multiplier memoization — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1080px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 38px;
+      line-height: 1.14; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+
+    .verification-key {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 18px;
+      margin: 18px 0 24px; font-size: 13px;
+    }
+    .verification-key strong {
+      color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .vbadge {
+      display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px;
+    }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    .cite-inline { color: var(--clay); font-family: var(--mono); font-size: 0.86em; }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+    .summary .v.warn    { color: var(--warn); }
+
+    .decision {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 48px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 880px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    .toc { background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px; color: var(--gray-500); max-width: 880px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 880px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14.5px; max-width: 880px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+    h3.sub {
+      font-family: var(--serif); font-weight: 500; font-size: 19px;
+      color: var(--slate); margin: 16px 0 10px;
+    }
+
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12.5px; }
+    .tbl td.num { font-family: var(--mono); text-align: right; }
+    .tbl td.accent { color: var(--clay); }
+    .tbl td.ok { color: var(--olive); }
+    .tbl td.warn { color: var(--warn); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .compare {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad   .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good  .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col.neut  .col-head { background: var(--oat); color: var(--slate); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+    .compare .col.neut li:before { content: '\2022'; position: absolute; left: 0; color: var(--gray-500); }
+    .compare .col-body p { font-size: 13.5px; color: var(--gray-700); margin: 6px 0; }
+    .compare .col-body p strong { color: var(--slate); }
+
+    .callout {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14px; color: var(--gray-700); max-width: 880px;
+      margin: 14px 0;
+    }
+    .callout .ct {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 6px;
+    }
+    .callout.crit { border-left-color: var(--rust); }
+    .callout.crit .ct { color: var(--rust); }
+    .callout.ok   { border-left-color: var(--olive); }
+    .callout.ok .ct   { color: var(--olive); }
+
+    .codepanel {
+      background: #121110; border-radius: 12px;
+      padding: 16px 20px; overflow-x: auto; margin: 14px 0;
+    }
+    .codepanel pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .codepanel .kw  { color: var(--clay); }
+    .codepanel .str { color: var(--olive); }
+    .codepanel .cm  { color: var(--gray-500); }
+    .codepanel .fn  { color: #C9B98A; }
+
+    /* Option picker */
+    fieldset.picker {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 18px 22px;
+      margin: 18px 0; max-width: 880px;
+    }
+    fieldset.picker legend {
+      font-family: var(--mono); font-size: 11.5px; padding: 0 8px;
+      color: var(--clay); text-transform: uppercase; letter-spacing: 0.07em;
+    }
+    fieldset.picker .opt {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 12px 0; border-top: 1px dashed var(--gray-300);
+    }
+    fieldset.picker .opt:first-of-type { border-top: none; }
+    fieldset.picker .opt input { margin-top: 4px; accent-color: var(--clay); }
+    fieldset.picker .opt label { flex: 1; cursor: pointer; }
+    fieldset.picker .opt .ot { color: var(--slate); font-weight: 600; font-size: 15px; }
+    fieldset.picker .opt .od { font-size: 13.5px; color: var(--gray-500); margin-top: 4px; }
+    fieldset.picker .opt .ot .tag {
+      font-family: var(--mono); font-size: 11px; padding: 1px 7px;
+      border-radius: 5px; background: var(--gray-150); color: var(--gray-500);
+      margin-left: 8px; vertical-align: middle;
+    }
+    fieldset.picker .opt .ot .tag.rec { background: #232A1C; color: var(--olive); }
+    .pickout {
+      font-family: var(--mono); font-size: 12px;
+      color: var(--gray-500); margin-top: 12px;
+    }
+    .pickout strong { color: var(--slate); }
+
+    .risks {
+      border: var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · economy perf</div>
+      <h1>Memoize <code style="font-size:0.78em">effectiveSkillMultipliers</code> per <code style="font-size:0.78em">advanceIsland</code> tick</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        A live save replayed through <code>scripts/profile-economy.ts</code> shows
+        <code>effectiveSkillMultipliers</code> consuming <strong>72.8% of CPU
+        inclusive</strong> inside <code>advanceIsland</code>. It is recomputed
+        from scratch on every call to <code>cap()</code>, which fires once per
+        resource per pass per segment. The set of unlocked skill nodes is
+        constant within one <code>advanceIsland</code> call, so the multiplier
+        object is constant in that scope. Memoize it once, thread it through
+        the inner loop, and the home-island per-frame budget drops from
+        <strong>6.6 ms mean / 21 ms p99</strong> back under 60 FPS without
+        touching any gameplay surface.
+      </div>
+
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author against the cited file:line or profile artifact.
+        <span class="vbadge u">unverified</span> projection or claim not personally re-verified in this pass.
+        <span class="vbadge x">corrected</span> earlier draft contained an error; this entry supplies the verified value.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Hot-path CPU now</div><div class="v warn">72.8% incl.</div></div>
+      <div class="cell"><div class="k">Hot-path CPU target</div><div class="v ok">&lt;10% incl.</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v accent">1 source · 1 test</div></div>
+      <div class="cell"><div class="k">Schema change</div><div class="v ok">None</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Cache the base <code>SkillMultipliers</code> once per <code>advanceIsland</code>; thread an optional <code>mult</code> arg through <code>cap()</code>.</div>
+      <div class="d-body"><strong>Option A — RatesContext threading.</strong>
+        Compute <code>baseMult = effectiveSkillMultipliers(state)</code> at the
+        top of <code>advanceIsland</code>. Add <code>baseMult?: SkillMultipliers</code>
+        to <code>RatesContext</code>. Extend <code>cap(state, r, override, opts, mult?)</code>
+        with an optional 5th arg. Hot-path callers inside <code>economy.ts</code>
+        opt in by passing <code>ctx?.baseMult</code>; UI / orbital / drones /
+        routes callers keep the legacy 4-arg call and pay the per-call cost
+        (acceptable — they're outside the hot path).</div>
+      <div class="d-body"><strong>Why not Option B (version cache).</strong>
+        <code>layerConditionalBonuses</code> at <a class="cite">economy.ts:588-613</a>
+        mutates the returned <code>SkillMultipliers</code> in place. A
+        version-keyed cache that returns the same object reference would be
+        poisoned by the first <code>computeRates</code> call (which layers
+        conditional bonuses), and the next <code>cap()</code> would read a
+        polluted base. Fixing that requires either defensive deep-copy on
+        every cache hit (defeating the speedup) or a wider rewrite of the
+        conditional-bonus layering contract. Option A sidesteps the entire
+        landmine by giving the hot path a separate, never-mutated
+        <code>baseMult</code> handle.</div>
+      <div class="d-body"><strong>Reservation.</strong> The picker in §10
+        is the final call. Option B's broader call-site coverage is a real
+        upside; if the user is willing to accept the conditional-bonus
+        copy-on-write refactor, B becomes viable.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#s01">01 Problem</a>
+      <a href="#s02">02 Root cause</a>
+      <a href="#s03">03 Proposed solutions</a>
+      <a href="#s04">04 Mutation surface</a>
+      <a href="#s05">05 API change</a>
+      <a href="#s06">06 Lattice non-interference</a>
+      <a href="#s07">07 Test plan</a>
+      <a href="#s08">08 Expected impact</a>
+      <a href="#s09">09 Non-goals</a>
+      <a href="#s10">10 Pick the option</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Problem statement</h2></div>
+      <p class="sec-intro">A live save was dumped from IndexedDB and replayed
+        locally through <code>scripts/profile-economy.ts</code> with the V8 CPU
+        profiler at 200&micro;s sampling. The worker-thread profile reveals
+        <code>effectiveSkillMultipliers</code> as the dominant cost inside the
+        per-frame integrator.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Frame</th>
+          <th>Self %</th>
+          <th>Incl %</th>
+          <th>Where</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">advanceIsland</td>
+            <td class="num">low</td>
+            <td class="num accent">85.8%</td>
+            <td class="mono">economy.ts:1542</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">effectiveSkillMultipliers</td>
+            <td class="num">moderate</td>
+            <td class="num warn">72.8%</td>
+            <td class="mono">skilltree.ts:903</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">computeAuraAmplifiers</td>
+            <td class="num">moderate</td>
+            <td class="num">66.6%</td>
+            <td class="mono">skilltree.ts:1132</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">buildAdjacency</td>
+            <td class="num accent">35%</td>
+            <td class="num">~35%</td>
+            <td class="mono">skilltree.ts:1154</td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">(garbage collector)</td>
+            <td class="num accent">10.7%</td>
+            <td class="num">—</td>
+            <td>allocation churn from <code>buildAdjacency</code> &amp; <code>blankMultipliers</code></td>
+            <td><span class="vbadge v">v</span> cpuprofile</td>
+          </tr>
+          <tr>
+            <td class="slate">cap()</td>
+            <td class="num">trivial</td>
+            <td class="num">~73%</td>
+            <td class="mono">economy.ts:381</td>
+            <td><span class="vbadge v">v</span> source</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">Per-frame budget</h3>
+      <ul class="body">
+        <li><strong>Home-island <code>advanceIsland</code> mean:</strong> <span class="vbadge v">v</span> 6.6 ms — already 40% of the 16.67 ms 60-FPS budget.</li>
+        <li><strong>p99:</strong> <span class="vbadge v">v</span> 21 ms — over budget. Frame drops visible on the live tab.</li>
+        <li><strong>24-hour offline catchup:</strong> <span class="vbadge v">v</span> 418 ms. Loads with a visible stutter.</li>
+        <li><strong>Save shape:</strong> <span class="vbadge v">v</span> home island = 59 buildings, level 25, 251 inventory keys.</li>
+      </ul>
+
+      <h3 class="sub">Profile artifacts</h3>
+      <ul class="body">
+        <li><code>/tmp/CPU.20260527.100010.748878.0.001.cpuprofile</code> &mdash; worker thread, 58 s sampling at 200&micro;s. <span class="vbadge v">v</span></li>
+        <li><code>/tmp/robot-islands-save.json</code> &mdash; 27 MB pretty-JSON dump of the live save. <span class="vbadge v">v</span></li>
+        <li><code>scripts/profile-economy.ts</code> &mdash; benchmark harness that replays a save through <code>advanceIsland</code>. <span class="vbadge v">v</span></li>
+        <li><code>/tmp/analyze-cpuprofile.py</code> &mdash; cpuprofile flattener. <span class="vbadge v">v</span></li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>Root cause</h2></div>
+      <p class="sec-intro">Walk the call chain to see why a single
+        <code>advanceIsland</code> call computes the same multiplier object
+        dozens of times.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Step</th><th>Call site</th><th>Calls per advanceIsland</th><th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">1. advanceIsland loop</td>
+            <td class="mono">economy.ts:1607</td>
+            <td class="num"><strong>S</strong> segments (1 in a typical frame; up to ~hundreds in a 24h catchup)</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">2. computeRates (per segment)</td>
+            <td class="mono">economy.ts:1619</td>
+            <td class="num">1 per segment &mdash; itself calls <code>effectiveSkillMultipliers</code> once at line 733</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">3. outputAvail (per building)</td>
+            <td class="mono">economy.ts:446</td>
+            <td class="num">~B buildings &times; ~K outputs/recipe per segment &rarr; each output calls <code>cap()</code></td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">4. findNextCapEvent (per resource)</td>
+            <td class="mono">economy.ts:1323</td>
+            <td class="num">~R resources with non-zero net rate per segment &rarr; each calls <code>cap()</code>; also separately <code>effectiveSkillMultipliers</code> at line 1351 for the maintenance-threshold ladder</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">5. applyRates (per resource)</td>
+            <td class="mono">economy.ts:1387</td>
+            <td class="num">~R per segment &rarr; each calls <code>cap()</code></td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="slate">6. cap() body</td>
+            <td class="mono">economy.ts:381</td>
+            <td class="num"><strong>1 effectiveSkillMultipliers per cap() invocation.</strong></td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body">For the dumped save's home island
+        (<code>B = 59</code>, <code>R</code> non-zero rates ~50-80 mid-tick),
+        each segment runs <code>cap()</code> on the order of
+        <strong>200&ndash;400 times</strong>. <code>effectiveSkillMultipliers</code>
+        rebuilds the adjacency graph (<code>buildAdjacency</code> on
+        <code>graph.edges</code> &mdash; the default catalog has 100+ edges)
+        and re-folds every unlocked node every time. The work is invariant in
+        the scope of a single segment, let alone a single tick: <code>state.unlockedNodes</code>
+        and <code>state.unlockedEdges</code> are not mutated by <code>computeRates</code>,
+        <code>applyRates</code>, <code>accrueXp</code>, or
+        <code>findNextCapEvent</code>.
+        <span class="vbadge v">v</span></p>
+
+      <div class="callout">
+        <div class="ct">Invariant</div>
+        <strong>Within one <code>advanceIsland</code> call, the base
+        <code>SkillMultipliers</code> object is constant.</strong>
+        Level-ups happen via <code>levelUpIfReady</code> &rarr; they
+        increment <code>state.level</code> and <code>state.unspentSkillPoints</code>,
+        but they do <em>not</em> mutate <code>unlockedNodes</code> /
+        <code>unlockedEdges</code>. The player can only spend points via
+        <code>buyNode</code> / keystone activations, which happen on UI
+        actions outside the tick loop.
+        <span class="vbadge v">v</span> <code>skilltree.ts:760,1363,1375,1399</code> &mdash; the only mutation sites are user-driven.
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>Proposed solutions</h2></div>
+      <p class="sec-intro">Two viable shapes. They differ in where the cache
+        lives and which callers benefit.</p>
+
+      <div class="compare">
+        <div class="col good">
+          <div class="col-head">Option A &mdash; RatesContext threading <span style="float:right;font-size:10px;color:var(--olive)">RECOMMENDED</span></div>
+          <div class="col-body">
+            <p><strong>Shape.</strong> Compute the base multiplier once at the
+            top of <code>advanceIsland</code>, stash on <code>RatesContext</code>,
+            pass through to <code>cap()</code>.</p>
+            <ul>
+              <li>Data-model: <code>RatesContext.baseMult?: SkillMultipliers</code> (read-only, never mutated).</li>
+              <li>Call-site changes: 5 inner-loop sites in <code>economy.ts</code> (lines 400, 446, 1105, 1323, 1387) opt in.</li>
+              <li>Mutation surface to track: <em>none</em>. Cache lives in a stack-allocated <code>ctx</code> object.</li>
+              <li>UI / orbital / routes / drones callers untouched &mdash; they pay the per-call cost (~24 non-test sites total) but are well outside the hot path.</li>
+              <li>Conditional-bonus mutation is naturally handled: <code>computeRates</code> at line 733 still does <code>effectiveSkillMultipliers(state)</code> itself, then layers; the per-segment local <code>skillMul</code> stays distinct from the per-tick <code>baseMult</code> threaded into <code>cap()</code>.</li>
+              <li>Risk of stale cache: zero. The cache cannot outlive one tick.</li>
+              <li>Test impact: 1 new memoization-correctness test; existing 2197 tests pass unchanged.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col neut">
+          <div class="col-head">Option B &mdash; Version-keyed cache on state</div>
+          <div class="col-body">
+            <p><strong>Shape.</strong> Add <code>state._skillMulVersion: number</code>
+            and <code>state._skillMulCache: SkillMultipliers | null</code>.
+            Bump the version on every <code>unlockedNodes</code> /
+            <code>unlockedEdges</code> / <code>socketBindings</code> mutation.
+            <code>effectiveSkillMultipliers</code> returns the cache when its
+            cached version matches.</p>
+            <ul>
+              <li>Data-model: 2 new private fields on <code>IslandState</code>; persistence migration to v14 to ignore them (they're cache, not state).</li>
+              <li>Call-site changes: <strong>zero</strong>. Every existing call benefits, including UI / orbital / routes / drones.</li>
+              <li>Mutation surface to track: every <code>unlockedNodes.add</code>, <code>unlockedNodes.delete</code>, <code>unlockedEdges.add</code>, <code>unlockedEdges.delete</code>, <code>socketBindings.set</code>, <code>socketBindings.delete</code>, and <code>state.unlockedNodes.clear()</code> in <code>tier-reset.ts</code>. Enumerated in §4.</li>
+              <li><strong>Conditional-bonus mutation landmine.</strong> <code>layerConditionalBonuses</code> at <a class="cite">economy.ts:588</a> mutates the returned <code>SkillMultipliers</code> in place &mdash; the comment at line 586 documents this explicitly. A cache that returns the same object reference would be poisoned on the first call; the next <code>cap()</code> would read polluted <code>storageCap</code> / <code>storageCategoryCap</code> values. Fix paths: (a) defensive deep-copy on every cache hit (defeats the speedup), or (b) rewrite <code>layerConditionalBonuses</code> to copy-then-mutate (wider refactor; touches 2 call sites at <a class="cite">economy.ts:733, 1644</a>).</li>
+              <li>Risk of stale cache: <strong>high</strong>. One missed mutation site corrupts the tick.</li>
+              <li>Test impact: 1 invalidation-correctness test + 1 cache-coherence test per mutation site (~7 tests). Existing tests need audit for hidden mutations.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout crit">
+        <div class="ct">Critical &mdash; option B has a concrete correctness bug, not just a hypothetical one</div>
+        <code>layerConditionalBonuses</code> mutates its <code>mul</code>
+        argument in place
+        (<a class="cite">economy.ts:601-610</a>). Today, <code>cap()</code>'s
+        call chain returns a <em>fresh</em> object every time, so it always
+        sees the unlayered base. If Option B returns the cached object, the
+        very first <code>computeRates</code> call (which layers
+        conditional bonuses) leaves the cache with
+        <code>storageCap</code> permanently multiplied by the
+        conditional-bonus factor. Subsequent <code>cap()</code> calls inside
+        <code>findNextCapEvent</code> and <code>applyRates</code> would
+        compute caps using the inflated value. <strong>This is not a
+        version-tracking issue; bumping the version doesn't help because
+        nothing mutates <code>unlockedNodes</code> between the layering and
+        the next read.</strong>
+      </div>
+
+      <h3 class="sub">Recommendation: Option A</h3>
+      <p class="body">Option A is recommended on two grounds, in order of weight:</p>
+      <ol class="body">
+        <li><strong>Correctness.</strong> Option A's <code>baseMult</code> on
+        <code>RatesContext</code> is read-only by construction: the only
+        consumer is <code>cap()</code>, which only reads <code>storageCap</code>
+        and <code>storageCategoryCap</code>. The per-segment
+        <code>computeRates</code> at <a class="cite">economy.ts:733</a> still
+        builds its own local <code>skillMul</code> for layering, so the
+        per-tick cache and the per-segment layered copy never touch.</li>
+        <li><strong>Simpler audit.</strong> Option A adds one field to
+        <code>RatesContext</code>; the diff fits on one screen. Option B
+        adds two state fields, bumps the persistence schema, demands a
+        complete enumeration of mutation sites (§4 below), <em>and</em>
+        forces a separate refactor of <code>layerConditionalBonuses</code>.</li>
+      </ol>
+      <p class="body">Option B's upside &mdash; UI / orbital / routes / drones
+        callers also benefit &mdash; is real but immaterial. Those sites fire
+        on player input or per-frame UI render, not per <code>cap()</code>
+        invocation; the profile shows they contribute negligibly to wall-clock
+        time.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>Mutation surface (informs Option B even though A is recommended)</h2></div>
+      <p class="sec-intro">Every site that mutates the inputs to
+        <code>effectiveSkillMultipliers</code>. If Option B is picked, every
+        row below must bump the version. If Option A is picked, the table
+        documents the invariant: none of these fire from inside the tick
+        loop, so a per-tick cache is automatically valid.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Site</th>
+          <th>What mutates</th>
+          <th>When</th>
+          <th>Tick-loop?</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono">skilltree.ts:760</td>
+            <td><code>state.unlockedNodes.add(nodeId)</code> in <code>buyNode</code></td>
+            <td>Player buys a node (UI action)</td>
+            <td class="ok">No</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="mono">skilltree.ts:670</td>
+            <td><code>state.unlockedNodes.delete(nodeId)</code> in refund path</td>
+            <td>Player refund (UI action)</td>
+            <td class="ok">No</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="mono">skilltree.ts:688</td>
+            <td><code>state.unlockedEdges.delete(edgeId)</code></td>
+            <td>Player refund (UI action)</td>
+            <td class="ok">No</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="mono">skilltree.ts:705,718,723</td>
+            <td><code>state.socketBindings.set/delete</code></td>
+            <td>Player binds/unbinds a graft crystal (UI action)</td>
+            <td class="ok">No</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="mono">skilltree.ts:1363,1375,1376</td>
+            <td><code>unlockedNodes.add</code> / <code>unlockedEdges.add</code> in path-purchase</td>
+            <td>Player buys a cheapest path (UI action)</td>
+            <td class="ok">No</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="mono">skilltree.ts:1399</td>
+            <td><code>state.unlockedNodes.add(ks.targetNode)</code> in keystone</td>
+            <td>Player activates keystone (UI action)</td>
+            <td class="ok">No</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="mono">tier-reset.ts:145,146</td>
+            <td><code>state.unlockedNodes.clear()</code>, <code>state.unlockedEdges.clear()</code></td>
+            <td>§9.7 Tier Reset (player action)</td>
+            <td class="ok">No</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="mono">persistence.ts:loadWorld</td>
+            <td>Set constructed from serialized array on load</td>
+            <td>Page load &mdash; before any tick runs</td>
+            <td class="ok">No</td>
+            <td><span class="vbadge v">v</span></td>
+          </tr>
+          <tr>
+            <td class="mono"><em>return-value of effectiveSkillMultipliers</em></td>
+            <td><code>layerConditionalBonuses</code> mutates fields on the returned object &mdash; <em>not</em> on <code>state</code>, but on the SkillMultipliers handle</td>
+            <td>Every <code>computeRates</code> and every per-segment battery block</td>
+            <td class="warn">YES &mdash; Option B landmine</td>
+            <td><span class="vbadge v">v</span> <code>economy.ts:601-610</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Completeness audit.</strong> The grep used to
+        produce this table is <code>grep -nE 'unlockedNodes|unlockedEdges|socketBindings' src/*.ts | grep -v test</code>
+        plus a follow-up filter for <code>.add</code> / <code>.delete</code> /
+        <code>.set</code> / <code>.clear</code>. Read-only sites
+        (<code>has</code>, <code>size</code>, <code>for…of</code>) are
+        excluded. <span class="vbadge v">v</span></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>API change (for Option A)</h2></div>
+      <p class="sec-intro">The <code>cap()</code> signature gains a fifth
+        positional argument. Behaviour is back-compat by construction: when
+        <code>mult</code> is undefined, the function falls back to recomputing.</p>
+
+      <div class="codepanel"><pre><span class="cm">// Before (economy.ts:373)</span>
+<span class="kw">export function</span> <span class="fn">cap</span>(
+  state: IslandState,
+  r: ResourceId,
+  override?: Record&lt;ResourceId, number&gt;,
+  opts?: { ignoreGrace?: <span class="kw">boolean</span> },
+): <span class="kw">number</span>;
+
+<span class="cm">// After</span>
+<span class="kw">export function</span> <span class="fn">cap</span>(
+  state: IslandState,
+  r: ResourceId,
+  override?: Record&lt;ResourceId, number&gt;,
+  opts?: { ignoreGrace?: <span class="kw">boolean</span> },
+  mult?: SkillMultipliers,   <span class="cm">// NEW &mdash; pre-computed base mult</span>
+): <span class="kw">number</span>;</pre></div>
+
+      <p class="body"><strong>Body change.</strong> The single line
+        <code>const mult = effectiveSkillMultipliers(state);</code> at
+        <a class="cite">economy.ts:381</a> becomes
+        <code>const mult = passedMult ?? effectiveSkillMultipliers(state);</code>.
+        Nothing else inside <code>cap()</code> changes.</p>
+
+      <h3 class="sub">RatesContext extension</h3>
+      <div class="codepanel"><pre><span class="cm">// economy.ts:108</span>
+<span class="kw">export interface</span> RatesContext {
+  <span class="cm">// ... existing fields ...</span>
+
+  <span class="cm">/** Pre-computed base SkillMultipliers for this advanceIsland call. Read-only.
+   *  When present, cap() reads from this instead of recomputing on every
+   *  invocation. Populated by advanceIsland; consumers must NOT layer
+   *  conditional bonuses onto this object &mdash; that's a separate per-segment
+   *  local in computeRates (line 733). */</span>
+  <span class="kw">readonly</span> baseMult?: SkillMultipliers;
+}</pre></div>
+
+      <h3 class="sub">Migration path for hot-path call sites</h3>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>File:line</th>
+          <th>Function</th>
+          <th>Change</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono">economy.ts:381</td>
+            <td><code>cap()</code></td>
+            <td>Use new <code>mult</code> arg if passed.</td>
+          </tr>
+          <tr>
+            <td class="mono">economy.ts:400</td>
+            <td><code>clearGraceIfRedundant</code></td>
+            <td>Pass <code>ctx?.baseMult</code>. This site is called from <code>advanceIsland</code> only at line 1583; thread <code>ctx</code> through.</td>
+          </tr>
+          <tr>
+            <td class="mono">economy.ts:446</td>
+            <td><code>outputAvail</code></td>
+            <td>Pass <code>ctx?.baseMult</code>. <code>outputAvail</code> already takes <code>caps</code>; extend with the same pattern.</td>
+          </tr>
+          <tr>
+            <td class="mono">economy.ts:1105</td>
+            <td>Genesis target check</td>
+            <td>Pass <code>skillMul</code> (already computed locally at line 733).</td>
+          </tr>
+          <tr>
+            <td class="mono">economy.ts:1323</td>
+            <td><code>findNextCapEvent</code></td>
+            <td>Already receives <code>ctx</code>; pass <code>ctx?.baseMult</code>.</td>
+          </tr>
+          <tr>
+            <td class="mono">economy.ts:1351</td>
+            <td>Maintenance threshold mul read</td>
+            <td>Replace <code>effectiveSkillMultipliers(state).maintenanceThreshold</code> with <code>(ctx?.baseMult ?? effectiveSkillMultipliers(state)).maintenanceThreshold</code>.</td>
+          </tr>
+          <tr>
+            <td class="mono">economy.ts:1387</td>
+            <td><code>applyRates</code></td>
+            <td>Extend signature with <code>baseMult</code>; threaded from <code>advanceIsland</code>.</td>
+          </tr>
+          <tr>
+            <td class="mono">economy.ts:1593</td>
+            <td><code>advanceIsland</code> maintenance read</td>
+            <td>Already at the top of <code>advanceIsland</code>; just reuse the <code>baseMult</code> already computed.</td>
+          </tr>
+          <tr>
+            <td class="mono">economy.ts:733, 1644</td>
+            <td>computeRates / battery block</td>
+            <td><strong>Keep as-is.</strong> Both immediately layer conditional bonuses; they need a fresh, mutable copy. Do <em>not</em> reuse <code>baseMult</code> here (would corrupt the cache).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">Non-hot-path call sites (unchanged)</h3>
+      <p class="body">These call <code>effectiveSkillMultipliers</code> directly
+        once each on UI render or player action. They pay the per-call cost,
+        which is fine because they fire at human cadence, not per-tick:</p>
+
+      <table class="tbl">
+        <thead><tr><th>File:line</th><th>Surface</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">drones.ts:394</td><td>Drone launch dispatch</td></tr>
+          <tr><td class="mono">orbital.ts:256,375,655,671,839</td><td>Orbital sat ops (range, repair, fuel, debris)</td></tr>
+          <tr><td class="mono">placement.ts:332,458</td><td>Placement panel skill bonus</td></tr>
+          <tr><td class="mono">routes.ts:674,694,782</td><td>Route capacity / airship range / teleporter</td></tr>
+          <tr><td class="mono">building-alerts-overlay.ts:61</td><td>Alerts overlay (UI render)</td></tr>
+          <tr><td class="mono">drones-ui.ts:1119</td><td>Drone fuel-efficiency readout (UI render)</td></tr>
+          <tr><td class="mono">inspector-ui.ts:1069,1332,1460</td><td>Inspector panels (UI render)</td></tr>
+          <tr><td class="mono">orbital-ui.ts:167</td><td>Orbital panel (UI render)</td></tr>
+        </tbody>
+      </table>
+      <p class="body">Total: <strong>24 non-test call sites</strong>; 8 hot-path
+        opt-ins (economy.ts) and 16 cold-path no-ops.
+        <span class="vbadge v">v</span></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2>Cross-island Lattice non-interference</h2></div>
+      <p class="sec-intro">§9.6 Network Consciousness and §13.3 Omniscient
+        Lattice introduce cross-island effects. Per-island memoization must
+        not conflate these.</p>
+
+      <p class="body"><code>effectiveSkillMultipliers(state, graph)</code> is
+        keyed strictly on <em>this island's</em> <code>unlockedNodes</code>
+        and the (global) skill graph. The §9.6 NC global production buff is
+        applied separately at <a class="cite">economy.ts:686</a> via
+        <code>ctx.ncBuff</code>, and the §13.3 Lattice inventory / cap /
+        cross-island-neighbor overrides come in via <code>ctx.inventory</code>,
+        <code>ctx.caps</code>, and <code>ctx.crossIsland</code>. None of these
+        feed <code>effectiveSkillMultipliers</code>. <span class="vbadge v">v</span></p>
+
+      <p class="body"><strong><code>network-consciousness.ts</code></strong>
+        reads only <code>world.islands</code> + <code>state.level</code> to
+        derive the milestone; it never touches <code>unlockedNodes</code>.
+        <span class="vbadge v">v</span> <code>network-consciousness.ts:1-40</code></p>
+
+      <p class="body">Conclusion: per-island memoization is safe regardless
+        of NC or Lattice activation. Each island's <code>advanceIsland</code>
+        call computes its own <code>baseMult</code> at the top; islands do
+        not share <code>baseMult</code> objects.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>Test plan</h2></div>
+      <p class="sec-intro">Existing test surface + targeted additions for the
+        invalidation guarantee.</p>
+
+      <h3 class="sub">Existing tests that must continue passing</h3>
+      <ul class="body">
+        <li><code>src/economy.test.ts</code> &mdash; 700+ tests. Particularly the cap/storage path: <span class="vbadge v">v</span> sites at lines 3003, 3029 use <code>batteryCapacityWs(state, effectiveSkillMultipliers(state))</code> directly; these don't pass through <code>RatesContext</code> and are unaffected.</li>
+        <li><code>src/skilltree.test.ts</code> &mdash; the multiplier-folding identity tests must round-trip unchanged.</li>
+        <li><code>src/skilltree-integration.test.ts</code> &mdash; end-to-end skill purchase + economy advancement.</li>
+        <li><code>src/battery-ladder.test.ts</code> &mdash; line 84 reads <code>effectiveSkillMultipliers(state)</code> directly; unchanged.</li>
+        <li><code>src/persistence.test.ts</code> &mdash; no schema change, no migration impact.</li>
+      </ul>
+
+      <h3 class="sub">New tests</h3>
+      <ol class="body">
+        <li><strong>Memoization correctness.</strong> Construct an <code>IslandState</code> with a non-trivial unlocked set. Call <code>advanceIsland</code> once; assert the storage cap reflects the skill multiplier. Mutate <code>state.unlockedNodes.add(<em>storage-mul-node</em>)</code>. Call <code>advanceIsland</code> again; assert the cap now reflects the <em>new</em> multiplier (no stale cache). This is the load-bearing invariant test.</li>
+        <li><strong>RatesContext threading.</strong> Construct an <code>IslandState</code>. Patch <code>effectiveSkillMultipliers</code> with a call-count spy. Run one <code>advanceIsland</code> tick across N segments. Assert call count equals 2 + maintenance-threshold reads &mdash; the per-tick base + per-segment local-with-bonuses + the line 1351 maintenance-ladder read; no per-<code>cap()</code> calls. (Spy needs <code>vi.spyOn</code> on the module.)</li>
+        <li><strong>Conditional-bonus non-pollution.</strong> Construct a state with a conditional-bonus node that multiplies <code>storageCap</code>. Tick once. Assert <code>cap(state, r)</code> from outside the tick (UI-style call) returns the <em>unlayered</em> base value, not the conditional-bonus-multiplied value. Guards against the Option-B failure mode if the implementation ever drifts back toward shared mutable mult.</li>
+      </ol>
+
+      <h3 class="sub">Perf-regression gate</h3>
+      <p class="body"><strong>In scope (Phase 5, optional).</strong> Add a perf
+        smoke test that loads a synthetic fixture (the same shape as the live
+        dump &mdash; 50+ buildings, 200+ inventory keys, L25) and asserts
+        <code>advanceIsland</code> for one frame completes in &lt;5 ms wall-clock
+        on the CI box. The threshold is generous (~3&times; the projected
+        post-fix mean) so it trips on regressions but not on transient noise.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>Expected impact</h2></div>
+      <p class="sec-intro">All numbers below are <em>projections</em> from the
+        existing profile (verification badge <code>u</code>). The actual win
+        is gated on a re-run of <code>scripts/profile-economy.ts</code> after
+        Phase 1.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>Projected after</th>
+          <th>Confidence</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate"><code>effectiveSkillMultipliers</code> inclusive %</td>
+            <td class="num warn">72.8%</td>
+            <td class="num ok">&lt;10%</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">Home-island <code>advanceIsland</code> mean</td>
+            <td class="num warn">6.6 ms</td>
+            <td class="num ok">~1.5 ms</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">Home-island <code>advanceIsland</code> p99</td>
+            <td class="num warn">21 ms</td>
+            <td class="num ok">~5 ms</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">24h offline catchup</td>
+            <td class="num warn">418 ms</td>
+            <td class="num ok">~100 ms</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">GC self %</td>
+            <td class="num">10.7%</td>
+            <td class="num ok">~3-5%</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+          <tr>
+            <td class="slate">60 FPS budget hit?</td>
+            <td class="num warn">No (p99)</td>
+            <td class="num ok">Yes</td>
+            <td><span class="vbadge u">u</span> projection</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Sensitivity.</strong> The win is proportional to
+        <code>cap()</code> call count per segment. For pure storage-cap-bound
+        islands (lots of resources at cap, lots of <code>outputAvail</code> /
+        <code>findNextCapEvent</code> early-exits per segment), the win is
+        even larger. For thin islands (few buildings, few resources), the win
+        is smaller in absolute ms but the GC churn reduction is the same %.</p>
+
+      <p class="body"><strong>What the projection assumes.</strong> Each
+        <code>effectiveSkillMultipliers</code> call costs ~1 ms on the home
+        island (the cpuprofile suggests this from the 72.8% inclusive /
+        ~50&ndash;100 calls/segment math); replacing dozens of these with a
+        single call saves the bulk. The residual ~10% covers the one call we
+        still make at the top of <code>advanceIsland</code> plus the per-segment
+        layered copy in <code>computeRates</code>.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Non-goals</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Optimising <code>buildAdjacency</code> itself</div>
+          <div class="dd">35% of self-time today. Likely follow-up &mdash; cache the adjacency map on the static graph once at module-init, not per call. Out of scope here because once memoization lands, <code>buildAdjacency</code> only fires once per <code>advanceIsland</code> instead of dozens of times, demoting it from "top hotspot" to "occasional cost". Re-profile before deciding it still matters.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Reducing allocation churn beyond the memoization</div>
+          <div class="dd"><code>blankMultipliers</code> allocates a fresh object on every call (plus 100+ keys via <code>Object.fromEntries</code>). With memoization it allocates once per tick; the surplus reduction is what brings GC from 10.7% to ~3%. Going below 3% would require an object-pool refactor &mdash; not worth the complexity.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Optimising rendering / PixiJS</div>
+          <div class="dd">The profile is worker-thread economy only. Rendering hotspots are a separate investigation.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Option-B-style cache for UI / orbital / routes / drones call sites</div>
+          <div class="dd">~16 cold-path sites. They fire at human cadence; per-call cost of ~1 ms is invisible. Could be addressed in a follow-up if a different profile (e.g. opening the inspector at 60Hz) ever surfaces them &mdash; but only after the <code>layerConditionalBonuses</code> mutation contract is rewritten.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Pick the option</h2></div>
+      <p class="sec-intro">Reserved for the user. The recommended pick is
+        pre-selected; flip to the alternative only if you accept the wider
+        refactor scope described in §3.</p>
+
+      <fieldset class="picker">
+        <legend>Implementation approach</legend>
+
+        <div class="opt">
+          <input type="radio" id="opt-a" name="impl-option" value="A" checked>
+          <label for="opt-a">
+            <div class="ot">Option A &mdash; RatesContext threading <span class="tag rec">recommended</span></div>
+            <div class="od">Cache <code>baseMult</code> once per <code>advanceIsland</code>; thread through <code>cap()</code> via <code>RatesContext</code>. 8 hot-path opt-ins, 16 cold-path no-ops. No mutation tracking. Diff ~80 LOC.</div>
+          </label>
+        </div>
+
+        <div class="opt">
+          <input type="radio" id="opt-b" name="impl-option" value="B">
+          <label for="opt-b">
+            <div class="ot">Option B &mdash; Version-keyed cache on state</div>
+            <div class="od">Add <code>_skillMulVersion</code> / <code>_skillMulCache</code> to <code>IslandState</code>; bump version on every <code>unlocked*</code> / <code>socketBindings</code> mutation. Zero call-site changes. Requires rewriting <code>layerConditionalBonuses</code> to copy-then-mutate &mdash; do not pick without also accepting that refactor.</div>
+          </label>
+        </div>
+
+        <div class="opt">
+          <input type="radio" id="opt-c" name="impl-option" value="C">
+          <label for="opt-c">
+            <div class="ot">Defer &mdash; do nothing</div>
+            <div class="od">Accept the 21 ms p99 and 418 ms catchup as-is; revisit if the profile gets worse. Not recommended given the live save already breaches the 60 FPS budget.</div>
+          </label>
+        </div>
+
+        <div class="pickout">
+          <strong>Selected:</strong> <span id="picked">Option A</span>
+        </div>
+      </fieldset>
+
+      <script>
+        document.querySelectorAll('input[name="impl-option"]').forEach((el) => {
+          el.addEventListener('change', (e) => {
+            const v = e.target.value;
+            const label =
+              v === 'A' ? 'Option A &mdash; RatesContext threading' :
+              v === 'B' ? 'Option B &mdash; Version-keyed cache' :
+              'Defer';
+            document.getElementById('picked').innerHTML = label;
+          });
+        });
+      </script>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="srisks">
+      <div class="sec-head"><span class="num">11</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Hot-path call site missed during Option A migration &mdash; some <code>cap()</code> calls still pay the per-invocation cost.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">No correctness impact; just less of a speedup. The Phase-4 re-profile catches it (target &lt;10% inclusive). Lint rule could enforce: <code>cap()</code> inside <code>economy.ts</code> must pass the 5th arg.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Future contributor accidentally mutates <code>ctx.baseMult</code> in place.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell"><code>readonly</code> on the interface field is advisory in TypeScript (doesn't deep-freeze). Add an <code>Object.freeze</code> at the <code>advanceIsland</code> top &mdash; cheap, makes mutation a runtime throw in dev.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Persistence migration churn (Option B only).</div>
+          <div class="cell"><span class="sev high">HIGH</span> (B only)</div>
+          <div class="cell">Bump v13 &rarr; v14 with a no-op migrate that strips/resets the cache fields. Not a risk for Option A.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Test that asserts <code>effectiveSkillMultipliers</code> is called N times implicitly via call-count spy breaks if the Phase-1 implementation does an unrelated extra read.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The new test in Phase 3 should pin <em>at most</em> a known small number (e.g. <code>&lt;=4</code> per tick), not an exact count &mdash; future code that adds one orthogonal read shouldn't trip a perf test.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec &middot; generated 2026-05-27 &middot; companion plan: <code>plans/2026-05-27-skillmult-memoize</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
