@@ -15,7 +15,7 @@
 //   - XP accrual proportional to PRODUCTION × xp_weight, not net flow.
 //   - Level up when threshold crossed; skill points granted.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { effectiveModifierMultipliers } from './biomes.js';
 import {
@@ -29,6 +29,7 @@ import { MAINTENANCE_DEGRADE_DURATION_MS, MAINTENANCE_THRESHOLD_MS_BY_TIER } fro
 import {
   accrueXp,
   advanceIsland,
+  cap,
   computeRates,
   findNextCapEvent,
   setGenesisTarget,
@@ -48,6 +49,7 @@ import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
+import * as skilltreeModule from './skilltree.js';
 import { FULL_CATALOG } from './skilltree-catalog.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
@@ -3987,4 +3989,76 @@ describe('conditionalBonus', () => {
     expect(mul.xpGain).toBe(1.25);
   });
 
+});
+
+describe('effectiveSkillMultipliers memoization', () => {
+  it('picks up new unlocked nodes between advanceIsland calls', () => {
+    const state = makeState({
+      level: 10,
+      buildings: [MINE],
+      inventory: { ...blankInventory(), iron_ore: 50 },
+    });
+    const storageNode = FULL_CATALOG.find(
+      (n) => n.effect.kind === 'storageCapMul',
+    )!;
+
+    // Tick once without the node. Cap reflects the base.
+    advanceIsland(state, state.lastTick + 1000, { defs: POWER_FREE });
+    const baseCap = cap(state, 'iron_ore');
+
+    // Unlock the storage node; tick again.
+    state.unlockedNodes.add(storageNode.id);
+    advanceIsland(state, state.lastTick + 1000, { defs: POWER_FREE });
+    const boostedCap = cap(state, 'iron_ore');
+
+    // Second cap MUST reflect the new multiplier — no stale cache.
+    expect(boostedCap).toBeGreaterThan(baseCap);
+    expect(boostedCap / baseCap).toBeCloseTo(1 + storageNode.magnitude, 3);
+  });
+
+  it('cap() reads the unlayered base, not the conditional-layered mult', () => {
+    const state = makeState({
+      level: 25,
+      buildings: [MINE],
+      inventory: { ...blankInventory(), iron_ore: 50 },
+      unlockedNodes: new Set([
+        // Unlock a couple of storageCapMul nodes so the base mult is != 1.
+        'storage.notable.verticalSilo' as any,
+        'storage.notable.vaultClimate' as any,
+      ]),
+    });
+
+    // Compute expected cap from the base multiplier before any tick.
+    const baseMult = effectiveSkillMultipliers(state);
+    const expectedCap = state.storageCaps.iron_ore * baseMult.storageCap;
+
+    // Tick once — advanceIsland computes baseMult AND computeRates
+    // layers conditional bonuses on its own copy.
+    advanceIsland(state, state.lastTick + 1000, { defs: POWER_FREE });
+
+    // External UI-style cap call (no ctx, no mult): should see the
+    // base storageCap, not a conditional-bonus-layered storageCap.
+    expect(cap(state, 'iron_ore')).toBeCloseTo(expectedCap, 3);
+  });
+
+  it('computes effectiveSkillMultipliers at most a small bounded number of times per tick', () => {
+    const state = makeState({
+      level: 25,
+      buildings: Array.from({ length: 50 }, (_, i) => ({
+        id: `b-${i}`,
+        defId: 'mine' as BuildingDefId,
+        x: i,
+        y: 0,
+      })),
+      inventory: { ...blankInventory(), iron_ore: 50 },
+    });
+    const spy = vi.spyOn(skilltreeModule, 'effectiveSkillMultipliers');
+    advanceIsland(state, state.lastTick + 1000, { defs: POWER_FREE });
+    // Bound: top-of-advance + per-segment computeRates + per-segment
+    // battery block + findNextCapEvent maintenance threshold fallback.
+    // For a 1-segment frame: ≤ 4. Pin a generous upper bound so
+    // unrelated future reads don't trip the test.
+    expect(spy.mock.calls.length).toBeLessThanOrEqual(8);
+    spy.mockRestore();
+  });
 });
