@@ -1687,7 +1687,7 @@ export function advanceIsland(
       const depletionTimeSec = state.batteryStoredWs / deficit;
       nextBatteryMs = t + depletionTimeSec * 1000;
     }
-    const nextEventMs = findNextCapEvent(state, net, t, nowMs, ctx);
+    const nextEventMs = findNextCapEvent(state, net, t, nowMs, effectiveCtx);
     // terrain_modifier v5 — segment-end clamp by the soonest pending shot.
     // Without this, a 30s segment containing a 4s shot would integrate past
     // fire-time and ResolveShot would land at the wrong simulated moment.
