@@ -428,14 +428,9 @@ export function dispatchDrone(
 
   origin.inventory[fuelResource] = inv(origin, fuelResource) - fuelLoaded;
 
-  // Spawn position = Drone Pad footprint centre, mirroring the §14.5
-  // Spaceport/satellite idiom in `launchSatellite`. The caller-supplied
-  // `originX`/`originY` (typically the launching island's geometric centre)
-  // are used only as a defensive fallback when no Drone Pad is placed on the
-  // island spec — the dispatch UI already gates on Drone Pad presence, so
-  // this branch is not expected to fire in practice. When multiple Drone
-  // Pads exist on one island, we pick the first one in placement order
-  // (deterministic; the dispatch flow only launches one drone at a time).
+  // Spawn coords: caller is source of truth. The engine trusts originX/originY
+  // without further resolution — the dispatch UI already validated the pad
+  // and computed the launch position before invoking dispatchDrone.
   const drone: Drone = {
     id: nextDroneId(),
     fromIslandId: origin.id,
