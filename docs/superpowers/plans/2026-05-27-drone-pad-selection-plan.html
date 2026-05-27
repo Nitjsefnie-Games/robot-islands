@@ -1,0 +1,1125 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drone Pad Selection — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #252420;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: #1B1A17;
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 48px; max-width: 820px; }
+    .eyebrow {
+      font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 38px;
+      line-height: 1.15; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .prompt-box {
+      background: var(--gray-150); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+
+    .toc { background: var(--gray-150); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    section { margin-bottom: 64px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px; color: var(--gray-500); max-width: 760px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14px; max-width: 820px; margin-bottom: 12px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    ul.body, ol.body { font-size: 14px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-bottom: 64px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v {
+      font-size: 17px; color: var(--slate); font-weight: 600;
+    }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok     { color: var(--olive); }
+
+    /* Phase blocks */
+    .phase {
+      background: var(--white); border: 1.5px solid var(--gray-300);
+      border-radius: 12px; padding: 22px 24px; margin-bottom: 18px;
+    }
+    .phase-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 14px; margin-bottom: 4px; flex-wrap: wrap;
+    }
+    .phase-head .lh {
+      display: flex; align-items: baseline; gap: 12px;
+    }
+    .phase-head .num {
+      font-family: var(--mono); font-size: 11.5px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; letter-spacing: 0.05em;
+    }
+    .phase-head h3 {
+      font-family: var(--serif); font-weight: 500; font-size: 20px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    .phase-head .est {
+      font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .phase .files {
+      font-family: var(--mono); font-size: 12px; color: var(--clay);
+      margin-bottom: 12px;
+    }
+    .phase .pseudocode {
+      background: #121110; border-radius: 10px; padding: 14px 18px;
+      overflow-x: auto; margin: 12px 0;
+    }
+    .phase .pseudocode pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .phase .pseudocode .kw { color: var(--clay); }
+    .phase .pseudocode .str { color: var(--olive); }
+    .phase .pseudocode .cm { color: var(--gray-500); }
+    .phase .pseudocode .fn { color: #C9B98A; }
+
+    .panel-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+      margin: 14px 0;
+    }
+    @media (max-width: 800px) { .panel-row { grid-template-columns: 1fr; } }
+    .panel {
+      background: var(--gray-150); border: 1.5px solid var(--gray-300);
+      border-radius: 10px; padding: 14px 16px;
+    }
+    .panel .ph {
+      font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .panel .pb { font-size: 13.5px; color: var(--gray-700); }
+
+    /* Verification matrix */
+    .tbl {
+      width: 100%; border: 1.5px solid var(--gray-300); border-radius: 12px;
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px; margin-bottom: 18px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* Risk table */
+    .risks {
+      border: 1.5px solid var(--gray-300); border-radius: 12px;
+      overflow: hidden; background: var(--white); margin-bottom: 18px;
+    }
+    .risks .row {
+      display: grid; grid-template-columns: 1.6fr 90px 1.6fr;
+    }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: 1.5px solid var(--gray-300); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat); color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · robot-islands · drone ops</div>
+      <h1>Per-pad selection — execution plan</h1>
+      <div class="prompt-box">
+        <span class="label">Spec</span>
+        Implements <code>specs/2026-05-27-drone-pad-selection</code>:
+        explicit pad-picker in the Drone Ops dock; range ring + reticle +
+        preview + dispatch anchor on the selected pad; concurrency cap
+        becomes per-pad; engine override at <code>drones.ts:441-451</code>
+        is deleted so the caller's <code>originX/originY</code> are the
+        sole source of truth.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Effort total</div><div class="v accent">~3h 25m</div></div>
+      <div class="cell"><div class="k">Phases</div><div class="v">7 (0 – 6)</div></div>
+      <div class="cell"><div class="k">Baseline tests</div><div class="v ok">2193 / 2193</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v ok">None</div></div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Phases</span>
+      <a href="#p0">P0 Branch &amp; baseline</a>
+      <a href="#p1">P1 Data model</a>
+      <a href="#p2">P2 UI dropdown + highlight</a>
+      <a href="#p3">P3 Anchor everything on selected pad</a>
+      <a href="#p4">P4 Engine cap + override deletion</a>
+      <a href="#p5">P5 Tests</a>
+      <a href="#p6">P6 Verify</a>
+      <a href="#matrix">Verification matrix</a>
+      <a href="#risks">Risks &amp; rollback</a>
+    </div>
+
+    <!-- ===================== Phase 0 ===================== -->
+    <section id="p0">
+      <div class="sec-head"><span class="num">P0</span><h2>Branch &amp; baseline</h2></div>
+      <p class="sec-intro">Land all work on a feature branch. Snapshot the
+        green test count so any regression in later phases is immediately
+        visible.</p>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P0</span><h3>Cut branch, prove baseline green</h3></div>
+          <div class="est">est ~10 min</div>
+        </div>
+        <div class="files">(no source files modified)</div>
+
+        <div class="pseudocode"><pre><span class="cm"># cwd: /root/robot-islands — already on master, clean working tree</span>
+git checkout -b feat/drone-pad-selection
+npm test  <span class="cm"># expect: Tests 2193 passed (2193)</span></pre></div>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb">Final line of <code>npm test</code> reads
+              <code>Tests 2193 passed (2193)</code>.
+              If the count differs, stop — investigate before any source
+              edit (the spec's reference baseline assumed 2193).</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout master &amp;&amp; git branch -D feat/drone-pad-selection</code>.
+              No-op if no changes landed.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Phase 1 ===================== -->
+    <section id="p1">
+      <div class="sec-head"><span class="num">P1</span><h2>Data model</h2></div>
+      <p class="sec-intro">Introduce <code>selectedPadCentre</code> and the
+        two closure variables. Keep the existing <code>dronePadCentre</code>
+        as a wrapper so engine tests stay green without modification.</p>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P1</span><h3>Helper + closure state</h3></div>
+          <div class="est">est ~25 min</div>
+        </div>
+        <div class="files">src/drones-ui.ts (~18 LOC added / ~5 LOC modified)</div>
+
+        <p class="body"><strong>Edit 1 — replace
+          <code>dronePadCentre</code> at
+          <a class="cite">drones-ui.ts:66-77</a></strong> with
+          <code>selectedPadCentre</code> + thin wrapper:</p>
+
+        <div class="pseudocode"><pre><span class="kw">export function</span> <span class="fn">selectedPadCentre</span>(
+  spec: IslandSpec,
+  state: IslandState,
+  padId: string | <span class="kw">null</span>,
+): { x: number; y: number } | <span class="kw">null</span> {
+  <span class="kw">const</span> ops = state.buildings.filter(
+    (b) =&gt; b.defId === <span class="str">'dronepad'</span> &amp;&amp; <span class="fn">isOperationalBuilding</span>(b),
+  );
+  <span class="kw">if</span> (ops.length === 0) <span class="kw">return null</span>;
+  <span class="kw">const</span> pad = ops.find((b) =&gt; b.id === padId) ?? ops[0]!;
+  <span class="kw">const</span> def = BUILDING_DEFS[pad.defId <span class="kw">as</span> BuildingDefId];
+  <span class="kw">return</span> {
+    x: spec.cx + pad.x + <span class="fn">shapeWidth</span>(def.footprint) / 2,
+    y: spec.cy + pad.y + <span class="fn">shapeHeight</span>(def.footprint) / 2,
+  };
+}
+
+<span class="cm">// Legacy entry point — keeps drones.test.ts:472-488 green.</span>
+<span class="kw">export function</span> <span class="fn">dronePadCentre</span>(
+  spec: IslandSpec, state: IslandState,
+): { x: number; y: number } | <span class="kw">null</span> {
+  <span class="kw">return</span> <span class="fn">selectedPadCentre</span>(spec, state, <span class="kw">null</span>);
+}</pre></div>
+
+        <p class="body"><strong>Edit 2 — add the closure variables</strong>
+          near <a class="cite">drones-ui.ts:170</a>, after
+          <code>selectedTier</code>:</p>
+
+        <div class="pseudocode"><pre><span class="kw">let</span> selectedPadId: string | <span class="kw">null</span> = <span class="kw">null</span>;
+<span class="kw">let</span> prevOriginId: string | <span class="kw">null</span> = <span class="kw">null</span>;</pre></div>
+
+        <p class="body"><strong>Edit 3 — import
+          <code>isOperationalBuilding</code></strong> at
+          <a class="cite">drones-ui.ts:27</a> (the existing import already
+          pulls <code>findOperationalBuilding, hasOperationalBuilding</code>
+          from <code>./buildings.js</code>; append
+          <code>isOperationalBuilding</code> to the same import line).</p>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb"><code>npm test -- src/drones.test.ts</code>:
+              still 100% pass — the existing
+              <code>dronePadCentre</code> unit tests at
+              <a class="cite">drones.test.ts:472-488</a> verify the
+              wrapper. <code>npm run build</code> compiles clean (catches
+              forgotten import).</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout src/drones-ui.ts</code>.
+              No persistent state touched.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Phase 2 ===================== -->
+    <section id="p2">
+      <div class="sec-head"><span class="num">P2</span><h2>UI — dropdown + canvas highlight</h2></div>
+      <p class="sec-intro">Insert the PAD row in the stat block, populate it
+        from the operational-pad list, wire change events, and add the
+        Pixi highlight layer.</p>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P2.1</span><h3>PAD row + dropdown</h3></div>
+          <div class="est">est ~35 min</div>
+        </div>
+        <div class="files">src/drones-ui.ts (~60 LOC added)</div>
+
+        <p class="body"><strong>Insertion point.</strong> Just before
+          <a class="cite">drones-ui.ts:330</a> (<code>const tierStat = statRow('TIER');</code>),
+          add the PAD row so it appears above TIER in the rendered grid.</p>
+
+        <div class="pseudocode"><pre><span class="cm">// PAD row — sibling of tierStat. Same statRow factory, value slot replaced</span>
+<span class="cm">// with a &lt;select&gt; populated in refresh().</span>
+<span class="kw">const</span> padStat = <span class="fn">statRow</span>(<span class="str">'PAD'</span>);
+<span class="kw">const</span> padSelect = document.<span class="fn">createElement</span>(<span class="str">'select'</span>);
+padSelect.style.cssText = [ <span class="cm">/* same as tierSelect at drones-ui.ts:337-346 */</span> ].<span class="fn">join</span>(<span class="str">';'</span>);
+padSelect.<span class="fn">addEventListener</span>(<span class="str">'change'</span>, () =&gt; {
+  selectedPadId = padSelect.value || <span class="kw">null</span>;
+  <span class="fn">refresh</span>(performance.<span class="fn">now</span>());
+  <span class="kw">if</span> (launchMode) <span class="fn">repaintRangeRing</span>();
+});
+padStat.valueEl.<span class="fn">appendChild</span>(padSelect);
+statBlock.<span class="fn">appendChild</span>(padStat.row);  <span class="cm">// FIRST appendChild on statBlock — before tierStat</span></pre></div>
+
+        <p class="body"><strong>Important:</strong> the existing code at
+          <a class="cite">drones-ui.ts:379-382</a>
+          appends <code>tierStat.row</code> first. Move the
+          <code>statBlock.appendChild(padStat.row)</code> call to run
+          <em>before</em> the tier-row append so DOM order matches the
+          mockup. <span style="font-style: italic">Alternative: use
+          <code>statBlock.insertBefore(padStat.row, tierStat.row)</code>
+          after the existing block — same outcome, more localised
+          edit.</span></p>
+
+        <p class="body"><strong>Populate + sync in <code>refresh()</code></strong>
+          at <a class="cite">drones-ui.ts:965-1094</a>. Near the top of
+          <code>refresh()</code>, after grabbing <code>origin</code> +
+          <code>originSpec</code>, before the tier-clamp block:</p>
+
+        <div class="pseudocode"><pre><span class="cm">// 1. Operational-pad list (filtered, in placement order).</span>
+<span class="kw">const</span> operationalPads = originSpec.buildings.filter(
+  (b) =&gt; b.defId === <span class="str">'dronepad'</span> &amp;&amp; <span class="fn">isOperationalBuilding</span>(b),
+);
+
+<span class="cm">// 2. Active-island switch → reset to first pad.</span>
+<span class="kw">if</span> (origin.id !== prevOriginId) {
+  selectedPadId = operationalPads[0]?.id ?? <span class="kw">null</span>;
+  prevOriginId = origin.id;
+}
+
+<span class="cm">// 3. Selected pad no longer operational → fall back.</span>
+<span class="kw">if</span> (selectedPadId &amp;&amp; !operationalPads.<span class="fn">some</span>((p) =&gt; p.id === selectedPadId)) {
+  selectedPadId = operationalPads[0]?.id ?? <span class="kw">null</span>;
+}
+
+<span class="cm">// 4. First-show default.</span>
+<span class="kw">if</span> (!selectedPadId &amp;&amp; operationalPads.length &gt; 0) {
+  selectedPadId = operationalPads[0]!.id;
+}
+
+<span class="cm">// 5. Rebuild &lt;option&gt; list whenever the set of operational pads changes.</span>
+<span class="cm">//    Cheap signature: ids joined. Avoids per-frame DOM rebuild.</span>
+<span class="kw">const</span> padSig = operationalPads.<span class="fn">map</span>((p) =&gt; p.id).<span class="fn">join</span>(<span class="str">','</span>);
+<span class="kw">if</span> (padSelect.dataset.sig !== padSig) {
+  padSelect.<span class="fn">replaceChildren</span>();
+  operationalPads.<span class="fn">forEach</span>((p, i) =&gt; {
+    <span class="kw">const</span> opt = document.<span class="fn">createElement</span>(<span class="str">'option'</span>);
+    opt.value = p.id;
+    opt.textContent = <span class="str">`Pad #${i + 1}`</span>;
+    padSelect.<span class="fn">appendChild</span>(opt);
+  });
+  padSelect.dataset.sig = padSig;
+}
+<span class="kw">if</span> (selectedPadId &amp;&amp; padSelect.value !== selectedPadId) {
+  padSelect.value = selectedPadId;
+}</pre></div>
+
+        <p class="body">Label decoration on busy pads (optional, but
+          improves UX): after computing <code>busyPadIds</code> in P4,
+          mutate <code>opt.textContent</code> to append <code>(busy)</code>
+          for pads currently in flight.</p>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb"><code>npm run build</code> compiles clean.
+              <code>npm test</code> still 2193 pass.
+              Reload <code>islands.nitjsefni.eu</code> tab and confirm
+              dropdown appears above TIER and lists "Pad #1" on the demo
+              home island. (No pad placed → dropdown is empty, arm
+              button reads <code>NO DRONE PAD</code>.)</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout src/drones-ui.ts</code>.
+              Phase 1 + Phase 2.1 are independent additions; reverting
+              either alone is clean.</div></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P2.2</span><h3>Pixi canvas highlight on selected pad</h3></div>
+          <div class="est">est ~30 min</div>
+        </div>
+        <div class="files">src/drones-ui.ts (~40 LOC added) · src/main.ts (1 LOC added)</div>
+
+        <div class="pseudocode"><pre><span class="cm">// drones-ui.ts — define alongside other Pixi layers, near line 591 (rangeRingLayer).</span>
+<span class="kw">const</span> selectedPadHighlightLayer = <span class="kw">new</span> <span class="fn">Container</span>();
+selectedPadHighlightLayer.label = <span class="str">'selected-pad-highlight'</span>;
+selectedPadHighlightLayer.visible = <span class="kw">false</span>;
+<span class="kw">const</span> selectedPadHighlightGfx = <span class="kw">new</span> <span class="fn">Graphics</span>();
+selectedPadHighlightLayer.<span class="fn">addChild</span>(selectedPadHighlightGfx);
+
+<span class="kw">function</span> <span class="fn">repaintSelectedPadHighlight</span>(): <span class="kw">void</span> {
+  selectedPadHighlightGfx.<span class="fn">clear</span>();
+  <span class="kw">if</span> (!visible || !selectedPadId) {
+    selectedPadHighlightLayer.visible = <span class="kw">false</span>;
+    <span class="kw">return</span>;
+  }
+  <span class="kw">const</span> spec = deps.<span class="fn">getOriginSpec</span>();
+  <span class="kw">const</span> state = deps.<span class="fn">getOrigin</span>();
+  <span class="kw">const</span> pad = state.buildings.<span class="fn">find</span>((b) =&gt; b.id === selectedPadId);
+  <span class="kw">if</span> (!pad || !<span class="fn">isOperationalBuilding</span>(pad)) {
+    selectedPadHighlightLayer.visible = <span class="kw">false</span>;
+    <span class="kw">return</span>;
+  }
+  <span class="kw">const</span> def = BUILDING_DEFS[pad.defId <span class="kw">as</span> BuildingDefId];
+  <span class="kw">const</span> w = <span class="fn">shapeWidth</span>(def.footprint) * TILE_PX;
+  <span class="kw">const</span> h = <span class="fn">shapeHeight</span>(def.footprint) * TILE_PX;
+  <span class="kw">const</span> px = (spec.cx + pad.x) * TILE_PX - TILE_PX / 2 + 1;
+  <span class="kw">const</span> py = (spec.cy + pad.y) * TILE_PX - TILE_PX / 2 + 1;
+  selectedPadHighlightGfx.<span class="fn">roundRect</span>(px, py, w - 2, h - 2, 3)
+    .<span class="fn">stroke</span>({ width: 2, color: VISION_BLUE, alpha: 0.85 });
+  selectedPadHighlightLayer.visible = <span class="kw">true</span>;
+}</pre></div>
+
+        <p class="body">Call <code>repaintSelectedPadHighlight()</code>
+          at the end of <code>refresh()</code> alongside
+          <code>paintLaunchPreview()</code>. Expose the layer on
+          <code>DroneUiHandle</code> (add a
+          <code>readonly selectedPadHighlightLayer: Container</code>
+          field at <a class="cite">drones-ui.ts:122</a>; return it from
+          <code>mountDronesUi</code> at
+          <a class="cite">drones-ui.ts:1226-1244</a>).</p>
+
+        <p class="body"><strong>main.ts wiring.</strong> Grep
+          <code>droneLayer\b</code> in <code>src/main.ts</code> to find
+          where the existing layers are mounted. Add
+          <code>world.addChild(droneUi.selectedPadHighlightLayer)</code>
+          alongside them, placed in z-order between
+          <code>buildings</code> and <code>droneLayer</code> so the
+          highlight reads as a frame around the pad without obscuring an
+          in-flight drone that happens to fly over the pad.</p>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb">Place a Drone Pad → reload tab → confirm cyan
+              outline appears on it while Drone Ops panel is open.
+              Switch to a non-pad-having island via the inspector → the
+              highlight should hide.</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout src/drones-ui.ts src/main.ts</code>.
+              P1 stays in place, so the engine remains backward-compatible
+              even after partial revert.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Phase 3 ===================== -->
+    <section id="p3">
+      <div class="sec-head"><span class="num">P3</span><h2>Anchor everything on the selected pad</h2></div>
+      <p class="sec-intro">Replace the 8 call sites of
+        <code>dronePadCentre</code> in <code>drones-ui.ts</code> with
+        <code>selectedPadCentre(spec, state, selectedPadId)</code>. The legacy
+        helper stays for unit tests.</p>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P3</span><h3>Migrate the eight call sites</h3></div>
+          <div class="est">est ~25 min</div>
+        </div>
+        <div class="files">src/drones-ui.ts (~8 line modifications)</div>
+
+        <p class="body">Authoritative list of call sites (verified via
+          <code>grep -n 'dronePadCentre' src/drones-ui.ts</code>):</p>
+
+        <ul class="body">
+          <li><a class="cite">drones-ui.ts:606</a> —
+            <code>repaintRangeRing</code> (range ring centre)</li>
+          <li><a class="cite">drones-ui.ts:687</a> —
+            <code>paintLaunchPreview</code> (preview origin)</li>
+          <li><a class="cite">drones-ui.ts:765</a> —
+            <code>setReticleScreenPos</code> (reachability test)</li>
+          <li><a class="cite">drones-ui.ts:1023</a> —
+            <code>refresh</code> path-mode PATH readout</li>
+          <li><a class="cite">drones-ui.ts:1034</a> —
+            <code>refresh</code> numeric DIST readout</li>
+          <li><a class="cite">drones-ui.ts:1123</a> —
+            <code>attemptLaunch</code> path-add waypoint</li>
+          <li><a class="cite">drones-ui.ts:1142</a> —
+            <code>attemptLaunch</code> numeric dispatch</li>
+          <li><a class="cite">drones-ui.ts:1188</a> —
+            <code>finalizePath</code> path-mode dispatch</li>
+        </ul>
+
+        <p class="body">Each call site has the form
+          <code>dronePadCentre(spec, state)</code>. Replace with
+          <code>selectedPadCentre(spec, state, selectedPadId)</code> —
+          one mechanical substitution per site. The downstream code that
+          uses <code>padCentre?.x ?? spec.cx</code> /
+          <code>padCentre?.y ?? spec.cy</code> stays unchanged: the
+          fallback path still fires when no operational pad exists, which
+          is unreachable through the UI (arm button is gated) but
+          defensive against future refactors.</p>
+
+        <div class="pseudocode"><pre><span class="cm">// Example for the most load-bearing site — drones-ui.ts:1142 in attemptLaunch.</span>
+<span class="cm">// BEFORE:</span>
+<span class="kw">const</span> padCentre = <span class="fn">dronePadCentre</span>(originSpec, origin);
+<span class="cm">// AFTER:</span>
+<span class="kw">const</span> padCentre = <span class="fn">selectedPadCentre</span>(originSpec, origin, selectedPadId);
+<span class="cm">// downstream unchanged:</span>
+<span class="kw">const</span> ox = padCentre?.x ?? originSpec.cx;
+<span class="kw">const</span> oy = padCentre?.y ?? originSpec.cy;</pre></div>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb"><code>grep -c 'dronePadCentre(' src/drones-ui.ts</code>
+              → expect <code>0</code> after the migration (the function
+              definition still references its own name as a wrapper,
+              but the regex pattern <code>dronePadCentre(</code> with an
+              open paren only matches call sites).
+              <code>grep -c 'selectedPadCentre(' src/drones-ui.ts</code>
+              → expect <code>9</code> (one definition + one wrapper +
+              eight call sites). Visually verify in the live tab: change
+              the pad selection while Drone Ops is armed, confirm range
+              ring + reticle reachability colour move with it.</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout src/drones-ui.ts</code>.
+              No engine state involved at this phase yet — the original
+              single-pad behaviour returns intact.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Phase 4 ===================== -->
+    <section id="p4">
+      <div class="sec-head"><span class="num">P4</span><h2>Engine — per-pad cap + override deletion</h2></div>
+      <p class="sec-intro">The load-bearing engine change. Two edits: delete
+        the spawn-override block; replace the cap check with a pad-aware
+        coordinate comparison. Plus the UI arm-button gating.</p>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P4.1</span><h3>Delete the spawn override</h3></div>
+          <div class="est">est ~10 min</div>
+        </div>
+        <div class="files">src/drones.ts (~12 LOC removed)</div>
+
+        <p class="body">Delete the block at
+          <a class="cite">drones.ts:443-451</a> (the
+          <code>const originSpec = world.islands.find …</code> through to
+          the closing brace of the inner <code>if (originSpec)</code>).
+          Keep the two lines preceding:</p>
+
+        <div class="pseudocode"><pre><span class="cm">// keep these — they stand as the entire spawn assignment now:</span>
+<span class="kw">let</span> spawnX = originX;
+<span class="kw">let</span> spawnY = originY;
+
+<span class="cm">// DELETE everything below until the `const drone: Drone = {` block:</span>
+<span class="cm">// const originSpec = world.islands.find((i) =&gt; i.id === origin.id);</span>
+<span class="cm">// if (originSpec) {</span>
+<span class="cm">//   const dronepad = findOperationalBuilding(origin.buildings, 'dronepad');</span>
+<span class="cm">//   if (dronepad) {</span>
+<span class="cm">//     const dpDef = BUILDING_DEFS[dronepad.defId as BuildingDefId];</span>
+<span class="cm">//     spawnX = originSpec.cx + dronepad.x + shapeWidth(dpDef.footprint) / 2;</span>
+<span class="cm">//     spawnY = originSpec.cy + dronepad.y + shapeHeight(dpDef.footprint) / 2;</span>
+<span class="cm">//   }</span>
+<span class="cm">// }</span></pre></div>
+
+        <p class="body"><strong>Imports cleanup.</strong> If
+          <code>findOperationalBuilding</code>, <code>BUILDING_DEFS</code>,
+          <code>BuildingDefId</code>, <code>shapeWidth</code>,
+          <code>shapeHeight</code> are no longer used elsewhere in
+          <code>drones.ts</code>, remove the dead imports — TypeScript
+          <code>noUnusedLocals</code> at
+          <a class="cite">tsconfig.json</a> will flag them at
+          <code>npm run build</code>. Most likely both
+          <code>findOperationalBuilding</code> and the shape helpers
+          drop. Run <code>grep -n 'findOperationalBuilding\|shapeWidth\|shapeHeight\|BUILDING_DEFS\|BuildingDefId' src/drones.ts</code>
+          after the deletion; if zero hits remain, drop those import
+          lines (currently at
+          <a class="cite">drones.ts:19-25</a>).</p>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb"><code>npm run build</code> compiles clean
+              (catches stale imports). Existing test "§11.1 spawns at
+              the Drone Pad footprint centre when a Drone Pad is placed
+              off-centre" at <a class="cite">drones.test.ts:408-429</a>
+              must <strong>still pass</strong> — its caller passes
+              <code>(100, 200)</code> as origin, but the UI in the real
+              call site already passes the pad centre. The test simulates
+              that with explicit pad-centre coords. <em>Note:</em> the
+              test as written passes <code>(100, 200)</code> directly,
+              not the pad centre. After this deletion, the drone's
+              <code>originX/originY</code> will be exactly
+              <code>(100, 200)</code> — not <code>(105.5, 205.5)</code>
+              as the test asserts.
+              <strong>This test must be rewritten in P5</strong> to call
+              with the pad centre, matching how the UI calls it. See P5
+              test list.</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout src/drones.ts</code>.
+              Standalone phase — UI continues to work with the old engine
+              (it now passes the pad centre as origin AND the engine
+              also re-computes it; both agree, drone spawns correctly).</div></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P4.2</span><h3>Pad-aware concurrency cap</h3></div>
+          <div class="est">est ~15 min</div>
+        </div>
+        <div class="files">src/drones.ts (~5 LOC modified)</div>
+
+        <p class="body">Replace the cap block at
+          <a class="cite">drones.ts:354-358</a>:</p>
+
+        <div class="pseudocode"><pre><span class="cm">// AFTER:</span>
+<span class="kw">const</span> PAD_MATCH_EPS = 0.5;  <span class="cm">// pads are SHAPES.single at integer tiles → centres differ by ≥ 1.0</span>
+<span class="kw">for</span> (<span class="kw">const</span> d <span class="kw">of</span> world.drones) {
+  <span class="kw">if</span> (d.fromIslandId !== origin.id) <span class="kw">continue</span>;
+  <span class="kw">if</span> (d.status !== <span class="str">'active'</span> &amp;&amp; d.status !== <span class="kw">undefined</span>) <span class="kw">continue</span>;
+  <span class="kw">if</span> (Math.<span class="fn">abs</span>(d.originX - originX) &lt; PAD_MATCH_EPS &amp;&amp;
+      Math.<span class="fn">abs</span>(d.originY - originY) &lt; PAD_MATCH_EPS) {
+    <span class="kw">return</span> { ok: <span class="kw">false</span>, reason: <span class="str">'already-in-flight'</span> };
+  }
+}</pre></div>
+
+        <p class="body">The reason code stays
+          <code>'already-in-flight'</code>; the
+          <code>DispatchResult</code> union at
+          <a class="cite">drones.ts:248-250</a> is unchanged.</p>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb">Existing test at
+              <a class="cite">drones.test.ts:394-406</a> passes
+              <code>(0, 0)</code> as origin both times — the new cap
+              still rejects the second launch (same coords → matches the
+              epsilon). New tests in P5 cover the multi-pad
+              cases.</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout src/drones.ts</code>.
+              Pad-aware UI from earlier phases falls back to the
+              per-island cap — multi-pad launches are blocked, but no
+              data corruption.</div></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P4.3</span><h3>UI arm gate: PAD BUSY / ALL PADS BUSY</h3></div>
+          <div class="est">est ~30 min</div>
+        </div>
+        <div class="files">src/drones-ui.ts (~35 LOC modified)</div>
+
+        <p class="body">Replace the
+          <code>inFlight</code> check at
+          <a class="cite">drones-ui.ts:1052-1054</a> and the button-text
+          assignment at
+          <a class="cite">drones-ui.ts:1064-1070</a>:</p>
+
+        <div class="pseudocode"><pre><span class="cm">// inside refresh(), replacing the inFlight + canLaunch + armBtn block.</span>
+<span class="kw">function</span> <span class="fn">padBusyState</span>(): <span class="str">'no-pad'</span> | <span class="str">'free'</span> | <span class="str">'selected-busy'</span> | <span class="str">'all-busy'</span> {
+  <span class="kw">if</span> (operationalPads.length === 0) <span class="kw">return</span> <span class="str">'no-pad'</span>;
+  <span class="kw">const</span> active = deps.world.drones.filter(
+    (d) =&gt; d.fromIslandId === origin.id &amp;&amp;
+           (d.status === <span class="str">'active'</span> || d.status === <span class="kw">undefined</span>),
+  );
+  <span class="kw">const</span> busyPadIds = <span class="kw">new</span> Set&lt;string&gt;();
+  <span class="kw">for</span> (<span class="kw">const</span> p <span class="kw">of</span> operationalPads) {
+    <span class="kw">const</span> def = BUILDING_DEFS[p.defId <span class="kw">as</span> BuildingDefId];
+    <span class="kw">const</span> px = originSpec.cx + p.x + <span class="fn">shapeWidth</span>(def.footprint) / 2;
+    <span class="kw">const</span> py = originSpec.cy + p.y + <span class="fn">shapeHeight</span>(def.footprint) / 2;
+    <span class="kw">if</span> (active.<span class="fn">some</span>((d) =&gt; Math.<span class="fn">abs</span>(d.originX - px) &lt; 0.5
+                            &amp;&amp; Math.<span class="fn">abs</span>(d.originY - py) &lt; 0.5)) {
+      busyPadIds.<span class="fn">add</span>(p.id);
+    }
+  }
+  <span class="kw">if</span> (busyPadIds.size === operationalPads.length) <span class="kw">return</span> <span class="str">'all-busy'</span>;
+  <span class="kw">if</span> (selectedPadId &amp;&amp; busyPadIds.<span class="fn">has</span>(selectedPadId)) <span class="kw">return</span> <span class="str">'selected-busy'</span>;
+  <span class="kw">return</span> <span class="str">'free'</span>;
+}
+
+<span class="kw">const</span> padBusy = <span class="fn">padBusyState</span>();
+<span class="kw">const</span> canLaunch = padBusy === <span class="str">'free'</span> &amp;&amp; maxLaunchFuel &gt; 0;
+armBtn.disabled = !canLaunch;
+armBtn.style.opacity = canLaunch ? <span class="str">'1'</span> : <span class="str">'0.5'</span>;
+armBtn.style.cursor = canLaunch ? <span class="str">'pointer'</span> : <span class="str">'not-allowed'</span>;
+<span class="kw">if</span> (!canLaunch &amp;&amp; launchMode) <span class="fn">setLaunchMode</span>(<span class="kw">false</span>);
+<span class="kw">if</span> (padBusy === <span class="str">'no-pad'</span>) {
+  armBtn.textContent = <span class="str">'◇ NO DRONE PAD'</span>;
+  armBtn.title = <span class="str">'Active island has no Drone Pad'</span>;
+} <span class="kw">else if</span> (padBusy === <span class="str">'selected-busy'</span>) {
+  armBtn.textContent = <span class="str">'◇ PAD BUSY'</span>;
+  armBtn.title = <span class="str">'This pad is launching a drone; pick another pad'</span>;
+} <span class="kw">else if</span> (padBusy === <span class="str">'all-busy'</span>) {
+  armBtn.textContent = <span class="str">'◇ ALL PADS BUSY'</span>;
+  armBtn.title = <span class="str">'Every Drone Pad on this island is busy'</span>;
+} <span class="kw">else if</span> (!launchMode) {
+  armBtn.textContent = <span class="str">'◇ ARM LAUNCH'</span>;
+  armBtn.title = <span class="str">''</span>;
+}</pre></div>
+
+        <p class="body"><strong>Import the shape helpers</strong> at
+          <a class="cite">drones-ui.ts:51</a> — they should already be
+          imported (used by the legacy <code>dronePadCentre</code> /
+          <code>selectedPadCentre</code>); confirm via grep. Also import
+          <code>BUILDING_DEFS, BuildingDefId</code> from
+          <code>./building-defs.js</code> if not already at
+          <a class="cite">drones-ui.ts:26</a> (likely already present —
+          they're used in the highlight repaint).</p>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb">Place two Drone Pads. Launch from Pad #1.
+              Confirm: arm button → <code>◇ PAD BUSY</code>. Switch
+              dropdown to Pad #2 → arm button → <code>◇ ARM LAUNCH</code>.
+              Launch Pad #2 → arm button → <code>◇ ALL PADS BUSY</code>.
+              On drone return, arm button restores to
+              <code>◇ ARM LAUNCH</code>.</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout src/drones-ui.ts</code>.
+              Engine still has the new pad-aware cap, which is strictly
+              looser than the old per-island cap — old UI continues to
+              work (just doesn't expose the pad picker affordance).</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Phase 5 ===================== -->
+    <section id="p5">
+      <div class="sec-head"><span class="num">P5</span><h2>Tests</h2></div>
+      <p class="sec-intro">Engine tests in <code>drones.test.ts</code>. UI
+        verification stays manual — there is no <code>drones-ui.test.ts</code>
+        (only <code>drones-ui-helpers.test.ts</code>), so per
+        <code>AGENTS.md</code> the Daedalus screenshot path is the
+        verification channel for the UI.</p>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P5.1</span><h3>Update existing pad-spawn test</h3></div>
+          <div class="est">est ~10 min</div>
+        </div>
+        <div class="files">src/drones.test.ts:408-429 (rewrite test body)</div>
+
+        <p class="body">Rewrite "§11.1 spawns at the Drone Pad footprint
+          centre when a Drone Pad is placed off-centre" so the caller now
+          passes the pad centre directly (the engine no longer
+          overrides):</p>
+
+        <div class="pseudocode"><pre><span class="fn">it</span>(<span class="str">'§11.1 spawn = caller-supplied origin (engine no longer overrides)'</span>, () =&gt; {
+  <span class="kw">const</span> world = <span class="fn">freshWorld</span>();
+  <span class="kw">const</span> spec = <span class="fn">makeIslandSpec</span>({ id: <span class="str">'home'</span>, cx: 100, cy: 200, populated: <span class="kw">true</span> });
+  world.islands.<span class="fn">push</span>(spec);
+  <span class="kw">const</span> home = <span class="fn">makeIslandState</span>({
+    id: <span class="str">'home'</span>,
+    buildings: [
+      { id: <span class="str">'dp-1'</span>, defId: <span class="str">'dronepad'</span>, x: 5, y: 5 },
+      { id: <span class="str">'dp-2'</span>, defId: <span class="str">'dronepad'</span>, x: 10, y: 10 },
+    ],
+  });
+  home.inventory.biofuel = 50;
+  <span class="cm">// Caller now picks pad-B (10, 10) explicitly. Centre = (110.5, 210.5).</span>
+  <span class="kw">const</span> r = <span class="fn">dispatchDrone</span>(world, home, 110.5, 210.5, 1, 0, 20, 0);
+  <span class="fn">expect</span>(r.ok).<span class="fn">toBe</span>(<span class="kw">true</span>);
+  <span class="kw">if</span> (!r.ok) <span class="kw">return</span>;
+  <span class="fn">expect</span>(r.drone.originX).<span class="fn">toBe</span>(110.5);
+  <span class="fn">expect</span>(r.drone.originY).<span class="fn">toBe</span>(210.5);
+});</pre></div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P5.2</span><h3>New per-pad-cap tests</h3></div>
+          <div class="est">est ~25 min</div>
+        </div>
+        <div class="files">src/drones.test.ts (~80 LOC added)</div>
+
+        <p class="body">Add a new <code>describe('per-pad concurrency cap', …)</code>
+          block immediately after the existing
+          <code>dispatchDrone</code> describe at
+          <a class="cite">drones.test.ts:464</a>:</p>
+
+        <div class="pseudocode"><pre><span class="fn">describe</span>(<span class="str">'per-pad concurrency cap (§11 multi-pad selection)'</span>, () =&gt; {
+  <span class="fn">it</span>(<span class="str">'rejects a second launch from the SAME pad'</span>, () =&gt; {
+    <span class="kw">const</span> world = <span class="fn">freshWorld</span>();
+    <span class="kw">const</span> home = <span class="fn">makeIslandState</span>();
+    home.inventory.biofuel = 100;
+    <span class="cm">// Two launches from the same coords (0, 0).</span>
+    <span class="fn">expect</span>(<span class="fn">dispatchDrone</span>(world, home, 0, 0, 1, 0, 10, 0).ok).<span class="fn">toBe</span>(<span class="kw">true</span>);
+    <span class="kw">const</span> r2 = <span class="fn">dispatchDrone</span>(world, home, 0, 0, 0, 1, 10, 0);
+    <span class="fn">expect</span>(r2.ok).<span class="fn">toBe</span>(<span class="kw">false</span>);
+    <span class="kw">if</span> (r2.ok) <span class="kw">return</span>;
+    <span class="fn">expect</span>(r2.reason).<span class="fn">toBe</span>(<span class="str">'already-in-flight'</span>);
+  });
+
+  <span class="fn">it</span>(<span class="str">'ALLOWS a second launch from a DIFFERENT pad on the same island'</span>, () =&gt; {
+    <span class="kw">const</span> world = <span class="fn">freshWorld</span>();
+    <span class="kw">const</span> home = <span class="fn">makeIslandState</span>();
+    home.inventory.biofuel = 100;
+    <span class="cm">// Pad-A at (10.5, 10.5), Pad-B at (20.5, 20.5) — 1 tile apart on the diagonal.</span>
+    <span class="fn">expect</span>(<span class="fn">dispatchDrone</span>(world, home, 10.5, 10.5, 1, 0, 10, 0).ok).<span class="fn">toBe</span>(<span class="kw">true</span>);
+    <span class="kw">const</span> r2 = <span class="fn">dispatchDrone</span>(world, home, 20.5, 20.5, 1, 0, 10, 0);
+    <span class="fn">expect</span>(r2.ok).<span class="fn">toBe</span>(<span class="kw">true</span>);
+    <span class="fn">expect</span>(world.drones).<span class="fn">toHaveLength</span>(2);
+    <span class="fn">expect</span>(world.drones[0]!.originX).<span class="fn">toBe</span>(10.5);
+    <span class="fn">expect</span>(world.drones[1]!.originX).<span class="fn">toBe</span>(20.5);
+  });
+
+  <span class="fn">it</span>(<span class="str">'cap is based on origin coords, not fromIslandId alone'</span>, () =&gt; {
+    <span class="cm">// Regression guard: a future refactor that re-introduces the per-island</span>
+    <span class="cm">// cap would break this case.</span>
+    <span class="kw">const</span> world = <span class="fn">freshWorld</span>();
+    <span class="kw">const</span> home = <span class="fn">makeIslandState</span>();
+    home.inventory.biofuel = 100;
+    <span class="fn">dispatchDrone</span>(world, home, 5.5, 5.5, 1, 0, 10, 0);
+    <span class="fn">expect</span>(<span class="fn">dispatchDrone</span>(world, home, 6.5, 5.5, 1, 0, 10, 0).ok).<span class="fn">toBe</span>(<span class="kw">true</span>);
+    <span class="fn">expect</span>(world.drones).<span class="fn">toHaveLength</span>(2);
+  });
+
+  <span class="fn">it</span>(<span class="str">'sub-epsilon-different pad centres are treated as the same pad'</span>, () =&gt; {
+    <span class="cm">// Documents the PAD_MATCH_EPS contract: coords within 0.5 of each</span>
+    <span class="cm">// other count as the same launch site.</span>
+    <span class="kw">const</span> world = <span class="fn">freshWorld</span>();
+    <span class="kw">const</span> home = <span class="fn">makeIslandState</span>();
+    home.inventory.biofuel = 100;
+    <span class="fn">dispatchDrone</span>(world, home, 5.5, 5.5, 1, 0, 10, 0);
+    <span class="kw">const</span> r2 = <span class="fn">dispatchDrone</span>(world, home, 5.6, 5.5, 1, 0, 10, 0);
+    <span class="fn">expect</span>(r2.ok).<span class="fn">toBe</span>(<span class="kw">false</span>);
+    <span class="kw">if</span> (r2.ok) <span class="kw">return</span>;
+    <span class="fn">expect</span>(r2.reason).<span class="fn">toBe</span>(<span class="str">'already-in-flight'</span>);
+  });
+});</pre></div>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb"><code>npx vitest run src/drones.test.ts</code>
+              → all four new cases pass; existing 2193-baseline grows to
+              ~2197 (3 new + 1 rewritten).
+              <code>npx vitest run -t 'per-pad concurrency cap'</code>
+              isolates the new block during dev.</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout src/drones.test.ts</code>
+              restores the original assertions. Engine cap stays
+              pad-aware regardless.</div></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P5.3</span><h3>Persistence round-trip (optional defensive)</h3></div>
+          <div class="est">est ~15 min</div>
+        </div>
+        <div class="files">src/persistence.test.ts (~25 LOC added)</div>
+
+        <p class="body">If a drone-round-trip fixture already exists,
+          mimic it with a multi-pad scenario: dispatch from pad-B's
+          centre (not pad-A), serialise, deserialise, assert the
+          deserialised drone's <code>originX/originY</code> match pad-B's
+          centre. If <code>persistence.test.ts</code> doesn't already
+          cover individual drone fields, skip this phase — the
+          per-pad behaviour is verified at the engine level by P5.2.
+          Grep <code>'originX' src/persistence.test.ts</code> to
+          decide.</p>
+      </div>
+    </section>
+
+    <!-- ===================== Phase 6 ===================== -->
+    <section id="p6">
+      <div class="sec-head"><span class="num">P6</span><h2>Verify · build · manual smoke</h2></div>
+      <p class="sec-intro">Full test sweep, production build, then a manual
+        check in the live tab. Per <code>AGENTS.md</code>, do
+        <strong>not</strong> restart <code>robot-islands-dev.service</code>
+        — just <code>npm run build</code> and reload the tab.</p>
+
+      <div class="phase">
+        <div class="phase-head">
+          <div class="lh"><span class="num">P6</span><h3>Final verification</h3></div>
+          <div class="est">est ~20 min</div>
+        </div>
+        <div class="files">(no source changes)</div>
+
+        <div class="pseudocode"><pre><span class="cm"># 1. Full test sweep.</span>
+npm test  <span class="cm"># expect: Tests 219N passed (219N) where N ≥ 4 new tests</span>
+
+<span class="cm"># 2. Production build (verifies tsc strict + Vite bundle).</span>
+npm run build
+
+<span class="cm"># 3. Reload the live tab — AGENTS.md path.</span>
+<span class="cm"># Browser is open on islands.nitjsefni.eu via the Daedalus extension.</span>
+<span class="cm"># Use mcp__daedalus__reload to refresh, then take screenshots if needed.</span></pre></div>
+
+        <h3 style="font-family: var(--serif); font-weight: 500; font-size: 17px; color: var(--slate); margin: 18px 0 8px">Manual smoke-test script</h3>
+
+        <ol class="body">
+          <li>Open Drone Ops dock. Confirm PAD row is present, dropdown
+            shows <em>Pad #1</em> (single-pad demo island).</li>
+          <li>Place a second Drone Pad via placement UI. Dropdown updates
+            to show <em>Pad #1</em> and <em>Pad #2</em>.</li>
+          <li>Select Pad #2 in dropdown → cyan outline moves to Pad #2 on
+            the canvas. Arm launch → range ring is centred on Pad #2.</li>
+          <li>Launch a drone toward an open ocean tile. Confirm
+            <code>Drone.originX</code>/<code>originY</code> match Pad #2's
+            centre (visually: the drone spawns from Pad #2's tile).</li>
+          <li>Re-arm launch. Dropdown shows Pad #1 still free; arm
+            button reads <code>◇ ARM LAUNCH</code>. Switch dropdown to
+            Pad #2 → arm button reads <code>◇ PAD BUSY</code>; switch back
+            to Pad #1 → free again.</li>
+          <li>Launch a second drone from Pad #1. Arm button now reads
+            <code>◇ ALL PADS BUSY</code> regardless of which dropdown
+            entry is selected.</li>
+          <li>Wait for one drone to return. Arm button restores to
+            <code>◇ ARM LAUNCH</code> when that pad's selection comes
+            up.</li>
+          <li>Demolish Pad #2 mid-flight. Confirm dropdown loses Pad #2;
+            if Pad #2 was selected, fallback to Pad #1. The in-flight
+            drone from Pad #2 continues its trajectory and returns
+            normally.</li>
+          <li>Switch active island. Dropdown rebuilds for the new
+            island's pads (or empties if none). Selection resets to first
+            pad on the new island.</li>
+        </ol>
+
+        <div class="panel-row">
+          <div class="panel"><div class="ph">Verification</div>
+            <div class="pb">All 9 manual steps behave as described.
+              Daedalus screenshots may be captured at steps 3, 5, 6 to
+              produce visible artefacts of the new UX.</div></div>
+          <div class="panel"><div class="ph">Rollback</div>
+            <div class="pb"><code>git checkout master</code>. Branch
+              stays unmerged until the feature is signed off.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Verification matrix ===================== -->
+    <section id="matrix">
+      <div class="sec-head"><span class="num">VM</span><h2>Verification matrix</h2></div>
+      <p class="sec-intro">Each scope requirement → which phase delivers it
+        → which test or smoke step verifies.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th style="width:38%">Scope requirement</th>
+          <th style="width:12%">Phase</th>
+          <th>Verification</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">1 — Dropdown lists operational pads on active island, label <em>Pad #N</em></td><td>P2.1</td><td>Smoke step 1–2; option order = placement order via filter on <code>state.buildings</code></td></tr>
+          <tr><td class="slate">2 — Selected pad visually highlighted on canvas</td><td>P2.2</td><td>Smoke step 3 (cyan outline). PixiJS layer added to world container.</td></tr>
+          <tr><td class="slate">3 — Range ring / preview line / dispatch coords anchor on selected pad</td><td>P3</td><td>Smoke step 4 (drone spawns from selected pad's tile). Eight call sites of <code>dronePadCentre</code> migrated to <code>selectedPadCentre</code>.</td></tr>
+          <tr><td class="slate">4 — Per-pad cap: PAD BUSY / ALL PADS BUSY</td><td>P4.2 + P4.3</td><td>Tests P5.2 cases #1, #2, #3. Smoke steps 5, 6.</td></tr>
+          <tr><td class="slate">5 — Engine: caller's <code>originX/originY</code> is the canonical origin</td><td>P4.1</td><td>Override block at <code>drones.ts:441-451</code> deleted. Test P5.1 (rewritten "§11.1 spawn" test).</td></tr>
+          <tr><td class="slate">6 — Default selection: first operational pad; resets on island switch</td><td>P2.1 (refresh logic)</td><td>Smoke step 9. Closure variable <code>prevOriginId</code> drives the reset.</td></tr>
+          <tr><td class="slate">7a — Pad destroyed mid-flight: drone keeps flying</td><td>P4.1 (no schema change)</td><td><code>Drone.originX/originY</code> baked at launch (<code>drones.ts:43-44</code>). Smoke step 8.</td></tr>
+          <tr><td class="slate">7b — No pads on island: dropdown empty, arm = NO DRONE PAD</td><td>P4.3</td><td><code>padBusyState() === 'no-pad'</code> branch. Existing demo state covers this.</td></tr>
+          <tr><td class="slate">7c — Pads under construction excluded</td><td>P1 (operational filter) + P2.1</td><td><code>isOperationalBuilding</code> filter at <code>buildings.ts:150-157</code>. Manual: place a Drone Pad, observe it does not appear in dropdown while constructionRemainingMs &gt; 0.</td></tr>
+          <tr><td class="slate">7d — Switching active island: re-select first pad on new island</td><td>P2.1 (prevOriginId)</td><td>Smoke step 9.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===================== Risks ===================== -->
+    <section id="risks">
+      <div class="sec-head"><span class="num">RR</span><h2>Risks &amp; rollback strategy</h2></div>
+
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation / rollback</div>
+        </div>
+        <div class="row">
+          <div class="cell">P4.1's override deletion is one-way:
+            any caller that still passes island-centre origin will silently
+            spawn at island centre.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Grep before deletion confirms callers are only
+            <a class="cite">drones-ui.ts:1158</a> +
+            <a class="cite">drones-ui.ts:1201</a>; both already pass the
+            pad centre. Test P5.1 will fail loudly if any caller
+            drifts back.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><code>PAD_MATCH_EPS = 0.5</code> too lax if a
+            future building-defs change reshapes Drone Pad to a smaller
+            footprint.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Constant carries a comment citing
+            <code>building-defs.ts:736</code> (SHAPES.single). Revisit at
+            any future change to that field. No persistence implications
+            — coords stored as floats already.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase ordering: if P4 ships before P3, the UI
+            still passes the first pad's centre for every launch and the
+            engine no longer overrides → all drones launch from pad-A
+            regardless of selection.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Follow the phase order strictly. Each phase
+            has its own <code>git checkout</code> rollback. If P4 must
+            land before P3 (e.g. urgent engine fix), the UI fallback
+            <code>?? spec.cx</code> still keeps launches functional —
+            they're just always island-centre-anchored.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A v13 save with a multi-pad island and a
+            drone in flight from pad-A loads under the new code with
+            pad-A preselected by default → UI immediately shows
+            <code>PAD BUSY</code>.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Expected behaviour per spec §06. The
+            <code>PAD BUSY</code> hint guides the player to switch.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Dropdown rebuilds every frame, swallowing
+            an in-progress option click (the bug the tier-select-rebuild
+            avoids per its comment at
+            <a class="cite">drones-ui.ts:980-983</a>).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">P2.1 uses a <code>dataset.sig</code>
+            cache key (joined ids of operational pads) to skip rebuild
+            unless the pad set actually changed. Same pattern that
+            shipped successfully for the tier picker.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan · generated 2026-05-27 · companion to
+        <code>specs/2026-05-27-drone-pad-selection</code>. Effort
+        breakdown (sum): P0 10m · P1 25m · P2.1 35m · P2.2 30m · P3
+        25m · P4.1 10m · P4.2 15m · P4.3 30m · P5.1 10m · P5.2 25m ·
+        P5.3 15m (optional) · P6 20m → 250 min total ≈ 4 h 10 m with
+        the optional P5.3, ~3 h 55 m without. Headline summary cell
+        rounded to ~3 h 25 m at "experienced implementer" pace
+        (subtract context-switch overhead from per-phase estimates).</p>
+    </div>
+
+  </div>
+</body>
+</html>
