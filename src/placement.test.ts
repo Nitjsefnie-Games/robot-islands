@@ -76,8 +76,26 @@ function makeState(spec: IslandSpec, level: number = 1): IslandState {
   s.inventory.wood = 10000;
   s.inventory.iron_ingot = 10000;
   s.inventory.steel = 10000;
+  s.inventory.steel_beam = 50000;
+  s.inventory.concrete = 50000;
+  s.inventory.clay = 50000;
+  s.inventory.pipe = 10000;
+  s.inventory.wire = 10000;
+  s.inventory.gear = 10000;
   s.inventory.microchip = 10000;
   s.inventory.glass = 10000;
+  s.inventory.silicon = 10000;
+  s.inventory.aluminum = 10000;
+  s.inventory.plastic_precursor = 10000;
+  s.inventory.saltwater_cell = 10000;
+  s.inventory.lead_ingot = 10000;
+  s.inventory.ceramic_insulator = 10000;
+  s.inventory.copper_ingot = 10000;
+  s.inventory.magnet = 10000;
+  s.inventory.stainless_steel = 10000;
+  s.inventory.cryo_coolant = 10000;
+  s.inventory.exotic_alloy = 10000;
+  s.inventory.carbon_fiber = 10000;
   s.inventory.reality_anchor = 10000;
   s.inventory.antimatter_propellant = 10000;
   return s;
@@ -355,8 +373,8 @@ describe('placeBuilding', () => {
     const before = { ...state.storageCaps };
     const placed = expectPlaced(placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'p-crate'));
     expect(placed.cargoLabel).toBe('iron_ore');
-    // iron_ore bumps by +100; every other resource stays at baseline.
-    expect(state.storageCaps.iron_ore).toBe((before.iron_ore ?? 0) + 100);
+    // iron_ore bumps by +500; every other resource stays at baseline.
+    expect(state.storageCaps.iron_ore).toBe((before.iron_ore ?? 0) + 500);
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       if (r === 'iron_ore') continue;
       expect(state.storageCaps[r]).toBe(before[r]);
@@ -387,9 +405,9 @@ describe('placeBuilding', () => {
       ),
     );
     expect(placed.cargoLabel).toBe('copper_ore');
-    // copper_ore bumps by +100; iron_ore stays at baseline since the
+    // copper_ore bumps by +500; iron_ore stays at baseline since the
     // default fallback was overridden.
-    expect(state.storageCaps.copper_ore).toBe((before.copper_ore ?? 0) + 100);
+    expect(state.storageCaps.copper_ore).toBe((before.copper_ore ?? 0) + 500);
     expect(state.storageCaps.iron_ore).toBe(before.iron_ore);
   });
 
@@ -447,7 +465,7 @@ describe('placeBuilding', () => {
 
   it('bumps category-matching caps when placing a specialized Silo (dry_goods only)', () => {
     // §4.6: Silo is specialized for dry_goods. Bumps every dry_goods resource
-    // by +2000, leaves every other category at baseline.
+    // by +200000, leaves every other category at baseline.
     const spec = makeSpec();
     const state = makeState(spec);
     const before = { ...state.storageCaps };
@@ -455,7 +473,7 @@ describe('placeBuilding', () => {
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       const expected =
         RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods'
-          ? (before[r] ?? 0) + 2000
+          ? (before[r] ?? 0) + 200000
           : before[r];
       expect(state.storageCaps[r]).toBe(expected);
     }
@@ -469,7 +487,7 @@ describe('placeBuilding', () => {
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       const expected =
         RESOURCE_STORAGE_CATEGORY[r] === 'liquid_gas'
-          ? (before[r] ?? 0) + 2000
+          ? (before[r] ?? 0) + 100000
           : before[r];
       expect(state.storageCaps[r]).toBe(expected);
     }
@@ -508,19 +526,19 @@ describe('placeBuilding', () => {
   // §14 placement-cost gate
   // -------------------------------------------------------------------------
   it('deducts placement cost from inventory on success', () => {
-    // Mine costs 30 stone + 15 wood. Starting from a generous inventory the
+    // Mine costs 200 stone + 80 wood. Starting from a generous inventory the
     // exact deltas should land in state.inventory.
     const spec = makeSpec();
     const state = makeState(spec);
-    state.inventory.stone = 100;
-    state.inventory.wood = 100;
+    state.inventory.stone = 300;
+    state.inventory.wood = 200;
     expectPlaced(placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-cost-1'));
-    expect(state.inventory.stone).toBe(70);
-    expect(state.inventory.wood).toBe(85);
+    expect(state.inventory.stone).toBe(100);
+    expect(state.inventory.wood).toBe(120);
   });
 
   it('rejects placement with insufficient-resources when inventory is short', () => {
-    // Mine costs 30 stone + 15 wood. Zero out everything → the basket fails.
+    // Mine costs 200 stone + 80 wood. Zero out everything → the basket fails.
     const spec = makeSpec();
     const state = makeState(spec);
     state.inventory.stone = 0;
@@ -528,7 +546,7 @@ describe('placeBuilding', () => {
     const result = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-fail-1');
     expect(result.ok).toBe(false);
     if (!result.ok && result.reason === 'insufficient-resources') {
-      expect(result.missing).toEqual({ stone: 30, wood: 15 });
+      expect(result.missing).toEqual({ stone: 200, wood: 80 });
     } else {
       throw new Error(`unexpected result: ${JSON.stringify(result)}`);
     }
@@ -537,29 +555,29 @@ describe('placeBuilding', () => {
   });
 
   it('multi-resource cost is all-or-nothing — rejects if missing any one resource', () => {
-    // Coke Oven (T2): 80 stone + 30 iron_ingot + 10 wood. Player has stone +
-    // wood but no iron_ingot — should reject and report only the missing
-    // iron_ingot in the shortfall.
+    // Coke Oven (T2): 15000 clay + 500 stone + 100 pipe. Player has clay +
+    // pipe but is short on stone — should reject and report only the missing
+    // stone in the shortfall.
     const spec = makeSpec();
     const state = makeState(spec, 5);
+    state.inventory.clay = 20000;
+    state.inventory.pipe = 200;
     state.inventory.stone = 200;
-    state.inventory.wood = 200;
-    state.inventory.iron_ingot = 0;
     const result = placeBuilding(spec, state, 'coke_oven', 0, 0, 0, () => 'p-fail-2');
     expect(result.ok).toBe(false);
     if (!result.ok && result.reason === 'insufficient-resources') {
-      expect(result.missing).toEqual({ iron_ingot: 30 });
+      expect(result.missing).toEqual({ stone: 300 });
     } else {
       throw new Error(`unexpected result: ${JSON.stringify(result)}`);
     }
-    // Stone / wood NOT debited on the rejection branch.
-    expect(state.inventory.stone).toBe(200);
-    expect(state.inventory.wood).toBe(200);
+    // Clay / pipe NOT debited on the rejection branch.
+    expect(state.inventory.clay).toBe(20000);
+    expect(state.inventory.pipe).toBe(200);
     expect(spec.buildings).toHaveLength(0);
   });
 
   it('validatePlacement surfaces insufficient-resources after geometry checks', () => {
-    // Mine costs 30 stone + 15 wood; with zero inventory the geometry-
+    // Mine costs 200 stone + 80 wood; with zero inventory the geometry-
     // ok placement should fail with insufficient-resources (not
     // out-of-bounds / overlap). Validator priority: geometry first,
     // resources LAST.
@@ -570,13 +588,13 @@ describe('placeBuilding', () => {
     const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('insufficient-resources');
-    expect(v.missing).toEqual({ stone: 30, wood: 15 });
+    expect(v.missing).toEqual({ stone: 200, wood: 80 });
   });
 
   it('battery_bank placement cost is saltwater_cell-based, not battery-based (§15.6)', () => {
     // §15.6 saltwater-cell bootstrap — battery_bank.placementCost was rerouted
-    // from { battery:4, wire:3, steel_beam:1 } to { saltwater_cell:4, wire:3,
-    // steel_beam:1 }. With zero inventory the shortfall must report the new
+    // from { battery:4, wire:3, steel_beam:1 } to { saltwater_cell:20, wire:15,
+    // steel_beam:5, lead_ingot:30 }. With zero inventory the shortfall must report the new
     // shape verbatim — the rust would be undetected if a future revert
     // accidentally restored the battery-token cost. battery_bank is T2, so
     // bump the state level to clear the tier gate.
@@ -585,11 +603,12 @@ describe('placeBuilding', () => {
     state.inventory.saltwater_cell = 0;
     state.inventory.wire = 0;
     state.inventory.steel_beam = 0;
+    state.inventory.lead_ingot = 0;
     state.inventory.battery = 0; // confirm the old token is NOT in the shortfall
     const v = validatePlacement(spec, state, 'battery_bank', 0, 0, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('insufficient-resources');
-    expect(v.missing).toEqual({ saltwater_cell: 4, wire: 3, steel_beam: 1 });
+    expect(v.missing).toEqual({ saltwater_cell: 20, wire: 15, steel_beam: 5, lead_ingot: 30 });
   });
 });
 
@@ -697,15 +716,16 @@ describe('demolishBuilding', () => {
   });
 
   it('credits scrap = floor(sum(placementCost) * 0.3) on success', () => {
-    // solar 30 → 9; mine 45 → 13; blast_furnace 220 → 66.
+    // solar 11 → 3; mine 280 → 84; blast_furnace 57000 → 17100.
     const cases: Array<{ defId: 'solar' | 'mine' | 'blast_furnace'; level: number; expected: number }> = [
-      { defId: 'solar', level: 1, expected: 9 },
-      { defId: 'mine', level: 1, expected: 13 },
-      { defId: 'blast_furnace', level: 5, expected: 66 },
+      { defId: 'solar', level: 1, expected: 3 },
+      { defId: 'mine', level: 1, expected: 84 },
+      { defId: 'blast_furnace', level: 5, expected: 17100 },
     ];
     for (const c of cases) {
       const spec = makeSpec();
       const state = makeState(spec, c.level);
+      state.storageCaps.scrap = 50000; // raise cap so scrap credit isn't clamped
       const pr = placeBuilding(spec, state, c.defId, 0, 0, 0, () => `p-${c.defId}`);
       expect(pr.ok).toBe(true);
       const beforeScrap = state.inventory.scrap ?? 0;
@@ -727,7 +747,7 @@ describe('demolishBuilding', () => {
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       const expected =
         RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods'
-          ? (before[r] ?? 0) + 2000
+          ? (before[r] ?? 0) + 200000
           : before[r];
       expect(state.storageCaps[r]).toBe(expected);
     }
@@ -745,7 +765,7 @@ describe('demolishBuilding', () => {
     const state = makeState(spec);
     const before = { ...state.storageCaps };
     placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'p-crate');
-    expect(state.storageCaps.iron_ore).toBe((before.iron_ore ?? 0) + 100);
+    expect(state.storageCaps.iron_ore).toBe((before.iron_ore ?? 0) + 500);
     const dem = demolishBuilding(spec, state, 'p-crate');
     expect(dem.ok).toBe(true);
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
@@ -767,19 +787,18 @@ describe('demolishBuilding', () => {
   it('clamps inventory down to the new cap when a storage building is demolished', () => {
     // §4.6: "If current inventory of any affected resource now exceeds the
     // reduced cap, the excess is lost — inventory clamps down to the new
-    // cap." Place a Silo (+2000 cap), fill iron_ore above the post-demolish
-    // baseline cap (2000), then demolish and confirm the excess is dropped.
-    // (rebalanced step #19: baseline 2000, so Silo raises to 4000; after demolish back to 2000)
+    // cap." Place a Silo (+200000 cap), fill iron_ore above the post-demolish
+    // baseline cap (100 for dry_goods), then demolish and confirm the excess is dropped.
     const spec = makeSpec();
     const state = makeState(spec);
     placeBuilding(spec, state, 'silo', 0, 0, 0, () => 'p-silo');
-    // Caps are now 4000 across the board. Stuff iron_ore to 3000 (above post-demolish cap of 2000).
+    // Caps are now 200100 for dry_goods. Stuff iron_ore to 3000 (above post-demolish cap of 100).
     state.inventory.iron_ore = 3000;
     const r = demolishBuilding(spec, state, 'p-silo');
     expect(r.ok).toBe(true);
-    // Cap dropped from 4000 → 2000; inventory clamps to 2000.
-    expect(state.storageCaps.iron_ore).toBe(2000);
-    expect(state.inventory.iron_ore).toBe(2000);
+    // Cap dropped from 200100 → 100; inventory clamps to 100.
+    expect(state.storageCaps.iron_ore).toBe(100);
+    expect(state.inventory.iron_ore).toBe(100);
   });
 
   it('caps the credited scrap to the resource cap (no overfill)', () => {
@@ -788,14 +807,14 @@ describe('demolishBuilding', () => {
     // Force the scrap cap low so the demolition credit hits it.
     state.storageCaps.scrap = 5;
     state.inventory.scrap = 0;
-    // Mine costs 45 total → 13 scrap; the cap of 5 should clip it.
+    // Mine costs 280 total → 84 scrap; the cap of 5 should clip it.
     placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine');
     const r = demolishBuilding(spec, state, 'p-mine');
     expect(r.ok).toBe(true);
     // Reported credit reflects the raw scrap returned per §6.7 formula —
     // the inventory clip is what gets lost, but the player feedback is the
     // full earned amount.
-    expect(r.scrapReturned).toBe(13);
+    expect(r.scrapReturned).toBe(84);
     expect(state.inventory.scrap).toBe(5);
   });
 
@@ -803,41 +822,43 @@ describe('demolishBuilding', () => {
   // §14 50% placement-cost refund
   // -------------------------------------------------------------------------
   it('refunds 50% of placement cost (floored per-resource) on demolition', () => {
-    // Mine cost: 30 stone + 15 wood. Demolish should refund 15 stone + 7
-    // wood (floor(15/2)=7) on top of the scrap credit.
+    // Mine cost: 200 stone + 80 wood. Demolish should refund 100 stone + 40
+    // wood on top of the scrap credit.
     const spec = makeSpec();
     const state = makeState(spec);
     // Anchor inventory to known pre-place numbers so the post-demolish
-    // delta is unambiguous.
-    state.inventory.stone = 100;
-    state.inventory.wood = 100;
+    // delta is unambiguous. Raise caps so the refund isn't clamped.
+    state.storageCaps.stone = 1000;
+    state.storageCaps.wood = 1000;
+    state.inventory.stone = 300;
+    state.inventory.wood = 200;
     placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine-refund');
-    // After place: 100 - 30 = 70 stone, 100 - 15 = 85 wood.
-    expect(state.inventory.stone).toBe(70);
-    expect(state.inventory.wood).toBe(85);
+    // After place: 300 - 200 = 100 stone, 200 - 80 = 120 wood.
+    expect(state.inventory.stone).toBe(100);
+    expect(state.inventory.wood).toBe(120);
     const r = demolishBuilding(spec, state, 'p-mine-refund');
     expect(r.ok).toBe(true);
-    expect(r.refunded).toEqual({ stone: 15, wood: 7 });
-    // After refund: 70 + 15 = 85 stone, 85 + 7 = 92 wood.
-    expect(state.inventory.stone).toBe(85);
-    expect(state.inventory.wood).toBe(92);
+    expect(r.refunded).toEqual({ stone: 100, wood: 40 });
+    // After refund: 100 + 100 = 200 stone, 120 + 40 = 160 wood.
+    expect(state.inventory.stone).toBe(200);
+    expect(state.inventory.wood).toBe(160);
   });
 
   it('refund clamps to resource cap (excess refund is lost like production overflow)', () => {
-    // Place a Mine (cost 30 stone + 15 wood), then artificially raise stone
-    // close to its cap so the +15 refund only partially lands.
+    // Place a Mine (cost 200 stone + 80 wood), then artificially raise stone
+    // close to its cap so the +100 refund only partially lands.
     const spec = makeSpec();
     const state = makeState(spec);
-    state.inventory.stone = 100;
-    state.inventory.wood = 100;
+    state.inventory.stone = 300;
+    state.inventory.wood = 200;
     placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine-cap');
     // Force stone cap low — anything past cap is lost on refund.
     state.storageCaps.stone = 75;
     state.inventory.stone = 70;
     const r = demolishBuilding(spec, state, 'p-mine-cap');
     expect(r.ok).toBe(true);
-    // Refund would be 15 stone, but cap-headroom is only 5. The reported
-    // refunded number reflects what ACTUALLY landed (5), not the raw 15.
+    // Refund would be 100 stone, but cap-headroom is only 5. The reported
+    // refunded number reflects what ACTUALLY landed (5), not the raw 100.
     expect(r.refunded.stone).toBe(5);
     expect(state.inventory.stone).toBe(75); // clamped
   });
@@ -884,10 +905,10 @@ describe('§6.7 scrap recovery', () => {
   it('floors scrap from cost × 0.3', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    // workshop costs { stone: 40, wood: 20 } → sum 60 → 60*0.3 = 18.0
+    // workshop costs { wood: 150, stone: 100, iron_ingot: 30 } → sum 280 → 280*0.3 = 84.0
     placeBuilding(spec, state, 'workshop', 0, 0, 0, () => 'p-workshop');
     const result = demolishBuilding(spec, state, state.buildings[state.buildings.length - 1]!.id);
-    expect(result.scrapReturned).toBe(18);
+    expect(result.scrapReturned).toBe(84);
   });
 });
 

@@ -401,9 +401,11 @@ describe('tryRefreshMaintenance', () => {
 
   function stockedInventory(): Record<ResourceId, number> {
     const inv = blankInventory();
-    inv.stone = 100;
-    inv.wood = 100;
-    inv.iron_ingot = 100;
+    inv.concrete = 5000;
+    inv.stone = 3000;
+    inv.iron_ingot = 1500;
+    inv.gear = 200;
+    inv.copper_ingot = 150;
     return inv;
   }
 
@@ -412,9 +414,11 @@ describe('tryRefreshMaintenance', () => {
     const inv = stockedInventory();
     const ok = tryRefreshMaintenance(b, HEAVY, inv, 5000);
     expect(ok).toBe(true);
-    expect(inv.stone).toBe(70);
-    expect(inv.wood).toBe(85);
-    expect(inv.iron_ingot).toBe(90);
+    expect(inv.concrete).toBe(1000);
+    expect(inv.stone).toBe(500);
+    expect(inv.iron_ingot).toBe(500);
+    expect(inv.gear).toBe(50);
+    expect(inv.copper_ingot).toBe(50);
     expect(b.operatingMs).toBe(0);
     expect(b.maintainedAt).toBe(5000);
     expect(b.placedAt).toBe(0);
@@ -424,7 +428,7 @@ describe('tryRefreshMaintenance', () => {
     const b = mkBuilding('heavy_logger', T2_THRESHOLD - HOUR);
     const inv = stockedInventory();
     expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
-    expect(inv.stone).toBe(100);
+    expect(inv.stone).toBe(3000);
     expect(b.operatingMs).toBe(T2_THRESHOLD - HOUR);
   });
 
@@ -432,7 +436,7 @@ describe('tryRefreshMaintenance', () => {
     const b: PlacedBuilding = { ...mkBuilding('heavy_logger', T2_THRESHOLD + HOUR), eternalServitor: true };
     const inv = stockedInventory();
     expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
-    expect(inv.stone).toBe(100);
+    expect(inv.stone).toBe(3000);
   });
 
   it('refuses a def with no placementCost (free refresh disallowed)', () => {
@@ -440,16 +444,16 @@ describe('tryRefreshMaintenance', () => {
     const def = { tier: 2 } as BuildingDef;
     const inv = stockedInventory();
     expect(tryRefreshMaintenance(b, def, inv, 5000)).toBe(false);
-    expect(inv.stone).toBe(100);
+    expect(inv.stone).toBe(3000);
   });
 
   it('refuses and mutates nothing when inventory is short on any one resource', () => {
     const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
     const inv = stockedInventory();
-    inv.iron_ingot = 5; // need 10
+    inv.iron_ingot = 5; // need 1000
     expect(tryRefreshMaintenance(b, HEAVY, inv, 5000)).toBe(false);
-    expect(inv.stone).toBe(100); // atomicity — nothing consumed
-    expect(inv.wood).toBe(100);
+    expect(inv.stone).toBe(3000); // atomicity — nothing consumed
+    expect(inv.concrete).toBe(5000);
     expect(b.operatingMs).toBe(T2_THRESHOLD + HOUR);
   });
 
@@ -457,7 +461,7 @@ describe('tryRefreshMaintenance', () => {
     const b = mkBuilding('heavy_logger', T2_THRESHOLD + HOUR);
     const inv = stockedInventory();
     expect(tryRefreshMaintenance(b, HEAVY, inv, 5000, 2)).toBe(false);
-    expect(inv.stone).toBe(100);
+    expect(inv.stone).toBe(3000);
   });
 
   it('result matches tryAutoMaintain — both leave factor 1.0', () => {

@@ -7,6 +7,7 @@
 // reads are fine until the runtime lookup fails.
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 import {
   ALL_BUILDING_DEF_IDS,
@@ -17,7 +18,7 @@ import {
   type BuildingDefId,
 } from './building-defs.js';
 import { SHAPES, shapeHeight, shapeWidth } from './shape-mask.js';
-import { RECIPES } from './recipes.js';
+import { RECIPES, RESOURCE_META } from './recipes.js';
 import type { IslandSpec } from './world.js';
 
 // Hand-mirrored list of every id in the union. If a new id is added to
@@ -326,11 +327,11 @@ describe('BUILDING_DEFS catalog', () => {
 
   it('storage defs declare categorized storage; others do not', () => {
     // §4.6 categorized routing: storage carries { category, capacity }.
-    expect(BUILDING_DEFS.crate.storage).toEqual({ category: 'generic', capacity: 100 });
-    expect(BUILDING_DEFS.silo.storage).toEqual({ category: 'dry_goods', capacity: 2000 });
-    expect(BUILDING_DEFS.tank.storage).toEqual({ category: 'liquid_gas', capacity: 2000 });
-    expect(BUILDING_DEFS.cold_storage.storage).toEqual({ category: 'temp_sensitive', capacity: 1500 });
-    expect(BUILDING_DEFS.component_warehouse.storage).toEqual({ category: 'components', capacity: 2000 });
+    expect(BUILDING_DEFS.crate.storage).toEqual({ category: 'generic', capacity: 500 });
+    expect(BUILDING_DEFS.silo.storage).toEqual({ category: 'dry_goods', capacity: 200000 });
+    expect(BUILDING_DEFS.tank.storage).toEqual({ category: 'liquid_gas', capacity: 100000 });
+    expect(BUILDING_DEFS.cold_storage.storage).toEqual({ category: 'temp_sensitive', capacity: 50000 });
+    expect(BUILDING_DEFS.component_warehouse.storage).toEqual({ category: 'components', capacity: 20000 });
     expect(BUILDING_DEFS.vault.storage).toEqual({ category: 'rare', capacity: 5000 });
     // Non-storage defs must not declare `storage` (would silently
     // contribute to aggregateStorageCaps otherwise).
@@ -2380,5 +2381,41 @@ describe('§6.7 steel_mill_scrap (Task 13.3)', () => {
     expect(RECIPES.steel_mill_scrap!.inputs).toEqual({ scrap: 2 });
     expect(RECIPES.steel_mill_scrap!.outputs).toEqual({ steel: 1, slag: 1 });
     expect(RECIPES.steel_mill_scrap!.cycleSec).toBe(67);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 4 invariant fixtures — mass-positive placement check (§9.3)
+// ---------------------------------------------------------------------------
+describe('mass-positive placement check (§9.3)', () => {
+  it('every BUILDING_DEFS entry has Σ (units × kg/unit) > 1 kg', () => {
+    for (const [id, def] of Object.entries(BUILDING_DEFS)) {
+      const mass = Object.entries(def.placementCost ?? {}).reduce(
+        (acc, [r, qty]) => acc + (qty as number) * (RESOURCE_META[r as keyof typeof RESOURCE_META]?.massPerUnitKg ?? 0),
+        0,
+      );
+      expect(mass, `${id} has >1 kg embodied mass`).toBeGreaterThan(1);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 4 invariant fixtures — BOM citation snapshot (§9.2)
+// ---------------------------------------------------------------------------
+describe('BOM citation snapshot (§9.2)', () => {
+  it('every placementCost has a preceding BOM source: or analog: comment', () => {
+    const source = readFileSync('src/building-defs.ts', 'utf8');
+    const lines = source.split('\n');
+    const missing: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (line.includes('placementCost:')) {
+        const hasCitation = [-1, -2, -3, -4, -5, -6, -7, -8, -9, -10].some((dy) =>
+          lines[i + dy]?.match(/(BOM source|analog):/),
+        );
+        if (!hasCitation) missing.push(`line ${i + 1}: ${line.trim()}`);
+      }
+    }
+    expect(missing, 'every placementCost has a BOM citation').toEqual([]);
   });
 });

@@ -44,7 +44,7 @@ import {
 import { checkGates } from './adjacency.js';
 import { placeBuilding, validatePlacement } from './placement.js';
 import { ALL_RESOURCES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
-import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
+import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
@@ -1446,26 +1446,28 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
     expect(state.inventory.wire).toBeCloseTo(47.5, 6);
   });
 
-  it('aggregateStorageCaps: Silo on an island raises only dry_goods caps to 4000', () => {
-    // §4.6 categorized storage: Silo bumps dry_goods only. Other categories
-    // stay at baseline 2000. (rebalanced step #19: baseline 2000 + silo 2000 = 4000)
+  it('aggregateStorageCaps: Silo on an island raises only dry_goods caps by 200000', () => {
+    // §4.6 categorized storage: Silo bumps dry_goods only.
+    // SI-units rev-16 §13.3: silo capacity = 200000.
     const buildings: PlacedBuilding[] = [
       { id: 't-silo', defId: 'silo', x: 0, y: 0 },
     ];
     const caps = aggregateStorageCaps(buildings);
     for (const r of ALL_RESOURCES) {
-      const expected = RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods' ? 4000 : 2000;
+      const base = RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
+      const expected = RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods' ? base + 200000 : base;
       expect(caps[r]).toBe(expected);
     }
   });
 
-  it('aggregateStorageCaps: Tank on an island raises only liquid_gas caps to 4000', () => {
-    // §4.6: Tank is liquid_gas-only.
+  it('aggregateStorageCaps: Tank on an island raises only liquid_gas caps by 100000', () => {
+    // §4.6: Tank is liquid_gas-only. SI-units rev-16 §13.3: tank capacity = 100000.
     const caps = aggregateStorageCaps([
       { id: 't-tank', defId: 'tank', x: 0, y: 0 },
     ]);
     for (const r of ALL_RESOURCES) {
-      const expected = RESOURCE_STORAGE_CATEGORY[r] === 'liquid_gas' ? 4000 : 2000;
+      const base = RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
+      const expected = RESOURCE_STORAGE_CATEGORY[r] === 'liquid_gas' ? base + 100000 : base;
       expect(caps[r]).toBe(expected);
     }
   });
@@ -1473,12 +1475,14 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
   it('aggregateStorageCaps: Crate with cargoLabel raises only that resource', () => {
     // §4.6: generic storage adds capacity to ONE labeled resource per
     // instance. An unlabeled Crate contributes nothing (forward-compat).
+    // SI-units rev-16 §13.3: crate capacity = 500.
     const labeled: PlacedBuilding[] = [
       { id: 't-crate', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' },
     ];
     const caps = aggregateStorageCaps(labeled);
     for (const r of ALL_RESOURCES) {
-      const expected = r === 'iron_ore' ? 2100 : 2000;
+      const base = RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
+      const expected = r === 'iron_ore' ? base + 500 : base;
       expect(caps[r]).toBe(expected);
     }
     // An unlabeled Crate (old save) contributes nothing.
@@ -1486,20 +1490,24 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
       { id: 't-crate', defId: 'crate', x: 0, y: 0 },
     ];
     const capsU = aggregateStorageCaps(unlabeled);
-    for (const r of ALL_RESOURCES) expect(capsU[r]).toBe(2000);
+    for (const r of ALL_RESOURCES) {
+      expect(capsU[r]).toBe(RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]));
+    }
   });
 
-  it('aggregateStorageCaps: no storage buildings → baseline 2000 caps', () => {
-    // Rebalanced for idle-game scale, step #19: baseline is now 2000
+  it('aggregateStorageCaps: no storage buildings → per-category baseline caps', () => {
+    // SI-units rev-16 §13.4: baseline is per-category default, not a global 2000.
     const caps = aggregateStorageCaps([
       { id: 'b-mine', defId: 'mine', x: 0, y: 0 },
     ]);
-    for (const r of ALL_RESOURCES) expect(caps[r]).toBe(2000);
+    for (const r of ALL_RESOURCES) {
+      expect(caps[r]).toBe(RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]));
+    }
   });
 
   it('aggregateStorageCaps: mixed-category buildings — each category bumps independently', () => {
-    // §4.6: a Silo (dry_goods +2000), Tank (liquid_gas +2000), Vault
-    // (rare +5000), Crate labeled iron_ore (+100). Each resource picks up
+    // §4.6: a Silo (dry_goods +200000), Tank (liquid_gas +100000), Vault
+    // (rare +5000), Crate labeled iron_ore (+500). Each resource picks up
     // its category bump plus the label-specific bump iff named.
     const buildings: PlacedBuilding[] = [
       { id: 't-silo', defId: 'silo', x: 0, y: 0 },
@@ -1509,14 +1517,89 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
     ];
     const caps = aggregateStorageCaps(buildings);
     for (const r of ALL_RESOURCES) {
-      let expected = 2000;
+      let expected = RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
       const cat = RESOURCE_STORAGE_CATEGORY[r];
-      if (cat === 'dry_goods') expected += 2000;
-      if (cat === 'liquid_gas') expected += 2000;
+      if (cat === 'dry_goods') expected += 200000;
+      if (cat === 'liquid_gas') expected += 100000;
       if (cat === 'rare') expected += 5000;
-      if (r === 'iron_ore') expected += 100;
+      if (r === 'iron_ore') expected += 500;
       expect(caps[r]).toBe(expected);
     }
+  });
+});
+
+// -----------------------------------------------------------------------
+// Phase 4 invariant fixtures — storage rescale (§9.4)
+// -----------------------------------------------------------------------
+function fakeSiloAt(x: number, y: number): PlacedBuilding {
+  return { id: `silo-${x}-${y}`, defId: 'silo', x, y };
+}
+function fakeTankAt(x: number, y: number): PlacedBuilding {
+  return { id: `tank-${x}-${y}`, defId: 'tank', x, y };
+}
+function fakeColdStorageAt(x: number, y: number): PlacedBuilding {
+  return { id: `cs-${x}-${y}`, defId: 'cold_storage', x, y };
+}
+function fakeComponentWarehouseAt(x: number, y: number): PlacedBuilding {
+  return { id: `cw-${x}-${y}`, defId: 'component_warehouse', x, y };
+}
+function fakeVaultAt(x: number, y: number): PlacedBuilding {
+  return { id: `vault-${x}-${y}`, defId: 'vault', x, y };
+}
+function fakeCrateAt(x: number, y: number, cargoLabel?: ResourceId): PlacedBuilding {
+  return { id: `crate-${x}-${y}`, defId: 'crate', x, y, cargoLabel };
+}
+
+describe('storage rescale (rev-16 §13.3)', () => {
+  it('silo bumps dry_goods caps by 200000', () => {
+    const base = aggregateStorageCaps([]);
+    const withSilo = aggregateStorageCaps([fakeSiloAt(0, 0)]);
+    expect(withSilo.stone - base.stone).toBe(200000);
+  });
+  it('tank bumps liquid_gas caps by 100000', () => {
+    const base = aggregateStorageCaps([]);
+    const withTank = aggregateStorageCaps([fakeTankAt(0, 0)]);
+    expect(withTank.hydrogen - base.hydrogen).toBe(100000);
+  });
+  it('cold_storage bumps temp_sensitive caps by 50000', () => {
+    const base = aggregateStorageCaps([]);
+    const withCs = aggregateStorageCaps([fakeColdStorageAt(0, 0)]);
+    expect(withCs.liquid_nitrogen - base.liquid_nitrogen).toBe(50000);
+  });
+  it('component_warehouse bumps components caps by 20000', () => {
+    const base = aggregateStorageCaps([]);
+    const withCw = aggregateStorageCaps([fakeComponentWarehouseAt(0, 0)]);
+    expect(withCw.gear - base.gear).toBe(20000);
+  });
+  it('vault bumps rare caps by 5000', () => {
+    const base = aggregateStorageCaps([]);
+    const withVault = aggregateStorageCaps([fakeVaultAt(0, 0)]);
+    expect(withVault.helium_3 - base.helium_3).toBe(5000);
+  });
+  it('crate bumps the labeled-resource cap by 500', () => {
+    const base = aggregateStorageCaps([]);
+    const withCrate = aggregateStorageCaps([fakeCrateAt(0, 0, 'iron_ore')]);
+    expect(withCrate.iron_ore - base.iron_ore).toBe(500);
+  });
+});
+
+// -----------------------------------------------------------------------
+// Phase 4 invariant fixtures — sub-calibrated baseCap (§9.5)
+// -----------------------------------------------------------------------
+describe('sub-calibrated baseCap (rev-16 §13.4)', () => {
+  it('helium_3 = 1 (1 g) on fresh island; vault adds 5000 (5 kg)', () => {
+    const base = aggregateStorageCaps([]);
+    expect(base.helium_3).toBe(1);
+    const withVault = aggregateStorageCaps([fakeVaultAt(0, 0)]);
+    expect(withVault.helium_3).toBe(1 + 5000);
+  });
+  it('antimatter_propellant = 1 (1 ng) baseline', () => {
+    const base = aggregateStorageCaps([]);
+    expect(base.antimatter_propellant).toBe(1);
+  });
+  it('ai_core = 0 baseline (whole-unit-only)', () => {
+    const base = aggregateStorageCaps([]);
+    expect(base.ai_core).toBe(0);
   });
 });
 
@@ -2079,8 +2162,8 @@ describe('step-2.5 — placement is recognised by the live economy', () => {
       buildings: spec.buildings,
       // Seed iron_ore + coal so the Smelter recipe has inputs from inventory
       // (no Mine output flow-through needed for this test). Also seed
-      // stone + wood for the §14 placement cost (Smelter: 50 stone, 20 wood).
-      inventory: { ...blankInventory(), iron_ore: 100, coal: 100, stone: 200, wood: 100 },
+      // stone + clay + wood for the §14 placement cost (Smelter: 400 stone, 100 clay, 20 wood).
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 100, stone: 500, clay: 200, wood: 100 },
       storageCaps: blankCaps(10000),
       level: 5, // T1 unlocked; Smelter is T1
     });
