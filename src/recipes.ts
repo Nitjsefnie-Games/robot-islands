@@ -2529,8 +2529,10 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   limekiln: {
     cycleSec: 40,
-    inputs: { limestone: 1 },
-    outputs: { quicklime: 1 },
+    inputs: { limestone: 25 },
+    outputs: { quicklime: 14, co2: 11 },
+    exogenousFlow: 'fuel-combustion-CO₂',
+    exogenousFlowKg: 5,
     category: 'chemistry',
   },
   lime_slaker: {
@@ -2541,8 +2543,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   brick_kiln: {
     cycleSec: 40,
-    inputs: { clay: 2 },
-    outputs: { brick: 1 },
+    inputs: { clay: 6 },
+    outputs: { brick: 5, water_vapor: 1 },
     category: 'chemistry',
   },
   mortar_mixer: {
@@ -2553,20 +2555,24 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   cement_mill: {
     cycleSec: 67,
-    inputs: { quicklime: 1, sand: 1, clay: 1 },
-    outputs: { cement: 1 },
+    inputs: { quicklime: 8, clay: 2, sand: 1 },
+    outputs: { cement: 11 },
+    exogenousFlow: 'fuel-combustion-CO₂',
+    exogenousFlowKg: 4,
     category: 'chemistry',
   },
   concrete_plant: {
     cycleSec: 67,
-    inputs: { cement: 1, sand: 2, fresh_water: 1 },
-    outputs: { concrete: 1 },
+    inputs: { cement: 1, sand: 2, stone: 3, fresh_water: 0.5 },
+    outputs: { concrete: 6 },
+    exogenousFlow: 'evaporation-water-vapor',
     category: 'chemistry',
   },
   charcoal_kiln: {
     cycleSec: 33,
-    inputs: { wood: 2 },
-    outputs: { charcoal: 1 },
+    inputs: { wood: 8 },
+    outputs: { charcoal: 2, wood_tar: 1, co2: 2, water_vapor: 3 },
+    biogenic: true,
     category: 'chemistry',
   },
   plank_mill: {
