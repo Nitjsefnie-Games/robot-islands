@@ -39,7 +39,7 @@ import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { dayPhaseName, nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
 import { weather } from './weather.js';
-import { resolveHeatAssignments, type HeatAssignments } from './heat.js';
+import { resolveHeatAssignments, MIN_HEAT_FACTOR, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
 import { footprintTiles } from './shape-mask.js';
 import {
@@ -938,9 +938,17 @@ export function computeRates(
     // is fully stalled this tick — no production, no consumption, no power
     // draw. Recorded as a tentative entry with baseRate=0 so pass-3's
     // power-balance loop also skips it (matched via inputAvail = 0).
-    if (def.requiresHeat && heat.hasHeat.get(b.id) !== true) {
-      tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1 });
-      continue;
+    let heatFactor = 1;
+    if (def.requiresHeat) {
+      const factor = heat.heatThrottleFactor.get(b.id) ?? 0;
+      if (factor < MIN_HEAT_FACTOR) {
+        // Brownout: full stall. Same shape as the pre-Phase-3 boolean gate.
+        tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1 });
+        continue;
+      }
+      // Partial throttle: multiplied into baseRate and effectiveMul so
+      // pass-2's nominal-rate math and pass-4's effectiveRate both pick it up.
+      heatFactor = factor;
     }
     // §8.1 tile-gating stall: if any footprint tile is outside the allowed
     // set, we zero baseRate so effectiveRate becomes 0 in pass 4. Power/heat
@@ -1003,8 +1011,8 @@ export function computeRates(
     const cryoMul = Object.keys(recipe.outputs).some((r) => r.includes('cryo'))
       ? modifierMul.cryoRecipeRateMul
       : 1;
-    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul;
-    tentative.push({ building: b, recipe, baseRate, buffStack, effectiveMul: gateResult.effectiveMul });
+    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul * heatFactor;
+    tentative.push({ building: b, recipe, baseRate, buffStack, effectiveMul: gateResult.effectiveMul * heatFactor });
     const pass1Outputs = resolveRotatingOutput(recipe, t);
     for (const [r, yld] of Object.entries(pass1Outputs)) {
       const id = r as ResourceId;
@@ -1093,7 +1101,12 @@ export function computeRates(
     // §5.2: heat-required consumer with no adjacent source is INACTIVE
     // (zero power draw). Checked before recipe lookup so the gate applies
     // even if the building's recipe is somehow undefined for the variant.
-    if (def.requiresHeat && heat.hasHeat.get(b.id) !== true) continue;
+    let heatFactorPass3 = 1;
+    if (def.requiresHeat) {
+      const factor = heat.heatThrottleFactor.get(b.id) ?? 0;
+      if (factor < MIN_HEAT_FACTOR) continue; // brownout — no power draw
+      heatFactorPass3 = factor;
+    }
     // §4.5 gating adjacency: a building with a failed hard gate draws no power.
     const gateResult = checkGates(b, validBuildings, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
     if (gateResult.effectiveMul === 0) continue;
@@ -1119,6 +1132,7 @@ export function computeRates(
       const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
       nominalThroughputFrac = gateResult.effectiveMul * ia * oa;
     }
+    nominalThroughputFrac *= heatFactorPass3;
     if (!active) continue;
     const producesBase = def.power?.produces ?? 0;
     // §2.7: solar-tagged producers scale by the current quadrant's average.
