@@ -1921,7 +1921,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 600 },
     requiredBiomes: ['plains'],
     // BOM source: NASA electromagnetic launch facility (scaled track + superconducting magnets).
-    // 258.52 t embodied.
+    // 307.52 t embodied (steel_beam 250 + magnet 50 + heavy_cable 4 + concrete 3 + gear 0.4 + wire 0.1 + microchip 0.02).
     placementCost: { steel_beam: 5000, concrete: 3000, magnet: 1000, microchip: 200, heavy_cable: 500, gear: 200, wire: 200 },
     glyph: '➶',
   },
