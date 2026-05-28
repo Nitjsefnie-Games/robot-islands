@@ -53,6 +53,12 @@ export interface HeatAssignments {
   readonly hasHeat: Map<string, boolean>;
   readonly coalConsumersByFurnace: Map<string, number>;
   readonly assignedSource: Map<string, string>;
+  /** §perf-2026-05-28: Per-consumer throttle factor ∈ [0, 1] from
+   *  the rev-16 §5.1 proportional-budget resolver. Missing key reads
+   *  as 1.0 (boolean-N:1 backward-compat fallback). Below
+   *  MIN_HEAT_FACTOR the consumer brownouts (computeRates zeros baseRate
+   *  — wired in Phase 3 commit 3). */
+  readonly heatThrottleFactor: Map<string, number>;
 }
 
 /** Empty result, used when an island has no consumers + no sources. */
@@ -60,7 +66,14 @@ export const EMPTY_HEAT_ASSIGNMENTS: HeatAssignments = {
   hasHeat: new Map(),
   coalConsumersByFurnace: new Map(),
   assignedSource: new Map(),
+  heatThrottleFactor: new Map(),
 };
+
+/** §perf-2026-05-28: brownout threshold per rev-16 §5.1. A consumer
+ *  whose proportional throttle factor falls below this value is treated
+ *  by computeRates as fully stalled (baseRate=0). Above the threshold,
+ *  the consumer runs at `factor × nominal rate`. Exported for tests. */
+export const MIN_HEAT_FACTOR = 0.1;
 
 /** All footprint tiles a building occupies, computed via `footprintTiles` with
  *  the building's shape mask and rotation. Returned as a Set of
@@ -150,14 +163,16 @@ export function resolveHeatAssignments(
   const sortedConsumers = [...consumers].sort((a, b) => a.id.localeCompare(b.id));
 
   if (geothermalActive) {
+    const heatThrottleFactor = new Map<string, number>();
     for (const consumer of sortedConsumers) {
       hasHeat.set(consumer.id, true);
+      heatThrottleFactor.set(consumer.id, 1);
     }
-    return { hasHeat, coalConsumersByFurnace, assignedSource };
+    return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor };
   }
 
   if (consumers.length === 0) {
-    return { hasHeat, coalConsumersByFurnace, assignedSource };
+    return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor: new Map() };
   }
 
   const sortedCoal = [...coalSources].sort((a, b) => a.id.localeCompare(b.id));
@@ -202,5 +217,46 @@ export function resolveHeatAssignments(
     hasHeat.set(consumer.id, false);
   }
 
-  return { hasHeat, coalConsumersByFurnace, assignedSource };
+  // §perf-2026-05-28: Proportional-budget pass — per source, throttle by demand.
+  const heatThrottleFactor = new Map<string, number>();
+
+  const consumersBySource = new Map<string, PlacedBuilding[]>();
+  for (const consumer of sortedConsumers) {
+    const srcId = assignedSource.get(consumer.id);
+    if (!srcId) continue;
+    const list = consumersBySource.get(srcId) ?? [];
+    list.push(consumer);
+    consumersBySource.set(srcId, list);
+  }
+
+  for (const [srcId, srcConsumers] of consumersBySource) {
+    const src = buildings.find((b) => b.id === srcId);
+    if (!src) continue;
+    const srcDef = BUILDING_DEFS[src.defId];
+    const supply = srcDef.heatSource?.thermalKW;
+
+    if (supply == null) {
+      // Backward-compat: source has no thermalKW → boolean N:1 behaviour.
+      for (const c of srcConsumers) heatThrottleFactor.set(c.id, 1);
+      continue;
+    }
+
+    const demand = srcConsumers.reduce((acc, c) => {
+      const d = BUILDING_DEFS[c.defId].heatDemandKW ?? 0;
+      return acc + d;
+    }, 0);
+
+    if (demand <= 0) {
+      for (const c of srcConsumers) heatThrottleFactor.set(c.id, 1);
+      continue;
+    }
+
+    const ratio = Math.min(1, supply / demand);
+    for (const c of srcConsumers) {
+      const prev = heatThrottleFactor.get(c.id) ?? 0;
+      heatThrottleFactor.set(c.id, Math.max(prev, ratio));
+    }
+  }
+
+  return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor };
 }
