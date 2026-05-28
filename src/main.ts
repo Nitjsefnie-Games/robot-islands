@@ -111,6 +111,7 @@ import { mountToastSurface } from './toast.js';
 import { mountSatelliteOverlay } from './satellite-overlay.js';
 import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
+import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
 import { checkObjectives, xpBumpPercentForCompletion, type ObjectiveId } from './tutorial.js';
 import { renderTutorialBanner } from './tutorial-ui.js';
@@ -163,6 +164,19 @@ async function main(): Promise<void> {
   // Load UI prefs (camera + active-island + open-panel) in parallel with
   // world; applied below after the camera is constructed.
   const restoredPrefs = await loadPrefs();
+
+  if (worldState.playerLat == null || worldState.playerLon == null) {
+    await new Promise<void>((resolve) => {
+      showMapPicker({
+        onPick: (lat, lon) => {
+          worldState.playerLat = lat;
+          worldState.playerLon = lon;
+          void saveWorld(worldState, restored?.islandStates ?? new Map());
+          resolve();
+        },
+      });
+    });
+  }
 
   // Ocean + island + fog-overlay layers are baked from the current world
   // state. They get rebuilt when discovery changes (drone-tick reveals new

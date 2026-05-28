@@ -46,9 +46,11 @@ import {
   clearSave,
   isValidSaveSnapshot,
   importSave,
+  saveWorld,
   serializeWorld,
   STORAGE_KEY_DISPLAY,
 } from './persistence.js';
+import { showMapPicker } from './map-picker.js';
 import { mountModal } from './ui-modal.js';
 import type { IslandState } from './economy.js';
 import type { WorldState } from './world.js';
@@ -304,6 +306,49 @@ export function mountSettingsUi(
       uiSection.appendChild(uiNote);
 
       body.appendChild(uiSection);
+
+      // ---- Location section -------------------------------------------------
+      const locSection = document.createElement('div');
+      locSection.style.display = 'flex';
+      locSection.style.flexDirection = 'column';
+      locSection.style.gap = '6px';
+
+      const locHeading = document.createElement('div');
+      locHeading.style.display = 'flex';
+      locHeading.style.alignItems = 'baseline';
+      locHeading.style.justifyContent = 'space-between';
+      locHeading.style.paddingBottom = '4px';
+      locHeading.style.borderBottom = '1px solid var(--ri-rule)';
+
+      const locHeadingLabel = document.createElement('span');
+      locHeadingLabel.textContent = 'LOCATION';
+      locHeadingLabel.className = 'ri-caps';
+      locHeadingLabel.style.color = 'var(--ri-accent)';
+      locHeading.appendChild(locHeadingLabel);
+
+      locSection.appendChild(locHeading);
+
+      const locBtnRow = document.createElement('div');
+      locBtnRow.style.display = 'flex';
+      locBtnRow.style.justifyContent = 'flex-end';
+      locBtnRow.style.paddingTop = '4px';
+      const changeLocationBtn = makeButton('Change location', () => {
+        showMapPicker({
+          current: deps.world.playerLat != null && deps.world.playerLon != null
+            ? { lat: deps.world.playerLat, lon: deps.world.playerLon }
+            : null,
+          onPick: (lat, lon) => {
+            deps.world.playerLat = lat;
+            deps.world.playerLon = lon;
+            void saveWorld(deps.world, deps.islandStates);
+          },
+          onCancel: () => { /* no-op */ },
+        });
+      });
+      locBtnRow.appendChild(changeLocationBtn);
+      locSection.appendChild(locBtnRow);
+
+      body.appendChild(locSection);
 
       // ---- Save section -----------------------------------------------------
       const saveSection = document.createElement('div');
