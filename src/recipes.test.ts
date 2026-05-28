@@ -563,9 +563,11 @@ describe('§6.2 T1 refined — quicklime + slaked_lime (Task 2.1)', () => {
   });
   it('limekiln recipe exists with limestone input and quicklime output', () => {
     expect(RECIPES.limekiln).toBeDefined();
-    expect(RECIPES.limekiln!.inputs).toEqual({ limestone: 1 });
-    expect(RECIPES.limekiln!.outputs).toEqual({ quicklime: 1 });
+    expect(RECIPES.limekiln!.inputs).toEqual({ limestone: 25 });
+    expect(RECIPES.limekiln!.outputs).toEqual({ quicklime: 14, co2: 11 });
     expect(RECIPES.limekiln!.cycleSec).toBe(40);
+    expect(RECIPES.limekiln!.exogenousFlow).toBe('fuel-combustion-CO₂');
+    expect(RECIPES.limekiln!.exogenousFlowKg).toBe(5);
   });
   it('lime_slaker recipe exists with quicklime + fresh_water input and slaked_lime output', () => {
     expect(RECIPES.lime_slaker).toBeDefined();
@@ -582,8 +584,8 @@ describe('§6.2 T1 refined — brick (Task 2.2)', () => {
   });
   it('brick_kiln recipe exists with clay input and brick output', () => {
     expect(RECIPES.brick_kiln).toBeDefined();
-    expect(RECIPES.brick_kiln!.inputs).toEqual({ clay: 2 });
-    expect(RECIPES.brick_kiln!.outputs).toEqual({ brick: 1 });
+    expect(RECIPES.brick_kiln!.inputs).toEqual({ clay: 6 });
+    expect(RECIPES.brick_kiln!.outputs).toEqual({ brick: 5, water_vapor: 1 });
     expect(RECIPES.brick_kiln!.cycleSec).toBe(40);
   });
 });
@@ -609,15 +611,18 @@ describe('§6.2 T1 refined — mortar + cement + concrete (Task 2.3)', () => {
   });
   it('cement_mill recipe: quicklime + sand + clay → cement', () => {
     expect(RECIPES.cement_mill).toBeDefined();
-    expect(RECIPES.cement_mill!.inputs).toEqual({ quicklime: 1, sand: 1, clay: 1 });
-    expect(RECIPES.cement_mill!.outputs).toEqual({ cement: 1 });
+    expect(RECIPES.cement_mill!.inputs).toEqual({ quicklime: 8, clay: 2, sand: 1 });
+    expect(RECIPES.cement_mill!.outputs).toEqual({ cement: 11 });
     expect(RECIPES.cement_mill!.cycleSec).toBe(67);
+    expect(RECIPES.cement_mill!.exogenousFlow).toBe('fuel-combustion-CO₂');
+    expect(RECIPES.cement_mill!.exogenousFlowKg).toBe(4);
   });
   it('concrete_plant recipe: cement + sand + fresh_water → concrete', () => {
     expect(RECIPES.concrete_plant).toBeDefined();
-    expect(RECIPES.concrete_plant!.inputs).toEqual({ cement: 1, sand: 2, fresh_water: 1 });
-    expect(RECIPES.concrete_plant!.outputs).toEqual({ concrete: 1 });
+    expect(RECIPES.concrete_plant!.inputs).toEqual({ cement: 1, sand: 2, stone: 3, fresh_water: 0.5 });
+    expect(RECIPES.concrete_plant!.outputs).toEqual({ concrete: 6 });
     expect(RECIPES.concrete_plant!.cycleSec).toBe(67);
+    expect(RECIPES.concrete_plant!.exogenousFlow).toBe('evaporation-water-vapor');
   });
 });
 
@@ -628,9 +633,10 @@ describe('§6.2 T1 refined — charcoal (Task 2.4)', () => {
   });
   it('charcoal_kiln recipe: 2 wood → 1 charcoal', () => {
     expect(RECIPES.charcoal_kiln).toBeDefined();
-    expect(RECIPES.charcoal_kiln!.inputs).toEqual({ wood: 2 });
-    expect(RECIPES.charcoal_kiln!.outputs).toEqual({ charcoal: 1 });
+    expect(RECIPES.charcoal_kiln!.inputs).toEqual({ wood: 8 });
+    expect(RECIPES.charcoal_kiln!.outputs).toEqual({ charcoal: 2, wood_tar: 1, co2: 2, water_vapor: 3 });
     expect(RECIPES.charcoal_kiln!.cycleSec).toBe(33);
+    expect(RECIPES.charcoal_kiln!.biogenic).toBe(true);
   });
 });
 

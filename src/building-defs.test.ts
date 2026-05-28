@@ -1239,8 +1239,10 @@ describe('§7.5 limekiln (T1 quicklime producer)', () => {
   });
   it('produces quicklime from limestone', () => {
     expect(RECIPES.limekiln).toBeDefined();
-    expect(RECIPES.limekiln!.inputs).toEqual({ limestone: 1 });
-    expect(RECIPES.limekiln!.outputs).toEqual({ quicklime: 1 });
+    expect(RECIPES.limekiln!.inputs).toEqual({ limestone: 25 });
+    expect(RECIPES.limekiln!.outputs).toEqual({ quicklime: 14, co2: 11 });
+    expect(RECIPES.limekiln!.exogenousFlow).toBe('fuel-combustion-CO₂');
+    expect(RECIPES.limekiln!.exogenousFlowKg).toBe(5);
   });
 });
 
@@ -1270,8 +1272,8 @@ describe('§7.6 brick_kiln (T1 brick producer)', () => {
   });
   it('produces brick from clay', () => {
     expect(RECIPES.brick_kiln).toBeDefined();
-    expect(RECIPES.brick_kiln!.inputs).toEqual({ clay: 2 });
-    expect(RECIPES.brick_kiln!.outputs).toEqual({ brick: 1 });
+    expect(RECIPES.brick_kiln!.inputs).toEqual({ clay: 6 });
+    expect(RECIPES.brick_kiln!.outputs).toEqual({ brick: 5, water_vapor: 1 });
   });
 });
 
@@ -1301,8 +1303,10 @@ describe('§7.8 cement_mill (T1 cement producer)', () => {
   });
   it('produces cement from quicklime + sand + clay', () => {
     expect(RECIPES.cement_mill).toBeDefined();
-    expect(RECIPES.cement_mill!.inputs).toEqual({ quicklime: 1, sand: 1, clay: 1 });
-    expect(RECIPES.cement_mill!.outputs).toEqual({ cement: 1 });
+    expect(RECIPES.cement_mill!.inputs).toEqual({ quicklime: 8, clay: 2, sand: 1 });
+    expect(RECIPES.cement_mill!.outputs).toEqual({ cement: 11 });
+    expect(RECIPES.cement_mill!.exogenousFlow).toBe('fuel-combustion-CO₂');
+    expect(RECIPES.cement_mill!.exogenousFlowKg).toBe(4);
   });
 });
 
@@ -1316,8 +1320,9 @@ describe('§7.8 concrete_plant (T1 concrete producer)', () => {
   });
   it('produces concrete from cement + sand + fresh_water', () => {
     expect(RECIPES.concrete_plant).toBeDefined();
-    expect(RECIPES.concrete_plant!.inputs).toEqual({ cement: 1, sand: 2, fresh_water: 1 });
-    expect(RECIPES.concrete_plant!.outputs).toEqual({ concrete: 1 });
+    expect(RECIPES.concrete_plant!.inputs).toEqual({ cement: 1, sand: 2, stone: 3, fresh_water: 0.5 });
+    expect(RECIPES.concrete_plant!.outputs).toEqual({ concrete: 6 });
+    expect(RECIPES.concrete_plant!.exogenousFlow).toBe('evaporation-water-vapor');
   });
 });
 
@@ -1332,8 +1337,9 @@ describe('§6.2 charcoal_kiln (T1 charcoal producer)', () => {
   });
   it('produces charcoal from wood', () => {
     expect(RECIPES.charcoal_kiln).toBeDefined();
-    expect(RECIPES.charcoal_kiln!.inputs).toEqual({ wood: 2 });
-    expect(RECIPES.charcoal_kiln!.outputs).toEqual({ charcoal: 1 });
+    expect(RECIPES.charcoal_kiln!.inputs).toEqual({ wood: 8 });
+    expect(RECIPES.charcoal_kiln!.outputs).toEqual({ charcoal: 2, wood_tar: 1, co2: 2, water_vapor: 3 });
+    expect(RECIPES.charcoal_kiln!.biogenic).toBe(true);
   });
 });
 
