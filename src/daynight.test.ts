@@ -51,7 +51,7 @@ describe('dayPhase', () => {
     // lands at full solar (multiplier 1.0), keeping pre-existing
     // power-balance tests passing.
     expect(dayPhaseName(0)).toBe('day');
-    expect(solarMultiplier(0)).toBe(1.0);
+    expect(solarMultiplier(0, 0, 0)).toBe(1.0);
   });
 });
 
@@ -79,28 +79,28 @@ describe('solarMultiplier + dayPhaseName per quadrant', () => {
 
   it('Dawn: start=0, midpoint=0.5, just-before-end≈1', () => {
     // Dawn quadrant t ∈ [-9h, -3h). Midpoint t = -6h.
-    expect(solarMultiplier(-9 * HOUR)).toBeCloseTo(0, 9);
-    expect(solarMultiplier(-6 * HOUR)).toBeCloseTo(0.5, 9);
-    expect(solarMultiplier(-3 * HOUR - 1)).toBeGreaterThan(0.999);
+    expect(solarMultiplier(-9 * HOUR, 0, 0)).toBeCloseTo(0, 9);
+    expect(solarMultiplier(-6 * HOUR, 0, 0)).toBeCloseTo(0.5, 9);
+    expect(solarMultiplier(-3 * HOUR - 1, 0, 0)).toBeGreaterThan(0.999);
   });
 
   it('Day: flat 1.0 across the quadrant', () => {
-    expect(solarMultiplier(-3 * HOUR)).toBe(1.0);
-    expect(solarMultiplier(0)).toBe(1.0);
-    expect(solarMultiplier(3 * HOUR - 1)).toBe(1.0);
+    expect(solarMultiplier(-3 * HOUR, 0, 0)).toBe(1.0);
+    expect(solarMultiplier(0, 0, 0)).toBe(1.0);
+    expect(solarMultiplier(3 * HOUR - 1, 0, 0)).toBe(1.0);
   });
 
   it('Dusk: start=1, midpoint=0.5, just-before-end≈0', () => {
     // Dusk quadrant t ∈ [+3h, +9h). Midpoint t = +6h.
-    expect(solarMultiplier(3 * HOUR)).toBe(1.0);
-    expect(solarMultiplier(6 * HOUR)).toBeCloseTo(0.5, 9);
-    expect(solarMultiplier(9 * HOUR - 1)).toBeLessThan(0.001);
+    expect(solarMultiplier(3 * HOUR, 0, 0)).toBe(1.0);
+    expect(solarMultiplier(6 * HOUR, 0, 0)).toBeCloseTo(0.5, 9);
+    expect(solarMultiplier(9 * HOUR - 1, 0, 0)).toBeLessThan(0.001);
   });
 
   it('Night: flat 0.0 across the quadrant', () => {
-    expect(solarMultiplier(9 * HOUR)).toBe(0.0);
-    expect(solarMultiplier(12 * HOUR)).toBe(0.0);
-    expect(solarMultiplier(15 * HOUR - 1)).toBe(0.0);
+    expect(solarMultiplier(9 * HOUR, 0, 0)).toBe(0.0);
+    expect(solarMultiplier(12 * HOUR, 0, 0)).toBe(0.0);
+    expect(solarMultiplier(15 * HOUR - 1, 0, 0)).toBe(0.0);
   });
 
   it('is continuous: no jump > 1/SOLAR_RAMP_SEGMENTS between 1ms-apart samples inside Dawn/Dusk', () => {
@@ -116,8 +116,8 @@ describe('solarMultiplier + dayPhaseName per quadrant', () => {
         // continuous in the ramp model but the next ms is in a different
         // quadrant).
         if (t + 1 >= quadStart + QUADRANT_MS) continue;
-        const a = solarMultiplier(t);
-        const b = solarMultiplier(t + 1);
+        const a = solarMultiplier(t, 0, 0);
+        const b = solarMultiplier(t + 1, 0, 0);
         expect(Math.abs(b - a)).toBeLessThan(maxAllowedJump);
       }
     }

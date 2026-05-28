@@ -382,7 +382,7 @@ export function mountIslandBar(
     const nowMs = Date.now();
     const phaseName = dayPhaseName(nowMs);
     const phaseFrac = (dayPhase(nowMs) * 4) % 1;
-    const mul = solarMultiplier(nowMs);
+    const mul = solarMultiplier(nowMs, world.playerLat, world.playerLon);
     phaseEl.textContent = `${PHASE_LABEL[phaseName]} ${Math.floor(phaseFrac * 100)}% · solar ${mul.toFixed(1)}×`;
 
     // Saved
