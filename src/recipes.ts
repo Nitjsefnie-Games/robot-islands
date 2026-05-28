@@ -1740,7 +1740,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     cycleSec: 2,
     inputs: { coal: 1 },
     outputs: {},
-    exogenousFlow: 'fuel-combustion-energy',
+    exogenousFlow: 'fuel-combustion-CO₂',
+    exogenousFlowKg: 2.42,
     category: 'power',
   },
   biomass_plant: {
