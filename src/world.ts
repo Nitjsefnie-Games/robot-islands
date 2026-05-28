@@ -27,7 +27,7 @@ import type { ModifierId } from './biomes.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { renderBuildings } from './buildings.js';
-import { BASELINE_STORAGE_CAP, CELL_SIZE_TILES } from './constants.js';
+import { CELL_SIZE_TILES } from './constants.js';
 import { islandCells } from './discovery.js';
 import type { IslandState } from './economy.js';
 import type { EndgameState, VictoryCondition } from './endgame.js';
@@ -42,7 +42,7 @@ import type { OceanCellSpec } from './ocean-cell.js';
 import { generateOceanTerrain } from './ocean-gen.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Route } from './routes.js';
-import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
+import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory } from './storage-categories.js';
 import { pointInVision, type VisionSource } from './vision-source.js';
 import { generateCellIslands, generateWorld } from './world-gen.js';
 
@@ -1000,13 +1000,7 @@ function startingInventory(): Record<ResourceId, number> {
   return inv;
 }
 
-/** Baseline cap before any storage building is placed. Rebalanced for
- *  idle-game scale, step #19: bumped from 100 → 2000 so a few minutes of
- *  T1 production doesn't instantly fill storage. Storage buildings add on
- *  top of this baseline. Re-exported from `constants.ts` (the canonical
- *  source of truth) so `placement.ts` and persistence forward-compat can
- *  use the same constant. */
-export { BASELINE_STORAGE_CAP };
+
 
 /**
  * Aggregate placement-time storage caps from a building list per §4.6
@@ -1021,7 +1015,8 @@ export { BASELINE_STORAGE_CAP };
  *     nothing — forward-compatible with old saves and with freshly-placed
  *     buildings that haven't been labeled yet.
  *
- * Every resource starts at BASELINE_STORAGE_CAP, regardless of category.
+ * Baseline caps are per-resource: override from RESOURCE_BASE_CAP, else
+ *  per-category default from defaultCapForCategory().
  *
  * Pure — no PixiJS, no DOM, no IslandState dependency.
  */
@@ -1029,7 +1024,12 @@ export function aggregateStorageCaps(
   buildings: ReadonlyArray<PlacedBuilding>,
 ): Record<ResourceId, number> {
   const caps = {} as Record<ResourceId, number>;
-  for (const r of ALL_RESOURCES) caps[r] = BASELINE_STORAGE_CAP;
+  for (const r of ALL_RESOURCES) {
+    const override = RESOURCE_BASE_CAP[r];
+    caps[r] = override !== undefined
+      ? override
+      : defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
+  }
   for (const b of buildings) {
     const def = BUILDING_DEFS[b.defId];
     const storage = def.storage;

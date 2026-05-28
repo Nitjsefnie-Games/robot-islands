@@ -421,3 +421,28 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   air: 'liquid_gas',
   cryo_coolant_vented: 'liquid_gas',
 };
+
+// SI-units rev-16 §13.4 — per-resource base storage cap on a fresh island.
+// Defaults via defaultCapForCategory() below; overrides for sub-calibrated
+// resources (helium_3, antimatter_propellant, ai_core, foundation_kit, etc).
+export const RESOURCE_BASE_CAP: Readonly<Partial<Record<ResourceId, number>>> = {
+  // helium_3: 1 unit = 1 g.
+  helium_3: 1,
+  // antimatter_propellant: 1 unit = 1 ng.
+  antimatter_propellant: 1,
+  // ai_core: 1 unit = 1 kg single chip. Whole-unit-only — 0 base cap.
+  ai_core: 0,
+  // foundation_kit: large assembly.
+  foundation_kit: 5,
+};
+
+// rev-16 §13.4 — category defaults when no per-resource override is present.
+export function defaultCapForCategory(c: StorageCategory): number {
+  switch (c) {
+    case 'dry_goods':      return 100;
+    case 'liquid_gas':     return 100;
+    case 'temp_sensitive': return 50;
+    case 'components':     return 20;
+    case 'rare':           return 1;
+  }
+}
