@@ -42,6 +42,11 @@ function makeState(spec: IslandSpec): IslandState {
   s.level = 5;
   s.inventory.stone = 10000;
   s.inventory.wood = 10000;
+  s.inventory.steel_beam = 10000;
+  s.inventory.concrete = 10000;
+  s.inventory.gear = 10000;
+  s.inventory.pipe = 10000;
+  s.inventory.microchip = 10000;
   return s;
 }
 
@@ -194,6 +199,10 @@ describe('§4 placement-ui ocean branch', () => {
     anchorState.inventory.carbon_steel = 10000;
     anchorState.inventory.wire = 10000;
     anchorState.inventory.microchip = 10000;
+    anchorState.inventory.steel_beam = 10000;
+    anchorState.inventory.concrete = 10000;
+    anchorState.inventory.gear = 10000;
+    anchorState.inventory.pipe = 10000;
     // Dummy target spec/state for the land path's getTargetSpec/getTargetState
     // calls (the ocean branch never reads them, but the deps require them).
     const dummySpec = makeSpec();
