@@ -1388,6 +1388,9 @@ export const RECIPE_SPECULATIVE: Readonly<Partial<Record<RecipeId, 'fantasy chem
   aetheric_conduit: 'fantasy chemistry',
   spacetime_resonator: 'fantasy chemistry',
   eldritch_sieve: 'fantasy chemistry',
+  plasma_forge: 'fantasy chemistry',
+  genesis_forge: 'fantasy chemistry',
+  ascendant_assembly: 'fantasy chemistry',
 };
 
 /**
