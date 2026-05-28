@@ -1541,6 +1541,7 @@ export type RecipeId =
   | 'nodule_concentrator_co'
   | 'vent_mineral_refinery_exotic'
   | 'vent_mineral_refinery_tritium'
+  | 'sheet_mill'
   // Task 6: synthetic recipe ids for Skill Forge crystal variants.
   | 'skill_forge_mining_t2'
   | 'skill_forge_mining_t3'
@@ -2895,8 +2896,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   metal_rolling_mill: {
     cycleSec: 133, // rebalanced for idle-game scale, step #19 (×40: was 10s); 2026-05-18 ÷3 for display visibility (was 400s)
-    inputs: { steel: 1 },
-    outputs: { wire: 1 },
+    inputs: { steel: 11 },
+    outputs: { wire: 20, mill_scale: 1 },
     category: 'manufacturing',
     // §7.1 spec lists multiple Steel Mill outputs (wire, sheet_metal,
     // pipe, beam); this Steel Mill ships wire only (input to the
@@ -3226,42 +3227,42 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'electronics',
   },
   // Phase 6 — T2 mechanical components (§6.3 / §7.1)
-  sheet_metal_mill: {
+  sheet_mill: {
     cycleSec: 67,
-    inputs: { steel: 1 },
-    outputs: { sheet_metal: 2 },
+    inputs: { steel: 53 },
+    outputs: { sheet_metal: 10, mill_scale: 3 },
     category: 'manufacturing',
   },
   pipe_mill: {
     cycleSec: 67,
-    inputs: { steel: 1 },
-    outputs: { pipe: 2 },
+    inputs: { steel: 42 },
+    outputs: { pipe: 10, mill_scale: 2 },
     category: 'manufacturing',
   },
   beam_mill: {
     cycleSec: 67,
-    inputs: { steel: 1 },
-    outputs: { steel_beam: 2 },
+    inputs: { steel: 105 },
+    outputs: { steel_beam: 2, mill_scale: 5 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 mechanical fasteners (§6.3)
-  bearing_press: {
+  bearing_assembler: {
     cycleSec: 67,
-    inputs: { steel: 1, lubricant: 1 },
-    outputs: { bearing: 2 },
+    inputs: { steel: 28, lubricant: 3 },
+    outputs: { bearing: 100, mill_scale: 1 },
     category: 'manufacturing',
   },
-  spring_winder: {
+  spring_press: {
     cycleSec: 67,
-    inputs: { steel: 1 },
-    outputs: { spring: 3 },
+    inputs: { steel: 11 },
+    outputs: { spring: 50, mill_scale: 1 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 mechanical components (§6.3)
-  cable_drawer: {
+  cable_mill: {
     cycleSec: 67,
-    inputs: { wire: 3 },
-    outputs: { heavy_cable: 1 },
+    inputs: { steel: 42 },
+    outputs: { heavy_cable: 5, mill_scale: 2 },
     category: 'manufacturing',
   },
   // Phase 6 — T3 battery (§6.3 / §7.9)
@@ -3728,6 +3729,11 @@ export function resolveRecipe(
       }
     }
     return RECIPES.vent_mineral_refinery_exotic;
+  }
+  // §3.9 cohort — sheet_metal_mill building uses sheet_mill recipe (renamed
+  // per rev-16 §3.9 cohort discipline; building id unchanged).
+  if (def.id === 'sheet_metal_mill') {
+    return RECIPES.sheet_mill;
   }
   return RECIPES[def.id as RecipeId];
 }
