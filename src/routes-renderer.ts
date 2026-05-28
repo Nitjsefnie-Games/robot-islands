@@ -1,23 +1,25 @@
 // Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0
 //
-// §perf-2026-05-28 Phase 2: routes renderer.
+// §perf-2026-05-28 Phase 3: routes renderer with texture-stroke dash animation.
 // Owns 3 containers parented under `world` (see main.ts wiring):
 //   staticLayer    — dashed-line geometry, built once per route per
-//                    cacheKey change (the expensive thing).
-//   animatedLayer  — Phase-3 texture-stroke overlay (Phase 2: unused stub).
+//                    cacheKey change (fallback if texture-stroke breaks).
+//   animatedLayer  — texture-stroked dashed line; per-frame UV offset via
+//                    clear+restroke with a shifted matrix (see API note below).
 //   overlayLayer   — per-frame chevrons + pulses + draft preview (cheap
 //                    primitives, rebuilt every update; not cached).
 
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Matrix } from 'pixi.js';
 import { routesCacheKey, type Route } from './routes.js';
 import { VISION_BLUE } from './world.js';
-import { colorForRouteType } from './routes-dash-texture.js';
+import { colorForRouteType, getDashedStrokeTexture } from './routes-dash-texture.js';
 
 export interface RouteRenderState {
   staticGraphics: Graphics;
   animatedGraphics: Graphics;
-  cacheKey: string;     // per-route subset of the full cacheKey
-  fromX: number;        // cached world-px endpoints; used by overlay layer
+  cacheKey: string;
+  routeType: Route['type'];
+  fromX: number;
   fromY: number;
   toX: number;
   toY: number;
@@ -28,6 +30,11 @@ export interface RouteRenderState {
 export type IslandPosResolver =
   (islandId: string) => { x: number; y: number } | null;
 
+/** Pixels of UV scroll per millisecond. Matches the pre-impl visual
+ *  feel (~12 px / 600 ms = 0.02 px/ms in routes-ui.ts:1037). The dash
+ *  pattern repeats every 12 px, so a full cycle takes 600 ms. */
+const SCROLL_SPEED_PX_PER_MS = 12 / 600;
+
 export class RouteRenderer {
   readonly staticLayer = new Container();
   readonly animatedLayer = new Container();
@@ -36,6 +43,9 @@ export class RouteRenderer {
 
   private readonly entries = new Map<string, RouteRenderState>();
   private lastFullKey: string | null = null;
+  private _disposed = false;
+  private readonly _scrollMatrix = new Matrix();
+
   constructor(private readonly resolveIslandPos: IslandPosResolver) {
     this.staticLayer.label = 'routes-static';
     this.animatedLayer.label = 'routes-animated';
@@ -65,10 +75,7 @@ export class RouteRenderer {
       this.lastFullKey = key;
     }
 
-    // Overlay (chevrons + pulses + draft preview) is cheap; rebuild every
-    // call. This is where the dash-scroll animation lives in Phase 2 (still
-    // per-frame). Phase 3 moves the scroll to a UV offset on the static
-    // layer's stroke and the overlay no longer carries dashes.
+    this.updateAnimationOnly(nowMs);
     this.paintOverlay(routes, nowMs, draftKey, panelVisible);
   }
 
@@ -96,6 +103,7 @@ export class RouteRenderer {
         existing.staticGraphics.clear();
         existing.animatedGraphics.clear();
         existing.cacheKey = perRouteKey;
+        existing.routeType = r.type;
         existing.fromX = from.x; existing.fromY = from.y;
         existing.toX = to.x;     existing.toY = to.y;
         this.buildRouteGeometry(r, existing);
@@ -108,6 +116,7 @@ export class RouteRenderer {
           staticGraphics: sg,
           animatedGraphics: ag,
           cacheKey: perRouteKey,
+          routeType: r.type,
           fromX: from.x, fromY: from.y,
           toX: to.x,     toY: to.y,
         };
@@ -125,53 +134,92 @@ export class RouteRenderer {
     }
   }
 
-  /** Build the dashed-line static geometry for a single route. Phase 2:
-   *  draws the dashed line via Graphics in WORLD coords (no resolveScreenPos);
-   *  the dash phase comes from `paintOverlay` per-frame. Phase 3 replaces
-   *  this body with a single texture-stroked line + tilePosition animation. */
+  /** Build the dashed-line geometry for a single route.
+   *  Phase 3: the animated layer uses a texture-stroked line; the static
+   *  layer is built as a fallback (hidden) in case the texture-stroke API
+   *  breaks in a future Pixi upgrade. */
   private buildRouteGeometry(r: Route, entry: RouteRenderState): void {
     const color = colorForRouteType(r.type);
-    const alpha = r.type === 'submarine_cable' || r.type === 'cable' ? 0.55 : 0.55;
+    const alpha = 0.55;
 
-    // Phase 2: build the line ONCE in world coords. Dash pattern is
-    // emitted as a sequence of moveTo/lineTo segments (same approach
-    // the old drawDashedSegment used); animation comes from paintOverlay
-    // redrawing on top each frame. Phase 3 replaces this with one
-    // texture-stroked lineTo and per-frame tilePosition update.
+    // Phase 2 fallback: build static dashed layer once.
     const DASH_LEN_WORLD_PX = 8;
     const GAP_LEN_WORLD_PX = 4;
     const dx = entry.toX - entry.fromX;
     const dy = entry.toY - entry.fromY;
     const totalLen = Math.sqrt(dx * dx + dy * dy);
-    if (totalLen <= 0) return;
-    const ux = dx / totalLen;
-    const uy = dy / totalLen;
-    const period = DASH_LEN_WORLD_PX + GAP_LEN_WORLD_PX;
-    let drawn = 0;
-    while (drawn < totalLen) {
-      const startT = drawn;
-      const endT = Math.min(totalLen, drawn + DASH_LEN_WORLD_PX);
-      if (endT > startT) {
-        const sx = entry.fromX + ux * startT;
-        const sy = entry.fromY + uy * startT;
-        const ex = entry.fromX + ux * endT;
-        const ey = entry.fromY + uy * endT;
-        entry.staticGraphics.moveTo(sx, sy).lineTo(ex, ey);
+    if (totalLen > 0) {
+      const ux = dx / totalLen;
+      const uy = dy / totalLen;
+      const period = DASH_LEN_WORLD_PX + GAP_LEN_WORLD_PX;
+      let drawn = 0;
+      while (drawn < totalLen) {
+        const startT = drawn;
+        const endT = Math.min(totalLen, drawn + DASH_LEN_WORLD_PX);
+        if (endT > startT) {
+          const sx = entry.fromX + ux * startT;
+          const sy = entry.fromY + uy * startT;
+          const ex = entry.fromX + ux * endT;
+          const ey = entry.fromY + uy * endT;
+          entry.staticGraphics.moveTo(sx, sy).lineTo(ex, ey);
+        }
+        drawn += period;
       }
-      drawn += period;
+      entry.staticGraphics.stroke({ width: 1.5, color, alpha });
     }
-    entry.staticGraphics.stroke({ width: 1.5, color, alpha });
 
-    // animatedGraphics stays empty in Phase 2 — Phase 3 fills it with the
-    // texture-stroked line + tilePosition animation.
-    void entry.animatedGraphics;
+    // Phase 3: texture-stroked animated line.
+    const tex = getDashedStrokeTexture(r.type);
+    const lineDx = entry.toX - entry.fromX;
+    const lineDy = entry.toY - entry.fromY;
+    const angle = Math.atan2(lineDy, lineDx);
+    this._scrollMatrix.set(1, 0, 0, 1, 0, 0).rotate(angle);
+    entry.animatedGraphics
+      .moveTo(entry.fromX, entry.fromY)
+      .lineTo(entry.toX, entry.toY)
+      .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
+
+    // Hide the fallback static layer — if the texture-stroke ever breaks,
+    // re-enable this line and delete the animated-layer build above.
+    entry.staticGraphics.visible = false;
+  }
+
+  /** Per-frame dash-scroll animation.
+   *
+   *  API-verification note (Pixi 8.x, installed 2026-05-28):
+   *  Pixi 8 bakes stroke-texture UVs into vertex geometry in
+   *  `buildContextBatches` (`buildUvs` via `generateTextureMatrix`).
+   *  There is no runtime uniform or `tilePosition`-style knob that shifts
+   *  a textured stroke without a full geometry rebuild. The implementer
+   *  verified this by reading `node_modules/pixi.js/lib/scene/graphics/
+   *  shared/utils/buildContextBatches.mjs` and `buildUvs.mjs`.
+   *
+   *  Fallback used here: each frame we `clear()` the animated Graphics,
+   *  redraw one `moveTo/lineTo`, and `stroke()` with a phase-shifted
+   *  `matrix`. This is still dramatically cheaper than Phase 2's
+   *  per-segment dashed-line loop (one line + one stroke vs N segments).
+   */
+  private updateAnimationOnly(nowMs: number): void {
+    const offsetPx = nowMs * SCROLL_SPEED_PX_PER_MS;
+    for (const entry of this.entries.values()) {
+      const dx = entry.toX - entry.fromX;
+      const dy = entry.toY - entry.fromY;
+      const angle = Math.atan2(dy, dx);
+
+      this._scrollMatrix.set(1, 0, 0, 1, 0, 0).rotate(angle).translate(-offsetPx, 0);
+
+      const tex = getDashedStrokeTexture(entry.routeType);
+      entry.animatedGraphics.clear();
+      entry.animatedGraphics
+        .moveTo(entry.fromX, entry.fromY)
+        .lineTo(entry.toX, entry.toY)
+        .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
+    }
   }
 
   /** Per-frame overlay rebuild: chevrons + arrival-pulse + draft preview.
-   *  Also handles the dash-scroll animation in Phase 2 by drawing a moving
-   *  highlight on top of the static dashed layer. Phase 3 deletes the
-   *  highlight (the static layer becomes texture-stroked and animates via
-   *  tilePosition — see Phase 3 card). */
+   *  Phase 3 deletes the per-frame dash highlight (the static layer became
+   *  texture-stroked and animates via the matrix shift above). */
   private paintOverlay(
     routes: ReadonlyArray<Route>,
     nowMs: number,
@@ -255,6 +303,8 @@ export class RouteRenderer {
   }
 
   dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
     for (const e of this.entries.values()) {
       e.staticGraphics.destroy();
       e.animatedGraphics.destroy();

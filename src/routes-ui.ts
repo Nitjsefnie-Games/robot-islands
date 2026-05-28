@@ -13,13 +13,12 @@
 //   - Stat block (ROUTES / CAP TOTAL / IN-FLIGHT / FUNNEL)
 //   - Create-route form: source / via-building / dest / cargo (collapsible)
 //   - Active routes ledger (cargo, capacity, in-flight count, ETA)
-//   - Renderable `Container` for in-world route lines + chevron glyphs
-//     (added to `app.stage` — screen-space — to keep stroke width and
-//     glyph size constant regardless of zoom)
+//   - In-world route lines + chevron glyphs are owned by RouteRenderer
+//     (world-space, parented under the `world` Container; see
+//     src/routes-renderer.ts and main.ts wiring).
 
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
-import { TILE_PX } from './island.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { CargoEntry } from './route-cargo.js';
 import {
@@ -1074,18 +1073,4 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   };
 }
 
-/** Helper for main.ts: convert an island id to its current screen-pixel
- *  centre. The conversion uses the same camera transform as the existing
- *  reticle. */
-export function makeIslandScreenPosResolver(
-  islandSpecs: ReadonlyMap<string, IslandSpec>,
-  cam: { tx: number; ty: number; zoom: number },
-): (islandId: string) => { x: number; y: number } | null {
-  return (islandId: string) => {
-    const spec = islandSpecs.get(islandId);
-    if (!spec) return null;
-    const wpx = spec.cx * TILE_PX;
-    const wpy = spec.cy * TILE_PX;
-    return { x: wpx * cam.zoom + cam.tx, y: wpy * cam.zoom + cam.ty };
-  };
-}
+
