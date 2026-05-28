@@ -1370,6 +1370,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 100 },
     // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25 — pipe-mill forming stands.
     // 10000 concrete + 7000 stone + 3500 iron_ingot + 250 gear + 2500 clay + 300 copper_ingot = 23.8 t.
+    // cycle-break (P4C6): swapped steel_beam + microchip → iron_ingot + clay to avoid the
+    // microchip → pcb_etcher → ... → steel_beam 10-node cycle.
     placementCost: { concrete: 10000, stone: 7000, iron_ingot: 3500, gear: 250, clay: 2500, copper_ingot: 300 },
     glyph: '◯',
   },
@@ -1384,6 +1386,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 100 },
     // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25 — beam-mill rolling stands.
     // 10000 concrete + 6000 stone + 3000 iron_ingot + 200 gear + 2000 clay + 200 copper_ingot = 21.6 t.
+    // cycle-break (P4C6): swapped steel_beam + microchip → iron_ingot + clay to avoid the
+    // microchip → pcb_etcher → ... → steel_beam 10-node cycle.
     placementCost: { concrete: 10000, stone: 6000, iron_ingot: 3000, gear: 200, clay: 2000, copper_ingot: 200 },
     glyph: '▬',
   },
