@@ -49,6 +49,9 @@ function makeWorld(islands: IslandSpec[]): WorldState {
     latticeActive: false,
     latticeNodeIslands: [],
     commPackets: [],
+    totalCo2Kg: 0,
+    playerLat: null,
+    playerLon: null,
     oceanCells: new Map(),
     depthRevealedCells: new Set<string>(),
   } as WorldState;

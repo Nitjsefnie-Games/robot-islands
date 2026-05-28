@@ -75,6 +75,7 @@ function makeState(inventory: Partial<Record<ResourceId, number>> = {}): IslandS
     auraAmpVersion: 0,
     auraAmpCache: null,
     auraAmpCacheVersion: -1,
+    co2Kg: 0,
     funnelPending: emptyFunnel(),
     declaredAt: null,
     aiCoreCrafted: false,
