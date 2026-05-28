@@ -820,10 +820,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.single,
     fill: 0x8a6a3a,
     stroke: 0x402a10,
-    // §4.6 / §8.4: +100 cap on ONE player-chosen resource per instance.
-    // Generic storage — each PlacedBuilding picks its `cargoLabel` and only
-    // that resource's cap is raised.
-    storage: { category: 'generic', capacity: 100 },
+    // rev-16 §13.3: +500 cap on ONE player-chosen resource per instance.
+    // Pallet-rack section analog. Generic storage — each PlacedBuilding picks
+    // its `cargoLabel` and only that resource's cap is raised.
+    storage: { category: 'generic', capacity: 500 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 15, wood: 8 },
     glyph: '▦',
@@ -836,9 +836,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xa08a5a,
     stroke: 0x504028,
-    // §4.6 / §8.4: +2000 cap, dry-goods category only. Bumps every resource
+    // rev-16 §13.3: +200000 cap (200 t), dry-goods category only.
+    // Coban Machinery 50 t farm silo × 4 modules analog. Bumps every resource
     // whose RESOURCE_STORAGE_CATEGORY === 'dry_goods'.
-    storage: { category: 'dry_goods', capacity: 2000 },
+    storage: { category: 'dry_goods', capacity: 200000 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 40, wood: 15 },
     glyph: '▦',
@@ -1502,16 +1503,17 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x2a4078,
     stroke: 0x0a1a3a,
-    // §4.6 / §8.4: +2000 cap, liquids/gases category only.
-    storage: { category: 'liquid_gas', capacity: 2000 },
+    // rev-16 §13.3: +100000 cap (100 t), liquids/gases category only.
+    // Kennedy Tank mid-class industrial analog.
+    storage: { category: 'liquid_gas', capacity: 100000 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
     glyph: '▦',
   },
-  // §4.6 / §8.4: Cold Storage — T2 specialized storage for temperature-
+  // rev-16 §13.3: Cold Storage — T2 specialized storage for temperature-
   // sensitive resources (cryogenic compound, cryo-coolant, liquid nitrogen,
-  // certain plastics). +1500 cap. Cool steel-grey fill keys to the
-  // refrigeration role.
+  // certain plastics). +50000 cap (50 t). Refrigerated warehouse module
+  // analog. Cool steel-grey fill keys to the refrigeration role.
   cold_storage: {
     id: 'cold_storage',
     displayName: 'Cold Storage',
@@ -1520,14 +1522,15 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x8090a0,
     stroke: 0x2a3848,
-    storage: { category: 'temp_sensitive', capacity: 1500 },
+    storage: { category: 'temp_sensitive', capacity: 50000 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 90, iron_ingot: 35, wood: 10 },
     glyph: '▦',
   },
-  // §4.6 / §8.4: Component Warehouse — T2 specialized storage for
+  // rev-16 §13.3: Component Warehouse — T2 specialized storage for
   // manufactured T2-T3 components (wire, bolt, gear, microchip, etc.).
-  // +2000 cap. Industrial-tan fill keys to the parts-warehouse role.
+  // +20000 cap (20 t). Industrial pallet-racked warehouse analog.
+  // Industrial-tan fill keys to the parts-warehouse role.
   component_warehouse: {
     id: 'component_warehouse',
     displayName: 'Component Warehouse',
@@ -1536,7 +1539,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x806840,
     stroke: 0x3a2810,
-    storage: { category: 'components', capacity: 2000 },
+    storage: { category: 'components', capacity: 20000 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
     glyph: '▦',
