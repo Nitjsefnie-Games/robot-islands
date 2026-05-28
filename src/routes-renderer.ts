@@ -136,36 +136,44 @@ export class RouteRenderer {
 
   /** Build the dashed-line geometry for a single route.
    *  Phase 3: the animated layer uses a texture-stroked line; the static
-   *  layer is built as a fallback (hidden) in case the texture-stroke API
-   *  breaks in a future Pixi upgrade. */
+   *  layer carries a per-segment dashed-line fallback that's only executed
+   *  if `BUILD_STATIC_FALLBACK` is flipped on — see the const below. */
   private buildRouteGeometry(r: Route, entry: RouteRenderState): void {
     const color = colorForRouteType(r.type);
     const alpha = 0.55;
 
-    // Phase 2 fallback: build static dashed layer once.
-    const DASH_LEN_WORLD_PX = 8;
-    const GAP_LEN_WORLD_PX = 4;
-    const dx = entry.toX - entry.fromX;
-    const dy = entry.toY - entry.fromY;
-    const totalLen = Math.sqrt(dx * dx + dy * dy);
-    if (totalLen > 0) {
-      const ux = dx / totalLen;
-      const uy = dy / totalLen;
-      const period = DASH_LEN_WORLD_PX + GAP_LEN_WORLD_PX;
-      let drawn = 0;
-      while (drawn < totalLen) {
-        const startT = drawn;
-        const endT = Math.min(totalLen, drawn + DASH_LEN_WORLD_PX);
-        if (endT > startT) {
-          const sx = entry.fromX + ux * startT;
-          const sy = entry.fromY + uy * startT;
-          const ex = entry.fromX + ux * endT;
-          const ey = entry.fromY + uy * endT;
-          entry.staticGraphics.moveTo(sx, sy).lineTo(ex, ey);
+    // Phase-2-style per-segment dashed fallback. Gated OFF by default:
+    // every cacheKey-change otherwise wastes O(totalLen / period) Graphics
+    // ops building geometry that's never painted (the static layer is
+    // hidden below). Flip `BUILD_STATIC_FALLBACK` to `true` and remove the
+    // `entry.staticGraphics.visible = false` line if the Phase-3 texture-
+    // stroke pipeline breaks in a future Pixi upgrade.
+    const BUILD_STATIC_FALLBACK = false;
+    if (BUILD_STATIC_FALLBACK) {
+      const DASH_LEN_WORLD_PX = 8;
+      const GAP_LEN_WORLD_PX = 4;
+      const dx = entry.toX - entry.fromX;
+      const dy = entry.toY - entry.fromY;
+      const totalLen = Math.sqrt(dx * dx + dy * dy);
+      if (totalLen > 0) {
+        const ux = dx / totalLen;
+        const uy = dy / totalLen;
+        const period = DASH_LEN_WORLD_PX + GAP_LEN_WORLD_PX;
+        let drawn = 0;
+        while (drawn < totalLen) {
+          const startT = drawn;
+          const endT = Math.min(totalLen, drawn + DASH_LEN_WORLD_PX);
+          if (endT > startT) {
+            const sx = entry.fromX + ux * startT;
+            const sy = entry.fromY + uy * startT;
+            const ex = entry.fromX + ux * endT;
+            const ey = entry.fromY + uy * endT;
+            entry.staticGraphics.moveTo(sx, sy).lineTo(ex, ey);
+          }
+          drawn += period;
         }
-        drawn += period;
+        entry.staticGraphics.stroke({ width: 1.5, color, alpha });
       }
-      entry.staticGraphics.stroke({ width: 1.5, color, alpha });
     }
 
     // Phase 3: texture-stroked animated line.
@@ -179,8 +187,8 @@ export class RouteRenderer {
       .lineTo(entry.toX, entry.toY)
       .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
 
-    // Hide the fallback static layer — if the texture-stroke ever breaks,
-    // re-enable this line and delete the animated-layer build above.
+    // The static layer is the per-segment dashed fallback — kept hidden.
+    // See `BUILD_STATIC_FALLBACK` above for the flip-on instructions.
     entry.staticGraphics.visible = false;
   }
 
