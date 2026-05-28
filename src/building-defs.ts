@@ -370,11 +370,15 @@ export type BuildingDefId =
   | 'weather_station_t2'
   | 'advanced_weather_station_t3'
   // §8.5 power generation
+  | 'water_wheel'
   | 'wind_turbine'
+  | 'windmill_t0'
   | 'battery_bank'
+  | 'bulk_concrete_plant'
   | 'capacitor_bank'
   | 'cryogenic_generator'
   | 'flywheel_array'
+  | 'newcomen_engine'
   | 'nuclear_reactor'
   // §8.7 cooling / treatment
   | 'cooling_tower'
@@ -840,6 +844,24 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { stone: 50, wood: 25 },
     glyph: '❀',
   },
+  // rev-16 §10.15-A — bootstrap power, no fuel, shoreline only.
+  // BOM source: rev-16 §4.3 + 19th-c. overshot watermill analog.
+  // 50 wood frame + 30 stone foundation + 5 iron axle = 85 kg.
+  water_wheel: {
+    id: 'water_wheel',
+    displayName: 'Water Wheel',
+    category: 'power',
+    // Intended tier: 0 — using 1 because type system only supports 1-6 currently.
+    tier: 1,
+    footprint: SHAPES.single,
+    fill: 0x6a5b3e,
+    stroke: 0x2a1e08,
+    power: { produces: 20 },
+    // 'water_edge' is not in TerrainKind; 'water' is the existing shoreline kind.
+    requiredTile: ['water'],
+    placementCost: { wood: 50, stone: 30, iron_ingot: 5 },
+    glyph: '⌬',
+  },
   // §8.5 T1 power: Wind Turbine (1x1, coast tile). Free output — no fuel
   // consumption. Lower output than Solar's daytime peak; complements
   // night-hour solar gaps on coastal islands.
@@ -855,6 +877,23 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiredTile: ['water'],
     placementCost: { steel: 30, wood: 10 },
     glyph: '✦',
+  },
+  // rev-16 §10.15-A — bootstrap power, no fuel, open-air grass.
+  // BOM source: rev-16 §4.3 + Dutch tjasker analog (wooden sail-mill).
+  // 80 wood + 20 stone + 3 iron = 103 kg.
+  windmill_t0: {
+    id: 'windmill_t0',
+    displayName: 'Windmill (T0)',
+    category: 'power',
+    // Intended tier: 0 — using 1 because type system only supports 1-6 currently.
+    tier: 1,
+    footprint: SHAPES.single,
+    fill: 0x9aa07a,
+    stroke: 0x4a4830,
+    power: { produces: 15 },
+    requiredTile: ['grass'],
+    placementCost: { wood: 80, stone: 20, iron_ingot: 3 },
+    glyph: '※',
   },
   // §8.5 T2 battery — 5 kWh power buffer. Zero standby; charges from
   // any island power surplus, discharges into deficit. Capacity is set
@@ -945,6 +984,21 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 60, wood: 20 },
     glyph: '♨',
+  },
+  // rev-16 §12.5 Bonus — pre-electric thermal power, burns coal/charcoal.
+  // BOM source: rev-16 §4.3 + Smeaton's 1772 cylinder-pump-beam reconstruction.
+  // 200 stone foundation + 80 iron beam + 40 copper boiler + 30 wood scaffolding + 5 bolt = 355 kg.
+  newcomen_engine: {
+    id: 'newcomen_engine',
+    displayName: 'Newcomen Engine',
+    category: 'power',
+    tier: 1,
+    footprint: SHAPES.single,
+    fill: 0x806040,
+    stroke: 0x301808,
+    power: { produces: 4 },
+    placementCost: { stone: 200, iron_ingot: 80, copper_ingot: 40, wood: 30, bolt: 5 },
+    glyph: '⚒',
   },
   // §12.3: Foundation Kit Assembler. A T1 manufacturing building dedicated
   // to crafting the Standard Foundation Kit consumed by §12 settlement
@@ -2222,6 +2276,23 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     placementCost: { steel: 150, reality_anchor: 75 },
     glyph: '✦',
+  },
+  // rev-16 §10.13 — industrial-scale concrete output, 100 concrete / 60 s = 6 t/hr.
+  // BOM source: Schwing Stetter CP-30 batching-plant datasheet.
+  // 8000 steel structure + 2000 stone aggregate-bin + 500 microchip control
+  // + 500 pipe slurry + 200 gear mixer + 100 wire = 12.5 t embodied.
+  bulk_concrete_plant: {
+    id: 'bulk_concrete_plant',
+    displayName: 'Bulk Concrete Plant',
+    category: 'manufacturing',
+    tier: 6,
+    // SHAPES.square3 — rect3x4 not in catalog.
+    footprint: SHAPES.square3,
+    fill: 0xa0a0a0,
+    stroke: 0x303030,
+    power: { consumes: 2000 },
+    placementCost: { steel_beam: 8000, stone: 2000, microchip: 500, pipe: 500, gear: 200, wire: 100 },
+    glyph: '▣',
   },
   // §14.3 / §14.10: Scanner Sat Assembly — produces Scanner Sat payloads
   // for §14.3 discovery + weather observation.
