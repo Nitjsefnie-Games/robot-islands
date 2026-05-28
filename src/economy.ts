@@ -207,6 +207,9 @@ export interface CableComponentBalance {
   readonly requiredTransmission: number;
 }
 
+/** Shorthand for the per-resource stockpile map used in `IslandState`. */
+export type Inventory = Record<ResourceId, number>;
+
 /**
  * The mutable per-island runtime state. `IslandSpec` in world.ts is the
  * static definition (shape, terrain, building positions); `IslandState`
