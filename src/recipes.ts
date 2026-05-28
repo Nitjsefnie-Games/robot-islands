@@ -1700,8 +1700,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T1 smelting — rebalanced for idle-game scale, step #19 (×10)
   smelter: {
     cycleSec: 27, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
-    inputs: { iron_ore: 1, coal: 1 },
-    outputs: { iron_ingot: 1 },
+    inputs: { iron_ore: 10, coal: 3 },
+    outputs: { iron_ingot: 6, slag: 2, co: 5 },
     category: 'smelting',
   },
 
@@ -1755,20 +1755,22 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T2 smelting — rebalanced for idle-game scale, step #19 (×40)
   coke_oven: {
     cycleSec: 133, // rebalanced for idle-game scale, step #19 (×40: was 10s); 2026-05-18 ÷3 for display visibility (was 400s)
-    inputs: { coal: 1 },
-    outputs: { coke: 1 },
+    inputs: { coal: 10 },
+    outputs: { coke: 7, wood_tar: 0.4, hydrogen: 0.5, co2: 1, refinery_gas: 1.1 },
     category: 'smelting',
   },
   blast_furnace: {
     cycleSec: 160, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
-    inputs: { iron_ingot: 1, coke: 1 },
-    outputs: { pig_iron: 1 },
+    inputs: { iron_ore: 35, coke: 18, limestone: 10 },
+    outputs: { pig_iron: 20, slag: 6, co2: 35 },
     category: 'smelting',
+    exogenousFlow: 'BF-top-gas-trace',
+    exogenousFlowKg: 0,
   },
   steel_mill: {
     cycleSec: 200, // rebalanced for idle-game scale, step #19 (×40: was 15s); 2026-05-18 ÷3 for display visibility (was 600s)
-    inputs: { pig_iron: 1 },
-    outputs: { steel: 1, slag: 1 },
+    inputs: { pig_iron: 100, quicklime: 7, oxygen: 9 },
+    outputs: { steel: 85, slag: 23, co: 7, co2: 1 },
     category: 'smelting',
   },
   // §6.7 Steel Mill scrap-substitution variant. Same cycleSec + outputs as
@@ -1835,9 +1837,11 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T3 smelting (higher-throughput steel alternative) — rebalanced for idle-game scale, step #19 (×20)
   electric_arc_furnace: {
     cycleSec: 40, // rebalanced for idle-game scale, step #19 (×20: was 6s); 2026-05-18 ÷3 for display visibility (was 120s)
-    inputs: { pig_iron: 1 },
-    outputs: { steel: 1 },
+    inputs: { scrap: 100, quicklime: 3 },
+    outputs: { steel: 95, slag: 5, co2: 1 },
     category: 'smelting',
+    exogenousFlow: 'electrode-graphite-consumed',
+    exogenousFlowKg: 0,
   },
 
   // ---------------------------------------------------------------------------
