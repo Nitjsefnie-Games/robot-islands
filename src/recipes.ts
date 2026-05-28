@@ -1442,7 +1442,8 @@ export type RecipeCategory =
   | 'manufacturing'
   | 'electronics'
   | 'power'
-  | 'logistics';
+  | 'logistics'
+  | 'environment';
 
 /** All recipe categories, useful for initialising per-category records to 1.0. */
 export const ALL_RECIPE_CATEGORIES: ReadonlyArray<RecipeCategory> = [
@@ -1453,6 +1454,7 @@ export const ALL_RECIPE_CATEGORIES: ReadonlyArray<RecipeCategory> = [
   'electronics',
   'power',
   'logistics',
+  'environment',
 ];
 
 /**
@@ -3628,6 +3630,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { concentrated_brine: 4 },
     outputs: { heavy_water: 1 },
     category: 'chemistry',
+  },
+  // §si-units rev-16 §7.4 — synthetic no-op recipe for CO₂ sink.
+  plant_a_tree: {
+    cycleSec: 60,
+    inputs: {},
+    outputs: {},
+    category: 'environment',
   },
 };
 
