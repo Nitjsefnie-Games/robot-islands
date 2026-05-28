@@ -255,6 +255,10 @@ export interface IslandState {
    *  it poisons the cache for all subsequent reads. */
   auraAmpCache: Map<NodeId, number> | null;
   auraAmpCacheVersion: number;
+  /** §si-units-2026-05-28 Phase 1: per-island cumulative CO₂ emitted in kg.
+   *  Phase 2 of the rework adds per-recipe emissions; Phase 5 drains via
+   *  wastewater_treatment + exhaust_scrubber; Phase 6 reads for weather. */
+  co2Kg: number;
   /** Pending bonus XP credits per resource per §10 (Funneling). When a route
    *  delivers `r` to this island and the island is below the funneling tier
    *  cap, `r × xp_weight[r] × funneling_bonus_percent` accumulates here. The

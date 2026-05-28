@@ -165,6 +165,12 @@ export interface SerializedWorld {
   /** Ocean-layer §5 — depth-revealed cell keys as a sorted array
    *  (mirrors `revealedCells`). */
   readonly depthRevealedCells?: ReadonlyArray<string>;
+  /** §si-units Phase 1 — global CO₂ pool in kg. */
+  readonly totalCo2Kg: number;
+  /** §si-units Phase 1 — player geo-latitude in [-90, +90] or null. */
+  readonly playerLat: number | null;
+  /** §si-units Phase 1 — player geo-longitude in [-180, +180] or null. */
+  readonly playerLon: number | null;
 }
 
 /** Top-level snapshot. The `v` field is the schema-version anchor: this
@@ -537,6 +543,9 @@ export function serializeWorld(
       latticeActive: world.latticeActive,
       latticeNodeIslands: [...world.latticeNodeIslands],
       commPackets: [...world.commPackets],
+      totalCo2Kg: world.totalCo2Kg,
+      playerLat: world.playerLat,
+      playerLon: world.playerLon,
       // §2.1 infinite map — sorted for deterministic save-blob ordering
       // (mirror of `revealedCells`). Absent if the world predates the
       // field (`makeInitialWorld` always seeds it on a fresh game).
@@ -714,6 +723,9 @@ export function deserializeWorld(
     latticeActive: snapshot.world.latticeActive ?? false,
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
     commPackets: [...snapshot.world.commPackets],
+    totalCo2Kg: snapshot.world.totalCo2Kg ?? 0,
+    playerLat: snapshot.world.playerLat ?? null,
+    playerLon: snapshot.world.playerLon ?? null,
     generatedCells: deserializeGeneratedCells(islands, snapshot.world.generatedCells),
     oceanCells: new Map(snapshot.world.oceanCells ?? []),
     depthRevealedCells: new Set(snapshot.world.depthRevealedCells ?? []),
