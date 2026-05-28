@@ -226,6 +226,46 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     // air is exogenous — never accrued, never decremented.
     expect(state.inventory.air ?? 0).toBe(0);
   });
+
+  it('charcoal_kiln accrues co2 output to state.co2Kg via direct path', () => {
+    const defs = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    // Strip power so no power plant is needed.
+    const { power: _p1, ...ckRest } = defs.charcoal_kiln;
+    defs.charcoal_kiln = ckRest as BuildingDef;
+
+    const CK: PlacedBuilding = { id: 'b-ck', defId: 'charcoal_kiln', x: 0, y: 0 };
+    const CF: PlacedBuilding = { id: 'b-cf', defId: 'coal_furnace', x: 2, y: 0 };
+
+    const state = makeState({
+      buildings: [CK, CF],
+      inventory: { ...blankInventory(), wood: 1000, coal: 1000 },
+      storageCaps: blankCaps(10_000),
+    });
+    advanceIsland(state, 33_000, { defs }); // 33 s = one cycle
+    // Recipe: 8 wood → 2 charcoal + 1 wood_tar + 2 co2 + 3 water_vapor
+    expect(state.inventory.co2).toBeCloseTo(2, 6);
+    expect(state.co2Kg).toBeCloseTo(2, 6);
+  });
+
+  it('limekiln accrues both process-CO₂ (inventory) and fuel-CO₂ (exogenous flow)', () => {
+    const defs = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    const { power: _p1, ...lkRest } = defs.limekiln;
+    defs.limekiln = lkRest as BuildingDef;
+
+    const LK: PlacedBuilding = { id: 'b-lk', defId: 'limekiln', x: 0, y: 0 };
+    const CF: PlacedBuilding = { id: 'b-cf', defId: 'coal_furnace', x: 2, y: 0 };
+
+    const state = makeState({
+      buildings: [LK, CF],
+      inventory: { ...blankInventory(), limestone: 1000, coal: 1000 },
+      storageCaps: blankCaps(10_000),
+    });
+    advanceIsland(state, 40_000, { defs }); // 40 s = one cycle
+    // Recipe: 25 limestone → 14 quicklime + 11 co2  [+5 kg fuel-combustion-CO₂]
+    expect(state.inventory.quicklime).toBeCloseTo(14, 6);
+    expect(state.inventory.co2).toBeCloseTo(11, 6); // inventory only
+    expect(state.co2Kg).toBeCloseTo(16, 6); // 11 process + 5 exogenous
+  });
 });
 
 describe('tutorial production flags (lubricantProduced / boltProduced)', () => {

@@ -1677,7 +1677,7 @@ export function advanceIsland(
     // integrate one constant solar multiplier across all four phases.
     // Wall-clock conversion: `t + wallOffset` lifts the perf-domain segment
     // time into the Date.now() domain `solarMultiplier` expects per spec.
-    const { production, consumption, net, power } = computeRates(
+    const { byBuilding, production, consumption, net, power } = computeRates(
       state,
       effectiveCtx,
       t,
@@ -1771,6 +1771,15 @@ export function advanceIsland(
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps, baseMult);
+      // §10 CO₂ accrual — Phase 2 hook
+      // Path 1: co2 produced as a regular recipe output
+      state.co2Kg += (production.co2 ?? 0) * dtSec;
+      // Path 2: exogenous fuel-combustion CO₂ (not in outputs ledger)
+      for (const br of byBuilding) {
+        if (br.recipe.exogenousFlow === 'fuel-combustion-CO₂' && br.recipe.exogenousFlowKg) {
+          state.co2Kg += br.recipe.exogenousFlowKg * br.effectiveRate * dtSec;
+        }
+      }
       accrueXp(state, production, consumption, dtSec, 1, skillMul.xpGain);
       // §13.3 Battery buffer — apply charge/discharge over the segment.
       if (rawBalance > 0 && maxCap > 0) {
