@@ -333,8 +333,13 @@ async function main(): Promise<void> {
     oceanLayer = renderOceanFromState(worldState, WORLD_HALF_SIZE_TILES);
     islandLayer = renderIslandLayer(worldState);
     fogOverlayLayer = renderFogOverlayFromState(worldState);
-    // Insert at the same Z slots: ocean 0, islands 1, fog 2, glyphs 3
-    // (mounted once at startup; rebuilt below by refresh), weather 4+.
+    // Insert at the same Z slots: ocean 0, islands 1, fog 2.
+    // Slot 3 (and the higher slots) are populated by appended children at
+    // startup (glyphs, weather, satellite/antenna overlays, sonar ring,
+    // grid) AND by post-startup `addChildAt` inserts for the routes layers
+    // (static 4 / animated 5 / overlay 6) and the drone + settlement layers
+    // (drones 7-8, settlement 9). This rebuild only re-anchors slots 0/1/2;
+    // every other child rides along under Pixi's auto-reindex.
     world.removeChild(oldOcean);
     world.removeChild(oldIslands);
     world.removeChild(oldFog);
