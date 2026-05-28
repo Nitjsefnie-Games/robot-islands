@@ -1588,8 +1588,25 @@ Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div>
           <li><strong>Overlay layer dominates:</strong> the per-frame chevron + pulse + draft overlay rebuild is cheap on paper but at &gt; 50 routes the chevron count balloons. Possible follow-up: cache the chevron geometry per route per <code>inFlight.length</code> too. Mark as TODO in the post-impl commit; the current spec doesn't gate on this.</li>
         </ul>
 
-        <h4>Measured impact (filled in by Phase 5)</h4>
-        <p class="body"><em>Implementer fills the table below from the post-Phase-3 cpuprofile + profile-economy.ts run. The X.XX placeholders are intentional — the plan author cannot know these without running the profile.</em></p>
+        <h4>Measured impact (2026-05-28, post-Phase-3 CDP profile)</h4>
+        <p class="body"><strong>Binding gate (paintLayer self &lt; 1 %): <span style="color:#E08B7F">NOT MET</span>.</strong>
+          The paintLayer successor (<code>paintOverlay</code> @ <code>src/routes-renderer.ts:223</code>)
+          measured 3.02 % self — a real 17 % drop from 3.65 % baseline, but
+          well above the &lt; 1 % spec target. The shortfall is structural,
+          not implementation-quality: Phase 3 verified that Pixi 8's
+          <code>Graphics.stroke({ texture })</code> bakes UVs into vertex
+          geometry at <code>buildContextBatches</code> time and exposes no
+          runtime tilePosition / matrix knob for in-place UV scroll. The
+          spec assumed such an API existed; it doesn't. The Phase 3
+          fallback (per-frame <code>clear()</code> + one
+          <code>moveTo</code>/<code>lineTo</code>/<code>stroke()</code> per
+          route with a phase-shifted Matrix on the stroke texture) is
+          materially cheaper than Phase 2's per-segment loop but cannot
+          fully eliminate per-frame Graphics work.</p>
+        <p class="body">The improvements ARE real across the down-chain
+          geometry pipeline — see the table below. The next radical step
+          (spec §10 Risk 4: shader-uniform / custom Mesh) remains open as a
+          future follow-up. <strong>This rework lands as the partial win.</strong></p>
         <table class="tbl">
           <thead><tr>
             <th>Metric</th>
@@ -1598,42 +1615,85 @@ Co-Authored-By: Kimi K2.6 &lt;noreply@kimi.com&gt;</pre></div>
             <th>Δ</th>
           </tr></thead>
           <tbody>
-            <tr><td class="slate">paintLayer self %</td><td class="mono">3.65 %</td><td class="mono">X.XX %</td><td class="mono">-X.XX pp</td></tr>
-            <tr><td class="slate">routes-ui.refresh inclusive %</td><td class="mono">31.14 %</td><td class="mono">X.XX %</td><td class="mono">-X.XX pp</td></tr>
-            <tr><td class="slate">GraphicsContext.stroke self %</td><td class="mono">11.55 %</td><td class="mono">X.XX %</td><td class="mono">-X.XX pp</td></tr>
-            <tr><td class="slate">buildLine self %</td><td class="mono">7.36 %</td><td class="mono">X.XX %</td><td class="mono">-X.XX pp</td></tr>
-            <tr><td class="slate">triangulateWithHoles self %</td><td class="mono">3.12 %</td><td class="mono">X.XX %</td><td class="mono">-X.XX pp</td></tr>
-            <tr><td class="slate">handleFillObject self %</td><td class="mono">3.34 %</td><td class="mono">X.XX %</td><td class="mono">-X.XX pp</td></tr>
-            <tr><td class="slate">Color._normalize self %</td><td class="mono">2.82 %</td><td class="mono">X.XX %</td><td class="mono">-X.XX pp</td></tr>
-            <tr><td class="slate">GC self %</td><td class="mono">9.15 %</td><td class="mono">X.XX %</td><td class="mono">-X.XX pp</td></tr>
-            <tr><td class="slate">paintLayer wall-clock @ 50 routes</td><td class="mono">TBM</td><td class="mono">X.XX ms</td><td class="mono">—</td></tr>
-            <tr><td class="slate">home-island mean tick (sanity)</td><td class="mono">(baseline)</td><td class="mono">X.XX ms</td><td class="mono">±X.XX %</td></tr>
+            <tr><td class="slate">paintLayer (→ paintOverlay) self %</td><td class="mono">3.65 %</td><td class="mono">3.02 %</td><td class="mono">-0.63 pp (-17 %)</td></tr>
+            <tr><td class="slate">routes-ui.refresh (→ renderer.update) inclusive %</td><td class="mono">31.14 %</td><td class="mono">26.65 %</td><td class="mono">-4.49 pp (-14 %)</td></tr>
+            <tr><td class="slate">GraphicsContext.stroke self %</td><td class="mono">11.55 %</td><td class="mono">9.58 %</td><td class="mono">-1.97 pp (-17 %)</td></tr>
+            <tr><td class="slate">buildLine self %</td><td class="mono">7.36 %</td><td class="mono">7.30 %</td><td class="mono">-0.06 pp (-1 %)</td></tr>
+            <tr><td class="slate">triangulateWithHoles self %</td><td class="mono">3.12 %</td><td class="mono">2.01 %</td><td class="mono">-1.11 pp (-36 %)</td></tr>
+            <tr><td class="slate">handleFillObject self %</td><td class="mono">3.34 %</td><td class="mono">2.47 %</td><td class="mono">-0.87 pp (-26 %)</td></tr>
+            <tr><td class="slate">Color._normalize self %</td><td class="mono">2.82 %</td><td class="mono">2.08 %</td><td class="mono">-0.74 pp (-26 %)</td></tr>
+            <tr><td class="slate">GC self %</td><td class="mono">9.15 %</td><td class="mono">6.71 %</td><td class="mono">-2.44 pp (-27 %)</td></tr>
+            <tr><td class="slate">RouteRenderer.update wall-clock @ 50 routes</td><td class="mono">TBM</td><td class="mono">~0.76 ms</td><td class="mono">under 1.5 ms gate ✓</td></tr>
+            <tr><td class="slate">home-island mean tick (sanity)</td><td class="mono">~1.04 ms</td><td class="mono">1.04 ms</td><td class="mono">unchanged ✓</td></tr>
           </tbody>
         </table>
+        <p class="body"><strong>Tests:</strong> 2215 / 2215 passing (was 2207 at Phase 0 + 8 added in Phase 4).</p>
+        <p class="body"><strong>Where the savings came from:</strong>
+          The Phase 3 fallback emits ONE
+          <code>moveTo</code>+<code>lineTo</code>+<code>stroke</code> per
+          route per frame instead of Phase 2's
+          <code>~totalLen/dashPeriod</code> segment commands. Result: the
+          down-chain Pixi pipeline (<code>buildContextBatches</code>,
+          <code>triangulateWithHoles</code>, <code>handleFillObject</code>,
+          <code>Color._normalize</code>) processes ~5-15 % fewer vertices
+          per route per frame. The GC drop (27 %) is downstream of the same
+          effect — fewer per-frame allocations in the geometry pipeline.
+          <code>buildLine</code>'s near-flat 7.36 → 7.30 % self is the
+          structural ceiling under the Pixi 8 stroke-texture pipeline:
+          rebuilding line geometry per frame is genuinely the cost.</p>
+        <p class="body"><strong>Open follow-up:</strong> If a future
+          version of Pixi exposes runtime UV-matrix writes on
+          stroke-texture commands, the existing
+          <code>RouteRenderer.updateAnimationOnly</code> can swap from the
+          fallback to the projected one-numeric-write path — see the JSDoc
+          at <code>src/routes-renderer.ts:180-194</code> for the
+          source-file evidence captured at this Pixi version. Until then,
+          the spec §10 Risk 4 shader-uniform / custom-Mesh path is the
+          next radical option if the perf budget tightens further.</p>
 
-        <h4>Final commit message</h4>
-        <div class="code"><pre>perf(routes-ui): document measured render-perf impact
+        <h4>Final commit message (used for this docs commit)</h4>
+        <div class="code"><pre>perf(routes-ui): document measured render-perf impact — partial win
 
 Phases 1-4 land the cache + world-space migration + texture-stroke
 animation + test coverage. Re-profile against the live tab at
-islands.nitjsefni.eu with the same save dump used for the baseline
-spec capture (/tmp/ri-real-hw-v2.cpuprofile):
+islands.nitjsefni.eu post-Phase-3:
 
   metric                       before    after    delta
   ----                         ------    -----    -----
-  paintLayer self %            3.65 %    X.XX %   -X.XX pp
-  refresh inclusive %         31.14 %    X.XX %   -X.XX pp
-  GraphicsContext.stroke %    11.55 %    X.XX %   -X.XX pp
-  buildLine self %             7.36 %    X.XX %   -X.XX pp
-  triangulateWithHoles %       3.12 %    X.XX %   -X.XX pp
-  handleFillObject self %      3.34 %    X.XX %   -X.XX pp
-  Color._normalize self %      2.82 %    X.XX %   -X.XX pp
-  GC self %                    9.15 %    X.XX %   -X.XX pp
-  perf-test 50 routes/update      TBM   X.XX ms
+  paintLayer (→ paintOverlay)  3.65 %    3.02 %   -0.63 pp (-17 %)
+  refresh (→ update) incl %   31.14 %   26.65 %   -4.49 pp (-14 %)
+  GraphicsContext.stroke %    11.55 %    9.58 %   -1.97 pp (-17 %)
+  buildLine self %             7.36 %    7.30 %   -0.06 pp ( -1 %)
+  triangulateWithHoles %       3.12 %    2.01 %   -1.11 pp (-36 %)
+  handleFillObject self %      3.34 %    2.47 %   -0.87 pp (-26 %)
+  Color._normalize self %      2.82 %    2.08 %   -0.74 pp (-26 %)
+  GC self %                    9.15 %    6.71 %   -2.44 pp (-27 %)
+  perf-test 50 routes/update      TBM    ~0.76 ms (under 1.5 ms gate)
 
-Binding gate (paintLayer self &lt; 1 %): &lt;MET / NOT MET&gt;.
+Binding gate (paintLayer self &lt; 1 %): NOT MET.
 
-Tests: 22XX/22XX passing.
+The shortfall is structural, not implementation-quality. Phase 3
+verified that Pixi 8's `Graphics.stroke({ texture })` bakes UVs
+into vertex geometry at `buildContextBatches` time and exposes no
+runtime tilePosition / matrix knob for in-place UV scroll. The
+spec assumed such an API existed; it doesn't. The Phase 3 fallback
+(per-frame clear + 1 stroke per route with phase-shifted matrix)
+is materially cheaper than Phase 2's per-segment loop but cannot
+fully eliminate per-frame Graphics work.
+
+The down-chain pipeline still benefited — `triangulateWithHoles`,
+`handleFillObject`, `Color._normalize` all dropped 26-36 % because
+the per-route stroke emits ~5-15 % fewer vertices than Phase 2.
+GC self % dropped 27 % from the corresponding allocation savings.
+
+Tests: 2215 / 2215 passing.
+home-island mean tick (sanity): 1.04 ms — unchanged from baseline.
+
+Open follow-up: if a future Pixi version exposes runtime UV-matrix
+writes on stroke-texture commands, `RouteRenderer.updateAnimation-
+Only` swaps from the fallback to the one-numeric-write path. Until
+then, spec §10 Risk 4 (shader-uniform / custom Mesh) is the next
+radical option.
 
 Spec: docs/superpowers/specs/2026-05-27-routes-ui-render-perf
 Plan: docs/superpowers/plans/2026-05-28-routes-ui-render-perf
