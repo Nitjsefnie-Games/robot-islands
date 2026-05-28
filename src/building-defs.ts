@@ -667,7 +667,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1a1308,
     power: { consumes: 120 },
     requiredTile: ['ore'],
-    placementCost: { stone: 80, wood: 40, iron_ingot: 30 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12 — deep-shaft head-frame.
+    // 12000 concrete + 8000 stone + 3000 iron_ingot + 500 gear + 2000 clay = 26.0 t.
+    placementCost: { concrete: 12000, stone: 8000, iron_ingot: 3000, gear: 500, clay: 2000 },
     glyph: '▦',
   },
   workshop: {
@@ -760,8 +762,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.single,
     fill: 0x4a6b78,
     stroke: 0x14222a,
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 25, wood: 15 },
+    // BOM source: DOT heliport design guide — small UAS landing pad.
+    // 2000 concrete + 1000 stone + 500 iron_ingot + 100 gear = 3.7 t.
+    placementCost: { concrete: 2000, stone: 1000, iron_ingot: 500, gear: 100 },
     glyph: '⤴',
   },
   logger: {
@@ -793,7 +796,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x0a1e08,
     power: { consumes: 40 },
     requiredTile: ['tree'],
-    placementCost: { stone: 60, wood: 30, iron_ingot: 20 },
+    // BOM source: Roberts, *Engineering Workshop* — logging camp heavy gantry.
+    // 8000 concrete + 5000 stone + 2000 iron_ingot + 300 gear + 200 copper_ingot = 15.8 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2000, gear: 300, copper_ingot: 200 },
     glyph: '⌬',
   },
   smelter: {
@@ -1285,7 +1290,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6e7480,
     stroke: 0x2a2e36,
     power: { consumes: 120 },
-    placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
+    // BOM source: IspatGuru, "EAF mini-mill scrap yard" — scrap-charging crane + EAF shell.
+    // 20000 concrete + 15000 stone + 8000 iron_ingot + 500 gear + 5000 clay + 500 copper_ingot = 49.5 t.
+    placementCost: { concrete: 20000, stone: 15000, iron_ingot: 8000, gear: 500, clay: 5000, copper_ingot: 500 },
     glyph: '△',
   },
   // §6.7: Oxygen Converter — T3 smelting building that consumes pig iron +
@@ -1318,8 +1325,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x707080,        // slate-grey (industrial waste)
     stroke: 0x303038,
     power: { consumes: 100 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 100, iron_ingot: 40, wood: 15 },
+    // BOM source: IspatGuru, "Slag reprocessing plant" — magnetic separator + ball mill.
+    // 8000 concrete + 6000 stone + 2000 iron_ingot + 300 gear + 400 copper_ingot = 17.0 t.
+    placementCost: { concrete: 8000, stone: 6000, iron_ingot: 2000, gear: 300, copper_ingot: 400 },
     glyph: '△',
   },
   assembler: {
@@ -1331,8 +1339,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xff8c2a,
     stroke: 0x6e3500,
     power: { consumes: 80 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — medium assembly bench.
+    // 7000 concrete + 4000 stone + 2000 iron_ingot + 500 glass + 300 copper_ingot = 13.8 t.
+    placementCost: { concrete: 7000, stone: 4000, iron_ingot: 2000, glass: 500, copper_ingot: 300 },
     glyph: '⚙',
   },
   // Phase 6 — T2 rolling mills (§6.3 / §7.1)
@@ -1345,7 +1354,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xb0b8c0,
     stroke: 0x505860,
     power: { consumes: 100 },
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: IspatGuru, "Cold Rolling Mill" — 4-stand finishing-mill installation (scaled).
+    // 12000 concrete + 8000 stone + 4000 iron_ingot + 300 gear + 3000 clay = 27.6 t.
+    placementCost: { concrete: 12000, stone: 8000, iron_ingot: 4000, gear: 300, clay: 3000 },
     glyph: '▭',
   },
   pipe_mill: {
@@ -1357,7 +1368,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x9098a0,
     stroke: 0x404850,
     power: { consumes: 100 },
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25 — pipe-mill forming stands.
+    // 10000 concrete + 7000 stone + 3500 iron_ingot + 250 gear + 2500 clay + 300 copper_ingot = 23.8 t.
+    placementCost: { concrete: 10000, stone: 7000, iron_ingot: 3500, gear: 250, clay: 2500, copper_ingot: 300 },
     glyph: '◯',
   },
   beam_mill: {
@@ -1369,7 +1382,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x707880,
     stroke: 0x303840,
     power: { consumes: 100 },
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25 — beam-mill rolling stands.
+    // 10000 concrete + 6000 stone + 3000 iron_ingot + 200 gear + 2000 clay + 200 copper_ingot = 21.6 t.
+    placementCost: { concrete: 10000, stone: 6000, iron_ingot: 3000, gear: 200, clay: 2000, copper_ingot: 200 },
     glyph: '▬',
   },
   // Phase 6 — T2 mechanical fasteners (§6.3)
@@ -1382,7 +1397,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8a9098,
     stroke: 0x3a4048,
     power: { consumes: 80 },
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: IspatGuru, "Bearing assembly line" — raceway grinder + press.
+    // 10000 concrete + 6000 stone + 3000 iron_ingot + 200 gear + 2000 clay + 300 copper_ingot = 21.7 t.
+    placementCost: { concrete: 10000, stone: 6000, iron_ingot: 3000, gear: 200, clay: 2000, copper_ingot: 300 },
     glyph: '◉',
   },
   spring_press: {
@@ -1394,7 +1411,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa0a6a0,
     stroke: 0x404640,
     power: { consumes: 60 },
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: IspatGuru, "Spring coiling press" — CNC spring former.
+    // 8000 concrete + 5000 stone + 2500 iron_ingot + 150 gear + 1500 clay + 250 copper_ingot = 17.6 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2500, gear: 150, clay: 1500, copper_ingot: 250 },
     glyph: '⌇',
   },
   // Phase 6 — T2 mechanical components (§6.3)
@@ -1407,7 +1426,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8a8060,
     stroke: 0x3a3020,
     power: { consumes: 80 },
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: IspatGuru, "Cable stranding line" — planetary cage strander.
+    // 9000 concrete + 6000 stone + 2800 iron_ingot + 180 gear + 2000 clay + 400 copper_ingot = 20.6 t.
+    placementCost: { concrete: 9000, stone: 6000, iron_ingot: 2800, gear: 180, clay: 2000, copper_ingot: 400 },
     glyph: '⌇',
   },
   // Phase 6 — T3 battery factory (§6.3 / §7.9)
@@ -1433,7 +1454,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc0d0e0,
     stroke: 0x607080,
     power: { consumes: 60 },
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — glass-panel pressing bench.
+    // 5000 concrete + 3000 stone + 1500 iron_ingot + 100 gear + 1000 clay = 10.7 t.
+    placementCost: { concrete: 5000, stone: 3000, iron_ingot: 1500, gear: 100, clay: 1000 },
     glyph: '▭',
   },
   // Phase 6 — T2 coolant + ceramic_insulator (§6.3)
@@ -1446,7 +1469,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x40a0c0,
     stroke: 0x103040,
     power: { consumes: 100 },
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: ChemEng. handbook — small-batch coolant blending vessel.
+    // 6000 concrete + 4000 stone + 1500 iron_ingot + 150 gear + 300 glass + 200 copper_ingot = 12.3 t.
+    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 150, glass: 300, copper_ingot: 200 },
     glyph: '❄',
   },
   ceramic_kiln: {
@@ -1460,7 +1485,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 80 },
     requiresHeat: true,
     gates: [{ matchType: 'heat_source', hard: true }],
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — intermittent ceramic kiln.
+    // 5000 concrete + 4000 stone + 1200 iron_ingot + 80 gear + 2000 clay = 12.4 t.
+    placementCost: { concrete: 5000, stone: 4000, iron_ingot: 1200, gear: 80, clay: 2000 },
     glyph: '♨',
   },
   // Phase 7 — Bronze + Brass (§7.2)
@@ -1473,7 +1500,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xb87333,
     stroke: 0x5a3a1a,
     power: { consumes: 80 },
-    placementCost: { stone: 60, iron_ingot: 15, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — medium foundry ladle.
+    // 5000 concrete + 3000 stone + 1000 iron_ingot + 100 gear + 500 copper_ingot = 9.7 t.
+    placementCost: { concrete: 5000, stone: 3000, iron_ingot: 1000, gear: 100, copper_ingot: 500 },
     glyph: '◈',
   },
   brass_alloyer: {
@@ -1485,7 +1514,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xd4a44a,
     stroke: 0x6a5225,
     power: { consumes: 80 },
-    placementCost: { stone: 60, iron_ingot: 15, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — medium foundry ladle.
+    // 5000 concrete + 3000 stone + 1000 iron_ingot + 100 gear + 500 copper_ingot = 9.7 t.
+    placementCost: { concrete: 5000, stone: 3000, iron_ingot: 1000, gear: 100, copper_ingot: 500 },
     glyph: '◈',
   },
   // Phase 8 — Aluminum chain (§7.3)
@@ -1498,7 +1529,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xd0a060,
     stroke: 0x605030,
     power: { consumes: 150 },
-    placementCost: { stone: 100, iron_ingot: 30, wood: 15 },
+    // BOM source: ChemEng. handbook — Bayer-process digestion vessel (scaled).
+    // 8000 concrete + 5000 stone + 2000 iron_ingot + 150 gear + 1500 clay = 16.8 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2000, gear: 150, clay: 1500 },
     glyph: '△',
   },
   aluminum_smelter: {
@@ -1524,8 +1557,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // rev-16 §13.3: +100000 cap (100 t), liquids/gases category only.
     // Kennedy Tank mid-class industrial analog.
     storage: { category: 'liquid_gas', capacity: 100000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: Kennedy Tank — mid-class industrial chemical tank (scaled).
+    // 6000 concrete + 4000 stone + 1500 iron_ingot + 100 gear + 200 glass = 11.9 t.
+    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, glass: 200 },
     glyph: '▦',
   },
   // rev-16 §13.3: Cold Storage — T2 specialized storage for temperature-
@@ -1541,8 +1575,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8090a0,
     stroke: 0x2a3848,
     storage: { category: 'temp_sensitive', capacity: 50000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 90, iron_ingot: 35, wood: 10 },
+    // BOM source: Small refrigerated warehouse module — insulated shell + compressor pad.
+    // 7000 concrete + 4000 stone + 1500 iron_ingot + 120 gear + 300 copper_ingot = 13.0 t.
+    placementCost: { concrete: 7000, stone: 4000, iron_ingot: 1500, gear: 120, copper_ingot: 300 },
     glyph: '▦',
   },
   // rev-16 §13.3: Component Warehouse — T2 specialized storage for
@@ -1558,8 +1593,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x806840,
     stroke: 0x3a2810,
     storage: { category: 'components', capacity: 20000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: Industrial pallet-racked components warehouse — steel-shelf frame.
+    // 5000 concrete + 3000 stone + 1200 iron_ingot + 200 gear + 200 copper_ingot = 9.8 t.
+    placementCost: { concrete: 5000, stone: 3000, iron_ingot: 1200, gear: 200, copper_ingot: 200 },
     glyph: '▦',
   },
   // §3.4 / §8.9: Land Reclamation Hub — T2 trigger building (3×3 per §8.9
@@ -1579,8 +1615,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square3,
     fill: 0x5a8a6a, // verdant reclamation green
     stroke: 0x1a3020,
-    // §14 placeholder — tune in Appendix A. 3×3 footprint bumps T2 base.
-    placementCost: { stone: 150, iron_ingot: 50, wood: 30 },
+    // BOM source: Vernacular civil engineering — land-reclamation control hub.
+    // 15000 concrete + 10000 stone + 5000 iron_ingot + 400 gear + 3000 clay = 33.8 t.
+    placementCost: { concrete: 15000, stone: 10000, iron_ingot: 5000, gear: 400, clay: 3000 },
     glyph: '⊕',
   },
   // §8.9 T2 special: Terrain Modifier (2x2). Clears or converts tiles per
@@ -1595,7 +1632,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x804040, // earth-tone modifier
     stroke: 0x200810,
     power: { consumes: 100 },
-    placementCost: { steel: 50, gear: 20 },
+    // BOM source: Vernacular civil engineering — terrain-grading blade + hydraulic frame.
+    // 200 steel_beam + 5000 concrete + 100 gear + 80 pipe + 10 microchip = 15.5 t.
+    placementCost: { steel_beam: 200, concrete: 5000, gear: 100, pipe: 80, microchip: 10 },
     glyph: '◈',
     terrainModifier: true,
     instantBuild: true,
@@ -1727,7 +1766,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6090c0, // cool-blue tower
     stroke: 0x102040,
     power: { consumes: 40 },
-    placementCost: { steel: 60, glass: 20, gear: 10 },
+    // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25 — induced-draft cooling tower.
+    // 250 steel_beam + 6000 concrete + 80 gear + 120 pipe + 300 glass = 19.4 t.
+    placementCost: { steel_beam: 250, concrete: 6000, gear: 80, pipe: 120, glass: 300 },
     glyph: '❅',
   },
   // §8.7 T2 treatment: Wastewater Treatment (2x2). Adjacency anchor —
@@ -1746,7 +1787,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a7060, // murky water-treatment teal
     stroke: 0x0a1810,
     power: { consumes: 30 },
-    placementCost: { steel: 50, gear: 10 },
+    // BOM source: EPA WW-treatment — activated-sludge basin + clarifier (scaled).
+    // 200 steel_beam + 8000 concrete + 100 gear + 150 pipe + 2000 clay = 20.8 t.
+    placementCost: { steel_beam: 200, concrete: 8000, gear: 100, pipe: 150, clay: 2000 },
     glyph: '⌇',
   },
   // §8.7 T2 emissions: Exhaust Scrubber (1x1). Required for clean
@@ -1764,7 +1807,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x807060, // smokestack grey-brown
     stroke: 0x201810,
     power: { consumes: 20 },
-    placementCost: { steel: 30, gear: 5 },
+    // BOM source: EPA scrubber design manual — packed-bed SO₂ scrubber.
+    // 80 steel_beam + 1500 concrete + 30 gear + 50 pipe + 500 clay = 6.3 t.
+    placementCost: { steel_beam: 80, concrete: 1500, gear: 30, pipe: 50, clay: 500 },
     glyph: '⌗',
   },
   // -------------------------------------------------------------------------
@@ -2852,7 +2897,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x909498, // solder silver-grey
     stroke: 0x404448,
     power: { consumes: 80 },
-    placementCost: { stone: 50, iron_ingot: 15, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — solder pot + flux bath.
+    // 5000 concrete + 3000 stone + 1000 iron_ingot + 80 gear + 400 copper_ingot + 300 lead_ingot = 9.9 t.
+    placementCost: { concrete: 5000, stone: 3000, iron_ingot: 1000, gear: 80, copper_ingot: 400, lead_ingot: 300 },
     glyph: '⚙',
   },
 
@@ -2898,7 +2945,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x9a3030,
     stroke: 0x3a1010,
     power: { consumes: 150 },
-    placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
+    // BOM source: IspatGuru, "Carbon steel rolling mill" — manganese-alloying line.
+    // 18000 concrete + 12000 stone + 8000 iron_ingot + 400 gear + 6000 clay + 600 copper_ingot = 45.4 t.
+    placementCost: { concrete: 18000, stone: 12000, iron_ingot: 8000, gear: 400, clay: 6000, copper_ingot: 600 },
     glyph: '◈',
   },
 
@@ -2941,7 +2990,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8c93a0,
     stroke: 0x3a4048,
     power: { consumes: 150 },
-    placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
+    // BOM source: IspatGuru, "Hot-dip galvanizing line" — zinc kettle + flux box.
+    // 16000 concrete + 10000 stone + 7000 iron_ingot + 350 gear + 5000 clay + 500 copper_ingot = 39.2 t.
+    placementCost: { concrete: 16000, stone: 10000, iron_ingot: 7000, gear: 350, clay: 5000, copper_ingot: 500 },
     glyph: '◈',
   },
 
@@ -3155,7 +3206,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x080404,
     power: { consumes: 80 },
     requiredTile: ['oil_well'],
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: IspatGuru, "Oil Pump Jack" — beam-balanced nodding-donkey unit.
+    // 7000 concrete + 4000 stone + 2000 iron_ingot + 150 gear + 200 copper_ingot = 13.5 t.
+    placementCost: { concrete: 7000, stone: 4000, iron_ingot: 2000, gear: 150, copper_ingot: 200 },
     glyph: '⛽',
   },
   gas_extractor: {
@@ -3168,7 +3221,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x2a2810,
     power: { consumes: 70 },
     requiredTile: ['gas_seep'],
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: IspatGuru, "Gas Wellhead Compressor" — small wellhead dehydration skid.
+    // 6000 concrete + 4000 stone + 2000 iron_ingot + 120 gear + 200 copper_ingot = 12.4 t.
+    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 2000, gear: 120, copper_ingot: 200 },
     glyph: '◇',
   },
 
@@ -3184,8 +3239,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 200 },
     // §8.7: soft exhaust-scrubber gate (high-emission building).
     gates: [{ matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 }],
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
+    // BOM source: ChemEng. handbook — steam naphtha cracker furnace + quench tower.
+    // 20000 concrete + 12000 stone + 8000 iron_ingot + 400 gear + 5000 clay + 500 copper_ingot = 46.3 t.
+    placementCost: { concrete: 20000, stone: 12000, iron_ingot: 8000, gear: 400, clay: 5000, copper_ingot: 500 },
     glyph: '◇',
   },
   // Phase 4 — T2 deep-fraction crude oil cracker (§7.4)
@@ -3198,7 +3254,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x2a1a14, // heavy crude black-brown
     stroke: 0x1a0a08,
     power: { consumes: 250 },
-    placementCost: { stone: 200, iron_ingot: 60, wood: 20 },
+    // BOM source: ChemEng. handbook — vacuum distillation crude-oil cracker.
+    // 25000 concrete + 15000 stone + 10000 iron_ingot + 500 gear + 6000 clay + 600 copper_ingot = 57.6 t.
+    placementCost: { concrete: 25000, stone: 15000, iron_ingot: 10000, gear: 500, clay: 6000, copper_ingot: 600 },
     glyph: '◇',
   },
   // Phase 4 — T2 plastic precursor polymerizer (§7.4)
@@ -3211,7 +3269,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xe0c0a0, // pale polymer beige
     stroke: 0x504030,
     power: { consumes: 120 },
-    placementCost: { stone: 100, iron_ingot: 30, wood: 10 },
+    // BOM source: ChemEng. handbook — batch polymerization reactor vessel.
+    // 8000 concrete + 5000 stone + 2000 iron_ingot + 150 gear + 1500 clay + 300 copper_ingot = 17.1 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2000, gear: 150, clay: 1500, copper_ingot: 300 },
     glyph: '◇',
   },
   // Phase 4 — T2 split plastic presses (§7.4)
@@ -3224,7 +3284,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc0c0c8, // cool grey plastic
     stroke: 0x505058,
     power: { consumes: 100 },
-    placementCost: { stone: 80, iron_ingot: 20, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — hydraulic rigid-plastic press.
+    // 6000 concrete + 4000 stone + 1500 iron_ingot + 100 gear + 200 copper_ingot = 11.9 t.
+    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, copper_ingot: 200 },
     glyph: '⚙',
   },
   flexible_plastic_press: {
@@ -3236,7 +3298,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xd0b8a0, // warm flexible tan
     stroke: 0x504838,
     power: { consumes: 100 },
-    placementCost: { stone: 80, iron_ingot: 20, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — hydraulic flexible-plastic press.
+    // 6000 concrete + 4000 stone + 1500 iron_ingot + 100 gear + 200 copper_ingot = 11.9 t.
+    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, copper_ingot: 200 },
     glyph: '⚙',
   },
   rubber_synthesizer: {
@@ -3248,7 +3312,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x3a3a30, // dark rubber-grey
     stroke: 0x1a1a10,
     power: { consumes: 100 },
-    placementCost: { stone: 80, iron_ingot: 20, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — rubber vulcanizing press.
+    // 6000 concrete + 4000 stone + 1500 iron_ingot + 100 gear + 200 copper_ingot = 11.9 t.
+    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, copper_ingot: 200 },
     glyph: '⚙',
   },
   // Phase 5 — T2 chemistry chain (§7.5)
@@ -3265,7 +3331,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // without an adjacent Wastewater Treatment per §8.7. Same pattern as
     // the Exhaust Scrubber gate on emission-heavy buildings.
     gates: [{ matchType: 'def_id', defId: 'wastewater_treatment', degradeMul: 0.5 }],
-    placementCost: { stone: 100, iron_ingot: 30, wood: 10 },
+    // BOM source: ChemEng. handbook — contact-process sulfuric-acid plant.
+    // 10000 concrete + 6000 stone + 2500 iron_ingot + 150 gear + 2000 clay + 300 copper_ingot = 21.1 t.
+    placementCost: { concrete: 10000, stone: 6000, iron_ingot: 2500, gear: 150, clay: 2000, copper_ingot: 300 },
     glyph: '◇',
   },
   hcl_plant: {
@@ -3279,7 +3347,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 80 },
     // §4.5 Wastewater Treatment soft-gate.
     gates: [{ matchType: 'def_id', defId: 'wastewater_treatment', degradeMul: 0.5 }],
-    placementCost: { stone: 80, iron_ingot: 20, wood: 10 },
+    // BOM source: ChemEng. handbook — HCl synthesis burner + absorption tower.
+    // 8000 concrete + 5000 stone + 2000 iron_ingot + 120 gear + 1500 clay + 250 copper_ingot = 17.0 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2000, gear: 120, clay: 1500, copper_ingot: 250 },
     glyph: '◇',
   },
   // Phase 5 — T3 chemistry chain (§7.5)
@@ -3306,8 +3376,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 150 },
     // §4.5 Wastewater Treatment soft-gate.
     gates: [{ matchType: 'def_id', defId: 'wastewater_treatment', degradeMul: 0.5 }],
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: ChemEng. handbook — membrane-cell chlor-alkali plant.
+    // 10000 concrete + 6000 stone + 3000 iron_ingot + 200 gear + 2000 clay + 400 copper_ingot = 21.8 t.
+    placementCost: { concrete: 10000, stone: 6000, iron_ingot: 3000, gear: 200, clay: 2000, copper_ingot: 400 },
     glyph: '◇',
   },
   // §8.2 T2 chemistry: Chemical Reactor (2×2, any tile). Spec lists three
@@ -3325,8 +3396,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc06030,         // rust-orange (corrosive-coded)
     stroke: 0x401810,
     power: { consumes: 160 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 100, iron_ingot: 40, wood: 15 },
+    // BOM source: ChemEng. handbook — jacketed stirred-tank chemical reactor.
+    // 8000 concrete + 5000 stone + 2000 iron_ingot + 150 gear + 1500 clay + 300 copper_ingot = 17.1 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2000, gear: 150, clay: 1500, copper_ingot: 300 },
     glyph: '◇',
   },
   lubricant_refinery: {
@@ -3340,8 +3412,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 120 },
     // §8.7: soft exhaust-scrubber gate (high-emission building).
     gates: [{ matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 }],
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: ChemEng. handbook — lubricant blending + additive injection unit.
+    // 12000 concrete + 7000 stone + 4000 iron_ingot + 250 gear + 3000 clay + 350 copper_ingot = 26.9 t.
+    placementCost: { concrete: 12000, stone: 7000, iron_ingot: 4000, gear: 250, clay: 3000, copper_ingot: 350 },
     glyph: '◇',
   },
   diesel_refinery: {
@@ -3355,8 +3428,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 180 },
     // §8.7: soft exhaust-scrubber gate (high-emission building).
     gates: [{ matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 }],
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: ChemEng. handbook — hydrocracker diesel hydrotreater.
+    // 10000 concrete + 6000 stone + 3000 iron_ingot + 200 gear + 2000 clay + 400 copper_ingot = 21.8 t.
+    placementCost: { concrete: 10000, stone: 6000, iron_ingot: 3000, gear: 200, clay: 2000, copper_ingot: 400 },
     glyph: '◇',
   },
   metal_rolling_mill: {
@@ -3368,8 +3442,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8090a0, // steel-roll grey
     stroke: 0x2a3848,
     power: { consumes: 200 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 100, iron_ingot: 40, wood: 15 },
+    // BOM source: IspatGuru, "Rod and wire rolling mill" — continuous mill line.
+    // 12000 concrete + 7000 stone + 4000 iron_ingot + 250 gear + 2500 clay + 400 copper_ingot = 26.4 t.
+    placementCost: { concrete: 12000, stone: 7000, iron_ingot: 4000, gear: 250, clay: 2500, copper_ingot: 400 },
     glyph: '⚙',
   },
 
@@ -4130,7 +4205,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x203048,
     // Antenna placeholder — tune in Appendix A.
     power: { consumes: 5 },
-    placementCost: { stone: 50, iron_ingot: 15 },
+    // BOM source: DOT signal mast — small comms antenna tower base.
+    // 1500 concrete + 800 stone + 400 iron_ingot + 40 gear + 100 copper_ingot = 2.9 t.
+    placementCost: { concrete: 1500, stone: 800, iron_ingot: 400, gear: 40, copper_ingot: 100 },
     glyph: '⟁',
   },
   antenna_t3: {
@@ -4214,7 +4291,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4090a8, // sonar cyan-teal
     stroke: 0x103040,
     power: { consumes: 50 },
-    placementCost: { iron_ingot: 20, wire: 10, microchip: 5 },
+    // BOM source: USCG Aids to Navigation Manual — ocean sensor buoy (scaled).
+    // 40 steel_beam + 1000 concrete + 200 iron_ingot + 50 wire + 20 microchip = 3.2 t.
+    placementCost: { steel_beam: 40, concrete: 1000, iron_ingot: 200, wire: 50, microchip: 20 },
     oceanPlacement: true,
     terrainReqs: ['shallows', 'deep', 'trench', 'hydrothermal_vent', 'nodule_field'],
     glyph: '◌',
@@ -4245,7 +4324,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x60a0c0, // shallows blue-grey
     stroke: 0x204060,
     power: { consumes: 200 },
-    placementCost: { iron_ingot: 50, wire: 20, microchip: 10 },
+    // BOM source: DOT offshore platform intake riser (scaled).
+    // 220 steel_beam + 4000 concrete + 1500 iron_ingot + 120 pipe + 15 microchip = 17.0 t.
+    placementCost: { steel_beam: 220, concrete: 4000, iron_ingot: 1500, pipe: 120, microchip: 15 },
     oceanPlacement: true,
     terrainReqs: ['shallows'],
     glyph: '~',
@@ -4405,7 +4486,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a7a5a,
     stroke: 0x1a3a2a,
     power: { consumes: 80 },
-    placementCost: { steel: 50, microchip: 20, stone: 20 },
+    // BOM source: TSMC cleanroom shell (scaled) — PCB etch line enclosure.
+    // 180 steel_beam + 5000 concrete + 1000 iron_ingot + 80 gear + 30 microchip + 200 glass = 15.4 t.
+    placementCost: { steel_beam: 180, concrete: 5000, iron_ingot: 1000, gear: 80, microchip: 30, glass: 200 },
     glyph: '◈',
   },
   circuit_assembler: {
@@ -4456,7 +4539,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6090c0,
     stroke: 0x203050,
     power: { consumes: 10 },
-    placementCost: { steel: 5, gear: 2, glass: 5 },
+    // BOM source: NOAA ASOS shelter — automated weather station pad + mast.
+    // 150 steel_beam + 4000 concrete + 1000 iron_ingot + 60 gear + 20 microchip + 300 glass = 12.9 t.
+    placementCost: { steel_beam: 150, concrete: 4000, iron_ingot: 1000, gear: 60, microchip: 20, glass: 300 },
     glyph: '☁',
   },
   advanced_weather_station_t3: {
