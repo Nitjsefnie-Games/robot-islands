@@ -774,7 +774,11 @@ export function computeRates(
   // is visible to the player as "extra mirrors are wasted past full sun".
   // Additive (not multiplicative) so mirrors function at night, where
   // solarMultiplier(night) = 0 would zero out a multiplicative term.
-  const rampMul = solarMultiplier(solarClockMs ?? t);
+  const rampMul = solarMultiplier(
+    solarClockMs ?? t,
+    ctx?.world?.playerLat ?? null,
+    ctx?.world?.playerLon ?? null,
+  );
   const solarMul = Math.min(1, rampMul + (ctx?.solarBoost ?? 0));
   const varianceFactor = computeVarianceFactor(state, modifierMul, t);
   // The §5.1 active flag depends on inputAvail, and inputAvail must be
