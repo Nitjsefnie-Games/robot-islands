@@ -106,6 +106,31 @@ export interface Route {
   sourceBuildingId?: string;
 }
 
+// VISUAL-FIELD-MARKER: any new field on the Route interface above
+// that affects rendered route geometry, dash style, or chevron
+// count MUST be added to routesCacheKey() below AND classified in
+// the not-visual whitelist in routes-renderer.test.ts.
+
+/**
+ * §perf-2026-05-28 RENDERING-RELEVANT FIELDS:
+ *   - route.id             (separates per-route entries in renderer cache)
+ *   - route.type           (selects dashed-stroke texture + colour)
+ *   - route.from           (island id → world-coord endpoint)
+ *   - route.to             (island id → world-coord endpoint)
+ *   - route.inFlight.length  (chevron count; items themselves NOT keyed)
+ *
+ * Adding a Route field that affects visual output? Add it here AND to
+ * the routes-renderer.test.ts whitelist. The whitelist test fails the
+ * build for unclassified fields.
+ */
+export function routesCacheKey(routes: ReadonlyArray<Route>): string {
+  let out = '';
+  for (const r of routes) {
+    out += `${r.id}|${r.type}|${r.from}|${r.to}|${r.inFlight.length};`;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Step-7 tuning constants
 // ---------------------------------------------------------------------------
