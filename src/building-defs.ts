@@ -644,8 +644,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiredTile: ['ore', 'coal'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small open-pit head-frame analog: 200 kg foundation stone + 80 kg wood
-    // frame + 20 kg iron picks/cables = 300 kg embodied.
-    placementCost: { stone: 200, wood: 80, iron_ingot: 20 },
+    // frame = 280 kg embodied.
+    // cycle-break (P4C2b): removed iron_ingot per circular-deps invariant.
+    placementCost: { stone: 200, wood: 80 },
     glyph: '⛏',
     // §4.5 placeholder — tune in Appendix A. Mild clustering bonus rewards
     // packing mines onto adjacent ore/coal veins.
@@ -679,8 +680,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x6b2f00,
     power: { consumes: 60 },
     // BOM source: Roberts Light-Engineering Workshop.
-    // 150 wood framing + 100 stone foundation + 30 iron fixtures + 20 bolts = 300 kg.
-    placementCost: { wood: 150, stone: 100, iron_ingot: 30, bolt: 20 },
+    // 150 wood framing + 100 stone foundation + 30 iron fixtures = 280 kg.
+    // cycle-break (P4C2b): removed bolt per circular-deps invariant.
+    placementCost: { wood: 150, stone: 100, iron_ingot: 30 },
     glyph: '⚙',
     // §4.5 placeholder — tune in Appendix A. Manufacturing co-location bonus:
     // small per-match rate boost up to three adjacent Workshops.
@@ -800,8 +802,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x3a1a1a,
     power: { consumes: 50 },
     // BOM source: Small Bealer bloomery analog.
-    // 400 stone foundation + 100 clay fire-brick + 30 iron fixtures + 20 wood fuel = 550 kg.
-    placementCost: { stone: 400, clay: 100, iron_ingot: 30, wood: 20 },
+    // 400 stone foundation + 100 clay fire-brick + 20 wood fuel = 520 kg.
+    // cycle-break (P4C2b): removed iron_ingot per circular-deps invariant.
+    placementCost: { stone: 400, clay: 100, wood: 20 },
     glyph: '△',
     // §4.5 placeholder — tune in Appendix A. Paired smelters share heat
     // efficiencies; gentle clustering bonus rewards a two-smelter line.
@@ -1200,8 +1203,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
       { matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 },
     ],
     // BOM source: IspatGuru "Coke Ovens".
-    // 15000 clay refractory + 8000 steel_beam shell + 500 stone foundation + 100 pipe = 23.9 t.
-    placementCost: { clay: 15000, steel_beam: 8000, stone: 500, pipe: 100 },
+    // 15000 clay refractory + 500 stone foundation + 100 pipe = 15.6 t.
+    // cycle-break (P4C2b): removed steel_beam per circular-deps invariant.
+    placementCost: { clay: 15000, stone: 500, pipe: 100 },
     glyph: '▲',
   },
   blast_furnace: {
@@ -1223,8 +1227,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §4.5 gating adjacency demonstration: hard heat_source gate.
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: IspatGuru "Blast Furnace Body".
-    // 30000 steel_beam shell + 25000 clay refractory + 2000 stone pad + 500 pipe + 200 sheet_metal = 60 t.
-    placementCost: { steel_beam: 30000, clay: 25000, stone: 2000, pipe: 500, sheet_metal: 200 },
+    // 30000 steel_beam shell + 25000 clay refractory + 2000 stone pad = 57 t.
+    // cycle-break (P4C2b): removed pipe and sheet_metal per circular-deps invariant.
+    placementCost: { steel_beam: 30000, clay: 25000, stone: 2000 },
     glyph: '△',
   },
   steel_mill: {
@@ -1245,8 +1250,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // `steel_mill_scrap` building (below) is a faster scrap-only T2
     // alternative, distinct from the substitution mechanic.
     // BOM source: EAF mini-mill (USA Steel TX).
-    // 25000 steel_beam structure + 8000 clay refractory + 2000 stone pad + 300 pipe + 100 gear = 36.4 t.
-    placementCost: { steel_beam: 25000, clay: 8000, stone: 2000, pipe: 300, gear: 100 },
+    // 25000 steel_beam structure + 8000 clay refractory + 2000 stone pad = 35 t.
+    // cycle-break (P4C2b): removed pipe and gear per circular-deps invariant.
+    placementCost: { steel_beam: 25000, clay: 8000, stone: 2000 },
     glyph: '△',
   },
   // §6.7: Steel Mill Scrap — alternate T2 steel producer using scrap instead
@@ -1783,8 +1789,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // rev-16 §5.3: Tetronics DC plasma reactor hold-temp.
     heatDemandKW: 200,
     // BOM source: Tetronics DC plasma arc.
-    // 10000 steel_beam vessel + 3000 clay refractory + 500 microchip control + 200 ceramic_insulator + 50 exotic_alloy = 13.75 t.
-    placementCost: { steel_beam: 10000, clay: 3000, microchip: 500, ceramic_insulator: 200, exotic_alloy: 50 },
+    // 10000 steel_beam vessel + 3000 clay refractory + 500 microchip control + 200 ceramic_insulator = 13.7 t.
+    // cycle-break (P4C2b): removed exotic_alloy per circular-deps invariant.
+    placementCost: { steel_beam: 10000, clay: 3000, microchip: 500, ceramic_insulator: 200 },
     glyph: '◉',
   },
   // §9.5: Cryogenic Compute Center — Arctic-unique. Only producer of AI
@@ -1802,8 +1809,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 1200 },
     requiredBiomes: ['arctic'],
     // BOM source: IBM Quantum System Two.
-    // 15000 steel_beam frame + 5000 ceramic_insulator + 1000 microchip + 500 cryo_coolant + 200 wire + 50 ai_core = 20.75 t.
-    placementCost: { steel_beam: 15000, ceramic_insulator: 5000, microchip: 1000, cryo_coolant: 500, wire: 200, ai_core: 50 },
+    // 15000 steel_beam frame + 5000 ceramic_insulator + 1000 microchip + 500 cryo_coolant + 200 wire = 20.7 t.
+    // cycle-break (P4C2b): removed ai_core per circular-deps invariant.
+    placementCost: { steel_beam: 15000, ceramic_insulator: 5000, microchip: 1000, cryo_coolant: 500, wire: 200 },
     glyph: '◈',
   },
   // §9.5: Mass Driver — Plains-unique T4. Long-range cargo route launcher
@@ -1941,8 +1949,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x301050,
     power: { consumes: 1500 },
     // BOM source: TSMC fab-line refs (cleanroom only).
-    // 8000 steel_beam frame + 4000 glass + 2000 microchip + 1000 ceramic_insulator + 200 silicon_wafer + 100 ai_core = 13.3 t.
-    placementCost: { steel_beam: 8000, glass: 4000, microchip: 2000, ceramic_insulator: 1000, silicon_wafer: 200, ai_core: 100 },
+    // 8000 steel_beam frame + 4000 glass + 2000 microchip + 1000 ceramic_insulator + 200 silicon_wafer = 12.3 t.
+    // cycle-break (P4C2b): removed ai_core per circular-deps invariant.
+    placementCost: { steel_beam: 8000, glass: 4000, microchip: 2000, ceramic_insulator: 1000, silicon_wafer: 200 },
     glyph: '◈',
   },
   // Phase 11 — T4 endgame (Task 11.3): Fuel Rod Assembler → nuclear_fuel_rod.
@@ -3286,7 +3295,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x405058,
     power: { consumes: 300 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 150, microchip: 60, stone: 30 },
+    // cycle-break (P4C2b): removed steel and microchip per circular-deps
+    // invariant. DEVIATION: both were required to make cryo_lab placeable
+    // because the cryo deadlock is downstream of the steel SCC; spec §14
+    // rebalance owns final tuning.
+    placementCost: { stone: 30 },
     glyph: '❄',
   },
   // Phase 5 — T3 cryo air separator (§7.5). Distinct from the existing
