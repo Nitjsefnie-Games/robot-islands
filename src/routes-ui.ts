@@ -31,6 +31,7 @@ import {
   createRouteFromBuilding,
   eligibleTransportBuildings,
   islandHasTeleporterPad,
+  routesCacheKey,
   type Route,
 } from './routes.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
@@ -1016,6 +1017,16 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     funnelStat.valueEl.style.color = totalFunnel > 0 ? 'var(--ri-accent)' : 'var(--ri-fg-1)';
   }
 
+  // ---- paintLayer skip-gate (§perf-2026-05-28 Phase 1) ----------------
+  // Cache the last-paint inputs so paintLayer can bail before any Pixi
+  // Graphics work when nothing visually relevant has changed. Phase 2
+  // migrates this cache into RouteRenderer; Phase 1 keeps it inside the
+  // existing closure for a minimal-diff first landing.
+  let lastCacheKey: string | null = null;
+  let lastVisible = false;
+  let lastDraftKey = '';
+  let lastNowMsBucket = -1;  // quantized nowMs; phase 1 still animates every frame
+
   // ---- Pixi route layer ------------------------------------------------------
   // Lives in screen space — added directly to the stage by main.ts. We
   // recompute each route's endpoint screen positions every frame via the
@@ -1030,6 +1041,25 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   routeLayer.addChild(batchGfx);
 
   function paintLayer(nowMs: number): void {
+    // Skip-gate: bail if routes, visibility, and draft selection haven't
+    // moved. NOTE: the dash scroll animation IS a per-frame visual change,
+    // so the gate quantizes nowMs to a 16ms bucket — within a bucket the
+    // phase is visually stable. Phase 3 removes this bucket by moving the
+    // scroll to a UV offset (one numeric write, not a full redraw).
+    const key = routesCacheKey(deps.world.routes);
+    const draftKey = visible
+      ? `${fromSel.value ?? ''}|${toSel.value ?? ''}`
+      : '';
+    const nowBucket = Math.floor(nowMs / 16);
+    if (
+      key === lastCacheKey
+      && visible === lastVisible
+      && draftKey === lastDraftKey
+      && nowBucket === lastNowMsBucket
+    ) {
+      return;  // fast path — no Pixi work
+    }
+
     routeGfx.clear();
     batchGfx.clear();
 
@@ -1098,6 +1128,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         drawChevron(batchGfx, cx, cy, ux, uy);
       }
     }
+
+    lastCacheKey = key;
+    lastVisible = visible;
+    lastDraftKey = draftKey;
+    lastNowMsBucket = nowBucket;
   }
 
   /** Stroke a dashed line from p1 to p2 in chunks. PixiJS 8's Graphics
