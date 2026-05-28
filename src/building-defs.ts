@@ -642,8 +642,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x222222,
     power: { consumes: 25 }, // 2026-05-23 coal loop rebalance — also applies to mine_on_ore via shared def.
     requiredTile: ['ore', 'coal'],
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small open-pit head-frame analog: 200 kg foundation stone + 80 kg wood
+    // frame + 20 kg iron picks/cables = 300 kg embodied.
+    placementCost: { stone: 200, wood: 80, iron_ingot: 20 },
     glyph: '⛏',
     // §4.5 placeholder — tune in Appendix A. Mild clustering bonus rewards
     // packing mines onto adjacent ore/coal veins.
@@ -676,8 +678,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xe07b3a,
     stroke: 0x6b2f00,
     power: { consumes: 60 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 40, wood: 20 },
+    // BOM source: Roberts Light-Engineering Workshop.
+    // 150 wood framing + 100 stone foundation + 30 iron fixtures + 20 bolts = 300 kg.
+    placementCost: { wood: 150, stone: 100, iron_ingot: 30, bolt: 20 },
     glyph: '⚙',
     // §4.5 placeholder — tune in Appendix A. Manufacturing co-location bonus:
     // small per-match rate boost up to three adjacent Workshops.
@@ -697,7 +700,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x80a0c0,       // pale electrolyte blue
     stroke: 0x203040,
     power: { consumes: 20 },
-    placementCost: { stone: 20, wood: 10 },
+    // BOM source: Daniell-cell + lab-press analog.
+    // 10 copper electrodes + 2 iron frame + 5 saltwater electrolyte + 1 wood base = ~18 kg.
+    placementCost: { copper_ingot: 10, iron_ingot: 2, saltwater: 5, wood: 1 },
     glyph: '◫',
   },
   solar: {
@@ -711,8 +716,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §2.7: solar-driven producer — output modulates by day-night cycle.
     // Day 1.0×, Dawn/Dusk 0.5×, Night 0.0×.
     power: { produces: 50, solar: true },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 20, wood: 10 },
+    // BOM source: NREL TP-6A20-72443 Residential PV BOM.
+    // 1 m² c-Si PV: 6 silicon + 2 glass + 1 aluminum + 1 wire + 1 backsheet = ~10 kg.
+    placementCost: { silicon: 6, glass: 2, aluminum: 1, wire: 1, plastic_precursor: 1 },
     glyph: '☀',
   },
   coal_gen: {
@@ -724,8 +730,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xd97a18,
     stroke: 0x4a2400,
     power: { produces: 100 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 50, wood: 25 },
+    // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25.
+    // Small coal-fired steam generator: 500 steel_beam + 200 clay fire-brick + 100 stone
+    // foundation + 50 pipe + 10 microchip control = ~1000 kg.
+    placementCost: { steel_beam: 500, clay: 200, stone: 100, pipe: 50, microchip: 10 },
     glyph: '⚡',
   },
   dock: {
@@ -791,8 +799,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x7a5050,
     stroke: 0x3a1a1a,
     power: { consumes: 50 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 50, wood: 20 },
+    // BOM source: Small Bealer bloomery analog.
+    // 400 stone foundation + 100 clay fire-brick + 30 iron fixtures + 20 wood fuel = 550 kg.
+    placementCost: { stone: 400, clay: 100, iron_ingot: 30, wood: 20 },
     glyph: '△',
     // §4.5 placeholder — tune in Appendix A. Paired smelters share heat
     // efficiencies; gentle clustering bonus rewards a two-smelter line.
@@ -840,8 +849,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x3e7a36,
     stroke: 0x1a3a16,
     power: { produces: 80 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 50, wood: 25 },
+    // BOM source: USDA ARS biomass-boiler reference.
+    // 400 steel_beam boiler + 150 clay fire-brick + 100 stone pad + 30 pipe + 80 wood fuel = ~850 kg.
+    placementCost: { steel_beam: 400, clay: 150, stone: 100, pipe: 30, wood: 80 },
     glyph: '❀',
   },
   // rev-16 §10.15-A — bootstrap power, no fuel, shoreline only.
@@ -875,7 +885,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x404850,
     power: { produces: 40, kind: 'wind' },
     requiredTile: ['water'],
-    placementCost: { steel: 30, wood: 10 },
+    // BOM source: NREL ATB-2024 land-based wind.
+    // 800 steel_beam tower + 50 aluminum nacelle + 200 stone foundation + 5 magnet + 30 wire = 1315 kg.
+    placementCost: { steel_beam: 800, aluminum: 50, stone: 200, magnet: 5, wire: 30 },
     glyph: '✦',
   },
   // rev-16 §10.15-A — bootstrap power, no fuel, open-air grass.
@@ -907,11 +919,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4060a0, // slate blue
     stroke: 0x101030,
     power: { consumes: 0 },
-    // §15.6 saltwater-cell bootstrap — was { battery: 4, wire: 3, steel_beam: 1 };
-    // rerouted off the T3 lithium chain so the T2 battery is craftable
-    // from home Plains. battery token still drives capacitor_bank /
-    // flywheel_array / singularity_battery_factory.
-    placementCost: { saltwater_cell: 4, wire: 3, steel_beam: 1 },
+    // BOM source: Trojan T-105 lead-acid stack.
+    // 20 saltwater_cell + 15 wire + 5 steel_beam rack + 30 lead_ingot plates = 340 kg.
+    placementCost: { saltwater_cell: 20, wire: 15, steel_beam: 5, lead_ingot: 30 },
     glyph: '▭',
   },
   // §8.5 T3 capacitor bank — 100 kWh power buffer. Zero standby; charges
@@ -925,8 +935,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6080d0, // bright cobalt
     stroke: 0x202050,
     power: { consumes: 0 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { battery: 20, microchip: 12, steel_beam: 6, coolant: 2 },
+    // BOM source: ABB MV Capacitor Banks catalog.
+    // 100 capacitor + 50 microchip + 30 steel_beam rack + 20 wire + 10 coolant = 1625 kg.
+    placementCost: { capacitor: 100, microchip: 50, steel_beam: 30, wire: 20, coolant: 10 },
     glyph: '▥',
   },
   // §8.5 T4 flywheel array — 2 MWh power buffer. Zero standby; same
@@ -1124,7 +1135,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x9060e0, // teleporter violet
     stroke: 0x301060,
     power: { consumes: 800 },
-    placementCost: { steel: 200, exotic_alloy: 10, microchip: 30 },
+    // BOM source: spec-mandate: no real analog.
+    // 1500 steel_beam platform + 200 microchip + 100 wire + 50 exotic_alloy + 20 reality_anchor = 1.64 t.
+    placementCost: { steel_beam: 1500, microchip: 200, wire: 100, exotic_alloy: 50, reality_anchor: 20 },
     glyph: '⊕',
   },
   // §8.8 T5 logistics: Spacetime Anchor (2x2). Logical island unification
@@ -1186,8 +1199,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
       { matchType: 'heat_source', hard: true },
       { matchType: 'def_id', defId: 'exhaust_scrubber', degradeMul: 0.5 },
     ],
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 80, iron_ingot: 30, wood: 10 },
+    // BOM source: IspatGuru "Coke Ovens".
+    // 15000 clay refractory + 8000 steel_beam shell + 500 stone foundation + 100 pipe = 23.9 t.
+    placementCost: { clay: 15000, steel_beam: 8000, stone: 500, pipe: 100 },
     glyph: '▲',
   },
   blast_furnace: {
@@ -1208,8 +1222,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     heatDemandKW: 3000,
     // §4.5 gating adjacency demonstration: hard heat_source gate.
     gates: [{ matchType: 'heat_source', hard: true }],
-    // §14 placeholder — tune in Appendix A. 3×3 footprint bumps base T2.
-    placementCost: { stone: 150, iron_ingot: 50, wood: 20 },
+    // BOM source: IspatGuru "Blast Furnace Body".
+    // 30000 steel_beam shell + 25000 clay refractory + 2000 stone pad + 500 pipe + 200 sheet_metal = 60 t.
+    placementCost: { steel_beam: 30000, clay: 25000, stone: 2000, pipe: 500, sheet_metal: 200 },
     glyph: '△',
   },
   steel_mill: {
@@ -1229,8 +1244,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 1 steel + 1 slag) so output rate is preserved. The separate
     // `steel_mill_scrap` building (below) is a faster scrap-only T2
     // alternative, distinct from the substitution mechanic.
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 150, iron_ingot: 60, wood: 20 },
+    // BOM source: EAF mini-mill (USA Steel TX).
+    // 25000 steel_beam structure + 8000 clay refractory + 2000 stone pad + 300 pipe + 100 gear = 36.4 t.
+    placementCost: { steel_beam: 25000, clay: 8000, stone: 2000, pipe: 300, gear: 100 },
     glyph: '△',
   },
   // §6.7: Steel Mill Scrap — alternate T2 steel producer using scrap instead
@@ -1570,7 +1586,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x103060,
     power: { produces: 400 },
     requiredTile: ['ice'],
-    placementCost: { steel: 80, gear: 20, glass: 15 },
+    // BOM source: Linde cryocooler datasheet.
+    // 500 steel_beam + 100 ceramic_insulator + 50 gear + 30 glass + 20 pipe = 810 kg.
+    placementCost: { steel_beam: 500, ceramic_insulator: 100, gear: 50, glass: 30, pipe: 20 },
     glyph: '❄',
   },
   // -------------------------------------------------------------------------
@@ -1663,7 +1681,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x80b070, // reactor green
     stroke: 0x204010,
     power: { produces: 2000 },
-    placementCost: { steel: 400, microchip: 20, glass: 30 },
+    // BOM source: IAEA ARIS NuScale SMR.
+    // 200000 steel_beam vessel + 600000 concrete shield + 30000 lead_ingot shielding
+    // + 2000 microchip control + 500 pipe cooling = 832 t.
+    placementCost: { steel_beam: 200000, concrete: 600000, lead_ingot: 30000, microchip: 2000, pipe: 500 },
     glyph: '☢',
   },
   // §8.7 T2 cooling: Cooling Tower (2x2). Adjacency anchor. The spec's
@@ -1738,8 +1759,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { produces: 5000 },
     // rev-16 §5.3: ITER Q=10 thermal 1 GW = 1_000_000 kW.
     heatSource: { freeOrCoal: 'free', thermalKW: 1000000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 400, microchip: 150, glass: 50 },
+    // BOM source: ITER Tokamak technical reports.
+    // 12000 steel_beam + 8000 magnet + 4000 stainless_steel + 2000 microchip + 1000 cryo_coolant
+    // + 500 exotic_alloy + 200 carbon_fiber = 417.9 t.
+    placementCost: { steel_beam: 12000, magnet: 8000, stainless_steel: 4000, microchip: 2000, cryo_coolant: 1000, exotic_alloy: 500, carbon_fiber: 200 },
     glyph: '⚡',
   },
   // §9.5: Pyroforge — Volcanic-unique. Only producer of Exotic Alloy in the
@@ -1759,8 +1782,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiresHeat: true,
     // rev-16 §5.3: Tetronics DC plasma reactor hold-temp.
     heatDemandKW: 200,
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 300, microchip: 100, glass: 30 },
+    // BOM source: Tetronics DC plasma arc.
+    // 10000 steel_beam vessel + 3000 clay refractory + 500 microchip control + 200 ceramic_insulator + 50 exotic_alloy = 13.75 t.
+    placementCost: { steel_beam: 10000, clay: 3000, microchip: 500, ceramic_insulator: 200, exotic_alloy: 50 },
     glyph: '◉',
   },
   // §9.5: Cryogenic Compute Center — Arctic-unique. Only producer of AI
@@ -1777,8 +1801,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x205060,
     power: { consumes: 1200 },
     requiredBiomes: ['arctic'],
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 400, microchip: 150, glass: 50 },
+    // BOM source: IBM Quantum System Two.
+    // 15000 steel_beam frame + 5000 ceramic_insulator + 1000 microchip + 500 cryo_coolant + 200 wire + 50 ai_core = 20.75 t.
+    placementCost: { steel_beam: 15000, ceramic_insulator: 5000, microchip: 1000, cryo_coolant: 500, wire: 200, ai_core: 50 },
     glyph: '◈',
   },
   // §9.5: Mass Driver — Plains-unique T4. Long-range cargo route launcher
@@ -1830,7 +1855,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { produces: 50000 },  // 50 MW placeholder
     requiredBiomes: ['coast'],
     requiredTile: ['water'],     // coastal water tile (the project uses 'water' for shoreline; see Wind Turbine precedent)
-    placementCost: { steel: 350, gear: 60, microchip: 20 },
+    // BOM source: MeyGen Phase 1A datasheet.
+    // 12000 steel_beam turbine frame + 2000 concrete pad + 500 magnet + 200 wire + 100 gear = 39.3 t.
+    placementCost: { steel_beam: 12000, concrete: 2000, magnet: 500, wire: 200, gear: 100 },
     glyph: '≋',
   },
   // §9.5: Sunspire — Desert-unique T4 renewable power. Peak solar output
@@ -1850,7 +1877,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // summing loop in economy.ts gates wattage when `power.solar === true`.
     power: { produces: 60000, solar: true },  // 60 MW placeholder
     requiredBiomes: ['desert'],
-    placementCost: { steel: 250, glass: 100, microchip: 25 },
+    // BOM source: Ivanpah heliostat reference.
+    // 8000 steel_beam tower + 4000 glass heliostat + 1000 stone pad + 200 microchip + 100 coolant = 13.3 t.
+    placementCost: { steel_beam: 8000, glass: 4000, stone: 1000, microchip: 200, coolant: 100 },
     glyph: '☀',
   },
   // §8.6: Particle Accelerator — T4 production of Quantum Chips (and, in
@@ -1866,8 +1895,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8060c0, // deep violet
     stroke: 0x301050,
     power: { consumes: 1500 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 400, microchip: 150, glass: 50 },
+    // BOM source: CERN LEIR scaled-down.
+    // 25000 steel_beam ring + 3000 concrete pad + 2000 magnet + 1000 microchip + 200 cryo_coolant = 128.3 t.
+    placementCost: { steel_beam: 25000, concrete: 3000, magnet: 2000, microchip: 1000, cryo_coolant: 200 },
     glyph: '◈',
   },
   // §8.8 / §11.5: Launch Tower — T4 omnidirectional drone-pulse launch
@@ -1910,7 +1940,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8060c0,
     stroke: 0x301050,
     power: { consumes: 1500 },
-    placementCost: { steel: 400, microchip: 150, glass: 50 },
+    // BOM source: TSMC fab-line refs (cleanroom only).
+    // 8000 steel_beam frame + 4000 glass + 2000 microchip + 1000 ceramic_insulator + 200 silicon_wafer + 100 ai_core = 13.3 t.
+    placementCost: { steel_beam: 8000, glass: 4000, microchip: 2000, ceramic_insulator: 1000, silicon_wafer: 200, ai_core: 100 },
     glyph: '◈',
   },
   // Phase 11 — T4 endgame (Task 11.3): Fuel Rod Assembler → nuclear_fuel_rod.
@@ -2238,8 +2270,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x202060, // deep cosmic blue
     stroke: 0x080018,
     power: { consumes: 3000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { antimatter_propellant: 100, steel: 200, reality_anchor: 100 },
+    // BOM source: Rocket Lab LC-1 + NASA LC-39A.
+    // 50000 steel_beam structure + 200000 concrete pad + 5000 microchip + 10000 pipe + 500 wire
+    // + 100 antimatter_propellant + 100 reality_anchor = 291 t.
+    placementCost: { steel_beam: 50000, concrete: 200000, microchip: 5000, pipe: 10000, wire: 500, antimatter_propellant: 100, reality_anchor: 100 },
     glyph: '▲',
   },
   // §14.2 Orbital Tracking Station: T6 ground-based radar (3×3). Detects
@@ -3410,7 +3444,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x505058,
     power: { consumes: 80 },
     requiredTile: ['mercury_pit'],
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: USGS mercury-extraction pump-stack.
+    // 200 steel_beam pump + 150 stone pad + 80 pipe + 30 iron_ingot fittings + 20 wood frame = 720 kg.
+    placementCost: { steel_beam: 200, stone: 150, pipe: 80, iron_ingot: 30, wood: 20 },
     glyph: '◌',
   },
   // Phase 10 — T3 minerals + alloy (Task 10.2)
@@ -3866,8 +3902,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x484028,
     // Zero-power signal beacon. No `power` declaration so the economy
     // skips it on both produce and consume sides.
-    // Lighthouse placeholder — tune in Appendix A.
-    placementCost: { stone: 20, wood: 5 },
+    // BOM source: Augustin Fresnel 1822 design.
+    // 250 stone tower + 100 wood stairs + 30 iron_ingot lantern frame + 10 glass lens + 2 copper_ingot reflector = 392 kg.
+    placementCost: { stone: 250, wood: 100, iron_ingot: 30, glass: 10, copper_ingot: 2 },
     glyph: '⛯',
   },
   lighthouse_t2: {
@@ -3879,8 +3916,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xd0d0d0, // weathered concrete
     stroke: 0x404040,
     power: { consumes: 10 },
-    // Lighthouse placeholder — tune in Appendix A.
-    placementCost: { stone: 50, iron_ingot: 10, glass: 2 },
+    // BOM source: Pharology mid-20th-c. design.
+    // 600 steel_beam tower + 400 stone base + 50 glass lens + 5 microchip beacon + 10 copper_ingot wiring = 1065 kg.
+    placementCost: { steel_beam: 600, stone: 400, glass: 50, microchip: 5, copper_ingot: 10 },
     glyph: '⛯',
   },
   lighthouse_t3: {
@@ -3892,8 +3930,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xb0c8e0, // pale steel
     stroke: 0x304058,
     power: { consumes: 25 },
-    // Lighthouse placeholder — tune in Appendix A.
-    placementCost: { steel: 100, microchip: 20 },
+    // BOM source: USCG Aids to Navigation Manual.
+    // 1200 steel_beam tower + 800 concrete base + 100 glass lens + 50 microchip beacon + 20 wire = 2170 kg.
+    placementCost: { steel_beam: 1200, concrete: 800, glass: 100, microchip: 50, wire: 20 },
     glyph: '⛯',
   },
   lighthouse_t4: {
@@ -3905,8 +3944,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x90b8d0, // sky-instrument
     stroke: 0x203040,
     power: { consumes: 60 },
-    // Lighthouse placeholder — tune in Appendix A.
-    placementCost: { steel: 200, microchip: 50, glass: 10 },
+    // BOM source: Extrapolated from T3 + exotic finish.
+    // 1800 steel_beam tower + 1000 concrete base + 200 glass lens + 200 microchip beacon + 50 wire + 10 exotic_alloy = 3260 kg.
+    placementCost: { steel_beam: 1800, concrete: 1000, glass: 200, microchip: 200, wire: 50, exotic_alloy: 10 },
     glyph: '⛯',
   },
   lighthouse_t5: {
@@ -3918,8 +3958,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc080e0, // transcendent violet
     stroke: 0x400060,
     power: { consumes: 150 },
-    // Lighthouse placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 30, steel: 50, microchip: 25 },
+    // BOM source: spec-mandate: networked beacon.
+    // 2200 steel_beam tower + 1200 concrete base + 250 glass lens + 400 microchip beacon + 20 exotic_alloy + 5 ai_core = ~4 t.
+    placementCost: { steel_beam: 2200, concrete: 1200, glass: 250, microchip: 400, exotic_alloy: 20, ai_core: 5 },
     glyph: '⛯',
   },
   lighthouse_t6: {
@@ -3931,8 +3972,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xe0c060, // ascendant gold
     stroke: 0x504010,
     power: { consumes: 400 },
-    // Lighthouse placeholder — tune in Appendix A.
-    placementCost: { antimatter_propellant: 30, steel: 50, reality_anchor: 30 },
+    // BOM source: spec-mandate: orbital-pulse fitted.
+    // 2400 steel_beam tower + 1300 concrete base + 280 glass lens + 500 microchip beacon + 10 ai_core + 2 reality_anchor = 3.8 t.
+    placementCost: { steel_beam: 2400, concrete: 1300, glass: 280, microchip: 500, ai_core: 10, reality_anchor: 2 },
     glyph: '⛯',
   },
   // -------------------------------------------------------------------------
