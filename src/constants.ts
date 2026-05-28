@@ -12,13 +12,6 @@
  *  cells, satellite coverage rasterization, and grid overlay rendering. */
 export const CELL_SIZE_TILES = 16;
 
-/** §4.6 baseline storage cap — every resource starts with this much
- *  capacity on a fresh island, regardless of storage category. Step #19
- *  rebalanced from 100 → 2000 for idle-game scale so a few minutes of
- *  T1 production doesn't instantly fill storage. Storage buildings add
- *  on top of this baseline. */
-export const BASELINE_STORAGE_CAP = 2000;
-
 /** §13.3 / §9.6 Network Consciousness threshold for Omniscient Lattice
  *  activation — the count of T5-mastered, networked islands with a valid
  *  Lattice Node required to unlock the §13.3 cross-island lattice. The
