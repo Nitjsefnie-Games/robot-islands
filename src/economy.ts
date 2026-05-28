@@ -524,6 +524,11 @@ function inputAvail(
   let factor = 1;
   for (const [r, needPerCycle] of Object.entries(recipe.inputs)) {
     const id = r as ResourceId;
+    // §si-units Phase 2 — atmosphere intake: bypass inventory check
+    // and decrement when both conditions hold.
+    if (recipe.exogenousFlow === 'atmosphere' && id === 'air') {
+      continue;
+    }
     // §13.3 Omniscient Lattice: when an inventory override is provided,
     // stockpile checks read from the unified pool instead of local state.
     const stock = inventory?.[id] ?? state.inventory[id] ?? 0;
@@ -1236,6 +1241,10 @@ export function computeRates(
     }
     for (const [r, need] of Object.entries(te.recipe.inputs)) {
       const id = r as ResourceId;
+      // §si-units Phase 2 — atmosphere intake: bypass inventory decrement.
+      if (te.recipe.exogenousFlow === 'atmosphere' && id === 'air') {
+        continue;
+      }
       const delta = (need ?? 0) * effectiveRate;
       consumption[id] = (consumption[id] ?? 0) + delta;
       net[id] = (net[id] ?? 0) - delta;
