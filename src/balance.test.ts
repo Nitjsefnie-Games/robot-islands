@@ -164,6 +164,8 @@ describe('Balance — every consumed resource has at least one producer', () => 
 describe('Balance — no building has both zero inputs and zero outputs', () => {
   it('every recipe has at least one input or one output (no fully-empty)', () => {
     for (const [defId, recipe] of Object.entries(RECIPES)) {
+      // §si-units rev-16 §7.4: plant_a_tree is a deliberate no-op CO₂ sink.
+      if (defId === 'plant_a_tree') continue;
       const hasInputs = Object.keys(recipe.inputs).length > 0;
       const hasOutputs = Object.keys(recipe.outputs).length > 0;
       const hasPower = (BUILDING_DEFS[defId as keyof typeof BUILDING_DEFS]?.power?.produces ?? 0) > 0;

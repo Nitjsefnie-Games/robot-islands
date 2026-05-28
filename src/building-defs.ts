@@ -90,6 +90,7 @@ export type BuildingDefId =
   | 'crate'
   | 'silo'
   | 'biomass_plant'
+  | 'plant_a_tree'
   // T1 manufacturing — Foundation Kit Assembler (§12.3 / §12 settlement)
   | 'kit_assembler'
   // Task 13.2 — Foundation Kit Enriched (T3) + Refined (T4) variants.
@@ -877,6 +878,22 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 400 steel_beam boiler + 150 clay fire-brick + 100 stone pad + 30 pipe + 80 wood fuel = ~850 kg.
     placementCost: { steel_beam: 400, clay: 150, stone: 100, pipe: 30, wood: 80 },
     glyph: '❀',
+  },
+  // §si-units rev-16 §7.4 — T1 environment building, forest-biome only.
+  plant_a_tree: {
+    id: 'plant_a_tree',
+    displayName: 'Plant a Tree',
+    category: 'special',
+    tier: 1,
+    footprint: SHAPES.single,
+    fill: 0x4a8030,
+    stroke: 0x0a2008,
+    power: {},
+    // analog: vernacular sapling-and-watering-can — no industrial reference.
+    placementCost: { wood: 5, fresh_water: 1 },
+    glyph: '🌲',
+    requiredBiomes: ['forest'],
+    co2CaptureKgPerCycle: 0.1,
   },
   // rev-16 §10.15-A — bootstrap power, no fuel, shoreline only.
   water_wheel: {
