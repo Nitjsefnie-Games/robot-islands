@@ -97,7 +97,8 @@ import {
   tickSweeperCleanup,
 } from './orbital.js';
 import { findNextMerge, performMerge } from './island-merge.js';
-import { makeIslandScreenPosResolver, mountRoutesUi } from './routes-ui.js';
+import { mountRoutesUi } from './routes-ui.js';
+import { RouteRenderer } from './routes-renderer.js';
 import { computeCableNetworkBalance, drainRoutesForBuilding, tickRoutes } from './routes.js';
 import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
 import { mountSettlementUi } from './settlement-ui.js';
@@ -1487,8 +1488,8 @@ async function main(): Promise<void> {
   });
   // Drone dots live in world space (above ocean + islands + fog overlay,
   // below the cell grid).
-  world.addChildAt(dronesUi.selectedPadHighlightLayer, 4);
-  world.addChildAt(dronesUi.droneLayer, 5);
+  world.addChildAt(dronesUi.selectedPadHighlightLayer, 7);
+  world.addChildAt(dronesUi.droneLayer, 8);
   // §14 orbital launch reticle + range ring — mounted alongside the drone
   // reticle. Reticle in screen space (fixed pixel size); range ring in
   // world space (radius reads in tiles regardless of zoom).
@@ -1512,21 +1513,27 @@ async function main(): Promise<void> {
     dronesUi.toggle();
   });
 
-  // Routes (freight-grid) side dock + screen-space route line + chevron layer.
-  // Lives in screen space (same discipline as the drone reticle): stroke
-  // widths stay 1.5px / chevrons stay ~10px regardless of zoom. Endpoint
-  // screen positions are computed each frame via the camera transform.
-  // (`islandSpecsById` is built earlier — same Map shared with the modifier-
-  // multiplier cache.)
+  // Routes (freight-grid) side dock + world-space route renderer.
+  // §perf-2026-05-28 Phase 2: route geometry now lives in WORLD space
+  // (not screen space) so the cache survives camera pan/zoom — the Pixi
+  // stage transform on `world` handles the camera mapping. Three new
+  // containers parented under `world` between the buildings + drones
+  // layers (see z-order in spec §08).
+  const routeRenderer = new RouteRenderer((islandId) => {
+    const spec = islandSpecsById.get(islandId);
+    if (!spec) return null;
+    return tileToWorldPx(spec.cx, spec.cy);
+  });
+  world.addChildAt(routeRenderer.staticLayer, 4);
+  world.addChildAt(routeRenderer.animatedLayer, 5);
+  world.addChildAt(routeRenderer.overlayLayer, 6);
+
   const routesUi = mountRoutesUi(document.body, {
     world: worldState,
     islandStates,
     islandSpecs: islandSpecsById,
+    routeRenderer,
   });
-  routesUi.setIslandScreenPosResolver(
-    makeIslandScreenPosResolver(islandSpecsById, cam),
-  );
-  app.stage.addChild(routesUi.routeLayer);
   defineAction(reg, 'toggle-routes', () => {
     routesUi.toggle();
   });
@@ -1552,7 +1559,7 @@ async function main(): Promise<void> {
     },
     onInstantSettled: () => { rebuildWorldLayers(); },
   });
-  world.addChildAt(settlementUi.vehicleLayer, 6);
+  world.addChildAt(settlementUi.vehicleLayer, 9);
   app.stage.addChild(settlementUi.reticleLayer);
   world.addChild(settlementUi.rangeRingLayer);
   // Hook the forward-declared cross-panel disarm callback to the now-

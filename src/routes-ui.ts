@@ -17,8 +17,6 @@
 //     (added to `app.stage` — screen-space — to keep stroke width and
 //     glyph size constant regardless of zoom)
 
-import { Container, Graphics } from 'pixi.js';
-
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { TILE_PX } from './island.js';
@@ -31,11 +29,11 @@ import {
   createRouteFromBuilding,
   eligibleTransportBuildings,
   islandHasTeleporterPad,
-  routesCacheKey,
   type Route,
 } from './routes.js';
-import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
+import { type IslandSpec, type WorldState } from './world.js';
 import { BUILDING_DEFS } from './building-defs.js';
+import type { RouteRenderer } from './routes-renderer.js';
 
 function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
@@ -49,13 +47,6 @@ function styled(el: HTMLElement, css: string): void {
 // power-link family, the §4 ocean-layer `submarine_cable` variant is
 // darker than the land `cable` so undersea power links read at a glance.
 
-/** Land cable — neutral cool grey, brighter than submarine to read as
- *  "above the waterline." */
-const LAND_CABLE_TINT = 0x9caab8;
-/** §4 ocean-layer submarine cable — steel-blue, darker than the land cable
- *  so the contrast reads even at small zooms. */
-const SUBMARINE_CABLE_TINT = 0x4a6680;
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -65,14 +56,6 @@ export interface RouteUiHandle {
   hide(): void;
   toggle(): boolean;
   isVisible(): boolean;
-  /** Container for route lines + in-flight chevrons. Lives in screen space
-   *  (add directly to the stage, NOT the world container) so widths stay
-   *  constant. The caller must invoke `refresh` each frame to update endpoint
-   *  screen positions from the camera state. */
-  readonly routeLayer: Container;
-  /** Camera readback — the caller injects the current screen-px positions
-   *  of each island id so we don't take a runtime dep on `camera.ts`. */
-  setIslandScreenPosResolver(fn: (islandId: string) => { x: number; y: number } | null): void;
 }
 
 export interface RouteUiDeps {
@@ -81,6 +64,7 @@ export interface RouteUiDeps {
   /** Island specs keyed by id (so we can resolve world-tile centres for
    *  distance/transit-time calculations in the create form). */
   readonly islandSpecs: ReadonlyMap<string, IslandSpec>;
+  readonly routeRenderer: RouteRenderer;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +72,6 @@ export interface RouteUiDeps {
 // ---------------------------------------------------------------------------
 export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUiHandle {
   let visible = false;
-  let resolveScreenPos: (id: string) => { x: number; y: number } | null = () => null;
 
   // ---- Panel chrome ----------------------------------------------------------
   const panel = document.createElement('div');
@@ -1017,187 +1000,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     funnelStat.valueEl.style.color = totalFunnel > 0 ? 'var(--ri-accent)' : 'var(--ri-fg-1)';
   }
 
-  // ---- paintLayer skip-gate (§perf-2026-05-28 Phase 1) ----------------
-  // Cache the last-paint inputs so paintLayer can bail before any Pixi
-  // Graphics work when nothing visually relevant has changed. Phase 2
-  // migrates this cache into RouteRenderer; Phase 1 keeps it inside the
-  // existing closure for a minimal-diff first landing.
-  let lastCacheKey: string | null = null;
-  let lastVisible = false;
-  let lastDraftKey = '';
-  let lastNowMsBucket = -1;  // quantized nowMs; phase 1 still animates every frame
-
-  // ---- Pixi route layer ------------------------------------------------------
-  // Lives in screen space — added directly to the stage by main.ts. We
-  // recompute each route's endpoint screen positions every frame via the
-  // injected `resolveScreenPos`. This keeps stroke widths and chevron
-  // sizes pixel-stable across zoom (the existing reticle uses the same
-  // discipline).
-  const routeLayer = new Container();
-  routeLayer.label = 'routes';
-  const routeGfx = new Graphics();
-  routeLayer.addChild(routeGfx);
-  const batchGfx = new Graphics();
-  routeLayer.addChild(batchGfx);
-
   function paintLayer(nowMs: number): void {
-    // Skip-gate: bail if routes, visibility, and draft selection haven't
-    // moved. NOTE: the dash scroll animation IS a per-frame visual change,
-    // so the gate quantizes nowMs to a 16ms bucket — within a bucket the
-    // phase is visually stable. Phase 3 removes this bucket by moving the
-    // scroll to a UV offset (one numeric write, not a full redraw).
-    const key = routesCacheKey(deps.world.routes);
-    const draftKey = visible
-      ? `${fromSel.value ?? ''}|${toSel.value ?? ''}`
+    const draftKey = visible && fromSel.value && toSel.value
+      ? `${fromSel.value}|${toSel.value}`
       : '';
-    const nowBucket = Math.floor(nowMs / 16);
-    if (
-      key === lastCacheKey
-      && visible === lastVisible
-      && draftKey === lastDraftKey
-      && nowBucket === lastNowMsBucket
-    ) {
-      return;  // fast path — no Pixi work
-    }
-
-    routeGfx.clear();
-    batchGfx.clear();
-
-    // Dash phase: shifts at 1 unit per 600ms for a slow "flowing" feel.
-    const phasePx = ((nowMs / 600) % 1) * 12; // dash pattern total = 8 + 4 = 12
-
-    // Draft-route preview line: when the panel is open and the FROM/TO
-    // selection is valid + distinct, render a low-alpha dashed cyan line
-    // between the two island centres so the player sees the proposed
-    // route on the map before commissioning. No chevrons — there are no
-    // batches in flight on a draft.
-    if (visible) {
-      const fromId = fromSel.value;
-      const toId = toSel.value;
-      if (fromId && toId && fromId !== toId) {
-        const p1 = resolveScreenPos(fromId);
-        const p2 = resolveScreenPos(toId);
-        if (p1 && p2) {
-          drawDashedSegment(routeGfx, p1, p2, phasePx, VISION_BLUE, 0.3);
-        }
-      }
-    }
-
-    for (const route of deps.world.routes) {
-      const p1 = resolveScreenPos(route.from);
-      const p2 = resolveScreenPos(route.to);
-      if (!p1 || !p2) continue;
-      // §6 cable tint discrimination — land `cable` and §4 ocean-layer
-      // `submarine_cable` are power-link routes (no cargo) and read
-      // distinctly from cargo routes. The submarine variant uses a
-      // darker steel-blue so the player can see at a glance which power
-      // routes are undersea.
-      const tint =
-        route.type === 'submarine_cable'
-          ? SUBMARINE_CABLE_TINT
-          : route.type === 'cable'
-            ? LAND_CABLE_TINT
-            : VISION_BLUE;
-      drawDashedSegment(routeGfx, p1, p2, phasePx, tint, 0.55);
-
-      // Pulse the destination endpoint amber when a batch arrives within 2s.
-      let nextEta = Infinity;
-      for (const b of route.inFlight) {
-        const eta = (b.arrivalTime - nowMs) / 1000;
-        if (eta < nextEta) nextEta = eta;
-      }
-      if (nextEta >= 0 && nextEta <= 2) {
-        const pulse = 1 - nextEta / 2; // 0..1 over the last 2s
-        const radius = 6 + pulse * 4;
-        routeGfx.circle(p2.x, p2.y, radius).stroke({ width: 1.5, color: 0xf5a742, alpha: 0.4 + 0.4 * pulse });
-      }
-
-      // In-flight chevrons
-      for (const b of route.inFlight) {
-        const total = b.arrivalTime - b.dispatchTime;
-        if (total <= 0) continue;
-        const t = Math.max(0, Math.min(1, (nowMs - b.dispatchTime) / total));
-        const cx = p1.x + (p2.x - p1.x) * t;
-        const cy = p1.y + (p2.y - p1.y) * t;
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        const len = Math.sqrt(dx * dx + dy * dy);
-        if (len <= 0) continue;
-        const ux = dx / len;
-        const uy = dy / len;
-        drawChevron(batchGfx, cx, cy, ux, uy);
-      }
-    }
-
-    lastCacheKey = key;
-    lastVisible = visible;
-    lastDraftKey = draftKey;
-    lastNowMsBucket = nowBucket;
-  }
-
-  /** Stroke a dashed line from p1 to p2 in chunks. PixiJS 8's Graphics
-   *  lacks a native setLineDash equivalent, so we emit one moveTo/lineTo
-   *  per dash segment. */
-  function drawDashedSegment(
-    g: Graphics,
-    p1: { x: number; y: number },
-    p2: { x: number; y: number },
-    phasePx: number,
-    color: number,
-    alpha: number,
-  ): void {
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const totalLen = Math.sqrt(dx * dx + dy * dy);
-    if (totalLen <= 0) return;
-    const ux = dx / totalLen;
-    const uy = dy / totalLen;
-    const DASH = 8;
-    const GAP = 4;
-    const PERIOD = DASH + GAP;
-    // Offset must INCREASE with phasePx so dashes slide p1→p2 (from→to),
-    // matching cargo + chevron travel direction. `-phasePx` flowed backwards.
-    let drawn = phasePx - PERIOD;
-    while (drawn < totalLen) {
-      const startT = Math.max(0, drawn);
-      const endT = Math.min(totalLen, drawn + DASH);
-      if (endT > startT) {
-        const sx = p1.x + ux * startT;
-        const sy = p1.y + uy * startT;
-        const ex = p1.x + ux * endT;
-        const ey = p1.y + uy * endT;
-        g.moveTo(sx, sy).lineTo(ex, ey).stroke({ width: 1.5, color, alpha });
-      }
-      drawn += PERIOD;
-    }
-  }
-
-  /** Draw a small ▶ chevron centred at (cx, cy) pointing along (ux, uy). */
-  function drawChevron(
-    g: Graphics,
-    cx: number,
-    cy: number,
-    ux: number,
-    uy: number,
-  ): void {
-    // Chevron geometry: triangle 10 long, 8 wide.
-    const len = 6; // distance from centre to tip
-    const back = 4; // distance from centre back
-    const width = 4; // half-width of the back edge
-    const px = -uy;
-    const py = ux;
-    const tipX = cx + ux * len;
-    const tipY = cy + uy * len;
-    const baseLX = cx - ux * back + px * width;
-    const baseLY = cy - uy * back + py * width;
-    const baseRX = cx - ux * back - px * width;
-    const baseRY = cy - uy * back - py * width;
-    g.moveTo(tipX, tipY)
-      .lineTo(baseLX, baseLY)
-      .lineTo(baseRX, baseRY)
-      .closePath()
-      .fill({ color: VISION_BLUE, alpha: 0.85 })
-      .stroke({ width: 1, color: 0xf5a742, alpha: 0.6 });
+    deps.routeRenderer.update(deps.world.routes, nowMs, draftKey, visible);
   }
 
   // Cache the populated-island id set so buildOptions() only re-runs when the
@@ -1264,10 +1071,6 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     hide,
     toggle,
     isVisible: () => visible,
-    routeLayer,
-    setIslandScreenPosResolver: (fn) => {
-      resolveScreenPos = fn;
-    },
   };
 }
 
