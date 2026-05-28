@@ -1,0 +1,62 @@
+{
+  "v": 14,
+  "savedAt": 1700000000000,
+  "savedAtPerf": 0,
+  "world": {
+    "islands": [
+      {
+        "id": "home",
+        "name": "home",
+        "biome": "plains",
+        "cx": 0,
+        "cy": 0,
+        "majorRadius": 14,
+        "minorRadius": 14,
+        "populated": true,
+        "discovered": true,
+        "buildings": [],
+        "modifiers": []
+      }
+    ],
+    "seed": "demo-seed",
+    "drones": [],
+    "routes": [],
+    "vehicles": [],
+    "satellites": [],
+    "repairDrones": [],
+    "debrisFields": [],
+    "commPackets": [],
+    "latticeActive": false,
+    "latticeNodeIslands": []
+  },
+  "islandStates": [
+    {
+      "id": "home",
+      "state": {
+        "id": "home",
+        "buildings": [],
+        "inventory": {},
+        "storageCaps": {},
+        "funnelPending": {},
+        "starterInventoryGrace": {},
+        "xp": 0,
+        "level": 1,
+        "unspentSkillPoints": 0,
+        "unlockedNodes": [],
+        "unlockedEdges": [],
+        "socketBindings": [],
+        "declaredAt": null,
+        "lastResetAt": null,
+        "lastTick": 0,
+        "aiCoreCrafted": false,
+        "ascendantCoreCrafted": false,
+        "timeLockBankedMin": 0,
+        "accelerationQueue": [],
+        "accelerationRemainingMin": 0,
+        "bankingEnabled": false,
+        "genesisTarget": null,
+        "batteryStoredWs": 0
+      }
+    }
+  ]
+}

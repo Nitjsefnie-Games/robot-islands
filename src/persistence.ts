@@ -76,7 +76,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 14 as const;
+export const SCHEMA_VERSION = 15 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -84,7 +84,7 @@ export const SCHEMA_VERSION = 14 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -416,6 +416,17 @@ export function migrateV12toV13(s: SerializedSnapshotV12): SaveSnapshot {
  *  progression. */
 export type SerializedSnapshotV13 = Omit<SaveSnapshot, 'v'> & { readonly v: 13 };
 
+/** v14 top-level snapshot — structurally identical to v15 SaveSnapshot
+ *  except for the missing co2Kg / totalCo2Kg / playerLat / playerLon fields. */
+export type SerializedSnapshotV14 = Omit<SaveSnapshot, 'v' | 'world' | 'islandStates'> & {
+  readonly v: 14;
+  readonly world: Omit<SerializedWorld, 'totalCo2Kg' | 'playerLat' | 'playerLon'>;
+  readonly islandStates: ReadonlyArray<{
+    readonly id: string;
+    readonly state: Omit<SerializedIslandState, 'co2Kg'>;
+  }>;
+};
+
 /** v13 → v14: reset per-island level, xp, unspentSkillPoints, and skill-tree
  *  progression (unlockedNodes, unlockedEdges, socketBindings). Preserves
  *  buildings, inventory, drones, routes, satellites — everything outside the
@@ -438,6 +449,24 @@ export function migrateV13toV14(s: SerializedSnapshotV13): SaveSnapshot {
         unlockedEdges: [],
         socketBindings: [],
       },
+    })),
+  } as unknown as SaveSnapshot;
+}
+
+/** v14 → v15: additive — seeds co2Kg, totalCo2Kg, playerLat, playerLon with safe defaults. */
+export function migrateV14toV15(s: SerializedSnapshotV14): SaveSnapshot {
+  return {
+    ...s,
+    v: 15 as const,
+    world: {
+      ...s.world,
+      totalCo2Kg: 0,
+      playerLat: null,
+      playerLon: null,
+    },
+    islandStates: s.islandStates.map((entry) => ({
+      ...entry,
+      state: { ...entry.state, co2Kg: 0 },
     })),
   } as unknown as SaveSnapshot;
 }
@@ -611,6 +640,9 @@ export function deserializeWorld(
   if ((snapshot as unknown as { v: number }).v === 13) {
     snapshot = migrateV13toV14(snapshot as unknown as SerializedSnapshotV13);
   }
+  if ((snapshot as unknown as { v: number }).v === 14) {
+    snapshot = migrateV14toV15(snapshot as unknown as SerializedSnapshotV14);
+  }
 
   if (snapshot.v !== SCHEMA_VERSION) {
     throw new Error(
@@ -723,9 +755,9 @@ export function deserializeWorld(
     latticeActive: snapshot.world.latticeActive ?? false,
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
     commPackets: [...snapshot.world.commPackets],
-    totalCo2Kg: snapshot.world.totalCo2Kg ?? 0,
-    playerLat: snapshot.world.playerLat ?? null,
-    playerLon: snapshot.world.playerLon ?? null,
+    totalCo2Kg: snapshot.world.totalCo2Kg,
+    playerLat: snapshot.world.playerLat,
+    playerLon: snapshot.world.playerLon,
     generatedCells: deserializeGeneratedCells(islands, snapshot.world.generatedCells),
     oceanCells: new Map(snapshot.world.oceanCells ?? []),
     depthRevealedCells: new Set(snapshot.world.depthRevealedCells ?? []),

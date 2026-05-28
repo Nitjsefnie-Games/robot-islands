@@ -6,6 +6,7 @@
 // the load-bearing logic and ARE testable in isolation: the IDB wrappers
 // just thread JSON through the store.
 
+import { readFileSync, existsSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { terrainAtForBiome } from './biomes.js';
@@ -98,6 +99,7 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     auraAmpVersion: 0,
     auraAmpCache: null,
     auraAmpCacheVersion: -1,
+    co2Kg: 0,
     funnelPending: emptyFunnel(),
     declaredAt: null,
     aiCoreCrafted: false,
@@ -132,7 +134,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(14);
+    expect(snap.v).toBe(15);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1470,7 +1472,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(14);
+    expect(snap.v).toBe(15);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -1498,6 +1500,9 @@ describe('migrateV7toV8', () => {
         repairDrones: [],
         debrisFields: [],
         commPackets: [],
+    totalCo2Kg: 0,
+    playerLat: null,
+    playerLon: null,
       },
       islandStates: [
         {
@@ -1558,6 +1563,9 @@ describe('migrateV7toV8', () => {
         repairDrones: [],
         debrisFields: [],
         commPackets: [],
+    totalCo2Kg: 0,
+    playerLat: null,
+    playerLon: null,
       },
       islandStates: [
         {
@@ -1639,6 +1647,9 @@ describe('migrateV8toV9', () => {
         repairDrones: [],
         debrisFields: [],
         commPackets: [],
+    totalCo2Kg: 0,
+    playerLat: null,
+    playerLon: null,
       },
       islandStates: [
         {
@@ -1678,7 +1689,7 @@ describe('migrateV8toV9', () => {
 });
 
 describe('deserializeWorld v8 → v9 round-trip', () => {
-  it('migrates a v8 snapshot and yields v14 in-memory state with empty socketBindings', () => {
+  it('migrates a v8 snapshot and yields v15 in-memory state with empty socketBindings', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
@@ -1736,6 +1747,9 @@ describe('migrateV11toV12', () => {
         repairDrones: [],
         debrisFields: [],
         commPackets: [],
+    totalCo2Kg: 0,
+    playerLat: null,
+    playerLon: null,
       } as unknown as SerializedWorld,
       islandStates: [{
         id: 'home',
@@ -1791,6 +1805,9 @@ describe('migrateV13toV14', () => {
         repairDrones: [],
         debrisFields: [],
         commPackets: [],
+    totalCo2Kg: 0,
+    playerLat: null,
+    playerLon: null,
       },
       islandStates: [{
         id: 'home',
@@ -1910,8 +1927,8 @@ describe('migrateV12toV13', () => {
   });
 });
 
-describe('deserializeWorld v7 → v14 migration chain', () => {
-  it('walks v7 through v8/v9/v10/v11/v12/v13/v14 and refunds SP via cumulativeSkillPointsForLevel', () => {
+describe('deserializeWorld v7 → v15 migration chain', () => {
+  it('walks v7 through v8/v9/v10/v11/v12/v13/v14/v15 and refunds SP via cumulativeSkillPointsForLevel', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
@@ -1946,4 +1963,48 @@ describe('deserializeWorld v7 → v14 migration chain', () => {
     expect(home.socketBindings).toBeInstanceOf(Map);
     expect(home.socketBindings.size).toBe(0);
   });
+});
+
+
+describe('persistence v14 → v15', () => {
+  it('v14 fixture loads cleanly into v15 with new fields seeded', () => {
+    const v14 = JSON.parse(readFileSync('src/fixtures/v14-minimal.json', 'utf8'));
+    const result = deserializeWorld(v14);
+    expect(result).not.toBeNull();
+    expect(result!.world.totalCo2Kg).toBe(0);
+    expect(result!.world.playerLat).toBeNull();
+    expect(result!.world.playerLon).toBeNull();
+    for (const entry of result!.islandStates.values()) {
+      expect(entry.co2Kg).toBe(0);
+    }
+  });
+
+  it('v15 round-trips byte-identical through serialize → deserialize → serialize', () => {
+    const world = makeInitialWorld(0);
+    const islandStates = new Map<string, IslandState>();
+    for (const spec of world.islands) {
+      if (spec.populated) {
+        islandStates.set(spec.id, makeInitialIslandState(spec, 0));
+      }
+    }
+    // Use 0 for both timestamps so lastTick remaps to 0 and the round-trip
+    // is byte-identical (deserializeWorld replaces lastTick with nowPerfMs -
+    // deltaMs, so matching save and load timestamps keeps it stable).
+    const s1 = serializeWorld(world, islandStates, 0, 0);
+    const reloaded = deserializeWorld(s1, 0, 0);
+    const s2 = serializeWorld(reloaded!.world, reloaded!.islandStates, s1.savedAt, s1.savedAtPerf);
+    expect(JSON.parse(JSON.stringify(s2))).toEqual(JSON.parse(JSON.stringify(s1)));
+  });
+
+  it.skipIf(!existsSync('/tmp/robot-islands-save.json'))(
+    'live /tmp/robot-islands-save.json migrates v14 → v15 with zero defaults',
+    () => {
+      const raw = readFileSync('/tmp/robot-islands-save.json', 'utf8');
+      const result = deserializeWorld(JSON.parse(raw));
+      expect(result).not.toBeNull();
+      expect(typeof result!.world.totalCo2Kg).toBe('number');
+      // playerLat / playerLon may be null (v14 default) or set (post-migration write);
+      // both are valid post-migration states.
+    },
+  );
 });
