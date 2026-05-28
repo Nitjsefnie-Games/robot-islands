@@ -833,10 +833,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // Pallet-rack section analog. Generic storage — each PlacedBuilding picks
     // its `cargoLabel` and only that resource's cap is raised.
     storage: { category: 'generic', capacity: 500 },
-    // §14 placeholder — tune in Appendix A.
-    // BOM source: WarehouseRack.com pallet-rack section.
-    // 15 kg stone foundation + 35 kg wood slats = 50 kg.
-    placementCost: { stone: 15, wood: 35 },
+    // BOM source: WarehouseRack.com pallet-rack section per rev-16 §13.3.
+    // 80 wood slats + 30 stone base = 110 kg.
+    placementCost: { wood: 80, stone: 30 },
     glyph: '▦',
   },
   silo: {
@@ -851,10 +850,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // Coban Machinery 50 t farm silo × 4 modules analog. Bumps every resource
     // whose RESOURCE_STORAGE_CATEGORY === 'dry_goods'.
     storage: { category: 'dry_goods', capacity: 200000 },
-    // §14 placeholder — tune in Appendix A.
-    // BOM source: Coban Machinery small farm silo.
-    // 150 kg stone pad + 60 kg wood framing + 40 kg iron fasteners = 250 kg.
-    placementCost: { stone: 150, wood: 60, iron_ingot: 40 },
+    // BOM source: Coban Machinery 50 t farm silo × 4 modules per rev-16 §13.3.
+    // 5500 steel wall sheets + 1500 stone foundation + 200 iron_ingot door/hardware = 7.2 t.
+    placementCost: { steel: 5500, stone: 1500, iron_ingot: 200 },
     glyph: '▦',
   },
   biomass_plant: {
@@ -872,8 +870,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '❀',
   },
   // rev-16 §10.15-A — bootstrap power, no fuel, shoreline only.
-  // BOM source: rev-16 §4.3 + 19th-c. overshot watermill analog.
-  // 50 wood frame + 30 stone foundation + 5 iron axle = 85 kg.
   water_wheel: {
     id: 'water_wheel',
     displayName: 'Water Wheel',
@@ -886,6 +882,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { produces: 20 },
     // 'water_edge' is not in TerrainKind; 'water' is the existing shoreline kind.
     requiredTile: ['water'],
+    // BOM source: rev-16 §4.3 + 19th-c. overshot watermill analog.
+    // 50 wood frame + 30 stone foundation + 5 iron axle = 85 kg.
     placementCost: { wood: 50, stone: 30, iron_ingot: 5 },
     glyph: '⌬',
   },
@@ -908,8 +906,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '✦',
   },
   // rev-16 §10.15-A — bootstrap power, no fuel, open-air grass.
-  // BOM source: rev-16 §4.3 + Dutch tjasker analog (wooden sail-mill).
-  // 80 wood + 20 stone + 3 iron = 103 kg.
   windmill_t0: {
     id: 'windmill_t0',
     displayName: 'Windmill (T0)',
@@ -921,6 +917,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x4a4830,
     power: { produces: 15 },
     requiredTile: ['grass'],
+    // BOM source: rev-16 §4.3 + Dutch tjasker analog (wooden sail-mill).
+    // 80 wood + 20 stone + 3 iron = 103 kg.
     placementCost: { wood: 80, stone: 20, iron_ingot: 3 },
     glyph: '※',
   },
@@ -1020,8 +1018,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '♨',
   },
   // rev-16 §12.5 Bonus — pre-electric thermal power, burns coal/charcoal.
-  // BOM source: rev-16 §4.3 + Smeaton's 1772 cylinder-pump-beam reconstruction.
-  // 200 stone foundation + 80 iron beam + 40 copper boiler + 30 wood scaffolding + 5 bolt = 355 kg.
   newcomen_engine: {
     id: 'newcomen_engine',
     displayName: 'Newcomen Engine',
@@ -1031,6 +1027,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x806040,
     stroke: 0x301808,
     power: { produces: 4 },
+    // BOM source: rev-16 §4.3 + Smeaton's 1772 cylinder-pump-beam reconstruction.
+    // 200 stone foundation + 80 iron beam + 40 copper boiler + 30 wood scaffolding + 5 bolt = 350.25 kg.
     placementCost: { stone: 200, iron_ingot: 80, copper_ingot: 40, wood: 30, bolt: 5 },
     glyph: '⚒',
   },
@@ -1590,9 +1588,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // rev-16 §13.3: +100000 cap (100 t), liquids/gases category only.
     // Kennedy Tank mid-class industrial analog.
     storage: { category: 'liquid_gas', capacity: 100000 },
-    // BOM source: Kennedy Tank — mid-class industrial chemical tank (scaled).
-    // 6000 concrete + 4000 stone + 1500 iron_ingot + 100 gear + 200 glass = 11.9 t.
-    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, glass: 200 },
+    // BOM source: Kennedy Tank — mid-class industrial chemical tank per rev-16 §13.3.
+    // 8000 steel shell + 3000 concrete bund + 1000 stone footing + 200 gear valve-train + 300 pipe manifold = 13.6 t.
+    placementCost: { steel: 8000, concrete: 3000, stone: 1000, gear: 200, pipe: 300 },
     glyph: '▦',
   },
   // rev-16 §13.3: Cold Storage — T2 specialized storage for temperature-
@@ -1608,9 +1606,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8090a0,
     stroke: 0x2a3848,
     storage: { category: 'temp_sensitive', capacity: 50000 },
-    // BOM source: Small refrigerated warehouse module — insulated shell + compressor pad.
-    // 7000 concrete + 4000 stone + 1500 iron_ingot + 120 gear + 300 copper_ingot = 13.0 t.
-    placementCost: { concrete: 7000, stone: 4000, iron_ingot: 1500, gear: 120, copper_ingot: 300 },
+    // BOM source: Small refrigerated warehouse module — insulated shell + compressor pad per rev-16 §13.3.
+    // 200 steel_beam frame + 3000 concrete pad + 1000 stone foundation + 500 copper_ingot refrigeration coil + 200 gear compressor + 100 microchip control = 14.91 t.
+    placementCost: { steel_beam: 200, concrete: 3000, stone: 1000, copper_ingot: 500, gear: 200, microchip: 100 },
     glyph: '▦',
   },
   // rev-16 §13.3: Component Warehouse — T2 specialized storage for
@@ -1626,9 +1624,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x806840,
     stroke: 0x3a2810,
     storage: { category: 'components', capacity: 20000 },
-    // BOM source: Industrial pallet-racked components warehouse — steel-shelf frame.
-    // 5000 concrete + 3000 stone + 1200 iron_ingot + 200 gear + 200 copper_ingot = 9.8 t.
-    placementCost: { concrete: 5000, stone: 3000, iron_ingot: 1200, gear: 200, copper_ingot: 200 },
+    // BOM source: Industrial pallet-racked components warehouse — steel-shelf frame per rev-16 §13.3.
+    // 160 steel_beam rack + 2000 concrete floor + 800 stone foundation + 500 iron_ingot bracket + 150 gear roller + 200 copper_ingot busbar = 11.8 t.
+    placementCost: { steel_beam: 160, concrete: 2000, stone: 800, iron_ingot: 500, gear: 150, copper_ingot: 200 },
     glyph: '▦',
   },
   // §3.4 / §8.9: Land Reclamation Hub — T2 trigger building (3×3 per §8.9
@@ -1747,9 +1745,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x504860,
     stroke: 0x1a1830,
     storage: { category: 'rare', capacity: 5000 },
-    // BOM source: UL-rated bank vault enclosure — reinforced concrete + steel liner.
-    // 800 steel_beam frame + 12000 concrete shell + 300 stone foundation + 100 microchip + 200 wire ≈ 52.4 t.
-    placementCost: { steel_beam: 800, concrete: 12000, stone: 300, microchip: 100, wire: 200 },
+    // BOM source: UL-rated bank vault enclosure — reinforced concrete + steel liner per rev-16 §13.3.
+    // 1200 steel_beam liner + 15000 concrete vault wall + 500 stone footing + 200 microchip biometric lock + 400 wire alarm mesh = 75.72 t.
+    placementCost: { steel_beam: 1200, concrete: 15000, stone: 500, microchip: 200, wire: 400 },
     glyph: '▦',
   },
   // §8.9: Platform Constructor (a.k.a. Foundry of Lands). T3 special building
@@ -2553,8 +2551,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4080a0,        // radar-blue
     stroke: 0x102030,
     power: { consumes: 80 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 200, microchip: 80, glass: 30 },
+    // BOM source: NASA DSN 70-m antenna support structure — scaled from T4 34-m analog per rev-16 §4.5.
+    // 1200 steel_beam structure + 3000 concrete pad + 300 microchip control + 300 glass radome + 400 wire feed + 300 ceramic_insulator = 63.83 t.
+    placementCost: { steel_beam: 1200, concrete: 3000, microchip: 300, glass: 300, wire: 400, ceramic_insulator: 300 },
     glyph: '◉',
   },
   // §7.12 / §11.7 / §14.10: Antimatter Refinery — produces Antimatter
@@ -2570,14 +2569,14 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc060e0, // electric violet
     stroke: 0x300040,
     power: { consumes: 5000 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 150, reality_anchor: 75 },
+    // BOM source: ITER tokamak containment building + cryogenic infrastructure — scaled to antimatter spec.
+    // Closest real analog: ITER tokamak × 0.15 (containment shell only, no magnets).
+    // spec-mandate: no real analog — antimatter_refinery is §7.12 fantasy chemistry.
+    // 2000 steel_beam shell + 5000 concrete shield + 500 microchip control + 100 exotic_alloy liner + 20 ai_core + 50 plasma_containment_vessel = 105.22 t.
+    placementCost: { steel_beam: 2000, concrete: 5000, microchip: 500, exotic_alloy: 100, ai_core: 20, plasma_containment_vessel: 50 },
     glyph: '✦',
   },
   // rev-16 §10.13 — industrial-scale concrete output, 100 concrete / 60 s = 6 t/hr.
-  // BOM source: Schwing Stetter CP-30 batching-plant datasheet.
-  // 8000 steel structure + 2000 stone aggregate-bin + 500 microchip control
-  // + 500 pipe slurry + 200 gear mixer + 100 wire = 12.5 t embodied.
   bulk_concrete_plant: {
     id: 'bulk_concrete_plant',
     displayName: 'Bulk Concrete Plant',
@@ -2588,7 +2587,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa0a0a0,
     stroke: 0x303030,
     power: { consumes: 2000 },
-    placementCost: { steel_beam: 8000, stone: 2000, microchip: 500, pipe: 500, gear: 200, wire: 100 },
+    // BOM source: Schwing Stetter CP-30 batching-plant datasheet.
+    // 8000 steel structure + 2000 stone aggregate-bin + 500 microchip control
+    // + 500 pipe slurry + 200 gear mixer + 100 wire = 12.5 t embodied.
+    placementCost: { steel: 8000, stone: 2000, microchip: 500, pipe: 500, gear: 200, wire: 100 },
     glyph: '▣',
   },
   // §14.3 / §14.10: Scanner Sat Assembly — produces Scanner Sat payloads
@@ -2602,7 +2604,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4080a0,
     stroke: 0x20303a,
     power: { consumes: 600 },
-    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    // BOM source: NASA smallsat integration facility — cleanroom + vibration table pad.
+    // 800 steel_beam frame + 4000 concrete isolation pad + 400 microchip ESD tooling + 400 glass observation + 400 wire harness + 20 exotic_alloy fixture = 44.66 t.
+    placementCost: { steel_beam: 800, concrete: 4000, microchip: 400, glass: 400, wire: 400, exotic_alloy: 20 },
     glyph: '◇',
   },
   // §14.3 / §14.10: Relay Sat Assembly — produces Relay Sat payloads for
@@ -2616,7 +2620,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa040c0,
     stroke: 0x303a20,
     power: { consumes: 600 },
-    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    // BOM source: NASA smallsat integration facility — cleanroom + vibration table pad.
+    // 800 steel_beam frame + 4000 concrete isolation pad + 400 microchip ESD tooling + 400 glass observation + 400 wire harness + 20 exotic_alloy fixture = 44.7 t.
+    placementCost: { steel_beam: 800, concrete: 4000, microchip: 400, glass: 400, wire: 400, exotic_alloy: 20 },
     glyph: '◇',
   },
   // §14.3 / §14.10: Sweeper Sat Assembly — produces Sweeper Sat payloads
@@ -2630,7 +2636,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x709020,
     stroke: 0x203030,
     power: { consumes: 600 },
-    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    // BOM source: NASA smallsat integration facility — cleanroom + vibration table pad.
+    // 800 steel_beam frame + 4000 concrete isolation pad + 400 microchip ESD tooling + 400 glass observation + 400 wire harness + 20 exotic_alloy fixture = 44.7 t.
+    placementCost: { steel_beam: 800, concrete: 4000, microchip: 400, glass: 400, wire: 400, exotic_alloy: 20 },
     glyph: '◇',
   },
   // §14.3 / §14.10: Mirror Sat Assembly — produces Mirror Sat payloads for
@@ -2648,7 +2656,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xd0b040,
     stroke: 0x402a10,
     power: { consumes: 600 },
-    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    // BOM source: NASA smallsat integration facility — cleanroom + vibration table pad.
+    // 800 steel_beam frame + 4000 concrete isolation pad + 400 microchip ESD tooling + 400 glass observation + 400 wire harness + 20 exotic_alloy fixture = 44.7 t.
+    placementCost: { steel_beam: 800, concrete: 4000, microchip: 400, glass: 400, wire: 400, exotic_alloy: 20 },
     glyph: '◇',
   },
   // §14.7 / §14.10: OIP Assembly — produces Orbital Insertion Packages
@@ -2663,7 +2673,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x408060,
     stroke: 0x403014,
     power: { consumes: 600 },
-    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    // BOM source: NASA smallsat integration facility — cleanroom + vibration table pad.
+    // 800 steel_beam frame + 4000 concrete isolation pad + 400 microchip ESD tooling + 400 glass observation + 400 wire harness + 20 exotic_alloy fixture = 44.7 t.
+    placementCost: { steel_beam: 800, concrete: 4000, microchip: 400, glass: 400, wire: 400, exotic_alloy: 20 },
     glyph: '⚙',
   },
   // §14.12 / §14.10: Repair Pack Assembly — produces Repair Pack consumables
@@ -2677,7 +2689,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x806040,
     stroke: 0x402818,
     power: { consumes: 600 },
-    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    // BOM source: NASA smallsat integration facility — cleanroom + vibration table pad.
+    // 800 steel_beam frame + 4000 concrete isolation pad + 400 microchip ESD tooling + 400 glass observation + 400 wire harness + 20 exotic_alloy fixture = 44.7 t.
+    placementCost: { steel_beam: 800, concrete: 4000, microchip: 400, glass: 400, wire: 400, exotic_alloy: 20 },
     glyph: '⚙',
   },
   // §14.12 / §14.10: Repair Drone Assembly — produces Repair Drone units.
@@ -2690,7 +2704,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa06060,
     stroke: 0x402020,
     power: { consumes: 600 },
-    placementCost: { steel: 250, microchip: 60, glass: 30 },
+    // BOM source: NASA smallsat integration facility — cleanroom + vibration table pad.
+    // 800 steel_beam frame + 4000 concrete isolation pad + 400 microchip ESD tooling + 400 glass observation + 400 wire harness + 20 exotic_alloy fixture = 44.7 t.
+    placementCost: { steel_beam: 800, concrete: 4000, microchip: 400, glass: 400, wire: 400, exotic_alloy: 20 },
     glyph: '◇',
   },
   // -------------------------------------------------------------------------
@@ -4725,7 +4741,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // to the ground-station comm range of an island with a Spaceport
     // (see `groundStationCommRange` in orbital.ts).
     power: { consumes: 400 },
-    placementCost: { antimatter_propellant: 40, steel: 80, reality_anchor: 40 },
+    // BOM source: extrapolated from DSN 70-m + NASA launch-comms analogs per rev-16 §4.5.
+    // Closest analog: antenna_t4 (DSN 34-m) × 2.5 (ascendant scale).
+    // spec-mandate: no real analog — exotic_alloy, ai_core, reality_anchor are §6 fantasy.
+    // 1600 steel_beam tower + 4000 concrete base + 600 microchip phased array + 500 glass lens + 600 wire feed + 400 ceramic_insulator + 50 exotic_alloy cladding + 15 ai_core + 5 reality_anchor = 85.33 t.
+    placementCost: { steel_beam: 1600, concrete: 4000, microchip: 600, glass: 500, wire: 600, ceramic_insulator: 400, exotic_alloy: 50, ai_core: 15, reality_anchor: 5 },
     glyph: '⟁',
   },
   // ---------------------------------------------------------------------------
@@ -4976,7 +4996,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // Wired into §5.1 power balance via def.power.produces alone, like
     // solar_panel / nuclear_reactor — no per-tick fuel burn.
     power: { produces: 2000 },
-    placementCost: { exotic_alloy: 6, ai_core: 1, plasma_containment_vessel: 1 },
+    // BOM source: spec-mandate: deep-sea geothermal harness — no real analog at T6 scale.
+    // Closest real analog: OTEC floating platform containment × 0.4 (scaled).
+    // spec-mandate: no real analog — exotic_alloy, ai_core, plasma_containment_vessel are §6 fantasy.
+    // 1200 steel_beam pressure hull + 5000 concrete ballast + 100 exotic_alloy heat exchanger + 20 ai_core + 40 plasma_containment_vessel + 500 heavy_cable tether + 300 microchip = 69.19 t.
+    placementCost: { steel_beam: 1200, concrete: 5000, exotic_alloy: 100, ai_core: 20, plasma_containment_vessel: 40, heavy_cable: 500, microchip: 300 },
     oceanPlacement: true,
     terrainReqs: ['hydrothermal_vent'],
     glyph: '★',
