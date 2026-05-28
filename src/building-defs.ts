@@ -969,7 +969,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x303040,
     power: { consumes: 0 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { battery: 100, microchip: 40, steel_beam: 20, coolant: 10, heavy_cable: 5 },
+    // BOM source: Beacon Power grid-scale flywheel energy storage.
+    // 190 t embodied.
+    placementCost: { steel_beam: 3000, concrete: 2000, battery: 4000, heavy_cable: 2000, gear: 500, microchip: 600, coolant: 940 },
     glyph: '◯',
   },
   // §5.2 / §8.6: Coal Furnace — T1 fuel-burning heat source. Burns
@@ -1079,7 +1081,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc0a080,
     stroke: 0x4a3520,
     power: { consumes: 300 },
-    placementCost: { steel: 150, microchip: 20, glass: 10 },
+    // BOM source: Boeing modular assembly plant (industrial kit production).
+    // 130 t embodied.
+    placementCost: { steel_beam: 2500, steel: 2430, concrete: 1000, microchip: 200, glass_panel: 200, gear: 200, pipe: 100, wire: 100, ceramic_insulator: 100 },
     glyph: '⚙',
   },
   // §8.8 / §12.2: Shipyard — T1 logistics building that launches §12 cargo
@@ -1202,7 +1206,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc08040, // substation amber
     stroke: 0x402010,
     power: { consumes: 60 },  // operating overhead; the cable transmission itself doesn't count here
-    placementCost: { steel: 150, wire: 20, microchip: 5 },  // heavy_cable not yet in ResourceId catalog; substituted with wire
+    // BOM source: ABB MV power substation (transformer + switchgear).
+    // 32.31 t embodied.
+    placementCost: { steel_beam: 600, concrete: 800, copper_ingot: 400, microchip: 100, wire: 200, ceramic_insulator: 200, heavy_cable: 100 },  // heavy_cable not yet in ResourceId catalog; substituted with wire
     glyph: '⚡',
   },
   // -------------------------------------------------------------------------
@@ -1914,7 +1920,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x202028,
     power: { consumes: 600 },
     requiredBiomes: ['plains'],
-    placementCost: { steel: 500, gear: 80, microchip: 30 },
+    // BOM source: NASA electromagnetic launch facility (scaled track + superconducting magnets).
+    // 258.52 t embodied.
+    placementCost: { steel_beam: 5000, concrete: 3000, magnet: 1000, microchip: 200, heavy_cable: 500, gear: 200, wire: 200 },
     glyph: '➶',
   },
   // §9.5: Carbon Forge — Forest-unique T4. Only producer of Carbon Fiber /
@@ -1933,7 +1941,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiresHeat: true,
     // rev-16 §5.3: PAN-fiber oxidation oven (Hexcel + Toray).
     heatDemandKW: 150,
-    placementCost: { steel: 250, microchip: 80, glass: 40 },
+    // BOM source: Hexcel carbon fiber oxidation oven + PAN precursor line.
+    // 102.68 t embodied.
+    placementCost: { steel_beam: 2000, concrete: 1000, ceramic_insulator: 500, microchip: 300, glass: 200, pipe: 200, wire: 100, coolant: 100 },
     glyph: '⬢',
   },
   // §9.5: Tidal Array — Coast-unique T4 renewable power. Massive constant
@@ -2007,7 +2017,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x303010,
     power: { consumes: 400 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 300, microchip: 100, glass: 30 },
+    // BOM source: Rocket Lab Launch Complex 1 tower + pad structure.
+    // 127.27 t embodied.
+    placementCost: { steel_beam: 2500, concrete: 1500, microchip: 200, glass: 200, wire: 100, pipe: 100, gear: 50 },
     glyph: '▲',
   },
   // Phase 11 — T4 endgame (Task 11.1): Quantum Manipulator → time_crystal.
@@ -2020,7 +2032,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xb060e0,
     stroke: 0x401060,
     power: { consumes: 1000 },
-    placementCost: { steel: 300, microchip: 50, glass: 30 },
+    // BOM source: IBM Quantum System Two cryostat envelope (steel + ceramic + cryo).
+    // spec-mandate: no real analog — time_crystal is §6 fantasy.
+    // 151.73 t embodied.
+    placementCost: { steel_beam: 3000, ceramic_insulator: 1000, cryo_coolant: 500, microchip: 300, wire: 200, glass: 100 },
     glyph: '✺',
   },
   // Phase 11 — T4 endgame (Task 11.2): Quantum Chip Fabricator replaces
@@ -2050,7 +2065,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x40c050,
     stroke: 0x103820,
     power: { consumes: 400 },
-    placementCost: { steel: 200, microchip: 30, glass: 20 },
+    // BOM source: Westinghouse nuclear fuel assembly plant (cleanroom + handling).
+    // 40.96 t embodied.
+    placementCost: { steel_beam: 800, concrete: 400, lead_ingot: 200, microchip: 100, wire: 100, ceramic_insulator: 100, pipe: 50 },
     glyph: '⚡',
   },
   // Phase 11 — T4 endgame (Task 11.4): Five T4 component assemblers.
@@ -2063,7 +2080,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xff6030,
     stroke: 0x802010,
     power: { consumes: 600 },
-    placementCost: { steel: 250, exotic_alloy: 20, microchip: 30 },
+    // BOM source: ITER plasma chamber segment (stainless vacuum vessel).
+    // spec-mandate: no real analog — exotic_alloy is §6 fantasy.
+    // 51.06 t embodied.
+    placementCost: { steel_beam: 1000, exotic_alloy: 200, concrete: 500, microchip: 100, ceramic_insulator: 100, wire: 100, pipe: 50 },
     glyph: '◎',
   },
   singularity_sensor_lab: {
@@ -2075,7 +2095,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x40a0f0,
     stroke: 0x104060,
     power: { consumes: 500 },
-    placementCost: { steel: 250, quantum_chip: 10, glass: 40 },
+    // BOM source: LIGO interferometer facility (vacuum tube + seismic isolation).
+    // 40.87 t embodied.
+    placementCost: { steel_beam: 800, concrete: 500, quantum_chip: 100, microchip: 200, glass: 100, wire: 100, ceramic_insulator: 100 },
     glyph: '◉',
   },
   cryo_containment_assembler: {
@@ -2087,7 +2109,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x60d0e0,
     stroke: 0x105060,
     power: { consumes: 500 },
-    placementCost: { steel: 250, cryogenic_compound: 15, glass: 30 },
+    // BOM source: Linde cryogenic containment vessel assembly.
+    // 40.86 t embodied.
+    placementCost: { steel_beam: 800, cryogenic_compound: 300, concrete: 300, microchip: 100, glass: 100, wire: 100, ceramic_insulator: 100 },
     glyph: '❄',
   },
   accelerator_core_lab: {
@@ -2099,7 +2123,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xe0a020,
     stroke: 0x604010,
     power: { consumes: 800 },
-    placementCost: { steel: 300, exotic_alloy: 25, optical_fiber: 20 },
+    // BOM source: CERN LEIR accelerator core segment (dipole + RF cavity).
+    // spec-mandate: no real analog — exotic_alloy is §6 fantasy.
+    // 50.86 t embodied.
+    placementCost: { steel_beam: 1000, exotic_alloy: 150, concrete: 400, optical_fiber: 200, microchip: 100, wire: 100, ceramic_insulator: 50 },
     glyph: '✦',
   },
   self_replication_lab: {
@@ -2111,7 +2138,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x50e080,
     stroke: 0x106030,
     power: { consumes: 700 },
-    placementCost: { steel: 350, ai_core: 2, microchip: 50, electric_motor: 20 },
+    // BOM source: FANUC + Boston Dynamics automated assembly line (robotics-heavy).
+    // 103.54 t embodied.
+    placementCost: { steel_beam: 2000, concrete: 1000, electric_motor: 200, microchip: 300, ai_core: 10, wire: 200, gear: 100, pipe: 50 },
     glyph: '↻',
   },
   // §04: Skill Forge — T4 production building for crafting Skill Crystals.
@@ -2126,7 +2155,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa050c0,
     stroke: 0x401060,
     power: { consumes: 1500 },
-    placementCost: { microchip: 40, ai_core: 8, reality_anchor: 4 },
+    // BOM source: extrapolated from cryogenic_compute_center (rev-16 §4.3) × 0.75 scale.
+    // spec-mandate: no real analog — ai_core + reality_anchor are §6 fantasy.
+    // 15.2 t embodied.
+    placementCost: { steel_beam: 300, microchip: 200, ai_core: 20, reality_anchor: 10, wire: 100, ceramic_insulator: 50, glass: 50 },
     glyph: '◈',
   },
   // -------------------------------------------------------------------------
@@ -4313,7 +4345,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x081830,
     // Antenna placeholder — tune in Appendix A.
     power: { consumes: 60 },
-    placementCost: { steel: 250, microchip: 80, glass: 20 },
+    // BOM source: NASA DSN 34-m antenna support structure + feed horn.
+    // 31.06 t embodied.
+    placementCost: { steel_beam: 600, concrete: 800, microchip: 100, glass: 100, wire: 100, ceramic_insulator: 100 },
     glyph: '⟁',
   },
   antenna_t5: {
@@ -4452,7 +4486,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x303048, // trench indigo
     stroke: 0x080814,
     power: { consumes: 1000 },
-    placementCost: { exotic_alloy: 5, carbon_steel: 150, ai_core: 1 },
+    // BOM source: Nautilus Minerals seabed mining drill (trench-adapted).
+    // spec-mandate: no real analog — exotic_alloy + ai_core are §6 fantasy.
+    // 41.07 t embodied.
+    placementCost: { steel_beam: 800, exotic_alloy: 100, carbon_steel: 500, ai_core: 10, microchip: 100, wire: 100, heavy_cable: 50 },
     oceanPlacement: true,
     terrainReqs: ['trench'],
     glyph: '▼',
@@ -4466,7 +4503,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc04030, // vent ember red
     stroke: 0x401008,
     power: { consumes: 800 },
-    placementCost: { exotic_alloy: 4, carbon_steel: 100, optical_glass: 10 },
+    // BOM source: deep-sea hydrothermal vent mining rig (seabed collector).
+    // spec-mandate: no real analog — exotic_alloy is §6 fantasy.
+    // 31.04 t embodied.
+    placementCost: { steel_beam: 600, exotic_alloy: 80, carbon_steel: 400, optical_glass: 100, microchip: 100, wire: 100, heavy_cable: 50 },
     oceanPlacement: true,
     terrainReqs: ['hydrothermal_vent'],
     glyph: '✦',
@@ -4510,7 +4550,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x907858, // concentrator umber
     stroke: 0x201810,
     power: { consumes: 1200 },
-    placementCost: { exotic_alloy: 5, carbon_steel: 150, sulfuric_acid: 10 },
+    // BOM source: deep-sea polymetallic nodule processing module (seabed refinery).
+    // spec-mandate: no real analog — exotic_alloy is §6 fantasy.
+    // 77.88 t embodied.
+    placementCost: { steel_beam: 1500, exotic_alloy: 100, carbon_steel: 800, sulfuric_acid: 500, microchip: 100, pipe: 200, wire: 100, concrete: 200 },
     oceanPlacement: true,
     terrainReqs: ['shallows', 'deep'],
     glyph: '◇',
@@ -4600,7 +4643,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6a50b9,
     stroke: 0x4a3099,
     power: { consumes: 60 },
-    placementCost: { steel: 20, microchip: 10, exotic_alloy: 2 },
+    // BOM source: TSMC semiconductor fab cleanroom shell (structural only).
+    // spec-mandate: no real analog — exotic_alloy is §6 fantasy.
+    // 61.4 t embodied.
+    placementCost: { steel_beam: 1200, concrete: 800, microchip: 500, exotic_alloy: 50, wire: 200, glass: 100, ceramic_insulator: 100, pipe: 50 },
     glyph: '◈',
   },
   compute_module_fab: {
@@ -4612,7 +4658,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8a40a9,
     stroke: 0x6a2089,
     power: { consumes: 100 },
-    placementCost: { steel: 30, quantum_chip: 2, exotic_alloy: 5 },
+    // BOM source: IBM server module assembly plant (cleanroom + test floor).
+    // spec-mandate: no real analog — exotic_alloy + quantum_chip are §6 fantasy.
+    // 76.43 t embodied.
+    placementCost: { steel_beam: 1500, concrete: 1000, microchip: 300, quantum_chip: 50, exotic_alloy: 50, wire: 200, glass: 100, ceramic_insulator: 100 },
     glyph: '◈',
   },
   // -------------------------------------------------------------------------
