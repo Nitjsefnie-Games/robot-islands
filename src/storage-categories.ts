@@ -409,4 +409,15 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   oceanography_crystal_t1: 'rare',
   oceanography_crystal_t2: 'rare',
   oceanography_crystal_t3: 'rare',
+  // Phase 2 — SI-units rework new resources (§08)
+  co: 'liquid_gas',
+  co2: 'liquid_gas',
+  refinery_gas: 'liquid_gas',
+  wood_tar: 'liquid_gas',
+  water_vapor: 'liquid_gas',
+  aviation_kerosene_crude: 'liquid_gas',
+  mill_scale: 'dry_goods',
+  calcium_sulfonate: 'dry_goods',
+  air: 'liquid_gas',
+  cryo_coolant_vented: 'liquid_gas',
 };
