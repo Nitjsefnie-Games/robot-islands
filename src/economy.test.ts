@@ -246,7 +246,7 @@ describe('tutorial production flags (lubricantProduced / boltProduced)', () => {
     const state = makeState({
       level: 5,
       buildings: [LUBRICANT_REFINERY],
-      inventory: { ...blankInventory(), crude_oil: 50, chlorine: 50 },
+      inventory: { ...blankInventory(), heavy_oil: 50, chlorine: 50, calcium_sulfonate: 50 },
     });
     expect(state.lubricantProduced).toBeFalsy();
     advanceIsland(state, 1_000_000, { defs: POWER_FREE });

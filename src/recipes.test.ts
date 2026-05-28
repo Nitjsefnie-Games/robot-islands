@@ -95,6 +95,9 @@ describe('recipe graph completeness (step 18)', () => {
     // air is an exogenous-flow resource (atmosphere intake, §3.3);
     // no producer recipe exists by design.
     producers.add('air');
+    // calcium_sulfonate is a Phase 2 expansion-hook resource
+    // (lubricant additive); producer recipe lands in Phase 10.
+    producers.add('calcium_sulfonate');
     const violations: { recipeId: string; missing: ResourceId }[] = [];
     for (const [recipeId, recipe] of Object.entries(RECIPES)) {
       if (!recipe) continue;
