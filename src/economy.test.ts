@@ -756,17 +756,17 @@ describe('power (§5.1)', () => {
     expect(net.coal).toBeCloseTo(-0.5303030303030303, 9); // workshop 0.01 + coal_gen 0.2
   });
 
-  it('partial brownout: Coal Gen alone (100W) under-supplies Mine 80W + Workshop 60W → factor ≈ 0.714', () => {
-    // P_produced = 100, P_consumed = 140, factor = 100/140 ≈ 0.7142857.
+  it('partial brownout: Coal Gen alone (50W) under-supplies Mine 80W + Workshop 60W → factor ≈ 0.357', () => {
+    // P_produced = 50, P_consumed = 140, factor = 50/140 ≈ 0.3571429.
     const state = makeState({
       buildings: [COAL_GEN, MINE_PWR_80, WORKSHOP_PWR],
       inventory: { ...blankInventory(), coal: 50 },
     });
     const { power, byBuilding } = computeRates(state, { defs: MINE_HEAVY });
-    expect(power.produced).toBe(100);
+    expect(power.produced).toBe(50);
     expect(power.consumed).toBe(140);
-    expect(power.factor).toBeCloseTo(100 / 140, 9);
-    const expectedFactor = 100 / 140;
+    expect(power.factor).toBeCloseTo(50 / 140, 9);
+    const expectedFactor = 50 / 140;
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR_80)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
     expect(mineRate).toBeCloseTo((1 / 17) * expectedFactor, 9); // rebalanced step #19; 2026-05-18 ÷3 (Mine 50→17)
@@ -839,7 +839,7 @@ describe('power (§5.1)', () => {
     expect(wsRate).toBeCloseTo((1 / 33) * (50 / 60), 9);
   });
 
-  it('power_systems.notable.turbineStaging unlocked: Coal Gen produces more than 100W', () => {
+  it('power_systems.notable.turbineStaging unlocked: Coal Gen produces more than 50W', () => {
     const node = FULL_CATALOG.find((n) => n.id === 'power_systems.notable.turbineStaging')!;
     const state = makeState({
       buildings: [COAL_GEN],
@@ -847,7 +847,7 @@ describe('power (§5.1)', () => {
       unlockedNodes: new Set(['power_systems.notable.turbineStaging']),
     });
     const { power } = computeRates(state);
-    expect(power.produced).toBeCloseTo(100 * (1 + node.magnitude), 9);
+    expect(power.produced).toBeCloseTo(50 * (1 + node.magnitude), 9);
   });
 
   it('Coal Gen with empty outputs is never output-stalled (cap doesn\'t apply)', () => {
@@ -862,8 +862,8 @@ describe('power (§5.1)', () => {
     });
     const { power, byBuilding } = computeRates(state);
     // Coal Gen has inputAvail=1 (coal in stockpile), outputAvail=1 (no
-    // outputs to be capped), so it's active and produces 100W.
-    expect(power.produced).toBe(100);
+    // outputs to be capped), so it's active and produces 50W.
+    expect(power.produced).toBe(50);
     expect(power.consumed).toBe(0);
     expect(power.factor).toBe(1);
     const cgRate = byBuilding.find((r) => r.building === COAL_GEN)?.effectiveRate;
@@ -907,8 +907,8 @@ describe('power (§5.1)', () => {
       // solarMultiplier is computed off state.lastTick (= 0) when nowMs is
       // unset; t=0 lands at start-of-Day per §2.7, so Solar produces full 50W.
     });
-    // Solar 50W + Coal Gen 100W = 150W — same as the identity-modifier run.
-    expect(power.produced).toBe(150);
+    // Solar 50W + Coal Gen 50W = 100W — same as the identity-modifier run.
+    expect(power.produced).toBe(100);
   });
 });
 
@@ -2557,7 +2557,7 @@ describe('day-night solar modulation (§2.7)', () => {
     }
   });
 
-  it('non-solar producers ignore the multiplier (Coal Gen at night still produces 100W)', () => {
+  it('non-solar producers ignore the multiplier (Coal Gen at night still produces 50W)', () => {
     // Coal Gen burns coal; needs coal in inventory to be active.
     const state = makeState({
       buildings: [COAL_GEN],
@@ -2565,7 +2565,7 @@ describe('day-night solar modulation (§2.7)', () => {
       lastTick: 12 * HOUR, // Night
     });
     const { power } = computeRates(state, undefined, 12 * HOUR);
-    expect(power.produced).toBe(100);
+    expect(power.produced).toBe(50);
   });
 
   it('§2.7 Sunspire is solar-tagged — produces 0W at deep night (regression: missing `solar: true` flag)', () => {
@@ -2622,17 +2622,17 @@ describe('day-night solar modulation (§2.7)', () => {
   });
 
   it('mixed island: at night only coal generator contributes; at noon both do', () => {
-    // SOLAR (50W) + COAL_GEN (100W) into MINE (40W) + WORKSHOP (60W) = 100W demand.
+    // SOLAR (50W) + COAL_GEN (50W) into MINE (40W) + WORKSHOP (60W) = 100W demand.
     const buildings = [SOLAR, COAL_GEN, MINE_PWR, WORKSHOP_PWR];
     const inv = { ...blankInventory(), coal: 50, iron_ore: 50 };
-    // Noon: produced = 50 + 100 = 150.
+    // Noon: produced = 50 + 50 = 100.
     const noon = makeState({ buildings, inventory: { ...inv }, lastTick: 0 });
     const noonPower = computeRates(noon).power;
-    expect(noonPower.produced).toBe(150);
-    // Night: solar 0, coal still 100.
+    expect(noonPower.produced).toBe(100);
+    // Night: solar 0, coal still 50.
     const night = makeState({ buildings, inventory: { ...inv }, lastTick: 12 * HOUR });
     const nightPower = computeRates(night, undefined, 12 * HOUR).power;
-    expect(nightPower.produced).toBe(100);
+    expect(nightPower.produced).toBe(50);
   });
 
   it('offline catchup over 24h integrates ramp sub-segments (matches per-quadrant ticking)', () => {
@@ -2800,7 +2800,7 @@ describe('§14.3 Mirror Sat — effectiveSolar composition (additive ramp + Σ b
       lastTick: 12 * HOUR,
     });
     const { power } = computeRates(state, { solarBoost: 0.7 }, 12 * HOUR, 12 * HOUR);
-    expect(power.produced).toBe(100);
+    expect(power.produced).toBe(50);
   });
 });
 
