@@ -817,6 +817,12 @@ export interface WorldState {
    *  but no depth knowledge yet. Mutable: discovery writers add cell
    *  keys as sonar coverage advances. */
   depthRevealedCells: Set<string>;
+  /** §si-units Phase 1 — global CO₂ pool in kg. */
+  totalCo2Kg: number;
+  /** §si-units Phase 1 — player geo-latitude in [-90, +90] or null. */
+  playerLat: number | null;
+  /** §si-units Phase 1 — player geo-longitude in [-180, +180] or null. */
+  playerLon: number | null;
 
 }
 
@@ -899,7 +905,7 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
   // Sat upgrades populate it as the player builds those revealers.
   const depthRevealedCells = new Set<string>();
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], commPackets: [], generatedCells, oceanCells, depthRevealedCells };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells };
 }
 
 /**
@@ -1070,6 +1076,7 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     auraAmpVersion: 0,
     auraAmpCache: null,
     auraAmpCacheVersion: -1,   // -1 forces miss on first computeAuraAmplifiers call
+    co2Kg: 0,
     funnelPending: startingFunnelPending(),
     declaredAt: null,
     // §13.1 T5 access gate. Defaults to false on every fresh island — T5
