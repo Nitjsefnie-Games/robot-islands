@@ -29,6 +29,7 @@ import { effectiveSkillMultipliers } from './skilltree.js';
 import {
   routeCapacityMultiplierForWeather,
   rasterizeRouteCells,
+  sumIslandCo2,
   weather,
   WEATHER_ROUTE_LOSS_RATE,
 } from './weather.js';
@@ -578,6 +579,8 @@ export function deliverArrivals(
             cell.cx,
             cell.cy,
             b.dispatchTime + cell.transitFraction * transitTimeMs,
+            undefined,
+            sumIslandCo2(world),
           );
           const lossRate = WEATHER_ROUTE_LOSS_RATE[w.state] ?? 0;
           if (lossRate > 0) {

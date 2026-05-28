@@ -132,12 +132,32 @@ function sampleState(weights: ReadonlyArray<WeightEntry>, rng: () => number): We
   return last?.state ?? 'clear';
 }
 
+/** §7.3: CO₂-band multiplier on storm-weight summing.
+ *  Bands: <100kg = 1.0; <10t = 1.1; <100t = 1.3; ≥100t = 1.6 (crisis). */
+export function co2WeatherMultiplier(totalCo2Kg: number): number {
+  if (totalCo2Kg < 100) return 1.0;
+  if (totalCo2Kg < 10_000) return 1.1;
+  if (totalCo2Kg < 100_000) return 1.3;
+  return 1.6;
+}
+
+export function sumIslandCo2(world: { islandStates?: Map<string, { co2Kg?: number }> }): number {
+  let sum = 0;
+  if (world.islandStates) {
+    for (const [, state] of world.islandStates) {
+      sum += state.co2Kg ?? 0;
+    }
+  }
+  return sum;
+}
+
 export function weather(
   seed: string,
   cx: number,
   cy: number,
   nowMs: number,
   biome?: Biome,
+  totalCo2Kg: number = 0,
 ): WeatherCell {
   const rng = makeSeededRng(`${seed}_weather_${cx}_${cy}`);
   const baseWeights = biome ? biomeWeatherWeights(biome) : BASE_WEIGHTS;
@@ -155,6 +175,16 @@ export function weather(
       for (const e of mutable) {
         if (e.state === 'severe_storm' || e.state === 'catastrophic') {
           e.weight *= 1.25;
+        }
+      }
+      weights = mutable;
+    }
+    const co2Mul = co2WeatherMultiplier(totalCo2Kg);
+    if (co2Mul !== 1.0) {
+      const mutable: WeightEntry[] = weights.map((e) => ({ state: e.state, weight: e.weight }));
+      for (const e of mutable) {
+        if (e.state === 'storm' || e.state === 'severe_storm' || e.state === 'catastrophic') {
+          e.weight *= co2Mul;
         }
       }
       weights = mutable;

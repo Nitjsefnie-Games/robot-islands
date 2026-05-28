@@ -38,7 +38,7 @@ import { hasOperationalBuilding, isOperationalBuilding, type PlacedBuilding } fr
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { dayPhaseName, nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
-import { weather } from './weather.js';
+import { sumIslandCo2, weather } from './weather.js';
 import { resolveHeatAssignments, MIN_HEAT_FACTOR, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
 import { footprintTiles } from './shape-mask.js';
@@ -624,7 +624,7 @@ export function evaluateConditionalEffectCondition(
       if (!world || nowMs === undefined) return false;
       const island = world.islands.find((i) => i.id === state.id);
       if (!island) return false;
-      const cell = weather(world.seed, island.cx, island.cy, nowMs, island.biome);
+      const cell = weather(world.seed, island.cx, island.cy, nowMs, island.biome, sumIslandCo2(world));
       return cell.state === 'storm' || cell.state === 'severe_storm' || cell.state === 'catastrophic';
     }
     case 'during-night': {
