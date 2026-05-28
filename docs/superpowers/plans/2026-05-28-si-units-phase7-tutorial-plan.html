@@ -1,0 +1,1808 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units Phase 7 — tutorial rework + reachability gate · implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 36px;
+      line-height: 1.16; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    h1 code {
+      font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px;
+      color: #C9B98A;
+    }
+    .prompt-box {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok     { color: var(--olive); }
+    .summary .v.warn   { color: var(--warn); }
+
+    .toc { background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+
+    section { margin-bottom: 56px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 25px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    h3.sub {
+      font-family: var(--serif); font-weight: 500; font-size: 17px;
+      color: var(--slate); margin: 20px 0 8px;
+    }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 12px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 5px; }
+
+    /* milestone timeline */
+    .milestones { display: flex; flex-direction: column; gap: 0; }
+    .milestone { display: grid; grid-template-columns: 110px 28px 1fr;
+      gap: 0 18px; position: relative; }
+    .milestone .when { text-align: right; font-family: var(--mono);
+      font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+    .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+    .milestone .dot { width: 14px; height: 14px; border-radius: 50%;
+      background: var(--white); border: 3px solid var(--clay);
+      margin-top: 4px; flex-shrink: 0; }
+    .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+    .milestone .dot.gate { background: var(--warn); border-color: var(--warn); }
+    .milestone .dot.human { background: var(--rust); border-color: var(--rust); }
+    .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+    .milestone:last-child .line { display: none; }
+    .milestone .body { padding-bottom: 30px; }
+    .milestone .body h3 {
+      font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin-bottom: 4px;
+    }
+    .milestone .body p { font-size: 13.5px; color: var(--gray-500);
+      margin-bottom: 10px; max-width: 700px; }
+    .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .milestone .tag {
+      font-family: var(--mono); font-size: 11.5px;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+    }
+    .milestone .tag.est { color: var(--warn); }
+    .milestone .tag.ok  { color: var(--olive); }
+    .milestone .tag.human { color: var(--rust); }
+
+    /* phase card */
+    .phase-card {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 22px 26px;
+    }
+    .phase-card h4 {
+      font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      margin: 18px 0 8px;
+    }
+    .phase-card h4:first-child { margin-top: 0; }
+    .verify, .rollback {
+      background: var(--gray-150); border-radius: 8px;
+      padding: 12px 16px; font-size: 13.5px; margin-top: 14px;
+    }
+    .verify strong { color: var(--olive); }
+    .rollback strong { color: var(--warn); }
+
+    /* code panel */
+    .code {
+      background: #121110; border-radius: 12px;
+      padding: 16px 20px; overflow-x: auto; margin: 10px 0;
+    }
+    .code pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .code .kw  { color: var(--clay); }
+    .code .str { color: var(--olive); }
+    .code .cm  { color: var(--gray-500); }
+    .code .fn  { color: #C9B98A; }
+    .code .new { background: rgba(143, 165, 110, 0.13); display: block; }
+    .code .del { background: rgba(224, 139, 127, 0.13); display: block; }
+
+    /* table */
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; }
+    .tbl td.ok { color: var(--olive); }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* callout */
+    .callout {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px;
+    }
+    .callout .ct {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px;
+    }
+    .callout.crit { border-left-color: var(--rust); }
+    .callout.crit .ct { color: var(--rust); }
+    .callout.ok { border-left-color: var(--olive); }
+    .callout.ok .ct { color: var(--olive); }
+
+    /* risk table */
+    .risks {
+      border: var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat); color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .check-list {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 22px;
+      font-size: 14px; color: var(--gray-700); max-width: 880px;
+    }
+    .check-list h4 {
+      font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 10px;
+    }
+    .check-list ul { list-style: none; margin: 0; padding: 0; }
+    .check-list li {
+      padding: 6px 0 6px 28px; position: relative; border-bottom: 1px dashed var(--gray-300);
+      font-size: 13.5px;
+    }
+    .check-list li:last-child { border-bottom: none; }
+    .check-list li::before {
+      content: ""; position: absolute; left: 4px; top: 12px;
+      width: 14px; height: 14px; border: 1.5px solid var(--gray-500);
+      border-radius: 3px;
+    }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · robot-islands · SI-units rework · Phase 7 of 7 (FINAL)</div>
+      <h1>Tutorial rework — 32-step <code>TUTORIAL_STEPS</code>, reachability gate, home terrain patches</h1>
+      <div class="prompt-box">
+        <span class="label">Spec</span>
+        Companion spec at <code>specs/2026-05-28-si-units-phase7-tutorial</code>.
+        Final phase of the SI-units rework. New <code>src/tutorial.ts</code> +
+        <code>src/tutorial-ui.ts</code> modules ship a 32-step hint system per
+        rev-16 §11.2. <code>defaultTerrainAt</code> at
+        <a class="cite">island.ts:293-355</a> gains copper_ore + clay clusters
+        and a 2×2 tree cluster; the single-stone scatter is removed.
+        <code>startingInventory()</code> at
+        <a class="cite">world.ts:983-995</a> is rewritten to the rev-9 9-resource
+        starter. The reachability invariant first introduced in Phase 4 is
+        promoted to a binding gate: <strong>battery_bank reachable from the
+        rev-9 starter inventory in ≤ 45 min of simulated game-time</strong>.
+        Subagent work is ~16 h; an 8 h human playtest is the final and only
+        manual approval gate of the seven-phase rework.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Subagent effort</div><div class="v accent">~16 h</div></div>
+      <div class="cell"><div class="k">Human playtest</div><div class="v warn">~8 h</div></div>
+      <div class="cell"><div class="k">Phases</div><div class="v">10 (Phase 0–9)</div></div>
+      <div class="cell"><div class="k">Commits</div><div class="v ok">8–10 + 2–4 playtest fixes</div></div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Phases</span>
+      <a href="#p0">Phase 0 — Baseline</a>
+      <a href="#p1">Phase 1 — Home terrain</a>
+      <a href="#p2">Phase 2 — Rev-9 starter</a>
+      <a href="#p3">Phase 3 — tutorial.ts</a>
+      <a href="#p4">Phase 4 — tutorial-ui.ts</a>
+      <a href="#p5">Phase 5 — Wiring + settings</a>
+      <a href="#p6">Phase 6 — tutorial.test.ts</a>
+      <a href="#p7">Phase 7 — Reachability gate</a>
+      <a href="#p8">Phase 8 — Subagent green</a>
+      <a href="#p9">Phase 9 — Human playtest gate</a>
+      <a href="#vmatrix">Verification matrix</a>
+      <a href="#risks">Risks</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">00</span><h2>Milestone timeline</h2></div>
+      <p class="sec-intro">Ten phases. Eight produce commits; Phase 0 (no
+        commit, baseline) and Phase 9 (human playtest, no subagent commits)
+        bracket the work. Phase 7 is the binding reachability gate; Phase 9
+        is the final human-side approval gate of the entire SI-units rework.</p>
+
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">step 0</div>
+          <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 0 — Baseline (no commit)</h3>
+            <p>Phases 1–6 of the SI-units rework have landed. Confirm full suite green; record current test count + reachability-test status.</p>
+            <div class="tags"><span class="tag est">~15 min</span><span class="tag">npm test</span><span class="tag">npx tsc --noEmit</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 1</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 1 — Home terrain patches in <code>src/island.ts</code></h3>
+            <p>Per spec §02 + rev-16 §11.1 + §12.8.1. Add copper_ore + clay (and sand if absent) clusters; promote tree cluster to 2×2; delete single-stone scatter. Adjust any home-terrain fixtures.</p>
+            <div class="tags"><span class="tag est">~1.5 h</span><span class="tag">island.ts</span><span class="tag">island.test.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 2</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 2 — Rev-9 starter inventory in <code>src/world.ts</code></h3>
+            <p>Per spec §03 + rev-16 §12.9.3. Rewrite <code>startingInventory()</code> at <a class="cite">world.ts:983-995</a> to the 9-resource starter; update fixtures hard-coded to the old (stone 60 / wood 40 / steel 30) values.</p>
+            <div class="tags"><span class="tag est">~1 h</span><span class="tag">world.ts</span><span class="tag">~10–20 tests</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 3</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 3 — Create <code>src/tutorial.ts</code></h3>
+            <p>Per spec §05. <code>TutorialStep</code> interface, 32-entry <code>TUTORIAL_STEPS</code> array, <code>currentStep</code> + <code>checkDismissals</code> helpers. Pure module — no DOM, no PixiJS.</p>
+            <div class="tags"><span class="tag est">~5 h</span><span class="tag">tutorial.ts (NEW)</span><span class="tag">~350 LOC</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 4</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 4 — Create <code>src/tutorial-ui.ts</code> + CSS</h3>
+            <p>Per spec §06. DOM hint overlay; <code>refreshTutorialHint(world)</code> entry point; <code>.tutorial-hint</code> styles in <code>src/ui.css</code>. Top-right anchored; click-to-dismiss; auto-dismiss on condition.</p>
+            <div class="tags"><span class="tag est">~2 h</span><span class="tag">tutorial-ui.ts (NEW)</span><span class="tag">ui.css</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 5</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 5 — Ticker wire + settings buttons</h3>
+            <p>Hook <code>refreshTutorialHint(world)</code> + <code>checkDismissals(world)</code> into <code>src/main.ts</code>'s ticker. Add "Skip Tutorial" + "Restart Tutorial" buttons to <code>src/settings-ui.ts</code>.</p>
+            <div class="tags"><span class="tag est">~1.5 h</span><span class="tag">main.ts</span><span class="tag">settings-ui.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 6</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 6 — <code>src/tutorial.test.ts</code></h3>
+            <p>Per spec §9.1 + §9.3 + §9.4 + §9.5. One <code>it()</code> per step asserts trigger fires + dismisses correctly; save/load migration; step ordering; skip/restart mechanism.</p>
+            <div class="tags"><span class="tag est">~3 h</span><span class="tag">tutorial.test.ts (NEW)</span><span class="tag">~50 tests</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 7</div>
+          <div class="dot-col"><span class="dot gate"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 7 — Reachability invariant extension <strong>(binding gate)</strong></h3>
+            <p>Extend the Phase 4 <code>src/reachability.test.ts</code>: rev-9 starter + post-Phase-7 terrain reaches <code>battery_bank</code> in ≤ 45 min via <code>simulateOptimalPath</code>. <strong>If fails, Phase 7 cannot land.</strong></p>
+            <div class="tags"><span class="tag est">~1.5 h</span><span class="tag">reachability.test.ts</span><span class="tag">BINDING GATE</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 8</div>
+          <div class="dot-col"><span class="dot gate"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 8 — Subagent green confirmation</h3>
+            <p>Full <code>npm test</code> + <code>npx tsc --noEmit</code>. No new commit — terminal confirmation that the seven preceding commits leave the suite green and the compiler clean before handing to human playtest.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">npm test</span><span class="tag">tsc --noEmit</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">gate</div>
+          <div class="dot-col"><span class="dot human"></span></div>
+          <div class="body">
+            <h3>Phase 9 — Human playtest gate (8 h) <strong>— manual</strong></h3>
+            <p>Per spec §10. Manual checklist: fresh playthrough to battery_bank ≤ 45 min, high-latitude run, skip/restart flow, late-game steps, pre-Phase-7 save load. May produce 2–4 fix commits per the budget; no commits required if everything passes clean.</p>
+            <div class="tags"><span class="tag human">8 h human</span><span class="tag">manual</span><span class="tag">islands.nitjsefni.eu</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p0">
+      <div class="sec-head"><span class="num">01</span><h2>Phase 0 — Baseline</h2></div>
+      <p class="sec-intro">No code change. Confirm Phases 1–6 of the SI-units
+        rework are landed and the suite is green before touching anything.</p>
+
+      <div class="phase-card">
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Confirm <code>HEAD</code> is on <code>master</code> at the post-Phase-6 commit (chemistry / heat / solar / CO₂ / map-picker all landed).</li>
+          <li>Run the full test suite. Note the test count for the impact-table delta:
+            <div class="code"><pre>npm test</pre></div>
+          </li>
+          <li>Run the type-check separately to catch strict-mode surprises before any code lands:
+            <div class="code"><pre>npx tsc --noEmit</pre></div>
+          </li>
+          <li>Confirm the Phase 4 reachability test is present at <code>src/reachability.test.ts</code> and currently green against the <em>pre-Phase-7</em> starter (this is the file Phase 7 will extend; Phase 7 doesn't author the file, only adds a new assertion).</li>
+          <li>If the suite is not green, stop and fix that first. Do not start Phase 1 on a red baseline.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0. <code>npx tsc --noEmit</code> exits 0. Record both test count and number of reachability assertions; Phase 6 + 7 will add to them.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;N/A — no changes made.</div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p1">
+      <div class="sec-head"><span class="num">02</span><h2>Phase 1 — Home terrain patches in <code>src/island.ts</code></h2></div>
+      <p class="sec-intro">Per spec §02. Patches to
+        <code>defaultTerrainAt</code> at <a class="cite">island.ts:293-355</a>:
+        add resource clusters the rev-9 tutorial chain needs at home, promote
+        the tree cluster shape, and remove the single-stone scatter that no
+        longer matters now that placement gates require contiguous clusters.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/island.ts</code> — <code>defaultTerrainAt</code> body at <a class="cite">island.ts:293-355</a>: add <code>copperOreTiles</code>, <code>clayTiles</code>, optional <code>sandTiles</code>; expand <code>treeTiles</code> to 2×2; delete <code>stoneTiles</code> (the scatter) and its consumption at <a class="cite">island.ts:353</a>.</li>
+          <li><code>src/island.test.ts</code> (existing) — update any test that snapshots the home terrain or that asserts the count of stone / tree tiles.</li>
+          <li><code>src/world.test.ts</code> (existing) — if the home spec is asserted at the resource-availability level (e.g. "home has limestone tile"), extend the same assertion for copper_ore + clay.</li>
+        </ul>
+
+        <h4>Pseudocode — defaultTerrainAt patch</h4>
+        <div class="code"><pre><span class="cm">// island.ts:295-297 — delete the scatter array entirely.</span>
+<span class="del"><span class="cm">// const stoneTiles: ReadonlyArray&lt;readonly [number, number]&gt; = [</span></span>
+<span class="del"><span class="cm">//   [-9, -2], [-8, 5], [3, 9], [7, -6], [10, 1], [-2, -10],</span></span>
+<span class="del"><span class="cm">// ];</span></span>
+
+<span class="cm">// island.ts:319-321 — expand tree cluster to 2×2 (rev-16 §12.8.1-B).</span>
+<span class="kw">const</span> treeTiles: <span class="kw">ReadonlyArray</span>&lt;<span class="kw">readonly</span> [<span class="kw">number</span>, <span class="kw">number</span>]&gt; = [
+  [6, -3], [7, -3], [6, -4],
+<span class="new">  [7, -4],  <span class="cm">// rev-16 §12.8.1-B — fourth tile completes the 2×2 square</span></span>
+];
+
+<span class="cm">// island.ts — NEW cluster declarations beside coalTiles / limestoneTiles.</span>
+<span class="cm">// Copper Mine (2×2, requiredTile: ['copper_ore']) needs four contiguous</span>
+<span class="cm">// copper_ore tiles. NW quadrant per spec §02.1; verify (-7..-6, -7..-6)</span>
+<span class="cm">// does not overlap existing clusters on read.</span>
+<span class="new"><span class="kw">const</span> copperOreTiles: <span class="kw">ReadonlyArray</span>&lt;<span class="kw">readonly</span> [<span class="kw">number</span>, <span class="kw">number</span>]&gt; = [</span>
+<span class="new">  [-7, -7], [-6, -7], [-7, -6], [-6, -6],</span>
+<span class="new">];</span>
+<span class="cm">// Brick / cement / ceramic chains all need clay. South side per spec §02.1.</span>
+<span class="new"><span class="kw">const</span> clayTiles: <span class="kw">ReadonlyArray</span>&lt;<span class="kw">readonly</span> [<span class="kw">number</span>, <span class="kw">number</span>]&gt; = [</span>
+<span class="new">  [5, 7], [6, 7], [5, 8], [6, 8],</span>
+<span class="new">];</span>
+<span class="cm">// IF defaultTerrainAt does NOT already return 'sand' for any tile</span>
+<span class="cm">// (verify by reading the function in full — beach tiles may be implicit),</span>
+<span class="cm">// add a sand cluster on the east coast. Skip otherwise.</span>
+<span class="new"><span class="kw">const</span> sandTiles: <span class="kw">ReadonlyArray</span>&lt;<span class="kw">readonly</span> [<span class="kw">number</span>, <span class="kw">number</span>]&gt; = [</span>
+<span class="new">  [10, -1], [11, -1], [10, 0], [11, 0],</span>
+<span class="new">];</span>
+
+<span class="cm">// Order matters in the lookup chain at island.ts:346-353.</span>
+<span class="cm">// New entries go BEFORE the generic 'grass' fallback (line 354). The</span>
+<span class="cm">// scatter-stone consumption (line 353) is deleted along with the array.</span>
+  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> waterTiles)        <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'water'</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> coalTiles)         <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'coal'</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> treeTiles)         <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'tree'</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> oilWellTiles)      <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'oil_well'</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> limestoneTiles)    <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'limestone'</span>;
+<span class="new">  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> copperOreTiles)    <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'copper_ore'</span>;</span>
+<span class="new">  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> clayTiles)         <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'clay'</span>;</span>
+<span class="new">  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> sandTiles)         <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'sand'</span>;</span>
+  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> stoneClusterTiles) <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'stone'</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> oreTiles)          <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'ore'</span>;
+<span class="del">  <span class="kw">for</span> (<span class="kw">const</span> t <span class="kw">of</span> stoneTiles)        <span class="kw">if</span> (t[0] === x && t[1] === y) <span class="kw">return</span> <span class="str">'stone'</span>;</span>
+  <span class="kw">return</span> <span class="str">'grass'</span>;</pre></div>
+
+        <h4>Coordinate verification step</h4>
+        <p class="body">Before committing, manually walk every existing
+          cluster in <a class="cite">island.ts:293-355</a> and confirm none
+          of the new coordinates collide. The function-body comment block at
+          <a class="cite">island.ts:326-344</a> already enumerates the existing
+          cluster positions; the proposed copper / clay / sand locations are
+          chosen to sit in unused quadrants. If a collision exists, shift the
+          new cluster by ±1 tile toward the centre of its quadrant — never out
+          of the radius-14 inscribed disk that bounds the buildable area.</p>
+
+        <h4>Sand verification step</h4>
+        <p class="body">Read <a class="cite">island.ts:293-355</a> in full
+          before adding the sand cluster. If <code>defaultTerrainAt</code> can
+          already return <code>'sand'</code> (e.g. from an implicit beach band
+          near the disk edge), <strong>do not add the sand cluster</strong> —
+          drop the <code>sandTiles</code> declaration and the corresponding
+          lookup line, leave a comment explaining the omission. The spec §02.1
+          says "verify if home has a beach tile; if not, add a 2×2 cluster";
+          this branch implements that conditional.</p>
+
+        <h4>Test updates</h4>
+        <ul class="body">
+          <li>Any test that snapshots <code>defaultTerrainAt</code> output (e.g. a tile-map fixture) must be regenerated. Re-running the snapshot suite with <code>-u</code> is acceptable here — the change is intentional.</li>
+          <li>If <code>island.test.ts</code> asserts <em>terrain counts</em> ("home has exactly 6 stone tiles"), update the constant to match the new layout (4 cluster + 0 scatter = 4 stone).</li>
+          <li>If <code>world.test.ts</code> asserts "home has limestone available", extend the parametric assertion to include <code>copper_ore</code> and <code>clay</code>.</li>
+        </ul>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Read <a class="cite">island.ts:293-355</a> in full. Note every cluster and the resource-priority lookup order at the bottom of the function.</li>
+          <li>Delete the <code>stoneTiles</code> scatter array (lines 295-297) and its consumption at line 353.</li>
+          <li>Expand <code>treeTiles</code> with <code>[7, -4]</code>.</li>
+          <li>Add <code>copperOreTiles</code>, <code>clayTiles</code>, and (conditionally) <code>sandTiles</code> declarations.</li>
+          <li>Add lookup-loop entries for each new cluster, placed before the existing <code>stoneClusterTiles</code> loop so that resource tiles win over fallback grass.</li>
+          <li>Update any home-terrain fixture / snapshot test.</li>
+          <li>Run <code>npm test</code>. New snapshot mismatches are acceptable; behavioural failures are not.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>npx tsc --noEmit</code> clean. Manual inspection in the dev preview tab (<code>npm run build</code> then reload at <code>https://islands.nitjsefni.eu/</code>) confirms the new resource clusters render at the expected positions; the old single-stone tiles no longer appear.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. The home-terrain function is pure and self-contained; no save-file migration concerns because <code>defaultTerrainAt</code> only applies to unbuilt tiles on first generation.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(island): home terrain patches for Phase 7 tutorial chain
+
+Per rev-16 §11.1 + §12.8.1 + design spec §02:
+  - Add copper_ore 2x2 cluster at (-7..-6, -7..-6) so Cell Press
+    can run without cross-island prospecting (rev-16 §11.1).
+  - Add clay 2x2 cluster at (5..6, 7..8) so brick / cement /
+    ceramic chains have a home source.
+  - Add sand 2x2 cluster at (10..11, -1..0) IF defaultTerrainAt
+    does not already return 'sand' for any tile (verify before
+    landing; drop if already present).
+  - Promote treeTiles from 3-tile L at (6..7, -3..-4) + (6, -4)
+    to 2x2 square — +33% wood/cluster, cleaner visual.
+  - Delete the 6-tile scatter stoneTiles array. Quarry needs the
+    cluster; single-tile stone no longer drives any placement.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase7-tutorial
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p2">
+      <div class="sec-head"><span class="num">03</span><h2>Phase 2 — Rev-9 starter inventory in <code>src/world.ts</code></h2></div>
+      <p class="sec-intro">Per spec §03. Rewrite
+        <code>startingInventory()</code> at <a class="cite">world.ts:983-995</a>
+        to the rev-9 9-resource starter. Sized to reach 1× battery_bank in
+        ≤ 45 minutes via the rev-9 cell_press chain.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/world.ts</code> — <code>startingInventory()</code> at <a class="cite">world.ts:983-995</a>; update the block-comment at <a class="cite">world.ts:975-981</a> describing the starter.</li>
+          <li>Tests hard-coded to the old starter — <code>npm test</code> after the rewrite will flag them; expect 10–20 touched. Update each to the rev-9 expectations.</li>
+        </ul>
+
+        <h4>Pseudocode — startingInventory rewrite</h4>
+        <div class="code"><pre><span class="cm">// world.ts:983 — replace the entire function.</span>
+<span class="kw">function</span> <span class="fn">startingInventory</span>(): <span class="kw">Record</span>&lt;ResourceId, <span class="kw">number</span>&gt; {
+  <span class="kw">const</span> inv = {} <span class="kw">as</span> <span class="kw">Record</span>&lt;ResourceId, <span class="kw">number</span>&gt;;
+  <span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> ALL_RESOURCES) inv[r] = 0;
+<span class="new">  <span class="cm">// rev-16 §12.9.3 — rev-9 starter. Sized to reach 1x battery_bank</span></span>
+<span class="new">  <span class="cm">// in &lt;= 45 min via the cell_press chain.</span></span>
+<span class="new">  inv.stone           = 1200;  <span class="cm">// ~22% battery-bank chain; Quarry refills rest</span></span>
+<span class="new">  inv.wood            = 600;   <span class="cm">// Logger/Mine/Workshop/Coal Furnace + Cell Press</span></span>
+<span class="new">  inv.iron_ore        = 30;    <span class="cm">// 3-5 smelter cycles before Mine output stabilises</span></span>
+<span class="new">  inv.coal            = 80;    <span class="cm">// ~25 min continuous Coal Furnace burn</span></span>
+<span class="new">  inv.iron_ingot      = 60;    <span class="cm">// Breaks circular dep: Mine 20 + Workshop 30 + 10</span></span>
+<span class="new">  inv.bolt            = 25;    <span class="cm">// Workshop placement 20 + 5 buffer</span></span>
+<span class="new">  inv.limestone       = 15;    <span class="cm">// BF flux + limekiln input for steel_mill quicklime</span></span>
+<span class="new">  inv.saltwater_cell  = 4;     <span class="cm">// Pre-built — saves ~3 min cell_press cycle</span></span>
+<span class="new">  inv.foundation_kit  = 1;     <span class="cm">// Unchanged — first settlement dispatch</span></span>
+<span class="new">  <span class="cm">// stone 60, wood 40, steel 30, foundation_kit 1 pre-rev-9 values</span></span>
+<span class="new">  <span class="cm">// REMOVED. steel intentionally 0 — player walks the iron-&gt;steel chain.</span></span>
+  <span class="kw">return</span> inv;
+}</pre></div>
+
+        <h4>Block-comment rewrite (world.ts:975-981)</h4>
+        <p class="body">The existing comment block describes the
+          pre-rev-9 values verbatim ("stone 60 — Mine (30) + Antenna T1 (15)
+          leaves 15 spare"). Rewrite it to enumerate the rev-9 line items and
+          point at the spec section so a future reader can find the
+          justification table:</p>
+        <div class="code"><pre><span class="new">  <span class="cm">/**</span></span>
+<span class="new">   <span class="cm">* Rev-9 starter inventory per rev-16 §12.9.3 + Phase 7 design spec §03.</span></span>
+<span class="new">   <span class="cm">* 9 line items, sized so the player can reach 1x battery_bank in</span></span>
+<span class="new">   <span class="cm">* &lt;= 45 minutes via the canonical tutorial chain. Replaces the</span></span>
+<span class="new">   <span class="cm">* pre-rev-9 4-resource starter (stone 60 / wood 40 / steel 30 / kit 1).</span></span>
+<span class="new">   <span class="cm">*</span></span>
+<span class="new">   <span class="cm">* Reachability is gated by src/reachability.test.ts — DO NOT lower any</span></span>
+<span class="new">   <span class="cm">* value without re-checking that the 45-min invariant holds.</span></span>
+<span class="new">   <span class="cm">*/</span></span></pre></div>
+
+        <h4>Touched-test detection</h4>
+        <p class="body">After the rewrite, run <code>npm test</code> and
+          collect every failing test that asserts a starter value. Each gets
+          one of three treatments:</p>
+        <ul class="body">
+          <li><strong>Recipe-cost assertions</strong> — they assumed steel 30 was enough to place a Wind Turbine. Rewrite to confirm iron_ingot 60 / coal 80 / wood 600 / stone 1200 enables the rev-9 first-build chain instead.</li>
+          <li><strong>Snapshot fixtures</strong> — regenerate with <code>npx vitest run -u</code>; the new starter is the intended baseline.</li>
+          <li><strong>Persistence tests</strong> — pre-Phase-7 saves still load (the schema didn't change); they just carry the old inventory values. Tests should verify either "starter == new defaults on fresh init" OR "loaded save preserves its own inventory" — never conflate the two paths.</li>
+        </ul>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Read <a class="cite">world.ts:975-995</a> in full to capture the current shape.</li>
+          <li>Rewrite the block-comment + function body per pseudocode above.</li>
+          <li>Run <code>npm test</code>. Expect ~10–20 failures hard-coded to the old starter.</li>
+          <li>Walk each failure and apply the appropriate treatment from the touched-test detection list. Resist regenerating snapshots wholesale; each one should be inspected to confirm the diff is intentional.</li>
+          <li>Re-run <code>npm test</code> until green.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>npx tsc --noEmit</code> clean. Manual: run <code>npm run build</code>, reload <code>islands.nitjsefni.eu</code>, start a new game, confirm the inventory panel shows the nine rev-9 line items and no others.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. No schema bump — saves remain compatible across the change.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(world): rev-9 starter inventory for Phase 7 tutorial chain
+
+Per rev-16 §12.9.3 + design spec §03. 9-resource starter sized
+to reach 1x battery_bank in &lt;= 45 min via the cell_press chain:
+
+  stone           1200   (was 60)    ~22% of battery-bank chain
+  wood            600    (was 40)    Logger/Mine/Workshop + Cell Press
+  iron_ore        30     (new)       3-5 smelter cycles head-start
+  coal            80     (new)       ~25 min continuous Coal Furnace
+  iron_ingot      60     (new)       breaks circular dep (Mine 20 + Workshop 30)
+  bolt            25     (new)       Workshop placement
+  limestone       15     (new)       BF flux + limekiln quicklime
+  saltwater_cell  4      (new)       pre-built; saves ~3 min cycle
+  foundation_kit  1      (unchanged) first settlement dispatch
+  steel           0      (was 30)    REMOVED — player walks the chain
+
+Reachability gate (src/reachability.test.ts) enforces the 45-min
+deadline from this starter.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase7-tutorial
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p3">
+      <div class="sec-head"><span class="num">04</span><h2>Phase 3 — Create <code>src/tutorial.ts</code></h2></div>
+      <p class="sec-intro">Per spec §05. New pure module: step definitions,
+        trigger polling, dismissal logic. No DOM imports — UI sits in Phase 4.
+        The interface and the 32-entry array are the bulk of the file.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/tutorial.ts</code> — NEW. ~350 LOC.</li>
+        </ul>
+
+        <h4>Module layout</h4>
+        <div class="code"><pre><span class="cm">// src/tutorial.ts</span>
+<span class="kw">import type</span> { World } <span class="kw">from</span> <span class="str">'./world'</span>;
+<span class="kw">import type</span> { ResourceId } <span class="kw">from</span> <span class="str">'./recipes'</span>;
+
+<span class="kw">export type</span> ObjectiveId = <span class="kw">string</span>;
+
+<span class="kw">export type</span> TutorialPriority = <span class="str">'critical'</span> | <span class="str">'recommended'</span> | <span class="str">'optional'</span>;
+
+<span class="kw">export interface</span> TutorialStep {
+  <span class="kw">readonly</span> id: ObjectiveId;
+  <span class="kw">readonly</span> mechanic: <span class="kw">string</span>;
+  <span class="kw">readonly</span> triggerCondition: (world: World) =&gt; <span class="kw">boolean</span>;
+  <span class="kw">readonly</span> hint: <span class="kw">string</span>;
+  <span class="kw">readonly</span> expectedAction: <span class="kw">string</span> | <span class="kw">null</span>;
+  <span class="kw">readonly</span> dismissalCondition: (world: World) =&gt; <span class="kw">boolean</span>;
+  <span class="kw">readonly</span> priority: TutorialPriority;
+}
+
+<span class="kw">export const</span> TUTORIAL_STEPS: <span class="kw">ReadonlyArray</span>&lt;TutorialStep&gt; = [
+  <span class="cm">/* 32 entries; see §step table below */</span>
+];
+
+<span class="kw">export function</span> <span class="fn">currentStep</span>(world: World): TutorialStep | <span class="kw">null</span> { <span class="cm">… */</span> }
+<span class="kw">export function</span> <span class="fn">checkDismissals</span>(world: World): ObjectiveId[] { <span class="cm">… */</span> }
+<span class="kw">export function</span> <span class="fn">markCompleted</span>(world: World, id: ObjectiveId): <span class="kw">void</span> { <span class="cm">… */</span> }
+<span class="kw">export function</span> <span class="fn">skipAll</span>(world: World): <span class="kw">void</span> { <span class="cm">… */</span> }
+<span class="kw">export function</span> <span class="fn">restart</span>(world: World): <span class="kw">void</span> { <span class="cm">… */</span> }</pre></div>
+
+        <h4>Helper bodies</h4>
+        <div class="code"><pre><span class="kw">export function</span> <span class="fn">currentStep</span>(world: World): TutorialStep | <span class="kw">null</span> {
+  <span class="kw">const</span> ts = world.tutorialState ?? { completed: [], current: <span class="kw">null</span> };
+  <span class="kw">const</span> completed = <span class="kw">new</span> Set(ts.completed);
+  <span class="kw">for</span> (<span class="kw">const</span> step <span class="kw">of</span> TUTORIAL_STEPS) {
+    <span class="kw">if</span> (completed.<span class="fn">has</span>(step.id)) <span class="kw">continue</span>;
+    <span class="kw">if</span> (step.<span class="fn">triggerCondition</span>(world)) <span class="kw">return</span> step;
+  }
+  <span class="kw">return</span> <span class="kw">null</span>;
+}
+
+<span class="kw">export function</span> <span class="fn">checkDismissals</span>(world: World): ObjectiveId[] {
+  <span class="kw">const</span> ts = world.tutorialState ?? { completed: [], current: <span class="kw">null</span> };
+  <span class="kw">const</span> completed = <span class="kw">new</span> Set(ts.completed);
+  <span class="kw">const</span> dismissed: ObjectiveId[] = [];
+  <span class="kw">for</span> (<span class="kw">const</span> step <span class="kw">of</span> TUTORIAL_STEPS) {
+    <span class="kw">if</span> (completed.<span class="fn">has</span>(step.id)) <span class="kw">continue</span>;
+    <span class="kw">if</span> (step.<span class="fn">dismissalCondition</span>(world)) dismissed.<span class="fn">push</span>(step.id);
+  }
+  <span class="kw">return</span> dismissed;
+}
+
+<span class="kw">export function</span> <span class="fn">markCompleted</span>(world: World, id: ObjectiveId): <span class="kw">void</span> {
+  world.tutorialState = world.tutorialState ?? { completed: [], current: <span class="kw">null</span> };
+  <span class="kw">if</span> (!world.tutorialState.completed.<span class="fn">includes</span>(id)) {
+    world.tutorialState.completed.<span class="fn">push</span>(id);
+  }
+}
+
+<span class="kw">export function</span> <span class="fn">skipAll</span>(world: World): <span class="kw">void</span> {
+  world.tutorialState = {
+    completed: TUTORIAL_STEPS.<span class="fn">map</span>(s =&gt; s.id),
+    current: <span class="kw">null</span>,
+  };
+}
+
+<span class="kw">export function</span> <span class="fn">restart</span>(world: World): <span class="kw">void</span> {
+  world.tutorialState = { completed: [], current: <span class="kw">null</span> };
+}</pre></div>
+
+        <h4>32-step table — rev-16 §11.2 verbatim</h4>
+        <p class="body">Authored in the order they fire. Each entry is a
+          single <code>const</code>-readable object literal in the
+          <code>TUTORIAL_STEPS</code> array. Trigger / dismissal predicates
+          read directly off <code>World</code> shape (post-Phase-6); the
+          implementer verifies each predicate by typechecking against the
+          current world model.</p>
+
+        <table class="tbl">
+          <thead><tr>
+            <th>#</th>
+            <th>id</th>
+            <th>Mechanic</th>
+            <th>Trigger (pseudocode against World)</th>
+            <th>Dismissal</th>
+            <th>Priority</th>
+          </tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td class="mono">01_map_picker</td><td class="slate">Map picker</td><td class="mono">w.playerLat == null</td><td class="mono">w.playerLat != null</td><td>critical</td></tr>
+            <tr><td class="num">2</td><td class="mono">02_bootstrap_power</td><td class="slate">Bootstrap power</td><td class="mono">w.playerLat != null && !hasBuilding(w, ['water_wheel', 'windmill_t0'])</td><td class="mono">hasBuilding(w, ['water_wheel', 'windmill_t0'])</td><td>critical</td></tr>
+            <tr><td class="num">3</td><td class="mono">03_building_placement</td><td class="slate">Building placement</td><td class="mono">hasBuilding(w, ['water_wheel','windmill_t0']) && !hasBuilding(w, ['mine'])</td><td class="mono">hasBuilding(w, ['mine'])</td><td>critical</td></tr>
+            <tr><td class="num">4</td><td class="mono">04_tile_gate</td><td class="slate">Tile-gate</td><td class="mono">hasBuilding(w, ['mine']) && !invSeen(w, 'iron_ore')</td><td class="mono">invSeen(w, 'iron_ore')</td><td>critical</td></tr>
+            <tr><td class="num">5</td><td class="mono">05_logger_placement</td><td class="slate">Logger placement</td><td class="mono">invSeen(w, 'iron_ore') && !hasBuilding(w, ['logger'])</td><td class="mono">hasBuilding(w, ['logger'])</td><td>critical</td></tr>
+            <tr><td class="num">6</td><td class="mono">06_iron_chain</td><td class="slate">Smelter / iron chain</td><td class="mono">invAtLeast(w, 'iron_ore', 10) && invAtLeast(w, 'coal', 3)</td><td class="mono">invSeen(w, 'iron_ingot')</td><td>critical</td></tr>
+            <tr><td class="num">7</td><td class="mono">07_heat_budget</td><td class="slate">Heat budget</td><td class="mono">hasBuilding(w, ['coke_oven']) && !hasAdjacentHeat(w, 'coke_oven')</td><td class="mono">hasAdjacentHeat(w, 'coke_oven') || !hasBuilding(w, ['coke_oven'])</td><td>critical</td></tr>
+            <tr><td class="num">8</td><td class="mono">08_adjacency_buff</td><td class="slate">Adjacency buffs</td><td class="mono">hasAdjacentSameType(w)</td><td class="mono">stepCompleted(w, '08_adjacency_buff', 30_000)</td><td>recommended</td></tr>
+            <tr><td class="num">9</td><td class="mono">09_copper_prospect</td><td class="slate">Copper-ore prospecting</td><td class="mono">attemptedBuild(w, 'cell_press') && !invSeen(w, 'copper_ingot')</td><td class="mono">invSeen(w, 'copper_ingot') || hasBuilding(w, ['copper_mine'])</td><td>critical</td></tr>
+            <tr><td class="num">10</td><td class="mono">10_limestone</td><td class="slate">Limestone for steel</td><td class="mono">attemptedBuild(w, 'blast_furnace') && !invSeen(w, 'limestone')</td><td class="mono">invSeen(w, 'limestone') || hasBuilding(w, ['limestone_quarry'])</td><td>critical</td></tr>
+            <tr><td class="num">11</td><td class="mono">11_construction_time</td><td class="slate">Construction time</td><td class="mono">hasBuildingUnderConstruction(w, tier=2)</td><td class="mono">stepCompleted(w, '11_construction_time', 20_000)</td><td>recommended</td></tr>
+            <tr><td class="num">12</td><td class="mono">12_storage_caps</td><td class="slate">Storage caps</td><td class="mono">anyResourceAtCap(w)</td><td class="mono">hasBuilding(w, ['crate','silo']) || !anyResourceAtCap(w)</td><td>recommended</td></tr>
+            <tr><td class="num">13</td><td class="mono">13_battery_bootstrap</td><td class="slate">Battery Bank bootstrap</td><td class="mono">solarBufferExhausted(w) || invAtLeast(w, 'saltwater_cell', 4)</td><td class="mono">hasBuilding(w, ['battery_bank'])</td><td>critical</td></tr>
+            <tr><td class="num">14</td><td class="mono">14_day_night_solar</td><td class="slate">Day-night solar</td><td class="mono">hasBuilding(w, ['solar_panel_t1','solar_panel_t2'])</td><td class="mono">stepCompleted(w, '14_day_night_solar', 60_000)</td><td>recommended</td></tr>
+            <tr><td class="num">15</td><td class="mono">15_co2_tracker</td><td class="slate">CO₂ tracker</td><td class="mono">w.co2AccruedKg &gt;= 100</td><td class="mono">stepCompleted(w, '15_co2_tracker', 15_000)</td><td>recommended</td></tr>
+            <tr><td class="num">16</td><td class="mono">16_maintenance</td><td class="slate">Maintenance</td><td class="mono">anyBuildingNeedsMaintenance(w)</td><td class="mono">!anyBuildingNeedsMaintenance(w)</td><td>recommended</td></tr>
+            <tr><td class="num">17</td><td class="mono">17_drones</td><td class="slate">Drones</td><td class="mono">hasBuilding(w, ['drone_pad'])</td><td class="mono">stepCompleted(w, '17_drones', 30_000) || w.droneRoutes.size &gt; 0</td><td>recommended</td></tr>
+            <tr><td class="num">18</td><td class="mono">18_lighthouse</td><td class="slate">Discovery + lighthouse</td><td class="mono">hasBuilding(w, ['lighthouse_t1','lighthouse_t2'])</td><td class="mono">discoveredIslandCount(w) &gt; w.startingDiscovered</td><td>recommended</td></tr>
+            <tr><td class="num">19</td><td class="mono">19_settlement</td><td class="slate">Settlement vehicles</td><td class="mono">discoveredIslandCount(w) &gt; w.startingDiscovered &amp;&amp; settledCount(w) === 1</td><td class="mono">settledCount(w) &gt;= 2</td><td>critical</td></tr>
+            <tr><td class="num">20</td><td class="mono">20_antenna</td><td class="slate">Antenna + signal range</td><td class="mono">routeAttemptedPastRange(w)</td><td class="mono">hasBuilding(w, ['antenna_t1','antenna_t2','antenna_t3'])</td><td>recommended</td></tr>
+            <tr><td class="num">21</td><td class="mono">21_cargo_routes</td><td class="slate">Cargo routes</td><td class="mono">settledCount(w) &gt;= 2</td><td class="mono">w.cargoRoutes.size &gt;= 1</td><td>recommended</td></tr>
+            <tr><td class="num">22</td><td class="mono">22_skill_tree</td><td class="slate">Skill tree T1 crystals</td><td class="mono">maxIslandLevel(w) &gt;= 30</td><td class="mono">unlockedNodeCount(w) &gt; 0</td><td>recommended</td></tr>
+            <tr><td class="num">23</td><td class="mono">23_tier_t3</td><td class="slate">Tier transition T2→T3</td><td class="mono">hasBuilding(w, ['steel_mill'])</td><td class="mono">stepCompleted(w, '23_tier_t3', 30_000)</td><td>recommended</td></tr>
+            <tr><td class="num">24</td><td class="mono">24_reactor_toxicity</td><td class="slate">Reactor toxicity</td><td class="mono">hasBuilding(w, ['nuclear_reactor'])</td><td class="mono">stepCompleted(w, '24_reactor_toxicity', 60_000)</td><td>critical</td></tr>
+            <tr><td class="num">25</td><td class="mono">25_biome_gating</td><td class="slate">Biome dependencies</td><td class="mono">attemptedBuild(w, 'pyroforge') || attemptedBuild(w, 'carbon_forge')</td><td class="mono">stepCompleted(w, '25_biome_gating', 30_000)</td><td>recommended</td></tr>
+            <tr><td class="num">26</td><td class="mono">26_weather_storms</td><td class="slate">Weather + storms</td><td class="mono">w.activeStormCount &gt; 0</td><td class="mono">w.activeStormCount === 0</td><td>recommended</td></tr>
+            <tr><td class="num">27</td><td class="mono">27_land_reclamation</td><td class="slate">Land reclamation</td><td class="mono">hasBuilding(w, ['platform_constructor'])</td><td class="mono">w.reclaimedTileCount &gt;= 4</td><td>optional</td></tr>
+            <tr><td class="num">28</td><td class="mono">28_tier_t4</td><td class="slate">Tier T3→T4</td><td class="mono">invSeen(w, 'ai_core') || invSeen(w, 'exotic_alloy')</td><td class="mono">stepCompleted(w, '28_tier_t4', 30_000)</td><td>recommended</td></tr>
+            <tr><td class="num">29</td><td class="mono">29_orbital</td><td class="slate">Orbital satellites</td><td class="mono">hasBuilding(w, ['spaceport'])</td><td class="mono">w.satelliteCount &gt;= 1</td><td>optional</td></tr>
+            <tr><td class="num">30</td><td class="mono">30_network_consciousness</td><td class="slate">Network consciousness</td><td class="mono">settledCount(w) &gt;= 10</td><td class="mono">stepCompleted(w, '30_network_consciousness', 15_000)</td><td>optional</td></tr>
+            <tr><td class="num">31</td><td class="mono">31_tier_reset</td><td class="slate">Tier reset</td><td class="mono">w.tierResetTriggered === true</td><td class="mono">w.tierResetCount &gt;= 1</td><td>optional</td></tr>
+            <tr><td class="num">32</td><td class="mono">32_genesis_milestone</td><td class="slate">Genesis milestone</td><td class="mono">invAtLeast(w, 'genesis_cell', 1)</td><td class="mono">invAtLeast(w, 'genesis_cell', 1)</td><td>optional</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Predicate-helper module</h4>
+        <p class="body">Steps 1–32 reference small predicate helpers
+          (<code>hasBuilding</code>, <code>invSeen</code>,
+          <code>attemptedBuild</code>, …). Implement them at the top of
+          <code>tutorial.ts</code> rather than scattering inline expressions
+          into each step. Each helper takes <code>(world, …args)</code> and
+          returns <code>boolean</code>. Implementation notes:</p>
+        <ul class="body">
+          <li><code>hasBuilding(w, kinds)</code> walks <code>w.islands</code> and returns true if any island has a placed building whose <code>def.id</code> matches any kind in the array. Constructed (not under-construction) only.</li>
+          <li><code>invSeen(w, r)</code> — any island has ever had &gt; 0 of <code>r</code>. Implement against a per-resource <em>cumulative-seen</em> flag if it exists on Phase 6's world model; otherwise approximate with <code>w.islands.some(i =&gt; (i.state.inventory[r] ?? 0) &gt; 0)</code> and accept that an item the player burns through before the next poll won't trigger. Per spec §05 polling frequency is implementer's choice — once-per-game-second is sufficient resolution for any reasonable burn rate.</li>
+          <li><code>attemptedBuild(w, defId)</code> — set by the placement-UI rejection path. Phase 5 wiring records this on a <code>world.recentBuildAttempts: Set&lt;BuildingDefId&gt;</code> with a 5-second TTL. If the field doesn't exist on Phase 6's world, this is a Phase 5 add (see §05 below).</li>
+          <li><code>hasAdjacentHeat(w, defId)</code> — for a given building kind, check at least one placement has an adjacent tile occupied by a heat-emitting building. Reuse Phase 4's heat-graph helper if it exists; otherwise inline a simple 4-neighbour scan.</li>
+          <li><code>hasAdjacentSameType(w)</code> — any two same-<code>def.id</code> buildings share an edge. Walk every island once.</li>
+          <li><code>stepCompleted(w, id, ttlMs)</code> — true if <code>id</code> entered <code>completed</code> at least <code>ttlMs</code> ago. Used as a soft-dismiss for "hint stays visible 30 s then disappears" steps.</li>
+        </ul>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Create <code>src/tutorial.ts</code>.</li>
+          <li>Declare the <code>TutorialStep</code> + <code>TutorialPriority</code> + <code>ObjectiveId</code> types at the top.</li>
+          <li>Implement the 6 predicate helpers (<code>hasBuilding</code>, <code>invSeen</code>, <code>attemptedBuild</code>, <code>hasAdjacentHeat</code>, <code>hasAdjacentSameType</code>, <code>stepCompleted</code>).</li>
+          <li>Author the 32-entry <code>TUTORIAL_STEPS</code> array, one literal per row of the table above. Hint copy is the rev-16 §11.2 string; tighten only where typo-level cleanup is warranted.</li>
+          <li>Implement <code>currentStep</code>, <code>checkDismissals</code>, <code>markCompleted</code>, <code>skipAll</code>, <code>restart</code>.</li>
+          <li>Run <code>npx tsc --noEmit</code>. The module must compile against the current <code>World</code> shape with strict + <code>noUnusedLocals</code> + <code>noUnusedParameters</code>.</li>
+          <li>Defer test authorship to Phase 6. This commit is type-only verification.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx tsc --noEmit</code> clean. <code>npm test</code> still green (no new tests yet; this commit can be a no-op from the runtime perspective because <code>tutorial.ts</code> is not yet imported by any other module).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. The new file is standalone; nothing else references it until Phase 5.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(tutorial): add src/tutorial.ts — 32-step TUTORIAL_STEPS
+
+Per rev-16 §11.2 + design spec §05. New pure module: TutorialStep
+interface, 32-entry TUTORIAL_STEPS array, currentStep /
+checkDismissals / markCompleted / skipAll / restart helpers.
+
+Six small predicates (hasBuilding, invSeen, attemptedBuild,
+hasAdjacentHeat, hasAdjacentSameType, stepCompleted) implement
+the trigger / dismissal table from spec §05.
+
+No runtime wiring yet — tutorial-ui.ts (Phase 4) and main.ts
+(Phase 5) consume this module. Phase 6 authors the tests.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase7-tutorial
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p4">
+      <div class="sec-head"><span class="num">05</span><h2>Phase 4 — Create <code>src/tutorial-ui.ts</code> + CSS</h2></div>
+      <p class="sec-intro">Per spec §06. DOM hint overlay. Top-right anchored,
+        fade in/out, click-to-dismiss, max-width 320 px.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/tutorial-ui.ts</code> — NEW. ~150 LOC.</li>
+          <li><code>src/ui.css</code> — add <code>.tutorial-hint</code> + child class styles.</li>
+        </ul>
+
+        <h4>Module shape</h4>
+        <div class="code"><pre><span class="cm">// src/tutorial-ui.ts</span>
+<span class="kw">import</span> { currentStep, markCompleted } <span class="kw">from</span> <span class="str">'./tutorial'</span>;
+<span class="kw">import type</span> { World } <span class="kw">from</span> <span class="str">'./world'</span>;
+
+<span class="kw">let</span> hintEl: HTMLElement | <span class="kw">null</span> = <span class="kw">null</span>;
+<span class="kw">let</span> renderedStepId: <span class="kw">string</span> | <span class="kw">null</span> = <span class="kw">null</span>;
+
+<span class="kw">export function</span> <span class="fn">refreshTutorialHint</span>(world: World): <span class="kw">void</span> {
+  <span class="kw">const</span> step = <span class="fn">currentStep</span>(world);
+  <span class="kw">if</span> (!step) {
+    <span class="kw">if</span> (hintEl) {
+      hintEl.<span class="fn">remove</span>();
+      hintEl = <span class="kw">null</span>;
+      renderedStepId = <span class="kw">null</span>;
+    }
+    <span class="kw">return</span>;
+  }
+  <span class="kw">if</span> (step.id === renderedStepId) <span class="kw">return</span>;  <span class="cm">// avoid re-render thrash</span>
+  <span class="kw">if</span> (!hintEl) {
+    hintEl = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+    hintEl.className = <span class="str">'tutorial-hint'</span>;
+    document.body.<span class="fn">appendChild</span>(hintEl);
+    hintEl.<span class="fn">addEventListener</span>(<span class="str">'click'</span>, () =&gt; {
+      <span class="kw">const</span> cur = <span class="fn">currentStep</span>(world);
+      <span class="kw">if</span> (cur) {
+        <span class="fn">markCompleted</span>(world, cur.id);
+        <span class="fn">refreshTutorialHint</span>(world);
+      }
+    });
+  }
+  hintEl.innerHTML = `
+    &lt;div class="tut-num"&gt;${step.id}&lt;/div&gt;
+    &lt;div class="tut-mech"&gt;${step.mechanic}&lt;/div&gt;
+    &lt;div class="tut-text"&gt;${step.hint}&lt;/div&gt;
+    ${step.expectedAction ? `&lt;div class="tut-action"&gt;${step.expectedAction}&lt;/div&gt;` : <span class="str">''</span>}
+    &lt;div class="tut-hint-dismiss"&gt;click to dismiss&lt;/div&gt;
+  `;
+  renderedStepId = step.id;
+}</pre></div>
+
+        <h4>CSS — append to src/ui.css</h4>
+        <div class="code"><pre><span class="cm">/* tutorial hint overlay — Phase 7 §06 */</span>
+.tutorial-hint {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: rgba(15, 18, 22, 0.92);
+  border: 1px solid #2d5878;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: #d6dde6;
+  z-index: 50;
+  cursor: pointer;
+  user-select: none;
+  animation: tut-fade-in 220ms ease-out;
+}
+.tutorial-hint:hover { border-color: #7dd3e8; }
+.tutorial-hint .tut-num {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7dd3e8;
+  margin-bottom: 4px;
+}
+.tutorial-hint .tut-mech {
+  font-weight: 600;
+  font-size: 14px;
+  color: #f5f3ec;
+  margin-bottom: 6px;
+}
+.tutorial-hint .tut-text { color: #cfccc2; margin-bottom: 8px; }
+.tutorial-hint .tut-action {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  color: #d97757;
+  margin-bottom: 6px;
+}
+.tutorial-hint .tut-hint-dismiss {
+  font-size: 10.5px;
+  color: #6c7280;
+  text-align: right;
+  font-style: italic;
+}
+@keyframes tut-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}</pre></div>
+
+        <h4>Re-render guard</h4>
+        <p class="body"><strong>The <code>renderedStepId</code> short-circuit
+          matters.</strong> The ticker calls <code>refreshTutorialHint</code>
+          every frame; without the guard, the <code>innerHTML</code> assignment
+          would rebuild the overlay 60 times per second and the fade-in
+          animation would loop forever. The guard means we re-render only when
+          the active step ID changes (or the active step disappears).</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Create <code>src/tutorial-ui.ts</code>. Implement <code>refreshTutorialHint(world)</code> and the module-level <code>hintEl</code> / <code>renderedStepId</code> state.</li>
+          <li>Append the <code>.tutorial-hint</code> CSS block to <code>src/ui.css</code>. Verify the keyframe name <code>tut-fade-in</code> doesn't collide with anything else in the file.</li>
+          <li>Run <code>npx tsc --noEmit</code>. Clean.</li>
+          <li>No tests in this phase — DOM-dependent code lives outside the pure-tested perimeter (per AGENTS.md "tests target the pure layer only").</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx tsc --noEmit</code> clean. <code>npm run build</code> succeeds. Manual: open <code>islands.nitjsefni.eu</code> after a fresh build; the hint overlay does not yet appear (no caller invokes <code>refreshTutorialHint</code> until Phase 5).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. CSS lives in a single file; the new module is standalone.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(tutorial-ui): add hint overlay (DOM) + .tutorial-hint CSS
+
+Per design spec §06. New src/tutorial-ui.ts: refreshTutorialHint
+posts a top-right anchored hint card showing the current
+tutorial step (id, mechanic, body, expected action). Click to
+dismiss; auto-dismisses when the step's dismissalCondition
+fires (Phase 5 ticker drives the polling).
+
+Re-render guard on renderedStepId avoids 60 Hz innerHTML thrash.
+
+CSS append to src/ui.css with .tutorial-hint family of classes +
+tut-fade-in keyframe. z-index 50 (above HUD, below modals).
+
+No caller yet — Phase 5 wires main.ts.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase7-tutorial
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p5">
+      <div class="sec-head"><span class="num">06</span><h2>Phase 5 — Ticker wire + settings buttons</h2></div>
+      <p class="sec-intro">Per spec §05 + §06.2. Hook the tutorial polling
+        into the existing PixiJS ticker. Add Skip / Restart buttons to the
+        settings panel.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/main.ts</code> — once-per-frame call to <code>refreshTutorialHint(world)</code> + walk of <code>checkDismissals(world)</code> + <code>markCompleted</code>.</li>
+          <li><code>src/settings-ui.ts</code> — two new buttons: "Skip Tutorial" → <code>tutorial.skipAll(world)</code>; "Restart Tutorial" → <code>tutorial.restart(world)</code>.</li>
+          <li><code>src/world.ts</code> — declare <code>recentBuildAttempts: Set&lt;BuildingDefId&gt;</code> on <code>World</code> if Phase 6 didn't add it. Bound by a TTL-cleanup (see below).</li>
+          <li>UI placement-rejection path (existing file — find via <code>grep</code> for the rejection toast) — push the attempted def-id into <code>world.recentBuildAttempts</code>.</li>
+        </ul>
+
+        <h4>main.ts — ticker hook</h4>
+        <div class="code"><pre><span class="cm">// In main.ts inside the existing app.ticker.add callback, after</span>
+<span class="cm">// economy / render / hud updates and before the buildAttempts TTL cleanup.</span>
+<span class="kw">import</span> { checkDismissals, markCompleted } <span class="kw">from</span> <span class="str">'./tutorial'</span>;
+<span class="kw">import</span> { refreshTutorialHint } <span class="kw">from</span> <span class="str">'./tutorial-ui'</span>;
+
+<span class="cm">// …existing tick body…</span>
+<span class="new"><span class="cm">// Phase 7 §05 — tutorial polling. Runs once per frame; predicates are O(1)</span></span>
+<span class="new"><span class="cm">// reads off the world, so the cost is negligible (32 predicates × 60 Hz =</span></span>
+<span class="new"><span class="cm">// ~2000/s, all O(1) or O(|islands|) at worst).</span></span>
+<span class="new"><span class="kw">for</span> (<span class="kw">const</span> id <span class="kw">of</span> <span class="fn">checkDismissals</span>(world)) {</span>
+<span class="new">  <span class="fn">markCompleted</span>(world, id);</span>
+<span class="new">}</span>
+<span class="new"><span class="fn">refreshTutorialHint</span>(world);</span>
+<span class="new"><span class="cm">// recentBuildAttempts TTL — 5 s window; cheap to walk.</span></span>
+<span class="new"><span class="kw">if</span> (world.recentBuildAttempts &amp;&amp; world.recentBuildAttempts.size &gt; 0) {</span>
+<span class="new">  <span class="kw">const</span> now = performance.<span class="fn">now</span>();</span>
+<span class="new">  <span class="kw">for</span> (<span class="kw">const</span> [defId, ts] <span class="kw">of</span> world.recentBuildAttemptTs ?? []) {</span>
+<span class="new">    <span class="kw">if</span> (now - ts &gt; 5000) {</span>
+<span class="new">      world.recentBuildAttempts.<span class="fn">delete</span>(defId);</span>
+<span class="new">      world.recentBuildAttemptTs!.<span class="fn">delete</span>(defId);</span>
+<span class="new">    }</span>
+<span class="new">  }</span>
+<span class="new">}</span></pre></div>
+
+        <h4>settings-ui.ts — Skip / Restart buttons</h4>
+        <div class="code"><pre><span class="cm">// Inside the existing settings-panel constructor / renderer.</span>
+<span class="kw">import</span> { skipAll, restart } <span class="kw">from</span> <span class="str">'./tutorial'</span>;
+<span class="kw">import</span> { refreshTutorialHint } <span class="kw">from</span> <span class="str">'./tutorial-ui'</span>;
+
+<span class="cm">// …existing button group…</span>
+<span class="new"><span class="kw">const</span> skipBtn = document.<span class="fn">createElement</span>(<span class="str">'button'</span>);</span>
+<span class="new">skipBtn.textContent = <span class="str">'Skip Tutorial'</span>;</span>
+<span class="new">skipBtn.<span class="fn">addEventListener</span>(<span class="str">'click'</span>, () =&gt; {</span>
+<span class="new">  <span class="fn">skipAll</span>(world);</span>
+<span class="new">  <span class="fn">refreshTutorialHint</span>(world);  <span class="cm">// removes the overlay immediately</span></span>
+<span class="new">});</span>
+<span class="new"><span class="kw">const</span> restartBtn = document.<span class="fn">createElement</span>(<span class="str">'button'</span>);</span>
+<span class="new">restartBtn.textContent = <span class="str">'Restart Tutorial'</span>;</span>
+<span class="new">restartBtn.<span class="fn">addEventListener</span>(<span class="str">'click'</span>, () =&gt; {</span>
+<span class="new">  <span class="fn">restart</span>(world);</span>
+<span class="new">  <span class="fn">refreshTutorialHint</span>(world);  <span class="cm">// step 1 should now show on next poll</span></span>
+<span class="new">});</span>
+<span class="new">settingsPanel.<span class="fn">appendChild</span>(skipBtn);</span>
+<span class="new">settingsPanel.<span class="fn">appendChild</span>(restartBtn);</span></pre></div>
+
+        <h4>world.ts — recentBuildAttempts field</h4>
+        <p class="body">If a Phase 6 commit didn't already declare a
+          build-attempt tracking field on the world, add it here. Two fields
+          for parity with the TTL cleanup above:</p>
+        <div class="code"><pre><span class="cm">// world.ts — extend World interface.</span>
+<span class="kw">export interface</span> World {
+  <span class="cm">/* …existing fields… */</span>
+<span class="new">  <span class="cm">/** Phase 7 §05 — set of building def-ids the player tried to place</span></span>
+<span class="new">   <span class="cm">*  but failed (missing resource, missing prereq). 5 s TTL maintained</span></span>
+<span class="new">   <span class="cm">*  by main.ts; consumed by tutorial steps 9 + 10 (copper / limestone)</span></span>
+<span class="new">   <span class="cm">*  and step 25 (biome gating). NOT persisted. */</span></span>
+<span class="new">  recentBuildAttempts: Set&lt;BuildingDefId&gt;;</span>
+<span class="new">  recentBuildAttemptTs: Map&lt;BuildingDefId, <span class="kw">number</span>&gt;;</span>
+}</pre></div>
+
+        <p class="body"><strong>Persistence strip:</strong> these two fields
+          are runtime-only. Add them to the destructure in
+          <a class="cite">persistence.ts:482</a>-style serialize path so
+          they're stripped on save. Reconstitute as empty
+          <code>Set</code> / <code>Map</code> on load. The pattern is the
+          same one used by the adjacency-cache rework's
+          <code>auraAmpCache</code> field — see
+          <code>plans/2026-05-27-skilltree-adjacency-cache-plan</code>
+          Phase 3 for the established idiom.</p>
+
+        <h4>Build-rejection wiring</h4>
+        <p class="body">Find the placement-UI's rejection path
+          (grep for "cannot place" or the toast that fires when the player
+          drags a building onto an invalid tile). Add a single line in the
+          rejection handler:</p>
+        <div class="code"><pre><span class="new">world.recentBuildAttempts.<span class="fn">add</span>(defId);</span>
+<span class="new">world.recentBuildAttemptTs.<span class="fn">set</span>(defId, performance.<span class="fn">now</span>());</span></pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Read <code>src/main.ts</code> to locate the existing <code>app.ticker.add</code> callback.</li>
+          <li>Add the imports + the three-line tutorial polling block + the TTL cleanup.</li>
+          <li>Extend <code>World</code> in <code>world.ts</code> with the two new fields. Seed empty in <code>makeInitialWorld</code> (or equivalent factory) and in <code>persistence.ts</code>'s deserialize path. Strip in serialize.</li>
+          <li>Open <code>src/settings-ui.ts</code> and add the Skip / Restart buttons.</li>
+          <li>Find the placement-rejection toast handler. Add the two-line write to <code>recentBuildAttempts</code>.</li>
+          <li>Run <code>npm test</code> + <code>npx tsc --noEmit</code>.</li>
+          <li>Manual: <code>npm run build</code>, reload the dev tab, start a new game, confirm step 1 fires immediately (map picker hint should appear at top-right).</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>npx tsc --noEmit</code> clean. Manual smoke-test on the dev tab shows the step-1 hint immediately on fresh game, dismissing when the player picks a latitude/longitude.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. The two world-fields are runtime-only and stripped on serialize; pre-rollback saves remain readable.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(main,settings): wire tutorial polling + skip/restart buttons
+
+Per design spec §05 + §06.2.
+
+main.ts — once-per-frame call to checkDismissals + markCompleted
+loop, then refreshTutorialHint(world). Cost: 32 O(1) predicate
+reads at 60 Hz, negligible against the existing economy tick.
+
+settings-ui.ts — two new buttons:
+  - "Skip Tutorial"    -&gt; tutorial.skipAll(world)
+  - "Restart Tutorial" -&gt; tutorial.restart(world)
+
+world.ts — adds recentBuildAttempts: Set&lt;BuildingDefId&gt; and a
+parallel recentBuildAttemptTs: Map&lt;BuildingDefId, number&gt; for
+TTL cleanup. Set by the placement-rejection UI handler (5 s
+TTL). Consumed by tutorial steps 9 + 10 + 25. Stripped on
+serialize, reseeded empty on deserialize.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase7-tutorial
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p6">
+      <div class="sec-head"><span class="num">07</span><h2>Phase 6 — <code>src/tutorial.test.ts</code></h2></div>
+      <p class="sec-intro">Per spec §9.1 + §9.3 + §9.4 + §9.5. One
+        <code>it()</code> per step asserts trigger fires + dismisses;
+        plus step-ordering, save-migration, and skip/restart tests.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/tutorial.test.ts</code> — NEW. ~50 tests, ~400 LOC.</li>
+        </ul>
+
+        <h4>Test structure</h4>
+        <div class="code"><pre><span class="cm">// src/tutorial.test.ts</span>
+<span class="kw">import</span> { describe, it, expect, beforeEach } <span class="kw">from</span> <span class="str">'vitest'</span>;
+<span class="kw">import</span> {
+  TUTORIAL_STEPS,
+  currentStep,
+  checkDismissals,
+  markCompleted,
+  skipAll,
+  restart,
+} <span class="kw">from</span> <span class="str">'./tutorial'</span>;
+<span class="kw">import</span> { makeTestWorld, placeBuilding, mutateInventory } <span class="kw">from</span> <span class="str">'./test-helpers'</span>;
+
+<span class="kw">describe</span>(<span class="str">'TUTORIAL_STEPS — integrity'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'has exactly 32 entries with unique ids'</span>, () =&gt; {
+    <span class="fn">expect</span>(TUTORIAL_STEPS.length).<span class="fn">toBe</span>(32);
+    <span class="kw">const</span> ids = <span class="kw">new</span> Set(TUTORIAL_STEPS.<span class="fn">map</span>(s =&gt; s.id));
+    <span class="fn">expect</span>(ids.size).<span class="fn">toBe</span>(32);
+  });
+});
+
+<span class="kw">describe</span>(<span class="str">'TUTORIAL_STEPS — per-step trigger + dismissal'</span>, () =&gt; {
+  <span class="kw">for</span> (<span class="kw">const</span> step <span class="kw">of</span> TUTORIAL_STEPS) {
+    <span class="kw">it</span>(`${step.id} fires on its trigger condition`, () =&gt; {
+      <span class="kw">const</span> w = <span class="fn">makeWorldForTrigger</span>(step.id);
+      <span class="fn">expect</span>(step.<span class="fn">triggerCondition</span>(w)).<span class="fn">toBe</span>(<span class="kw">true</span>);
+      <span class="fn">expect</span>(<span class="fn">currentStep</span>(w)?.id).<span class="fn">toBe</span>(step.id);
+    });
+    <span class="kw">it</span>(`${step.id} dismisses on its dismissal condition`, () =&gt; {
+      <span class="kw">const</span> w = <span class="fn">makeWorldForDismissal</span>(step.id);
+      <span class="fn">expect</span>(step.<span class="fn">dismissalCondition</span>(w)).<span class="fn">toBe</span>(<span class="kw">true</span>);
+      <span class="fn">expect</span>(<span class="fn">checkDismissals</span>(w)).<span class="fn">toContain</span>(step.id);
+    });
+  }
+});
+
+<span class="kw">describe</span>(<span class="str">'TUTORIAL_STEPS — ordering'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'currentStep returns step 1 on a fresh world'</span>, () =&gt; { <span class="cm">… */</span> });
+  <span class="kw">it</span>(<span class="str">'currentStep returns step N+1 after step N is marked completed'</span>, () =&gt; { <span class="cm">… */</span> });
+  <span class="kw">it</span>(<span class="str">'mid-tutorial state from a v15 save resumes at the right step'</span>, () =&gt; { <span class="cm">… */</span> });
+});
+
+<span class="kw">describe</span>(<span class="str">'skipAll + restart'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'skipAll fills completed with all 32 ids'</span>, () =&gt; { <span class="cm">… */</span> });
+  <span class="kw">it</span>(<span class="str">'skipAll causes currentStep to return null'</span>, () =&gt; { <span class="cm">… */</span> });
+  <span class="kw">it</span>(<span class="str">'restart resets completed to []'</span>, () =&gt; { <span class="cm">… */</span> });
+  <span class="kw">it</span>(<span class="str">'restart causes step 1 to reappear'</span>, () =&gt; { <span class="cm">… */</span> });
+});
+
+<span class="kw">describe</span>(<span class="str">'persistence — tutorialState'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'pre-Phase-7 save (tutorialState undefined) loads with empty completed'</span>, () =&gt; { <span class="cm">… */</span> });
+  <span class="kw">it</span>(<span class="str">'v15 save with mid-tutorial state round-trips identity'</span>, () =&gt; { <span class="cm">… */</span> });
+});</pre></div>
+
+        <h4>Per-step world factories</h4>
+        <p class="body">The 32 per-step trigger tests need a per-step
+          world factory — <code>makeWorldForTrigger(stepId)</code> — that
+          constructs a world satisfying that step's trigger but not its
+          dismissal. The factories are themselves boilerplate; collect them
+          in a switch / lookup table at the bottom of the test file. Examples:</p>
+        <ul class="body">
+          <li><code>'01_map_picker'</code> — fresh world with <code>playerLat = null</code>.</li>
+          <li><code>'02_bootstrap_power'</code> — fresh world with <code>playerLat = 40</code>, no power buildings placed.</li>
+          <li><code>'06_iron_chain'</code> — <code>inventory.iron_ore = 10, inventory.coal = 3</code>, no smelter placed.</li>
+          <li><code>'13_battery_bootstrap'</code> — <code>inventory.saltwater_cell = 4</code>, no battery_bank placed.</li>
+          <li><code>'15_co2_tracker'</code> — <code>co2AccruedKg = 100</code>.</li>
+          <li><code>'30_network_consciousness'</code> — 10 settled islands; verify settledCount predicate.</li>
+        </ul>
+
+        <h4>Dismissal world factories</h4>
+        <p class="body"><code>makeWorldForDismissal(stepId)</code> — same
+          shape, but the dismissal predicate is true. For most steps this is
+          a minor extension of the trigger world (e.g. step 03 trigger has
+          no Mine; step 03 dismissal has a placed Mine).</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Create <code>src/tutorial.test.ts</code>.</li>
+          <li>Write the integrity test (32 entries / unique ids).</li>
+          <li>Write the parameterized per-step trigger + dismissal tests using a <code>for</code> loop over <code>TUTORIAL_STEPS</code>.</li>
+          <li>Implement <code>makeWorldForTrigger</code> + <code>makeWorldForDismissal</code> factories at the bottom of the file. One switch case per step id.</li>
+          <li>Write the ordering tests (steps 1 → 2 → 3 progression, mid-tutorial save resumption).</li>
+          <li>Write the skip/restart tests.</li>
+          <li>Write the persistence tests (use the existing <code>persistence.test.ts</code> helpers — round-trip a snapshot containing <code>tutorialState</code>).</li>
+          <li>Run <code>npx vitest run src/tutorial.test.ts</code>. All 50-ish tests pass.</li>
+          <li>Run full <code>npm test</code>. Suite stays green.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx vitest run src/tutorial.test.ts</code> all pass. Full <code>npm test</code> green. The test count delta is ~50 (from Phase 0 baseline).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. The tests are append-only; Phase 5 code remains in place and continues to work without coverage from this file.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>test(tutorial): per-step trigger + dismissal coverage
+
+Per design spec §9.1 + §9.3 + §9.4 + §9.5.
+
+New src/tutorial.test.ts:
+  - integrity: 32 entries, unique ids
+  - per-step trigger: 32 it()s, one per step id
+  - per-step dismissal: 32 it()s, one per step id
+  - ordering: fresh world -&gt; step 1; mark N -&gt; current is N+1;
+    mid-tutorial save resumes at the right step
+  - skipAll + restart: completion-list semantics
+  - persistence: v15 mid-tutorial round-trip; pre-Phase-7 save
+    (tutorialState undefined) loads with empty completed
+
+~50 new tests, ~400 LOC. Full suite remains green.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase7-tutorial
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p7">
+      <div class="sec-head"><span class="num">08</span><h2>Phase 7 — Reachability invariant extension (binding gate)</h2></div>
+      <p class="sec-intro">Per spec §07. The Phase 4 reachability test
+        established <code>simulateOptimalPath</code>; Phase 7 extends it with
+        the rev-9 starter + post-Phase-7 home terrain reaching
+        <code>battery_bank</code> in ≤ 45 minutes. <strong>This is the binding
+        gate of the phase — if it fails, Phase 7 cannot land.</strong></p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/reachability.test.ts</code> (Phase 4 file) — append the rev-9 / Phase-7 invariant.</li>
+        </ul>
+
+        <h4>New assertion</h4>
+        <div class="code"><pre><span class="kw">describe</span>(<span class="str">'reachability — rev-9 tutorial chain (Phase 7 binding gate)'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'rev-9 starter inventory reaches 1× battery_bank in &lt;= 45 min'</span>, () =&gt; {
+    <span class="kw">const</span> homeSpec = <span class="fn">makeHomeIslandSpec</span>();  <span class="cm">// post-Phase-7 patched terrain</span>
+    <span class="kw">const</span> state = <span class="fn">makeInitialIslandState</span>(homeSpec, 0);
+    state.inventory = <span class="fn">startingInventory</span>();         <span class="cm">// rev-9 values</span>
+
+    <span class="kw">const</span> envDeadline = process.env.TUTORIAL_DEADLINE_MIN;
+    <span class="kw">const</span> deadlineMin = envDeadline ? Number(envDeadline) : 45;
+    <span class="kw">const</span> deadlineMs = deadlineMin * 60 * 1000;
+
+    <span class="kw">const</span> outcome = <span class="fn">simulateOptimalPath</span>(state, deadlineMs, <span class="str">'battery_bank'</span>);
+
+    <span class="fn">expect</span>(outcome.reached).<span class="fn">toBe</span>(<span class="kw">true</span>);
+    <span class="fn">expect</span>(outcome.elapsedMs).<span class="fn">toBeLessThanOrEqual</span>(deadlineMs);
+  });
+
+  <span class="kw">it</span>(<span class="str">'tutorial steps 1-13 fire in dependency order along the optimal path'</span>, () =&gt; {
+    <span class="cm">// Walks simulateOptimalPath at coarse timestamps; at each timestamp</span>
+    <span class="cm">// snapshot the world and ask currentStep / checkDismissals what fires.</span>
+    <span class="cm">// Assert step ids appear in 01..13 order; no step fires before its</span>
+    <span class="cm">// predecessor has dismissed.</span>
+    <span class="kw">const</span> homeSpec = <span class="fn">makeHomeIslandSpec</span>();
+    <span class="kw">const</span> state = <span class="fn">makeInitialIslandState</span>(homeSpec, 0);
+    state.inventory = <span class="fn">startingInventory</span>();
+    <span class="kw">const</span> world = <span class="fn">wrapAsWorld</span>(state);
+    <span class="kw">const</span> firedOrder = <span class="fn">simulatePathAndCollectSteps</span>(world, 45 * 60 * 1000);
+    <span class="kw">const</span> expectedPrefix = [
+      <span class="str">'01_map_picker'</span>, <span class="str">'02_bootstrap_power'</span>, <span class="str">'03_building_placement'</span>,
+      <span class="str">'04_tile_gate'</span>, <span class="str">'05_logger_placement'</span>, <span class="str">'06_iron_chain'</span>,
+      <span class="str">'07_heat_budget'</span>, <span class="str">'08_adjacency_buff'</span>, <span class="str">'09_copper_prospect'</span>,
+      <span class="str">'10_limestone'</span>, <span class="str">'11_construction_time'</span>, <span class="str">'12_storage_caps'</span>,
+      <span class="str">'13_battery_bootstrap'</span>,
+    ];
+    <span class="fn">expect</span>(firedOrder.<span class="fn">slice</span>(0, 13)).<span class="fn">toEqual</span>(expectedPrefix);
+  });
+});</pre></div>
+
+        <h4>simulatePathAndCollectSteps helper</h4>
+        <p class="body">Phase 4 ships <code>simulateOptimalPath</code> as a
+          "run to deadline; report reached / elapsed." For the ordering
+          assertion we need a richer driver that exposes intermediate world
+          snapshots. Two options:</p>
+        <ul class="body">
+          <li><strong>(A)</strong> Add a sibling helper in the same file: <code>simulatePathAndCollectSteps(world, deadlineMs): ObjectiveId[]</code> that runs the same scheduler, snapshots the world at each step-transition boundary, and accumulates the fired step ids. Preferred.</li>
+          <li><strong>(B)</strong> Extend <code>simulateOptimalPath</code> with an optional callback. Less clean — the existing call sites would need to opt in.</li>
+        </ul>
+        <p class="body">Choose (A). The new helper lives in
+          <code>src/reachability.ts</code> (Phase 4 file). Document at the
+          top of the helper that it's a tutorial-aware driver and not the
+          canonical reachability path.</p>
+
+        <h4>If the gate fails</h4>
+        <p class="body"><strong>Per rev-16 §12.9.4 mitigations</strong> —
+          ordered by least-invasive:</p>
+        <ol class="body">
+          <li><strong>(a) Already-applied.</strong> The 4 starter <code>saltwater_cell</code>s save ~3 min by skipping the cell_press cycle. If the test fails by &gt; 3 min, this won't be enough.</li>
+          <li><strong>(b) Add 2× coke + 2× pig_iron to the starter.</strong> Saves a coke_oven cycle (~5 min) + a smelter cycle (~5 min). One-line additions in <code>startingInventory()</code>.</li>
+          <li><strong>(c) Add 1× steel_beam pre-seeded.</strong> Saves the steel-mill cycle (~8 min). Largest gain; most player-visible "cheat" feel.</li>
+          <li><strong>(d) Bump <code>TUTORIAL_DEADLINE_MIN</code> to 60.</strong> Last resort. Document in the commit message + add a §12 risk-table entry pointing at the playtest-driven decision.</li>
+        </ol>
+        <p class="body">Pick the smallest fix that makes the test pass. The
+          spec §10.1 calls for "≤ 45 min in fresh playthrough" — bumping the
+          test deadline without addressing the underlying gap means the
+          playtest will fail by the same margin. Prefer (b) or (c) over (d).</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Open <code>src/reachability.test.ts</code>; locate the existing <code>simulateOptimalPath</code> assertion from Phase 4.</li>
+          <li>Append the new <code>describe</code> block with the two <code>it</code>s above.</li>
+          <li>If <code>simulatePathAndCollectSteps</code> doesn't exist, add it to <code>src/reachability.ts</code> beside <code>simulateOptimalPath</code>.</li>
+          <li>Run <code>npx vitest run src/reachability.test.ts</code>.</li>
+          <li>If the reachability test passes — proceed.</li>
+          <li>If it fails — apply mitigation from the ordered list above. Iterate until pass.</li>
+          <li>Run full <code>npm test</code>. Suite green.</li>
+        </ol>
+
+        <div class="callout crit">
+          <div class="ct">Binding gate</div>
+          <code>npx vitest run src/reachability.test.ts</code> must exit 0
+          before Phase 7 is allowed to land. If the gate cannot be made to
+          pass after applying mitigations (a)–(d), the underlying problem is
+          a spec issue — the rev-9 starter + tutorial chain do not actually
+          reach battery_bank in any reasonable time — and Phase 7 must be
+          deferred for a spec revision (rev-17 §11 / §12).
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;Both new tests pass. Full <code>npm test</code> green. <code>npx tsc --noEmit</code> clean.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. Phase 4's existing assertion remains. If a mitigation (b)/(c)/(d) was applied to <code>world.ts</code> or <code>reachability.test.ts</code>, the rollback should revert those too.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>test(reachability): rev-9 starter -&gt; battery_bank in 45 min (binding gate)
+
+Per design spec §07. Extends the Phase 4 reachability suite
+with the canonical Phase 7 invariant:
+
+  rev-9 startingInventory() + post-Phase-7 home terrain
+  + canonical tutorial chain
+  -&gt; 1x battery_bank in &lt;= 45 minutes of simulated game-time
+
+TUTORIAL_DEADLINE_MIN env var overrides the deadline for
+local tuning; default 45.
+
+Second test confirms tutorial steps 01..13 fire in dependency
+order along the optimal path — guards against trigger-predicate
+regressions that would let later steps fire prematurely.
+
+simulatePathAndCollectSteps helper added beside
+simulateOptimalPath in src/reachability.ts (tutorial-aware
+driver, not the canonical reachability call).
+
+This is the binding gate of Phase 7 — passes here are necessary
+but not sufficient (the 8 h human playtest is the final gate).
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase7-tutorial
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p8">
+      <div class="sec-head"><span class="num">09</span><h2>Phase 8 — Subagent green confirmation</h2></div>
+      <p class="sec-intro">No commit. Terminal confirmation that the
+        seven preceding commits leave the suite green and the compiler
+        clean. Hand off to human playtest.</p>
+
+      <div class="phase-card">
+        <h4>Procedure</h4>
+        <ol class="body">
+          <li>Confirm <code>HEAD</code> is on the Phase 7 (reachability) commit.</li>
+          <li>Run the full suite, capture the test count:
+            <div class="code"><pre>npm test</pre></div>
+          </li>
+          <li>Run the typechecker separately:
+            <div class="code"><pre>npx tsc --noEmit</pre></div>
+          </li>
+          <li>Build the production bundle (the dev tab serves <code>dist/</code>):
+            <div class="code"><pre>npm run build</pre></div>
+          </li>
+          <li>Sanity-check the build artefact: refresh <code>islands.nitjsefni.eu</code> and confirm the game loads, a new game starts cleanly, and the step-1 (map picker) hint appears in the top-right. Do <em>not</em> walk further — that's Phase 9's playtest.</li>
+          <li>Post a message in the project mailbox handing off to the user for the playtest gate. Include the test count delta, any newly-touched files, and the explicit acknowledgement that the reachability gate passed.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0 with full count ≥ Phase 0 baseline + 50 (Phase 6) + 2 (Phase 7). <code>npx tsc --noEmit</code> exits 0. <code>npm run build</code> succeeds. Browser smoke-test: game loads, step-1 hint visible.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;N/A — no commit. If verification fails, roll back the offending phase commit and re-run.</div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p9">
+      <div class="sec-head"><span class="num">10</span><h2>Phase 9 — Human playtest gate (8 h, manual)</h2></div>
+      <p class="sec-intro">Per spec §10 + rev-16 §11.4. The 8 h playtest is
+        the only manual approval gate in the entire 7-phase SI-units rework.
+        Subagent work cannot verify tutorial UX feel — only a real play
+        session does.</p>
+
+      <div class="phase-card">
+        <h4>Playtest URL</h4>
+        <p class="body">Browser tab at <code>https://islands.nitjsefni.eu/</code>
+          (served by <code>robot-islands-dev.service</code> per CLAUDE.md).
+          Each playtest iteration: <code>npm run build</code> → reload tab.
+          <strong>Do not</strong> restart the systemd service for code
+          changes — the unit serves <code>dist/</code>, not source.</p>
+
+        <h4>10.1 Fresh-new-game playthrough (≤ 4 h)</h4>
+        <div class="check-list">
+          <h4>Checklist — fresh game</h4>
+          <ul>
+            <li>New world; map picker fires immediately on session start.</li>
+            <li>Pick a temperate latitude (40 N — NYC equivalent).</li>
+            <li>Step 2 (bootstrap power) fires after map picker dismisses.</li>
+            <li>Step 3 (building placement) fires after Water Wheel placed.</li>
+            <li>Step 4 (tile gate) fires after Mine placed.</li>
+            <li>Step 5 (logger) fires after first iron_ore extracted.</li>
+            <li>Step 6 (iron chain) fires once iron_ore + coal stockpile reach trigger thresholds.</li>
+            <li>Step 7 (heat budget) fires when Coke Oven placed without adjacent heat.</li>
+            <li>Step 8 (adjacency buff) fires after two same-type buildings sit adjacent.</li>
+            <li>Step 9 (copper prospect) fires on attempted Cell Press placement without copper_ingot.</li>
+            <li>Step 10 (limestone) fires on attempted Blast Furnace without limestone.</li>
+            <li>Step 11 (construction time) fires on first T2 placement.</li>
+            <li>Step 12 (storage caps) fires when any resource reaches its cap.</li>
+            <li>Step 13 (battery bootstrap) fires; player reaches 1× battery_bank.</li>
+            <li>Total time to battery_bank ≤ 45 min wall-clock. Log actual time.</li>
+            <li>Each hint dismisses at the right moment (no stuck or premature dismissals).</li>
+            <li>No two hints visible simultaneously.</li>
+          </ul>
+        </div>
+
+        <h4>10.2 High-latitude playthrough (~2 h)</h4>
+        <div class="check-list">
+          <h4>Checklist — 64 N (Reykjavik)</h4>
+          <ul>
+            <li>Restart Tutorial; pick 64 N.</li>
+            <li>Confirm solar production is near-zero in winter (depending on real current date).</li>
+            <li>Tutorial does not push solar before batteries — verify by playing through steps 1-13 only on water-wheel / biomass / coal chain.</li>
+            <li>Player can still reach battery_bank without solar (water_wheel + cell_press + coal-furnace + smelter is sufficient).</li>
+            <li>Document any moments where "low solar" felt unsurfaced.</li>
+          </ul>
+        </div>
+
+        <h4>10.3 Skip / restart flow (~30 min)</h4>
+        <div class="check-list">
+          <h4>Checklist — settings</h4>
+          <ul>
+            <li>From a mid-tutorial state (e.g. step 8), open settings, hit "Skip Tutorial."</li>
+            <li>Hint overlay disappears within one frame.</li>
+            <li>Open inventory / build any building — no further hint fires.</li>
+            <li>Hit "Restart Tutorial" in settings.</li>
+            <li>Step 1 (or the next applicable step given current game state) appears.</li>
+            <li>Walk one more step to confirm the cycle resumes normally.</li>
+            <li>Refresh the browser tab; confirm skipped state persists (was saved) and Skip/Restart still works post-reload.</li>
+          </ul>
+        </div>
+
+        <h4>10.4 Late-game tutorial steps (~30 min — spot-check, no full grind)</h4>
+        <div class="check-list">
+          <h4>Checklist — late-game predicates</h4>
+          <ul>
+            <li>Use the debug-console / save-edit to seed a world satisfying step 22 (level 30), step 24 (nuclear_reactor placed), step 26 (active storm), step 28 (ai_core in inventory), step 32 (genesis_cell crafted).</li>
+            <li>Each predicate fires its corresponding hint.</li>
+            <li>Step 32 (Genesis) does not re-fire once dismissed even if more crafts happen.</li>
+            <li>Step 30 (10-island network) fires only at the precise threshold (9 islands: silent; 10 islands: hint).</li>
+          </ul>
+        </div>
+
+        <h4>10.5 Pre-Phase-7 save load (~30 min)</h4>
+        <div class="check-list">
+          <h4>Checklist — legacy save</h4>
+          <ul>
+            <li>Take the user's existing live save at <code>/tmp/robot-islands-save.json</code> (27.5 MB pre-Phase-7).</li>
+            <li>Load it into the post-Phase-7 build.</li>
+            <li>Save loads cleanly — no exception, no missing fields, no schema-version error.</li>
+            <li>The player already has batteries built; expect steps 1-14 to dismiss en-masse on the first poll.</li>
+            <li>Step 15 onward fires as their conditions become true.</li>
+            <li>UI does not queue or stack multiple hints — only one visible at a time.</li>
+          </ul>
+        </div>
+
+        <h4>10.6 Fix-commit budget (~1 h)</h4>
+        <p class="body">Expect ~2–4 fix commits surfacing playtest issues.
+          Each is small (hint copy tweak, trigger predicate tightening, CSS
+          tweak). Commit message style:</p>
+        <div class="code"><pre>fix(tutorial): &lt;short description&gt;
+
+Surfaced by Phase 9 human playtest (Phase 7 of SI-units rework).
+&lt;1-2 sentence root cause + fix description.&gt;
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+
+        <div class="callout crit">
+          <div class="ct">Playtest cannot be skipped</div>
+          Per rev-16 §11.4 + design spec §10. Tutorial UX (trigger timing,
+          hint placement, player-skip behaviour) cannot be subagent-verified.
+          The 8 h budget is a hard floor — even if early playthroughs feel
+          clean, work through all five sub-checklists above before declaring
+          the rework complete.
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;User signs off on each of the five sub-checklists. Any fix commits added are themselves green under <code>npm test</code> + <code>npx tsc --noEmit</code>. Total session log records ≤ 45 min wall-clock to battery_bank on the fresh playthrough.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;If playtest reveals fundamental issues that fix-commits can't resolve in the 8 h budget, the entire phase rolls back: <code>git revert</code> the 8 phase commits + revert any seeded fix commits. Re-spec with rev-17 §11 addenda before retrying.</div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="vmatrix">
+      <div class="sec-head"><span class="num">11</span><h2>Verification matrix</h2></div>
+      <p class="sec-intro">Cross-reference: every spec requirement → phase
+        delivering it → test or measurement verifying it.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Spec requirement</th>
+          <th>Phase</th>
+          <th>Verifying test / measurement</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">Home terrain — copper_ore 2×2 cluster</td>
+            <td class="mono">Phase 1</td>
+            <td>Updated island.test.ts asserts cluster presence; manual smoke-test on dev tab</td>
+          </tr>
+          <tr>
+            <td class="slate">Home terrain — clay 2×2 cluster</td>
+            <td class="mono">Phase 1</td>
+            <td>Same as copper_ore</td>
+          </tr>
+          <tr>
+            <td class="slate">Home terrain — sand cluster (conditional)</td>
+            <td class="mono">Phase 1</td>
+            <td>Implementer's verification step (read island.ts before adding); if added, parallel assertion</td>
+          </tr>
+          <tr>
+            <td class="slate">Tree cluster 2×2 (was 3-tile L)</td>
+            <td class="mono">Phase 1</td>
+            <td>Updated tree-tile assertion; reachability test catches if shape change breaks the wood chain</td>
+          </tr>
+          <tr>
+            <td class="slate">stoneTiles scatter removed</td>
+            <td class="mono">Phase 1</td>
+            <td>Updated stone-tile-count assertion (was 6 scatter + 4 cluster = 10; now 4 cluster)</td>
+          </tr>
+          <tr>
+            <td class="slate">Rev-9 starter inventory — 9 line items</td>
+            <td class="mono">Phase 2</td>
+            <td>Updated startingInventory() tests; reachability gate is the load-bearing assertion</td>
+          </tr>
+          <tr>
+            <td class="slate">Rev-9 starter — steel removed</td>
+            <td class="mono">Phase 2</td>
+            <td>Any test asserting inv.steel == 30 fails; rewrite to iron_ingot 60</td>
+          </tr>
+          <tr>
+            <td class="slate">tutorial.ts — TutorialStep interface</td>
+            <td class="mono">Phase 3</td>
+            <td>tsc --noEmit clean; per-step tests (Phase 6) consume the type</td>
+          </tr>
+          <tr>
+            <td class="slate">tutorial.ts — 32-entry TUTORIAL_STEPS</td>
+            <td class="mono">Phase 3</td>
+            <td>tutorial.test.ts integrity test (count + unique ids)</td>
+          </tr>
+          <tr>
+            <td class="slate">tutorial.ts — currentStep / checkDismissals / markCompleted</td>
+            <td class="mono">Phase 3</td>
+            <td>tutorial.test.ts ordering tests; per-step trigger/dismissal tests</td>
+          </tr>
+          <tr>
+            <td class="slate">tutorial.ts — skipAll / restart</td>
+            <td class="mono">Phase 3</td>
+            <td>tutorial.test.ts skipAll + restart suite</td>
+          </tr>
+          <tr>
+            <td class="slate">tutorial-ui.ts — DOM hint overlay</td>
+            <td class="mono">Phase 4</td>
+            <td>Manual smoke-test on dev tab; Phase 9 §10.1 checklist</td>
+          </tr>
+          <tr>
+            <td class="slate">ui.css — .tutorial-hint styles</td>
+            <td class="mono">Phase 4</td>
+            <td>Visual inspection on dev tab</td>
+          </tr>
+          <tr>
+            <td class="slate">main.ts — ticker polling wire</td>
+            <td class="mono">Phase 5</td>
+            <td>Step 1 fires immediately on fresh game (Phase 9 §10.1 first line)</td>
+          </tr>
+          <tr>
+            <td class="slate">settings-ui.ts — Skip + Restart buttons</td>
+            <td class="mono">Phase 5</td>
+            <td>Phase 9 §10.3 skip/restart checklist</td>
+          </tr>
+          <tr>
+            <td class="slate">world.ts — recentBuildAttempts field</td>
+            <td class="mono">Phase 5</td>
+            <td>Steps 9 + 10 + 25 trigger tests (Phase 6) exercise the predicate</td>
+          </tr>
+          <tr>
+            <td class="slate">tutorial.test.ts — per-step trigger/dismissal</td>
+            <td class="mono">Phase 6</td>
+            <td>64 it()s (32 trigger + 32 dismissal) pass</td>
+          </tr>
+          <tr>
+            <td class="slate">Save migration — pre-Phase-7 saves load</td>
+            <td class="mono">Phase 6</td>
+            <td>persistence test in tutorial.test.ts; Phase 9 §10.5 manual load</td>
+          </tr>
+          <tr>
+            <td class="slate">Reachability — battery_bank in ≤ 45 min</td>
+            <td class="mono">Phase 7</td>
+            <td><strong>BINDING GATE</strong>; reachability.test.ts new assertion</td>
+          </tr>
+          <tr>
+            <td class="slate">Step ordering — 01..13 in dependency order</td>
+            <td class="mono">Phase 7</td>
+            <td>reachability.test.ts second new it() (simulatePathAndCollectSteps)</td>
+          </tr>
+          <tr>
+            <td class="slate">Full suite green pre-playtest</td>
+            <td class="mono">Phase 8</td>
+            <td>npm test + tsc --noEmit + npm run build all exit 0</td>
+          </tr>
+          <tr>
+            <td class="slate">Playtest — fresh new game ≤ 45 min to battery_bank</td>
+            <td class="mono">Phase 9</td>
+            <td>§10.1 manual checklist</td>
+          </tr>
+          <tr>
+            <td class="slate">Playtest — high-latitude playthrough</td>
+            <td class="mono">Phase 9</td>
+            <td>§10.2 manual checklist</td>
+          </tr>
+          <tr>
+            <td class="slate">Playtest — skip/restart</td>
+            <td class="mono">Phase 9</td>
+            <td>§10.3 manual checklist</td>
+          </tr>
+          <tr>
+            <td class="slate">Playtest — late-game steps</td>
+            <td class="mono">Phase 9</td>
+            <td>§10.4 manual checklist</td>
+          </tr>
+          <tr>
+            <td class="slate">Playtest — pre-Phase-7 save load</td>
+            <td class="mono">Phase 9</td>
+            <td>§10.5 manual checklist (live 27.5 MB save)</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="risks">
+      <div class="sec-head"><span class="num">12</span><h2>Risks &amp; mitigations</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 7 reachability gate fails — rev-9 starter + post-Phase-7 terrain can't reach battery_bank in 45 min along the canonical chain. The gate is binding, so Phase 7 stalls.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Apply rev-16 §12.9.4 mitigations in order: (b) 2× coke + 2× pig_iron starter, (c) 1× steel_beam, (d) bump <code>TUTORIAL_DEADLINE_MIN</code> to 60. Pick the smallest fix; document choice in the commit body.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Tutorial hint fires too early — predicate is too loose, player gets a hint about a mechanic they're not ready for.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 6 per-step tests verify the predicate fires on its target world only. Phase 9 §10.1 playtest catches timing issues; fix-commit budget covers tightening.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A trigger predicate never fires because of a subtle state mismatch (e.g. checking <code>w.co2AccruedKg</code> when the actual field is <code>w.co2_accrued_kg</code> or lives on <code>islandState</code>).</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 6 per-step trigger tests catch this — each constructs a world the predicate should accept; a mismatched field name means <code>triggerCondition</code> returns false in the test, fails fast.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Pre-Phase-7 live save loads with all 32 steps' triggers already true — hint queue overwhelms the UI on first frame.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Per spec §06 + Phase 5 wiring: only ONE step renders at a time (<code>currentStep</code> returns the first un-completed step whose trigger is true). <code>checkDismissals</code> fast-dismisses in a single frame for steps whose dismissal is also true; UI sees a smooth cascade, not a stack. Verified by Phase 9 §10.5 manual load.</div>
+        </div>
+        <div class="row">
+          <div class="cell">High-latitude playtest reveals solar so weak that the player can't follow the canonical chain.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">The tutorial chain doesn't depend on solar — water_wheel / windmill_t0 bootstrap power; coal_furnace continues night. Phase 9 §10.2 explicitly checks this path. If it actually breaks, the underlying spec issue is real and we fix the chain, not the tutorial.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 2 starter inventory rewrite breaks more than the ~10-20 expected tests — a hidden cluster of fixtures hard-codes the old steel:30 value.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 2 step list explicitly enumerates the three treatment categories (recipe-cost / snapshot / persistence). Walk each failure deliberately; resist <code>vitest run -u</code> blind regeneration. Time budget includes 1 h for ~20 fix-ups.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Terrain patches in Phase 1 collide with the player's existing placements on a long-running live save (build on a tile that becomes copper_ore post-update).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell"><code>defaultTerrainAt</code> applies only to the unbuilt-on initial-generation terrain. Existing placements override the function output. Phase 9 §10.5 manual load against the user's live 27.5 MB save verifies this — no rebuild of an existing tile is expected.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Player skips the tutorial then later wants help — "Restart Tutorial" re-fires steps the player has already passed (e.g. step 32 Genesis on a player who has 5 already crafted).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Each step's <code>dismissalCondition</code> handles "already done." Step 32 dismissal is "<code>invAtLeast(w, 'genesis_cell', 1)</code>" — a player who restarts and already has crafts dismisses the step in the same frame it fires (covered by <code>checkDismissals</code> fast-walk).</div>
+        </div>
+        <div class="row">
+          <div class="cell">Ticker polling has a measurable performance cost on the hot path (60 Hz × 32 predicates × per-island walks adds up).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Predicates are O(1) for most steps; the few O(|islands|) ones walk &lt; 20 islands typical. Budget: ~64 ns/predicate × 32 = ~2 μs/frame, &lt; 0.02% of a 16 ms frame budget. If a profile-economy.ts run shows otherwise, throttle polling to once per game-second (still imperceptible to the player).</div>
+        </div>
+        <div class="row">
+          <div class="cell">DOM <code>innerHTML</code> assignment in <code>refreshTutorialHint</code> re-runs every frame, causing fade-in animation thrash.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell"><code>renderedStepId</code> guard short-circuits on no-change. Only when the active step's id changes does the innerHTML get rebuilt. Phase 4 pseudocode includes the guard explicitly; Phase 9 §10.1 visual smoke-test confirms no animation loop.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Subagent commits don't ship the trailer; CI / manual review catches missing <code>Co-Authored-By</code>.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Each commit template in this plan ends with the trailer literal. Implementer scans the composed message before <code>git commit</code> per CLAUDE.md "every commit means every commit." Skill-prescribed and plan-prescribed commits both count.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="open">
+      <div class="sec-head"><span class="num">13</span><h2>Implementation notes</h2></div>
+      <p class="sec-intro">Useful context for the implementer that didn't
+        rise to the level of a spec requirement.</p>
+
+      <ul class="body">
+        <li><strong>Order matters.</strong> Phases 1 and 2 are independent of Phase 3+ and can land before any tutorial code is written. Doing them first means a working game with rev-9 starter exists before the tutorial wires in — the reachability test in Phase 7 needs both to evaluate.</li>
+        <li><strong>Phase 3 is the largest single commit.</strong> ~350 LOC of mostly literal-table data (the 32 steps). Resist the urge to split per step — they're more readable as a single array.</li>
+        <li><strong>Hot-path graph identity for polling.</strong> <code>refreshTutorialHint(world)</code> walks <code>TUTORIAL_STEPS</code> linearly; the guard at the top of each step's predicate (<code>if (completed.has(step.id)) continue;</code>) means a fully-completed tutorial costs 32 Set lookups + 0 predicate evaluations, basically free.</li>
+        <li><strong>Don't export helpers from tutorial.ts beyond the spec's surface.</strong> Predicate helpers (<code>hasBuilding</code>, <code>invSeen</code>, …) stay module-private. Phase 6 tests use the public surface (<code>currentStep</code>, <code>checkDismissals</code>, etc.); never reach into private helpers from a test.</li>
+        <li><strong>Step 8 (adjacency buff) and 11 (construction time) use <code>stepCompleted(w, id, ttlMs)</code> as their dismissal.</strong> This is a soft-dismiss for "read-and-move-on" hints with no enforcement criterion. The TTL is the hint visibility duration; the player can dismiss manually by clicking before it expires.</li>
+        <li><strong>Step 17 (drones) and 18 (lighthouse) similarly use soft dismiss.</strong> The strict dismissal (<code>droneRoutes.size &gt; 0</code> / <code>discoveredIslandCount(w) &gt; startingDiscovered</code>) is the satisfying-condition; the soft TTL is the fallback so the hint doesn't sit forever if the player ignores it.</li>
+        <li><strong>Persistence schema does NOT bump.</strong> Per spec §05.1, <code>tutorialState</code> is already declared at <a class="cite">persistence.ts:145</a> by an earlier phase. Phase 7 only populates it; no migration is required. Pre-Phase-7 saves load with <code>tutorialState: undefined</code>; <code>currentStep</code> treats this as empty completed.</li>
+        <li><strong>Phase 9 fix-commits are NOT optional.</strong> Even if every checklist passes, log a "Phase 9 playtest verification" empty-ish commit (or amend the Phase 8 confirmation message) so the git history shows the playtest gate completed. This is the closure marker for the entire 7-phase SI-units rework.</li>
+        <li><strong>Dev tab discipline.</strong> Per AGENTS.md, the systemd service serves <code>dist/</code>, not source. Every iteration: <code>npm run build</code> → reload tab. Do NOT restart <code>robot-islands-dev.service</code> for code changes.</li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan · Phase 7 of 7 (FINAL) · generated 2026-05-28 ·
+        spec at <code>specs/2026-05-28-si-units-phase7-tutorial</code> ·
+        rev-16 §11 + §12 source-of-truth ·
+        binding gate: <code>reachability.test.ts</code> 45-min invariant ·
+        manual gate: 8 h human playtest</p>
+    </div>
+
+  </div>
+</body>
+</html>

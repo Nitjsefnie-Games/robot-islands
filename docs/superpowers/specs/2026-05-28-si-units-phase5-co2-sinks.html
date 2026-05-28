@@ -1,0 +1,487 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units rework Phase 5 — CO₂ sinks + plant_a_tree</title>
+  <style>
+    :root {
+      --ivory: #1B1A17; --slate: #F5F3EC; --clay: #D97757; --oat: #3A352B;
+      --olive: #8FA56E; --rust: #E08B7F; --warn: #E0B47F;
+      --gray-150: #2E2C27; --gray-300: #3A3833; --gray-500: #8F8D82;
+      --gray-700: #CFCCC2; --white: #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px; --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    h1 code { font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px; color: #C9B98A; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .verification-key { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; margin: 18px 0 24px; font-size: 13px; }
+    .verification-key strong { color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    .vbadge { display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px; }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 48px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    .toc { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    h3.sub { font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin: 26px 0 10px; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; color: var(--clay); }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .codepanel { background: #121110; border-radius: 12px; padding: 16px 20px;
+      overflow-x: auto; margin: 12px 0 18px; }
+    .codepanel pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre; }
+    .codepanel .kw { color: var(--clay); }
+    .codepanel .str { color: var(--olive); }
+    .codepanel .cm { color: var(--gray-500); }
+    .codepanel .fn { color: #C9B98A; }
+    .codepanel .new { background: rgba(143, 165, 110, 0.13); display: block; }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 280px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px; }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · SI-units rework · Phase 5</div>
+      <h1>CO₂ sinks — <code>wastewater_treatment</code>, <code>exhaust_scrubber</code>, <code>plant_a_tree</code></h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Phase 2 wired accrual; Phase 5 wires the drains. Two existing
+        buildings gain CO₂-capture rates; one new T1 building enters the
+        catalog. The drain integrator hook in <code>advanceIsland</code>
+        subtracts kg/cycle from <code>state.co2Kg</code> on each running
+        sink. Bounded by zero — sinks don't go negative when CO₂ is
+        already drained.
+      </div>
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author.
+        <span class="vbadge u">unverified</span> projection.
+        <span class="vbadge x">corrected</span> earlier draft contained an error.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Subagent effort</div><div class="v accent">~4 h</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">2 source · 2 test</div></div>
+      <div class="cell"><div class="k">New buildings</div><div class="v">1 (plant_a_tree)</div></div>
+      <div class="cell"><div class="k">Schema change</div><div class="v ok">None</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Two existing buildings gain optional <code>co2CaptureKgPerCycle</code> field. One new T1 building (<code>plant_a_tree</code>) ships with the same field + forest-biome gate. Integrator drains CO₂ proportionally to recipe progress, clamped at 0.</div>
+      <div class="d-body"><strong>wastewater_treatment</strong> at
+        <a class="cite">building-defs.ts:1621</a>: existing T3 building;
+        extend with <code>co2CaptureKgPerCycle: 5</code> per rev-16 §7.4.
+        Drain fires when the recipe runs (existing power + heat gates
+        unchanged).</div>
+      <div class="d-body"><strong>exhaust_scrubber</strong> at
+        <a class="cite">building-defs.ts:1639</a>: existing T3 building;
+        extend with <code>co2CaptureKgPerCycle: 20</code>, gated on
+        adjacency to a CO₂-producing source (coal_gen, biomass_plant,
+        cement_mill, limekiln). The adjacency gate uses the existing
+        heat-resolver pattern.</div>
+      <div class="d-body"><strong>plant_a_tree</strong> (NEW T1 building):
+        single tile, forest-biome only, zero power.
+        <code>co2CaptureKgPerCycle: 0.1</code>. Slow but cumulative; no
+        inputs (per rev-16 §7.4: "consumes 1 sapling (new resource? Or
+        reuse wood -1 unit per cycle)"). Phase 5 picks the simpler path:
+        no inputs, no outputs — pure CO₂ sink mechanic.</div>
+      <div class="d-body"><strong>Drain hook in <code>advanceIsland</code>.</strong>
+        Inside the segment integrator (same locality as Phase 2's accrual
+        hook), per running building with <code>co2CaptureKgPerCycle &gt; 0</code>:
+        <code>const drainKg = (def.co2CaptureKgPerCycle ?? 0) ×
+        (segmentDurationSec / recipe.cycleSec) × buildingRunningFactor;
+        state.co2Kg = Math.max(0, state.co2Kg - drainKg);</code>. The
+        clamp at zero is load-bearing — Phase 6 weather thresholds work
+        from absolute kg.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#s01">01 Problem</a>
+      <a href="#s02">02 Sink extensions</a>
+      <a href="#s03">03 plant_a_tree</a>
+      <a href="#s04">04 Drain integrator</a>
+      <a href="#s05">05 API change</a>
+      <a href="#s06">06 Test plan</a>
+      <a href="#s07">07 Expected impact</a>
+      <a href="#s08">08 Risks</a>
+      <a href="#s09">09 Non-goals</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Problem</h2></div>
+      <p class="sec-intro">Phase 2's CO₂ accrual is monotonically
+        increasing. Phase 6 will read the pool for weather thresholds;
+        without drains, the player has no agency. The doc's §7.4 names
+        three sinks; Phase 5 ships them.</p>
+
+      <ul class="body">
+        <li><code>wastewater_treatment</code> at <a class="cite">building-defs.ts:1621</a> exists today (T3 water-cleanup); its real-world analog (algae bioreactor / activated-sludge treatment) absorbs CO₂. The rev-16 doc says ~5 kg/cycle.</li>
+        <li><code>exhaust_scrubber</code> at <a class="cite">building-defs.ts:1639</a> exists today (post-combustion gas treatment); real flue-gas scrubbers capture 5-20% of CO₂. Per rev-16, 20 kg/cycle adjacent to a CO₂-producing source.</li>
+        <li><code>plant_a_tree</code> doesn't exist. Per rev-16 §7.4: new T1 placeable, forest biome only, 0.1 kg/cycle. Slow but free.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>Sink extensions — existing buildings</h2></div>
+
+      <h3 class="sub">2.1 wastewater_treatment</h3>
+      <p class="body">Per rev-16 §7.4: 5 kg CO₂ / cycle when running.
+        The "when running" is the existing recipe-runs gate
+        (<code>computeRates</code>'s output rate &gt; 0). Phase 5 adds
+        the field; the integrator reads it.</p>
+      <div class="codepanel"><pre><span class="cm">// building-defs.ts:1621 — extend wastewater_treatment def.</span>
+{
+  id: <span class="str">'wastewater_treatment'</span>,
+  <span class="cm">/* …existing fields… */</span>
+<span class="new">  co2CaptureKgPerCycle: 5,</span>
+}</pre></div>
+
+      <h3 class="sub">2.2 exhaust_scrubber</h3>
+      <p class="body">Per rev-16 §7.4: 20 kg/cycle when adjacent to a
+        CO₂-producing source. The adjacency gate uses the heat-resolver's
+        4-neighbor footprint pattern.</p>
+      <div class="codepanel"><pre><span class="cm">// building-defs.ts:1639 — extend exhaust_scrubber def.</span>
+{
+  id: <span class="str">'exhaust_scrubber'</span>,
+  <span class="cm">/* …existing fields… */</span>
+<span class="new">  co2CaptureKgPerCycle: 20,</span>
+<span class="new">  co2CaptureAdjacency: [<span class="str">'coal_gen'</span>, <span class="str">'biomass_plant'</span>, <span class="str">'cement_mill'</span>, <span class="str">'limekiln'</span>],</span>
+}</pre></div>
+
+      <p class="body"><strong>The adjacency field</strong> is new:
+        <code>co2CaptureAdjacency?: ReadonlyArray&lt;BuildingDefId&gt;</code>
+        on <code>BuildingDef</code>. The integrator drains only when at
+        least one adjacent building (per 4-neighbor footprint) matches
+        an entry. Absent → drain unconditionally (wastewater_treatment
+        uses this).</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2><code>plant_a_tree</code> new building</h2></div>
+      <p class="sec-intro">New T1 placeable. 1×1 footprint. Forest biome
+        only. Zero inputs, zero outputs, zero power. Pure CO₂ sink at
+        0.1 kg/cycle.</p>
+
+      <div class="codepanel"><pre><span class="cm">// building-defs.ts — append a new entry.</span>
+<span class="new">plant_a_tree: {</span>
+<span class="new">  id: <span class="str">'plant_a_tree'</span>,</span>
+<span class="new">  displayName: <span class="str">'Plant a Tree'</span>,</span>
+<span class="new">  tier: 1,</span>
+<span class="new">  footprint: SHAPES.OneByOne,</span>
+<span class="new">  requiredBiomes: [<span class="str">'forest'</span>],  <span class="cm">// or [tree-tile-required gate]</span></span>
+<span class="new">  <span class="cm">// BOM source: hand-rolled — sapling planting requires minimal materials</span></span>
+<span class="new">  placementCost: { wood: 5, fresh_water: 1 },</span>
+<span class="new">  power: {},  <span class="cm">// no power draw</span></span>
+<span class="new">  co2CaptureKgPerCycle: 0.1,</span>
+<span class="new">  <span class="cm">// Recipe-less — the "cycle" for CO₂ capture is a fixed cadence.</span></span>
+<span class="new">  <span class="cm">// Implementer choice: define a no-op recipe with cycleSec=60 OR</span></span>
+<span class="new">  <span class="cm">// add a synthetic "no-recipe sink" path to the integrator.</span></span>
+<span class="new">},</span></pre></div>
+
+      <h3 class="sub">3.1 Recipe-less sink — integrator handling</h3>
+      <p class="body">The plant_a_tree has no real recipe (no inputs,
+        no outputs). Two implementation choices:</p>
+      <ul class="body">
+        <li><strong>(a) Synthetic recipe.</strong> Add a no-op recipe in <code>RECIPES.plant_a_tree</code> with <code>cycleSec: 60, inputs: {}, outputs: {}</code>. The CO₂ drain hook fires on every cycle completion. The recipe-graph treats the building as a leaf node with no resource implications.</li>
+        <li><strong>(b) Synthetic running gate.</strong> Treat any building with <code>co2CaptureKgPerCycle &gt; 0</code> and no recipe as "always running"; the integrator applies the drain at a fixed cadence (e.g. 60s) regardless of recipe.</li>
+      </ul>
+      <p class="body"><strong>Phase 5 picks (a) — synthetic recipe.</strong>
+        Aligns with the existing infrastructure (the recipe-graph code
+        path is well-tested). The no-op recipe is a one-line entry in
+        <code>RECIPES</code> with empty inputs / outputs. The drain
+        fires as a side-effect of recipe progress, same as the other
+        sinks.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>Drain integrator hook</h2></div>
+      <p class="sec-intro">Inside <code>advanceIsland</code>'s segment
+        integrator, after Phase 2's accrual hook. The drain runs per
+        building, scaled by segment progress.</p>
+
+      <div class="codepanel"><pre><span class="cm">// economy.ts — append to the segment loop, after Phase 2's accrual hook.</span>
+<span class="kw">for</span> (<span class="kw">const</span> b <span class="kw">of</span> runningBuildings) {
+  <span class="kw">const</span> def = BUILDING_DEFS[b.defId];
+  <span class="kw">const</span> capture = def.co2CaptureKgPerCycle ?? 0;
+  <span class="kw">if</span> (capture &lt;= 0) <span class="kw">continue</span>;
+
+  <span class="cm">// Adjacency gate — exhaust_scrubber requires adjacent CO₂ source.</span>
+  <span class="kw">if</span> (def.co2CaptureAdjacency) {
+    <span class="kw">const</span> hasAdjacentSource = <span class="fn">adjacentMatchesAnyDef</span>(
+      b, state.buildings, def.co2CaptureAdjacency,
+    );
+    <span class="kw">if</span> (!hasAdjacentSource) <span class="kw">continue</span>;
+  }
+
+  <span class="cm">// Per-cycle drain × cycles this segment × running factor (heat throttle, etc.).</span>
+  <span class="kw">const</span> recipe = <span class="fn">resolveRecipe</span>(b, state, nowMs);
+  <span class="kw">const</span> cyclesThisSegment = recipe
+    ? (segmentDurationSec / recipe.cycleSec) * <span class="fn">runningFactorFor</span>(b)
+    : segmentDurationSec / 60;  <span class="cm">// recipe-less sink fixed cadence</span>
+
+  <span class="kw">const</span> drainKg = capture * cyclesThisSegment;
+  state.co2Kg = <span class="fn">Math.max</span>(0, state.co2Kg - drainKg);
+}</pre></div>
+
+      <p class="body"><strong>The zero clamp is load-bearing.</strong>
+        Phase 6 reads <code>state.co2Kg</code> for weather thresholds
+        (rev-16 §7.3). If the integrator allowed negative values, a
+        "preemptively scrubbed" island would have negative CO₂
+        contributing negative emissions when summed for world-total —
+        Phase 6's weather logic would behave erratically. The clamp
+        ensures CO₂ stays non-negative.</p>
+
+      <p class="body"><strong>Order of operations.</strong> Per segment:
+        Phase 2's accrual fires first (CO₂ accrues from producing
+        buildings), then Phase 5's drain (sinks subtract). This means
+        instantaneous net CO₂ during a segment is order-dependent in
+        edge cases (e.g. exhaust_scrubber adjacent to coal_gen — the
+        scrubber drains AFTER the gen accrues). Per rev-16 this is the
+        correct order — scrubbers capture emissions in real industrial
+        operation.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>API change surface</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/building-defs.ts (BuildingDef)</div>
+          <div class="what"><span class="lead">Add two optional fields:</span> <code>co2CaptureKgPerCycle?: number</code> and <code>co2CaptureAdjacency?: ReadonlyArray&lt;BuildingDefId&gt;</code>. Top-level on BuildingDef.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.ts:1621, :1639</div>
+          <div class="what"><span class="lead">Extend wastewater_treatment + exhaust_scrubber</span> with the new fields per spec §02.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.ts (new def)</div>
+          <div class="what"><span class="lead">Add plant_a_tree def</span> per spec §03. Synthetic no-op recipe entry in recipes.ts.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/recipes.ts (RecipeId + RECIPES)</div>
+          <div class="what"><span class="lead">Add plant_a_tree recipe (no-op):</span> <code>{ cycleSec: 60, inputs: {}, outputs: {}, category: 'environment' }</code>. Category may need adding to <code>RecipeCategory</code> at <a class="cite">recipes.ts:1111</a>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts (CO₂ drain hook)</div>
+          <div class="what"><span class="lead">Append drain loop to the segment integrator.</span> Per spec §04. Implements the zero-clamped drain math.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.test.ts</div>
+          <div class="what"><span class="lead">CO₂ accrual + drain integration tests.</span> coal_gen + exhaust_scrubber adjacent — net CO₂ per minute. plant_a_tree alone — slow drain. wastewater_treatment standalone — drain regardless of adjacency.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2>Test plan</h2></div>
+
+      <h3 class="sub">6.1 Single-source accrual</h3>
+      <p class="body">coal_gen at 1 coal / 2 s producing 2.42 kg CO₂ / coal → 1.21 kg/s. After 60 s of operation, <code>state.co2Kg = 72.6 kg</code>.</p>
+
+      <h3 class="sub">6.2 Adjacent exhaust_scrubber drain</h3>
+      <p class="body">Same coal_gen + adjacent exhaust_scrubber at 20 kg/cycle (cycleSec inherited from recipe; assume 60 s default for the scrubber's recipe). Over 60 s: accrual +72.6 kg, drain −20 kg. Net <code>state.co2Kg = 52.6 kg</code>.</p>
+
+      <h3 class="sub">6.3 Standalone wastewater_treatment</h3>
+      <p class="body">No adjacency requirement. 5 kg/cycle drain over 60 s: <code>state.co2Kg</code> drops by 5 kg (assuming sufficient initial value). If state.co2Kg = 3 kg initial, drops to 0 (zero clamp).</p>
+
+      <h3 class="sub">6.4 plant_a_tree slow drain</h3>
+      <p class="body">No-input building. 0.1 kg/cycle at cycleSec 60 s = 0.0017 kg/s. After 10 minutes, drains 1 kg. Bounded; verifies the no-input path works.</p>
+
+      <h3 class="sub">6.5 Zero clamp</h3>
+      <p class="body">state.co2Kg = 0; wastewater_treatment runs; after 60 s state.co2Kg still 0 (not negative).</p>
+
+      <h3 class="sub">6.6 Existing suite continuity</h3>
+      <p class="body"><code>npm test</code> green. Phase 5 adds ~8 new tests, touches no existing.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>Expected impact</h2></div>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>After Phase 5</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">CO₂ pool drains</td><td class="num">0 (monotonic)</td><td class="num">3 sinks (5, 20, 0.1 kg/cycle)</td></tr>
+          <tr><td class="slate">Buildings with co2Capture field</td><td class="num">0</td><td class="num">3</td></tr>
+          <tr><td class="slate">New buildings</td><td class="num">0</td><td class="num">1 (plant_a_tree)</td></tr>
+          <tr><td class="slate">Coal_gen + 1 scrubber net CO₂ / hr</td><td class="num">+4356 kg</td><td class="num">+3156 kg (−27% drained)</td></tr>
+          <tr><td class="slate">Coal_gen + 3 scrubbers net CO₂ / hr</td><td class="num">+4356 kg</td><td class="num">+756 kg (−83% drained)</td></tr>
+          <tr><td class="slate">Test count</td><td class="num">~2300 (post-Phase-4)</td><td class="num">~2308</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Gameplay implication.</strong> Players who
+        run heavy combustion can offset emissions with adjacent
+        scrubbers. plant_a_tree is the slow-but-free option for
+        long-term equilibrium. wastewater_treatment becomes a
+        dual-purpose building (water cleanup + carbon capture). Phase 6
+        weather coupling makes the offset meaningful.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">A scrubber adjacent to multiple CO₂ sources double-drains.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The drain is a fixed per-cycle value; the adjacency gate is a boolean (any matching neighbor). No double-counting.</div>
+        </div>
+        <div class="row">
+          <div class="cell">plant_a_tree's "no-op recipe" pattern is novel; existing economy code paths may not handle it cleanly.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">The no-op recipe pattern matches existing constructs (some maintenance recipes have empty outputs). If <code>computeRates</code> rejects empty outputs, fallback to the synthetic running gate (§3 option b).</div>
+        </div>
+        <div class="row">
+          <div class="cell">A future building adds <code>co2CaptureKgPerCycle</code> without an adjacency check, draining everywhere.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Adjacency is optional by design; wastewater_treatment intentionally drains without one. The schema allows both shapes.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The zero clamp causes a discontinuity when the pool first hits zero — the inspector's per-tick rate display shows -X kg/s then 0 kg/s abruptly.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Cosmetic. Inspector can show "drain rate (would be X if pool larger)" if needed; Phase 5 doesn't ship that UI.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Non-goals</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Weather coupling</div>
+          <div class="dd">Phase 6 reads state.co2Kg and applies storm-probability thresholds. Phase 5 only drains.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Biogenic vs fossil CO₂ accounting</div>
+          <div class="dd">If biomass_plant's biogenic CO₂ should be excluded from weather coupling (rev-16 §7.2 note), that logic lands in Phase 6. Phase 5's drain doesn't distinguish.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">A real biological sapling resource</div>
+          <div class="dd">Rev-16 §7.4 floated "new sapling resource OR reuse wood −1/cycle". Phase 5 picks neither — plant_a_tree has no inputs. Future content can revisit.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">CO₂ sequestration via deep-injection</div>
+          <div class="dd">A future high-tier sink (T4-T5) using underground reservoirs. Not in rev-16.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · Phase 5 of 7 · generated 2026-05-28 ·
+        companion plan at <code>plans/2026-05-28-si-units-phase5-co2-sinks-plan</code> ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16 §7.4</p>
+    </div>
+
+  </div>
+</body>
+</html>

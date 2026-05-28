@@ -1,0 +1,849 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units rework Phase 7 — tutorial rework + reachability + home terrain</title>
+  <style>
+    :root {
+      --ivory: #1B1A17; --slate: #F5F3EC; --clay: #D97757; --oat: #3A352B;
+      --olive: #8FA56E; --rust: #E08B7F; --warn: #E0B47F;
+      --gray-150: #2E2C27; --gray-300: #3A3833; --gray-500: #8F8D82;
+      --gray-700: #CFCCC2; --white: #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px; --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    h1 code { font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px; color: #C9B98A; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .verification-key { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; margin: 18px 0 24px; font-size: 13px; }
+    .verification-key strong { color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    .vbadge { display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px; }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 48px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .summary .v.warn { color: var(--warn); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    .toc { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    h3.sub { font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin: 26px 0 10px; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13px; }
+    .tbl th, .tbl td { text-align: left; padding: 9px 12px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 11.5px; color: var(--clay); }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .codepanel { background: #121110; border-radius: 12px; padding: 16px 20px;
+      overflow-x: auto; margin: 12px 0 18px; }
+    .codepanel pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre; }
+    .codepanel .kw { color: var(--clay); }
+    .codepanel .str { color: var(--olive); }
+    .codepanel .cm { color: var(--gray-500); }
+    .codepanel .fn { color: #C9B98A; }
+    .codepanel .new { background: rgba(143, 165, 110, 0.13); display: block; }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 280px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px; }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .callout { background: var(--white); border: var(--border); border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px; }
+    .callout .ct { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px; }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · SI-units rework · Phase 7 (final)</div>
+      <h1>Tutorial rework — 32-step contract, reachability gate, home terrain</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Final phase. With all six prior phases landed, the game's
+        progression has shifted substantively: real chemistry, real
+        embodied-mass costs, proportional heat throttle, real-astronomy
+        solar, CO₂ weather. The existing tutorial — built around the
+        pre-SI catalog — is obsolete. Phase 7 ships per rev-16 §11: a
+        32-step tutorial walkthrough covering every mechanic, the
+        rev-9 starter inventory sized to reach 1× battery_bank in 45
+        minutes, home-terrain patches (copper_ore + clay clusters,
+        2×2 tree cluster, removal of single-tile stone scatter), and
+        the reachability invariant test promoted to a binding gate.
+        The 8 h human playtest is the only manual approval gate in the
+        full 7-phase rework.
+      </div>
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author.
+        <span class="vbadge u">unverified</span> projection (especially tutorial UX).
+        <span class="vbadge x">corrected</span> earlier draft contained an error.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Subagent effort</div><div class="v accent">~16 h</div></div>
+      <div class="cell"><div class="k">Human playtest</div><div class="v warn">~8 h</div></div>
+      <div class="cell"><div class="k">Tutorial steps</div><div class="v">32</div></div>
+      <div class="cell"><div class="k">Reachability deadline</div><div class="v">45 min</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Per rev-16 §11 verbatim — 32 steps, per-step trigger / hint / dismissal contract, rev-9 starter inventory, home terrain patches per §12.8.1. The reachability invariant gates the phase landing.</div>
+      <div class="d-body"><strong>New <code>src/tutorial.ts</code></strong>
+        + <strong><code>src/tutorial-ui.ts</code></strong> modules.
+        State machine + hint overlay. Persisted in
+        <code>SerializedWorld.tutorialState</code> (already declared at
+        <a class="cite">persistence.ts:145</a> as
+        <code>{ completed: ObjectiveId[]; current: ObjectiveId | null }</code>).
+        Phase 7 extends with per-step state.</div>
+      <div class="d-body"><strong>Home terrain patches.</strong>
+        Rev-16 §11.1 + §12.8.1: add copper_ore (cluster) + clay
+        (cluster) + sand (verify) to home island
+        <code>defaultTerrainAt</code> at
+        <a class="cite">island.ts:293-355</a>. Replace 3-tile L tree
+        cluster at (6..7, -3..-4) with 2×2 square. Remove 6 isolated
+        single-stone tiles in <code>stoneTiles</code> array.</div>
+      <div class="d-body"><strong>Rev-9 starter inventory.</strong>
+        Per rev-16 §12.9.3: <code>stone 1200, wood 600, iron_ore 30,
+        coal 80, iron_ingot 60, bolt 25, limestone 15, saltwater_cell
+        4, foundation_kit 1</code>. All others zero. Lives in
+        <code>world.ts:983-995</code>'s <code>startingInventory()</code>.
+        Replaces the existing pre-Phase-7 starter (stone 60, wood 40,
+        steel 30, foundation_kit 1).</div>
+      <div class="d-body"><strong>Reachability invariant test
+        (binding).</strong> Phase 4 introduced the
+        <code>simulateOptimalPath</code> utility + reachability test.
+        Phase 7 extends it with the production starter inventory + 32
+        tutorial steps as the canonical path. The test asserts:
+        battery_bank reached within 45 minutes of simulated game-time
+        from the rev-9 starter via the tutorial's step-1-to-step-13
+        chain. If the test fails, Phase 7 cannot land.</div>
+      <div class="d-body"><strong>8 h human playtest gate.</strong>
+        Per rev-16 §11.4: tutorial UX cannot be subagent-verified.
+        After Phase 7's subagent work lands, the user plays through the
+        tutorial in a browser at https://islands.nitjsefni.eu/. Failures
+        (broken trigger, missed step, wrong hint timing) get spec
+        addenda + fix commits. The playtest is mandatory before
+        Phase 7 ships to master.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#s01">01 Problem</a>
+      <a href="#s02">02 Home terrain patches</a>
+      <a href="#s03">03 Rev-9 starter inventory</a>
+      <a href="#s04">04 32-step tutorial</a>
+      <a href="#s05">05 tutorial.ts state machine</a>
+      <a href="#s06">06 tutorial-ui.ts hint overlay</a>
+      <a href="#s07">07 Reachability invariant (binding gate)</a>
+      <a href="#s08">08 API change</a>
+      <a href="#s09">09 Test plan</a>
+      <a href="#s10">10 Human playtest checklist</a>
+      <a href="#s11">11 Expected impact</a>
+      <a href="#s12">12 Risks</a>
+      <a href="#s13">13 Non-goals</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Problem</h2></div>
+      <p class="sec-intro">After six phases of mechanical realism work,
+        the game is materially different from what the existing tutorial
+        teaches. A new player following the old tutorial will hit a
+        wall when they try to build a Cell Press without copper, a
+        Blast Furnace without limestone, or a Wind Turbine before the
+        steel chain is online.</p>
+
+      <p class="body"><strong>What the old tutorial assumed:</strong>
+        Mine + Workshop + Wind Turbine + Solar; pre-SI placement costs;
+        binary heat gates; trapezoidal solar; no CO₂; no map picker;
+        no real-chemistry chain. None of this survives the rework.</p>
+
+      <p class="body"><strong>What the new tutorial must cover:</strong>
+        25+ distinct mechanics, in an order that doesn't break the
+        chain-dependency graph. Per rev-16 §11.2:
+        building placement → tile gates → cycleSec → power balance →
+        adjacency → heat budget → copper prospecting → limestone for
+        steel → construction time → storage caps → maintenance →
+        day-night solar (with chosen location) → battery bootstrap
+        (rev-9 saltwater_cell chain) → drones → discovery → settlement
+        → foundation kits → antennas → cargo routes → skill tree →
+        CO₂ tracker → tier transitions → reactor toxicity → biome
+        gating → weather → land reclamation → orbital → network
+        consciousness → tier reset → lattice → genesis milestone.</p>
+
+      <p class="body"><strong>Why the playtest is mandatory.</strong>
+        Trigger conditions fire on game events; an incorrect predicate
+        manifests as "hint never appears" or "hint appears
+        prematurely." Static testing can verify the predicate function;
+        only a real play session verifies the FEEL — that the hint
+        arrives in time to help, that consecutive hints don't queue up
+        in a wall of text, that the player isn't blocked by a missing
+        prerequisite.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>Home terrain patches — rev-16 §11.1 + §12.8.1</h2></div>
+
+      <h3 class="sub">2.1 New tile clusters</h3>
+      <table class="tbl">
+        <thead><tr>
+          <th>Terrain</th>
+          <th>Why needed</th>
+          <th>Proposed placement</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">copper_ore</td><td>Cell Press needs copper_ingot (10 units). Without home copper, players need cross-island exploration before they can build batteries.</td><td class="mono">2×2 cluster at (-7..-6, -7..-6) — unused NW quadrant</td></tr>
+          <tr><td class="slate">clay</td><td>Brick + cement + ceramic chains all need clay. Real BF needs fire-brick (= clay).</td><td class="mono">2×2 cluster at (5..6, 7..8) — south side</td></tr>
+          <tr><td class="slate">sand</td><td>Cement + glass + sulfuric_acid need sand. Verify if home has a beach tile; if not, add a 2×2 cluster.</td><td class="mono">2×2 cluster at (10..11, -1..0) — east coast — IF beach tile not present</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Implementer's verification step:</strong>
+        Read <a class="cite">island.ts:293-355</a> defaultTerrainAt to
+        confirm the existing cluster positions. Adjust the proposed
+        coordinates above to avoid overlap with existing clusters or
+        building footprints. Limestone is already at (-9..-8, 7..8)
+        per rev-16 §12.1.</p>
+
+      <h3 class="sub">2.2 Tree cluster — 3-tile L → 2×2 square</h3>
+      <p class="body">Per rev-16 §12.8.1 Decision B. Current at
+        <a class="cite">island.ts:319-321</a>:</p>
+      <div class="codepanel"><pre><span class="kw">const</span> treeTiles: <span class="kw">ReadonlyArray</span>&lt;<span class="kw">readonly</span> [<span class="kw">number</span>, <span class="kw">number</span>]&gt; = [
+  [6, -3], [7, -3], [6, -4],  <span class="cm">// 3-tile L (current)</span>
+];
+
+<span class="cm">// AFTER:</span>
+<span class="new"><span class="kw">const</span> treeTiles: <span class="kw">ReadonlyArray</span>&lt;<span class="kw">readonly</span> [<span class="kw">number</span>, <span class="kw">number</span>]&gt; = [</span>
+<span class="new">  [6, -3], [7, -3], [6, -4], [7, -4],  <span class="cm">// 2×2 square (rev-16 §12.8.1-B)</span></span>
+<span class="new">];</span></pre></div>
+      <p class="body">Effect: 33% more wood-per-cluster + cleaner
+        visual + more Logger placement options.</p>
+
+      <h3 class="sub">2.3 Single-stone removal</h3>
+      <p class="body">Per rev-16 §12.8.1 Decision A. Delete the
+        <code>stoneTiles</code> array at
+        <a class="cite">island.ts:295-297</a> (6 isolated single-stone
+        tiles). Retain only the 2×2 cluster at (-11..-10, 4..5) at
+        <a class="cite">island.ts:300-302</a>.</p>
+      <div class="codepanel"><pre><span class="cm">// BEFORE — delete:</span>
+<span class="cm">// const stoneTiles: ReadonlyArray&lt;readonly [number, number]&gt; = [</span>
+<span class="cm">//   [-9, -2], [-8, 5], [3, 9], [7, -6], [10, 1], [-2, -10],</span>
+<span class="cm">// ];</span>
+
+<span class="cm">// AFTER — only the 2x2 bootstrap cluster remains:</span>
+<span class="kw">const</span> stoneClusterTiles: <span class="kw">ReadonlyArray</span>&lt;<span class="kw">readonly</span> [<span class="kw">number</span>, <span class="kw">number</span>]&gt; = [
+  [-11, 4], [-10, 4], [-11, 5], [-10, 5],
+];</pre></div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>Rev-9 starter inventory</h2></div>
+
+      <h3 class="sub">3.1 New values per rev-16 §12.9.3</h3>
+      <table class="tbl">
+        <thead><tr>
+          <th>Resource</th>
+          <th>Current qty</th>
+          <th>Rev-9 qty</th>
+          <th>Purpose</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">stone</td><td class="num">60</td><td class="num">1200</td><td>~22% of full battery-bank chain (~5400 kg) — Quarry refills the rest</td></tr>
+          <tr><td class="slate">wood</td><td class="num">40</td><td class="num">600</td><td>Logger / Mine / Workshop / Coal Furnace + Cell Press timber buffer</td></tr>
+          <tr><td class="slate">iron_ingot</td><td class="num">0</td><td class="num">60</td><td>Breaks circular dep: Mine (20) + Workshop (30) + 10 buffer</td></tr>
+          <tr><td class="slate">iron_ore</td><td class="num">0</td><td class="num">30</td><td>Bootstrap buffer for 3-5 smelter cycles before Mine output</td></tr>
+          <tr><td class="slate">coal</td><td class="num">0</td><td class="num">80</td><td>Coal Furnace continuous burn (~25 min) + coke_oven + smelter DRI</td></tr>
+          <tr><td class="slate">bolt</td><td class="num">0</td><td class="num">25</td><td>Workshop placement (20) + 5 buffer</td></tr>
+          <tr><td class="slate">limestone</td><td class="num">0</td><td class="num">15</td><td>BF flux + limekiln input for steel_mill quicklime</td></tr>
+          <tr><td class="slate">saltwater_cell</td><td class="num">0</td><td class="num">4</td><td>Pre-built — saves cell_press cycle time (~3 min)</td></tr>
+          <tr><td class="slate">foundation_kit</td><td class="num">1</td><td class="num">1</td><td>Unchanged — first settlement dispatch</td></tr>
+          <tr><td class="slate">steel</td><td class="num">30</td><td class="num">0</td><td><strong>Removed</strong> — was a pre-rev-6 placeholder; player walks the iron→steel chain</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">3.2 startingInventory() rewrite</h3>
+      <p class="body">At <a class="cite">world.ts:983-995</a>, the
+        <code>startingInventory()</code> helper. Phase 7 rewrites
+        verbatim per §3.1.</p>
+
+      <h3 class="sub">3.3 Lifeline mitigation (rev-16 §12.9.4 (a))</h3>
+      <p class="body">The 4 starter saltwater_cells save ~3 min by
+        skipping the cell_press cycle. Per rev-16 §12.9.4, this is the
+        recommended mitigation to keep the 45-min reachability deadline
+        achievable. If playtest reveals more time-pressure, additional
+        mitigations are documented in rev-16: 2× starter coke + pig_iron,
+        OR 1× steel_beam pre-seeded.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>32-step tutorial walkthrough — rev-16 §11.2 verbatim</h2></div>
+      <p class="sec-intro">Per rev-16 §11.2 table. Each step:
+        <code>{ id, triggerCondition, hint, expectedAction, dismissalCondition, priority }</code>.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>#</th>
+          <th>Mechanic</th>
+          <th>Trigger</th>
+          <th>Hint (draft)</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td class="slate">Map picker</td><td class="mono">session start AND world.playerLat == null</td><td>"Choose your location — real sunrise will follow real time at that spot."</td></tr>
+          <tr><td class="num">2</td><td class="slate">Bootstrap power</td><td class="mono">picker done</td><td>"Place a Water Wheel on the freshwater cluster (or Windmill on grass) to power your buildings."</td></tr>
+          <tr><td class="num">3</td><td class="slate">Building placement</td><td class="mono">power source placed</td><td>"Drag the Mine from the build palette onto an ore tile."</td></tr>
+          <tr><td class="num">4</td><td class="slate">Resource extraction + tile-gate</td><td class="mono">first Mine placed</td><td>"The Mine only extracts on ore tiles — see the green tile-highlight."</td></tr>
+          <tr><td class="num">5</td><td class="slate">Logger placement</td><td class="mono">first Mine extracting</td><td>"Logger on the tree cluster keeps wood coming in."</td></tr>
+          <tr><td class="num">6</td><td class="slate">Smelter / iron chain</td><td class="mono">iron_ore + coal stockpile &gt;= 10/3</td><td>"Smelter turns ore into iron ingots. 10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 CO."</td></tr>
+          <tr><td class="num">7</td><td class="slate">Heat budget</td><td class="mono">first Coke Oven placed without heat source</td><td>"Coke Oven needs adjacent heat. Build a Coal Furnace next to it — and remember, one source feeds limited consumers."</td></tr>
+          <tr><td class="num">8</td><td class="slate">Adjacency buffs</td><td class="mono">two same-def buildings adjacent</td><td>"Adjacent same-type buildings get a +10% buff. Cluster wisely."</td></tr>
+          <tr><td class="num">9</td><td class="slate">Copper-ore prospecting</td><td class="mono">player tries to build Cell Press without copper_ingot</td><td>"Cell Press needs copper electrodes. Build a Copper Mine on a copper-ore tile."</td></tr>
+          <tr><td class="num">10</td><td class="slate">Limestone for steel</td><td class="mono">player tries to build Blast Furnace without limestone</td><td>"Blast Furnace needs limestone flux. Build a Limestone Quarry on the limestone cluster."</td></tr>
+          <tr><td class="num">11</td><td class="slate">Construction time</td><td class="mono">first T2 building placed</td><td>"Larger buildings take longer to construct."</td></tr>
+          <tr><td class="num">12</td><td class="slate">Storage caps</td><td class="mono">any resource fills cap</td><td>"Each resource has a storage cap. Build Crates (single) or Silos (dry_goods category) to expand."</td></tr>
+          <tr><td class="num">13</td><td class="slate">Battery Bank bootstrap</td><td class="mono">solar buffer exhausted overnight OR cell_press output stockpiled</td><td>"Cell Press → saltwater_cell → Battery Bank stores daytime surplus."</td></tr>
+          <tr><td class="num">14</td><td class="slate">Day-night solar</td><td class="mono">first solar panel placed</td><td>"Solar produces only when the sun is up. Pair with batteries for night."</td></tr>
+          <tr><td class="num">15</td><td class="slate">CO₂ tracker</td><td class="mono">first 100 kg accrued</td><td>"Your industry emits CO₂. Tracked in the HUD; high totals worsen weather."</td></tr>
+          <tr><td class="num">16</td><td class="slate">Maintenance</td><td class="mono">building reaches maintenance threshold</td><td>"Buildings need periodic maintenance. The orange wrench means it's due."</td></tr>
+          <tr><td class="num">17</td><td class="slate">Drones</td><td class="mono">first Drone Pad placed</td><td>"Drones haul resources between buildings. Set fuel and target."</td></tr>
+          <tr><td class="num">18</td><td class="slate">Discovery + lighthouse</td><td class="mono">first Lighthouse T1 placed</td><td>"Lighthouses extend your vision over the ocean."</td></tr>
+          <tr><td class="num">19</td><td class="slate">Settlement vehicles</td><td class="mono">first discovered nearby island</td><td>"Ships and helicopters carry Foundation Kits to new islands."</td></tr>
+          <tr><td class="num">20</td><td class="slate">Antenna + signal range</td><td class="mono">inter-island route attempted past range</td><td>"Antennas extend signal coverage."</td></tr>
+          <tr><td class="num">21</td><td class="slate">Cargo routes</td><td class="mono">second island settled</td><td>"Ship routes carry bulk cargo on schedule."</td></tr>
+          <tr><td class="num">22</td><td class="slate">Skill tree T1 crystals</td><td class="mono">level 30 reached</td><td>"Spend Skill Crystals at the Skill Forge to unlock buffs."</td></tr>
+          <tr><td class="num">23</td><td class="slate">Tier transition T2→T3</td><td class="mono">steel mill operational</td><td>"T3 chemistry / electronics unlocks. New buildings — Electrolyzer, Lithography Lab."</td></tr>
+          <tr><td class="num">24</td><td class="slate">Reactor toxicity</td><td class="mono">nuclear_reactor placed</td><td>"Reactors leak radiation onto adjacent tiles. Cooling tower + wastewater mitigate."</td></tr>
+          <tr><td class="num">25</td><td class="slate">Biome dependencies</td><td class="mono">player needs exotic_alloy</td><td>"Pyroforge is Volcanic-only. Carbon Forge is Forest-only."</td></tr>
+          <tr><td class="num">26</td><td class="slate">Weather + storms</td><td class="mono">first storm event</td><td>"Storms damage outdoor buildings. CO₂ accumulation worsens storm frequency."</td></tr>
+          <tr><td class="num">27</td><td class="slate">Land reclamation</td><td class="mono">player builds Platform Constructor</td><td>"Reclaim ocean tiles to expand island footprints."</td></tr>
+          <tr><td class="num">28</td><td class="slate">Tier T3→T4</td><td class="mono">first AI Core / Exotic Alloy</td><td>"T4 endgame. Fusion Core + Particle Accelerator unlock."</td></tr>
+          <tr><td class="num">29</td><td class="slate">Orbital satellites</td><td class="mono">first Spaceport unlocked</td><td>"Satellites extend discovery + comms. Each launch needs Antimatter Propellant + Orbital Insertion Package."</td></tr>
+          <tr><td class="num">30</td><td class="slate">Network consciousness</td><td class="mono">10-island network reached</td><td>"Your network has reached consciousness threshold."</td></tr>
+          <tr><td class="num">31</td><td class="slate">Tier reset</td><td class="mono">player triggers tier reset</td><td>"Tier Reset rebuilds the world with permanent skill carry-over."</td></tr>
+          <tr><td class="num">32</td><td class="slate">Genesis milestone</td><td class="mono">first Genesis Cell crafted</td><td>"You've crafted a Genesis Cell. Milestone, not a win condition."</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Step ordering rationale.</strong> Map
+        picker first (Phase 6's gate). Then bootstrap power before any
+        electricity-dependent building (Mine, Workshop, Smelter). Then
+        the iron chain before any T2 building. Copper-ore prospecting
+        between iron-chain stability and Cell Press attempt. Storage +
+        maintenance + day-night land after the player has experienced
+        the underlying mechanic at least once.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2><code>tutorial.ts</code> state machine</h2></div>
+      <p class="sec-intro">New module. Step definitions, trigger
+        polling, dismissal logic. Pure (no DOM) — the UI layer
+        consumes the state.</p>
+
+      <div class="codepanel"><pre><span class="cm">// tutorial.ts</span>
+<span class="kw">export interface</span> TutorialStep {
+  <span class="kw">readonly</span> id: <span class="kw">string</span>;
+  <span class="kw">readonly</span> triggerCondition: (world: WorldSnapshot) =&gt; <span class="kw">boolean</span>;
+  <span class="kw">readonly</span> hint: <span class="kw">string</span>;
+  <span class="kw">readonly</span> expectedAction: <span class="kw">string</span> | <span class="kw">null</span>;
+  <span class="kw">readonly</span> dismissalCondition: (world: WorldSnapshot) =&gt; <span class="kw">boolean</span>;
+  <span class="kw">readonly</span> priority: <span class="str">'critical'</span> | <span class="str">'recommended'</span> | <span class="str">'optional'</span>;
+}
+
+<span class="kw">export const</span> TUTORIAL_STEPS: <span class="kw">ReadonlyArray</span>&lt;TutorialStep&gt; = [
+  {
+    id: <span class="str">'01_map_picker'</span>,
+    triggerCondition: (w) =&gt; w.playerLat == <span class="kw">null</span>,
+    hint: <span class="str">'Choose your location — real sunrise will follow real time at that spot.'</span>,
+    expectedAction: <span class="str">'open_map_picker'</span>,
+    dismissalCondition: (w) =&gt; w.playerLat != <span class="kw">null</span>,
+    priority: <span class="str">'critical'</span>,
+  },
+  <span class="cm">// …31 more entries…</span>
+];
+
+<span class="kw">export function</span> <span class="fn">currentStep</span>(world: WorldSnapshot): TutorialStep | <span class="kw">null</span> {
+  <span class="kw">const</span> completed = <span class="kw">new</span> Set(world.tutorialState?.completed ?? []);
+  <span class="kw">for</span> (<span class="kw">const</span> step <span class="kw">of</span> TUTORIAL_STEPS) {
+    <span class="kw">if</span> (completed.<span class="fn">has</span>(step.id)) <span class="kw">continue</span>;
+    <span class="kw">if</span> (step.<span class="fn">triggerCondition</span>(world)) <span class="kw">return</span> step;
+  }
+  <span class="kw">return</span> <span class="kw">null</span>;
+}
+
+<span class="kw">export function</span> <span class="fn">checkDismissals</span>(world: WorldSnapshot): <span class="kw">string</span>[] {
+  <span class="kw">const</span> completed = <span class="kw">new</span> Set(world.tutorialState?.completed ?? []);
+  <span class="kw">const</span> newlyCompleted: <span class="kw">string</span>[] = [];
+  <span class="kw">for</span> (<span class="kw">const</span> step <span class="kw">of</span> TUTORIAL_STEPS) {
+    <span class="kw">if</span> (completed.<span class="fn">has</span>(step.id)) <span class="kw">continue</span>;
+    <span class="kw">if</span> (step.<span class="fn">dismissalCondition</span>(world)) newlyCompleted.<span class="fn">push</span>(step.id);
+  }
+  <span class="kw">return</span> newlyCompleted;
+}</pre></div>
+
+      <p class="body"><strong>Per-tick polling.</strong>
+        <code>main.ts</code>'s ticker calls
+        <code>currentStep(world)</code> + <code>checkDismissals(world)</code>
+        once per frame (or once per game-second; the polling frequency
+        is implementer's choice — frame-rate is fine since predicates
+        are cheap). Dismissals append to
+        <code>world.tutorialState.completed</code>; new triggers update
+        the active hint.</p>
+
+      <h3 class="sub">5.1 Save/load — tutorial completion</h3>
+      <p class="body"><code>tutorialState</code> is already declared in
+        <code>SerializedWorld</code> at
+        <a class="cite">persistence.ts:145</a>. Phase 7 doesn't add a
+        new schema field — only uses the existing one. Pre-Phase-7
+        saves load with <code>tutorialState: undefined</code>; the
+        currentStep helper treats it as empty completed list (no steps
+        completed); the player sees the tutorial from step 1 on next
+        session. Mitigation: if a player wants to skip the tutorial
+        entirely, the settings panel gains a "Mark tutorial complete"
+        action that fills <code>completed</code> with all 32 ids.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2><code>tutorial-ui.ts</code> hint overlay</h2></div>
+      <p class="sec-intro">DOM-based hint surface. Floats over the
+        canvas in the top-right corner. Dismisses automatically when
+        the step's dismissal condition triggers; player can also click
+        to dismiss manually.</p>
+
+      <div class="codepanel"><pre><span class="cm">// tutorial-ui.ts</span>
+<span class="kw">let</span> hintEl: HTMLElement | <span class="kw">null</span> = <span class="kw">null</span>;
+
+<span class="kw">export function</span> <span class="fn">refreshTutorialHint</span>(world: WorldSnapshot): <span class="kw">void</span> {
+  <span class="kw">const</span> step = <span class="fn">currentStep</span>(world);
+  <span class="kw">if</span> (!step) {
+    <span class="kw">if</span> (hintEl) {
+      hintEl.<span class="fn">remove</span>();
+      hintEl = <span class="kw">null</span>;
+    }
+    <span class="kw">return</span>;
+  }
+  <span class="kw">if</span> (!hintEl) {
+    hintEl = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+    hintEl.className = <span class="str">'tutorial-hint'</span>;
+    document.body.<span class="fn">appendChild</span>(hintEl);
+    hintEl.<span class="fn">addEventListener</span>(<span class="str">'click'</span>, () =&gt; {
+      <span class="cm">// Manual dismiss — mark current step completed.</span>
+      world.tutorialState = world.tutorialState ?? { completed: [], current: <span class="kw">null</span> };
+      world.tutorialState.completed.<span class="fn">push</span>(step.id);
+      <span class="fn">refreshTutorialHint</span>(world);
+    });
+  }
+  hintEl.innerHTML = `
+    &lt;div class="tut-num"&gt;Step ${step.id}&lt;/div&gt;
+    &lt;div class="tut-text"&gt;${step.hint}&lt;/div&gt;
+    &lt;div class="tut-action"&gt;${step.expectedAction ?? <span class="str">''</span>}&lt;/div&gt;
+  `;
+}</pre></div>
+
+      <h3 class="sub">6.1 Styling</h3>
+      <p class="body">Hint overlay uses the existing
+        <a class="cite">ui.css</a> palette. Top-right anchored; fades
+        in/out; max-width 320 px. Click-through behaviour: clicking
+        on the hint dismisses it but doesn't pass through to the
+        canvas beneath (the player still sees their map).</p>
+
+      <h3 class="sub">6.2 Settings panel — "Skip Tutorial" action</h3>
+      <p class="body">Per spec §05.1, the settings panel gains a
+        <strong>"Mark tutorial complete"</strong> button that fills
+        <code>completed</code> with all 32 step ids. The player can
+        also re-open the tutorial via a <strong>"Restart Tutorial"</strong>
+        action that clears <code>completed</code> and resumes from
+        step 1.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>Reachability invariant (binding gate)</h2></div>
+      <p class="sec-intro">Phase 4 introduced
+        <code>simulateOptimalPath</code>. Phase 7 ships the production
+        starter + canonical path to <code>battery_bank</code> within
+        45 minutes.</p>
+
+      <div class="codepanel"><pre><span class="kw">describe</span>(<span class="str">'tutorial reachability (rev-16 §12.9.5)'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'walks rev-9 starter inventory → 1 battery_bank in 45 min'</span>, () =&gt; {
+    <span class="kw">const</span> homeSpec = <span class="fn">makeHomeIslandSpec</span>();  <span class="cm">// post-Phase-7 patched terrain</span>
+    <span class="kw">const</span> state = <span class="fn">makeInitialIslandState</span>(homeSpec, 0);
+    state.inventory = <span class="fn">startingInventory</span>();  <span class="cm">// rev-9 values</span>
+
+    <span class="kw">const</span> deadline_ms = 45 * 60 * 1000;
+    <span class="kw">const</span> outcome = <span class="fn">simulateOptimalPath</span>(state, deadline_ms, <span class="str">'battery_bank'</span>);
+
+    <span class="fn">expect</span>(outcome.reached).<span class="fn">toBe</span>(<span class="kw">true</span>);
+    <span class="fn">expect</span>(outcome.elapsedMs).<span class="fn">toBeLessThanOrEqual</span>(deadline_ms);
+  });
+
+  <span class="kw">it</span>(<span class="str">'tutorial steps 1-13 trigger in dependency order'</span>, () =&gt; {
+    <span class="cm">// Walks the optimal path; asserts each tutorial step's trigger</span>
+    <span class="cm">// condition fires (and dismisses) in step order. Catches predicates</span>
+    <span class="cm">// that misfire on player progress.</span>
+  });
+});</pre></div>
+
+      <p class="body"><strong>Parametric N.</strong> Per rev-16 §12.9.5
+        the deadline is parametric — default 45 min, can be raised to
+        60 min if playtest reveals tighter pacing is needed. The test
+        accepts an env var <code>TUTORIAL_DEADLINE_MIN</code> for
+        local tuning.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>API change surface</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/tutorial.ts (NEW)</div>
+          <div class="what"><span class="lead">TutorialStep interface + 32-step TUTORIAL_STEPS array + currentStep + checkDismissals helpers.</span> Per spec §05. ~300-400 LOC.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/tutorial-ui.ts (NEW)</div>
+          <div class="what"><span class="lead">DOM hint overlay.</span> Per spec §06. ~150 LOC.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/main.ts</div>
+          <div class="what"><span class="lead">Tutorial polling hook in the ticker.</span> Once per frame: <code>refreshTutorialHint(world); for (id of checkDismissals(world)) markCompleted(world, id);</code></div>
+        </div>
+        <div class="change">
+          <div class="file">src/settings-ui.ts</div>
+          <div class="what"><span class="lead">Add "Skip Tutorial" + "Restart Tutorial" buttons.</span></div>
+        </div>
+        <div class="change">
+          <div class="file">src/island.ts:293-355</div>
+          <div class="what"><span class="lead">Home terrain patches per spec §02.</span> Add copper_ore + clay + sand clusters; 2×2 tree cluster; remove single-stone scatter.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/world.ts:983-995</div>
+          <div class="what"><span class="lead">startingInventory rewrite</span> per spec §03.2 rev-9 values.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/ui.css</div>
+          <div class="what"><span class="lead">Add .tutorial-hint styles.</span> Top-right anchored, fade-in/out.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/tutorial.test.ts (NEW)</div>
+          <div class="what"><span class="lead">Per-step trigger + dismissal unit tests.</span> One <code>it()</code> per step asserting trigger fires + dismisses correctly.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/reachability.test.ts (Phase 4 file, extended)</div>
+          <div class="what"><span class="lead">Add the rev-9-starter + post-Phase-7-terrain reachability assertion.</span> Per spec §07.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Test plan</h2></div>
+
+      <h3 class="sub">9.1 Per-step trigger tests</h3>
+      <p class="body">For each of 32 steps: construct a world state
+        satisfying the trigger; assert <code>currentStep</code> returns
+        that step. Then mutate state to satisfy dismissal; assert
+        <code>checkDismissals</code> returns the step's id.</p>
+
+      <h3 class="sub">9.2 Reachability invariant (binding gate)</h3>
+      <p class="body">Per spec §07. Must pass.</p>
+
+      <h3 class="sub">9.3 Step ordering</h3>
+      <p class="body">A simulated playthrough through
+        <code>simulateOptimalPath</code> exposes steps as they fire.
+        Assert step ids appear in the expected order (1-32) — no
+        step fires before its prerequisite step has dismissed.</p>
+
+      <h3 class="sub">9.4 Save migration with mid-tutorial state</h3>
+      <p class="body">A v15 save with <code>tutorialState.completed =
+        ['01_map_picker', '02_bootstrap_power']</code> loads correctly;
+        currentStep returns step 3 (next in sequence). Skipped pre-Phase-7
+        saves with <code>tutorialState: undefined</code> load with
+        empty completed.</p>
+
+      <h3 class="sub">9.5 Tutorial-skip mechanism</h3>
+      <p class="body">Settings "Mark tutorial complete" button fills
+        all 32 ids; currentStep returns null; hint overlay disappears.
+        "Restart Tutorial" clears completed; step 1 reappears.</p>
+
+      <h3 class="sub">9.6 Full-suite green</h3>
+      <p class="body"><code>npm test</code> green. Tutorial-related
+        fixtures add ~50 new tests. Existing tests that hard-coded the
+        old starter (stone: 60, wood: 40, steel: 30) update to the
+        rev-9 values — ~10-20 tests touched.</p>
+
+      <h3 class="sub">9.7 Human playtest (after subagent green)</h3>
+      <p class="body">Per §10 below.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Human playtest checklist (8 h)</h2></div>
+      <p class="sec-intro">Manual gate. The subagent landed code is
+        green per the unit tests; the playtest verifies the FEEL.</p>
+
+      <div class="callout">
+        <div class="ct">Playtest cannot be skipped</div>
+        Per rev-16 §11.4 — tutorial UX trigger timing, hint placement,
+        and player-skip behaviour cannot be subagent-verified. The 8 h
+        budget is a hard floor; expect to log 2-4 fix commits as the
+        playtest surfaces issues.
+      </div>
+
+      <h3 class="sub">10.1 Fresh-new-game playthrough</h3>
+      <ul class="body">
+        <li>New world; verify map picker fires on session start.</li>
+        <li>Pick a temperate-latitude location (e.g. 40° N, NYC).</li>
+        <li>Walk steps 1-13 to first battery_bank. Time the run; should be ≤ 45 min.</li>
+        <li>Verify each hint fires at the right moment (after the trigger condition becomes true, before the player gets stuck).</li>
+        <li>Verify each hint dismisses at the right moment (after the expected action completes).</li>
+      </ul>
+
+      <h3 class="sub">10.2 High-latitude playthrough</h3>
+      <ul class="body">
+        <li>Restart tutorial; pick 64° N (Reykjavik). Solar near-zero in winter.</li>
+        <li>Verify the player can still reach battery_bank via biomass + coal — the tutorial doesn't break.</li>
+        <li>Document any issues with "low solar production" not being surfaced clearly enough.</li>
+      </ul>
+
+      <h3 class="sub">10.3 Skip / restart flow</h3>
+      <ul class="body">
+        <li>From any mid-tutorial state, hit "Skip Tutorial" — hint disappears, no more hints fire.</li>
+        <li>Hit "Restart Tutorial" — step 1 reappears, completed list resets.</li>
+      </ul>
+
+      <h3 class="sub">10.4 Late-game tutorial steps</h3>
+      <ul class="body">
+        <li>Steps 22-32 cover endgame mechanics. Verify they fire at the right player progress points.</li>
+        <li>Step 32 (Genesis Cell) only fires once; subsequent crafts don't re-trigger.</li>
+      </ul>
+
+      <h3 class="sub">10.5 Pre-Phase-7 save load</h3>
+      <ul class="body">
+        <li>Load an existing live save (the user's 27.5 MB
+          <code>/tmp/robot-islands-save.json</code>) post-Phase-7
+          deploy. Verify the tutorial picks up where it can — the
+          player has already built batteries, so steps 1-14 should
+          dismiss en-masse on first poll; steps 15+ fire as their
+          conditions become true.</li>
+      </ul>
+
+      <h3 class="sub">10.6 Fix-commit budget</h3>
+      <p class="body">Expect ~2-4 fix commits during the playtest, each
+        addressing a specific issue (hint timing, missed trigger,
+        wrong order). Per rev-16 §11.4 the 8h budget includes the
+        time for these fixes.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Expected impact</h2></div>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>After Phase 7</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">Tutorial steps</td><td class="num">~13 (old)</td><td class="num">32</td></tr>
+          <tr><td class="slate">Starter inventory completeness</td><td class="num">stone 60 + wood 40 + steel 30</td><td class="num">9 resources, 2061 total kg</td></tr>
+          <tr><td class="slate">Home terrain — copper_ore</td><td class="num">absent</td><td class="num">2×2 cluster</td></tr>
+          <tr><td class="slate">Home terrain — clay</td><td class="num">absent</td><td class="num">2×2 cluster</td></tr>
+          <tr><td class="slate">Tree cluster shape</td><td class="num">3-tile L</td><td class="num">2×2 square (+33% tiles)</td></tr>
+          <tr><td class="slate">Reachability gate</td><td class="num">N/A</td><td class="num">45 min to battery_bank</td></tr>
+          <tr><td class="slate">Test count</td><td class="num">~2348 (post-6)</td><td class="num">~2400</td></tr>
+          <tr><td class="slate">Lines added</td><td class="num">N/A</td><td class="num">~700 (tutorial.ts + tutorial-ui.ts + tests)</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Player-side impact.</strong> A new player
+        sees the rework's mechanics introduced in order, with each step
+        gated on the previous. The map picker becomes the first
+        in-game decision — meaningfully shapes the player's experience
+        from minute 1. The 45-min battery-bank milestone provides a
+        clear "tutorial complete" signal even though the 32 steps span
+        the entire game.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s12">
+      <div class="sec-head"><span class="num">12</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Reachability invariant fails — rev-9 starter + Phase 4 BOMs + tutorial chain can't reach battery_bank in 45 min.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Phase 4 must have left this passing; Phase 7's added terrain (copper_ore + clay) only helps the chain. If failing, mitigations: bump TUTORIAL_DEADLINE_MIN to 60, OR add 1× steel_beam OR 1× wire to starter inventory (per rev-16 §12.9.4 (c)).</div>
+        </div>
+        <div class="row">
+          <div class="cell">Tutorial hint fires too early — player isn't ready for the mechanic yet.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Playtest surfaces this; fix by tightening the trigger predicate. Critical-priority steps (1-14) get more conservative triggers than optional-priority (22-32).</div>
+        </div>
+        <div class="row">
+          <div class="cell">A trigger predicate never fires because of a subtle state mismatch (e.g. checking <code>state.unlockedNodes.has('mining.t1')</code> when the actual NodeId is <code>'mining_t1'</code>).</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Per-step unit test (§9.1) verifies each predicate fires on its target state. Playtest catches the rest.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Pre-Phase-7 live save loads with all 32 steps' triggers already true — hint queue overwhelms the UI.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">currentStep returns ONE step at a time; only one hint visible. checkDismissals runs once per frame and can fast-dismiss many steps in a few seconds; the UI doesn't queue. A pre-Phase-7 save will dismiss steps 1-N silently in the first frame.</div>
+        </div>
+        <div class="row">
+          <div class="cell">High-latitude playtest reveals solar is so weak that the player can't reach battery_bank via the canonical path.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">The bootstrap power (water_wheel / windmill_t0) doesn't depend on solar. The tutorial guides the player through water/wind → biomass → coal — none require solar to be productive. Verified by §10.2 playtest.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Terrain patches collide with existing buildings on a long-running live save (player has placed something on (-7, -7) where the new copper_ore cluster goes).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">defaultTerrainAt only applies to the unbuilt-on initial-generation terrain. Existing placements retain their tiles. New terrain elements only appear in regions the player hasn't claimed.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Player skips the tutorial then later wants help — "Restart Tutorial" might re-fire steps the player has already passed (e.g. step 32 Genesis cell on a player who has 5 already).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Each step's <code>dismissalCondition</code> handles "already done" — Genesis dismissal is "player has crafted ≥ 1 genesis_cell." A player who restarts and already has crafts dismisses the step in the same frame it fires.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The tutorial's polling hook in the ticker has a performance impact on the hot path.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Predicates are O(1) reads on the world snapshot. 32 predicates per frame at 60 FPS = ~2000/s — negligible. Profile in <code>scripts/profile-economy.ts</code>; bump polling to once-per-game-second if needed (still imperceptible to the player).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s13">
+      <div class="sec-head"><span class="num">13</span><h2>Non-goals</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Tutorial localization</div>
+          <div class="dd">Hint strings are English-only. Future internationalization work can extract them into a strings file.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Cinematic-style "tutorial mission"</div>
+          <div class="dd">Phase 7 ships hints + nudges, not a scripted tutorial level. The player plays the real game with guidance overlays.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Per-step animated highlighting</div>
+          <div class="dd">Step "place a Mine on an ore tile" could highlight target tiles. Phase 7 ships text hints only; future content can add visual overlays.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Achievements / badges for step completion</div>
+          <div class="dd">Out of scope. The 32-step list is internal to the tutorial; the player doesn't see a "Step 14/32" progress counter.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Branching tutorial paths</div>
+          <div class="dd">All 32 steps fire in a single linear sequence. A player who picks an alternative starting biome (when biome selection ships in some future content) might want a different tutorial — not addressed.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">In-tutorial tooltip system</div>
+          <div class="dd">Hint overlay is separate from per-element tooltips. Existing tooltips stay; tutorial adds a parallel hint surface.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · Phase 7 of 7 (FINAL) · generated 2026-05-28 ·
+        companion plan at <code>plans/2026-05-28-si-units-phase7-tutorial-plan</code> ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16 §11 + §12 ·
+        binding gate: 45-min reachability + 8 h human playtest</p>
+    </div>
+
+  </div>
+</body>
+</html>

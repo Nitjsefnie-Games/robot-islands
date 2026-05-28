@@ -1,0 +1,745 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units rework Phase 4 — per-building BOMs + storage rescale</title>
+  <style>
+    :root {
+      --ivory: #1B1A17; --slate: #F5F3EC; --clay: #D97757; --oat: #3A352B;
+      --olive: #8FA56E; --rust: #E08B7F; --warn: #E0B47F;
+      --gray-150: #2E2C27; --gray-300: #3A3833; --gray-500: #8F8D82;
+      --gray-700: #CFCCC2; --white: #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px; --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    h1 code { font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px; color: #C9B98A; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .verification-key { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; margin: 18px 0 24px; font-size: 13px; }
+    .verification-key strong { color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    .vbadge { display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px; }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 48px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .summary .v.warn { color: var(--warn); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    .toc { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    h3.sub { font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin: 26px 0 10px; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; color: var(--clay); }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .codepanel { background: #121110; border-radius: 12px; padding: 16px 20px;
+      overflow-x: auto; margin: 12px 0 18px; }
+    .codepanel pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre; }
+    .codepanel .kw { color: var(--clay); }
+    .codepanel .str { color: var(--olive); }
+    .codepanel .cm { color: var(--gray-500); }
+    .codepanel .fn { color: #C9B98A; }
+    .codepanel .new { background: rgba(143, 165, 110, 0.13); display: block; }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 280px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px; }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · SI-units rework · Phase 4</div>
+      <h1>Per-building BOMs + storage rescale — embodied-mass realism, no multipliers</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Every <code>placementCost</code> in <code>building-defs.ts</code>
+        is rewritten as a real-engineering-analog Bill of Materials per
+        rev-16 §4. The §4.3 representative table (30 buildings) supplies
+        verified per-building citations; the remaining 210 buildings get
+        BOMs derived from the same methodology + per-category templates
+        with per-building source citations per §4.5. The
+        global <code>BASELINE_STORAGE_CAP = 2000</code> at
+        <a class="cite">constants.ts:20</a> is replaced by a per-resource
+        <code>RESOURCE_BASE_CAP</code> table; storage-building
+        <code>capacity</code> values rescale to real-industrial magnitudes
+        per rev-16 §13.3.
+      </div>
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author against rev-16 + source files.
+        <span class="vbadge u">unverified</span> projection or design-time claim not yet validated against code.
+        <span class="vbadge x">corrected</span> earlier draft contained an error; this entry supplies the verified value.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Subagent effort</div><div class="v accent">~24 h</div></div>
+      <div class="cell"><div class="k">Buildings touched</div><div class="v">~240</div></div>
+      <div class="cell"><div class="k">Storage building rescale</div><div class="v">6</div></div>
+      <div class="cell"><div class="k">Reachability gate</div><div class="v warn">Required to land</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">240 building BOMs rewritten per real engineering analogs. Storage cap architecture flips from global constant to per-resource baseCap. Reachability invariant test enforces the chain stays buildable from the rev-7 starter.</div>
+      <div class="d-body"><strong>30 representative BOMs verbatim from rev-16 §4.3.</strong>
+        The doc's §4.3 table contains 30 BOMs with per-building citations
+        (Hartman & Mutmansky, NREL, IspatGuru, ITER specs, etc.). Phase 4
+        applies these verbatim. The implementer does NOT re-research
+        these — rev-16 §4.3 is the canonical source.</div>
+      <div class="d-body"><strong>210 remaining buildings: per-category templates + per-building citations.</strong>
+        Per rev-16 §4.5, every building in the catalog (~240 total)
+        carries a per-building citation in a code comment in
+        <code>building-defs.ts</code>. For buildings outside the §4.3
+        representative set, the implementer (a) reads the building's
+        function from its <code>BuildingDef</code>, (b) identifies a
+        category analog (e.g. "small modular reactor", "industrial
+        cleanroom", "shipping container office"), (c) researches one or
+        two named sources per building, (d) computes the BOM, (e) ships
+        with a comment citing the analog. Per-building work cost is
+        non-trivial — Phase 4's 24h budget allocates ~6 minutes per
+        building.</div>
+      <div class="d-body"><strong>No multipliers, no exemptions.</strong>
+        Rev-16 §4.2 explicitly forbids hand-tune multipliers,
+        early-game-cheap reductions, tutorial subsidies, narrative-cost
+        inflations. Every BOM is its derived embodied mass — no scaling.
+        If a derived cost breaks gameplay, the fix is tutorial
+        restructure (Phase 7) or tier re-ordering, not cost adjustment.</div>
+      <div class="d-body"><strong>Storage rescale.</strong>
+        <code>BASELINE_STORAGE_CAP = 2000</code> deleted; replaced by
+        <code>RESOURCE_BASE_CAP: Readonly&lt;Record&lt;ResourceId, number&gt;&gt;</code>
+        with per-resource defaults from rev-16 §13.4. Storage building
+        capacity values rescale: silo +200 t (was +2000), tank +100 t
+        (was +2000), cold_storage +50 t, component_warehouse +20 t,
+        vault +5 t, crate +500 kg per labelled resource. The
+        <code>aggregateStorageCaps</code> algorithm at
+        <a class="cite">world.ts:1022-1045</a> stays
+        identical — only the constants change.</div>
+      <div class="d-body"><strong>Reachability invariant test (binding gate).</strong>
+        Phase 4 ships a vitest that asserts the rev-9 starter inventory
+        + rev-16 chain can reach 1 battery_bank within 45 minutes of
+        simulated game time. Per rev-16 §12.9.5. If this gate fails,
+        Phase 4 is broken and rolls back. Phase 7 (tutorial) ships the
+        rev-9 starter; Phase 4 uses a hand-rolled equivalent fixture
+        for the test.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#s01">01 Problem</a>
+      <a href="#s02">02 BOM methodology</a>
+      <a href="#s03">03 30 representative BOMs (rev-16 §4.3)</a>
+      <a href="#s04">04 Remaining 210 buildings</a>
+      <a href="#s05">05 Storage rescale</a>
+      <a href="#s06">06 RESOURCE_BASE_CAP table</a>
+      <a href="#s07">07 Reachability invariant test</a>
+      <a href="#s08">08 API change</a>
+      <a href="#s09">09 Test plan</a>
+      <a href="#s10">10 Expected impact</a>
+      <a href="#s11">11 Risks</a>
+      <a href="#s12">12 Non-goals</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Problem</h2></div>
+      <p class="sec-intro">v3 audit finding: every placement cost is
+        a coarse footprint × tier-density formula. A T1 Smelter costs
+        70 kg of materials yet houses a furnace whose real analog
+        weighs 550 kg. A Nuclear Reactor's 770 kg cost is 1000× too
+        cheap by embodied mass. The economy lies about scarcity.</p>
+
+      <p class="body"><strong>Verified by direct read:</strong></p>
+      <ul class="body">
+        <li><code>mine</code> at <a class="cite">building-defs.ts:634</a>: <code>{ stone: 30, wood: 15 }</code> = 45 kg vs analog ~300 kg.</li>
+        <li><code>smelter</code> at <a class="cite">building-defs.ts:655</a>: <code>{ stone: 80, wood: 40, iron_ingot: 30 }</code> = 150 kg vs ~550 kg.</li>
+        <li><code>battery_bank</code> at <a class="cite">building-defs.ts:867</a>: <code>{ saltwater_cell: 4, wire: 3, steel_beam: 1 }</code> = ~10 "units" but under §2.2 unit-mass anchors actually 340 kg.</li>
+        <li><code>nuclear_reactor</code> placementCost (search): pre-rev-4 was ~770 kg vs ITER-class small modular reactor analog at 832 t (1000× under).</li>
+      </ul>
+
+      <p class="body"><strong>Storage gap.</strong>
+        <code>BASELINE_STORAGE_CAP = 2000</code> at
+        <a class="cite">constants.ts:20</a> applies the same 2000-unit
+        cap to every resource regardless of category — bulk minerals,
+        precious components, and crystals all share the same default.
+        Under rev-16's per-category cap discipline this collapses to
+        absurdity: 2000 ai_cores = 260 t of compute, 2000 antimatter_propellants
+        = 2000 ng of antimatter (more than CERN produces in a century).</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>BOM methodology — rev-16 §4.1</h2></div>
+      <p class="sec-intro">Per-building Bill of Materials derived from
+        a real engineering analog. Five steps per building.</p>
+
+      <ol class="body">
+        <li><strong>Identify the analog.</strong> What real-world thing does this building approximate? (e.g. small bloomery for T1 smelter, ITER for T4 fusion_core, Rocket Lab LC-1 for spaceport.)</li>
+        <li><strong>Cite the source.</strong> A named engineering reference (textbook chapter, NREL ATB, IEA fact sheet, manufacturer datasheet, peer-reviewed paper, Wikipedia + a deep-source corroboration).</li>
+        <li><strong>Derive the BOM.</strong> Mass breakdown by component: structural steel, fire brick, foundation stone, electronics, fluids. Each line is a real number of kg.</li>
+        <li><strong>Convert to game units.</strong> Each kg-mass → <code>RESOURCE_META[r].massPerUnitKg</code> reverse-lookup. 500 kg of steel = 500 units; 100 kg of fire-brick (≈ clay) = 100 units of clay; 5 kg of microchip = 50 units of microchip (microchip = 0.1 kg/unit).</li>
+        <li><strong>Tile-scale per area.</strong> Where the analog is rated per-area (solar arrays, concrete pads), scale by the building's footprint in tiles (1 tile = 1 m²). 4-tile spaceport's 200 t concrete pad = 50 m × 4 m × 1 m × 2400 kg/m³ ≈ 200 t.</li>
+      </ol>
+
+      <p class="body"><strong>Code-comment citation format.</strong>
+        Per rev-16 §4.5, every building's <code>placementCost</code>
+        carries a JSDoc comment naming the analog + source. Example:</p>
+      <div class="codepanel"><pre><span class="cm">// BOM source: NREL TP-6A20-72443 Residential PV BOM</span>
+<span class="cm">// 1 m² c-Si PV: 6 silicon + 2 glass + 1 aluminum + 0.5 wire + 1 backsheet = ~10 kg</span>
+placementCost: { silicon: 6, glass: 2, aluminum: 1, wire: 1, plastic_precursor: 1 },</pre></div>
+
+      <p class="body"><strong>Round-and-ship integer policy.</strong>
+        The derived BOM may produce fractional units (e.g. 0.5 wire =
+        0.25 kg under wire = 0.5 kg/unit). Round to the nearest integer
+        unit count per resource. The mass-balance auditor (Phase 2) does
+        not apply to placement costs (placement is a one-time event,
+        not a recipe); rounding error here is cosmetic.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>30 representative BOMs — rev-16 §4.3 verbatim</h2></div>
+      <p class="sec-intro">Rev-16 §4.3 contains 30 buildings with full
+        per-building BOMs + per-building citations. Phase 4 applies these
+        verbatim. The implementer's job is to copy the rev-16 §4.3
+        column values into the <code>placementCost</code> field and
+        add the corresponding code comment with the citation.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Building</th>
+          <th>Tier</th>
+          <th>Rev-16 §4.3 BOM</th>
+          <th>Mass</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">mine</td><td>T1</td><td class="mono">200 stone + 80 wood + 20 iron_ingot</td><td class="num">300 kg</td></tr>
+          <tr><td class="slate">smelter</td><td>T1</td><td class="mono">400 stone + 100 clay (fire_brick) + 30 iron_ingot + 20 wood</td><td class="num">550 kg</td></tr>
+          <tr><td class="slate">workshop</td><td>T1</td><td class="mono">150 wood + 100 stone + 30 iron_ingot + 20 bolt</td><td class="num">300 kg</td></tr>
+          <tr><td class="slate">cell_press</td><td>T1</td><td class="mono">10 copper_ingot + 2 iron_ingot + 5 saltwater + 1 wood</td><td class="num">~18 kg</td></tr>
+          <tr><td class="slate">solar</td><td>T1</td><td class="mono">6 silicon + 2 glass + 1 aluminum + 1 wire + 1 plastic_precursor</td><td class="num">~10 kg</td></tr>
+          <tr><td class="slate">coal_gen</td><td>T1</td><td class="mono">500 steel + 200 clay (fire_brick) + 100 stone + 50 pipe + 10 microchip</td><td class="num">~1000 kg</td></tr>
+          <tr><td class="slate">biomass_plant</td><td>T1</td><td class="mono">400 steel + 150 clay + 100 stone + 30 pipe + 80 wood</td><td class="num">~850 kg</td></tr>
+          <tr><td class="slate">wind_turbine</td><td>T1</td><td class="mono">800 steel + 50 aluminum + 200 stone + 5 magnet + 30 wire</td><td class="num">1315 kg</td></tr>
+          <tr><td class="slate">water_wheel <span class="vbadge u">NEW</span></td><td>T0</td><td class="mono">50 wood + 30 stone + 5 iron_ingot</td><td class="num">85 kg</td></tr>
+          <tr><td class="slate">windmill_t0 <span class="vbadge u">NEW</span></td><td>T0</td><td class="mono">80 wood + 20 stone + 3 iron_ingot</td><td class="num">103 kg</td></tr>
+          <tr><td class="slate">newcomen_engine <span class="vbadge u">NEW</span></td><td>T1</td><td class="mono">200 stone + 80 iron_ingot + 40 copper_ingot + 30 wood + 5 bolt</td><td class="num">355 kg</td></tr>
+          <tr><td class="slate">battery_bank</td><td>T2</td><td class="mono">20 saltwater_cell + 15 wire + 5 steel_beam + 30 lead_ingot</td><td class="num">340 kg</td></tr>
+          <tr><td class="slate">coke_oven</td><td>T2</td><td class="mono">15000 clay + 8000 steel + 500 stone + 100 pipe</td><td class="num">23.9 t</td></tr>
+          <tr><td class="slate">blast_furnace</td><td>T2</td><td class="mono">30000 steel + 25000 clay + 2000 stone + 500 pipe + 200 sheet_metal</td><td class="num">60 t</td></tr>
+          <tr><td class="slate">steel_mill</td><td>T2</td><td class="mono">25000 steel + 8000 clay + 2000 stone + 300 pipe + 100 gear</td><td class="num">36.4 t</td></tr>
+          <tr><td class="slate">capacitor_bank</td><td>T3</td><td class="mono">100 capacitor + 50 microchip + 30 steel_beam + 20 wire + 10 coolant</td><td class="num">1625 kg</td></tr>
+          <tr><td class="slate">cryogenic_generator</td><td>T2</td><td class="mono">500 steel + 100 ceramic_insulator + 50 gear + 30 glass + 20 pipe</td><td class="num">810 kg</td></tr>
+          <tr><td class="slate">nuclear_reactor</td><td>T3</td><td class="mono">200000 steel + 600000 concrete + 30000 lead_ingot + 2000 microchip + 500 pipe</td><td class="num">832 t</td></tr>
+          <tr><td class="slate">fusion_core</td><td>T4</td><td class="mono">12000 steel + 8000 magnet + 4000 stainless_steel + 2000 microchip + 1000 cryo_coolant + 500 exotic_alloy + 200 carbon_fiber</td><td class="num">417.9 t</td></tr>
+          <tr><td class="slate">tidal_array</td><td>T4</td><td class="mono">12000 steel + 2000 concrete + 500 magnet + 200 wire + 100 gear</td><td class="num">39.3 t</td></tr>
+          <tr><td class="slate">sunspire</td><td>T4</td><td class="mono">8000 steel + 4000 glass + 1000 stone + 200 microchip + 100 coolant</td><td class="num">13.3 t</td></tr>
+          <tr><td class="slate">pyroforge</td><td>T4</td><td class="mono">10000 steel + 3000 clay + 500 microchip + 200 ceramic_insulator + 50 exotic_alloy</td><td class="num">13.75 t</td></tr>
+          <tr><td class="slate">cryogenic_compute_center</td><td>T4</td><td class="mono">15000 steel + 5000 ceramic_insulator + 1000 microchip + 500 cryo_coolant + 200 wire + 50 ai_core</td><td class="num">20.75 t</td></tr>
+          <tr><td class="slate">particle_accelerator</td><td>T4</td><td class="mono">25000 steel + 3000 concrete + 2000 magnet + 1000 microchip + 200 cryo_coolant</td><td class="num">128.3 t</td></tr>
+          <tr><td class="slate">quantum_chip_fab</td><td>T4</td><td class="mono">8000 steel + 4000 glass + 2000 microchip + 1000 ceramic_insulator + 200 silicon_wafer + 100 ai_core</td><td class="num">13.3 t</td></tr>
+          <tr><td class="slate">teleporter_pad</td><td>T4</td><td class="mono">1500 steel + 200 microchip + 100 wire + 50 exotic_alloy + 20 reality_anchor</td><td class="num">1.64 t</td></tr>
+          <tr><td class="slate">spaceport</td><td>T6</td><td class="mono">50000 steel + 200000 concrete + 5000 microchip + 10000 pipe + 500 wire + 100 antimatter_propellant + 100 reality_anchor</td><td class="num">291 t</td></tr>
+          <tr><td class="slate">mercury_well</td><td>T3</td><td class="mono">200 steel + 150 stone + 80 pipe + 30 iron_ingot + 20 wood</td><td class="num">720 kg</td></tr>
+          <tr><td class="slate">lighthouse_t1..t6</td><td>T1..T6</td><td class="mono">See rev-16 §4.3 — six rows, masses 392 kg → 3.8 t</td><td class="num">multi</td></tr>
+          <tr><td class="slate">bulk_concrete_plant <span class="vbadge u">NEW</span></td><td>T6</td><td class="mono">8000 steel + 2000 stone + 500 microchip + 500 pipe + 200 gear + 100 wire</td><td class="num">12.5 t</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>3 NEW T0/T1 buildings.</strong>
+        water_wheel, windmill_t0, newcomen_engine are introduced by
+        rev-16 §10.15 Option A (bootstrap power) and §12.5 Bonus
+        (Newcomen). Phase 4 adds these to <code>BuildingDefId</code> +
+        <code>BUILDING_DEFS</code> + <code>BuildingDefId</code> union.
+        Their <code>power.produces</code> (20 / 15 / 4 unit respectively),
+        tile gates (water-adjacent / open-air-grass / no-gate), and
+        <code>requiredTile</code> declarations come from rev-16 §4.3
+        annotations.</p>
+
+      <p class="body"><strong>1 NEW T6 building.</strong>
+        bulk_concrete_plant per rev-16 §10.13 → adds a 12 t industrial
+        concrete plant at 100 concrete / 60 s = 6 t/hr. Its recipe lives
+        in Phase 2's recipe scope; Phase 4 adds the def.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>Remaining 210 buildings — per-category templates</h2></div>
+      <p class="sec-intro">~210 buildings outside the §4.3 representative
+        set need per-building BOMs + citations. The methodology is
+        identical (§02); the work cost is per-building research.</p>
+
+      <h3 class="sub">4.1 Per-category density templates</h3>
+      <p class="body">Per rev-16 §4.1 (pre-rev-3 superseded by per-building
+        BOM discipline). Templates serve as a STARTING POINT for the
+        per-building research, NOT as the final value. The implementer
+        starts from the template, then refines with a per-building
+        analog citation. No template-only BOMs ship.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Category</th>
+          <th>kg/m² template</th>
+          <th>Example analogs to cite</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">T0/T1 raw extractors</td><td class="num">50-150 kg/m²</td><td class="mono">Hartman ch. 12, ASTM mining-equipment standards</td></tr>
+          <tr><td class="slate">T1 light industry</td><td class="num">100-300 kg/m²</td><td class="mono">Roberts Engineering Workshop, light-industrial OSHA standards</td></tr>
+          <tr><td class="slate">T2 heavy industry</td><td class="num">2-15 t/m²</td><td class="mono">Babcock &amp; Wilcox Steam 41e, IspatGuru blast-furnace + coke-oven references</td></tr>
+          <tr><td class="slate">T3 power + electrochemistry</td><td class="num">5-50 t/m²</td><td class="mono">IAEA ARIS SMR Catalogue, ABB capacitor-bank catalogs</td></tr>
+          <tr><td class="slate">T4 endgame fantasy</td><td class="num">1-100 t/m² (case-by-case)</td><td class="mono">ITER, Tetronics, IBM Quantum, CERN — analog half cited per §02 step 1</td></tr>
+          <tr><td class="slate">T5 transcendent (untestable)</td><td class="num">1-10 t/m²</td><td class="mono">No real analog; citation is "extrapolated from T4 endgame analogs" per rev-16 §4.5</td></tr>
+          <tr><td class="slate">T6 orbital + spaceport</td><td class="num">10-1000 t (per-installation, not per-m²)</td><td class="mono">NASA launch-pad, Rocket Lab LC-1, DSN antenna installations</td></tr>
+          <tr><td class="slate">Storage buildings</td><td class="num">per §05 (silo, tank, etc.)</td><td class="mono">WarehouseRack.com, Coban Machinery silos, Kennedy Tank</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">4.2 The 24h budget</h3>
+      <p class="body"><strong>~6 minutes per building.</strong> 24 h ÷
+        240 buildings = 6 min. Of which 4 min for analog identification +
+        BOM derivation, 1 min for citation lookup, 1 min for the code
+        edit. Realistic per Hartman + IspatGuru reference-checking
+        velocity. Buildings with already-cited rev-16 §4.3 BOMs (30)
+        cost ~1 min each; buildings outside that set cost more — call
+        it 8-10 min for un-templated cases. 30 × 1 + 210 × 8 = 1710 min
+        = 28.5 h, which exceeds the 24 h budget by ~20%. Phase 4 may
+        need 28 h in practice; the plan sets the gate at "all 240 land,
+        even if it takes longer."</p>
+
+      <h3 class="sub">4.3 Fantasy buildings</h3>
+      <p class="body">Per rev-16 §4.3 conventions for fantasy spec-mandate
+        materials (exotic_alloy, ai_core, reality_anchor, antimatter_propellant):
+        the citation comment names BOTH the plausible analog (e.g.
+        "DGX H100 130 kg per Sunbird DCIM") AND a <code>// spec-mandate:
+        no real analog</code> tag for the fantasy half (ai_core inputs).</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>Storage rescale — rev-16 §13.3</h2></div>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Building</th>
+          <th>Footprint</th>
+          <th>Current capacity</th>
+          <th>Rev-16 §13.3 capacity</th>
+          <th>Analog</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">crate</td><td>1×1</td><td class="num">+100 to one labelled resource</td><td class="num">+500 kg</td><td class="mono">Pallet-rack section</td></tr>
+          <tr><td class="slate">silo</td><td>2×2</td><td class="num">+2000</td><td class="num">+200000 (200 t)</td><td class="mono">Small farm silo (Coban Machinery)</td></tr>
+          <tr><td class="slate">tank</td><td>(check)</td><td class="num">+2000</td><td class="num">+100000 (100 t)</td><td class="mono">Mid-class industrial chemical tank (Kennedy Tank)</td></tr>
+          <tr><td class="slate">cold_storage</td><td>(check)</td><td class="num">+1500</td><td class="num">+50000 (50 t)</td><td class="mono">Small refrigerated warehouse module</td></tr>
+          <tr><td class="slate">component_warehouse</td><td>(check)</td><td class="num">+2000</td><td class="num">+20000 (20 t)</td><td class="mono">Industrial pallet-racked components warehouse</td></tr>
+          <tr><td class="slate">vault</td><td>3×3</td><td class="num">+5000</td><td class="num">+5000 (5 t)</td><td class="mono">Precious-materials secure vault</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Caveat on tier-progression.</strong> The
+        silo bump from +2000 to +200000 is 100×. Per rev-16 §13.6,
+        the storage-cap-vs-cycleSec equilibrium shifts; Phase 6 retune
+        verifies this stays gameplay-engaging. Phase 4 just applies
+        the values.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2><code>RESOURCE_BASE_CAP</code> table</h2></div>
+      <p class="sec-intro">Replaces global <code>BASELINE_STORAGE_CAP = 2000</code>.
+        Per-resource defaults from rev-16 §13.4, with overrides for
+        sub-calibrated resources (helium_3, antimatter_propellant, ai_core).</p>
+
+      <h3 class="sub">6.1 Default-by-category</h3>
+      <table class="tbl">
+        <thead><tr>
+          <th>Category</th>
+          <th>baseCap (kg)</th>
+          <th>Rationale</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">dry_goods default</td><td class="num">100</td><td>Small pile / personal-inventory scale</td></tr>
+          <tr><td class="slate">liquid_gas default</td><td class="num">100</td><td>Small drum / personal-inventory scale</td></tr>
+          <tr><td class="slate">temp_sensitive default</td><td class="num">50</td><td>Small refrigerated container</td></tr>
+          <tr><td class="slate">components default</td><td class="num">20</td><td>Small parts. Component count is the gameplay constraint, not mass.</td></tr>
+          <tr><td class="slate">rare default</td><td class="num">1</td><td>Precious materials default to scarce. Most rare resources have explicit overrides.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">6.2 Per-resource overrides</h3>
+      <table class="tbl">
+        <thead><tr>
+          <th>Resource</th>
+          <th>baseCap</th>
+          <th>Rationale</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">helium_3 (1 unit = 1 g sub-cal)</td><td class="num">1 (1 g)</td><td>Player can hold 1 g per island without storage. Vault adds 5 kg He-3 → 1/3 world annual production.</td></tr>
+          <tr><td class="slate">antimatter_propellant (1 unit = 1 ng)</td><td class="num">1 (1 ng)</td><td>Single ng base cap. Vault adds 5×10⁹ units storage — production-rate, not storage, is the gating factor.</td></tr>
+          <tr><td class="slate">ai_core (1 unit = 1 kg single chip)</td><td class="num">0 (whole-unit-only)</td><td>Rev-9 implementation-time resolution: 1 unit = 1 kg single chip. Vault adds 5000 chips; reality_forge's 4 ai_core/cycle still grindy.</td></tr>
+          <tr><td class="slate">foundation_kit / enriched / refined</td><td class="num">5</td><td>Components-category but kits are large assemblies (100-800 kg per unit). 5-unit base cap = 500-4000 kg of kits.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">6.3 Algorithm change — <code>aggregateStorageCaps</code></h3>
+      <div class="codepanel"><pre><span class="cm">// world.ts:1018-1045 — replace the BASELINE_STORAGE_CAP loop.</span>
+<span class="cm">// BEFORE:</span>
+<span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> ALL_RESOURCES) caps[r] = BASELINE_STORAGE_CAP;
+
+<span class="cm">// AFTER:</span>
+<span class="new"><span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> ALL_RESOURCES) {</span>
+<span class="new">  caps[r] = RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);</span>
+<span class="new">}</span></pre></div>
+
+      <p class="body">A new <code>RESOURCE_BASE_CAP</code> constant lives
+        in <code>storage-categories.ts</code> (or a new file
+        <code>storage-baseline.ts</code> — implementer chooses). The
+        <code>defaultCapForCategory</code> helper maps the 5 categories
+        to the §6.1 defaults. Per-resource overrides bypass the category
+        default.</p>
+
+      <h3 class="sub">6.4 Removal of <code>BASELINE_STORAGE_CAP</code></h3>
+      <p class="body">The constant at <a class="cite">constants.ts:20</a>
+        is deleted. Imports at <a class="cite">world.ts:30</a> and
+        <a class="cite">world.ts:1003</a> are removed. Grep
+        <code>BASELINE_STORAGE_CAP</code> across <code>src/</code> to
+        catch any remaining caller. Any test fixture that asserts
+        "2000 default" needs updating to category-default values.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>Reachability invariant test (binding gate)</h2></div>
+      <p class="sec-intro">Rev-16 §12.9.5 invariant — the player must
+        reach 1 battery_bank within 45 minutes of game time from the
+        rev-9 starter inventory. Phase 4's BOM rewrite shifts every
+        building's cost; this test confirms the chain remains buildable.</p>
+
+      <div class="codepanel"><pre><span class="kw">describe</span>(<span class="str">'reachability invariant (rev-16 §12.9.5)'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'walks rev-9 starter → 1 battery_bank in 45 min of simulated game time'</span>, () =&gt; {
+    <span class="kw">const</span> homeSpec = <span class="fn">makeHomeIslandSpecForReachabilityTest</span>();
+    <span class="kw">const</span> state = <span class="fn">makeInitialIslandState</span>(homeSpec, 0);
+    state.inventory = {
+      stone: 1200, wood: 600, iron_ore: 30, coal: 80, iron_ingot: 60, bolt: 25,
+      limestone: 15, saltwater_cell: 4, foundation_kit: 1,
+      <span class="cm">// All others zeroed</span>
+    } <span class="kw">as</span> Inventory;
+
+    <span class="kw">const</span> deadline_ms = 45 * 60 * 1000;
+    <span class="kw">const</span> outcome = <span class="fn">simulateOptimalPath</span>(state, deadline_ms, <span class="str">'battery_bank'</span>);
+
+    <span class="fn">expect</span>(outcome.reached, <span class="str">'battery_bank reachable'</span>).<span class="fn">toBe</span>(<span class="kw">true</span>);
+    <span class="fn">expect</span>(outcome.elapsedMs, <span class="str">'within deadline'</span>).<span class="fn">toBeLessThanOrEqual</span>(deadline_ms);
+  });
+});</pre></div>
+
+      <p class="body"><strong>simulateOptimalPath helper.</strong> A new
+        test utility that walks the dependency graph from a starter
+        inventory toward a target building, placing intermediate
+        buildings as soon as their inputs are available, advancing the
+        simulator state via <code>advanceIsland</code> through each
+        recipe cycle. Implementation lives in
+        <code>src/test-helpers/reachability.ts</code> (new file). The
+        algorithm: BFS over recipe-graph predecessors from the target;
+        for each predecessor, place its source building when its
+        placement BOM is satisfied; advance simulation until the target's
+        placement BOM is satisfied OR the deadline expires.</p>
+
+      <p class="body"><strong>Binding gate.</strong> If this test fails
+        on the post-Phase-4 BOMs, Phase 4 cannot land. Mitigations: bump
+        starter inventory (Phase 7 territory), reduce a specific
+        building's BOM with a citation (acceptable per rev-16 §4.5
+        per-building citation discipline), restructure the tutorial
+        chain (Phase 7). NOT acceptable: apply a multiplier or
+        early-game subsidy.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>API change surface</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/building-defs.ts (240 entries)</div>
+          <div class="what"><span class="lead">Rewrite every <code>placementCost</code></span> per rev-16 §4.3 (30 representative) or per-category templates + per-building citation (210 remaining).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.ts (3+1 new defs)</div>
+          <div class="what"><span class="lead">Add water_wheel, windmill_t0, newcomen_engine (T0/T1 bootstrap power) + bulk_concrete_plant (T6).</span> Per rev-16 §10.15-A + §10.13. Their recipes are Phase 2 scope; Phase 4 declares the defs.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.ts (storage capacities)</div>
+          <div class="what"><span class="lead">Rewrite storage building <code>storage.capacity</code> values</span> per spec §05 table. crate +500, silo +200000, etc.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/constants.ts:20</div>
+          <div class="what"><span class="lead">Delete <code>BASELINE_STORAGE_CAP</code> export.</span></div>
+        </div>
+        <div class="change">
+          <div class="file">src/storage-categories.ts (or new src/storage-baseline.ts)</div>
+          <div class="what"><span class="lead">Add <code>RESOURCE_BASE_CAP: Readonly&lt;Partial&lt;Record&lt;ResourceId, number&gt;&gt;&gt;</code></span> with per-resource overrides per spec §06.2. Sparse — only resources that override the category default appear.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/world.ts:1003 + :1018-1045</div>
+          <div class="what"><span class="lead">Remove <code>BASELINE_STORAGE_CAP</code> import + replace aggregate-caps loop</span> with the per-resource baseCap walk per spec §6.3.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/test-helpers/reachability.ts (NEW)</div>
+          <div class="what"><span class="lead">simulateOptimalPath utility</span> per spec §07. ~100 LOC. Internal to the test fixtures.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/reachability.test.ts (NEW)</div>
+          <div class="what"><span class="lead">The §07 invariant test.</span> Binding gate — must pass for Phase 4 to land.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.test.ts (storage cap tests)</div>
+          <div class="what"><span class="lead">Update fixtures that asserted "2000 default cap"</span> to the per-category defaults. ~5-10 tests touched.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Test plan</h2></div>
+
+      <h3 class="sub">9.1 Reachability invariant (binding gate)</h3>
+      <p class="body">Per §07. Must pass.</p>
+
+      <h3 class="sub">9.2 BOM citation snapshot</h3>
+      <p class="body">Every <code>placementCost</code> in
+        <code>BUILDING_DEFS</code> has at least one preceding code-comment
+        line containing <code>BOM source:</code> or <code>analog:</code>.
+        Phase 4 adds the comments alongside the values; a snapshot test
+        walks the source file looking for the comment pattern.</p>
+
+      <h3 class="sub">9.3 Mass-positive placement check</h3>
+      <p class="body">Every building's placement cost, when scored as
+        Σ (units × <code>RESOURCE_META[r].massPerUnitKg</code>), is
+        &gt; 1 kg. Catches accidentally-zero placement costs.</p>
+
+      <h3 class="sub">9.4 Storage rescale fixture</h3>
+      <p class="body">A test that builds a silo on a fresh island and
+        asserts every dry_goods resource's cap jumps from 100 →
+        200100 kg (per-resource baseCap 100 + silo capacity 200000).
+        Same for tank, cold_storage, etc.</p>
+
+      <h3 class="sub">9.5 Sub-calibrated baseCap</h3>
+      <p class="body">helium_3 storage cap is 1 g on fresh island; a
+        vault adds 5000 g = 5 kg = 1/3 world annual production. Asserts
+        the per-resource override beats the category default.</p>
+
+      <h3 class="sub">9.6 Existing-suite continuity</h3>
+      <p class="body"><code>npm test</code> stays green. Phase 4 touches
+        ~10-20 fixtures that hard-coded the old 2000-cap or specific
+        placement costs.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Expected impact</h2></div>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>After Phase 4</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">T1 Smelter cost</td><td class="num">150 kg (3 resources)</td><td class="num">550 kg (4 resources)</td><td><span class="vbadge u">u</span> §4.3</td></tr>
+          <tr><td class="slate">T2 Blast Furnace cost</td><td class="num">~600 kg</td><td class="num warn">60 t</td><td><span class="vbadge u">u</span> §4.3</td></tr>
+          <tr><td class="slate">Nuclear Reactor cost</td><td class="num">~770 kg</td><td class="num warn">832 t</td><td><span class="vbadge u">u</span> §4.3</td></tr>
+          <tr><td class="slate">Fusion Core cost</td><td class="num">~6 t</td><td class="num warn">417.9 t</td><td><span class="vbadge u">u</span> §4.3</td></tr>
+          <tr><td class="slate">Spaceport cost</td><td class="num">~7 t</td><td class="num warn">291 t</td><td><span class="vbadge u">u</span> §4.3</td></tr>
+          <tr><td class="slate">Silo cap (per resource)</td><td class="num">+2000</td><td class="num ok">+200000 (200 t)</td><td><span class="vbadge u">u</span> §05</td></tr>
+          <tr><td class="slate">Vault cap (per resource)</td><td class="num">+5000</td><td class="num">+5000 (5 t)</td><td><span class="vbadge u">u</span> §05 — no change in magnitude</td></tr>
+          <tr><td class="slate">Default cap (dry_goods)</td><td class="num warn">2000 (all resources)</td><td class="num ok">100 (category-default)</td><td><span class="vbadge u">u</span> §06</td></tr>
+          <tr><td class="slate">helium_3 cap (fresh island)</td><td class="num warn">2000 g = 2 kg</td><td class="num ok">1 g</td><td><span class="vbadge u">u</span> §06.2</td></tr>
+          <tr><td class="slate">Reachability test (45 min to battery_bank)</td><td class="num">N/A (no test)</td><td class="num ok">PASS</td><td><span class="vbadge u">u</span> §07 binding gate</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Gameplay implication.</strong> Real
+        embodied-mass costs make endgame buildings genuinely expensive.
+        A Fusion Core at 418 t requires the player to have established
+        a 100+ t/hr concrete + steel production chain — the spaceport
+        + bulk_concrete_plant + steel_mill cascade becomes mandatory
+        endgame infrastructure. Storage rescale lets the player buffer
+        real industrial-scale stockpiles in a single silo, matching the
+        higher production scale.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Reachability invariant test fails — the rev-9 starter + Phase 2 recipes + Phase 4 BOMs don't reach battery_bank in 45 min.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Phase 4 is gated on the test. If it fails, the implementer (a) identifies which building's cost blocks the chain, (b) consults rev-16 §4.5 for an alternative analog citation that ships a smaller BOM (e.g. small Bealer bloomery vs Sims+Briggs cupola), (c) re-runs the test. Multipliers / subsidies remain forbidden.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A player's live save has buildings that previously placed at the old (cheap) cost; on next load the placement-cost is now 10× more — does the player feel cheated?</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Existing buildings stay placed (placement is one-time). The new costs apply only to new placements. Document in Phase 4 commit body as "live-save buildings retained at original cost; new builds use rev-16 BOMs."</div>
+        </div>
+        <div class="row">
+          <div class="cell">Per-building citation discipline costs more than 24h — the 210-building research takes 28-32h in practice.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Per-category templates (§4.1) provide a STARTING POINT — the implementer can ship 50-100 buildings on the template plus a "extrapolated from category" comment, then refine. Phase 4 may take longer; the budget is a target, not a hard cap.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Storage-cap rescale silos-from-2000-to-200000 causes runaway production: silos no longer fill, balance feedback collapses, players stockpile infinite quantities.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 6 retune verifies the storage-cap-vs-cycleSec equilibrium. If a building produces faster than the new 200t silo fills, that's a recipe-rate issue (Phase 2 retune territory), not a storage issue.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A new resource introduced by Phase 2 lacks a RESOURCE_BASE_CAP entry; the aggregate-caps walk fails with undefined.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The §6.3 algorithm falls back to <code>defaultCapForCategory</code> when a per-resource override is absent. The storage-categories invariant test (every ResourceId has a category) ensures the default is always defined.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The 4 new building defs (water_wheel, windmill_t0, newcomen_engine, bulk_concrete_plant) need recipe support; if Phase 2 didn't ship their recipes, Phase 4's defs are non-functional.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 2 ships recipes for the 3 new T0/T1 bootstrap power buildings + the bulk_concrete_plant recipe. Phase 4's defs reference these recipes. Dependency order: Phase 2 before Phase 4. Plan enforces.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A building's BOM references a resource that's not in Phase 1's catalog (e.g. fire_brick — distinct from clay).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Per rev-16 §4.3, "fire_brick" maps to <code>clay</code> in the catalog (no separate refractory resource exists). The implementer translates fire_brick → clay at BOM-derivation time. Any BOM ingredient must resolve to an existing ResourceId.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s12">
+      <div class="sec-head"><span class="num">12</span><h2>Non-goals</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Tutorial restructure</div>
+          <div class="dd">Phase 7 ships the rev-9 starter inventory + 32-step tutorial. Phase 4's reachability test uses a hand-rolled equivalent fixture; the production starter ships separately.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Home-island terrain patch</div>
+          <div class="dd">Phase 7 adds copper_ore + clay clusters to home island. Phase 4 doesn't touch terrain — the test fixture assumes the post-Phase-7 home composition.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Bulk_concrete_plant recipe wiring</div>
+          <div class="dd">Phase 2 ships the recipe. Phase 4 only declares the def with the BOM + adjacent metadata.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Weather / CO₂ coupling</div>
+          <div class="dd">Phase 6. Phase 4 doesn't touch weather or CO₂.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Multiplicative storage caps</div>
+          <div class="dd">Rev-16 §13.2 explicitly chose additive (linear) over multiplicative. Storage rescale stays additive.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Per-instance crate sub-categories</div>
+          <div class="dd">Crate's per-instance <code>cargoLabel</code> mechanic (rev-16 §13.5) stays — only the crate's per-label capacity bumps 100→500.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · Phase 4 of 7 · generated 2026-05-28 ·
+        companion plan at <code>plans/2026-05-28-si-units-phase4-boms-plan</code> ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16 §4 + §13</p>
+    </div>
+
+  </div>
+</body>
+</html>

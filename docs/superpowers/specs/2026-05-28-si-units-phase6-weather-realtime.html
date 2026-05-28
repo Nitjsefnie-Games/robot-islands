@@ -1,0 +1,804 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units rework Phase 6 — real-astronomy solar + map picker + weather coupling</title>
+  <style>
+    :root {
+      --ivory: #1B1A17; --slate: #F5F3EC; --clay: #D97757; --oat: #3A352B;
+      --olive: #8FA56E; --rust: #E08B7F; --warn: #E0B47F;
+      --gray-150: #2E2C27; --gray-300: #3A3833; --gray-500: #8F8D82;
+      --gray-700: #CFCCC2; --white: #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px; --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    h1 code { font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px; color: #C9B98A; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .verification-key { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; margin: 18px 0 24px; font-size: 13px; }
+    .verification-key strong { color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    .vbadge { display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px; }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 48px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .summary .v.warn { color: var(--warn); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    .toc { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    h3.sub { font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin: 26px 0 10px; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; color: var(--clay); }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .codepanel { background: #121110; border-radius: 12px; padding: 16px 20px;
+      overflow-x: auto; margin: 12px 0 18px; }
+    .codepanel pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre; }
+    .codepanel .kw { color: var(--clay); }
+    .codepanel .str { color: var(--olive); }
+    .codepanel .cm { color: var(--gray-500); }
+    .codepanel .fn { color: #C9B98A; }
+    .codepanel .new { background: rgba(143, 165, 110, 0.13); display: block; }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 280px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px; }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .callout { background: var(--white); border: var(--border); border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px; }
+    .callout .ct { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px; }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · SI-units rework · Phase 6</div>
+      <h1>Real-astronomy solar + map picker UI + weather coupling</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        The mid-stream user directive replaces the trapezoidal +
+        sin-scale solar curves with <strong>real astronomy driven by
+        the player's chosen geographic location and the wall-clock
+        time</strong>. Game time runs 1:1 with real time (already true
+        in the current daynight model — <code>DAY_DURATION_MS = 24 ×
+        3600 × 1000</code>); the change is in HOW the
+        <code>solarMultiplier(nowMs)</code> function computes the
+        instantaneous insolation factor. The Phase 1 schema reserved
+        <code>playerLat</code> + <code>playerLon</code> as
+        <code>number | null</code> on the world snapshot; Phase 6 ships
+        the map picker that prompts on null pairs and the SunCalc
+        integration that consumes the values. Weather coupling per
+        rev-16 §7.3 lands alongside (CO₂ thresholds drive storm
+        probability + heatwave events). Coal_gen power retune per
+        rev-16 §10.3 + a balance retune pass close the phase.
+      </div>
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author.
+        <span class="vbadge u">unverified</span> projection or design-time claim.
+        <span class="vbadge x">corrected</span> earlier draft contained an error.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Subagent effort</div><div class="v accent">~18 h</div></div>
+      <div class="cell"><div class="k">New dependency</div><div class="v">suncalc (~5 KB)</div></div>
+      <div class="cell"><div class="k">New UI</div><div class="v">Map picker (SVG)</div></div>
+      <div class="cell"><div class="k">Schema change</div><div class="v ok">None (Phase 1 added the fields)</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Replace <code>solarMultiplier(nowMs)</code> with a SunCalc-driven altitude formula keyed on <code>(nowMs, world.playerLat, world.playerLon)</code>. Add a one-time SVG world-map picker. Wire CO₂ thresholds to <code>weather.ts</code>. Retune coal_gen.</div>
+      <div class="d-body"><strong>SunCalc dependency.</strong>
+        <code>npm install --save suncalc</code> — MIT-licensed,
+        ~5 KB minified, no transitive deps. Pure JS module; works in
+        Vite + the test environment. Maintained library, used by
+        OpenStreetMap.</div>
+      <div class="d-body"><strong>solarMultiplier rewrite.</strong> The
+        new function takes <code>(nowMs, lat, lon)</code>, computes the
+        sun's altitude angle, returns
+        <code>Math.max(0, Math.sin(altitude))</code>. At noon at the
+        equator on the spring equinox, altitude ≈ 90° → multiplier ≈ 1.
+        At noon at 60° N on December 21, altitude ≈ 6° → multiplier
+        ≈ 0.1 (winter sun). Below horizon → 0. Polar night / midnight
+        sun handled naturally.</div>
+      <div class="d-body"><strong>Map picker UI.</strong> On the first
+        session after Phase 6 ships (lat/lon still null per the Phase 1
+        migration default), main.ts surfaces a modal with an SVG
+        equirectangular world map. Player clicks → lat/lon computed
+        from click coordinates → persisted via the existing save
+        machinery. After first click, the picker doesn't re-appear
+        (lat/lon now non-null). Settings panel gains a "Change location"
+        action that re-opens the picker.</div>
+      <div class="d-body"><strong>Weather coupling.</strong> Rev-16 §7.3
+        thresholds: <100 kg no penalty, 100-10000 +10% storm probability,
+        >10000 +30% storm + heatwave events, >100000 climate-crisis
+        chain. The threshold check fires once per game-day in
+        <code>weather.ts</code>'s existing storm-spawn logic. CO₂ pool
+        is <code>sum(state.co2Kg) across all islands</code> — Phase 6
+        computes the aggregate on demand (not stored).</div>
+      <div class="d-body"><strong>Boundary integrator hook.</strong> The
+        existing piecewise-constant integrator at
+        <a class="cite">daynight.ts:131</a>'s
+        <code>nextSolarBoundaryMs(nowMs)</code> still sub-segments
+        within the day for fidelity; the new astronomy curve is more
+        continuously varying than the trapezoidal one, so sub-segment
+        count may need to bump from 8 to 16 per rev-16 §7.1 noise
+        bound. Phase 6 keeps it at 8 first; bumps if test fixtures
+        surface drift.</div>
+      <div class="d-body"><strong>Coal_gen retune.</strong> Per rev-16
+        §10.3 resolution: coal_gen output 100 → 50 unit at the existing
+        2-s burn rate (preserves smelter timing while staying honest at
+        ~40 % thermal efficiency). One-line edit in
+        <code>building-defs.ts</code>.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#s01">01 Problem</a>
+      <a href="#s02">02 SunCalc + altitude formula</a>
+      <a href="#s03">03 Map picker UI</a>
+      <a href="#s04">04 First-session prompt flow</a>
+      <a href="#s05">05 Weather coupling</a>
+      <a href="#s06">06 Coal_gen retune</a>
+      <a href="#s07">07 Boundary integrator</a>
+      <a href="#s08">08 API change</a>
+      <a href="#s09">09 Test plan</a>
+      <a href="#s10">10 Expected impact</a>
+      <a href="#s11">11 Risks</a>
+      <a href="#s12">12 Non-goals</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Problem</h2></div>
+      <p class="sec-intro">Three coupled changes share this phase
+        because they share the environmental-loop subsystem.</p>
+
+      <h3 class="sub">1.1 Solar curve doesn't reflect the player's reality</h3>
+      <p class="body">Current <code>solarMultiplier(nowMs)</code> at
+        <a class="cite">daynight.ts:83</a> is a trapezoidal curve:
+        6h ramp up, 6h flat at 1.0, 6h ramp down, 6h flat at 0.
+        Integrates to a 50% capacity factor. Doesn't depend on where the
+        player is geographically; a player in Reykjavik gets the same
+        solar pattern as a player in Singapore. Doesn't depend on the
+        calendar date; December and June produce identical curves.</p>
+
+      <p class="body">Rev-16 §7.1 proposed a sinusoidal 22% CF curve as
+        an improvement. The user's mid-stream directive supersedes that:
+        <strong>real wall-clock time = in-game time, with the player
+        choosing a geographic location on a map, and full real
+        sunrise/sunset behaviour.</strong> Phase 6 ships this.</p>
+
+      <h3 class="sub">1.2 No weather feedback from CO₂</h3>
+      <p class="body">Phases 2 + 5 wired accrual + drains;
+        <code>state.co2Kg</code> moves but nothing reads it. Rev-16
+        §7.3 specs the consumer: storm probability + heatwave events
+        keyed on threshold bands. Phase 6 wires this into the existing
+        weather logic in <code>weather.ts</code>.</p>
+
+      <h3 class="sub">1.3 Coal_gen is still wrong</h3>
+      <p class="body">Per rev-16 §10.3 + §2.1 corrected: at realistic
+        ~40% coal-plant thermal efficiency, 12.5 MW thermal → 5 MW
+        electrical = 50 unit. Current
+        <code>building-defs.ts</code>'s coal_gen produces 100 unit (10
+        MW electrical) — implies impossible-for-coal ~80% efficiency.
+        Phase 6 retunes to 50 unit per the rev-9 resolution.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>SunCalc + altitude formula</h2></div>
+      <p class="sec-intro">SunCalc.js gives sun position
+        (altitude + azimuth) for any (date, lat, lon) triple. Solar
+        intensity scales as <code>sin(altitude)</code> for altitude ≥ 0;
+        below horizon means night.</p>
+
+      <h3 class="sub">2.1 Dependency add</h3>
+      <div class="codepanel"><pre><span class="cm">// package.json</span>
+<span class="str">"dependencies"</span>: {
+  <span class="cm">/* …existing… */</span>
+<span class="new">  <span class="str">"suncalc"</span>: <span class="str">"^1.9.0"</span>,</span>
+}</pre></div>
+
+      <p class="body"><strong>SunCalc surface (verified at
+        https://github.com/mourner/suncalc):</strong></p>
+      <ul class="body">
+        <li><code>SunCalc.getPosition(date: Date, lat: number, lon: number): { altitude: number; azimuth: number }</code> — altitude in radians, azimuth in radians. Pure function; no I/O.</li>
+        <li><code>SunCalc.getTimes(date: Date, lat: number, lon: number): { sunrise: Date; sunset: Date; solarNoon: Date; ... }</code> — useful for the inspector UI ("sunrise in 2h 14m").</li>
+      </ul>
+
+      <h3 class="sub">2.2 New solarMultiplier</h3>
+      <div class="codepanel"><pre><span class="cm">// daynight.ts — replace solarMultiplier wholesale.</span>
+<span class="kw">import</span> SunCalc <span class="kw">from</span> <span class="str">'suncalc'</span>;
+
+<span class="cm">/** Real-astronomy solar insolation factor at the player's geographic</span>
+<span class="cm"> *  location and the current wall-clock time. Returns 0 below horizon,</span>
+<span class="cm"> *  sin(altitude) above. Drives <code>computeRates</code>'s solar power</span>
+<span class="cm"> *  multiplier per §15.3 the same way the trapezoidal curve did.</span>
+<span class="cm"> *</span>
+<span class="cm"> *  Pre-Phase-6 callers passed <code>solarMultiplier(nowMs)</code>; the new</span>
+<span class="cm"> *  signature requires <code>lat</code> + <code>lon</code>. Callers must thread</span>
+<span class="cm"> *  these through; the world snapshot carries them as <code>playerLat</code> /</span>
+<span class="cm"> *  <code>playerLon</code>. When either is null (no picker run yet), this</span>
+<span class="cm"> *  returns 0 — solar buildings produce nothing until the player picks</span>
+<span class="cm"> *  a location. The map picker is a session-start blocker in main.ts. */</span>
+<span class="kw">export function</span> <span class="fn">solarMultiplier</span>(
+  nowMs: <span class="kw">number</span>,
+  lat: <span class="kw">number</span> | <span class="kw">null</span>,
+  lon: <span class="kw">number</span> | <span class="kw">null</span>,
+): <span class="kw">number</span> {
+  <span class="kw">if</span> (lat == <span class="kw">null</span> || lon == <span class="kw">null</span>) <span class="kw">return</span> 0;
+  <span class="kw">const</span> pos = SunCalc.<span class="fn">getPosition</span>(<span class="kw">new</span> Date(nowMs), lat, lon);
+  <span class="kw">if</span> (pos.altitude &lt;= 0) <span class="kw">return</span> 0;
+  <span class="kw">return</span> <span class="fn">Math.sin</span>(pos.altitude);
+}</pre></div>
+
+      <p class="body"><strong>Range check.</strong>
+        <code>pos.altitude ∈ [-π/2, +π/2]</code>; <code>sin(π/2) = 1</code>
+        at sun directly overhead (equator at solar noon on equinox).
+        <code>sin(altitude) ∈ [0, 1]</code> for altitude ≥ 0.</p>
+
+      <p class="body"><strong>Removed: SOLAR_AMPLITUDE,
+        sinusoidal-22%-CF, rev-16 §7.1's amplitude scaling.</strong>
+        The amplitude factor 0.69 from rev-16 §7.1 doesn't apply here —
+        the real-astronomy curve produces the realistic capacity
+        factor naturally (e.g. 20-30% annual CF at mid-latitudes
+        because nights and shallow-angle hours are real and
+        accounted for). The 22% target was an aggregate of cloud +
+        soiling losses; Phase 6 doesn't simulate those — clear-sky is
+        the realistic ceiling.</p>
+
+      <h3 class="sub">2.3 dayPhase / dayPhaseName retain</h3>
+      <p class="body">Existing <code>dayPhase</code> and
+        <code>dayPhaseName</code> at <a class="cite">daynight.ts:45</a>
+        return abstract phase values used by other systems (e.g. the
+        weather logic, the maintenance scheduler). Phase 6 retains
+        these — they're driven by the in-game-time-of-day modulo, not by
+        astronomy. The two systems are independent: phase-of-day for
+        gameplay rhythm; astronomy for solar power.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>Map picker UI</h2></div>
+      <p class="sec-intro">One-time location selection. Static SVG world
+        map, equirectangular projection. Click coordinate → (lat, lon).
+        Persists to <code>world.playerLat / playerLon</code>.</p>
+
+      <h3 class="sub">3.1 New module — <code>src/map-picker.ts</code></h3>
+      <p class="body">Vanilla DOM (no PixiJS — matches the existing
+        <code>hud.ts</code> + <code>ui.ts</code> patterns). The picker
+        is a modal layer over the canvas; closes on click.</p>
+      <div class="codepanel"><pre><span class="cm">// map-picker.ts — schematic</span>
+<span class="kw">export function</span> <span class="fn">showMapPicker</span>(
+  onPick: (lat: <span class="kw">number</span>, lon: <span class="kw">number</span>) =&gt; <span class="kw">void</span>,
+): <span class="kw">void</span> {
+  <span class="kw">const</span> modal = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+  modal.className = <span class="str">'map-picker-modal'</span>;
+  modal.innerHTML = `
+    &lt;h2&gt;Where do you live?&lt;/h2&gt;
+    &lt;p&gt;Click your location on the map. Real sunrise / sunset will follow real time at that location.&lt;/p&gt;
+    &lt;svg viewBox="0 0 360 180" class="map-picker-svg"&gt;
+      &lt;!-- Inline world equirectangular SVG. Public-domain Natural Earth land outline. --&gt;
+      &lt;path d="..." fill="#3A3833" /&gt;
+    &lt;/svg&gt;
+    &lt;p class="map-picker-readout"&gt;&lt;/p&gt;
+  `;
+  <span class="kw">const</span> svg = modal.<span class="fn">querySelector</span>(<span class="str">'svg'</span>)!;
+  svg.<span class="fn">addEventListener</span>(<span class="str">'click'</span>, (e) =&gt; {
+    <span class="kw">const</span> rect = svg.<span class="fn">getBoundingClientRect</span>();
+    <span class="kw">const</span> xPx = e.clientX - rect.left;
+    <span class="kw">const</span> yPx = e.clientY - rect.top;
+    <span class="cm">// Equirectangular: viewBox 0..360 = lon -180..180, 0..180 = lat 90..-90.</span>
+    <span class="kw">const</span> lon = (xPx / rect.width) * 360 - 180;
+    <span class="kw">const</span> lat = 90 - (yPx / rect.height) * 180;
+    document.body.<span class="fn">removeChild</span>(modal);
+    <span class="fn">onPick</span>(lat, lon);
+  });
+  document.body.<span class="fn">appendChild</span>(modal);
+}</pre></div>
+
+      <h3 class="sub">3.2 SVG world-map asset</h3>
+      <p class="body">A static public-domain SVG world map. Source:
+        Natural Earth Public Domain Map Dataset
+        (https://www.naturalearthdata.com/), 1:110m cultural-vector
+        boundaries. Either bundle the SVG inline (~30 KB minified) or
+        load from <code>public/world-map.svg</code>. Inline is simpler
+        for a one-time picker. The SVG fits in <code>map-picker.ts</code>
+        as a const string.</p>
+
+      <h3 class="sub">3.3 Styling</h3>
+      <p class="body">Reuse existing CSS variables from <code>ui.css</code>
+        — modal background <code>var(--ivory)</code>, border
+        <code>var(--clay)</code>. The picker matches the existing UI
+        aesthetic.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>First-session prompt flow</h2></div>
+      <p class="sec-intro">After Phase 1's migration, every fresh world
+        + every migrated v14 save has <code>playerLat = playerLon =
+        null</code>. Phase 6's <code>main.ts</code> bootstrap checks the
+        pair and prompts the picker if either is null.</p>
+
+      <div class="codepanel"><pre><span class="cm">// main.ts bootstrap — after world load, before the canvas renders.</span>
+<span class="kw">if</span> (world.playerLat == <span class="kw">null</span> || world.playerLon == <span class="kw">null</span>) {
+  <span class="fn">showMapPicker</span>((lat, lon) =&gt; {
+    world.playerLat = lat;
+    world.playerLon = lon;
+    <span class="fn">saveWorld</span>(world);
+    <span class="fn">startGame</span>(world);
+  });
+} <span class="kw">else</span> {
+  <span class="fn">startGame</span>(world);
+}</pre></div>
+
+      <h3 class="sub">4.1 Settings panel "Change location" affordance</h3>
+      <p class="body">Per the global CLAUDE.md "Keep the human in the
+        loop" doctrine — the player may want to relocate. The settings
+        panel (existing <code>settings-ui.ts</code>) gains a
+        <strong>Change location</strong> button that re-invokes
+        <code>showMapPicker</code> and overwrites the saved values.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>Weather coupling — rev-16 §7.3</h2></div>
+      <p class="sec-intro">CO₂ thresholds drive storm probability + new
+        heatwave events. Bands per rev-16 §7.3.</p>
+
+      <h3 class="sub">5.1 Thresholds</h3>
+      <table class="tbl">
+        <thead><tr>
+          <th>Global CO₂ band (kg)</th>
+          <th>Effect</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="mono">&lt; 100</td><td>No penalty.</td></tr>
+          <tr><td class="mono">100 – 10000</td><td>+10% storm probability per biome.</td></tr>
+          <tr><td class="mono">&gt; 10000</td><td>+30% storm probability + 5% chance per day of "heatwave" event (solar bonus, but per-tile crop yield −20%).</td></tr>
+          <tr><td class="mono">&gt; 100000</td><td>"Climate-crisis" event chain — weather penalties stack; only out is wastewater_treatment + plant_a_tree.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">5.2 Integration with existing weather.ts</h3>
+      <p class="body">The existing storm-spawn logic lives in
+        <code>weather.ts</code> (~587 lines). The integration point is
+        the storm-roll function (whatever its name; grep
+        <code>stormProbability</code>). Phase 6 multiplies the existing
+        baseline by the CO₂-band multiplier from the table above.</p>
+      <div class="codepanel"><pre><span class="kw">function</span> <span class="fn">co2WeatherMultiplier</span>(totalCo2Kg: <span class="kw">number</span>): <span class="kw">number</span> {
+  <span class="kw">if</span> (totalCo2Kg &lt; 100) <span class="kw">return</span> 1.0;
+  <span class="kw">if</span> (totalCo2Kg &lt; 10000) <span class="kw">return</span> 1.1;
+  <span class="kw">if</span> (totalCo2Kg &lt; 100000) <span class="kw">return</span> 1.3;
+  <span class="kw">return</span> 1.6;  <span class="cm">// climate-crisis tier</span>
+}
+
+<span class="cm">// In the existing storm roll:</span>
+<span class="kw">const</span> baseProb = <span class="cm">/* existing biome × tier × season formula */</span>;
+<span class="kw">const</span> totalCo2 = <span class="fn">sumIslandCo2</span>(world);
+<span class="kw">const</span> co2Mul = <span class="fn">co2WeatherMultiplier</span>(totalCo2);
+<span class="kw">const</span> adjustedProb = baseProb * co2Mul;</pre></div>
+
+      <h3 class="sub">5.3 Heatwave event (new)</h3>
+      <p class="body">A new weather event type. Fires once per game-day
+        on a 5% roll when <code>totalCo2Kg &gt; 10000</code>. Effects:</p>
+      <ul class="body">
+        <li>Solar output ×1.2 for the day (heat = more direct insolation, slightly more efficient PV — rough proxy).</li>
+        <li>Per-tile crop yield (forest tile wood extraction, plant_a_tree CO₂ capture) ×0.8 for the day.</li>
+        <li>UI surface: HUD banner "Heatwave today — solar +20%, plants stressed −20%".</li>
+      </ul>
+
+      <h3 class="sub">5.4 Climate-crisis event chain (new)</h3>
+      <p class="body">At <code>totalCo2Kg &gt; 100000</code>, a recurring
+        event chain fires. The chain is a sequence of escalating storms
+        + heatwaves + drought events until the player drives CO₂ below
+        100000 via sinks. Per rev-16 §7.3 narrative: "the only out is
+        wastewater_treatment + plant_a_tree."</p>
+
+      <h3 class="sub">5.5 sumIslandCo2 helper</h3>
+      <div class="codepanel"><pre><span class="kw">export function</span> <span class="fn">sumIslandCo2</span>(world: World): <span class="kw">number</span> {
+  <span class="kw">let</span> sum = 0;
+  <span class="kw">for</span> (<span class="kw">const</span> state <span class="kw">of</span> world.islandStates.<span class="fn">values</span>()) {
+    sum += state.co2Kg ?? 0;
+  }
+  <span class="kw">return</span> sum;
+}</pre></div>
+      <p class="body">Computed on demand (not stored). World snapshot's
+        <code>totalCo2Kg</code> field is updated by this helper at
+        save-write time so persisted snapshots have a consistent value;
+        runtime reads call the live aggregator.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2>Coal_gen retune — rev-16 §10.3</h2></div>
+      <p class="sec-intro">Single-value edit. coal_gen's
+        <code>power.produces</code> drops 100 → 50 unit. Rationale: at
+        ~40% real coal-plant thermal efficiency, 12.5 MW thermal × 0.40
+        = 5 MW electrical = 50 unit under the 100 kW/unit anchor.</p>
+
+      <div class="codepanel"><pre><span class="cm">// building-defs.ts — coal_gen entry, find via grep coal_gen.</span>
+{
+  id: <span class="str">'coal_gen'</span>,
+  <span class="cm">/* …existing fields… */</span>
+  power: { produces: <span class="new">50</span> },  <span class="cm">// was 100; rev-16 §10.3 resolution</span>
+  <span class="cm">/* …rest unchanged… */</span>
+}</pre></div>
+
+      <p class="body"><strong>Gameplay implication.</strong> Players
+        whose grid relied on coal_gen's 100-unit output now see half
+        that. Multiple coal_gens or a switch to alternative sources
+        (biomass_plant, wind_turbine, solar, geothermal) needed. The
+        balance retune in §06 of this phase verifies the existing
+        progression remains playable.</p>
+
+      <p class="body"><strong>Alternative (rejected): double burn
+        rate.</strong> Per rev-16 §10.3, option B keeps output at 100
+        unit by doubling coal burn to 1 coal/s. Phase 6 picks option A
+        (50 unit, 1 coal/2s) because the 2-s cycle is load-bearing for
+        smelter timing.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>Boundary integrator — sub-segmentation</h2></div>
+      <p class="sec-intro">The new astronomy curve is continuously
+        varying; the piecewise-constant integrator must sub-segment
+        finely enough to integrate accurately.</p>
+
+      <p class="body">Current <code>SOLAR_RAMP_SEGMENTS = 8</code> at
+        <a class="cite">daynight.ts:73</a>. Trapezoidal had 8 sub-segments
+        per 6h quadrant for the 0→1 ramp. The new astronomy curve is
+        non-linear (sin of altitude) and continuously varying over the
+        entire day. Phase 6 keeps the 8-per-quadrant resolution as a
+        first pass — the post-implementation profile compares it against
+        higher resolutions (16, 32) to confirm 8 is sufficient. If not,
+        bump.</p>
+
+      <h3 class="sub">7.1 nextSolarBoundaryMs adjustment</h3>
+      <p class="body"><code>nextSolarBoundaryMs(nowMs)</code> at
+        <a class="cite">daynight.ts:131</a> currently returns the next
+        sub-segment boundary based on the trapezoidal-quadrant model.
+        Phase 6 replaces with a uniform sub-segment grid: divide the
+        24h day into <code>SOLAR_RAMP_SEGMENTS × 4 = 32</code> intervals
+        (or whatever the new resolution is); return the next interval
+        boundary.</p>
+      <div class="codepanel"><pre><span class="kw">export function</span> <span class="fn">nextSolarBoundaryMs</span>(nowMs: <span class="kw">number</span>): <span class="kw">number</span> | <span class="kw">null</span> {
+  <span class="kw">const</span> totalSegmentsPerDay = SOLAR_RAMP_SEGMENTS * 4;
+  <span class="kw">const</span> segmentMs = DAY_DURATION_MS / totalSegmentsPerDay;
+  <span class="kw">const</span> nowSegment = <span class="fn">Math.floor</span>(nowMs / segmentMs);
+  <span class="kw">return</span> (nowSegment + 1) * segmentMs;
+}</pre></div>
+
+      <p class="body"><strong>Why not sample at sunrise / sunset
+        exactly:</strong> The integrator's segment math expects regular
+        boundaries; introducing astronomy-derived boundaries would
+        complicate the math and tie the integrator to SunCalc's
+        precision. The uniform-grid approach is simpler and the worst-case
+        integration error stays bounded by the segment width.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>API change surface</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">package.json</div>
+          <div class="what"><span class="lead">Add <code>suncalc</code> dependency.</span> ~5 KB minified, MIT, no transitives.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/daynight.ts</div>
+          <div class="what"><span class="lead">Replace solarMultiplier body with SunCalc altitude formula.</span> Signature change: now takes <code>(nowMs, lat, lon)</code>. Returns 0 when either coordinate is null.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/daynight.ts</div>
+          <div class="what"><span class="lead">Update nextSolarBoundaryMs to uniform-grid sub-segmentation.</span> Per spec §07.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts (all solarMultiplier callers)</div>
+          <div class="what"><span class="lead">Thread playerLat / playerLon through every callsite.</span> The world snapshot is already in scope at the integrator level.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/map-picker.ts (NEW)</div>
+          <div class="what"><span class="lead">SVG world-map picker modal.</span> Per spec §03. ~100-150 LOC.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/main.ts</div>
+          <div class="what"><span class="lead">First-session picker prompt + Settings panel "Change location" wire-up.</span> Per spec §04.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/settings-ui.ts</div>
+          <div class="what"><span class="lead">Add "Change location" button</span> that re-invokes the picker.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/weather.ts</div>
+          <div class="what"><span class="lead">Add CO₂-weather multiplier + heatwave event + climate-crisis chain.</span> Per spec §05. Integration with existing storm-roll path.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/weather.ts</div>
+          <div class="what"><span class="lead">Add sumIslandCo2 helper.</span> Lives wherever the storm logic reads it.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.ts (coal_gen)</div>
+          <div class="what"><span class="lead">power.produces 100 → 50.</span> Single value edit + comment citing rev-16 §10.3.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/daynight.test.ts</div>
+          <div class="what"><span class="lead">Replace trapezoidal-curve tests with astronomy fixtures:</span> equator noon equinox → ~1.0, polar winter night → 0, mid-latitude sunrise/sunset transitions match SunCalc within tolerance.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/weather.test.ts</div>
+          <div class="what"><span class="lead">CO₂-threshold tests:</span> low CO₂ → 1× multiplier, mid → 1.1×, high → 1.3×, crisis → 1.6×. Heatwave event roll fixtures.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Test plan</h2></div>
+
+      <h3 class="sub">9.1 SunCalc altitude fixtures</h3>
+      <p class="body">Spring equinox 2026-03-20, noon UTC at equator
+        (0, 0): altitude ≈ 90°, multiplier ≈ 1. June solstice 2026-06-21,
+        noon at (60, 0): altitude ≈ 53°, multiplier ≈ 0.80. December
+        solstice 2026-12-21, noon at (60, 0): altitude ≈ 6°, multiplier
+        ≈ 0.10. Polar night (84, 0) Dec 21: altitude ≤ 0 all day,
+        multiplier 0 for all 24 hours.</p>
+
+      <h3 class="sub">9.2 Null lat/lon</h3>
+      <p class="body"><code>solarMultiplier(nowMs, null, null)</code>
+        returns 0 regardless of nowMs. Tested across multiple nowMs values
+        to confirm.</p>
+
+      <h3 class="sub">9.3 Map picker click-to-lat/lon</h3>
+      <p class="body">Click at SVG viewBox (180, 90) → lat 0, lon 0
+        (center). Click at (270, 45) → lat 45, lon 90. Click at (90, 135)
+        → lat -45, lon -90. Per equirectangular conversion.</p>
+
+      <h3 class="sub">9.4 First-session picker prompt</h3>
+      <p class="body">Fresh world has null lat/lon; main.ts shows the
+        picker. After picker click, lat/lon non-null + save persists.
+        Second session: picker doesn't appear.</p>
+
+      <h3 class="sub">9.5 CO₂ → storm multiplier</h3>
+      <p class="body">totalCo2Kg 50 → multiplier 1.0. 1000 → 1.1. 50000
+        → 1.3. 500000 → 1.6. Edge cases at thresholds (99, 100, 9999,
+        10000, 99999, 100000) verified.</p>
+
+      <h3 class="sub">9.6 Heatwave fixture</h3>
+      <p class="body">Configure totalCo2Kg = 50000 + force a day-roll
+        with controlled RNG. Heatwave fires (5% probability test); solar
+        multiplier ×1.2 applied; per-tile yield ×0.8 applied. After the
+        in-game day passes, heatwave clears.</p>
+
+      <h3 class="sub">9.7 Coal_gen retune</h3>
+      <p class="body">A test island with one coal_gen produces 50 unit
+        of power (was 100). Confirms the single-value edit applied.</p>
+
+      <h3 class="sub">9.8 Live-save replay</h3>
+      <p class="body"><code>scripts/profile-economy.ts /tmp/robot-islands-save.json</code>
+        runs successfully with the live save's playerLat/playerLon set
+        manually to (40, -74) (NYC) before replay. Solar output reflects
+        NYC's geographic position.</p>
+
+      <h3 class="sub">9.9 Full-suite green</h3>
+      <p class="body"><code>npm test</code> passes. Tests touching
+        solarMultiplier(nowMs) directly need updating to pass lat/lon —
+        ~10-30 tests touched.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Expected impact</h2></div>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>After Phase 6</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">Solar CF (Equator)</td><td class="num">~50% (trapezoidal)</td><td class="num">~32% (real clear-sky annual avg)</td></tr>
+          <tr><td class="slate">Solar CF (60° N, summer)</td><td class="num">~50%</td><td class="num">~25-30% (long days, low angle)</td></tr>
+          <tr><td class="slate">Solar CF (60° N, winter)</td><td class="num">~50%</td><td class="num">~3-5% (short days)</td></tr>
+          <tr><td class="slate">Solar CF (Polar, midwinter)</td><td class="num">~50%</td><td class="num">0% (polar night)</td></tr>
+          <tr><td class="slate">CO₂ → storm multiplier</td><td class="num">1.0× (no coupling)</td><td class="num">1.0× → 1.6× by band</td></tr>
+          <tr><td class="slate">Coal_gen output</td><td class="num">100 unit</td><td class="num">50 unit</td></tr>
+          <tr><td class="slate">Heatwave events</td><td class="num">N/A</td><td class="num">5%/day at &gt;10t CO₂</td></tr>
+          <tr><td class="slate">Test count</td><td class="num">~2308 (post-5)</td><td class="num">~2348</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Gameplay implication.</strong> Players in
+        equatorial / temperate zones see solar as a reliable producer.
+        Players in high latitudes see strong seasonal swings — winter
+        forces battery + biomass + coal cooperation; summer's long days
+        ease the load. Polar gameplay is a different game (minimal
+        solar, fusion mandatory). The map picker becomes a real
+        gameplay choice, not a cosmetic preference.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">A player at high latitude (e.g. Reykjavik 64° N) gets nearly zero solar in winter; the existing tutorial / progression assumes solar works year-round; player can't progress.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">This is the central gameplay shift. Mitigations: (a) map picker tooltip warns "high latitudes have seasonal solar — alternative power recommended", (b) tutorial steps for biomass + coal_furnace land before solar in the rev-16 §11.2 32-step order, (c) Newcomen Engine (T1, coal-fired, 4 kW) provides the off-grid power for winter weeks.</div>
+        </div>
+        <div class="row">
+          <div class="cell">SunCalc.getPosition is called every segment boundary — could be a perf hit if segment count is high.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">SunCalc is ~5 µs per call. 32 segments × N solar buildings × 1 call/segment = small. Profile via scripts/profile-economy.ts; if it surfaces, cache per-segment.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The map picker SVG is large or has artifacts that prevent the player from clicking certain regions.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The Natural Earth SVG is a polygonal land outline over a uniform rect; click coordinates compute from the rect (not from polygon hit-test). Anywhere in the rect resolves to a lat/lon.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A player picks a location in the middle of the ocean (most of the rect is ocean) — gameplay-wise this is fine but cosmetically odd.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The picker doesn't prohibit ocean clicks — astronomy works at all coordinates. UX may show a "(ocean)" annotation; doesn't gate the pick.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Existing tests that call solarMultiplier(nowMs) without lat/lon get TypeScript errors after signature change.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 6's commit pass updates every caller — grep for <code>solarMultiplier(</code> across <code>src/</code>. Fixture tests get a deterministic (0, 0) location to keep their behaviour deterministic.</div>
+        </div>
+        <div class="row">
+          <div class="cell">SunCalc's TypeScript types are old / missing — type definitions absent.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">@types/suncalc exists; install alongside. Or declare the surface inline if @types is missing.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A heatwave event fires while a storm is also active; effects double-stack.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Per rev-16 §7.3 the heatwave is a separate event — they can stack. Solar +20% during a thunderstorm is implausible but the bands are independent in the model. Acceptable.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Climate-crisis chain triggers + becomes unrecoverable because plant_a_tree's 0.1 kg/cycle can't keep up with 100t accrual.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">The threshold (100t) is achievable through heavy industrialisation. Recovery: multiple exhaust_scrubbers at 20 kg/cycle each scale linearly. A dedicated CCS hub of 10 scrubbers = 200 kg/cycle = 2.88 t/hr drain — recovers from 100t in ~35 hours. Phase 6's heatwave + crisis events make this a real choice, not impossible.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s12">
+      <div class="sec-head"><span class="num">12</span><h2>Non-goals</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Cloud cover simulation</div>
+          <div class="dd">The astronomy curve is clear-sky. Per rev-16 §7.1's 22% CF discussion, real CF includes ~30-40% cloud cover loss. Phase 6 ships clear-sky; future content could layer cloud probability per latitude.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Daylight saving time</div>
+          <div class="dd">SunCalc uses UTC + lat/lon; DST doesn't apply. Player's local clock might be DST-adjusted but solar position is timezone-independent.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Multiple per-island locations</div>
+          <div class="dd">Phase 6 picks ONE location for the world (shared across all islands). Future content could allow per-island latitude offsets for thematic biomes.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Tilted PV arrays</div>
+          <div class="dd">Real PV arrays tilt to maximise insolation. Phase 6 treats solar buildings as horizontal panels (sin(altitude) intensity). A tilt-optimization is future content.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Atmospheric refraction</div>
+          <div class="dd">SunCalc handles standard refraction; Phase 6 doesn't customize. Edge cases (sun visible below astronomical horizon at sunrise) are SunCalc-handled.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Sunpath visualization in UI</div>
+          <div class="dd">The HUD could show "sunrise in 2h 14m" via SunCalc.getTimes. Phase 6 doesn't ship this UI; the data is there if a future phase wants it.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · Phase 6 of 7 · generated 2026-05-28 ·
+        companion plan at <code>plans/2026-05-28-si-units-phase6-weather-realtime-plan</code> ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16 §7 +
+        user mid-stream directive on real-astronomy</p>
+    </div>
+
+  </div>
+</body>
+</html>

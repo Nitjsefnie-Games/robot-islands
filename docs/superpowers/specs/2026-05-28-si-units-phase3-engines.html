@@ -1,0 +1,682 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units rework Phase 3 — heat throttle + cubic drag (solar deferred to Phase 6)</title>
+  <style>
+    :root {
+      --ivory: #1B1A17; --slate: #F5F3EC; --clay: #D97757; --oat: #3A352B;
+      --olive: #8FA56E; --rust: #E08B7F; --warn: #E0B47F;
+      --gray-150: #2E2C27; --gray-300: #3A3833; --gray-500: #8F8D82;
+      --gray-700: #CFCCC2; --white: #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px; --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    h1 code { font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px; color: #C9B98A; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    .verification-key { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 18px; margin: 18px 0 24px; font-size: 13px; }
+    .verification-key strong { color: var(--slate); font-family: var(--mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    .vbadge { display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px; }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 48px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .summary .v.warn { color: var(--warn); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    .toc { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 32px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    h3.sub { font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin: 26px 0 10px; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; color: var(--clay); }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl td.ok { color: var(--olive); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .codepanel { background: #121110; border-radius: 12px; padding: 16px 20px;
+      overflow-x: auto; margin: 12px 0 18px; }
+    .codepanel pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre; }
+    .codepanel .kw { color: var(--clay); }
+    .codepanel .str { color: var(--olive); }
+    .codepanel .cm { color: var(--gray-500); }
+    .codepanel .fn { color: #C9B98A; }
+    .codepanel .new { background: rgba(143, 165, 110, 0.13); display: block; }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 280px 1fr; gap: 4px 24px; }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med { background: var(--oat); color: var(--slate); }
+    .sev.low { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px; }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .callout { background: var(--white); border: var(--border); border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px; }
+    .callout .ct { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px; }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · SI-units rework · Phase 3</div>
+      <h1>Heat throttle + cubic drag — <code>thermalKW</code>, <code>speed² × tilesPerFuel = const</code></h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Two engine replacements: <code>heat.ts</code>'s boolean N:1
+        adjacency gate becomes a proportional thermal-kW throttle per
+        rev-16 §5; <code>settlement.ts</code>'s SHIP_STATS and
+        HELICOPTER_STATS retable to the cubic-drag invariant
+        <code>speed² × tilesPerFuel = const</code> per rev-16 §6. The
+        rev-16 doc also specs a sinusoidal solar curve (§7.1, 22% CF), but
+        because Phase 6 replaces the solar curve entirely with
+        real-astronomy SunCalc-driven elevation given lat/lon, Phase 3
+        <strong>skips the sinusoidal placeholder</strong>. The trapezoidal
+        curve in <code>daynight.ts</code> stays until Phase 6 replaces it
+        directly.
+      </div>
+      <div class="verification-key">
+        <strong>Verification key.</strong>
+        <span class="vbadge v">verified</span> directly read by the author against rev-16 + source files.
+        <span class="vbadge u">unverified</span> projection or design-time claim not yet validated against code.
+        <span class="vbadge x">corrected</span> earlier draft contained an error; this entry supplies the verified value.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Subagent effort</div><div class="v accent">~10 h</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">3 source · 4 test</div></div>
+      <div class="cell"><div class="k">Schema change</div><div class="v ok">None (Phase 1 added the fields)</div></div>
+      <div class="cell"><div class="k">Solar</div><div class="v warn">Deferred → Phase 6</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Heat resolver gains proportional throttle. Drag tables retabled cubic. Solar curve NOT touched — Phase 6 will replace.</div>
+      <div class="d-body"><strong>Heat throttle.</strong> The existing
+        N:1 adjacency gate at <a class="cite">heat.ts:124-205</a> is
+        replaced by a proportional thermal-kW resolver per rev-16 §5.1.
+        Each heat source advertises <code>thermalKW</code> (Phase 1 field);
+        each heat consumer advertises <code>heatDemandKW</code>. The
+        resolver sums demand per source, divides supply by demand to get
+        a throttle factor ∈ [0, 1], and propagates that factor to
+        <code>computeRates</code> which multiplies recipe rates by it.</div>
+      <div class="d-body"><strong>Heat-source thermalKW backfill</strong>
+        per rev-16 §5.3 table. coal_furnace 830 kW (1 coal × 25 MJ/kg / 30 s),
+        geothermal_vent 1000 kW (low-grade geothermal well), plasma_heater
+        184 kW (200 kW input × 92% efficiency), fusion_core 1,000,000 kW
+        (ITER 1 GW target). Heat-consumer heatDemandKW: coke_oven 60 kW,
+        blast_furnace 3000 kW (hot-blast preheat), electric_arc_furnace
+        80 kW residual, pyroforge 200 kW, carbon_forge 150 kW. The full
+        table lives in §5.3 of rev-16.</div>
+      <div class="d-body"><strong>Backward-compat fallback.</strong>
+        Heat sources without <code>thermalKW</code> set, OR consumers
+        without <code>heatDemandKW</code> set, fall back to the existing
+        boolean N:1 gate. This keeps fantasy / out-of-table buildings
+        working through Phase 3 even if the §5.3 table is incomplete for
+        them. Future phases populate the missing entries.</div>
+      <div class="d-body"><strong>Drag retable.</strong> Replace
+        SHIP_STATS at <a class="cite">settlement.ts:119</a> and
+        HELICOPTER_STATS at <a class="cite">settlement.ts:126</a> with
+        rev-16 §6.2 values. Ship invariant <code>speed² × tilesPerFuel
+        = 0.03125</code> (T1 anchor); heli invariant <code>speed² ×
+        tilesPerFuel = 0.121</code>. Fuel-per-second now scales as v³.</div>
+      <div class="d-body"><strong>Solar deferred.</strong> Rev-16 §7.1's
+        sin-scale 22% CF curve was an intermediate design. The user's
+        mid-stream directive (real wall-clock astronomy, location picker
+        in Phase 6) supersedes it. Phase 3 leaves
+        <code>daynight.ts</code>'s trapezoidal curve in place; Phase 6
+        ships the full lat/lon-aware SunCalc replacement. Avoids wasted
+        work + a re-verification pass on the same module.</div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Sections</span>
+      <a href="#s01">01 Problem</a>
+      <a href="#s02">02 Heat throttle algorithm</a>
+      <a href="#s03">03 thermalKW + heatDemandKW backfill</a>
+      <a href="#s04">04 computeRates integration</a>
+      <a href="#s05">05 Drag retable</a>
+      <a href="#s06">06 Solar — deferred</a>
+      <a href="#s07">07 API change</a>
+      <a href="#s08">08 Test plan</a>
+      <a href="#s09">09 Expected impact</a>
+      <a href="#s10">10 Risks</a>
+      <a href="#s11">11 Non-goals</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Problem</h2></div>
+      <p class="sec-intro">Two engines violate energy/momentum
+        conservation. v3 audit findings F16 (heat) and F18 (drag).</p>
+
+      <h3 class="sub">Heat — F16</h3>
+      <p class="body">Current <code>heat.ts</code> at
+        <a class="cite">heat.ts:124-205</a> implements an N:1 adjacency
+        gate: a single Plasma Heater serves any number of adjacent Coke
+        Ovens at zero incremental cost. A 200 W Plasma Heater (well,
+        200 kW under the rev-4 anchor) producing 184 kW thermal serves
+        N×60 kW Coke Ovens at full throughput, regardless of N. Energy
+        violation by design. Real industrial thermal coupling has finite
+        supply; deficit propagates as proportional throttling.</p>
+
+      <h3 class="sub">Drag — F18</h3>
+      <p class="body">Current SHIP_STATS at
+        <a class="cite">settlement.ts:119</a>:</p>
+      <div class="codepanel"><pre><span class="kw">export const</span> SHIP_STATS: <span class="kw">Record</span>&lt;VehicleTier, VehicleStats&gt; = {
+  1: { speed: 0.25, tilesPerFuel: 0.5,  maxKits: 1, failureRate: 0.02,  weatherMultiplier: 1.0 },
+  2: { speed: 0.30, tilesPerFuel: 2,    maxKits: 2, failureRate: 0.015, weatherMultiplier: 0.9 },
+  3: { speed: 0.40, tilesPerFuel: 3.5,  maxKits: 2, failureRate: 0.01,  weatherMultiplier: 0.8 },
+  4: { speed: 0.50, tilesPerFuel: 5,    maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
+};</pre></div>
+      <p class="body"><strong>Both speed AND tilesPerFuel grow across
+        tiers</strong> — fuel/sec at T4 vs T1 is
+        <code>(0.50/5) / (0.25/0.5) = 0.20</code> — fuel-per-second
+        <em>drops</em> by 5× while speed doubles. This violates cruise
+        drag (P ∝ v³ for ships and helicopters per rev-16 §6 + Geography
+        of Transport Systems). Real cruise drag means T4 ship should burn
+        ~64× more fuel/s than T1 at the new T4 speed.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>Heat throttle algorithm</h2></div>
+      <p class="sec-intro">Rev-16 §5.1 BEFORE/AFTER pseudocode applied
+        verbatim. The new algorithm has three phases: discover adjacency
+        edges (unchanged), compute per-source budgets (new), apply
+        throttle in <code>computeRates</code> (new).</p>
+
+      <h3 class="sub">2.1 New <code>HeatAssignments</code> shape</h3>
+      <div class="codepanel"><pre><span class="cm">// heat.ts:52 — extend HeatAssignments with the throttle map.</span>
+<span class="kw">export interface</span> HeatAssignments {
+  <span class="kw">readonly</span> hasHeat: <span class="kw">Map</span>&lt;<span class="kw">string</span>, <span class="kw">boolean</span>&gt;;
+  <span class="kw">readonly</span> coalConsumersByFurnace: <span class="kw">Map</span>&lt;<span class="kw">string</span>, <span class="kw">number</span>&gt;;
+  <span class="kw">readonly</span> assignedSource: <span class="kw">Map</span>&lt;<span class="kw">string</span>, <span class="kw">string</span>&gt;;
+<span class="new">  <span class="cm">/** Per-consumer throttle factor ∈ [0, 1] from the rev-16 §5.1</span></span>
+<span class="new"><span class="cm">   *  proportional-budget resolver. Missing key reads as 1.0 (the</span></span>
+<span class="new"><span class="cm">   *  backward-compat fallback for consumers without heatDemandKW). */</span></span>
+<span class="new">  <span class="kw">readonly</span> heatThrottleFactor: <span class="kw">Map</span>&lt;<span class="kw">string</span>, <span class="kw">number</span>&gt;;</span>
+}</pre></div>
+
+      <h3 class="sub">2.2 Resolver — proportional throttle</h3>
+      <p class="body">Append a fourth phase to
+        <code>resolveHeatAssignments</code> (after the existing priority
+        A/B/C assignment): walk per-source consumer lists, sum demand,
+        compute throttle.</p>
+      <div class="codepanel"><pre><span class="cm">// heat.ts — appended to resolveHeatAssignments after the existing loop.</span>
+<span class="kw">const</span> heatThrottleFactor = <span class="kw">new</span> Map&lt;<span class="kw">string</span>, <span class="kw">number</span>&gt;();
+
+<span class="cm">// Group consumers by their assigned source.</span>
+<span class="kw">const</span> consumersBySource = <span class="kw">new</span> Map&lt;<span class="kw">string</span>, PlacedBuilding[]&gt;();
+<span class="kw">for</span> (<span class="kw">const</span> consumer <span class="kw">of</span> sortedConsumers) {
+  <span class="kw">const</span> srcId = assignedSource.<span class="fn">get</span>(consumer.id);
+  <span class="kw">if</span> (!srcId) <span class="kw">continue</span>;  <span class="cm">// no source → hasHeat already false; throttle stays absent</span>
+  <span class="kw">const</span> list = consumersBySource.<span class="fn">get</span>(srcId) ?? [];
+  list.<span class="fn">push</span>(consumer);
+  consumersBySource.<span class="fn">set</span>(srcId, list);
+}
+
+<span class="cm">// For each source: sum demand, compute ratio, propagate per-consumer.</span>
+<span class="kw">for</span> (<span class="kw">const</span> [srcId, consumers] <span class="kw">of</span> consumersBySource) {
+  <span class="kw">const</span> src = buildings.<span class="fn">find</span>((b) =&gt; b.id === srcId)!;
+  <span class="kw">const</span> srcDef = BUILDING_DEFS[src.defId];
+  <span class="kw">const</span> supply = srcDef.heatSource?.thermalKW;
+
+  <span class="kw">if</span> (supply == <span class="kw">null</span>) {
+    <span class="cm">// Backward-compat: source has no thermalKW → boolean N:1 behaviour preserved.</span>
+    <span class="cm">// Every consumer this source serves throttles at 1.0.</span>
+    <span class="kw">for</span> (<span class="kw">const</span> c <span class="kw">of</span> consumers) heatThrottleFactor.<span class="fn">set</span>(c.id, 1);
+    <span class="kw">continue</span>;
+  }
+
+  <span class="kw">const</span> demand = consumers.<span class="fn">reduce</span>((acc, c) =&gt; {
+    <span class="kw">const</span> d = BUILDING_DEFS[c.defId].heatDemandKW ?? 0;
+    <span class="kw">return</span> acc + d;
+  }, 0);
+
+  <span class="kw">if</span> (demand &lt;= 0) {
+    <span class="cm">// No measured demand from any consumer → boolean-equivalent: all run.</span>
+    <span class="kw">for</span> (<span class="kw">const</span> c <span class="kw">of</span> consumers) heatThrottleFactor.<span class="fn">set</span>(c.id, 1);
+    <span class="kw">continue</span>;
+  }
+
+  <span class="kw">const</span> ratio = <span class="fn">Math.min</span>(1, supply / demand);
+  <span class="kw">for</span> (<span class="kw">const</span> c <span class="kw">of</span> consumers) {
+    <span class="cm">// Multiple sources potentially feeding the same consumer: take the max ratio.</span>
+    <span class="kw">const</span> prev = heatThrottleFactor.<span class="fn">get</span>(c.id) ?? 0;
+    heatThrottleFactor.<span class="fn">set</span>(c.id, <span class="fn">Math.max</span>(prev, ratio));
+  }
+}
+
+<span class="kw">return</span> { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor };</pre></div>
+
+      <h3 class="sub">2.3 Boolean fallback contract</h3>
+      <p class="body"><strong>Source without <code>thermalKW</code>:</strong>
+        every consumer gets throttle 1.0 (existing behaviour preserved).
+        <strong>Consumer without <code>heatDemandKW</code>:</strong>
+        consumer's contribution to demand is 0; doesn't affect other
+        consumers' ratio computation; the consumer itself runs at 1.0.
+        <strong>MIN_HEAT_FACTOR threshold:</strong> per rev-16 §5.1
+        pseudocode, consumers below a minimum ratio (e.g. 0.1) are gated
+        off entirely. Phase 3 ships <code>MIN_HEAT_FACTOR = 0.1</code> as
+        a const in <code>heat.ts</code>; the threshold is exposed for
+        tests but not configurable at runtime.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>thermalKW + heatDemandKW backfill</h2></div>
+      <p class="sec-intro">Rev-16 §5.3 table values. Sources first, then
+        consumers. Buildings not in the table get no value — they fall
+        through to the boolean N:1 gate.</p>
+
+      <h3 class="sub">3.1 Sources</h3>
+      <table class="tbl">
+        <thead><tr>
+          <th>Building</th>
+          <th>thermalKW</th>
+          <th>Citation</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">coal_furnace</td><td class="num">830</td><td class="mono">1 coal × 25 MJ/kg / 30 s = 833 kW (rev-16 §5.3 + verified bituminous HHV)</td></tr>
+          <tr><td class="slate">geothermal_vent</td><td class="num">1000</td><td class="mono">1 MW typical low-grade geothermal well (rev-16 §5.3 + IRENA datasheets)</td></tr>
+          <tr><td class="slate">plasma_heater</td><td class="num">184</td><td class="mono">200 kW elec × 92% transferred-arc efficiency (rev-16 §5.3 + ABB News)</td></tr>
+          <tr><td class="slate">fusion_core</td><td class="num">1000000</td><td class="mono">ITER Q=10 target: 50 MW heating → 500 MW fusion; thermal output 1 GW (rev-16 §5.3 + ITER Facts &amp; Figures)</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">3.2 Consumers</h3>
+      <table class="tbl">
+        <thead><tr>
+          <th>Building</th>
+          <th>heatDemandKW</th>
+          <th>Citation</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">coke_oven</td><td class="num">60</td><td class="mono">Single chamber 1100 °C carbonization (IspatGuru)</td></tr>
+          <tr><td class="slate">blast_furnace</td><td class="num">3000</td><td class="mono">Hot-blast preheat (1000-1300 °C; 2×2 small-class) (IspatGuru "Hot Blast Stoves")</td></tr>
+          <tr><td class="slate">electric_arc_furnace</td><td class="num">80</td><td class="mono">Residual heat for refractory hold-temp; main heat from electrodes</td></tr>
+          <tr><td class="slate">pyroforge</td><td class="num">200</td><td class="mono">Tetronics DC plasma reactor refractory hold-temp</td></tr>
+          <tr><td class="slate">carbon_forge</td><td class="num">150</td><td class="mono">PAN-fiber oxidation oven (Hexcel + Toray)</td></tr>
+          <tr><td class="slate">smelter</td><td class="num">50</td><td class="mono">DRI cupola hot-hold (rev-16 §12.6)</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Where to put the values.</strong> In
+        <code>building-defs.ts</code>, each affected entry gets
+        <code>heatSource: { ..., thermalKW: N }</code> (for sources) or
+        <code>heatDemandKW: N</code> (for consumers, top-level). Phase 1
+        added the optional schema fields; Phase 3 populates them.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2><code>computeRates</code> integration</h2></div>
+      <p class="sec-intro">The boolean <code>hasHeat</code> gate in
+        <code>computeRates</code> becomes a multiplicative
+        <code>heatThrottleFactor</code> applied to recipe rates.</p>
+
+      <h3 class="sub">4.1 Current gate</h3>
+      <p class="body"><code>economy.ts</code>'s
+        <code>computeRates</code> currently treats heat as a binary on/off
+        — a consumer with <code>requiresHeat: true</code> and
+        <code>hasHeat: false</code> contributes 0 to output rates. The
+        Phase 3 change keeps the boolean for the deficit-to-zero case
+        (consumer hits below <code>MIN_HEAT_FACTOR</code>) and adds the
+        multiplicative throttle for the partial-deficit case.</p>
+
+      <div class="codepanel"><pre><span class="cm">// economy.ts — inside computeRates, where the existing hasHeat gate sits.</span>
+<span class="cm">// BEFORE:</span>
+<span class="kw">if</span> (def.requiresHeat &amp;&amp; !heatAssignments.hasHeat.<span class="fn">get</span>(b.id)) {
+  recipeRateFactor = 0;
+}
+
+<span class="cm">// AFTER:</span>
+<span class="kw">if</span> (def.requiresHeat) {
+<span class="new">  <span class="kw">const</span> factor = heatAssignments.heatThrottleFactor.<span class="fn">get</span>(b.id) ?? 0;</span>
+<span class="new">  <span class="kw">if</span> (factor &lt; MIN_HEAT_FACTOR) {</span>
+<span class="new">    recipeRateFactor = 0;  <span class="cm">// brownout — consumer cannot operate</span></span>
+<span class="new">  } <span class="kw">else</span> {</span>
+<span class="new">    recipeRateFactor *= factor;  <span class="cm">// throttle the recipe rate</span></span>
+<span class="new">  }</span>
+}</pre></div>
+
+      <h3 class="sub">4.2 The boolean <code>hasHeat</code> stays</h3>
+      <p class="body">The existing inspector UI reads
+        <code>hasHeat</code> to render the "no heat source" tooltip. The
+        boolean stays as a derived value: <code>hasHeat ===
+        (heatThrottleFactor &gt;= MIN_HEAT_FACTOR)</code>. The resolver
+        derives it from the throttle map after the proportional-budget
+        loop completes.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>Drag retable — cubic invariant</h2></div>
+      <p class="sec-intro">Rev-16 §6.2 SHIP_STATS and HELICOPTER_STATS
+        tables replace the existing values. Per-tier
+        <code>maxKits</code>, <code>failureRate</code>,
+        <code>weatherMultiplier</code> stay unchanged (those are
+        progression knobs, not drag).</p>
+
+      <h3 class="sub">5.1 New SHIP_STATS</h3>
+      <p class="body">Invariant: <code>speed² × tilesPerFuel = 0.03125</code>.
+        Fuel/sec ratios T1→T4: 1×, 4.1×, 13.8×, 64×.</p>
+      <div class="codepanel"><pre><span class="kw">export const</span> SHIP_STATS: <span class="kw">Record</span>&lt;VehicleTier, VehicleStats&gt; = {
+  1: { speed: 0.25, tilesPerFuel: 0.5000, maxKits: 1, failureRate: 0.020, weatherMultiplier: 1.0 },
+  2: { speed: 0.40, tilesPerFuel: 0.1953, maxKits: 2, failureRate: 0.015, weatherMultiplier: 0.9 },
+  3: { speed: 0.60, tilesPerFuel: 0.0868, maxKits: 2, failureRate: 0.010, weatherMultiplier: 0.8 },
+  4: { speed: 1.00, tilesPerFuel: 0.0313, maxKits: 3, failureRate: 0.005, weatherMultiplier: 0.7 },
+};</pre></div>
+
+      <h3 class="sub">5.2 New HELICOPTER_STATS</h3>
+      <p class="body">Invariant: <code>speed² × tilesPerFuel = 0.121</code>.
+        Fuel/sec ratios T1→T4: 1×, 3.69×, 13.2×, 38×.</p>
+      <div class="codepanel"><pre><span class="kw">export const</span> HELICOPTER_STATS: <span class="kw">Record</span>&lt;VehicleTier, VehicleStats&gt; = {
+  1: { speed: 0.55, tilesPerFuel: 0.4000, maxKits: 1, failureRate: 0.025, weatherMultiplier: 1.3 },
+  2: { speed: 0.85, tilesPerFuel: 0.1675, maxKits: 1, failureRate: 0.015, weatherMultiplier: 1.1 },
+  3: { speed: 1.30, tilesPerFuel: 0.0716, maxKits: 2, failureRate: 0.008, weatherMultiplier: 0.9 },
+  4: { speed: 1.85, tilesPerFuel: 0.0354, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
+};</pre></div>
+
+      <h3 class="sub">5.3 Verification arithmetic</h3>
+      <p class="body">Ship T1: 0.25² × 0.50 = 0.03125. Ship T4: 1.00² × 0.0313 = 0.0313 ≈ 0.03125 ✓.
+        Heli T1: 0.55² × 0.40 = 0.121. Heli T4: 1.85² × 0.0354 = 0.1212 ✓.
+        Fuel/sec scaling T4/T1: ship (1.00/0.0313)/(0.25/0.5) = 32 / 0.5 = 64 ✓;
+        heli (1.85/0.0354)/(0.55/0.4) = 52.3 / 1.375 = 38 ✓.</p>
+
+      <h3 class="sub">5.4 maxKits / weatherMultiplier deltas</h3>
+      <p class="body">Per rev-16 §6.2: Ship T4 <code>maxKits</code> bumps
+        2 → 3 (the only progression change beyond drag); heli weather
+        multiplier T2 0.9 → 1.1 stays (heli is weather-vulnerable; rev-16
+        adjusts but keeps the spirit). The values above are verbatim from
+        rev-16 §6.2 tables.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2>Solar — deferred to Phase 6</h2></div>
+      <p class="sec-intro">Rev-16 §7.1 spec'd a sinusoidal 22% CF curve.
+        The mid-stream user directive reroutes this work to Phase 6 via
+        real-astronomy SunCalc (lat/lon-driven). Phase 3 leaves
+        <code>daynight.ts</code> alone.</p>
+
+      <div class="callout">
+        <div class="ct">Why defer</div>
+        Phase 6's spec replaces the trapezoidal curve directly with the
+        real-astronomy curve (latitude-dependent day length, real
+        sunrise/sunset, polar regions). Shipping rev-16 §7.1's sinusoidal
+        as a Phase 3 intermediate would mean: write code + tests for
+        sin-scale → re-verify everything → throw away in Phase 6. Net
+        wasted: ~3 h of subagent + ~1 h of review per the original §7.1
+        scope. Skipping the intermediate saves both.
+      </div>
+
+      <p class="body">The Phase 1 <code>playerLat</code> /
+        <code>playerLon</code> fields are in the schema and persisted as
+        <code>null</code>. Phase 3 does not touch them; Phase 6's map
+        picker provides the first non-null values.</p>
+
+      <p class="body"><strong>Existing trapezoidal preserved.</strong>
+        <code>solarMultiplier</code> at <a class="cite">daynight.ts:83</a>
+        is unchanged through Phase 3. Phase 6's commit replaces the body
+        wholesale.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>API change surface</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/heat.ts</div>
+          <div class="what"><span class="lead">Add <code>heatThrottleFactor: Map&lt;string, number&gt;</code> to <code>HeatAssignments</code>.</span> Resolver appends the proportional-throttle phase per spec §02. EMPTY_HEAT_ASSIGNMENTS gains an empty Map for the new field.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/heat.ts</div>
+          <div class="what"><span class="lead">Add <code>MIN_HEAT_FACTOR = 0.1</code> module-level const.</span> Exported for test fixtures.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts (computeRates)</div>
+          <div class="what"><span class="lead">Replace boolean <code>hasHeat</code> gate with throttle-multiplied recipeRateFactor</span> per spec §04. Single integration point — the existing <code>hasHeat</code> branch.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.ts</div>
+          <div class="what"><span class="lead">Populate <code>thermalKW</code> on 4 heat sources + <code>heatDemandKW</code> on 6 heat consumers</span> per spec §03 tables.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/settlement.ts:119, :126</div>
+          <div class="what"><span class="lead">Replace SHIP_STATS and HELICOPTER_STATS literals with rev-16 §6.2 cubic-invariant tables</span> per spec §05.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/heat.test.ts</div>
+          <div class="what"><span class="lead">New tests for proportional throttle:</span> 1-source / 3-consumers full feed (ratio = 1), 1-source / 5-consumers partial (ratio = 0.6 each), zero-supply backward-compat (boolean fallback). Existing N:1 boolean tests stay green via the fallback path.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/settlement.test.ts</div>
+          <div class="what"><span class="lead">Update T1-T4 ship + heli fixtures to cubic values.</span> Tests that asserted specific tilesPerFuel values get updated. Verification arithmetic test asserts invariant constancy across tiers.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.test.ts</div>
+          <div class="what"><span class="lead">Heat-throttle integration tests in computeRates.</span> Asserts recipe rate halves when one source feeds two over-demand consumers.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>Test plan</h2></div>
+
+      <h3 class="sub">8.1 Heat proportional throttle</h3>
+      <p class="body">Three fixtures: (a) plasma_heater (184 kW) + 3 coke_ovens (60 kW each = 180 kW demand) → throttle 1.0 for all three; (b) plasma_heater + 4 coke_ovens (240 kW demand) → throttle 184/240 = 0.767 for all four; (c) plasma_heater + 5 coke_ovens (300 kW demand) → throttle 0.61 for all five.</p>
+
+      <h3 class="sub">8.2 Heat boolean fallback</h3>
+      <p class="body">A heat source without <code>thermalKW</code> (e.g. a hypothetical un-tabled fantasy building) serving 2 consumers without <code>heatDemandKW</code> still produces <code>hasHeat: true</code> for both, throttle 1.0. Pre-Phase-3 boolean behaviour preserved.</p>
+
+      <h3 class="sub">8.3 Brownout at MIN_HEAT_FACTOR</h3>
+      <p class="body">fusion_core + 1 blast_furnace (1 GW vs 3 kW demand) → throttle 1.0 (capped). coal_furnace + 1 blast_furnace (830 kW vs 3000 kW) → throttle 0.277 → above the 0.1 threshold; consumer runs at 27.7% rate. coal_furnace + 5 blast_furnaces → throttle 0.055 → below threshold; all five brownout.</p>
+
+      <h3 class="sub">8.4 Drag cubic invariant</h3>
+      <p class="body"><code>for tier in 1..4: expect(speed² × tilesPerFuel ≈ invariant).toBeCloseTo(0.03125, 3)</code> for ships, same for helis at 0.121. Catches future tier-data drift.</p>
+
+      <h3 class="sub">8.5 Existing-suite continuity</h3>
+      <p class="body"><code>npm test</code> stays green. Settlement tests that asserted specific fuel-per-trip values will fail and get updated to the new tables — about ~6-12 such tests per grep.</p>
+
+      <h3 class="sub">8.6 Save-replay sanity</h3>
+      <p class="body"><code>scripts/profile-economy.ts /tmp/robot-islands-save.json</code> — runs without NaN, with sensible inventory deltas. Vehicles with existing in-flight trips finish per the new fuel curve.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Expected impact</h2></div>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Before</th>
+          <th>After Phase 3</th>
+          <th>Verified</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="slate">Heat resolution</td><td class="num warn">N:1 boolean (unlimited consumers/source)</td><td class="num ok">proportional throttle</td><td><span class="vbadge u">u</span> §8.1-8.3 tests</td></tr>
+          <tr><td class="slate">Plasma heater serving 3 coke ovens</td><td class="num">100% each</td><td class="num ok">100% each (180 ≤ 184)</td><td><span class="vbadge u">u</span> fixture</td></tr>
+          <tr><td class="slate">Plasma heater serving 5 coke ovens</td><td class="num warn">100% each (cheat)</td><td class="num ok">61% each</td><td><span class="vbadge u">u</span> fixture</td></tr>
+          <tr><td class="slate">Coal furnace + blast furnace</td><td class="num">100%</td><td class="num warn">27.7%</td><td><span class="vbadge u">u</span> fixture — surfaces a real bottleneck; Phase 6 retune may upgrade BF heat source</td></tr>
+          <tr><td class="slate">Drag invariant (ship T4/T1 fuel/s)</td><td class="num warn">~0.2× (current)</td><td class="num ok">64× (cubic)</td><td><span class="vbadge u">u</span> §8.4 test</td></tr>
+          <tr><td class="slate">SHIP_STATS T4 tilesPerFuel</td><td class="num">5</td><td class="num warn">0.0313</td><td><span class="vbadge u">u</span> table</td></tr>
+          <tr><td class="slate">Test count</td><td class="num">~2225 (post-Phase-2)</td><td class="num">~2255</td><td><span class="vbadge u">u</span> ~30 new fixtures</td></tr>
+          <tr><td class="slate">Solar curve</td><td class="num">trapezoidal</td><td class="num">trapezoidal (unchanged)</td><td><span class="vbadge u">u</span> Phase 6 replaces</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body"><strong>Gameplay implication.</strong> Heat-source
+        upgrades become a real progression knob — early-game coal furnace
+        no longer feeds an entire factory; mid-game requires plasma
+        heaters or geothermal vents. T4 ship is 64× more fuel-hungry
+        per second than T1 at top speed; route economics shift. Both
+        consequences are intentional per rev-16 §5.4 + §6.1.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Player's existing live save has a coal_furnace + blast_furnace that previously worked at 100% throughput; Phase 3 throttles it to 27.7%. The player notices a sudden production stall on next session.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Expected and load-bearing. The realism gate is a feature, not a bug. Phase 6 retune may bundle a tutorial hint surfacing the new heat-budget UI. Document as a known behaviour shift in the Phase 3 commit body.</div>
+        </div>
+        <div class="row">
+          <div class="cell">T4 ship's 64× fuel-burn breaks long-haul route economics overnight; players lose ships in transit when their fuel buffer runs dry.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Vehicles in flight at the moment of the schema change carry their committed fuel; the new fuel curve only applies to NEW trips. Phase 3 commits before any new launches use the new tables; no in-flight retroactive change.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A heat source has <code>thermalKW</code> set but the resolver throttles all consumers to 1.0 because no consumer has <code>heatDemandKW</code> set — the new throttle does nothing.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Phase 3's §03 populates demand on all 6 known consumers (coke_oven, BF, EAF, pyroforge, carbon_forge, smelter). Any future heat-consumer building must declare its demand or accept the 1.0 fallback. Plan adds a recommendation: linter / spot-check at PR time.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A consumer's heatDemandKW value disagrees with rev-16 §5.3 because the implementer reads the wrong row.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The §03 table in this spec is the canonical source — implementer copies values from there. Plan adds a snapshot test asserting populated values against the §03 table.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Existing settlement tests that compute "fuel-needed for trip" against current SHIP_STATS fail in unexpected ways after the cubic retable.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Plan Phase 3 includes a "test fixture sweep" sub-commit that updates affected fixtures. Each updated fixture is verified against the cubic invariant in §8.4 — no value is "made up", every value comes from the table.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The heat resolver appends a Map allocation on every call — small perf hit.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The existing resolver already allocates 3 Maps per call (hasHeat, coalConsumersByFurnace, assignedSource). A 4th Map is a small marginal cost. Profile in <code>scripts/profile-economy.ts</code> if a regression appears; the existing infrastructure handles this.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Non-goals</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Solar curve replacement</div>
+          <div class="dd">Phase 6 replaces the trapezoidal curve with real
+            astronomy (SunCalc + lat/lon). Phase 3 leaves
+            <code>daynight.ts</code> alone.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">CO₂ → weather coupling</div>
+          <div class="dd">Phase 6 reads <code>state.co2Kg</code> + applies storm-probability thresholds.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Power-output retune (coal_gen, biomass_plant)</div>
+          <div class="dd">Per rev-16 §10.3, coal_gen should output 50 unit (= 5 MW) at the current 2-s burn rate vs the existing 100 unit. Phase 3 doesn't touch <code>power.produces</code> — it's a separate balance call that lives in Phase 6's full-suite retune.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Per-building thermalKW backfill beyond the §5.3 table</div>
+          <div class="dd">Fantasy heat sources (e.g. neutronium-something) don't have rev-16 §5.3 entries. Phase 3 leaves them on the boolean fallback. Later phases may populate them as the corresponding fantasy chains land.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">UI surfacing of heatThrottleFactor</div>
+          <div class="dd">The inspector UI surface for "consumer is at 60% throttle" lands separately — the rev-16 §5 algorithm produces the data, but the inspector tooltip rewrite is out of scope for this phase. Existing "hasHeat: false" tooltip remains for full-brownout cases.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · Phase 3 of 7 · generated 2026-05-28 ·
+        companion plan at <code>plans/2026-05-28-si-units-phase3-engines-plan</code> ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16 §5 + §6</p>
+    </div>
+
+  </div>
+</body>
+</html>

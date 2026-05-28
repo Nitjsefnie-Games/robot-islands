@@ -1,0 +1,1431 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units rework Phase 1 — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 36px;
+      line-height: 1.16; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    h1 code {
+      font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px;
+      color: #C9B98A;
+    }
+    .prompt-box {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+    .vbadge { display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-right: 6px; }
+    .vbadge.v { background: #2D3A24; color: var(--olive); }
+    .vbadge.u { background: var(--oat); color: var(--warn); }
+    .vbadge.x { background: #4A2A1C; color: var(--rust); }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok     { color: var(--olive); }
+    .summary .v.warn   { color: var(--warn); }
+
+    .toc { background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    section { margin-bottom: 56px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 25px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    h3.sub {
+      font-family: var(--serif); font-weight: 500; font-size: 17px;
+      color: var(--slate); margin: 20px 0 8px;
+    }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 12px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 5px; }
+
+    /* milestone timeline */
+    .milestones { display: flex; flex-direction: column; gap: 0; }
+    .milestone { display: grid; grid-template-columns: 110px 28px 1fr;
+      gap: 0 18px; position: relative; }
+    .milestone .when { text-align: right; font-family: var(--mono);
+      font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+    .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+    .milestone .dot { width: 14px; height: 14px; border-radius: 50%;
+      background: var(--white); border: 3px solid var(--clay);
+      margin-top: 4px; flex-shrink: 0; }
+    .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+    .milestone .dot.gate { background: var(--warn); border-color: var(--warn); }
+    .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+    .milestone:last-child .line { display: none; }
+    .milestone .body { padding-bottom: 30px; }
+    .milestone .body h3 {
+      font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin-bottom: 4px;
+    }
+    .milestone .body p { font-size: 13.5px; color: var(--gray-500);
+      margin-bottom: 10px; max-width: 700px; }
+    .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .milestone .tag {
+      font-family: var(--mono); font-size: 11.5px;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+    }
+    .milestone .tag.est { color: var(--warn); }
+    .milestone .tag.ok  { color: var(--olive); }
+
+    /* phase card */
+    .phase-card {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 22px 26px;
+    }
+    .phase-card h4 {
+      font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      margin: 18px 0 8px;
+    }
+    .phase-card h4:first-child { margin-top: 0; }
+    .verify, .rollback {
+      background: var(--gray-150); border-radius: 8px;
+      padding: 12px 16px; font-size: 13.5px; margin-top: 14px;
+    }
+    .verify strong { color: var(--olive); }
+    .rollback strong { color: var(--warn); }
+
+    /* code panel */
+    .code {
+      background: #121110; border-radius: 12px;
+      padding: 16px 20px; overflow-x: auto; margin: 10px 0;
+    }
+    .code pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .code .kw  { color: var(--clay); }
+    .code .str { color: var(--olive); }
+    .code .cm  { color: var(--gray-500); }
+    .code .fn  { color: #C9B98A; }
+    .code .new { background: rgba(143, 165, 110, 0.13); display: block; }
+
+    /* table */
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; }
+    .tbl td.ok { color: var(--olive); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* callout */
+    .callout {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px;
+    }
+    .callout .ct {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px;
+    }
+    .callout.crit { border-left-color: var(--rust); }
+    .callout.crit .ct { color: var(--rust); }
+    .callout.ok { border-left-color: var(--olive); }
+    .callout.ok .ct { color: var(--olive); }
+
+    /* risk table */
+    .risks {
+      border: var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat); color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · robot-islands · SI-units rework · Phase 1 of 7</div>
+      <h1>Schema upgrade — <code>RESOURCE_META</code>, terminal tags, produced-resource invariant, lat/lon scaffold</h1>
+      <div class="prompt-box">
+        <span class="label">Spec</span>
+        Companion spec at <code>specs/2026-05-28-si-units-phase1-schema</code>.
+        Foundational schema for the 7-phase SI-units rework. Adds an exhaustive
+        <code>RESOURCE_META</code> record (mass / volume / energy / terminal
+        tag) for every <code>ResourceId</code>, a sparse <code>RECIPE_SPECULATIVE</code>
+        overlay tagging fantasy chains, optional <code>thermalKW</code> /
+        <code>heatDemandKW</code> on <code>BuildingDef</code>, <code>co2Kg</code>
+        on <code>IslandState</code>, <code>totalCo2Kg</code> / <code>playerLat</code> /
+        <code>playerLon</code> on <code>SerializedWorld</code>, and a v14 → v15
+        save-schema bump. <strong>Pure additive — no behaviour change.</strong>
+        Source of truth: <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Effort</div><div class="v accent">~12 h subagent</div></div>
+      <div class="cell"><div class="k">Phases</div><div class="v">7 (Phase 0–6)</div></div>
+      <div class="cell"><div class="k">Commits</div><div class="v">5 (Phases 1–5)</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v warn">v14 → v15</div></div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Phases</span>
+      <a href="#p0">Phase 0 — Baseline</a>
+      <a href="#p1">Phase 1 — RESOURCE_META + RECIPE_SPECULATIVE</a>
+      <a href="#p2">Phase 2 — Produced-resource invariant</a>
+      <a href="#p3">Phase 3 — BuildingDef heat fields</a>
+      <a href="#p4">Phase 4 — IslandState.co2Kg + world fields</a>
+      <a href="#p5">Phase 5 — v14 → v15 migration</a>
+      <a href="#p6">Phase 6 — Gate + metrics</a>
+      <a href="#vmatrix">Verification matrix</a>
+      <a href="#risks">Risks</a>
+      <a href="#notes">Implementation notes</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">00</span><h2>Milestone timeline</h2></div>
+      <p class="sec-intro">Five commits, each independently revertable. Phase 0
+        and Phase 6 are bookends (no commit, no code change). Phases 1–5 are
+        the load-bearing work; their order is dictated by dependency, not
+        sequence (Phase 2's invariant test reads Phase 1's
+        <code>RESOURCE_META</code>; Phase 5's migration seeds Phase 4's
+        fields).</p>
+
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">step 0</div>
+          <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 0 — Baseline (no commit)</h3>
+            <p>Read the spec end-to-end. Verify <code>npm test</code> is green
+              before touching anything. Capture pre-rework test count + build
+              time as Phase 6's diff target.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">npm test</span><span class="tag">npx tsc --noEmit</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 1</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 1 — <code>RESOURCE_META</code> + <code>RECIPE_SPECULATIVE</code> + <code>ResourceMeta</code> interface</h3>
+            <p>The biggest commit. Adds the exhaustive 252-entry Record + the
+              sparse fantasy overlay + the interface declaration in
+              <code>recipes.ts</code>. TypeScript exhaustiveness enforces
+              "every <code>ResourceId</code> has an entry." Nothing reads the
+              new tables yet — <code>npm test</code> stays green.</p>
+            <div class="tags"><span class="tag est">~5 h</span><span class="tag">recipes.ts</span><span class="tag">252 entries</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 2</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 2 — Produced-resource invariant (spec §05)</h3>
+            <p>Adds a new test in <code>recipes.test.ts</code> implementing
+              the spec §05 contract: every produced resource has a
+              <code>terminal</code> tag; tagged-<code>'consumed'</code> +
+              actually-produced ⇒ ≥ 1 recipe consumer. <strong>This is
+              additive</strong> — the existing producer/consumer tests at
+              <code>recipes.test.ts:81</code> + <code>balance.test.ts:126</code>
+              stay in place. (The plan calls this "F12 rewrite" mirroring the
+              spec, but it's a <em>new</em> test against the produced-side
+              of the graph; F12 is a v3-audit finding name, not an existing
+              test.)</p>
+            <div class="tags"><span class="tag est">~1.5 h</span><span class="tag">recipes.test.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 3</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 3 — <code>BuildingDef</code> heat fields</h3>
+            <p>Optional <code>thermalKW?</code> on <code>heatSource</code>,
+              optional <code>heatDemandKW?</code> at <code>BuildingDef</code>
+              top level. No values populated; Phase 3 of the rework (proper)
+              fills them. <code>tsc</code> stays clean.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">building-defs.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 4</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 4 — <code>IslandState.co2Kg</code> + <code>SerializedWorld</code> CO₂/lat/lon</h3>
+            <p>Three new <code>SerializedWorld</code> fields
+              (<code>totalCo2Kg</code>, <code>playerLat</code>,
+              <code>playerLon</code>) + one new <code>IslandState</code>
+              field (<code>co2Kg</code>). Seed in
+              <code>makeInitialIslandState</code> at
+              <a class="cite">world.ts:1059</a> and in the fresh-world factory
+              return at <a class="cite">world.ts:902</a> + the
+              <code>serializeWorld</code> output at
+              <a class="cite">persistence.ts:498</a>. Nothing reads the new
+              fields yet.</p>
+            <div class="tags"><span class="tag est">~1.5 h</span><span class="tag">economy.ts</span><span class="tag">world.ts</span><span class="tag">persistence.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 5</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 5 — Persistence v14 → v15</h3>
+            <p>Bump <code>SCHEMA_VERSION</code> from 14 → 15 at
+              <a class="cite">persistence.ts:79</a>. Add 14 to
+              <code>SUPPORTED_LOAD_VERSIONS</code>. Declare
+              <code>SerializedSnapshotV14</code>; write
+              <code>migrateV14toV15</code> beside the existing
+              <code>migrateV13toV14</code> at
+              <a class="cite">persistence.ts:420</a>. Wire into the migration
+              chain around line 603. Add three persistence tests per spec §9.4
+              (v14 fixture loads; v15 round-trips identity; live save
+              migrates).</p>
+            <div class="tags"><span class="tag est">~3 h</span><span class="tag">persistence.ts</span><span class="tag">persistence.test.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 6</div>
+          <div class="dot-col"><span class="dot gate"></span></div>
+          <div class="body">
+            <h3>Phase 6 — Gate + metrics (no commit)</h3>
+            <p>Full <code>npm test</code> + <code>npx tsc --noEmit</code>.
+              Capture baseline-vs-after metrics in the lead session's review
+              note: test count delta (+ ~10 expected), schema version (15),
+              build time (unchanged). <strong>Binding gate:</strong> zero
+              pre-existing tests fail; the only red is allowed in newly-added
+              tests during development. Phase 1 is data-only; any pre-existing
+              test failure indicates an accidental coupling, not a real
+              regression.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">npm test</span><span class="tag">tsc</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p0">
+      <div class="sec-head"><span class="num">01</span><h2>Phase 0 — Baseline (no commit)</h2></div>
+      <p class="sec-intro">Orientation. Confirm the suite is green before
+        Phase 1 lands. Read the spec end-to-end before touching code.</p>
+
+      <div class="phase-card">
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Read the spec in full:
+            <div class="code"><pre>cat docs/superpowers/specs/2026-05-28-si-units-phase1-schema.html</pre></div>
+          </li>
+          <li>Read the foundation doc §2 (calibration table), §3.5 (terminal-tag
+            schema), §3.6 (fantasy rescale), §8 Phase 1 portion:
+            <div class="code"><pre>less docs/superpowers/plans/2026-05-27-si-units-rework-foundation.html</pre></div>
+          </li>
+          <li>Confirm the suite is green:
+            <div class="code"><pre>npm test 2&gt;&amp;1 | tail -20</pre></div>
+            <p class="body">Capture the test count (spec §9.5 names ~2215 as
+              the expected baseline). If green, proceed to Phase 1. If red,
+              stop and fix the existing failures first — do not start Phase 1
+              on a red baseline.</p>
+          </li>
+          <li>Capture the <code>tsc</code> baseline (must compile clean under
+            strict + <code>noUnusedLocals</code> + <code>noUncheckedIndexedAccess</code>):
+            <div class="code"><pre>npx tsc --noEmit 2&gt;&amp;1 | tail -5</pre></div>
+          </li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0. <code>tsc --noEmit</code> exits 0. Test count recorded.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;N/A — no changes made.</div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p1">
+      <div class="sec-head"><span class="num">02</span><h2>Phase 1 — <code>RESOURCE_META</code> + <code>RECIPE_SPECULATIVE</code></h2></div>
+      <p class="sec-intro">The biggest commit in the phase. Adds three new
+        exports to <code>recipes.ts</code>: the <code>ResourceMeta</code>
+        interface, the exhaustive 252-entry <code>RESOURCE_META</code> record,
+        and the sparse <code>RECIPE_SPECULATIVE</code> overlay. Placed beside
+        the existing <code>XP_WEIGHT</code> table at
+        <a class="cite">recipes.ts:738</a> — same locality, same idiom.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts</code> — three additions near <code>XP_WEIGHT</code> (line 738). Read <code>ALL_RESOURCES</code> at <a class="cite">recipes.ts:417</a> + <code>RECIPES</code> at <a class="cite">recipes.ts:1309</a> to enumerate the resources that need entries.</li>
+        </ul>
+
+        <h4>Pseudocode</h4>
+        <div class="code"><pre><span class="cm">// recipes.ts — new module-level exports, near XP_WEIGHT at line 738.</span>
+<span class="new"><span class="kw">export interface</span> ResourceMeta {</span>
+<span class="new">  <span class="cm">/** Mass of one unit in kilograms. Required for every resource —</span></span>
+<span class="new"><span class="cm">   *  fantasy resources carry an anchor per rev-16 §3.6. */</span></span>
+<span class="new">  <span class="kw">readonly</span> massPerUnitKg: <span class="kw">number</span>;</span>
+<span class="new">  <span class="cm">/** Volume in litres. Optional — fluids + gases only. */</span></span>
+<span class="new">  <span class="kw">readonly</span> volumePerUnitL?: <span class="kw">number</span>;</span>
+<span class="new">  <span class="cm">/** Specific energy in kWh. Optional — energy carriers only. */</span></span>
+<span class="new">  <span class="kw">readonly</span> energyPerUnitKWh?: <span class="kw">number</span>;</span>
+<span class="new">  <span class="cm">/** Terminal classification per rev-16 §3.5.1. */</span></span>
+<span class="new">  <span class="kw">readonly</span> terminal:</span>
+<span class="new">    | <span class="str">'consumed'</span></span>
+<span class="new">    | <span class="str">`expansion-hook:${<span class="kw">string</span>}`</span></span>
+<span class="new">    | <span class="str">'gameplay-sink'</span>;</span>
+<span class="new">}</span>
+
+<span class="new"><span class="kw">export const</span> RESOURCE_META: <span class="kw">Readonly</span>&lt;<span class="kw">Record</span>&lt;ResourceId, ResourceMeta&gt;&gt; = {</span>
+<span class="new">  <span class="cm">// T0 raws (rev-16 §2.2; 1 kg/unit default).</span></span>
+<span class="new">  wood:        { massPerUnitKg: 1, terminal: <span class="str">'consumed'</span> },</span>
+<span class="new">  iron_ore:    { massPerUnitKg: 1, terminal: <span class="str">'consumed'</span> },</span>
+<span class="new">  coal:        { massPerUnitKg: 1, terminal: <span class="str">'consumed'</span> },</span>
+<span class="new">  stone:       { massPerUnitKg: 1, terminal: <span class="str">'consumed'</span> },</span>
+<span class="new">  <span class="cm">// …enumerate every entry in ALL_RESOURCES (recipes.ts:417 onward)…</span></span>
+<span class="new">  <span class="cm">// Fluids — both mass + volume declared.</span></span>
+<span class="new">  saltwater:   { massPerUnitKg: 1.03, volumePerUnitL: 1, terminal: <span class="str">'consumed'</span> },</span>
+<span class="new">  fresh_water: { massPerUnitKg: 1,    volumePerUnitL: 1, terminal: <span class="str">'consumed'</span> },</span>
+<span class="new">  crude_oil:   { massPerUnitKg: 0.85, volumePerUnitL: 1, terminal: <span class="str">'consumed'</span> },</span>
+<span class="new">  <span class="cm">// Energy carriers — mass + energy declared.</span></span>
+<span class="new">  battery:        { massPerUnitKg: 5, energyPerUnitKWh: 1, terminal: <span class="str">'consumed'</span> },</span>
+<span class="new">  casimir_energy: { massPerUnitKg: 0, energyPerUnitKWh: 1, terminal: <span class="str">'gameplay-sink'</span> },</span>
+<span class="new">  <span class="cm">// Expansion-hook orphans (rev-16 §3.5.3).</span></span>
+<span class="new">  mercury:     { massPerUnitKg: 1, terminal: <span class="str">'expansion-hook:amalgamation / chlor-alkali Hg-cell variant'</span> },</span>
+<span class="new">  natural_gas: { massPerUnitKg: 1, terminal: <span class="str">'expansion-hook:ammonia / syngas / gas-turbine'</span> },</span>
+<span class="new">  <span class="cm">// Gameplay sinks — milestone flags + 60 skill crystals.</span></span>
+<span class="new">  ascendant_core:    { massPerUnitKg: 1, terminal: <span class="str">'gameplay-sink'</span> },</span>
+<span class="new">  genesis_cell:      { massPerUnitKg: 1, terminal: <span class="str">'gameplay-sink'</span> },</span>
+<span class="new">  mining_crystal_t1: { massPerUnitKg: 1, terminal: <span class="str">'gameplay-sink'</span> },</span>
+<span class="new">  <span class="cm">// …all 60 crystals + ascendant_core + genesis_cell + scanner_sat (in-flight)…</span></span>
+<span class="new">};</span>
+
+<span class="new"><span class="kw">export const</span> RECIPE_SPECULATIVE: <span class="kw">Readonly</span>&lt;<span class="kw">Partial</span>&lt;<span class="kw">Record</span>&lt;RecipeId,</span>
+<span class="new">  <span class="str">'fantasy chemistry'</span> | <span class="str">'narrative cost'</span> | <span class="kw">true</span>&gt;&gt;&gt; = {</span>
+<span class="new">  <span class="cm">// rev-16 §9.1 fantasy chemistry — exhaustive list.</span></span>
+<span class="new">  pyroforge:                  <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  cryogenic_compute_center:   <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  carbon_forge:               <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  reality_forge:              <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  antimatter_refinery:        <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  casimir_tap:                <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  zero_point_extractor:       <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  dark_matter_collector:      <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  neutronium_compactor:       <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  strange_matter_assembler:   <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  quantum_foam_distillery:    <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  higgs_flux_resonator:       <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  spacetime_fragment_lattice: <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  eldritch_processor_loom:    <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  phase_converter_synth:      <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  memetic_core_assembler:     <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">  time_crystal_synthesizer:   <span class="str">'fantasy chemistry'</span>,</span>
+<span class="new">};</span></pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Read <code>ALL_RESOURCES</code> at <a class="cite">recipes.ts:417</a> in full to enumerate the 252 <code>ResourceId</code> values. The exhaustive <code>Record</code> type forces every one to appear in <code>RESOURCE_META</code>.</li>
+          <li>For each resource, decide <code>massPerUnitKg</code> from rev-16 §2.2:
+            <ul class="body">
+              <li><strong>Default:</strong> 1 kg/unit (matches the §2.1 coal anchor).</li>
+              <li><strong>Fluids</strong> (saltwater, fresh_water, crude_oil, kerosene, naphtha, diesel, fuel, lubricant, sulfuric_acid, ammonia, chlorine, hydrogen, oxygen, argon, nitrogen, lpg, cryo_coolant, cryogenic_hydrogen): density from rev-16 §2.2 table — most ≈ 1 kg/L; crude_oil ≈ 0.85; salt water 1.03; LPG / gases sub-kg. Declare <code>volumePerUnitL: 1</code> where the unit semantics are litre-based.</li>
+              <li><strong>Energy carriers</strong> (battery, capacitor, casimir_energy, plasma_charge): declare <code>energyPerUnitKWh</code> per rev-16 §2.2.</li>
+              <li><strong>Fantasy with sub-calibration</strong> (helium_3 at 1 g, antimatter at 1 ng per rev-16 §3.6): use the rescaled mass; the volume/energy fields stay omitted unless §2.2 names them.</li>
+            </ul>
+          </li>
+          <li>For each resource, decide <code>terminal</code> from rev-16 §3.5.3 + §3.5.5:
+            <ul class="body">
+              <li><code>'consumed'</code> — default for any resource appearing in at least one recipe's <code>inputs</code>. Includes all T0 raws (Mine / Logger output is the producer; downstream recipes consume).</li>
+              <li><code>'expansion-hook:&lt;note&gt;'</code> — mercury, natural_gas (currently produced, no consumer). Other Phase-2-introduced resources (co2, refinery_gas, wood_tar, water_vapor, mill_scale, cryo_coolant_vented) do NOT exist in <code>ResourceId</code> yet — Phase 1 covers only the current 252.</li>
+              <li><code>'gameplay-sink'</code> — 60 skill crystals (<code>mining_crystal_t1</code> through <code>oceanography_crystal_t3</code>), <code>ascendant_core</code>, <code>genesis_cell</code>, the in-flight satellite/drone states (<code>scanner_sat</code>, <code>relay_sat</code>, <code>sweeper_sat</code>, <code>repair_drone</code>).</li>
+            </ul>
+          </li>
+          <li>Cross-check terminal-tag decisions against the existing <code>TERMINAL_BYPRODUCTS</code> + <code>STARTER_TERRAIN</code> sets in <a class="cite">balance.test.ts:79</a>. Resources in <code>TERMINAL_BYPRODUCTS</code> that have no consumer today (e.g. <code>antimatter_propellant</code>, <code>repair_pack</code>, <code>orbital_insertion_package</code>) are candidates for <code>'gameplay-sink'</code> — flag any ambiguities.</li>
+          <li>Add <code>RECIPE_SPECULATIVE</code> with the 17 fantasy recipe ids from rev-16 §9.1 fantasy-chemistry list. Cross-check against <a class="cite">recipes.ts:1530</a>, <a class="cite">recipes.ts:1542</a>, <a class="cite">recipes.ts:1620</a>, <a class="cite">recipes.ts:1939</a>, <a class="cite">recipes.ts:1956</a> for the recipe-id spellings actually in the file (the spec gives canonical names; the codebase may differ in casing or subscript). Use grep:
+            <div class="code"><pre>grep -nE "(pyroforge|reality_forge|antimatter_refinery|casimir_tap|memetic|eldritch|phase_converter|time_crystal)" src/recipes.ts</pre></div>
+          </li>
+          <li>Run <code>npx tsc --noEmit</code> — the exhaustive <code>Record&lt;ResourceId, ResourceMeta&gt;</code> will fail compile if any resource is missing. Add the missing entry. Repeat until clean.</li>
+          <li>Run <code>npm test</code> — the suite must remain green. Phase 1's code is unread; tests don't touch <code>RESOURCE_META</code> yet.</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Exhaustiveness contract</div>
+          <code>Readonly&lt;Record&lt;ResourceId, ResourceMeta&gt;&gt;</code> is
+          the enforcement. A future <code>ResourceId</code> added without a
+          sibling <code>RESOURCE_META</code> entry fails
+          <code>npx tsc --noEmit</code>. <strong>Do not</strong> work around
+          this with <code>Partial</code> or index access — the strict map IS
+          the contract.
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx tsc --noEmit</code> exits 0. <code>npm test</code> green (test count unchanged from Phase 0). Manually count <code>RESOURCE_META</code> entries — should match <code>ALL_RESOURCES.length</code> (252 per spec §03). Spot-check 5 fantasy recipes in <code>RECIPE_SPECULATIVE</code> appear as keys in the <code>RECIPES</code> Partial map.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert &lt;commit-sha&gt;</code>. No save-file impact (no reads yet).</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(recipes): add RESOURCE_META exhaustive record + RECIPE_SPECULATIVE overlay
+
+Foundation for the 7-phase SI-units rework (Phase 1 of 7).
+
+  RESOURCE_META&lt;ResourceId, {massPerUnitKg, volumePerUnitL?,
+    energyPerUnitKWh?, terminal}&gt;: 252 entries, compile-time
+    exhaustive. Anchors per rev-16 §2.2 (1 unit coal = 1 kg).
+    Fluids declare volumePerUnitL; energy carriers declare
+    energyPerUnitKWh. The terminal field classifies every
+    resource as 'consumed', 'expansion-hook:&lt;note&gt;', or
+    'gameplay-sink' per rev-16 §3.5.
+
+  RECIPE_SPECULATIVE: sparse overlay tagging the 17 rev-16
+    §9.1 fantasy-chemistry recipes (pyroforge, reality_forge,
+    antimatter_refinery, casimir_tap, the 7 T5 raw extractors,
+    the 4 T5 component-synthesis recipes). Real-chemistry
+    recipes have no entry; the Phase-2 mass-balance auditor's
+    contract will be "if absent, must balance."
+
+No behaviour change — nothing reads the new tables yet.
+The Phase-2 mass-balance auditor (rev-16 §3) is the first
+consumer. Phase 2 of this rework's spec adds the produced-
+resource invariant test that reads RESOURCE_META.terminal.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase1-schema
+Foundation: docs/superpowers/plans/2026-05-27-si-units-rework-foundation rev-16
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p2">
+      <div class="sec-head"><span class="num">03</span><h2>Phase 2 — Produced-resource invariant</h2></div>
+      <p class="sec-intro">Adds a new vitest covering spec §05's contract.
+        <strong>This is the spec's "F12 rewrite"</strong> — but the F12 name
+        comes from the external v3 physics-balance audit, not from an existing
+        test in the codebase. Grep confirms: no source file references "F12"
+        or "dead-resource". The contract is new; the test is new. The
+        existing <code>recipes.test.ts:81</code> + <code>balance.test.ts:126</code>
+        producer/consumer tests stay in place (they check
+        consumed→produced; the new test checks produced→tagged→consumed).</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.test.ts</code> — append a new <code>describe('produced resources have terminal classification (rev-16 §3.5.4)', …)</code> block after the existing <a class="cite">recipes.test.ts:61</a> <code>describe('recipe graph completeness (step 18)', …)</code>.</li>
+        </ul>
+
+        <h4>Pseudocode</h4>
+        <div class="code"><pre><span class="kw">import</span> { ALL_RESOURCES, RECIPES, RESOURCE_META, <span class="kw">type</span> ResourceId } <span class="kw">from</span> <span class="str">'./recipes.js'</span>;
+
+<span class="kw">describe</span>(<span class="str">'produced resources have terminal classification (rev-16 §3.5.4)'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'every ResourceId has a RESOURCE_META entry with a valid terminal tag'</span>, () =&gt; {
+    <span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> ALL_RESOURCES) {
+      <span class="kw">const</span> meta = RESOURCE_META[r];
+      <span class="fn">expect</span>(meta, <span class="str">`${r} missing RESOURCE_META`</span>).<span class="fn">toBeDefined</span>();
+      <span class="fn">expect</span>(meta.massPerUnitKg, <span class="str">`${r} massPerUnitKg`</span>).<span class="fn">toBeGreaterThanOrEqual</span>(0);
+      <span class="kw">const</span> t = meta.terminal;
+      <span class="kw">const</span> ok = t === <span class="str">'consumed'</span>
+        || t === <span class="str">'gameplay-sink'</span>
+        || (<span class="kw">typeof</span> t === <span class="str">'string'</span> &amp;&amp; t.<span class="fn">startsWith</span>(<span class="str">'expansion-hook:'</span>));
+      <span class="fn">expect</span>(ok, <span class="str">`${r} terminal=${t}`</span>).<span class="fn">toBe</span>(<span class="kw">true</span>);
+    }
+  });
+
+  <span class="kw">it</span>(<span class="str">"tagged 'consumed' resources that are produced have ≥ 1 recipe consumer"</span>, () =&gt; {
+    <span class="kw">const</span> producedBy = <span class="kw">new</span> Map&lt;ResourceId, <span class="kw">string</span>[]&gt;();
+    <span class="kw">const</span> consumedBy = <span class="kw">new</span> Map&lt;ResourceId, <span class="kw">string</span>[]&gt;();
+    <span class="kw">for</span> (<span class="kw">const</span> [recipeId, recipe] <span class="kw">of</span> Object.<span class="fn">entries</span>(RECIPES)) {
+      <span class="kw">if</span> (!recipe) <span class="kw">continue</span>;
+      <span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> Object.<span class="fn">keys</span>(recipe.outputs) <span class="kw">as</span> ResourceId[]) {
+        producedBy.<span class="fn">set</span>(r, [...(producedBy.<span class="fn">get</span>(r) ?? []), recipeId]);
+      }
+      <span class="kw">for</span> (<span class="kw">const</span> rot <span class="kw">of</span> recipe.rotateOutputs ?? []) {
+        <span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> Object.<span class="fn">keys</span>(rot) <span class="kw">as</span> ResourceId[]) {
+          producedBy.<span class="fn">set</span>(r, [...(producedBy.<span class="fn">get</span>(r) ?? []), recipeId]);
+        }
+      }
+      <span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> Object.<span class="fn">keys</span>(recipe.inputs) <span class="kw">as</span> ResourceId[]) {
+        consumedBy.<span class="fn">set</span>(r, [...(consumedBy.<span class="fn">get</span>(r) ?? []), recipeId]);
+      }
+    }
+    <span class="kw">const</span> violations: <span class="kw">string</span>[] = [];
+    <span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> ALL_RESOURCES) {
+      <span class="kw">if</span> (RESOURCE_META[r].terminal === <span class="str">'consumed'</span> &amp;&amp; producedBy.<span class="fn">has</span>(r)) {
+        <span class="kw">if</span> (!consumedBy.<span class="fn">has</span>(r)) violations.<span class="fn">push</span>(r);
+      }
+    }
+    <span class="fn">expect</span>(violations, <span class="str">`tagged-'consumed' but unconsumed: ${violations.join(', ')}`</span>).<span class="fn">toEqual</span>([]);
+  });
+
+  <span class="kw">it</span>(<span class="str">'RECIPE_SPECULATIVE entries reference real RecipeIds'</span>, () =&gt; {
+    <span class="kw">for</span> (<span class="kw">const</span> recipeId <span class="kw">of</span> Object.<span class="fn">keys</span>(RECIPE_SPECULATIVE)) {
+      <span class="fn">expect</span>(RECIPES[recipeId <span class="kw">as</span> RecipeId], <span class="str">`${recipeId} not in RECIPES`</span>).<span class="fn">toBeDefined</span>();
+    }
+  });
+});</pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Locate <a class="cite">recipes.test.ts:61</a> — the existing <code>describe('recipe graph completeness (step 18)', …)</code> block. Append the new <code>describe</code> block after it.</li>
+          <li>Update the existing imports at <a class="cite">recipes.test.ts:22</a> to add <code>RESOURCE_META</code> + <code>RECIPE_SPECULATIVE</code> + <code>type RecipeId</code>.</li>
+          <li>Run <code>npx vitest run src/recipes.test.ts</code> — the new tests should pass on the catalog Phase 1 leaves. If "tagged-'consumed' but unconsumed" fails, the failing resource(s) need their tag re-evaluated in Phase 1 — likely they should be <code>'gameplay-sink'</code> or <code>'expansion-hook'</code>. Bounce back to Phase 1 and adjust (then re-commit Phase 1; Phase 2 lands after Phase 1's catalog is correct).</li>
+          <li>Run full <code>npm test</code> — must stay green.</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Why this isn't a rewrite of an existing test</div>
+          Grep confirms <code>balance.test.ts:126</code> and
+          <code>recipes.test.ts:81</code> check the <em>consumed→produced</em>
+          direction with hardcoded <code>STARTER_TERRAIN</code> +
+          <code>TERMINAL_BYPRODUCTS</code> sets. The new test covers the
+          <em>produced→tagged→consumed</em> direction — orthogonal. Both
+          contracts stay enforced. The <code>STARTER_TERRAIN</code> /
+          <code>TERMINAL_BYPRODUCTS</code> consolidation into
+          <code>RESOURCE_META.terminal</code> is deferred (out of Phase 1's
+          additive-only scope); flag it for a future cleanup pass.
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;Three new tests pass under <code>npx vitest run src/recipes.test.ts</code>. Full <code>npm test</code> stays green. Test-count delta = +3.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert &lt;commit-sha&gt;</code>. Phase 1's <code>RESOURCE_META</code> stays in place; only the test goes.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>test(recipes): produced-resource terminal-tag invariant (rev-16 §3.5.4)
+
+Adds three vitest cases enforcing the produced-side contract:
+  - every ResourceId has a RESOURCE_META entry with a valid
+    terminal tag (the spec §05 "F12 rewrite" contract)
+  - tagged-'consumed' + produced resources have ≥ 1 consumer
+  - RECIPE_SPECULATIVE keys are real RecipeIds
+
+Note: this is a NEW test, not a rewrite — the v3-audit
+"F12 dead-resource test" name maps to no existing source file
+(grep confirms). The existing recipes.test.ts:81 + balance.test.ts:126
+producer/consumer checks (consumed→produced direction) stay in
+place. The new test covers the orthogonal produced→tagged→consumed
+direction. Future cleanup: consolidate the hardcoded
+STARTER_TERRAIN + TERMINAL_BYPRODUCTS sets in balance.test.ts
+into RESOURCE_META.terminal (deferred — Phase 1 is additive only).
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase1-schema §05
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p3">
+      <div class="sec-head"><span class="num">04</span><h2>Phase 3 — <code>BuildingDef</code> heat fields</h2></div>
+      <p class="sec-intro">Two new optional fields on <code>BuildingDef</code>.
+        Phase 1 only declares them; Phase 3 of the rework (proper) wires the
+        proportional throttle. Tiny commit; can cluster with Phase 4 if the
+        implementer judges them artificially split.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/building-defs.ts</code> — extend the <code>BuildingDef</code> interface at <a class="cite">building-defs.ts:479</a> + the nested <code>heatSource</code> object at <a class="cite">building-defs.ts:548</a>.</li>
+        </ul>
+
+        <h4>Pseudocode</h4>
+        <div class="code"><pre><span class="cm">// building-defs.ts:479 — extend BuildingDef.</span>
+<span class="kw">export interface</span> BuildingDef {
+  <span class="cm">/* …existing fields… */</span>
+<span class="new">  <span class="cm">/** §heat-2026-05-28 Phase 1: thermal-kW demand on the consumer side.</span></span>
+<span class="new"><span class="cm">   *  Only buildings carrying `requiresHeat` declare this. Absent reads</span></span>
+<span class="new"><span class="cm">   *  as the rev-16 §5.3 category default, surfaced by Phase 3 of the</span></span>
+<span class="new"><span class="cm">   *  SI-units rework. Phase 1 declares the field; Phase 3 wires the</span></span>
+<span class="new"><span class="cm">   *  proportional-throttle resolver in heat.ts. */</span></span>
+<span class="new">  <span class="kw">readonly</span> heatDemandKW?: <span class="kw">number</span>;</span>
+  <span class="cm">/* …existing fields including the heatSource sub-object at line 548… */</span>
+  <span class="kw">readonly</span> heatSource?: {
+    <span class="kw">readonly</span> freeOrCoal: <span class="str">'free'</span> | <span class="str">'coal'</span>;
+    <span class="kw">readonly</span> coalPerCycle?: <span class="kw">number</span>;
+<span class="new">    <span class="cm">/** §heat-2026-05-28 Phase 1: thermal output in kW per rev-16 §5.3.</span></span>
+<span class="new"><span class="cm">     *  Phase 3 of the rework reads this to throttle consumers</span></span>
+<span class="new"><span class="cm">     *  proportionally when supply &lt; demand. Phase 1 declares; no</span></span>
+<span class="new"><span class="cm">     *  building populates it yet. */</span></span>
+<span class="new">    <span class="kw">readonly</span> thermalKW?: <span class="kw">number</span>;</span>
+  };
+  <span class="cm">/* …rest of existing fields… */</span>
+}</pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Open <code>src/building-defs.ts</code>; locate the <code>BuildingDef</code> interface at line 479.</li>
+          <li>Add the <code>heatDemandKW?: number</code> optional field near the existing <code>requiresHeat</code> boolean (grep <code>requiresHeat</code> first to confirm location — it's a sibling field of <code>heatSource</code>, not nested).</li>
+          <li>Inside the <code>heatSource</code> sub-object at line 548, add <code>thermalKW?: number</code> as a third readonly field alongside <code>freeOrCoal</code> + <code>coalPerCycle</code>.</li>
+          <li>Run <code>npx tsc --noEmit</code> — both fields are optional, so no existing call site breaks. Must compile clean.</li>
+          <li>Run <code>npm test</code> — green.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx tsc --noEmit</code> exits 0. <code>npm test</code> green. No existing building definition populates the new fields (grep <code>thermalKW</code> and <code>heatDemandKW</code> — should show only the interface declarations).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert &lt;commit-sha&gt;</code>. Trivial; no consumers.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(building-defs): declare thermalKW / heatDemandKW (rev-16 §5)
+
+Two optional kW fields on BuildingDef for the Phase 3
+proportional-throttle resolver in the SI-units rework:
+
+  - BuildingDef.heatSource.thermalKW?: thermal-kW output of
+    heat sources (Coke Oven, Plasma Heater, Fusion Core, etc.)
+  - BuildingDef.heatDemandKW?: thermal-kW demand of consumers
+    (Blast Furnace, Smelter, Crucible, etc.)
+
+Phase 1 declares; no building populates either field yet.
+Phase 3 of the rework wires the resolver that replaces the
+boolean N:1 adjacency gate at heat.ts:124-205 with a
+proportional throttle.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase1-schema §3.3
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p4">
+      <div class="sec-head"><span class="num">05</span><h2>Phase 4 — <code>IslandState.co2Kg</code> + <code>SerializedWorld</code> CO₂/lat/lon</h2></div>
+      <p class="sec-intro">Four new fields total — one on <code>IslandState</code>,
+        three on <code>SerializedWorld</code>. Seed in the live factories so
+        a fresh game has correct defaults; the migration in Phase 5 covers
+        old saves.</p>
+
+      <div class="phase-card">
+        <h4>Files (3 source touches)</h4>
+        <ul class="body">
+          <li><code>src/economy.ts:216</code> — extend <code>IslandState</code> with <code>co2Kg: number</code>.</li>
+          <li><code>src/world.ts:1059</code> — seed <code>co2Kg: 0</code> in <code>makeInitialIslandState</code>.</li>
+          <li><code>src/world.ts:902</code> — the fresh-world factory return literal. Three new <code>WorldSnapshot</code> fields seeded: <code>totalCo2Kg: 0</code>, <code>playerLat: null</code>, <code>playerLon: null</code>.</li>
+          <li><code>src/world.ts</code> — the <code>WorldSnapshot</code> type itself (locate via grep <code>type WorldSnapshot</code> or <code>interface WorldSnapshot</code>). Extend with the three new fields, matching the optional / required pattern in <code>SerializedWorld</code>.</li>
+          <li><code>src/persistence.ts:131</code> — extend <code>SerializedWorld</code> with three required fields.</li>
+          <li><code>src/persistence.ts:498</code> area — extend <code>serializeWorld</code>'s output literal with the three fields read from <code>world</code>.</li>
+          <li><code>src/persistence.ts:578</code> area — extend <code>deserializeWorld</code> to seed/preserve the three fields on load.</li>
+        </ul>
+
+        <h4>Interface extensions</h4>
+        <div class="code"><pre><span class="cm">// economy.ts:216 — extend IslandState (immediately after auraAmpCacheVersion at line 257).</span>
+<span class="kw">export interface</span> IslandState {
+  <span class="cm">/* …through line 257 (auraAmpCacheVersion)… */</span>
+<span class="new">  <span class="cm">/** §si-units-2026-05-28 Phase 1: per-island cumulative CO₂ emitted in kg.</span></span>
+<span class="new"><span class="cm">   *  Per rev-16 §7.2, Phase 2 of the rework adds per-recipe emissions here</span></span>
+<span class="new"><span class="cm">   *  (limekiln 0.44 kg/limestone process + 0.33 kg/CaO fuel; coal_gen</span></span>
+<span class="new"><span class="cm">   *  2.42 kg/coal; biomass_plant 1.83 kg/wood biogenic; etc.). Phase 6</span></span>
+<span class="new"><span class="cm">   *  reads for weather thresholds; Phase 5 drains via wastewater_treatment</span></span>
+<span class="new"><span class="cm">   *  + exhaust_scrubber. Persisted across save/load. */</span></span>
+<span class="new">  co2Kg: <span class="kw">number</span>;</span>
+  <span class="cm">/* …rest of existing fields… */</span>
+}
+
+<span class="cm">// persistence.ts:131 — extend SerializedWorld.</span>
+<span class="kw">export interface</span> SerializedWorld {
+  <span class="cm">/* …existing fields through line 167 (depthRevealedCells?)… */</span>
+<span class="new">  <span class="cm">/** §si-units Phase 1: global CO₂ pool in kg (sum of island co2Kg +</span></span>
+<span class="new"><span class="cm">   *  exogenous emissions from Phase 2). Read by Phase 6 weather coupling.</span></span>
+<span class="new"><span class="cm">   *  Default 0 on fresh world / v14 migration. */</span></span>
+<span class="new">  <span class="kw">readonly</span> totalCo2Kg: <span class="kw">number</span>;</span>
+<span class="new">  <span class="cm">/** §si-units Phase 1: player geo-latitude in degrees, [-90, +90].</span></span>
+<span class="new"><span class="cm">   *  Null until the Phase-6 map picker sets it. Phase 3's sin-scale solar</span></span>
+<span class="new"><span class="cm">   *  ignores; Phase 6's real-astronomy solar consumes. */</span></span>
+<span class="new">  <span class="kw">readonly</span> playerLat: <span class="kw">number</span> | <span class="kw">null</span>;</span>
+<span class="new">  <span class="cm">/** §si-units Phase 1: player geo-longitude in degrees, [-180, +180]. */</span></span>
+<span class="new">  <span class="kw">readonly</span> playerLon: <span class="kw">number</span> | <span class="kw">null</span>;</span>
+}</pre></div>
+
+        <h4>Factory seed — world.ts:1059</h4>
+        <div class="code"><pre>    unlockedNodes: <span class="kw">new</span> Set(),
+    unlockedEdges: <span class="kw">new</span> Set(),
+    auraAmpVersion: 0,
+    auraAmpCache: <span class="kw">null</span>,
+    auraAmpCacheVersion: -1,
+<span class="new">    co2Kg: 0,</span>
+    funnelPending: startingFunnelPending(),
+    <span class="cm">/* …existing fields continue… */</span></pre></div>
+
+        <h4>Fresh-world factory — world.ts:902</h4>
+        <p class="body">The current return is a single dense literal. Reformat
+          inline or break to multi-line; the new fields slot in beside
+          <code>commPackets</code>.</p>
+        <div class="code"><pre>  <span class="kw">return</span> {
+    islands, drones: [], routes: [], vehicles: [], revealedCells,
+    seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [],
+    tutorialState: { completed: <span class="kw">new</span> Set(), current: <span class="str">'place_solar'</span> },
+    endgameState: { achieved: <span class="kw">new</span> Set&lt;VictoryCondition&gt;(), firstAchievedMs: <span class="kw">null</span> },
+    latticeActive: <span class="kw">false</span>, latticeNodeIslands: [], commPackets: [],
+<span class="new">    totalCo2Kg: 0,</span>
+<span class="new">    playerLat: <span class="kw">null</span>,</span>
+<span class="new">    playerLon: <span class="kw">null</span>,</span>
+    generatedCells, oceanCells, depthRevealedCells,
+  };</pre></div>
+
+        <h4>serializeWorld — persistence.ts:498</h4>
+        <div class="code"><pre>  <span class="kw">return</span> {
+    v: SCHEMA_VERSION,
+    savedAt: nowWallMs,
+    savedAtPerf: nowPerfMs,
+    world: {
+      islands,
+      seed: world.seed,
+      <span class="cm">/* …drones, routes, vehicles, revealedCells, satellites, etc.… */</span>
+      commPackets: [...world.commPackets],
+<span class="new">      totalCo2Kg: world.totalCo2Kg,</span>
+<span class="new">      playerLat: world.playerLat,</span>
+<span class="new">      playerLon: world.playerLon,</span>
+      generatedCells: world.generatedCells ? [...world.generatedCells].<span class="fn">sort</span>() : <span class="kw">undefined</span>,
+      <span class="cm">/* …oceanCells, depthRevealedCells… */</span>
+    },
+    islandStates: <span class="cm">/* …already extended above by the co2Kg field flowing through ...rest… */</span>,
+  };</pre></div>
+
+        <p class="body"><strong>IslandState serialization is automatic.</strong>
+          The destructure-then-spread pattern at <a class="cite">persistence.ts:490</a>
+          (<code>...rest, unlockedNodes: [...], unlockedEdges: [...], socketBindings: [...]</code>)
+          carries every other field through unchanged. Adding
+          <code>co2Kg</code> to <code>IslandState</code> means it flows through
+          via <code>...rest</code> automatically — no edit needed on serialize
+          for the per-island side. Deserialize at
+          <a class="cite">persistence.ts:578</a> needs to be checked: confirm
+          the rebuild walks <code>...s, …</code> not field-by-field.</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Extend <code>IslandState</code> at <a class="cite">economy.ts:216</a>. Place <code>co2Kg</code> after the cache fields (line ~257) — clusters with other "per-island metrics" semantically.</li>
+          <li>Seed <code>co2Kg: 0</code> in <code>makeInitialIslandState</code> at <a class="cite">world.ts:1059</a>.</li>
+          <li>Locate the <code>WorldSnapshot</code> type in <code>world.ts</code> (grep). Add the three optional/required fields matching <code>SerializedWorld</code>'s shape (the live type usually mirrors <code>SerializedWorld</code> with Maps/Sets instead of arrays — confirm by reading the existing type).</li>
+          <li>Extend the fresh-world factory return at <a class="cite">world.ts:902</a> with the three default-valued fields.</li>
+          <li>Extend <code>SerializedWorld</code> at <a class="cite">persistence.ts:131</a> with the three readonly fields.</li>
+          <li>Extend <code>serializeWorld</code>'s output literal at <a class="cite">persistence.ts:498</a> to copy the three fields from the live world.</li>
+          <li>Confirm <code>deserializeWorld</code> at <a class="cite">persistence.ts:578</a> propagates the three fields onto the live world. If the rebuild uses spread, no edit needed; if field-by-field, add three assignments.</li>
+          <li>Run <code>npx tsc --noEmit</code>. Because <code>SerializedWorld</code>'s three new fields are required (not <code>?</code>), the <code>serializeWorld</code> literal must declare them. The compiler enforces this; fix any missed site by name.</li>
+          <li>Run <code>npm test</code>. The persistence round-trip tests will likely fail on the v14 path until Phase 5 lands the migration — that's expected (Phase 5 will seed defaults for old saves). Confirm only the v14-load test fails; new-save / round-trip tests should pass because Phase 4's factory seeds the fields on fresh worlds.</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Two seed sites, not one</div>
+          The advisor flagged this gap: the migration alone doesn't cover
+          fresh worlds. The seed must land BOTH in
+          <code>makeInitialIslandState</code> /
+          <code>fresh-world factory at world.ts:902</code> (live path)
+          AND in <code>migrateV14toV15</code> (old-save path, Phase 5).
+          Phase 4 covers the live path; Phase 5 covers the migration path.
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx tsc --noEmit</code> exits 0. <code>npm test</code> mostly green — only the v14 persistence-load test should fail (and will pass after Phase 5). Spot-check: a fresh world (no save) loads and has <code>world.totalCo2Kg === 0</code>, <code>world.playerLat === null</code>, every island has <code>state.co2Kg === 0</code>.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert &lt;commit-sha&gt;</code>. Phases 1-3 stay in place.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(state): add co2Kg + totalCo2Kg + playerLat/Lon fields (rev-16 §7 + Phase 6 prep)
+
+Adds the runtime state slots the SI-units rework consumes
+from Phase 2 onward:
+
+  - IslandState.co2Kg: per-island cumulative CO₂ in kg.
+    Phase 2 of the rework increments per-recipe per rev-16 §7.2.
+  - SerializedWorld.totalCo2Kg: global pool consumed by Phase 6
+    weather coupling (storm probability + biome event modifiers).
+  - SerializedWorld.playerLat / playerLon: number | null. Geographic
+    location seeds the Phase 6 real-astronomy solar curve.
+    Null sentinel until the Phase 6 map picker UI lands.
+
+Seeded in:
+  - makeInitialIslandState (world.ts:1059) — co2Kg: 0
+  - fresh-world factory return (world.ts:902) — totalCo2Kg: 0,
+    playerLat: null, playerLon: null
+  - serializeWorld (persistence.ts:498) — pass through from live world
+
+No behaviour change — nothing reads the fields yet. Phase 1
+declares; Phase 2+ wires consumers.
+
+Save-format compatibility: v14 saves break here because the
+new SerializedWorld fields are required. Phase 5's
+migrateV14toV15 lands next to seed defaults for old saves.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase1-schema §3.4-3.5
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p5">
+      <div class="sec-head"><span class="num">06</span><h2>Phase 5 — Persistence v14 → v15 migration</h2></div>
+      <p class="sec-intro">Bump the schema version, declare the v14 input
+        shape, write the additive migration, wire it into the load chain,
+        and add the three persistence tests per spec §9.4.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/persistence.ts:79</code> — bump <code>SCHEMA_VERSION</code> from 14 to 15.</li>
+          <li><code>src/persistence.ts:87</code> — add 14 to <code>SUPPORTED_LOAD_VERSIONS</code>.</li>
+          <li><code>src/persistence.ts:~415</code> — declare <code>SerializedSnapshotV14</code> type alias (mirror the <code>SerializedSnapshotV13</code> idiom at <a class="cite">persistence.ts:411</a>).</li>
+          <li><code>src/persistence.ts:~420</code> — write <code>migrateV14toV15</code> beside the existing <code>migrateV13toV14</code>.</li>
+          <li><code>src/persistence.ts:~603</code> — wire <code>migrateV14toV15</code> into <code>loadWorld</code>'s migration chain.</li>
+          <li><code>src/persistence.test.ts</code> + <code>src/persistence-load.test.ts</code> — add three tests per spec §9.4.</li>
+          <li><code>src/fixtures/v14-minimal.json</code> (new) — minimal hand-rolled v14 snapshot for the round-trip test.</li>
+        </ul>
+
+        <h4>Schema-version bump + migration</h4>
+        <div class="code"><pre><span class="cm">// persistence.ts:79</span>
+<span class="kw">export const</span> SCHEMA_VERSION = <span class="new">15</span> <span class="kw">as const</span>;
+
+<span class="cm">// persistence.ts:87 — add 15; keep 7..14 for backward load support.</span>
+<span class="kw">export const</span> SUPPORTED_LOAD_VERSIONS: <span class="kw">ReadonlySet</span>&lt;<span class="kw">number</span>&gt; =
+  <span class="kw">new</span> Set([7, 8, 9, 10, 11, 12, 13, 14<span class="new">, 15</span>]);
+
+<span class="cm">// persistence.ts:~415 — beside SerializedSnapshotV13 at line 411.</span>
+<span class="new"><span class="cm">/** v14 top-level snapshot — structurally identical to v15 SaveSnapshot</span></span>
+<span class="new"><span class="cm"> *  except for the missing co2Kg / totalCo2Kg / playerLat / playerLon</span></span>
+<span class="new"><span class="cm"> *  fields. The v14 → v15 migration is purely additive (no field rename,</span></span>
+<span class="new"><span class="cm"> *  no removal, no per-resource backfill mismatch). */</span></span>
+<span class="new"><span class="kw">export type</span> SerializedSnapshotV14 = <span class="kw">Omit</span>&lt;SaveSnapshot, <span class="str">'v'</span> | <span class="str">'world'</span> | <span class="str">'islandStates'</span>&gt; &amp; {</span>
+<span class="new">  <span class="kw">readonly</span> v: 14;</span>
+<span class="new">  <span class="kw">readonly</span> world: <span class="kw">Omit</span>&lt;SerializedWorld, <span class="str">'totalCo2Kg'</span> | <span class="str">'playerLat'</span> | <span class="str">'playerLon'</span>&gt;;</span>
+<span class="new">  <span class="kw">readonly</span> islandStates: <span class="kw">ReadonlyArray</span>&lt;{</span>
+<span class="new">    <span class="kw">readonly</span> id: <span class="kw">string</span>;</span>
+<span class="new">    <span class="kw">readonly</span> state: <span class="kw">Omit</span>&lt;SerializedIslandState, <span class="str">'co2Kg'</span>&gt;;</span>
+<span class="new">  }&gt;;</span>
+<span class="new">};</span>
+
+<span class="new"><span class="cm">/** v14 → v15: additive — seeds co2Kg, totalCo2Kg, playerLat, playerLon</span></span>
+<span class="new"><span class="cm"> *  with safe defaults (0 / 0 / null / null). No field removed or renamed. */</span></span>
+<span class="new"><span class="kw">export function</span> <span class="fn">migrateV14toV15</span>(s: SerializedSnapshotV14): SaveSnapshot {</span>
+<span class="new">  <span class="kw">return</span> {</span>
+<span class="new">    ...s,</span>
+<span class="new">    v: 15 <span class="kw">as const</span>,</span>
+<span class="new">    world: {</span>
+<span class="new">      ...s.world,</span>
+<span class="new">      totalCo2Kg: 0,</span>
+<span class="new">      playerLat: <span class="kw">null</span>,</span>
+<span class="new">      playerLon: <span class="kw">null</span>,</span>
+<span class="new">    },</span>
+<span class="new">    islandStates: s.islandStates.<span class="fn">map</span>((entry) =&gt; ({</span>
+<span class="new">      ...entry,</span>
+<span class="new">      state: { ...entry.state, co2Kg: 0 },</span>
+<span class="new">    })),</span>
+<span class="new">  } <span class="kw">as unknown as</span> SaveSnapshot;</span>
+<span class="new">}</span>
+
+<span class="cm">// persistence.ts:~603 — wire into loadWorld's migration chain.</span>
+<span class="cm">// existing chain handles v7..v13 → v14; add the v14 → v15 step.</span>
+<span class="kw">if</span> (snapshot.v === 13) {
+  snapshot = <span class="fn">migrateV13toV14</span>(snapshot <span class="kw">as unknown as</span> SerializedSnapshotV13);
+}
+<span class="new"><span class="kw">if</span> (snapshot.v === 14) {</span>
+<span class="new">  snapshot = <span class="fn">migrateV14toV15</span>(snapshot <span class="kw">as unknown as</span> SerializedSnapshotV14);</span>
+<span class="new">}</span></pre></div>
+
+        <h4>Tests — three cases per spec §9.4</h4>
+        <div class="code"><pre><span class="kw">import</span> { readFileSync } <span class="kw">from</span> <span class="str">'node:fs'</span>;
+<span class="kw">import</span> { existsSync } <span class="kw">from</span> <span class="str">'node:fs'</span>;
+
+<span class="kw">describe</span>(<span class="str">'persistence v14 → v15'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'v14 fixture loads cleanly into v15 with new fields seeded'</span>, () =&gt; {
+    <span class="kw">const</span> v14 = <span class="kw">JSON</span>.<span class="fn">parse</span>(<span class="fn">readFileSync</span>(<span class="str">'src/fixtures/v14-minimal.json'</span>, <span class="str">'utf8'</span>));
+    <span class="kw">const</span> result = <span class="fn">deserializeWorld</span>(v14);
+    <span class="fn">expect</span>(result).<span class="fn">not</span>.<span class="fn">toBeNull</span>();
+    <span class="fn">expect</span>(result!.world.totalCo2Kg).<span class="fn">toBe</span>(0);
+    <span class="fn">expect</span>(result!.world.playerLat).<span class="fn">toBeNull</span>();
+    <span class="fn">expect</span>(result!.world.playerLon).<span class="fn">toBeNull</span>();
+    <span class="kw">for</span> (<span class="kw">const</span> entry <span class="kw">of</span> result!.islandStates) {
+      <span class="fn">expect</span>(entry.state.co2Kg).<span class="fn">toBe</span>(0);
+    }
+  });
+
+  <span class="kw">it</span>(<span class="str">'v15 round-trips byte-identical through serialize → deserialize → serialize'</span>, () =&gt; {
+    <span class="kw">const</span> { world, islandStates } = <span class="fn">freshWorldForTest</span>();   <span class="cm">// existing helper</span>
+    <span class="kw">const</span> s1 = <span class="fn">serializeWorld</span>(world, islandStates, <span class="fn">Date.now</span>(), <span class="fn">performance.now</span>());
+    <span class="kw">const</span> reloaded = <span class="fn">deserializeWorld</span>(s1);
+    <span class="kw">const</span> s2 = <span class="fn">serializeWorld</span>(reloaded!.world, reloaded!.islandStates, s1.savedAt, s1.savedAtPerf);
+    <span class="fn">expect</span>(<span class="kw">JSON</span>.<span class="fn">parse</span>(<span class="kw">JSON</span>.<span class="fn">stringify</span>(s2))).<span class="fn">toEqual</span>(<span class="kw">JSON</span>.<span class="fn">parse</span>(<span class="kw">JSON</span>.<span class="fn">stringify</span>(s1)));
+  });
+
+  <span class="kw">it</span>.<span class="fn">skipIf</span>(!<span class="fn">existsSync</span>(<span class="str">'/tmp/robot-islands-save.json'</span>))(
+    <span class="str">'live /tmp/robot-islands-save.json migrates v14 → v15 with zero defaults'</span>,
+    () =&gt; {
+      <span class="kw">const</span> raw = <span class="fn">readFileSync</span>(<span class="str">'/tmp/robot-islands-save.json'</span>, <span class="str">'utf8'</span>);
+      <span class="kw">const</span> result = <span class="fn">deserializeWorld</span>(<span class="kw">JSON</span>.<span class="fn">parse</span>(raw));
+      <span class="fn">expect</span>(result).<span class="fn">not</span>.<span class="fn">toBeNull</span>();
+      <span class="fn">expect</span>(result!.world.totalCo2Kg).<span class="fn">toBe</span>(0);
+      <span class="fn">expect</span>(result!.world.playerLat).<span class="fn">toBeNull</span>();
+      <span class="fn">expect</span>(result!.world.playerLon).<span class="fn">toBeNull</span>();
+    },
+  );
+});</pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Bump <code>SCHEMA_VERSION = 15</code> at <a class="cite">persistence.ts:79</a>.</li>
+          <li>Add <code>15</code> to <code>SUPPORTED_LOAD_VERSIONS</code> at <a class="cite">persistence.ts:87</a> (keep 7..14 for backward compatibility).</li>
+          <li>Declare <code>SerializedSnapshotV14</code> as the precise v14 input shape. Mirror the <code>SerializedSnapshotV13</code> idiom at <a class="cite">persistence.ts:411</a> but use <code>Omit</code> for the four new fields so the type tells the truth (it doesn't have them).</li>
+          <li>Write <code>migrateV14toV15</code> beside <code>migrateV13toV14</code> at <a class="cite">persistence.ts:420</a>. Use spread + per-island map per the pseudocode above. Cast through <code>as unknown as SaveSnapshot</code> matches the existing migration idiom.</li>
+          <li>Wire the migration into <code>loadWorld</code>'s chain at <a class="cite">persistence.ts:603</a>. The pattern is <code>if (snapshot.v === N) snapshot = migrateVNtoVN+1(...)</code>; chain it after the existing v13 → v14 step.</li>
+          <li>Create <code>src/fixtures/v14-minimal.json</code> — a hand-rolled v14 snapshot covering the schema shape (single island, empty inventory, no satellites). Use the JSON from a current save dump as a template; replace <code>"v": 15</code> with <code>"v": 14</code> and strip the four new fields (<code>totalCo2Kg</code>, <code>playerLat</code>, <code>playerLon</code>, per-island <code>co2Kg</code>) to make it genuinely v14-shaped.</li>
+          <li>Add the three tests per spec §9.4 in <code>src/persistence.test.ts</code> (or split — fixture load + round-trip in <code>persistence.test.ts</code>, live-save migration in <code>persistence-load.test.ts</code>).</li>
+          <li>Run <code>npx vitest run src/persistence.test.ts src/persistence-load.test.ts</code>. The three new tests must pass. The third test uses <code>skipIf</code> on missing live save, so CI without <code>/tmp/robot-islands-save.json</code> still passes.</li>
+          <li>Run full <code>npm test</code> — green. The Phase 4 v14-load failure is now resolved by this commit.</li>
+          <li>Note on <code>STORAGE_KEY</code> at <a class="cite">persistence.ts:71</a>: the constant is <code>'robot-islands:save:v14'</code>. Per spec §06, Phase 1 keeps this as-is and trusts the in-snapshot <code>v</code> field as the authoritative version anchor. The legacy-key probe in <code>loadWorld</code> at <a class="cite">persistence.ts:937</a> already walks <code>SUPPORTED_LOAD_VERSIONS</code> when the primary key misses, so old browsers' v14 saves still load. <strong>Do not</strong> rename the key — that's a separate decision deferred to a future polish pass.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx tsc --noEmit</code> exits 0. Full <code>npm test</code> green. The three new persistence tests pass. Manually load <code>/tmp/robot-islands-save.json</code> via a one-off node script if available — confirm migration emits zero defaults.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git revert &lt;commit-sha&gt;</code>. Phase 4's fields stay in place. CAUTION: a v15 save written before rollback will fail to load post-rollback (the v15 wire shape exists but the loader doesn't know about it). Players who haven't saved post-Phase-5 are unaffected.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(persistence): v14 → v15 schema bump for SI-units rework Phase 1
+
+Additive migration — seeds the four fields added in the previous
+commits (co2Kg per island; totalCo2Kg, playerLat, playerLon on
+world) with safe defaults (0 / 0 / null / null).
+
+  - SCHEMA_VERSION 14 → 15
+  - SUPPORTED_LOAD_VERSIONS gains 15
+  - SerializedSnapshotV14 type alias captures the precise v14 shape
+  - migrateV14toV15: spread + per-island map; no field renames,
+    no removals
+  - loadWorld migration chain extended at ~line 603
+
+Tests (3 new in persistence.test.ts + persistence-load.test.ts):
+  - v14-minimal.json fixture loads cleanly under v15
+  - v15 round-trips serialize → deserialize → serialize identity
+  - live /tmp/robot-islands-save.json migrates with zero defaults
+    (skipped when the dump isn't present, so CI stays portable)
+
+STORAGE_KEY stays 'robot-islands:save:v14' — the legacy-key probe
+in loadWorld already walks SUPPORTED_LOAD_VERSIONS, and the
+in-snapshot v field is authoritative.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase1-schema §06
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p6">
+      <div class="sec-head"><span class="num">07</span><h2>Phase 6 — Test gate + metrics (no commit)</h2></div>
+      <p class="sec-intro">Validation phase. No source change; the implementer
+        documents metric deltas in the lead session's review note.
+        <strong>This is the gate</strong> — if any pre-existing test fails
+        after Phase 1's data-only schema upgrade, the rework introduced an
+        accidental coupling and must be debugged before landing.</p>
+
+      <div class="phase-card">
+        <h4>Procedure</h4>
+        <ol class="body">
+          <li>Run the full suite after all five commits land:
+            <div class="code"><pre>npm test 2&gt;&amp;1 | tail -30</pre></div>
+          </li>
+          <li>Run <code>tsc</code> strict-mode check:
+            <div class="code"><pre>npx tsc --noEmit 2&gt;&amp;1 | tail -10</pre></div>
+          </li>
+          <li>Capture the four baseline-vs-after deltas:
+            <ul class="body">
+              <li><strong>Test count.</strong> Phase 0 baseline was ~2215 (spec §9.5). Phase 1 adds three Phase-2 tests + three Phase-5 tests = +6 expected. Spec §10 names ~2225 as the target — both bands acceptable.</li>
+              <li><strong>Build time.</strong> Pure schema, no runtime path change. Expect &lt; 5 % drift.</li>
+              <li><strong>Schema version.</strong> 14 → 15. Confirm by reading <code>persistence.ts:79</code>.</li>
+              <li><strong>Behaviour delta.</strong> Zero. Any pre-existing economy / heat / placement / persistence test fails ⇒ accidental coupling somewhere; debug before landing the merged sequence.</li>
+            </ul>
+          </li>
+          <li>Document the deltas in the lead session's review note OR (preferred) in a follow-up commit body if the lead session decides to summarise on master.</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Gate criteria</div>
+          The Phase 1 contract is <strong>zero behavioural change</strong>.
+          A test failure on any pre-existing case is a defect introduced
+          by the rework — not a flake, not a fixture drift, not "acceptable
+          given the change." Halt the merge sequence and bisect:
+          <code>git bisect</code> across Phases 1–5 isolates which commit
+          introduced the coupling.
+        </div>
+
+        <h4>If the gate fails</h4>
+        <ul class="body">
+          <li><strong>Recipe / economy tests fail after Phase 1:</strong> something
+            in the implementation is reading <code>RESOURCE_META</code> /
+            <code>RECIPE_SPECULATIVE</code> when it shouldn't. Phase 1's
+            contract is "declared but unread." Confirm by grep.</li>
+          <li><strong>Persistence tests fail after Phase 4:</strong> expected if
+            v14 saves are in the suite — Phase 5 lands the migration. If
+            Phase 5 didn't land yet, this is a sequencing bug; if Phase 5
+            DID land, the migration is incomplete (e.g. forgot a per-island
+            seed). Audit the migration code.</li>
+          <li><strong>Heat / building tests fail after Phase 3:</strong> the
+            optional fields shouldn't affect anything. If they do, a building
+            def's literal is being type-asserted in a way that newer fields
+            break — check for <code>BuildingDef</code> spreads or
+            <code>Object.keys(def)</code> walks.</li>
+          <li><strong>Sky-is-falling — many tests fail:</strong> revert the
+            top commit, re-run, repeat until green. The bisect surfaces the
+            offending Phase. Most likely culprit: a missing seed site in
+            Phase 4 (the live world or the snapshot) that propagated
+            <code>undefined</code> through a non-defensive consumer.</li>
+        </ul>
+
+        <h4>Final review note (no commit)</h4>
+        <div class="code"><pre>SI-units rework Phase 1 complete.
+
+Commits landed (5): 1) feat(recipes) RESOURCE_META + RECIPE_SPECULATIVE
+                    2) test(recipes) produced-resource invariant
+                    3) feat(building-defs) thermalKW + heatDemandKW
+                    4) feat(state) co2Kg + totalCo2Kg + playerLat/Lon
+                    5) feat(persistence) v14 → v15 migration
+
+Metrics (Phase 0 baseline → Phase 6 post-impl):
+  Test count:         2215 → 2221 (+6, expected)
+  Build time:         ~10 s → ~10 s (unchanged)
+  Schema version:     14 → 15
+  Behaviour delta:    none (data-only schema)
+
+Phase 1 of 7 of the SI-units rework. The next phase (Phase 2 per
+rev-16 §8) introduces 7 new resources (co2, refinery_gas, wood_tar,
+water_vapor, mill_scale, aviation_kerosene_crude, cryo_coolant_vented)
++ the mass-balance auditor that reads RESOURCE_META + RECIPE_SPECULATIVE.
+
+Foundation: docs/superpowers/plans/2026-05-27-si-units-rework-foundation rev-16
+Spec:       docs/superpowers/specs/2026-05-28-si-units-phase1-schema
+Plan:       docs/superpowers/plans/2026-05-28-si-units-phase1-schema-plan</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="vmatrix">
+      <div class="sec-head"><span class="num">08</span><h2>Verification matrix</h2></div>
+      <p class="sec-intro">Cross-reference: every spec requirement → phase
+        delivering it → test or measurement verifying it.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Spec requirement</th>
+          <th>Phase</th>
+          <th>Verifying test / measurement</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">RESOURCE_META exhaustive (252 entries, every ResourceId)</td>
+            <td class="mono">Phase 1</td>
+            <td><code>tsc --noEmit</code> exhaustive-Record enforcement; Phase 2 test 1 (every ResourceId has a meta entry).</td>
+          </tr>
+          <tr>
+            <td class="slate">ResourceMeta carries massPerUnitKg + terminal (always); volumePerUnitL + energyPerUnitKWh (optional)</td>
+            <td class="mono">Phase 1</td>
+            <td>Phase 2 test 1 asserts <code>massPerUnitKg &gt;= 0</code> and <code>terminal</code> is one of three valid forms.</td>
+          </tr>
+          <tr>
+            <td class="slate">RECIPE_SPECULATIVE covers rev-16 §9.1 fantasy list (17 entries)</td>
+            <td class="mono">Phase 1</td>
+            <td>Phase 2 test 3: every <code>RECIPE_SPECULATIVE</code> key is a real <code>RecipeId</code>. Manual diff against §9.1 list during review.</td>
+          </tr>
+          <tr>
+            <td class="slate">Produced-resource invariant: 'consumed' + produced ⇒ has consumer</td>
+            <td class="mono">Phase 2</td>
+            <td>Phase 2 test 2 walks <code>RECIPES</code>, builds producedBy / consumedBy, flags violations.</td>
+          </tr>
+          <tr>
+            <td class="slate">Expansion-hook + gameplay-sink always pass</td>
+            <td class="mono">Phase 2</td>
+            <td>Phase 2 test 2 — by construction, the loop only checks <code>terminal === 'consumed'</code>.</td>
+          </tr>
+          <tr>
+            <td class="slate">BuildingDef.heatSource.thermalKW? declared</td>
+            <td class="mono">Phase 3</td>
+            <td><code>tsc --noEmit</code> green; no building populates it (grep <code>thermalKW</code>).</td>
+          </tr>
+          <tr>
+            <td class="slate">BuildingDef.heatDemandKW? declared</td>
+            <td class="mono">Phase 3</td>
+            <td>Same — tsc + grep verification.</td>
+          </tr>
+          <tr>
+            <td class="slate">IslandState.co2Kg required, seeded 0</td>
+            <td class="mono">Phase 4</td>
+            <td><code>tsc</code> enforces field presence; <code>makeInitialIslandState</code> grep shows the seed; Phase 5 v15 round-trip test asserts <code>co2Kg === 0</code>.</td>
+          </tr>
+          <tr>
+            <td class="slate">SerializedWorld.totalCo2Kg / playerLat / playerLon</td>
+            <td class="mono">Phase 4</td>
+            <td><code>tsc</code> enforces presence in <code>serializeWorld</code>; Phase 5 v14-load test asserts post-migration values.</td>
+          </tr>
+          <tr>
+            <td class="slate">Fresh world factory seeds the 3 SerializedWorld fields</td>
+            <td class="mono">Phase 4</td>
+            <td>Phase 5 round-trip test on a freshly-constructed world.</td>
+          </tr>
+          <tr>
+            <td class="slate">SCHEMA_VERSION 14 → 15; SUPPORTED_LOAD_VERSIONS gains 15</td>
+            <td class="mono">Phase 5</td>
+            <td>Read-the-constant verification; existing version-mismatch test continues to pass.</td>
+          </tr>
+          <tr>
+            <td class="slate">SerializedSnapshotV14 type alias precise</td>
+            <td class="mono">Phase 5</td>
+            <td><code>tsc</code> compile of <code>migrateV14toV15</code> signature; review reads the <code>Omit</code> shape.</td>
+          </tr>
+          <tr>
+            <td class="slate">migrateV14toV15 additive (no rename / removal)</td>
+            <td class="mono">Phase 5</td>
+            <td>Phase 5 test 1: v14 fixture loads with all new defaults; spread-only shape verified on diff review.</td>
+          </tr>
+          <tr>
+            <td class="slate">v14 → v15 wired into loadWorld migration chain</td>
+            <td class="mono">Phase 5</td>
+            <td>Phase 5 test 1 calls <code>deserializeWorld(v14fixture)</code> and gets a v15 result.</td>
+          </tr>
+          <tr>
+            <td class="slate">Live /tmp/robot-islands-save.json migrates cleanly</td>
+            <td class="mono">Phase 5</td>
+            <td>Phase 5 test 3 (skipIf live save absent).</td>
+          </tr>
+          <tr>
+            <td class="slate">Zero behavioural change vs. Phase 0 baseline</td>
+            <td class="mono">Phase 6</td>
+            <td>Full <code>npm test</code> stays green; pre-existing test count delta is +6 (new tests only).</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="risks">
+      <div class="sec-head"><span class="num">09</span><h2>Risks &amp; mitigations</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">A resource currently producing-but-unconsumed (e.g. natural_gas, mercury, T6 in-flight states) is tagged <code>'consumed'</code> by mistake — Phase 2 test 2 fails on green code.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 1 step 3 mandates a grep-driven audit per resource. Cross-check against the existing <code>TERMINAL_BYPRODUCTS</code> + <code>STARTER_TERRAIN</code> sets in <code>balance.test.ts:79</code>. If the new test fails, bounce to Phase 1 commit and re-tag.</div>
+        </div>
+        <div class="row">
+          <div class="cell">RECIPE_SPECULATIVE entry names don't match actual RecipeId spellings (e.g. <code>memetic_core_assembler</code> vs <code>memetic_forge</code> — the catalog uses the latter).</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 1 step 5 grep-confirms every fantasy recipe id against <code>RECIPES</code>. Phase 2 test 3 catches drift at runtime. Lead session reviews the diff against rev-16 §9.1.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 4 misses a seed site — fresh world has <code>undefined</code> instead of seeded default, propagating into a non-defensive consumer that does <code>+= world.totalCo2Kg</code> later.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Phase 4 step 9 explicitly runs the fresh-world test before commit; <code>tsc</code> with required (non-optional) <code>SerializedWorld</code> fields forces a compile error if the literal at <code>world.ts:902</code> or <code>persistence.ts:498</code> misses the field. The required typing IS the enforcement.</div>
+        </div>
+        <div class="row">
+          <div class="cell">v14 → v15 migration silently corrupts a deeply-nested field (e.g. island's tutorial / endgame state) by overlooking it in the spread.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Migration is spread-then-overwrite — only the four new fields are touched. The structural test (Phase 5 test 2 round-trip identity) catches any unintended field drift.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Live save <code>/tmp/robot-islands-save.json</code> at 27.5 MB chokes the v14 fixture pattern.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">v14 fixture is hand-rolled minimal (single island, no satellites). Live save loaded via <code>readFileSync</code> at test time, not committed. Existing <code>persistence-load.test.ts</code> uses the same pattern.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A future Phase 6 lat/lon picker emits values outside <code>[-90, +90]</code> / <code>[-180, +180]</code> because Phase 1 didn't validate range.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Phase 6 spec owns the picker contract; Phase 6 adds validation. Phase 1's permissive declaration matches the codebase pattern.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A pre-Phase-1 commit on master adds a new resource without a RESOURCE_META entry → merge fails.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Rebase before Phase 1 lands. Subagent-driven-development runs on master per <a class="cite">AGENTS.md</a>; pre-Phase-1 inflight branches are unlikely with active session focus.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The implementer interprets "F12 rewrite" as editing an existing test that doesn't exist, and wastes time searching.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Phase 2 card explicitly calls out that F12 is an external v3-audit finding name, not a source test, and points at <code>recipes.test.ts:61</code> as the append site. Plan documents the grep that confirms absence.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Migration's <code>Omit</code> typing for <code>SerializedSnapshotV14</code> doesn't capture the v14 reality precisely (a v14 save might have additional optional fields the type omits).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The migration spreads <code>...s.world</code> then overrides, so unknown fields flow through. The <code>Omit</code> is a documentation hint, not a load-bearing constraint. Phase 5 test 3's live-save migration catches real-world drift.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="notes">
+      <div class="sec-head"><span class="num">10</span><h2>Implementation notes</h2></div>
+      <p class="sec-intro">Context for the implementer that didn't rise to a
+        spec requirement or risk.</p>
+
+      <ul class="body">
+        <li><strong>Phase 1 is the time sink.</strong> Reading 252 resources and
+          assigning a kg-value + terminal tag to each is mechanical but
+          tedious. Budget 5 hours; resist the urge to skip the grep audit
+          on terminal-tag assignments — Phase 2's test is the safety net,
+          and a single mis-tag will fail it.</li>
+        <li><strong>"F12 rewrite" is a misnomer for an additive test.</strong> Grep
+          confirms no source file references "F12" or "dead-resource". The
+          v3 physics-balance audit (an external doc) used "F12" as a
+          finding-id; the spec inherits that label. Phase 2 ADDS the new
+          contract; it doesn't rewrite anything existing. The existing
+          <code>balance.test.ts:79</code> hardcoded sets stay until a
+          future cleanup pass formally consolidates them into
+          <code>RESOURCE_META.terminal</code> (out of Phase 1 scope per
+          spec §01 "additive only").</li>
+        <li><strong>The 17 fantasy recipe names may need translation.</strong>
+          rev-16 §9.1 names recipes canonically (e.g. <code>memetic_core_assembler</code>);
+          the live catalog at <code>recipes.ts:1309</code> may differ
+          (e.g. <code>memetic_forge</code>). Grep both names before
+          populating <code>RECIPE_SPECULATIVE</code>; use the codebase
+          spelling.</li>
+        <li><strong>Phase 3 is trivially small.</strong> Two optional fields
+          on an interface. Can cluster with Phase 4 in a single commit if
+          the split feels artificial. Don't cluster Phase 3 with Phase 1 —
+          Phase 1 is in <code>recipes.ts</code>; Phase 3 is in
+          <code>building-defs.ts</code>; logically separate files.</li>
+        <li><strong>Phase 4's two seed sites are easy to miss.</strong> The
+          fresh-world factory at <a class="cite">world.ts:902</a> AND the
+          migration in Phase 5 both must seed the same defaults. Diverging
+          defaults cause "fresh game has X, loaded-from-v14 game has Y"
+          bugs that surface only after Phase 6 adds the consumer.</li>
+        <li><strong>Don't rename STORAGE_KEY.</strong> Spec §06 explicitly
+          keeps it as <code>'robot-islands:save:v14'</code>. The legacy-key
+          probe in <code>loadWorld</code> walks
+          <code>SUPPORTED_LOAD_VERSIONS</code> when the primary key misses,
+          so old browsers' v14 saves still load. Renaming to <code>:v15</code>
+          is a deferred polish decision.</li>
+        <li><strong>v14 fixture is minimal, not exhaustive.</strong> Single
+          island, empty inventory, no satellites. The point is to round-trip
+          the schema shape; full economic state goes via the live-save
+          migration test (Phase 5 test 3) which uses the real save dump.</li>
+        <li><strong>Commit order matters for tests.</strong> Phase 4 (state +
+          serialize) lands BEFORE Phase 5 (migration) intentionally — the
+          interleaving means Phase 4's commit may have one failing
+          persistence test (v14 load), which Phase 5 then fixes. This is
+          OK during the merge sequence but the lead session may prefer a
+          squash if they want master to stay continuously green. Document
+          either way in the lead's review note.</li>
+        <li><strong>Phase 6 is a no-commit verification phase.</strong> The
+          spec lists ~12h subagent budget; Phase 6 budget is 30 min of the
+          implementer's time at the end. The numbers go into the lead's
+          review note, not into a commit body, unless the lead session
+          decides to summarise post-hoc.</li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan · Phase 1 of 7 · generated 2026-05-28 ·
+        spec at <code>specs/2026-05-28-si-units-phase1-schema</code> ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16</p>
+    </div>
+
+  </div>
+</body>
+</html>

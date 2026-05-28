@@ -1,0 +1,1692 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units Phase 6 — real-astronomy solar + map picker + weather coupling — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 36px;
+      line-height: 1.16; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    h1 code {
+      font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px;
+      color: #C9B98A;
+    }
+    .prompt-box {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok     { color: var(--olive); }
+
+    .toc { background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+
+    section { margin-bottom: 56px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 25px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    h3.sub {
+      font-family: var(--serif); font-weight: 500; font-size: 17px;
+      color: var(--slate); margin: 20px 0 8px;
+    }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 12px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 5px; }
+
+    /* milestone timeline */
+    .milestones { display: flex; flex-direction: column; gap: 0; }
+    .milestone { display: grid; grid-template-columns: 110px 28px 1fr;
+      gap: 0 18px; position: relative; }
+    .milestone .when { text-align: right; font-family: var(--mono);
+      font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+    .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+    .milestone .dot { width: 14px; height: 14px; border-radius: 50%;
+      background: var(--white); border: 3px solid var(--clay);
+      margin-top: 4px; flex-shrink: 0; }
+    .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+    .milestone .dot.gate { background: var(--warn); border-color: var(--warn); }
+    .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+    .milestone:last-child .line { display: none; }
+    .milestone .body { padding-bottom: 30px; }
+    .milestone .body h3 {
+      font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin-bottom: 4px;
+    }
+    .milestone .body p { font-size: 13.5px; color: var(--gray-500);
+      margin-bottom: 10px; max-width: 700px; }
+    .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .milestone .tag {
+      font-family: var(--mono); font-size: 11.5px;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+    }
+    .milestone .tag.est { color: var(--warn); }
+    .milestone .tag.ok  { color: var(--olive); }
+
+    /* phase card */
+    .phase-card {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 22px 26px;
+    }
+    .phase-card h4 {
+      font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      margin: 18px 0 8px;
+    }
+    .phase-card h4:first-child { margin-top: 0; }
+    .verify, .rollback {
+      background: var(--gray-150); border-radius: 8px;
+      padding: 12px 16px; font-size: 13.5px; margin-top: 14px;
+    }
+    .verify strong { color: var(--olive); }
+    .rollback strong { color: var(--warn); }
+
+    /* code panel */
+    .code {
+      background: #121110; border-radius: 12px;
+      padding: 16px 20px; overflow-x: auto; margin: 10px 0;
+    }
+    .code pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .code .kw  { color: var(--clay); }
+    .code .str { color: var(--olive); }
+    .code .cm  { color: var(--gray-500); }
+    .code .fn  { color: #C9B98A; }
+    .code .new { background: rgba(143, 165, 110, 0.13); display: block; }
+
+    /* table */
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; }
+    .tbl td.ok { color: var(--olive); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* callout */
+    .callout {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px;
+    }
+    .callout .ct {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px;
+    }
+    .callout.crit { border-left-color: var(--rust); }
+    .callout.crit .ct { color: var(--rust); }
+    .callout.ok { border-left-color: var(--olive); }
+    .callout.ok .ct { color: var(--olive); }
+
+    /* risk table */
+    .risks {
+      border: var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat); color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · robot-islands · SI-units rework · Phase 6</div>
+      <h1>Real-astronomy <code>solarMultiplier</code> + map picker UI + CO₂ weather coupling</h1>
+      <div class="prompt-box">
+        <span class="label">Spec</span>
+        Companion spec at <code>specs/2026-05-28-si-units-phase6-weather-realtime</code>.
+        Replaces the trapezoidal <code>solarMultiplier(nowMs)</code> at
+        <a class="cite">daynight.ts:83</a> with a SunCalc-driven
+        <code>sin(altitude)</code> formula keyed on the player's
+        chosen geographic location. Ships the one-time SVG world-map
+        picker that writes <code>world.playerLat / playerLon</code>
+        (Phase 1 reserved the schema slot). Wires CO₂ thresholds to
+        <code>weather.ts</code> storm-rolls + adds heatwave + climate-crisis
+        events. Retunes <code>coal_gen</code> from 100 → 50 unit per
+        rev-16 §10.3. Eight commits, ~18 h budget.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Effort</div><div class="v accent">~18 h</div></div>
+      <div class="cell"><div class="k">Phases</div><div class="v">9 (Phase 0–8)</div></div>
+      <div class="cell"><div class="k">Commits</div><div class="v">8</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v ok">~9 source · 3 test · 1 NEW</div></div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Phases</span>
+      <a href="#p0">Phase 0 — Baseline</a>
+      <a href="#p1">Phase 1 — Install suncalc</a>
+      <a href="#p2">Phase 2 — solarMultiplier rewrite</a>
+      <a href="#p3">Phase 3 — Thread lat/lon</a>
+      <a href="#p4">Phase 4 — map-picker.ts NEW</a>
+      <a href="#p5">Phase 5 — Bootstrap + Settings wire</a>
+      <a href="#p6">Phase 6 — CO₂ weather coupling</a>
+      <a href="#p7">Phase 7 — coal_gen retune</a>
+      <a href="#p8">Phase 8 — Tests + green</a>
+      <a href="#vmatrix">Verification matrix</a>
+      <a href="#risks">Risks</a>
+      <a href="#notes">Implementation notes</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">00</span><h2>Milestone timeline</h2></div>
+      <p class="sec-intro">Eight commits, each independently revertable.
+        Phases 1–3 form a tight dependency chain (install → rewrite →
+        callsite ripple); 4–5 are the picker UI; 6–7 are independent
+        smaller edits; 8 is the gate.</p>
+
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">step 0</div>
+          <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 0 — Baseline (no commit)</h3>
+            <p>Confirm Phases 1-5 of the SI-units rework are merged and the suite is green. Live-save loads. No code change.</p>
+            <div class="tags"><span class="tag est">~10 min</span><span class="tag">npm test</span><span class="tag">git log --oneline | head</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 1</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 1 — <code>npm install suncalc</code> + <code>@types/suncalc</code></h3>
+            <p>Dependency add only. No source change. <code>package.json</code> + <code>package-lock.json</code> in the commit.</p>
+            <div class="tags"><span class="tag est">~10 min</span><span class="tag">package.json</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 2</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 2 — <code>solarMultiplier</code> + <code>nextSolarBoundaryMs</code> rewrite</h3>
+            <p>Replace the trapezoidal body at <a class="cite">daynight.ts:83</a> with the SunCalc altitude formula. New signature <code>(nowMs, lat, lon)</code>. Rewrite <a class="cite">daynight.ts:131</a> as a uniform sub-segment grid. ~40 LOC churn in one file.</p>
+            <div class="tags"><span class="tag est">~1.5 h</span><span class="tag">daynight.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 3</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 3 — Thread <code>playerLat / playerLon</code> through callsites</h3>
+            <p>Two runtime sites (<a class="cite">economy.ts:748</a>, <a class="cite">hud.ts:385</a>) + the test fixtures. <code>tsc -b</code> picks up every miss.</p>
+            <div class="tags"><span class="tag est">~1 h</span><span class="tag">economy.ts</span><span class="tag">hud.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 4</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 4 — NEW <code>src/map-picker.ts</code> module</h3>
+            <p>SVG world-map modal, equirectangular projection, click → (lat, lon). ~150 LOC + an inline Natural Earth land outline. No bootstrap wire-up yet.</p>
+            <div class="tags"><span class="tag est">~4 h</span><span class="tag">map-picker.ts</span><span class="tag">NEW</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 5</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 5 — Bootstrap prompt + Settings "Change location"</h3>
+            <p>Main-bootstrap check: if <code>playerLat == null || playerLon == null</code>, show picker before the renderer wires. Settings panel gets a button that re-opens the picker. ~30 LOC across two files.</p>
+            <div class="tags"><span class="tag est">~1.5 h</span><span class="tag">main.ts</span><span class="tag">settings-ui.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 6</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 6 — CO₂ weather coupling in <code>weather.ts</code></h3>
+            <p>Add <code>co2WeatherMultiplier(totalCo2Kg)</code>, <code>sumIslandCo2(world)</code>, heatwave event, climate-crisis chain. Multiply existing storm probability inside the <code>weather()</code> roll at <a class="cite">weather.ts:163</a>.</p>
+            <div class="tags"><span class="tag est">~3 h</span><span class="tag">weather.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 7</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 7 — <code>coal_gen</code> retune 100 → 50</h3>
+            <p>Single-value edit at <a class="cite">building-defs.ts:714</a>. Comment cites rev-16 §10.3. ~1 LOC.</p>
+            <div class="tags"><span class="tag est">~15 min</span><span class="tag">building-defs.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 8</div>
+          <div class="dot-col"><span class="dot gate"></span></div>
+          <div class="body">
+            <h3>Phase 8 — Tests + green confirmation (gate)</h3>
+            <p>~40 new tests across <code>daynight.test.ts</code>, <code>weather.test.ts</code>, NEW <code>map-picker.test.ts</code>. ~10-30 existing tests touched for signature ripple. Live-save replay with manually-set lat/lon. <strong>Binding gate: <code>npm test</code> green.</strong></p>
+            <div class="tags"><span class="tag est">~6 h</span><span class="tag">npm test</span><span class="tag">scripts/profile-economy.ts</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p0">
+      <div class="sec-head"><span class="num">01</span><h2>Phase 0 — Baseline</h2></div>
+      <p class="sec-intro">No code change. Confirm the upstream phases have
+        landed, the suite is green, and the live save still loads (Phase 1's
+        v14 → v15 migration is fully tested at this point).</p>
+
+      <div class="phase-card">
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Confirm the current <code>master</code> includes Phases 1-5 of the SI-units rework. The Phase 1 spec ships <code>SerializedWorld.playerLat / playerLon: number | null</code>; grep should find these in <code>persistence.ts</code> or the runtime <code>WorldState</code>.
+            <div class="code"><pre>grep -rn 'playerLat' src/ | head</pre></div>
+            <p class="body">If grep returns empty, halt — Phase 1 hasn't landed yet, and Phase 6 can't proceed without the schema slot.</p>
+          </li>
+          <li>Run the full test suite.
+            <div class="code"><pre>npm test</pre></div>
+            <p class="body">Must exit 0. Capture the test count as the diff target (Phase 8 expects ~40 new tests).</p>
+          </li>
+          <li>Profile the live save once for a Phase 8 baseline comparison:
+            <div class="code"><pre>npx tsx scripts/profile-economy.ts /tmp/robot-islands-save.json</pre></div>
+            <p class="body">Mean tick / p99 / 24h-catchup numbers — record them in a scratch file. The astronomy rewrite shouldn't move these meaningfully (one SunCalc call per solar segment is sub-microsecond), but a regression check matters.</p>
+          </li>
+          <li>Open the dev URL <code>https://islands.nitjsefni.eu/</code> in the browser, screenshot the running app via the Daedalus extension. Confirm the world loads (sanity check the v15 save round-trips through the bootstrap).</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0; <code>playerLat</code> grep finds at least one source hit; profile prints headline metrics; live save loads in the browser.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;N/A — no changes made.</div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p1">
+      <div class="sec-head"><span class="num">02</span><h2>Phase 1 — Install <code>suncalc</code> + <code>@types/suncalc</code></h2></div>
+      <p class="sec-intro">Pure dependency add. No source change in this
+        commit — keeps the install diff cleanly auditable.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>package.json</code> — adds <code>suncalc</code> to <code>dependencies</code>, <code>@types/suncalc</code> to <code>devDependencies</code>.</li>
+          <li><code>package-lock.json</code> — regenerated by npm.</li>
+        </ul>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>From the repo root, run the install (one command — both packages, types as a dev-dep):
+            <div class="code"><pre>npm install --save suncalc
+npm install --save-dev @types/suncalc</pre></div>
+          </li>
+          <li>Verify the lockfile updated. Confirm no transitive dependencies were pulled in (suncalc is stdlib-only):
+            <div class="code"><pre>jq '.dependencies.suncalc, .devDependencies."@types/suncalc"' package.json
+npm ls suncalc</pre></div>
+            <p class="body">Expect a single-line <code>suncalc@^1.9.0</code> (or current). No nested children.</p>
+          </li>
+          <li>Sanity-check the import works in the test environment without touching any source:
+            <div class="code"><pre>node -e "console.log(require('suncalc').getPosition(new Date('2026-03-20T12:00:00Z'), 0, 0))"</pre></div>
+            <p class="body">Expect an object with <code>altitude</code> near π/2 (≈1.55 rad ≈ 89°) and <code>azimuth</code> near 0. Both numeric, finite.</p>
+          </li>
+          <li>Run <code>npm test</code>. Must remain green — no source change, but a corrupted install would surface immediately.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0; <code>npm ls suncalc</code> shows a single top-level entry; the Node one-liner prints an altitude ≈ π/2.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git reset --hard HEAD~1</code> and <code>npm install</code> to restore the prior lockfile.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>chore(deps): add suncalc + @types/suncalc for Phase 6 astronomy
+
+Pure dependency add. suncalc@^1.9.0 (MIT, ~5KB minified, no
+transitive deps) provides SunCalc.getPosition(date, lat, lon)
+which Phase 6's solarMultiplier rewrite will call to compute
+the sun's altitude angle. @types/suncalc ships the
+TypeScript declarations so strict mode is satisfied without
+an inline `declare module`.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase6-weather-realtime
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p2">
+      <div class="sec-head"><span class="num">03</span><h2>Phase 2 — <code>solarMultiplier</code> + <code>nextSolarBoundaryMs</code> rewrite</h2></div>
+      <p class="sec-intro">The astronomy core. Replaces the trapezoidal
+        body and the quadrant-aware boundary integrator with the new
+        SunCalc-driven model + uniform sub-segment grid. Single file,
+        single commit. Compile breaks across callsites are <em>expected</em>
+        and resolved in Phase 3.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/daynight.ts</code> — body of <code>solarMultiplier</code> at <a class="cite">daynight.ts:83</a>; body of <code>nextSolarBoundaryMs</code> at <a class="cite">daynight.ts:131</a>; new import line at top.</li>
+        </ul>
+
+        <h4>2.1 New <code>solarMultiplier</code></h4>
+        <div class="code"><pre><span class="cm">// daynight.ts — replace function body at line 83.</span>
+<span class="new"><span class="kw">import</span> SunCalc <span class="kw">from</span> <span class="str">'suncalc'</span>;</span>
+
+<span class="cm">/** Real-astronomy solar insolation factor at the player's geographic</span>
+<span class="cm"> *  location and the current wall-clock time. Returns 0 below horizon,</span>
+<span class="cm"> *  sin(altitude) ∈ [0, 1] above. Drives `computeRates`'s solar power</span>
+<span class="cm"> *  multiplier per SPEC §15.3 the same way the trapezoidal curve did.</span>
+<span class="cm"> *</span>
+<span class="cm"> *  When either lat or lon is null (no picker run yet), returns 0 —</span>
+<span class="cm"> *  solar buildings produce nothing until the player picks a location.</span>
+<span class="cm"> *  main.ts blocks bootstrap on the picker so this only fires for</span>
+<span class="cm"> *  fixture / test paths that explicitly pass null. */</span>
+<span class="kw">export function</span> <span class="fn">solarMultiplier</span>(
+  nowMs: <span class="kw">number</span>,
+  lat: <span class="kw">number</span> | <span class="kw">null</span>,
+  lon: <span class="kw">number</span> | <span class="kw">null</span>,
+): <span class="kw">number</span> {
+<span class="new">  <span class="kw">if</span> (lat == <span class="kw">null</span> || lon == <span class="kw">null</span>) <span class="kw">return</span> 0;</span>
+<span class="new">  <span class="kw">const</span> pos = SunCalc.<span class="fn">getPosition</span>(<span class="kw">new</span> Date(nowMs), lat, lon);</span>
+<span class="new">  <span class="kw">if</span> (pos.altitude &lt;= 0) <span class="kw">return</span> 0;</span>
+<span class="new">  <span class="kw">return</span> <span class="fn">Math.sin</span>(pos.altitude);</span>
+}</pre></div>
+
+        <h4>2.2 Uniform-grid <code>nextSolarBoundaryMs</code></h4>
+        <p class="body">The old function dispatches on quadrant — Day/Night
+          flat segments fall through to <code>nextPhaseBoundaryMs</code>,
+          Dawn/Dusk sub-segment at <code>SOLAR_RAMP_SEGMENTS = 8</code>
+          ticks. The new astronomy curve is continuously varying over
+          the full 24h, so the right replacement is a uniform-grid sub-segment
+          across the whole day:</p>
+        <div class="code"><pre><span class="cm">// daynight.ts — replace function body at line 131.</span>
+<span class="kw">export function</span> <span class="fn">nextSolarBoundaryMs</span>(nowMs: <span class="kw">number</span>): <span class="kw">number</span> | <span class="kw">null</span> {
+<span class="new">  <span class="kw">const</span> totalSegmentsPerDay = SOLAR_RAMP_SEGMENTS * 4;  <span class="cm">// 32 per day</span></span>
+<span class="new">  <span class="kw">const</span> segmentMs = DAY_DURATION_MS / totalSegmentsPerDay;</span>
+<span class="new">  <span class="kw">const</span> nowSegment = <span class="fn">Math.floor</span>(nowMs / segmentMs);</span>
+<span class="new">  <span class="kw">return</span> (nowSegment + 1) * segmentMs;</span>
+}</pre></div>
+        <p class="body"><strong>Why uniform vs astronomy-derived
+          boundaries.</strong> Tying the boundary integrator to SunCalc's
+          sunrise/sunset times would chain integrator precision to library
+          behaviour and complicate the segment math (sunrise/sunset move
+          continuously with date and latitude). Uniform-grid keeps the
+          integrator self-contained — worst-case integration error is
+          bounded by <code>(slope × segment_width) / 2 ≈ segment_width × 0.5</code>
+          which at 32 segments/day equals 45 min × 0.5 = 22.5 min of sin
+          drift, well within the §15.3 noise floor.</p>
+        <p class="body"><strong>Note on <code>SOLAR_RAMP_SEGMENTS</code>:</strong>
+          The constant at <a class="cite">daynight.ts:73</a> retains the
+          name for compatibility with the integrator's tag. The comment
+          above it should be reworded to "sub-segments per 6h quadrant of
+          the astronomy curve" (still 8; total 32/day). Update the JSDoc.</p>
+
+        <h4>2.3 Existing exports retained</h4>
+        <ul class="body">
+          <li><code>dayPhase</code>, <code>dayPhaseName</code>, <code>nextPhaseBoundaryMs</code>, <code>DAY_DURATION_MS</code>, <code>QUADRANT_MS</code>, <code>DayPhase</code>, <code>SOLAR_RAMP_SEGMENTS</code> — all unchanged. The phase-of-day abstraction is used by <code>weather.ts</code> (severe-storm dawn/night boost) and the maintenance scheduler; both want gameplay-rhythm phases, not astronomy.</li>
+        </ul>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Add the <code>import SunCalc from 'suncalc';</code> line at the top of <code>daynight.ts</code> (above the existing comment block).</li>
+          <li>Replace the body of <code>solarMultiplier</code> at lines 83-97 with the new (nowMs, lat, lon) version.</li>
+          <li>Replace the body of <code>nextSolarBoundaryMs</code> at lines 131-150 with the uniform-grid version.</li>
+          <li>Update the JSDoc above <code>SOLAR_RAMP_SEGMENTS</code> at line 62 to reflect the new "8 sub-segments per 6h quadrant of the astronomy curve" interpretation.</li>
+          <li>Run <code>tsc -b</code>. <strong>Expect compile errors at every callsite</strong> — that's the Phase 3 work item, listed explicitly. Do NOT attempt to fix them in this commit; the breakage IS the audit trail confirming Phase 3 catches them all.</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Deliberate red build</div>
+          This commit lands a red <code>tsc -b</code>. Phase 3 lands in the
+          immediate-next commit and resolves them. The two phases are split
+          because the rewrite-and-callsite-fix is logically two things and
+          isolating the rewrite makes the diff readable. Lead must <strong>not</strong>
+          push a branch between Phase 2 and Phase 3.
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>daynight.ts</code> imports suncalc; <code>solarMultiplier</code> takes three params; <code>nextSolarBoundaryMs</code> uses the uniform-grid formula. <code>tsc -b</code> is expected to FAIL with errors at <code>economy.ts:748</code>, <code>hud.ts:385</code>, and the test files. No other errors.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git reset --hard HEAD~1</code> restores the trapezoidal model. Phase 1's dep stays installed but unused; no impact.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(daynight): replace solarMultiplier with SunCalc astronomy
+
+Per spec §02 + §07. solarMultiplier(nowMs, lat, lon) now
+returns sin(altitude) above horizon, 0 below — driven by
+real wall-clock time at the player's geographic location.
+Null lat/lon returns 0 (fixture / unset-location path; main.ts
+blocks bootstrap on the picker so runtime never hits null).
+
+nextSolarBoundaryMs becomes a uniform 32-segment-per-day
+grid. SOLAR_RAMP_SEGMENTS retained as the per-quadrant
+divisor; the comment is reworded.
+
+Callsites at economy.ts:748 and hud.ts:385 still pass the
+old single-arg shape; tsc -b is red after this commit. The
+following commit (Phase 3) threads playerLat/playerLon
+through every site and restores green.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase6-weather-realtime
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p3">
+      <div class="sec-head"><span class="num">04</span><h2>Phase 3 — Thread <code>playerLat / playerLon</code> through callsites</h2></div>
+      <p class="sec-intro">Fix the red build from Phase 2. The runtime
+        surface is small (two calls); the test surface is the larger
+        share. <code>tsc -b</code> is the audit trail — when it compiles
+        green, every caller has been threaded.</p>
+
+      <div class="phase-card">
+        <h4>Runtime callsites (2)</h4>
+        <ul class="body">
+          <li><a class="cite">economy.ts:748</a> — inside the segment integrator. The world snapshot is in scope at this level via <code>worldState</code> or its destructure; thread <code>worldState.playerLat / playerLon</code> through.</li>
+          <li><a class="cite">hud.ts:385</a> — the HUD's day-night indicator. <code>hud.ts</code> already has access to <code>worldState</code> through its render entry point; pass the two fields.</li>
+        </ul>
+
+        <h4>Test callsites (~10-30)</h4>
+        <ul class="body">
+          <li><code>src/daynight.test.ts</code> — ~10 direct <code>solarMultiplier(t)</code> calls (see <a class="cite">daynight.test.ts:54</a>, <a class="cite">daynight.test.ts:82-103</a>, <a class="cite">daynight.test.ts:119</a>). These existing tests check the trapezoidal shape and become wrong-by-design when the body switches — they are <strong>replaced wholesale</strong> in Phase 8, NOT patched here. For Phase 3 they get the minimal change <code>solarMultiplier(t, 0, 0)</code> to compile; their content updates in Phase 8.</li>
+          <li><code>src/economy.test.ts</code> — same minimal compile fix at the ~3 direct call sites (see <a class="cite">economy.test.ts:2391</a>, <a class="cite">economy.test.ts:2419</a>, <a class="cite">economy.test.ts:2598</a>). Indirect callers (tests that drive <code>advanceIsland</code>) need <code>worldState.playerLat = 0; worldState.playerLon = 0;</code> in their setup to keep solar non-zero where tests assume it. Walk the failures in <code>npx vitest run src/economy.test.ts</code>.</li>
+        </ul>
+
+        <h4>Pseudocode — runtime fix at economy.ts:748</h4>
+        <div class="code"><pre><span class="cm">// Before (line 748):</span>
+<span class="cm">// const rampMul = solarMultiplier(solarClockMs ?? t);</span>
+<span class="cm">// After:</span>
+<span class="new">  <span class="kw">const</span> rampMul = <span class="fn">solarMultiplier</span>(</span>
+<span class="new">    solarClockMs ?? t,</span>
+<span class="new">    worldState.playerLat,</span>
+<span class="new">    worldState.playerLon,</span>
+<span class="new">  );</span></pre></div>
+        <p class="body">Confirm <code>worldState</code> is in scope at line 748
+          — read the surrounding function (<code>computeRates</code> or its
+          caller) and verify the closure or parameter list passes it through.
+          If not directly available, walk it down the call chain in this same
+          commit (one or two function signatures may take an extra param).
+          Don't introduce a module-level singleton — Phase 6 won't accept
+          that pattern.</p>
+
+        <h4>Pseudocode — runtime fix at hud.ts:385</h4>
+        <div class="code"><pre><span class="cm">// Before (line 385):</span>
+<span class="cm">// const mul = solarMultiplier(nowMs);</span>
+<span class="cm">// After:</span>
+<span class="new">    <span class="kw">const</span> mul = <span class="fn">solarMultiplier</span>(nowMs, worldState.playerLat, worldState.playerLon);</span></pre></div>
+
+        <h4>Test-side minimal compile fix</h4>
+        <p class="body">Use sed-like single-pass on test files but verify
+          each match — some calls already destructure variables. Pattern:</p>
+        <div class="code"><pre><span class="cm">// Before:</span>
+<span class="cm">// solarMultiplier(t)  /  solarMultiplier(nowMs)  /  solarMultiplier(0)</span>
+<span class="cm">// After (Phase 3 only — Phase 8 rewrites these tests entirely):</span>
+<span class="new">solarMultiplier(t, 0, 0)</span></pre></div>
+        <p class="body">Lat=0, lon=0 is the equator/prime-meridian point.
+          On the trapezoidal model these tests passed because the function
+          was time-only; under the new astronomy model the tests will
+          <em>fail at runtime</em> because the numerical expectations no
+          longer match. <strong>That's OK for Phase 3.</strong> The phase
+          gate is <em>tsc green</em>, not <em>tests green</em>. Phase 8
+          deletes and replaces the trapezoidal-shape tests with astronomy
+          fixtures.</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Run <code>tsc -b</code> from the repo root. Capture every error location.
+            <div class="code"><pre>npx tsc -b 2&gt;&amp;1 | grep "error TS"</pre></div>
+          </li>
+          <li>For each runtime error in <code>src/*.ts</code> (NOT <code>src/*.test.ts</code>), thread <code>worldState.playerLat / playerLon</code> through. If the function chain doesn't carry <code>worldState</code> at that point, extend a signature or two — minimal additive change.</li>
+          <li>For each test error in <code>src/*.test.ts</code>, add <code>, 0, 0</code> to the call. Don't update expected values yet (Phase 8).</li>
+          <li>Re-run <code>tsc -b</code>. Repeat 1-3 until clean.</li>
+          <li>Run <code>npm test</code>. <strong>Expect ~15-30 failures</strong> in the test files patched with <code>(t, 0, 0)</code> — the trapezoidal-shape assertions don't match the astronomy curve. These are Phase 8 work. Confirm the failures are all in <code>daynight.test.ts</code>, <code>economy.test.ts</code>, or <code>hud.test.ts</code>; if a non-solar test fails, that's a regression — investigate.</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Phase 3 gate is compile, not test</div>
+          The gate for this commit is <strong><code>tsc -b</code> green</strong>.
+          A red test suite is expected and tracked into Phase 8. The commit
+          message explicitly lists this so the reviewer knows.
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>tsc -b</code> exits 0. <code>grep -rn 'solarMultiplier(' src/</code> shows EVERY call has three args. <code>npm test</code> may fail; document the failure count in the commit body and confirm they're solar-curve assertion failures (not type / structural breakage).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git reset --hard HEAD~1</code>. Combined with Phase 2 rollback, restores green state.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>refactor(economy,hud,tests): thread playerLat/playerLon through solarMultiplier
+
+Resolves the red tsc -b from the previous commit. Two
+runtime callsites (economy.ts:748, hud.ts:385) now thread
+worldState.playerLat / playerLon. ~15 test calls get the
+minimal `(t, 0, 0)` compile fix; the trapezoidal-shape
+assertions in those tests are replaced in Phase 8.
+
+tsc -b: green.
+npm test: 15-25 expected failures (solar-curve assertions
+against the new astronomy curve) all in daynight.test.ts /
+economy.test.ts / hud.test.ts. No structural / type breakage.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase6-weather-realtime
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p4">
+      <div class="sec-head"><span class="num">05</span><h2>Phase 4 — NEW <code>src/map-picker.ts</code></h2></div>
+      <p class="sec-intro">Standalone module, no bootstrap wire-up. Builds
+        the modal in isolation so the diff is reviewable on its own. The
+        next commit (Phase 5) wires it into the main loop.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/map-picker.ts</code> — NEW. ~150 LOC.</li>
+        </ul>
+
+        <h4>4.1 Surface</h4>
+        <div class="code"><pre><span class="cm">// map-picker.ts</span>
+<span class="kw">export interface</span> MapPickerOptions {
+  <span class="cm">/** Existing location to highlight on open. Null on first session. */</span>
+  current?: { lat: <span class="kw">number</span>; lon: <span class="kw">number</span> } | <span class="kw">null</span>;
+  <span class="cm">/** Player picked. Modal closes immediately on this fire. */</span>
+  onPick: (lat: <span class="kw">number</span>, lon: <span class="kw">number</span>) =&gt; <span class="kw">void</span>;
+  <span class="cm">/** Player closed without picking (only fired from "Change location"</span>
+<span class="cm">   *  — first-session modal has no escape hatch). */</span>
+  onCancel?: () =&gt; <span class="kw">void</span>;
+}
+
+<span class="kw">export function</span> <span class="fn">showMapPicker</span>(opts: MapPickerOptions): <span class="kw">void</span>;</pre></div>
+
+        <h4>4.2 SVG asset choice</h4>
+        <p class="body">Two options for the world-map SVG:</p>
+        <table class="tbl">
+          <thead><tr>
+            <th>Option</th>
+            <th>Pros</th>
+            <th>Cons</th>
+            <th>Pick</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="slate">Inline string in <code>map-picker.ts</code></td>
+              <td>One file; no fetch; bundles into JS; test environment doesn't need the asset path.</td>
+              <td>+30 KB to the module file; large diff.</td>
+              <td class="ok mono">YES</td>
+            </tr>
+            <tr>
+              <td class="slate"><code>public/world-map.svg</code> + <code>&lt;img&gt;</code></td>
+              <td>Separates content from logic; same SVG visible in repo browse.</td>
+              <td>Two-file commit; fetch path adds a tick of latency; vitest needs a stub.</td>
+              <td class="mono">no</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="body"><strong>Picked: inline.</strong> The picker is a
+          one-time UI element; the binary-size cost is paid once at module
+          import. The Natural Earth Public Domain Map Dataset
+          (https://www.naturalearthdata.com/) at 1:110m provides a
+          coarse land outline as a single <code>&lt;path d="..."&gt;</code>
+          element ~30 KB after coordinate-precision pruning. The implementer
+          downloads the SVG once during Phase 4 (offline, asset is public-domain)
+          and pastes it into the module as a <code>const WORLD_SVG_PATH = "M..."</code>
+          string. The full data URL or path attribute is inserted into the
+          SVG element at modal-creation time.</p>
+
+        <h4>4.3 Equirectangular conversion</h4>
+        <p class="body">The SVG uses <code>viewBox="0 0 360 180"</code>:
+          every viewBox unit = 1 degree. Click coordinates relative to the
+          SVG bounding rect are converted with:</p>
+        <div class="code"><pre><span class="kw">const</span> rect = svg.<span class="fn">getBoundingClientRect</span>();
+<span class="kw">const</span> xPx = e.clientX - rect.left;
+<span class="kw">const</span> yPx = e.clientY - rect.top;
+<span class="cm">// viewBox 0..360 = lon -180..180; 0..180 = lat 90..-90.</span>
+<span class="kw">const</span> lon = (xPx / rect.width) * 360 - 180;
+<span class="kw">const</span> lat = 90 - (yPx / rect.height) * 180;</pre></div>
+        <p class="body"><strong>Range guarantee.</strong> Clicks land inside
+          the rect (the SVG fills the modal at fixed aspect); lat ∈ [-90, 90],
+          lon ∈ [-180, 180] mathematically. Clamp defensively in case of
+          sub-pixel rounding at corners:</p>
+        <div class="code"><pre><span class="kw">const</span> clampedLat = <span class="fn">Math.max</span>(-90, <span class="fn">Math.min</span>(90, lat));
+<span class="kw">const</span> clampedLon = <span class="fn">Math.max</span>(-180, <span class="fn">Math.min</span>(180, lon));</pre></div>
+
+        <h4>4.4 Modal DOM shape</h4>
+        <div class="code"><pre><span class="kw">function</span> <span class="fn">buildModal</span>(opts: MapPickerOptions): HTMLElement {
+  <span class="kw">const</span> modal = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+  modal.className = <span class="str">'map-picker-modal'</span>;
+  modal.<span class="fn">setAttribute</span>(<span class="str">'role'</span>, <span class="str">'dialog'</span>);
+  modal.<span class="fn">setAttribute</span>(<span class="str">'aria-modal'</span>, <span class="str">'true'</span>);
+  modal.<span class="fn">setAttribute</span>(<span class="str">'aria-label'</span>, <span class="str">'Choose your location'</span>);
+
+  <span class="cm">// Content. Heading + instruction + SVG + readout + (optional) cancel.</span>
+  <span class="kw">const</span> inner = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+  inner.className = <span class="str">'map-picker-inner'</span>;
+  inner.innerHTML = `
+    &lt;h2&gt;Where do you live?&lt;/h2&gt;
+    &lt;p&gt;Click your location on the map. Real sunrise / sunset will
+       follow real time at that location. High latitudes have strong
+       seasonal solar — alternative power recommended.&lt;/p&gt;
+    &lt;svg class="map-picker-svg" viewBox="0 0 360 180"
+         xmlns="http://www.w3.org/2000/svg"&gt;
+      &lt;rect width="360" height="180" fill="var(--ocean-blue, #1a2e44)" /&gt;
+      &lt;path d="${WORLD_SVG_PATH}" fill="var(--land-tan, #3A3833)" /&gt;
+      &lt;circle class="map-picker-pin" r="2" fill="var(--clay)" hidden /&gt;
+    &lt;/svg&gt;
+    &lt;p class="map-picker-readout"&gt;&lt;/p&gt;
+    &lt;div class="map-picker-actions"&gt;
+      &lt;button class="map-picker-confirm" disabled&gt;Confirm&lt;/button&gt;
+      ${opts.onCancel ? <span class="str">'&lt;button class="map-picker-cancel"&gt;Cancel&lt;/button&gt;'</span> : <span class="str">''</span>}
+    &lt;/div&gt;
+  `;
+  modal.<span class="fn">appendChild</span>(inner);
+  <span class="kw">return</span> modal;
+}</pre></div>
+        <p class="body"><strong>Two-step pick.</strong> Click → preview pin
+          + readout ("Selected: 40.7° N, 74.0° W (≈ New York)"). Confirm →
+          fires <code>onPick</code> and removes the modal. The Confirm-step
+          is a small UX guard against misclicks; first-session players
+          shouldn't accidentally lock themselves to the wrong hemisphere.</p>
+
+        <h4>4.5 Pre-baked city annotations (optional polish)</h4>
+        <p class="body">A small inline <code>const CITIES: Array&lt;{ lat: number; lon: number; name: string }&gt;</code>
+          (~10-15 entries: London, NYC, Tokyo, São Paulo, Sydney, Cape Town,
+          Reykjavik, Singapore, Mumbai, etc.) lets the readout snap to
+          "≈ New York" when the click lands within ~5° of a known city.
+          Pure UX sugar; <code>onPick</code> still gets the click-derived
+          lat/lon, not the city's. Implement only if time permits in
+          Phase 4's 4h budget; otherwise the readout shows raw coords.</p>
+
+        <h4>4.6 Styling</h4>
+        <p class="body">Inline <code>&lt;style&gt;</code> block injected by
+          <code>showMapPicker</code> the first time it's called (singleton
+          flag — avoid duplicating the <code>&lt;style&gt;</code> if the
+          picker reopens via Settings). CSS reuses the existing palette
+          variables from the global <code>ui.css</code> (the project keeps
+          <code>--ivory</code>, <code>--slate</code>, <code>--clay</code>
+          at the document root). Backdrop is a 90% black overlay; the
+          inner panel uses <code>var(--ivory)</code>; the SVG land path
+          is <code>var(--gray-300)</code>.</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Download the Natural Earth 1:110m land outline SVG offline once. Run it through an SVG path-precision pruner (e.g. <code>svgo --precision 1</code>) to bring it under 30 KB. Paste the path's <code>d</code> attribute into <code>map-picker.ts</code> as <code>const WORLD_SVG_PATH</code>.</li>
+          <li>Write the module per the surface above. Vanilla DOM — no framework dependency. Match the existing <code>hud.ts</code> + <code>ui.ts</code> idioms (create elements, attach listeners, append to body).</li>
+          <li>Inject the CSS as a <code>&lt;style&gt;</code> on first call. Use a module-level <code>let _stylesInstalled = false;</code> guard.</li>
+          <li>Wire the click handler — pin preview, confirm-enabled flag, confirm-fires-onPick. The first click only previews; second action confirms.</li>
+          <li>Add Esc-key handler that triggers <code>onCancel</code> if provided, otherwise no-op (first-session must pick).</li>
+          <li>Run <code>tsc -b</code>. Must compile clean — no callers yet so no ripple. <code>npm test</code> stays at the Phase 3 failure level (no NEW failures from this commit).</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>tsc -b</code> green. <code>npm test</code> shows the SAME failure count as Phase 3 (no new failures, no new passes — the module isn't imported anywhere yet). Manual: <code>showMapPicker({ onPick: console.log })</code> in the browser console renders the modal; clicking + confirming logs (lat, lon).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git reset --hard HEAD~1</code> deletes the file. Nothing references it.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(map-picker): add SVG world-map location picker modal
+
+NEW src/map-picker.ts. Vanilla DOM (matches hud.ts / ui.ts
+patterns); equirectangular Natural Earth 1:110m land outline
+inlined as a const path string (~30 KB pruned).
+
+API:
+  showMapPicker({
+    current?: { lat, lon } | null,
+    onPick: (lat, lon) =&gt; void,
+    onCancel?: () =&gt; void,
+  })
+
+Two-step pick: click previews, Confirm fires onPick. First-
+session modal has no Cancel (onCancel undefined → no button,
+Esc no-op). The Settings "Change location" path (Phase 5)
+provides onCancel.
+
+No bootstrap wire-up in this commit — Phase 5 wires it into
+main.ts and settings-ui.ts.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase6-weather-realtime
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p5">
+      <div class="sec-head"><span class="num">06</span><h2>Phase 5 — Bootstrap prompt + Settings "Change location"</h2></div>
+      <p class="sec-intro">Wires Phase 4's module into the running game.
+        Two touchpoints: <code>main.ts</code> at the load-then-render
+        seam, and <code>settings-ui.ts</code> with a new button.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/main.ts</code> — add picker check after <code>loadWorld</code> at <a class="cite">main.ts:161</a>, before the renderer hooks (oceanLayer / islandLayer construction at <a class="cite">main.ts:176</a>).</li>
+          <li><code>src/settings-ui.ts</code> — add "Change location" button + handler.</li>
+        </ul>
+
+        <h4>5.1 Bootstrap path</h4>
+        <div class="code"><pre><span class="cm">// main.ts — around line 162, after `const worldState = restored ? … : …`</span>
+<span class="new"><span class="kw">if</span> (worldState.playerLat == <span class="kw">null</span> || worldState.playerLon == <span class="kw">null</span>) {</span>
+<span class="new">  <span class="kw">await new</span> Promise&lt;<span class="kw">void</span>&gt;((resolve) =&gt; {</span>
+<span class="new">    <span class="fn">showMapPicker</span>({</span>
+<span class="new">      onPick: (lat, lon) =&gt; {</span>
+<span class="new">        <span class="cm">// playerLat/playerLon are `readonly` on the WorldState interface;</span></span>
+<span class="new">        <span class="cm">// use the mutation idiom the rest of main.ts uses (cast or replace</span></span>
+<span class="new">        <span class="cm">// the snapshot). Walk persistence.ts for the pattern.</span></span>
+<span class="new">        (worldState <span class="kw">as</span> Mutable&lt;WorldState&gt;).playerLat = lat;</span>
+<span class="new">        (worldState <span class="kw">as</span> Mutable&lt;WorldState&gt;).playerLon = lon;</span>
+<span class="new">        <span class="kw">void</span> <span class="fn">saveWorld</span>(worldState, islandStates);</span>
+<span class="new">        <span class="fn">resolve</span>();</span>
+<span class="new">      },</span>
+<span class="new">    });</span>
+<span class="new">  });</span>
+<span class="new">}</span></pre></div>
+        <p class="body"><strong>islandStates timing.</strong>
+          <code>islandStates</code> may not be constructed at the picker-fire
+          point yet — re-read <a class="cite">main.ts:162</a>'s surroundings
+          to confirm. If islandStates lives in the restored path only,
+          either move the picker BEFORE islandStates construction (saving
+          just the world without states is fine if persistence supports
+          a partial write) or AFTER (so the save is complete). The spec
+          §04 shows the picker firing before <code>startGame</code>, which
+          aligns with "before renderer hookup but after both world +
+          states are populated." Pick the post-population position.</p>
+
+        <h4>5.2 Mutable cast pattern</h4>
+        <p class="body">The WorldState interface declares
+          <code>playerLat</code> and <code>playerLon</code> as
+          <code>readonly</code> per Phase 1. The existing codebase has a
+          pattern for mutation through a Mutable&lt;T&gt; helper or
+          structural-replace via spread. Search:</p>
+        <div class="code"><pre>grep -rn '<span class="kw">as</span> Mutable&lt;\|<span class="kw">type</span> Mutable\|Writable&lt;' src/</pre></div>
+        <p class="body">If the project has a <code>Mutable&lt;T&gt;</code>
+          type alias, reuse it. If not, replace the snapshot:</p>
+        <div class="code"><pre><span class="cm">// Alternative — structural replace, idiomatic in main.ts:</span>
+<span class="kw">const</span> newWorld = { ...worldState, playerLat: lat, playerLon: lon };
+<span class="cm">// Reassign the let binding for worldState (must be `let`, not `const`).</span></pre></div>
+        <p class="body">Whichever pattern the existing codebase uses
+          elsewhere for mutating the world snapshot — match it. Don't
+          invent a third.</p>
+
+        <h4>5.3 Settings panel</h4>
+        <div class="code"><pre><span class="cm">// settings-ui.ts — wherever the panel's button list is built.</span>
+<span class="kw">const</span> changeLocationBtn = document.<span class="fn">createElement</span>(<span class="str">'button'</span>);
+changeLocationBtn.textContent = <span class="str">'Change location'</span>;
+changeLocationBtn.<span class="fn">addEventListener</span>(<span class="str">'click'</span>, () =&gt; {
+  <span class="fn">showMapPicker</span>({
+    current: worldState.playerLat != <span class="kw">null</span> &amp;&amp; worldState.playerLon != <span class="kw">null</span>
+      ? { lat: worldState.playerLat, lon: worldState.playerLon }
+      : <span class="kw">null</span>,
+    onPick: (lat, lon) =&gt; {
+      <span class="cm">// Mutate + save (same pattern as bootstrap).</span>
+      …
+    },
+    onCancel: () =&gt; { <span class="cm">/* no-op; modal removes itself */</span> },
+  });
+});
+panel.<span class="fn">appendChild</span>(changeLocationBtn);</pre></div>
+        <p class="body"><strong>WorldState access in settings-ui.</strong>
+          The settings panel module accepts the world reference via its
+          constructor / init parameters. Re-read the existing constructor
+          shape — most likely the new button needs the same
+          <code>worldState</code> reference that the other buttons
+          (panel-toggles, save-now, etc.) use. If not present, extend the
+          init signature; minimal additive change.</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Apply the bootstrap picker check at <code>main.ts</code> immediately after world load completes — before the renderer wires <code>oceanLayer</code> / <code>islandLayer</code> at lines 176-181. Use the await-promise pattern so the renderer truly blocks on the pick.</li>
+          <li>Apply the Settings "Change location" button.</li>
+          <li>Confirm <code>saveWorld</code> persists the new lat/lon. Re-read <code>persistence.ts</code>'s SerializedWorld writer to verify the fields are in the serialized shape (Phase 1 should have wired them).</li>
+          <li>Browser smoke test: load the dev URL, picker modal appears (first-session simulation: clear localStorage first OR force-null the playerLat in the live save), click somewhere, confirm. Reload page — picker doesn't reappear.</li>
+          <li>Open Settings panel, click "Change location", confirm picker re-opens with the current location pinned. Cancel without changing; lat/lon unchanged.</li>
+          <li>Run <code>npm test</code>. Failure count unchanged from Phase 3 — main.ts bootstrap isn't covered by tests (browser-side only).</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;Browser: fresh save → picker shows → pick → save persists → reload → picker doesn't show. Settings: Change location button opens picker pre-populated; Cancel preserves state. <code>tsc -b</code> green. <code>npm test</code> at Phase 3 failure level.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git reset --hard HEAD~1</code> reverts the wire-up. <code>map-picker.ts</code> from Phase 4 remains but unreferenced (harmless dead code).</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(main,settings): wire map picker — first-session prompt + change-location
+
+main.ts: between worldState load (line 161) and renderer
+hookup (line 176), if playerLat or playerLon is null, await
+showMapPicker, write back, saveWorld. The promise blocks the
+renderer so the player picks before they see any solar UI
+(which would be stuck at 0 with null lat/lon).
+
+settings-ui.ts: new "Change location" button on the panel
+that re-opens the picker pre-populated with the current
+coords.
+
+Mutation goes through the same idiom the rest of main.ts uses
+to update the worldState snapshot.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase6-weather-realtime
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p6">
+      <div class="sec-head"><span class="num">07</span><h2>Phase 6 — CO₂ weather coupling</h2></div>
+      <p class="sec-intro">Wires the Phase 2 + Phase 5 <code>state.co2Kg</code>
+        signal into <code>weather.ts</code>. Adds the multiplier function,
+        the aggregate helper, the heatwave event, and the climate-crisis
+        chain. Single file, ~100 LOC added.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/weather.ts</code> — add <code>co2WeatherMultiplier</code>, <code>sumIslandCo2</code>, heatwave + crisis types, integrate into <code>weather()</code> at <a class="cite">weather.ts:135</a>.</li>
+        </ul>
+
+        <h4>6.1 CO₂ multiplier function</h4>
+        <div class="code"><pre><span class="cm">// weather.ts — module-level helpers.</span>
+<span class="cm">/** §7.3: CO₂-band multiplier on storm-weight summing.</span>
+<span class="cm"> *  Bands: &lt;100kg = 1.0; &lt;10t = 1.1; &lt;100t = 1.3; ≥100t = 1.6 (crisis). */</span>
+<span class="kw">export function</span> <span class="fn">co2WeatherMultiplier</span>(totalCo2Kg: <span class="kw">number</span>): <span class="kw">number</span> {
+  <span class="kw">if</span> (totalCo2Kg &lt; 100) <span class="kw">return</span> 1.0;
+  <span class="kw">if</span> (totalCo2Kg &lt; 10_000) <span class="kw">return</span> 1.1;
+  <span class="kw">if</span> (totalCo2Kg &lt; 100_000) <span class="kw">return</span> 1.3;
+  <span class="kw">return</span> 1.6;
+}
+
+<span class="kw">export function</span> <span class="fn">sumIslandCo2</span>(world: WorldState): <span class="kw">number</span> {
+  <span class="kw">let</span> sum = 0;
+  <span class="kw">for</span> (<span class="kw">const</span> [, state] <span class="kw">of</span> world.islandStates) {
+    sum += state.co2Kg ?? 0;
+  }
+  <span class="kw">return</span> sum;
+}</pre></div>
+        <p class="body"><strong>WorldState shape check.</strong> Re-read
+          <code>world.ts</code> to confirm <code>islandStates</code> is a
+          <code>Map&lt;IslandId, IslandState&gt;</code> (the
+          <code>Map.entries()</code> destructure above) and that
+          <code>IslandState.co2Kg: number</code> is in the schema from
+          Phase 1. Adjust the loop shape if the live binding differs
+          (some codebases keep it as a plain object record).</p>
+
+        <h4>6.2 Wire into the storm-roll</h4>
+        <p class="body">The integration site is inside the existing
+          <code>weather()</code> function at <a class="cite">weather.ts:135</a>.
+          The function samples a state per dwell interval; the CO₂ multiplier
+          modulates the per-event storm-tier weights:</p>
+        <div class="code"><pre><span class="cm">// weather.ts — around line 153 inside the for-loop of weather().</span>
+<span class="cm">// Existing:</span>
+<span class="cm">//   if (phase === 'night' || phase === 'dawn') { …×1.25 storms… }</span>
+<span class="cm">//   const dwell = MIN_DWELL_MS + …;</span>
+<span class="cm">//   const state = sampleState(weights, rng);</span>
+
+<span class="cm">// New: thread world into weather() signature so the aggregator can run.</span>
+<span class="new"><span class="kw">const</span> co2Mul = <span class="fn">co2WeatherMultiplier</span>(<span class="fn">sumIslandCo2</span>(world));</span>
+<span class="new"><span class="kw">if</span> (co2Mul !== 1.0) {</span>
+<span class="new">  <span class="kw">const</span> mutable: WeightEntry[] = weights.<span class="fn">map</span>((e) =&gt; ({ state: e.state, weight: e.weight }));</span>
+<span class="new">  <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> mutable) {</span>
+<span class="new">    <span class="kw">if</span> (e.state === <span class="str">'storm'</span> || e.state === <span class="str">'severe_storm'</span> || e.state === <span class="str">'catastrophic'</span>) {</span>
+<span class="new">      e.weight *= co2Mul;</span>
+<span class="new">    }</span>
+<span class="new">  }</span>
+<span class="new">  weights = mutable;</span>
+<span class="new">}</span>
+<span class="kw">const</span> state = <span class="fn">sampleState</span>(weights, rng);</pre></div>
+        <p class="body"><strong>Signature ripple.</strong>
+          <code>weather()</code> currently takes
+          <code>(seed, cx, cy, nowMs, biome?)</code>. Adding the
+          aggregator means either (a) extending the signature to take
+          <code>world: WorldState</code> as a final parameter, or
+          (b) accepting <code>totalCo2Kg: number</code> precomputed by the
+          caller. Pick (b) — it keeps <code>weather.ts</code> independent
+          of the world snapshot and lets tests inject the value:</p>
+        <div class="code"><pre><span class="cm">// New signature:</span>
+<span class="kw">export function</span> <span class="fn">weather</span>(
+  seed: <span class="kw">string</span>, cx: <span class="kw">number</span>, cy: <span class="kw">number</span>, nowMs: <span class="kw">number</span>,
+  biome?: Biome,
+<span class="new">  totalCo2Kg: <span class="kw">number</span> = 0,</span>
+): WeatherCell { … }</pre></div>
+        <p class="body">Default zero keeps existing callers happy; they get
+          a 1.0× multiplier and behaviour-equivalent output. Threading
+          through real <code>totalCo2Kg</code> is a Phase 6.3 follow-up
+          inside the same commit at the runtime callers.</p>
+
+        <h4>6.3 Heatwave event type</h4>
+        <p class="body">The heatwave is a new <code>WeatherState</code>?
+          Or a parallel event flag? Per spec §5.3 it's a "new weather event
+          type" that fires on a per-day roll independent of the storm-tier
+          state — best modeled as a separate flag on the world (or per-island)
+          that the renderer + economy read alongside the current
+          <code>WeatherCell</code>:</p>
+        <div class="code"><pre><span class="cm">// weather.ts — new export.</span>
+<span class="kw">export interface</span> HeatwaveState {
+  <span class="cm">/** True for the full game-day this event is active. */</span>
+  <span class="kw">readonly</span> active: <span class="kw">boolean</span>;
+  <span class="cm">/** Wall-clock ms when the heatwave started. */</span>
+  <span class="kw">readonly</span> sinceMs: <span class="kw">number</span>;
+  <span class="cm">/** Wall-clock ms when the heatwave ends (sinceMs + DAY_DURATION_MS). */</span>
+  <span class="kw">readonly</span> untilMs: <span class="kw">number</span>;
+}
+
+<span class="kw">export function</span> <span class="fn">rollHeatwave</span>(
+  seed: <span class="kw">string</span>,
+  dayIndex: <span class="kw">number</span>,
+  totalCo2Kg: <span class="kw">number</span>,
+): HeatwaveState | <span class="kw">null</span> {
+  <span class="kw">if</span> (totalCo2Kg &lt; 10_000) <span class="kw">return</span> <span class="kw">null</span>;
+  <span class="kw">const</span> rng = <span class="fn">makeSeededRng</span>(`${seed}_heatwave_${dayIndex}`);
+  <span class="kw">if</span> (<span class="fn">rng</span>() &gt;= 0.05) <span class="kw">return</span> <span class="kw">null</span>;
+  <span class="kw">const</span> sinceMs = dayIndex * DAY_DURATION_MS;
+  <span class="kw">return</span> { active: <span class="kw">true</span>, sinceMs, untilMs: sinceMs + DAY_DURATION_MS };
+}</pre></div>
+        <p class="body"><strong>Deterministic by seed + day.</strong>
+          Same idiom as <code>weather()</code> — RNG keyed by save seed
+          + day index — so the heatwave at a given (CO₂, day) is replayable
+          across save/load cycles. The 5% per-day probability fires only
+          when <code>totalCo2Kg ≥ 10_000</code> per spec §5.3.</p>
+
+        <h4>6.4 Effect application</h4>
+        <p class="body">Where the heatwave's ×1.2 solar / ×0.8 crop yield
+          gets applied is a question of consumer responsibility. Two
+          consumers:</p>
+        <ul class="body">
+          <li><strong>Solar buildings (×1.2 nameplate).</strong> Multiplies into the same
+            <code>solarMultiplier</code> result at the economy.ts:748 callsite — gated by an active heatwave. Read <code>rollHeatwave(seed, currentDayIndex(t), totalCo2Kg)?.active</code>, apply factor if true.</li>
+          <li><strong>Crop yield (×0.8).</strong> Apply at the recipe-resolution layer for crop-bearing recipes (<code>plant_a_tree</code>, <code>orchard</code>, whatever the catalog names them — grep <code>building-defs.ts</code> for crop-like producers).</li>
+        </ul>
+        <p class="body">Both consumers are inside <code>economy.ts</code>. The
+          heatwave roll itself lives in <code>weather.ts</code>; the consumer
+          imports the helper. <strong>Avoid stashing heatwave state on the
+          world snapshot</strong> — deterministic by seed+day means it's
+          re-derivable, and the snapshot stays lean.</p>
+
+        <h4>6.5 Climate-crisis chain (deferred-ish)</h4>
+        <p class="body">Per spec §5.4 the climate-crisis chain at
+          <code>totalCo2Kg &gt; 100_000</code> is "a sequence of escalating
+          storms + heatwaves + drought events." Phase 6 ships the
+          threshold-detection function + the multiplier band (1.6×) which
+          is the dominant mechanic. The recurring event chain itself is a
+          Phase 6 scope question — the spec's language is loose ("a chain
+          fires"). Two options:</p>
+        <ul class="body">
+          <li><strong>Minimal interpretation:</strong> the 1.6× multiplier on storm weights IS the chain (more storms more often). Heatwave probability also doubles at crisis tier (5% → 10%). Drought is a future Phase. <strong>Pick this — it's a tractable scope.</strong></li>
+          <li><strong>Full interpretation:</strong> add a CrisisEvent type with rotating storm / heatwave / drought modes. Out of scope for Phase 6's 18h budget; carry to a follow-up.</li>
+        </ul>
+        <p class="body">Add a JSDoc comment on <code>co2WeatherMultiplier</code>
+          naming the deferred interpretation so future work has the hook.</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Add the <code>co2WeatherMultiplier</code> + <code>sumIslandCo2</code> exports to <code>weather.ts</code>.</li>
+          <li>Add the optional <code>totalCo2Kg: number = 0</code> parameter to <code>weather()</code> and apply the multiplier inside the for-loop, around line 153-163.</li>
+          <li>Add the <code>HeatwaveState</code> type + <code>rollHeatwave</code> helper.</li>
+          <li>Update the runtime callers of <code>weather()</code> — grep for <code>weather(</code> in <code>src/</code> outside tests; thread <code>sumIslandCo2(worldState)</code> through. Most likely the call lives in the per-cell weather-overlay render path; one or two sites.</li>
+          <li>Wire heatwave into <code>economy.ts</code> at the solar gate — multiply <code>solarMultiplier(...) × 1.2</code> when active. Wire into crop-recipe resolution — multiply yield × 0.8 when active. Be explicit about WHICH recipes count as "crop" — name them with a const set <code>CROP_RECIPE_IDS: Set&lt;RecipeId&gt;</code>.</li>
+          <li>Run <code>tsc -b</code>. Must compile clean.</li>
+          <li>Run <code>npm test</code>. Pre-Phase-6 weather tests should still pass (default <code>totalCo2Kg = 0</code> means 1.0× multiplier, behaviour-preserved). The Phase 3 solar-curve failures still fail — Phase 8 fixes those.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>tsc -b</code> green. Pre-existing weather tests still pass. <code>grep -n 'co2WeatherMultiplier\|sumIslandCo2\|rollHeatwave' src/</code> shows the functions exported + at least one caller in <code>weather.ts</code> + at least one in <code>economy.ts</code>.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git reset --hard HEAD~1</code>. CO₂ accrual from Phase 2/5 continues but has no consumer (back to pre-Phase-6 behaviour).</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(weather,economy): CO₂-coupled storm multiplier + heatwave events
+
+Per spec §05 (rev-16 §7.3). New exports in weather.ts:
+  - co2WeatherMultiplier(kg) → 1.0 / 1.1 / 1.3 / 1.6 by band
+  - sumIslandCo2(world) → aggregate across all islands
+  - rollHeatwave(seed, dayIdx, kg) → HeatwaveState | null,
+    deterministic by seed+day, 5% probability at &gt;10t CO₂
+
+weather() picks up a totalCo2Kg parameter (default 0 →
+behaviour-preserving for existing callers) and multiplies
+storm/severe/catastrophic weights by the CO₂ multiplier inside
+the existing dwell-roll loop.
+
+economy.ts wires heatwave into the solar gate (×1.2 active)
+and the crop-recipe yield path (×0.8 active). Heatwave state
+is re-derived from seed+day each tick — NOT stored on the
+world snapshot.
+
+Climate-crisis chain (spec §5.4): minimal interpretation —
+the 1.6× multiplier IS the chain. Full event-rotation is
+deferred to a follow-up phase per scope.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase6-weather-realtime
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p7">
+      <div class="sec-head"><span class="num">08</span><h2>Phase 7 — <code>coal_gen</code> retune 100 → 50</h2></div>
+      <p class="sec-intro">Smallest commit in the phase. Single-line value
+        change at <a class="cite">building-defs.ts:714</a>. Cited in spec
+        §06 as the rev-16 §10.3 resolution.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/building-defs.ts</code> — <code>coal_gen</code> entry at line 706, change <code>power: { produces: 100 }</code> at line 714 → <code>50</code>.</li>
+        </ul>
+
+        <h4>Diff</h4>
+        <div class="code"><pre><span class="cm">// building-defs.ts — line 714</span>
+<span class="cm">// Before:</span>
+<span class="cm">//   power: { produces: 100 },</span>
+<span class="cm">// After:</span>
+<span class="new">    power: { produces: 50 },  <span class="cm">// rev-16 §10.3: 12.5 MW thermal × 40% = 5 MW electrical = 50 unit</span></span></pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Edit <a class="cite">building-defs.ts:714</a>: <code>produces: 100</code> → <code>produces: 50</code>. Add the inline comment citing rev-16 §10.3.</li>
+          <li>Run <code>tsc -b</code> — must remain green (value-only change).</li>
+          <li>Run <code>npm test</code>. <strong>Expect a small handful of failures</strong> in tests that asserted on specific coal_gen output values (e.g. "with one coal_gen, power supply = 100"). Two paths:
+            <ul class="body">
+              <li>If the failing tests are <em>verifying the old number specifically</em>, update them in THIS commit — the retune is a single-mechanic change and its test update belongs together.</li>
+              <li>If a failing test is testing a derived chain (e.g. "smelter completes 5 cycles per minute on one coal_gen") that's now broken by the halved input, document in the commit body and EITHER update the test to the new chain-balance numbers OR mark the chain as out-of-scope for retune (the spec's "balance retune in §06" is acknowledged as deferred).</li>
+            </ul>
+          </li>
+          <li>If the failure list is &gt;10 tests, halt and reconsider — the retune might be tied to more chains than the spec acknowledges; consult the spec author before muscling through.</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Balance-retune scope</div>
+          The spec §06 mentions that "the balance retune in §06 of this
+          phase verifies the existing progression remains playable." This
+          phase only ships the value change; the broader playthrough
+          rebalance is deferred. If tests reveal a deeper chain regression
+          (e.g. T3 progression now requires 5 coal_gens to power a single
+          factory line), document it as a follow-up rather than fixing
+          here.
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>grep -n 'produces: 50\|produces:50' src/building-defs.ts</code> shows the new line. <code>npm test</code> fails ONLY on the new-Phase-3-leftovers + the small coal_gen-asserting tests handled in this commit. <code>tsc -b</code> green.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert returns 100 unit.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>balance(building-defs): coal_gen 100 → 50 unit per rev-16 §10.3
+
+12.5 MW thermal × ~40% real coal-plant efficiency = 5 MW
+electrical = 50 unit under the 100 kW/unit anchor. The
+previous 100-unit value implied ~80% efficiency which is
+unreachable for coal. Burn rate (1 coal / 2 s) kept; smelter
+timing depends on the 2-s cycle and is load-bearing.
+
+Tests asserting the old 100-unit value updated in the same
+commit. Broader playthrough rebalance deferred — the value
+change lands here; chain-progression tuning is follow-up.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase6-weather-realtime
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p8">
+      <div class="sec-head"><span class="num">09</span><h2>Phase 8 — Tests + green confirmation (gate)</h2></div>
+      <p class="sec-intro">The gate. ~40 new tests; ~10-30 existing tests
+        replaced or touched. Final commit confirms full-suite green and
+        captures the live-save replay artifact.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/daynight.test.ts</code> — wholesale replace trapezoidal-shape tests with astronomy fixtures (per spec §9.1, §9.2).</li>
+          <li><code>src/weather.test.ts</code> — add CO₂-multiplier band tests + heatwave fixture (per spec §9.5, §9.6).</li>
+          <li><code>src/map-picker.test.ts</code> — NEW. Click → lat/lon conversion (per spec §9.3). JSDom-friendly; no Pixi.</li>
+          <li><code>src/economy.test.ts</code> — update solar-curve assertions to astronomy values; setup helper for lat/lon defaulting to (0, 0).</li>
+          <li><code>src/building-defs.test.ts</code> (if it exists, otherwise inline in <code>economy.test.ts</code>) — coal_gen retune (per spec §9.7).</li>
+        </ul>
+
+        <h4>8.1 SunCalc altitude fixtures (per spec §9.1)</h4>
+        <p class="body">Five fixtures, all under one <code>describe('solarMultiplier — astronomy', …)</code>:</p>
+        <div class="code"><pre><span class="kw">describe</span>(<span class="str">'solarMultiplier — astronomy'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'returns ~1.0 at equator noon on the spring equinox'</span>, () =&gt; {
+    <span class="cm">// 2026-03-20 12:00 UTC at (0, 0). Sun directly overhead → mul ≈ 1.</span>
+    <span class="kw">const</span> t = <span class="kw">new</span> Date(<span class="str">'2026-03-20T12:00:00Z'</span>).<span class="fn">getTime</span>();
+    <span class="fn">expect</span>(<span class="fn">solarMultiplier</span>(t, 0, 0)).<span class="fn">toBeCloseTo</span>(1.0, 2);
+  });
+
+  <span class="kw">it</span>(<span class="str">'returns ~0.80 at 60°N noon on June solstice'</span>, () =&gt; {
+    <span class="kw">const</span> t = <span class="kw">new</span> Date(<span class="str">'2026-06-21T12:00:00Z'</span>).<span class="fn">getTime</span>();
+    <span class="fn">expect</span>(<span class="fn">solarMultiplier</span>(t, 60, 0)).<span class="fn">toBeCloseTo</span>(0.80, 1);
+  });
+
+  <span class="kw">it</span>(<span class="str">'returns ~0.10 at 60°N noon on December solstice'</span>, () =&gt; {
+    <span class="kw">const</span> t = <span class="kw">new</span> Date(<span class="str">'2026-12-21T12:00:00Z'</span>).<span class="fn">getTime</span>();
+    <span class="fn">expect</span>(<span class="fn">solarMultiplier</span>(t, 60, 0)).<span class="fn">toBeCloseTo</span>(0.10, 1);
+  });
+
+  <span class="kw">it</span>(<span class="str">'returns 0 throughout polar night at 84°N on Dec 21'</span>, () =&gt; {
+    <span class="kw">const</span> dec21 = <span class="kw">new</span> Date(<span class="str">'2026-12-21T00:00:00Z'</span>).<span class="fn">getTime</span>();
+    <span class="kw">for</span> (<span class="kw">let</span> h = 0; h &lt; 24; h++) {
+      <span class="kw">const</span> t = dec21 + h * 60 * 60 * 1000;
+      <span class="fn">expect</span>(<span class="fn">solarMultiplier</span>(t, 84, 0)).<span class="fn">toBe</span>(0);
+    }
+  });
+
+  <span class="kw">it</span>(<span class="str">'is monotonic ascending across a sunrise transition'</span>, () =&gt; {
+    <span class="cm">// At (40, -74) on Mar 20, sun rises around 11:00 UTC. Sample 11-13 UTC,</span>
+    <span class="cm">// expect non-decreasing.</span>
+    <span class="cm">// (Implementer: pin exact times by checking SunCalc.getTimes once.)</span>
+  });
+});</pre></div>
+
+        <h4>8.2 Null lat/lon (per spec §9.2)</h4>
+        <div class="code"><pre><span class="kw">describe</span>(<span class="str">'solarMultiplier — null inputs'</span>, () =&gt; {
+  <span class="kw">it.each</span>([
+    [0],
+    [<span class="kw">new</span> Date(<span class="str">'2026-06-21T12:00:00Z'</span>).<span class="fn">getTime</span>()],
+    [<span class="kw">new</span> Date(<span class="str">'2026-12-21T00:00:00Z'</span>).<span class="fn">getTime</span>()],
+  ])(<span class="str">'returns 0 at t=%s regardless of nowMs'</span>, (t) =&gt; {
+    <span class="fn">expect</span>(<span class="fn">solarMultiplier</span>(t, <span class="kw">null</span>, <span class="kw">null</span>)).<span class="fn">toBe</span>(0);
+    <span class="fn">expect</span>(<span class="fn">solarMultiplier</span>(t, 0, <span class="kw">null</span>)).<span class="fn">toBe</span>(0);
+    <span class="fn">expect</span>(<span class="fn">solarMultiplier</span>(t, <span class="kw">null</span>, 0)).<span class="fn">toBe</span>(0);
+  });
+});</pre></div>
+
+        <h4>8.3 Map picker click → lat/lon (per spec §9.3)</h4>
+        <p class="body">Pure unit test of the equirectangular formula. The
+          full DOM modal isn't tested (would need jsdom + click events);
+          extract the conversion into a tested helper:</p>
+        <div class="code"><pre><span class="cm">// map-picker.ts — extract for testability.</span>
+<span class="kw">export function</span> <span class="fn">clickToLatLon</span>(
+  xPx: <span class="kw">number</span>, yPx: <span class="kw">number</span>,
+  rectWidth: <span class="kw">number</span>, rectHeight: <span class="kw">number</span>,
+): { lat: <span class="kw">number</span>; lon: <span class="kw">number</span> } { … }</pre></div>
+        <div class="code"><pre><span class="cm">// map-picker.test.ts</span>
+<span class="kw">describe</span>(<span class="str">'clickToLatLon — equirectangular'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'center → (0, 0)'</span>, () =&gt; {
+    <span class="fn">expect</span>(<span class="fn">clickToLatLon</span>(180, 90, 360, 180)).<span class="fn">toEqual</span>({ lat: 0, lon: 0 });
+  });
+  <span class="kw">it</span>(<span class="str">'(270, 45) → (45, 90)'</span>, () =&gt; {
+    <span class="fn">expect</span>(<span class="fn">clickToLatLon</span>(270, 45, 360, 180)).<span class="fn">toEqual</span>({ lat: 45, lon: 90 });
+  });
+  <span class="kw">it</span>(<span class="str">'(90, 135) → (-45, -90)'</span>, () =&gt; {
+    <span class="fn">expect</span>(<span class="fn">clickToLatLon</span>(90, 135, 360, 180)).<span class="fn">toEqual</span>({ lat: -45, lon: -90 });
+  });
+  <span class="kw">it</span>(<span class="str">'corner (0, 0) → (90, -180)'</span>, () =&gt; {
+    <span class="fn">expect</span>(<span class="fn">clickToLatLon</span>(0, 0, 360, 180)).<span class="fn">toEqual</span>({ lat: 90, lon: -180 });
+  });
+  <span class="kw">it</span>(<span class="str">'opposite corner (360, 180) → (-90, 180)'</span>, () =&gt; {
+    <span class="fn">expect</span>(<span class="fn">clickToLatLon</span>(360, 180, 360, 180)).<span class="fn">toEqual</span>({ lat: -90, lon: 180 });
+  });
+});</pre></div>
+
+        <h4>8.4 First-session picker prompt (per spec §9.4)</h4>
+        <p class="body">Bootstrap behaviour is browser-side; vitest tests the
+          predicate at minimum. A full bootstrap test would need DOM mocks
+          beyond what's currently set up — defer to manual smoke-test
+          confirmed in Phase 5. Add a single unit:</p>
+        <div class="code"><pre><span class="kw">it</span>(<span class="str">'shouldShowPicker returns true when either coord is null'</span>, () =&gt; {
+  <span class="fn">expect</span>(<span class="fn">shouldShowPicker</span>({ playerLat: <span class="kw">null</span>, playerLon: <span class="kw">null</span> })).<span class="fn">toBe</span>(<span class="kw">true</span>);
+  <span class="fn">expect</span>(<span class="fn">shouldShowPicker</span>({ playerLat: 40, playerLon: <span class="kw">null</span> })).<span class="fn">toBe</span>(<span class="kw">true</span>);
+  <span class="fn">expect</span>(<span class="fn">shouldShowPicker</span>({ playerLat: <span class="kw">null</span>, playerLon: -74 })).<span class="fn">toBe</span>(<span class="kw">true</span>);
+  <span class="fn">expect</span>(<span class="fn">shouldShowPicker</span>({ playerLat: 40, playerLon: -74 })).<span class="fn">toBe</span>(<span class="kw">false</span>);
+});</pre></div>
+        <p class="body">Extract <code>shouldShowPicker</code> as a tested
+          export in <code>map-picker.ts</code> (or wherever the bootstrap
+          check lives). Tiny pure function; trivially tested.</p>
+
+        <h4>8.5 CO₂ → storm multiplier (per spec §9.5)</h4>
+        <div class="code"><pre><span class="kw">describe</span>(<span class="str">'co2WeatherMultiplier — band edges'</span>, () =&gt; {
+  <span class="kw">it.each</span>([
+    [0, 1.0], [50, 1.0], [99, 1.0],
+    [100, 1.1], [500, 1.1], [9999, 1.1],
+    [10_000, 1.3], [50_000, 1.3], [99_999, 1.3],
+    [100_000, 1.6], [500_000, 1.6], [1_000_000, 1.6],
+  ])(<span class="str">'co2WeatherMultiplier(%i) = %f'</span>, (co2, mul) =&gt; {
+    <span class="fn">expect</span>(<span class="fn">co2WeatherMultiplier</span>(co2)).<span class="fn">toBe</span>(mul);
+  });
+});
+
+<span class="kw">describe</span>(<span class="str">'sumIslandCo2 — aggregation'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'sums co2Kg across the islandStates map'</span>, () =&gt; {
+    <span class="kw">const</span> world = <span class="fn">makeWorldFixture</span>([
+      { id: <span class="str">'a'</span>, co2Kg: 1000 },
+      { id: <span class="str">'b'</span>, co2Kg: 2500 },
+      { id: <span class="str">'c'</span>, co2Kg: 0 },
+    ]);
+    <span class="fn">expect</span>(<span class="fn">sumIslandCo2</span>(world)).<span class="fn">toBe</span>(3500);
+  });
+  <span class="kw">it</span>(<span class="str">'treats missing co2Kg as 0'</span>, () =&gt; {
+    <span class="kw">const</span> world = <span class="fn">makeWorldFixture</span>([{ id: <span class="str">'a'</span> }]);
+    <span class="fn">expect</span>(<span class="fn">sumIslandCo2</span>(world)).<span class="fn">toBe</span>(0);
+  });
+});</pre></div>
+
+        <h4>8.6 Heatwave fixture (per spec §9.6)</h4>
+        <div class="code"><pre><span class="kw">describe</span>(<span class="str">'rollHeatwave — deterministic + threshold'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'returns null below 10t CO₂'</span>, () =&gt; {
+    <span class="fn">expect</span>(<span class="fn">rollHeatwave</span>(<span class="str">'s'</span>, 1, 9999)).<span class="fn">toBeNull</span>();
+  });
+  <span class="kw">it</span>(<span class="str">'fires roughly 5% of the time at &gt;10t (1000 days, expect 50±15)'</span>, () =&gt; {
+    <span class="kw">let</span> hits = 0;
+    <span class="kw">for</span> (<span class="kw">let</span> d = 0; d &lt; 1000; d++) {
+      <span class="kw">if</span> (<span class="fn">rollHeatwave</span>(<span class="str">'s'</span>, d, 50_000)) hits++;
+    }
+    <span class="fn">expect</span>(hits).<span class="fn">toBeGreaterThan</span>(35);
+    <span class="fn">expect</span>(hits).<span class="fn">toBeLessThan</span>(65);
+  });
+  <span class="kw">it</span>(<span class="str">'same seed + day → same result (replayable)'</span>, () =&gt; {
+    <span class="fn">expect</span>(<span class="fn">rollHeatwave</span>(<span class="str">'s'</span>, 42, 50_000))
+      .<span class="fn">toEqual</span>(<span class="fn">rollHeatwave</span>(<span class="str">'s'</span>, 42, 50_000));
+  });
+});
+
+<span class="kw">describe</span>(<span class="str">'heatwave economy effect'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'multiplies solar output by 1.2 when active'</span>, () =&gt; { … });
+  <span class="kw">it</span>(<span class="str">'multiplies crop yield by 0.8 when active'</span>, () =&gt; { … });
+  <span class="kw">it</span>(<span class="str">'clears when totalCo2Kg drops below 10t'</span>, () =&gt; { … });
+});</pre></div>
+
+        <h4>8.7 Coal_gen retune (per spec §9.7)</h4>
+        <div class="code"><pre><span class="kw">it</span>(<span class="str">'coal_gen produces 50 unit of power (rev-16 §10.3)'</span>, () =&gt; {
+  <span class="fn">expect</span>(BUILDING_DEFS.coal_gen.power?.produces).<span class="fn">toBe</span>(50);
+});
+
+<span class="kw">it</span>(<span class="str">'one coal_gen powers exactly 5 MW worth of load'</span>, () =&gt; {
+  <span class="kw">const</span> state = <span class="fn">makeFixtureWithBuildings</span>([<span class="str">'coal_gen'</span>]);
+  <span class="kw">const</span> rates = <span class="fn">computeRates</span>(state, 0);
+  <span class="fn">expect</span>(<span class="fn">totalPowerSupply</span>(rates)).<span class="fn">toBe</span>(50);
+});</pre></div>
+
+        <h4>8.8 Live-save replay (per spec §9.8)</h4>
+        <p class="body">Not a vitest unit — a procedural step the implementer
+          runs once and captures into the commit body:</p>
+        <ol class="body">
+          <li>Take <code>/tmp/robot-islands-save.json</code> (the live save fixture used by <code>scripts/profile-economy.ts</code>) and manually set its <code>world.playerLat = 40.7128</code>, <code>world.playerLon = -74.0060</code> (NYC).</li>
+          <li>Run <code>npx tsx scripts/profile-economy.ts /tmp/robot-islands-save.json</code>.</li>
+          <li>Capture the headline metrics. The pre/post comparison may show solar producers at lower output (NYC's annual CF ≈ 18% vs the trapezoidal 50% — but the producer count and recipe chains continue working, which is the smoke).</li>
+          <li>Also run the picker against a fresh fictional save (delete the localStorage save in the browser, reload, walk the picker UI, verify save persists).</li>
+        </ol>
+
+        <h4>8.9 Full-suite green</h4>
+        <p class="body">Final step:</p>
+        <ol class="body">
+          <li><code>npm test</code> exits 0.</li>
+          <li>Test count up by ~40 from the Phase 0 baseline.</li>
+          <li>No new perf regressions in <code>scripts/profile-economy.ts</code> (within ~5% of Phase 0).</li>
+        </ol>
+
+        <div class="callout crit">
+          <div class="ct">Binding gate</div>
+          <code>npm test</code> exits 0 AND test count increased by 30+. If
+          a non-trivial number of pre-existing tests are STILL red after
+          Phase 8 (say &gt;5), the rewrite has hidden a real regression
+          and the gate fails. Roll back to Phase 0 and re-diagnose.
+        </div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Walk every still-red test from Phase 3's leftover failures. For each, determine: is it a solar-curve assertion (replace with astronomy fixture), or an indirect downstream (update its setup to provide a deterministic location like (0, 0))?</li>
+          <li>Write the new astronomy fixtures per §8.1 — start with the easy ones (equator noon equinox, polar night).</li>
+          <li>Write the CO₂ / heatwave coverage per §8.5 + §8.6.</li>
+          <li>Write the map-picker conversion unit tests per §8.3.</li>
+          <li>Write the coal_gen retune assertion per §8.7.</li>
+          <li>Run <code>npm test</code>. Iterate until green.</li>
+          <li>Run the live-save replay per §8.8. Capture metrics.</li>
+          <li>Commit + write the final phase summary into the commit body.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0. Test count delta is +30 to +50. Profile metrics within ±5% of Phase 0. Live save loads, renders, and runs in the browser at <code>https://islands.nitjsefni.eu/</code>.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;<code>git reset --hard HEAD~8</code> reverts the entire Phase 6 series. The v15 schema persists from Phase 1; the picker dependency persists from Phase 1 of this phase set but is unreferenced.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>test(phase6): astronomy + map-picker + CO₂ weather coverage; suite green
+
+Phase 8 closes the SI-units Phase 6 series. New tests per
+spec §09:
+
+  §9.1 SunCalc altitude fixtures              ~5 tests
+  §9.2 Null lat/lon → 0                       ~3 tests
+  §9.3 Map-picker click → lat/lon             ~5 tests
+  §9.4 First-session picker prompt predicate  ~1 test
+  §9.5 CO₂ multiplier band edges              ~12 tests
+  §9.6 Heatwave fire / determinism / effects  ~6 tests
+  §9.7 coal_gen 50-unit retune                ~2 tests
+  §9.8 Live-save replay (NYC lat/lon)         procedural
+  Updates to existing solar-curve tests in
+    daynight.test.ts / economy.test.ts /
+    hud.test.ts                               ~15-25 tests
+
+Live-save replay captured in scratch — no perf regression.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase6-weather-realtime
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="vmatrix">
+      <div class="sec-head"><span class="num">10</span><h2>Verification matrix</h2></div>
+      <p class="sec-intro">Every spec requirement → phase that delivers it →
+        test or measurement that verifies it.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Spec requirement</th>
+          <th>Phase</th>
+          <th>Verifying test / measurement</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">SunCalc dependency installed, MIT, no transitives</td>
+            <td class="mono">Phase 1</td>
+            <td><code>npm ls suncalc</code> + smoke import via Node REPL</td>
+          </tr>
+          <tr>
+            <td class="slate">solarMultiplier signature (nowMs, lat, lon) returns sin(altitude) clamped at 0</td>
+            <td class="mono">Phase 2</td>
+            <td>Phase 8 §8.1 astronomy fixtures (5 tests); §8.2 null-input (3 tests)</td>
+          </tr>
+          <tr>
+            <td class="slate">Null lat/lon returns 0</td>
+            <td class="mono">Phase 2</td>
+            <td>Phase 8 §8.2</td>
+          </tr>
+          <tr>
+            <td class="slate">nextSolarBoundaryMs uniform 32-segment grid</td>
+            <td class="mono">Phase 2</td>
+            <td>Existing daynight.test.ts boundary tests updated; sanity: boundary deltas equal 24h/32 = 45min</td>
+          </tr>
+          <tr>
+            <td class="slate">solarMultiplier callsites threaded with playerLat/playerLon</td>
+            <td class="mono">Phase 3</td>
+            <td><code>tsc -b</code> green; <code>grep 'solarMultiplier(' src/</code> audit</td>
+          </tr>
+          <tr>
+            <td class="slate">SVG world-map picker modal exists with equirectangular conversion</td>
+            <td class="mono">Phase 4</td>
+            <td>Phase 8 §8.3 conversion unit tests (5 tests); manual browser smoke</td>
+          </tr>
+          <tr>
+            <td class="slate">First-session bootstrap prompt fires on null lat/lon</td>
+            <td class="mono">Phase 5</td>
+            <td>Phase 8 §8.4 shouldShowPicker (1 test); manual browser walk</td>
+          </tr>
+          <tr>
+            <td class="slate">Settings "Change location" button opens picker pre-populated</td>
+            <td class="mono">Phase 5</td>
+            <td>Manual browser walk</td>
+          </tr>
+          <tr>
+            <td class="slate">Picker writes lat/lon to world snapshot; saveWorld persists</td>
+            <td class="mono">Phase 5</td>
+            <td>Manual: reload after pick, picker doesn't reappear</td>
+          </tr>
+          <tr>
+            <td class="slate">co2WeatherMultiplier band thresholds (1.0/1.1/1.3/1.6)</td>
+            <td class="mono">Phase 6</td>
+            <td>Phase 8 §8.5 (12 tests including 100/9999/10000/99999/100000 edges)</td>
+          </tr>
+          <tr>
+            <td class="slate">sumIslandCo2 aggregates correctly across islandStates</td>
+            <td class="mono">Phase 6</td>
+            <td>Phase 8 §8.5 (2 tests)</td>
+          </tr>
+          <tr>
+            <td class="slate">Heatwave event fires at 5% per day above 10t CO₂</td>
+            <td class="mono">Phase 6</td>
+            <td>Phase 8 §8.6 (1000-day statistical bound + determinism)</td>
+          </tr>
+          <tr>
+            <td class="slate">Heatwave effect: ×1.2 solar / ×0.8 crop</td>
+            <td class="mono">Phase 6</td>
+            <td>Phase 8 §8.6 (3 economy-integration tests)</td>
+          </tr>
+          <tr>
+            <td class="slate">Climate-crisis chain (minimal scope: 1.6× multiplier)</td>
+            <td class="mono">Phase 6</td>
+            <td>Phase 8 §8.5 covers the 1.6× tier</td>
+          </tr>
+          <tr>
+            <td class="slate">coal_gen power.produces = 50</td>
+            <td class="mono">Phase 7</td>
+            <td>Phase 8 §8.7 (catalog assertion + integration)</td>
+          </tr>
+          <tr>
+            <td class="slate">Live-save loads with manually-set lat/lon</td>
+            <td class="mono">Phase 8</td>
+            <td>§8.8 procedural; NYC lat/lon replay</td>
+          </tr>
+          <tr>
+            <td class="slate">No persistence schema bump (Phase 1 already added the fields)</td>
+            <td class="mono">All</td>
+            <td>Existing v15 round-trip tests stay green; <code>grep SUPPORTED_LOAD_VERSIONS</code> untouched</td>
+          </tr>
+          <tr>
+            <td class="slate">Full <code>npm test</code> green (binding gate)</td>
+            <td class="mono">Phase 8</td>
+            <td>Final commit verification</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="risks">
+      <div class="sec-head"><span class="num">11</span><h2>Risks &amp; mitigations</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>The Phase 3 patchwork test fix breaks more than expected.</strong> "Add (t, 0, 0)" gets too clever — some calls were already destructuring or pass a non-nowMs arg, and naive sed creates type errors.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Do not run a sed across the repo blind. Walk each <code>solarMultiplier(</code> match individually. <code>tsc -b</code> after each file. The two runtime sites get a careful threaded edit; test sites get the literal <code>(t, 0, 0)</code> only after confirming <code>t</code> is the nowMs arg name in scope.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>High-latitude players locked out of solar progression.</strong> A player picking Reykjavik (64°N) gets ~0 solar all winter; tutorial / progression may assume solar works.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Per spec §11 row 1: (a) picker tooltip warns "high latitudes have strong seasonal solar — alternative power recommended" (added in Phase 4's modal text); (b) Phase 6 doesn't fundamentally rebalance the progression — that's a follow-up. The escape hatch for stuck players is the Settings "Change location" button (Phase 5). Surface this in the in-game help if not already present.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Astronomy tests are brittle to SunCalc precision changes.</strong> Suncalc-major-version bumps in upstream could shift the expected values.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Pin to <code>suncalc@^1.9.0</code> (semver minor → patch). Use <code>toBeCloseTo(value, 1)</code> / <code>toBeCloseTo(value, 2)</code> — one decimal place of precision tolerates SunCalc model refinements without falsely failing.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Heatwave event multiplies solar in a way the renderer doesn't reflect.</strong> ×1.2 in economy.ts but the HUD's solar gauge shows the raw multiplier.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 6's heatwave wire-up updates the HUD path too — re-read <code>hud.ts:385</code>'s solar callsite to apply the same ×1.2 when heatwave is active. Optionally show a "Heatwave today" banner; spec §5.3 lists this as expected.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>The first-session bootstrap promise deadlocks.</strong> If <code>showMapPicker</code>'s onPick callback is never called (player closes the tab mid-pick), the Promise stays unresolved and the rest of the bootstrap can't proceed.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">No-escape-hatch design IS the intended behaviour — player must pick to proceed. Closing the tab is fine (no save corruption — nothing wrote). Browser-side test would smoke this; manual smoke in Phase 5 confirms.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>The Natural Earth SVG inline string blows up <code>map-picker.ts</code></strong> beyond 100 KB and the bundle / Vite tree-shaker can't dead-strip it from the build for paths that don't use it.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">~30 KB is the target after <code>svgo --precision 1</code>. The picker module is imported only by main.ts and settings-ui.ts — both are eager-loaded already, so the 30 KB cost is amortized into the existing bundle.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>The CO₂-threshold `weather()` ripple breaks the determinism contract.</strong> <code>weather()</code>'s RNG seeding depends on <code>seed_weather_cx_cy</code>; adding a CO₂ multiplier doesn't change the seed but DOES change the weight table — so the same RNG roll picks a different state for the same input. Replays of pre-Phase-6 saves see different weather histories.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">This is a behaviour change by design — CO₂ is a NEW input to weather. Pre-Phase-6 saves have <code>totalCo2Kg = 0</code> (Phase 1 default) → multiplier 1.0 → behaviour-preserved. Only saves where the player has accumulated CO₂ see different storm patterns from the new mechanic, which is the intended user-visible change. Document in the commit body.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Climate-crisis chain unrecoverable.</strong> Player tips into the 100t band; only 0.1 kg/cycle plant_a_tree can't drain it; player softlocked.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Per spec §11 row 8: 10 exhaust_scrubbers at 20 kg/cycle each = 200 kg/cycle = 2.88 t/hr — drains 100t in ~35 hours. The CCS hub IS the out. Verify exhaust_scrubber exists in <code>building-defs.ts</code>; if not, that's a separate phase blocker but not Phase 6's responsibility.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Coal_gen retune breaks a non-obvious chain</strong> (e.g. T3 progression milestone times). The spec §06 calls out the retune as a one-line change but doesn't audit downstream.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 7 step 3 explicitly checks for test failure cascade; if it's &gt;10 tests the implementer halts and consults rather than muscling through. The follow-up "broader balance retune" is openly scoped out.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Vitest's jsdom doesn't render the SVG picker correctly</strong> → Phase 8 §8.3 click-conversion tests need careful extraction.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Plan already extracts <code>clickToLatLon</code> as a pure function; tests are against the helper, not against jsdom-rendered events. The helper has no DOM dependency — pure math, trivially tested.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><strong>Phase 2's red <code>tsc -b</code> commit lands without Phase 3 immediately following</strong> (CI / pre-push hook), polluting <code>master</code> with a broken intermediate state.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">The two commits land in the same session, atomically reviewed. The subagent-driven-development pattern (master is the source of truth, no worktrees) makes this safer because there's no branching; the in-session checkpoint is "Phase 3 is also done before stopping." The implementer should NOT walk away between Phase 2 and Phase 3.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="notes">
+      <div class="sec-head"><span class="num">12</span><h2>Implementation notes</h2></div>
+      <p class="sec-intro">Useful context that didn't rise to the level of
+        a spec requirement.</p>
+
+      <ul class="body">
+        <li><strong>Phase 2 + Phase 3 are atomic.</strong> The red-build commit in Phase 2 is intentional but must be paired with Phase 3 immediately. Don't push between them — the subagent-driven-development pattern on master means no branch isolation; an intermediate red commit is a hazard if a parallel session does anything before Phase 3 lands.</li>
+        <li><strong>Map-picker assets are static.</strong> The Natural Earth SVG is public-domain and committed inline; no build-time fetch. The implementer downloads + prunes the SVG once before writing Phase 4.</li>
+        <li><strong>Weather signature change is opt-in.</strong> The new <code>totalCo2Kg: number = 0</code> parameter defaults to behaviour-preserving 1.0× — so existing test fixtures continue to work without modification, and only the new tests + runtime threading exercise the CO₂ path.</li>
+        <li><strong>Heatwave state is re-derivable.</strong> The spec calls it a "new weather event" but the implementation keeps it stateless — RNG keyed by <code>seed + dayIndex + CO₂-threshold</code> means any call to <code>rollHeatwave(seed, dayIdx, kg)</code> returns the same answer. Don't persist to the world snapshot.</li>
+        <li><strong>Bootstrap mutation idiom.</strong> Phase 5's picker → save → reassign pattern needs to match the existing <code>main.ts</code> idiom. Re-read main.ts ~1620 (where the periodic saveWorld fires) before committing — if the snapshot is mutable in places, use that path; if it's structurally replaced, use that. Don't invent a third pattern.</li>
+        <li><strong>SunCalc's <code>altitude</code> is in radians.</strong> Spec §02 is explicit; tests should not accidentally pass degrees. The new <code>solarMultiplier</code> body uses <code>Math.sin(pos.altitude)</code> which is radians-correct.</li>
+        <li><strong>UI consideration — first-session warning text.</strong> The picker modal includes a one-line tip about high-latitude solar variability. This is the player's only warning before the geographic constraint becomes load-bearing on their progression; the text matters.</li>
+        <li><strong>Test extraction discipline.</strong> Two helpers (<code>clickToLatLon</code>, <code>shouldShowPicker</code>) get extracted as exports specifically so they're tested. Keep them lean — they're meant to be pure math + a predicate, nothing more.</li>
+        <li><strong>Scope discipline on the climate-crisis chain.</strong> The spec's language at §5.4 is generative ("a sequence of escalating storms + heatwaves + drought events"). Phase 6 picks the minimal interpretation (the 1.6× multiplier IS the chain) and documents the deferral. Don't over-design without product clarity.</li>
+        <li><strong>The Phase 0 baseline isn't a wall-clock perf gate.</strong> Phase 6 shouldn't measurably change tick performance — one SunCalc call per solar segment is sub-microsecond. The Phase 8 live-save replay captures the numbers as a regression check, not a "must improve by X%" target.</li>
+        <li><strong>Don't restart <code>robot-islands-dev.service</code> for code changes.</strong> Per <code>AGENTS.md</code> guidance — restart only on <code>vite.config.ts</code> or <code>package.json</code> deps changes. Phase 1's <code>package.json</code> change IS a restart trigger; subsequent phases are <code>npm run build</code> + browser reload only.</li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan · Phase 6 of 7 · generated 2026-05-28 ·
+        spec at <code>specs/2026-05-28-si-units-phase6-weather-realtime</code> ·
+        follows from <code>plans/2026-05-28-si-units-rework-foundation</code> rev-16 §7
+        + user mid-stream directive on real-astronomy</p>
+    </div>
+
+  </div>
+</body>
+</html>
