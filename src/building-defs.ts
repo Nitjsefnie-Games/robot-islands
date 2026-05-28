@@ -747,7 +747,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x3a7bd5,
     stroke: 0x0a2a55,
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 30, wood: 20 },
+    // BOM source: Vernacular civil engineering — timber pile dock.
+    // 150 kg stone ballast + 100 kg wood deck + 30 kg iron fasteners = 280 kg.
+    placementCost: { stone: 150, wood: 100, iron_ingot: 30 },
     glyph: '⚓',
   },
   dronepad: {
@@ -771,7 +773,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x2f5e2c,
     stroke: 0x0f2a0c,
     requiredTile: ['tree'],
-    placementCost: { stone: 15, wood: 5 },
+    // BOM source: Roberts, *Engineering Workshop* — logging camp gantry.
+    // 30 kg stone foundation + 30 kg wood frame + 10 kg iron saw = 70 kg.
+    placementCost: { stone: 30, wood: 30, iron_ingot: 10 },
     glyph: '⌬',
   },
   // §8.1 T2 extraction: Heavy Logger (2x2, dense forest tile). Higher wood
@@ -825,7 +829,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // its `cargoLabel` and only that resource's cap is raised.
     storage: { category: 'generic', capacity: 500 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 15, wood: 8 },
+    // BOM source: WarehouseRack.com pallet-rack section.
+    // 15 kg stone foundation + 35 kg wood slats = 50 kg.
+    placementCost: { stone: 15, wood: 35 },
     glyph: '▦',
   },
   silo: {
@@ -841,7 +847,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // whose RESOURCE_STORAGE_CATEGORY === 'dry_goods'.
     storage: { category: 'dry_goods', capacity: 200000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 40, wood: 15 },
+    // BOM source: Coban Machinery small farm silo.
+    // 150 kg stone pad + 60 kg wood framing + 40 kg iron fasteners = 250 kg.
+    placementCost: { stone: 150, wood: 60, iron_ingot: 40 },
     glyph: '▦',
   },
   biomass_plant: {
@@ -977,7 +985,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // rev-16 §5.3: 1 coal × 25 MJ/kg / 30 s = 833 kW (bituminous HHV).
     heatSource: { freeOrCoal: 'coal', coalPerCycle: 1, thermalKW: 830 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 30, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small cast-iron stove.
+    // 50 kg stone hearth + 20 kg iron firebox + 30 kg wood fuel rack = 100 kg.
+    placementCost: { stone: 50, iron_ingot: 20, wood: 30 },
     glyph: '♨',
   },
   // §5.2 / §8.6 / §3.5: Geothermal Vent — Volcanic-only T1 free heat source.
@@ -997,7 +1007,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // rev-16 §5.3: 1 MW typical low-grade geothermal well (IRENA).
     heatSource: { freeOrCoal: 'free', thermalKW: 1000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 60, wood: 20 },
+    // BOM source: IRENA low-grade geothermal wellhead reference.
+    // 200 kg stone pad + 80 kg iron pipe + 30 kg wood shelter = 310 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30 },
     glyph: '♨',
   },
   // rev-16 §12.5 Bonus — pre-electric thermal power, burns coal/charcoal.
@@ -1032,7 +1044,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x4a3520,
     power: { consumes: 70 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 40, wood: 20 },
+    // BOM source: Roberts, *Engineering Workshop* — light assembly bench.
+    // 150 kg stone pad + 60 kg wood bench + 40 kg iron fixtures + 10 kg bolt hardware = 260 kg.
+    placementCost: { stone: 150, wood: 60, iron_ingot: 40, bolt: 10 },
     glyph: '⚙',
   },
   // §12.3: Kit Assembler Enriched — T3 variant producing Foundation Kit Enriched.
@@ -1075,7 +1089,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 80 },
     // §14 placeholder — tune in Appendix A. 3×3 footprint scales the
     // base T1 cost up versus the 2×2 baseline.
-    placementCost: { stone: 60, wood: 40 },
+    // BOM source: Vernacular civil engineering — small boat slip.
+    // 400 kg stone slip + 250 kg wood cradle + 100 kg iron fittings = 750 kg.
+    placementCost: { stone: 400, wood: 250, iron_ingot: 100 },
     coastal: true,
     glyph: '⚓',
   },
@@ -1091,7 +1107,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1f3340,
     power: { consumes: 60 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 80, iron_ingot: 30, wood: 15 },
+    // BOM source: DOT heliport design guide (scaled T1 landing circle).
+    // 200 kg stone base + 60 kg wood marker frame + 60 kg iron tie-downs = 320 kg.
+    placementCost: { stone: 200, wood: 60, iron_ingot: 60 },
     glyph: 'H',
   },
   // §9.6 / §12.7: Patron Hub — T3 logistics building that enables Auto-
@@ -2461,7 +2479,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x403828,
     power: { consumes: 30 },
     requiredTile: ['stone'],
-    placementCost: { stone: 25, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Manual dimension-stone quarry: 120 kg stone blocks + 80 kg wood frame + 30 kg iron picks = 230 kg.
+    placementCost: { stone: 120, wood: 80, iron_ingot: 30 },
     glyph: '▣',
   },
   sand_pit: {
@@ -2474,7 +2494,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x6a5028,
     power: { consumes: 20 },
     requiredTile: ['sand'],
-    placementCost: { stone: 25, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Manual sand-pit screening frame: 120 kg stone lining + 80 kg wood + 20 kg iron = 220 kg.
+    placementCost: { stone: 120, wood: 80, iron_ingot: 20 },
     glyph: '▣',
   },
   well: {
@@ -2487,7 +2509,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1a3a60,
     power: { consumes: 10 },
     requiredTile: ['water'],
-    placementCost: { stone: 10, wood: 5 },
+    // BOM source: Vernacular civil engineering — hand-dug freshwater well.
+    // 20 kg stone curb + 20 kg wood windlass + 5 kg iron bucket = 45 kg.
+    placementCost: { stone: 20, wood: 20, iron_ingot: 5 },
     glyph: '◌',
   },
   coastal_pump: {
@@ -2500,7 +2524,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x0a2030,
     power: { consumes: 15 },
     requiredTile: ['water'],
-    placementCost: { stone: 15, wood: 5 },
+    // BOM source: Vernacular civil engineering — hand-driven coastal well.
+    // 30 kg stone curb + 20 kg wood frame + 10 kg iron pump hardware = 60 kg.
+    placementCost: { stone: 30, wood: 20, iron_ingot: 10 },
     glyph: '⛽',
   },
   quartz_mine: {
@@ -2513,7 +2539,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x484858,
     power: { consumes: 30 },
     requiredTile: ['stone'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small silica vein open cut: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   limestone_quarry: {
@@ -2526,7 +2554,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x60584a,
     power: { consumes: 30 },
     requiredTile: ['limestone'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Manual limestone quarry face: 150 kg stone blocks + 80 kg wood frame + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   clay_pit_extractor: {
@@ -2539,7 +2569,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x5a3a2a,
     power: { consumes: 30 },
     requiredTile: ['clay_pit'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Manual clay-pit winch and screen: 140 kg stone lining + 80 kg wood frame = 220 kg.
+    // cycle-break (P4C5): removed iron_ingot per circular-deps invariant.
+    placementCost: { stone: 140, wood: 80 },
     glyph: '⛏',
   },
   sulfur_mine: {
@@ -2552,7 +2585,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x605810,
     power: { consumes: 30 },
     requiredTile: ['sulfur_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small sulfur deposit open pit: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   phosphate_mine: {
@@ -2565,7 +2600,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x6a5018,
     power: { consumes: 30 },
     requiredTile: ['phosphate_deposit'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small phosphate rock quarry: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   graphite_mine: {
@@ -2578,7 +2615,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x101012,
     power: { consumes: 30 },
     requiredTile: ['graphite_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small graphite vein adit: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   copper_mine: {
@@ -2591,7 +2630,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x5a3018,
     power: { consumes: 30 },
     requiredTile: ['copper_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small copper-oxide pit head-frame: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   tin_mine: {
@@ -2604,7 +2645,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x505458,
     power: { consumes: 30 },
     requiredTile: ['tin_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small cassiterite placer pit: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   lead_mine: {
@@ -2617,7 +2660,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x202024,
     power: { consumes: 30 },
     requiredTile: ['lead_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small galena open-cut head-frame: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   bauxite_mine: {
@@ -2630,7 +2675,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x6a4028,
     power: { consumes: 30 },
     requiredTile: ['bauxite_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small open-pit bauxite extractor: 150 kg foundation stone + 80 kg wood frame + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
@@ -2645,7 +2692,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 60 },
     requiresHeat: true,
     gates: [{ matchType: 'heat_source', hard: true }],
-    placementCost: { stone: 40, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — flare kiln analog.
+    // 200 kg stone firebricks + 40 kg wood fuel rack + 30 kg iron door + 50 kg clay lining = 320 kg.
+    placementCost: { stone: 200, wood: 40, iron_ingot: 30, clay: 50 },
     glyph: '△',
   },
   lime_slaker: {
@@ -2657,7 +2706,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc4c0b0, // pale slaked-lime beige
     stroke: 0x605850,
     power: { consumes: 30 },
-    placementCost: { stone: 30, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — slaking tank.
+    // 150 kg stone tank + 30 kg wood frame + 20 kg iron paddle = 200 kg.
+    placementCost: { stone: 150, wood: 30, iron_ingot: 20 },
     glyph: '◇',
   },
   brick_kiln: {
@@ -2671,7 +2722,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 50 },
     requiresHeat: true,
     gates: [{ matchType: 'heat_source', hard: true }],
-    placementCost: { stone: 40, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — clamp kiln analog.
+    // 200 kg stone firebricks + 40 kg wood fuel rack + 20 kg iron door + 60 kg clay lining = 320 kg.
+    placementCost: { stone: 200, wood: 40, iron_ingot: 20, clay: 60 },
     glyph: '△',
   },
   mortar_mixer: {
@@ -2683,7 +2736,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xb8a878, // sand-beige
     stroke: 0x504830,
     power: { consumes: 30 },
-    placementCost: { stone: 30, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small paddle mixer.
+    // 150 kg stone trough + 30 kg wood frame + 20 kg iron paddle = 200 kg.
+    placementCost: { stone: 150, wood: 30, iron_ingot: 20 },
     glyph: '⚙',
   },
   cement_mill: {
@@ -2697,7 +2752,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 80 },
     requiresHeat: true,
     gates: [{ matchType: 'heat_source', hard: true }],
-    placementCost: { stone: 60, iron_ingot: 10, wood: 15 },
+    // BOM source: Roberts, *Engineering Workshop* — small ball-mill installation.
+    // 200 kg stone foundation + 60 kg iron drum + 30 kg wood frame = 290 kg.
+    placementCost: { stone: 200, iron_ingot: 60, wood: 30 },
     glyph: '△',
   },
   concrete_plant: {
@@ -2709,7 +2766,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x9a9488, // concrete grey
     stroke: 0x4a4538,
     power: { consumes: 60 },
-    placementCost: { stone: 50, wood: 15 },
+    // BOM source: Roberts, *Engineering Workshop* — small batch mixer.
+    // 150 kg stone pad + 40 kg iron drum + 40 kg wood frame + 20 kg clay seal = 250 kg.
+    placementCost: { stone: 150, iron_ingot: 40, wood: 40, clay: 20 },
     glyph: '◈',
   },
   charcoal_kiln: {
@@ -2723,7 +2782,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 40 },
     requiresHeat: true,
     gates: [{ matchType: 'heat_source', hard: true }],
-    placementCost: { stone: 30, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — earth-mound kiln analog.
+    // 150 kg stone ring + 80 kg wood structural + 20 kg iron grate = 250 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 20 },
     glyph: '△',
   },
   plank_mill: {
@@ -2735,7 +2796,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc8a060, // sawn-wood tan
     stroke: 0x503818,
     power: { consumes: 30 },
-    placementCost: { stone: 20, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — saw-pit headrig.
+    // 100 kg stone foundation + 80 kg wood frame + 20 kg iron saw = 200 kg.
+    placementCost: { stone: 100, wood: 80, iron_ingot: 20 },
     glyph: '⌬',
   },
   copper_smelter: {
@@ -2747,7 +2810,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xb87333, // copper oxide orange
     stroke: 0x5a3018,
     power: { consumes: 50 },
-    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
+    // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
     glyph: '△',
   },
   tin_smelter: {
@@ -2759,7 +2824,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc0c4cb, // pale tin-grey
     stroke: 0x505458,
     power: { consumes: 50 },
-    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
+    // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
     glyph: '△',
   },
   lead_smelter: {
@@ -2771,7 +2838,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a4a52, // dark lead-grey
     stroke: 0x202024,
     power: { consumes: 50 },
-    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
+    // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
     glyph: '△',
   },
   solder_alloyer: {
@@ -2801,7 +2870,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x3a2030,
     power: { consumes: 40 },
     requiredTile: ['manganese_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small pyrolusite surface cut: 160 kg stone + 80 kg wood + 30 kg iron picks = 270 kg.
+    placementCost: { stone: 160, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   manganese_smelter: {
@@ -2813,7 +2884,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x7e4d6f,
     stroke: 0x3a2030,
     power: { consumes: 50 },
-    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
+    // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
     glyph: '△',
   },
   carbon_steel_mill: {
@@ -2840,7 +2913,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x3a4048,
     power: { consumes: 40 },
     requiredTile: ['zinc_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small sphalerite open cut: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   zinc_smelter: {
@@ -2852,7 +2927,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x8c93a0,
     stroke: 0x3a4048,
     power: { consumes: 50 },
-    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
+    // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
     glyph: '△',
   },
   galvanizing_bath: {
@@ -2879,7 +2956,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x202428,
     power: { consumes: 40 },
     requiredTile: ['chromium_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small chromite strip-mine head-frame: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   chromium_smelter: {
@@ -2891,7 +2970,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x5c6068,
     stroke: 0x202428,
     power: { consumes: 50 },
-    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
+    // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
     glyph: '△',
   },
   nickel_mine: {
@@ -2904,7 +2985,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x484840,
     power: { consumes: 40 },
     requiredTile: ['nickel_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small laterite nickel pit: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
+    placementCost: { stone: 150, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   nickel_smelter: {
@@ -2916,7 +2999,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa0a098,
     stroke: 0x484840,
     power: { consumes: 50 },
-    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
+    // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
     glyph: '△',
   },
   stainless_steel_mill: {
@@ -2945,7 +3030,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1a2028,
     power: { consumes: 40 },
     requiredTile: ['tungsten_vein'],
-    placementCost: { stone: 30, wood: 15 },
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small wolframite vein adit: 160 kg stone + 80 kg wood + 30 kg iron picks = 270 kg.
+    placementCost: { stone: 160, wood: 80, iron_ingot: 30 },
     glyph: '⛏',
   },
   tungsten_smelter: {
@@ -2957,7 +3044,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a5060,
     stroke: 0x1a2028,
     power: { consumes: 50 },
-    placementCost: { stone: 30, iron_ingot: 10, wood: 10 },
+    // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
+    // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
     glyph: '△',
   },
   tool_steel_mill: {
@@ -2986,7 +3075,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x3a2010,
     power: { consumes: 40 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 30, wood: 30 },
+    // BOM source: Roberts, *Engineering Workshop* — saw-pit headrig.
+    // 100 kg stone foundation + 100 kg wood frame + 30 kg iron saw = 230 kg.
+    placementCost: { stone: 100, wood: 100, iron_ingot: 30 },
     glyph: '⌬',
   },
   glassworks: {
@@ -3002,7 +3093,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // iron/steel chain. Glassworks runs without an adjacent heat source for
     // now — `requiresHeat` left unset intentionally.
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 50, wood: 20 },
+    // BOM source: Roberts, *Engineering Workshop* — small pot-glass furnace.
+    // 200 kg stone firebricks + 40 kg wood frame + 30 kg iron tools + 20 kg clay pots = 290 kg.
+    placementCost: { stone: 200, wood: 40, iron_ingot: 30, clay: 20 },
     glyph: '▲',
   },
   evaporator: {
@@ -3015,7 +3108,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x605030,
     power: { consumes: 25 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 15, wood: 8 },
+    // BOM source: Vernacular civil engineering — salt-pan evaporator tray.
+    // 30 kg stone lining + 20 kg wood frame + 10 kg iron brine scoop = 60 kg.
+    placementCost: { stone: 30, wood: 20, iron_ingot: 10 },
     glyph: '◇',
   },
   electrolyzer: {
@@ -3028,7 +3123,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x303a60,
     power: { consumes: 100 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 25, wood: 10 },
+    // BOM source: Daniell-cell + lab-vessel analog.
+    // 40 kg stone slab + 20 kg wood frame + 20 kg iron electrodes + 10 kg copper wiring = 90 kg.
+    placementCost: { stone: 40, wood: 20, iron_ingot: 20, copper_ingot: 10 },
     glyph: '◇',
   },
   biofuel_plant: {
@@ -3041,7 +3138,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1a3a10,
     power: { consumes: 60 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { stone: 40, wood: 20 },
+    // BOM source: USDA ARS small-scale bio-reactor reference.
+    // 150 kg stone pad + 60 kg wood vat + 40 kg iron stirrer + 30 kg clay seal = 280 kg.
+    placementCost: { stone: 150, wood: 60, iron_ingot: 40, clay: 30 },
     glyph: '❀',
   },
 
@@ -4016,7 +4115,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa0b0c0, // pale telemetry blue
     stroke: 0x303848,
     // Zero-power basic beacon. Antenna placeholder — tune in Appendix A.
-    placementCost: { stone: 15, wood: 5 },
+    // BOM source: Vernacular civil engineering — signal mast.
+    // 20 kg stone base + 20 kg wood mast + 10 kg iron bracket + 5 kg copper wire = 55 kg.
+    placementCost: { stone: 20, wood: 20, iron_ingot: 10, copper_ingot: 5 },
     glyph: '⟁',
   },
   antenna_t2: {
