@@ -23,12 +23,15 @@ import {
   ALL_RECIPE_CATEGORIES,
   ALL_RESOURCES,
   RECIPES,
+  RECIPE_SPECULATIVE,
+  RESOURCE_META,
   XP_WEIGHT,
   fuelForTier,
   nextRotateOutputBoundaryMs,
   resolveRotatingOutput,
   availableRecipes,
   type RecipeCategory,
+  type RecipeId,
   type ResourceId,
 } from './recipes.js';
 import { BUILDING_DEFS } from './building-defs.js';
@@ -137,6 +140,53 @@ describe('recipe graph completeness (step 18)', () => {
     for (const [recipeId, recipe] of Object.entries(RECIPES)) {
       if (!recipe) continue;
       expect(recipe.cycleSec, `recipe ${recipeId} has non-positive cycleSec`).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('produced resources have terminal classification (rev-16 §3.5.4)', () => {
+  it('every ResourceId has a RESOURCE_META entry with a valid terminal tag', () => {
+    for (const r of ALL_RESOURCES) {
+      const meta = RESOURCE_META[r];
+      expect(meta, `${r} missing RESOURCE_META`).toBeDefined();
+      expect(meta.massPerUnitKg, `${r} massPerUnitKg`).toBeGreaterThanOrEqual(0);
+      const t = meta.terminal;
+      const ok = t === 'consumed'
+        || t === 'gameplay-sink'
+        || (typeof t === 'string' && t.startsWith('expansion-hook:'));
+      expect(ok, `${r} terminal=${t}`).toBe(true);
+    }
+  });
+
+  it("tagged 'consumed' resources that are produced have ≥ 1 recipe consumer", () => {
+    const producedBy = new Map<ResourceId, string[]>();
+    const consumedBy = new Map<ResourceId, string[]>();
+    for (const [recipeId, recipe] of Object.entries(RECIPES)) {
+      if (!recipe) continue;
+      for (const r of Object.keys(recipe.outputs) as ResourceId[]) {
+        producedBy.set(r, [...(producedBy.get(r) ?? []), recipeId]);
+      }
+      for (const rot of recipe.rotateOutputs ?? []) {
+        for (const r of Object.keys(rot) as ResourceId[]) {
+          producedBy.set(r, [...(producedBy.get(r) ?? []), recipeId]);
+        }
+      }
+      for (const r of Object.keys(recipe.inputs) as ResourceId[]) {
+        consumedBy.set(r, [...(consumedBy.get(r) ?? []), recipeId]);
+      }
+    }
+    const violations: string[] = [];
+    for (const r of ALL_RESOURCES) {
+      if (RESOURCE_META[r].terminal === 'consumed' && producedBy.has(r)) {
+        if (!consumedBy.has(r)) violations.push(r);
+      }
+    }
+    expect(violations, `tagged-'consumed' but unconsumed: ${violations.join(', ')}`).toEqual([]);
+  });
+
+  it('RECIPE_SPECULATIVE entries reference real RecipeIds', () => {
+    for (const recipeId of Object.keys(RECIPE_SPECULATIVE)) {
+      expect(RECIPES[recipeId as RecipeId], `${recipeId} not in RECIPES`).toBeDefined();
     }
   });
 });
