@@ -743,7 +743,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xd97a18,
     stroke: 0x4a2400,
-    power: { produces: 100 },
+    power: { produces: 50 },  // rev-16 §10.3: 12.5 MW thermal × ~40% = 5 MW electrical = 50 unit
     // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25.
     // Small coal-fired steam generator: 500 steel_beam + 200 clay fire-brick + 100 stone
     // foundation + 50 pipe + 10 microchip control = ~1000 kg.
