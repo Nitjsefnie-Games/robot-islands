@@ -40,7 +40,7 @@ import { buildingAtTile, findOceanBuildingAt } from './placement.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { visibleCellsFromVision } from './vision-source.js';
 import { findPopulatedIslandAt, type WorldState } from './world.js';
-import { biomeForCell, weather, type WeatherState, WEATHER_FORECAST_LOOKAHEAD_MS } from './weather.js';
+import { biomeForCell, sumIslandCo2, weather, type WeatherState, WEATHER_FORECAST_LOOKAHEAD_MS } from './weather.js';
 
 // ---------------------------------------------------------------------------
 // Display strings
@@ -277,19 +277,20 @@ function formatDuration(ms: number): string {
  *  "Weather (universal, both ocean and land)"). The forecast line uses
  *  the next-state change inside the §2.6 lookahead window. */
 function weatherInfoForCell(
-  world: Pick<WorldState, 'seed' | 'islands'>,
+  world: Pick<WorldState, 'seed' | 'islands' | 'islandStates'>,
   cellX: number,
   cellY: number,
   nowMs: number,
 ): WeatherInfo {
   const biome = biomeForCell(world, cellX, cellY);
-  const cur = weather(world.seed, cellX, cellY, nowMs, biome);
+  const totalCo2Kg = sumIslandCo2(world);
+  const cur = weather(world.seed, cellX, cellY, nowMs, biome, totalCo2Kg);
   const stateLabel = WEATHER_STATE_LABEL[cur.state];
   // Next cycle: query just after `untilMs` to see what state follows.
   let forecastText: string | null = null;
   const remainingMs = cur.untilMs - nowMs;
   if (remainingMs > 0 && remainingMs <= WEATHER_FORECAST_LOOKAHEAD_MS) {
-    const next = weather(world.seed, cellX, cellY, cur.untilMs + 1, biome);
+    const next = weather(world.seed, cellX, cellY, cur.untilMs + 1, biome, totalCo2Kg);
     if (next.state !== cur.state) {
       forecastText = `→ ${WEATHER_STATE_LABEL[next.state]} in ${formatDuration(remainingMs)}`;
     } else {
@@ -331,7 +332,7 @@ function consumersForTerrain(terrain: string): ReadonlyArray<ConsumerSummary> {
  *  narrow so the helper is trivial to fixture in unit tests. */
 type HoverWorld = Pick<
   WorldState,
-  'seed' | 'islands' | 'oceanCells' | 'revealedCells' | 'depthRevealedCells'
+  'seed' | 'islands' | 'oceanCells' | 'revealedCells' | 'depthRevealedCells' | 'islandStates'
 >;
 
 /** Tile (n) is rendered centred on world pixel (n * TILE_PX), so its

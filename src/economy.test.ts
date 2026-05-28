@@ -4416,7 +4416,7 @@ describe('CO₂ sinks (Phase 5)', () => {
       buildings: [{ id: 'pt', defId: 'plant_a_tree', x: 5, y: 5 }],
     });
     state.co2Kg = 10;
-    advanceIsland(state, 600_000, { terrainAt: () => 'forest' });
+    advanceIsland(state, 600_000, { terrainAt: () => 'tree' });
     expect(state.co2Kg).toBeCloseTo(9, 1);
   });
 

@@ -42,6 +42,7 @@ import { visibleCellsFromVision } from './vision-source.js';
 import {
   WEATHER_FORECAST_LOOKAHEAD_MS,
   biomeForCell,
+  sumIslandCo2,
   weather,
   type WeatherState,
   type WeatherVisionSources,
@@ -131,6 +132,7 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
 
   const rebuild = (nowMs: number, sources: WeatherVisionSources): void => {
     layer.removeChildren();
+    const totalCo2Kg = sumIslandCo2(world);
     // 1) Current-cycle layer — every cell intersecting ocean ellipses or
     //    per-island weather circles.
     const currentCells = visibleCellsFromVision(sources.current);
@@ -139,7 +141,7 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
       const cellX = Number(key.slice(0, idx));
       const cellY = Number(key.slice(idx + 1));
       const biome = biomeForCell(world, cellX, cellY);
-      const w = weather(world.seed, cellX, cellY, nowMs, biome);
+      const w = weather(world.seed, cellX, cellY, nowMs, biome, totalCo2Kg);
       drawCell(cellX, cellY, w.state, 1);
     }
     // 2) Forecast layer — only islands carrying an Advanced Weather Station
@@ -154,7 +156,7 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
         const cellX = Number(key.slice(0, idx));
         const cellY = Number(key.slice(idx + 1));
         const biome = biomeForCell(world, cellX, cellY);
-        const w = weather(world.seed, cellX, cellY, forecastMs, biome);
+        const w = weather(world.seed, cellX, cellY, forecastMs, biome, totalCo2Kg);
         drawCell(cellX, cellY, w.state, FORECAST_ALPHA_MULTIPLIER);
       }
     }
