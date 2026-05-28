@@ -45,6 +45,7 @@ function makeState(
     auraAmpVersion: 0,
     auraAmpCache: null,
     auraAmpCacheVersion: -1,
+    co2Kg: 0,
     funnelPending: {} as Record<ResourceId, number>,
     declaredAt: null,
     aiCoreCrafted: false,

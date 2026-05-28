@@ -75,6 +75,7 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     auraAmpVersion: 0,
     auraAmpCache: null,
     auraAmpCacheVersion: -1,
+    co2Kg: 0,
     funnelPending: emptyInv(),
     declaredAt: null,
     aiCoreCrafted: false,
@@ -623,6 +624,9 @@ function makeBfsWorld(opts: {
       latticeNodeIslands: [],
     islandStates: opts.islandStates,
     commPackets: [],
+    totalCo2Kg: 0,
+    playerLat: null,
+    playerLon: null,
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
   } as WorldState;

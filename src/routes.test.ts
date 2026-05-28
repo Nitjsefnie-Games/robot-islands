@@ -63,6 +63,7 @@ function makeState(id: string, over: Partial<IslandState> = {}): IslandState {
     auraAmpVersion: 0,
     auraAmpCache: null,
     auraAmpCacheVersion: -1,
+    co2Kg: 0,
     funnelPending: blankFunnel(),
     declaredAt: null,
     aiCoreCrafted: false,
@@ -83,7 +84,7 @@ function makeState(id: string, over: Partial<IslandState> = {}): IslandState {
 function makeWorld(routes: Route[] = [], islands: IslandSpec[] = []): WorldState {
   return { islands, drones: [], routes, vehicles: [], revealedCells: new Set(), satellites: [], repairDrones: [],
     debrisFields: [], endgameState: { achieved: new Set(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [],
-    commPackets: [], seed: 'test-seed', oceanCells: new Map(), depthRevealedCells: new Set() };
+    commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, seed: 'test-seed', oceanCells: new Map(), depthRevealedCells: new Set() };
 }
 
 function makeIslandSpec(id: string, cx: number, cy: number): IslandSpec {
