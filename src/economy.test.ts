@@ -4342,3 +4342,96 @@ describe('heat throttle end-to-end via computeRates', () => {
     expect(entry?.effectiveRate).toBeCloseTo(1 / 133, 3);
   });
 });
+
+
+describe('CO₂ sinks (Phase 5)', () => {
+  it('baseline: coal_gen alone accrues ~72.6 kg in 60 s', () => {
+    const state = makeState({
+      buildings: [{ id: 'cg', defId: 'coal_gen', x: 5, y: 5 }],
+      inventory: { ...blankInventory(), coal: 10_000 },
+    });
+    state.co2Kg = 0;
+    advanceIsland(state, 60_000);
+    expect(state.co2Kg).toBeCloseTo(72.6, 1);
+  });
+
+  it('adjacent exhaust_scrubber drains 20 kg/cycle', () => {
+    const state = makeState({
+      buildings: [
+        { id: 'cg', defId: 'coal_gen', x: 5, y: 5 },
+        { id: 'es', defId: 'exhaust_scrubber', x: 7, y: 5 },
+      ],
+      inventory: { ...blankInventory(), coal: 10_000 },
+    });
+    state.co2Kg = 0;
+    advanceIsland(state, 60_000);
+    expect(state.co2Kg).toBeCloseTo(52.6, 1); // 72.6 − 20
+  });
+
+  it('non-adjacent scrubber does NOT drain', () => {
+    const state = makeState({
+      buildings: [
+        { id: 'cg', defId: 'coal_gen', x: 5, y: 5 },
+        { id: 'es', defId: 'exhaust_scrubber', x: 10, y: 5 },
+      ],
+      inventory: { ...blankInventory(), coal: 10_000 },
+    });
+    state.co2Kg = 0;
+    advanceIsland(state, 60_000);
+    expect(state.co2Kg).toBeCloseTo(72.6, 1);
+  });
+
+  it('scrubber adjacent to non-emitter does NOT drain', () => {
+    const state = makeState({
+      buildings: [
+        { id: 'lg', defId: 'logger', x: 5, y: 5 },
+        { id: 'es', defId: 'exhaust_scrubber', x: 6, y: 5 },
+      ],
+    });
+    state.co2Kg = 0;
+    advanceIsland(state, 60_000);
+    expect(state.co2Kg).toBe(0);
+  });
+
+  it('standalone wastewater_treatment drains unconditionally', () => {
+    const state = makeState({
+      buildings: [{ id: 'wt', defId: 'wastewater_treatment', x: 5, y: 5 }],
+    });
+    state.co2Kg = 100;
+    advanceIsland(state, 60_000);
+    expect(state.co2Kg).toBeCloseTo(95, 1);
+  });
+
+  it('zero clamp — drain at empty pool stays at zero', () => {
+    const state = makeState({
+      buildings: [{ id: 'wt', defId: 'wastewater_treatment', x: 5, y: 5 }],
+    });
+    state.co2Kg = 0;
+    advanceIsland(state, 60_000);
+    expect(state.co2Kg).toBe(0);
+  });
+
+  it('plant_a_tree slow drain on forest tile', () => {
+    const state = makeState({
+      buildings: [{ id: 'pt', defId: 'plant_a_tree', x: 5, y: 5 }],
+    });
+    state.co2Kg = 10;
+    advanceIsland(state, 600_000, { terrainAt: () => 'forest' });
+    expect(state.co2Kg).toBeCloseTo(9, 1);
+  });
+
+  it('multiple scrubbers stack additively', () => {
+    const state = makeState({
+      buildings: [
+        { id: 'cg', defId: 'coal_gen', x: 5, y: 5 },
+        { id: 'es1', defId: 'exhaust_scrubber', x: 7, y: 5 },
+        { id: 'es2', defId: 'exhaust_scrubber', x: 7, y: 6 },
+        { id: 'es3', defId: 'exhaust_scrubber', x: 5, y: 7 },
+      ],
+      inventory: { ...blankInventory(), coal: 10_000 },
+    });
+    state.co2Kg = 0;
+    advanceIsland(state, 60_000);
+    expect(state.co2Kg).toBeCloseTo(12.6, 1); // 72.6 − 60
+  });
+});
