@@ -920,7 +920,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.single,
     fill: 0x4a2820, // dark ember
     stroke: 0x1a0a08,
-    heatSource: { freeOrCoal: 'coal', coalPerCycle: 1 },
+    // rev-16 §5.3: 1 coal × 25 MJ/kg / 30 s = 833 kW (bituminous HHV).
+    heatSource: { freeOrCoal: 'coal', coalPerCycle: 1, thermalKW: 830 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 30, wood: 10 },
     glyph: '♨',
@@ -939,7 +940,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x401005,
     power: { produces: 200 },
     requiredBiomes: ['volcanic'],
-    heatSource: { freeOrCoal: 'free' },
+    // rev-16 §5.3: 1 MW typical low-grade geothermal well (IRENA).
+    heatSource: { freeOrCoal: 'free', thermalKW: 1000 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { stone: 60, wood: 20 },
     glyph: '♨',
@@ -1120,6 +1122,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // Fusion Core to operate. Per §7.1 the coke-making chain is heat-driven
     // ("Coal → Coke (Coke Oven)") in addition to the §8.2 catalog tagging.
     requiresHeat: true,
+    // rev-16 §5.3: single-chamber 1100 °C carbonization (IspatGuru).
+    heatDemandKW: 60,
     // §4.5 gating adjacency: hard heat_source gate, plus §8.7 soft
     // exhaust-scrubber gate — this is one of the spec's "high-emission"
     // buildings, so missing an adjacent Exhaust Scrubber drops output to
@@ -1146,6 +1150,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // effective rate on `resolveHeatAssignments`; without heat it stalls and
     // contributes 0 to P_consumed.
     requiresHeat: true,
+    // rev-16 §5.3: 2×2 hot-blast preheat 1000-1300 °C (IspatGuru).
+    heatDemandKW: 3000,
     // §4.5 gating adjacency demonstration: hard heat_source gate.
     gates: [{ matchType: 'heat_source', hard: true }],
     // §14 placeholder — tune in Appendix A. 3×3 footprint bumps base T2.
@@ -1529,7 +1535,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa040a0, // plasma magenta
     stroke: 0x401040,
     power: { consumes: 200 },
-    heatSource: { freeOrCoal: 'free' },
+    // rev-16 §5.3: 200 kW elec × 92% transferred-arc eff (ABB).
+    heatSource: { freeOrCoal: 'free', thermalKW: 184 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { steel: 120, microchip: 40, stone: 30 },
     glyph: '♨',
@@ -1546,6 +1553,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §5.2: T3 arc furnaces still rely on adjacent heat per the spec's
     // smelting-category convention. Gated like Blast Furnace / Pyroforge.
     requiresHeat: true,
+    // rev-16 §5.3: residual refractory hold-temp; main heat from electrodes.
+    heatDemandKW: 80,
     // §4.5 gating adjacency demonstration: hard heat_source gate.
     gates: [{ matchType: 'heat_source', hard: true }],
     // §14 placeholder — tune in Appendix A.
@@ -1673,7 +1682,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a90c8, // cool electric blue
     stroke: 0x1a3050,
     power: { produces: 5000 },
-    heatSource: { freeOrCoal: 'free' },
+    // rev-16 §5.3: ITER Q=10 thermal 1 GW = 1_000_000 kW.
+    heatSource: { freeOrCoal: 'free', thermalKW: 1000000 },
     // §14 placeholder — tune in Appendix A.
     placementCost: { steel: 400, microchip: 150, glass: 50 },
     glyph: '⚡',
@@ -1693,6 +1703,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 800 },
     requiredBiomes: ['volcanic'],
     requiresHeat: true,
+    // rev-16 §5.3: Tetronics DC plasma reactor hold-temp.
+    heatDemandKW: 200,
     // §14 placeholder — tune in Appendix A.
     placementCost: { steel: 300, microchip: 100, glass: 30 },
     glyph: '◉',
@@ -1746,6 +1758,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 700 },
     requiredBiomes: ['forest'],
     requiresHeat: true,
+    // rev-16 §5.3: PAN-fiber oxidation oven (Hexcel + Toray).
+    heatDemandKW: 150,
     placementCost: { steel: 250, microchip: 80, glass: 40 },
     glyph: '⬢',
   },
