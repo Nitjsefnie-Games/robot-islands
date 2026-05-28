@@ -1463,6 +1463,20 @@ export interface Recipe {
   readonly cycleSec: number;
   readonly inputs: Partial<Record<ResourceId, number>>;
   readonly outputs: Partial<Record<ResourceId, number>>;
+  /** Per Phase 2 spec §9. Names a legitimate mass-balance violation that
+   *  the mass-balance auditor must skip. Recognized values:
+   *  'fuel-combustion-CO₂', 'atmosphere', 'BF-top-gas-trace',
+   *  'electrode-graphite-consumed', 'evaporation-water-vapor',
+   *  'hydrocracker-light-ends-vented', 'hydrotreatment-H2S-and-light-gas',
+   *  'process-losses + HCl', 'saltwater_cell-encapsulates-electrolyte'. */
+  readonly exogenousFlow?: string;
+  /** Magnitude of the exogenous flow in kg per cycle. REQUIRED when
+   *  exogenousFlow === 'fuel-combustion-CO₂' (consumed by the Phase 8 CO₂
+   *  accrual hook). Optional otherwise. */
+  readonly exogenousFlowKg?: number;
+  /** Marks a recipe as biogenic-CO₂ (charcoal_kiln, biomass_plant). Phase 6
+   *  weather coupling reads this for a forest-regrowth net-zero offset. */
+  readonly biogenic?: true;
   readonly category: RecipeCategory;
   /** If set, outputs cycle through these options deterministically per §8.10. */
   readonly rotateOutputs?: ReadonlyArray<Partial<Record<ResourceId, number>>>;
