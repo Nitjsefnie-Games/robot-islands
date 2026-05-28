@@ -209,9 +209,9 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'sheet_metal_mill',
   'pipe_mill',
   'beam_mill',
-  'bearing_press',
-  'spring_winder',
-  'cable_drawer',
+  'bearing_assembler',
+  'spring_press',
+  'cable_mill',
   'battery_factory',
   'glass_panel_press',
   'coolant_synthesizer',
@@ -2025,17 +2025,17 @@ describe('§8.1 T2 extraction buildings', () => {
     });
   });
 
-  describe('§6.3 T2 bearing_press + spring_winder (Task 6.2)', () => {
-    it('bearing_press is T2, 2x2, manufacturing, consumes 80W', () => {
-      const def = BUILDING_DEFS.bearing_press;
+  describe('§6.3 T2 bearing_assembler + spring_press (Task 6.2)', () => {
+    it('bearing_assembler is T2, 2x2, manufacturing, consumes 80W', () => {
+      const def = BUILDING_DEFS.bearing_assembler;
       expect(def).toBeDefined();
       expect(def.tier).toBe(2);
       expect(def.footprint.tiles.length).toBe(4);
       expect(def.category).toBe('manufacturing');
       expect(def.power?.consumes).toBe(80);
     });
-    it('spring_winder is T2, 2x2, manufacturing, consumes 60W', () => {
-      const def = BUILDING_DEFS.spring_winder;
+    it('spring_press is T2, 2x2, manufacturing, consumes 60W', () => {
+      const def = BUILDING_DEFS.spring_press;
       expect(def).toBeDefined();
       expect(def.tier).toBe(2);
       expect(def.footprint.tiles.length).toBe(4);
@@ -2044,9 +2044,9 @@ describe('§8.1 T2 extraction buildings', () => {
     });
   });
 
-  describe('§6.3 cable_drawer (Task 6.3)', () => {
-    it('cable_drawer is T2, 2x2, manufacturing, consumes 80W', () => {
-      const def = BUILDING_DEFS.cable_drawer;
+  describe('§6.3 cable_mill (Task 6.3)', () => {
+    it('cable_mill is T2, 2x2, manufacturing, consumes 80W', () => {
+      const def = BUILDING_DEFS.cable_mill;
       expect(def).toBeDefined();
       expect(def.tier).toBe(2);
       expect(def.footprint.tiles.length).toBe(4);

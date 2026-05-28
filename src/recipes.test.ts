@@ -1011,22 +1011,22 @@ describe('§6.3 T2 rolling outputs — sheet_metal + pipe + steel_beam (Task 6.1
     expect(XP_WEIGHT.pipe).toBe(10);
     expect(XP_WEIGHT.steel_beam).toBe(10);
   });
-  it('sheet_metal_mill recipe: steel → sheet_metal', () => {
-    expect(RECIPES.sheet_metal_mill).toBeDefined();
-    expect(RECIPES.sheet_metal_mill!.inputs).toEqual({ steel: 1 });
-    expect(RECIPES.sheet_metal_mill!.outputs).toEqual({ sheet_metal: 2 });
-    expect(RECIPES.sheet_metal_mill!.cycleSec).toBe(67);
+  it('sheet_mill recipe: steel → sheet_metal + mill_scale', () => {
+    expect(RECIPES.sheet_mill).toBeDefined();
+    expect(RECIPES.sheet_mill!.inputs).toEqual({ steel: 53 });
+    expect(RECIPES.sheet_mill!.outputs).toEqual({ sheet_metal: 10, mill_scale: 3 });
+    expect(RECIPES.sheet_mill!.cycleSec).toBe(67);
   });
-  it('pipe_mill recipe: steel → pipe', () => {
+  it('pipe_mill recipe: steel → pipe + mill_scale', () => {
     expect(RECIPES.pipe_mill).toBeDefined();
-    expect(RECIPES.pipe_mill!.inputs).toEqual({ steel: 1 });
-    expect(RECIPES.pipe_mill!.outputs).toEqual({ pipe: 2 });
+    expect(RECIPES.pipe_mill!.inputs).toEqual({ steel: 42 });
+    expect(RECIPES.pipe_mill!.outputs).toEqual({ pipe: 10, mill_scale: 2 });
     expect(RECIPES.pipe_mill!.cycleSec).toBe(67);
   });
-  it('beam_mill recipe: steel → steel_beam', () => {
+  it('beam_mill recipe: steel → steel_beam + mill_scale', () => {
     expect(RECIPES.beam_mill).toBeDefined();
-    expect(RECIPES.beam_mill!.inputs).toEqual({ steel: 1 });
-    expect(RECIPES.beam_mill!.outputs).toEqual({ steel_beam: 2 });
+    expect(RECIPES.beam_mill!.inputs).toEqual({ steel: 105 });
+    expect(RECIPES.beam_mill!.outputs).toEqual({ steel_beam: 2, mill_scale: 5 });
     expect(RECIPES.beam_mill!.cycleSec).toBe(67);
   });
 });
@@ -1038,30 +1038,30 @@ describe('§6.3 T2 mechanical fasteners — bearing + spring (Task 6.2)', () => 
     expect(XP_WEIGHT.bearing).toBe(10);
     expect(XP_WEIGHT.spring).toBe(10);
   });
-  it('bearing_press recipe: steel + lubricant → bearing', () => {
-    expect(RECIPES.bearing_press).toBeDefined();
-    expect(RECIPES.bearing_press!.inputs).toEqual({ steel: 1, lubricant: 1 });
-    expect(RECIPES.bearing_press!.outputs).toEqual({ bearing: 2 });
-    expect(RECIPES.bearing_press!.cycleSec).toBe(67);
+  it('bearing_assembler recipe: steel + lubricant → bearing + mill_scale', () => {
+    expect(RECIPES.bearing_assembler).toBeDefined();
+    expect(RECIPES.bearing_assembler!.inputs).toEqual({ steel: 28, lubricant: 3 });
+    expect(RECIPES.bearing_assembler!.outputs).toEqual({ bearing: 100, mill_scale: 1 });
+    expect(RECIPES.bearing_assembler!.cycleSec).toBe(67);
   });
-  it('spring_winder recipe: steel → spring', () => {
-    expect(RECIPES.spring_winder).toBeDefined();
-    expect(RECIPES.spring_winder!.inputs).toEqual({ steel: 1 });
-    expect(RECIPES.spring_winder!.outputs).toEqual({ spring: 3 });
-    expect(RECIPES.spring_winder!.cycleSec).toBe(67);
+  it('spring_press recipe: steel → spring + mill_scale', () => {
+    expect(RECIPES.spring_press).toBeDefined();
+    expect(RECIPES.spring_press!.inputs).toEqual({ steel: 11 });
+    expect(RECIPES.spring_press!.outputs).toEqual({ spring: 50, mill_scale: 1 });
+    expect(RECIPES.spring_press!.cycleSec).toBe(67);
   });
 });
 
-describe('§6.3 heavy_cable via cable_drawer (Task 6.3)', () => {
+describe('§6.3 heavy_cable via cable_mill (Task 6.3)', () => {
   it('heavy_cable is in ALL_RESOURCES with xp_weight 10', () => {
     expect(ALL_RESOURCES).toContain('heavy_cable');
     expect(XP_WEIGHT.heavy_cable).toBe(10);
   });
-  it('cable_drawer recipe: wire → heavy_cable', () => {
-    expect(RECIPES.cable_drawer).toBeDefined();
-    expect(RECIPES.cable_drawer!.inputs).toEqual({ wire: 3 });
-    expect(RECIPES.cable_drawer!.outputs).toEqual({ heavy_cable: 1 });
-    expect(RECIPES.cable_drawer!.cycleSec).toBe(67);
+  it('cable_mill recipe: steel → heavy_cable + mill_scale', () => {
+    expect(RECIPES.cable_mill).toBeDefined();
+    expect(RECIPES.cable_mill!.inputs).toEqual({ steel: 42 });
+    expect(RECIPES.cable_mill!.outputs).toEqual({ heavy_cable: 5, mill_scale: 2 });
+    expect(RECIPES.cable_mill!.cycleSec).toBe(67);
   });
 });
 

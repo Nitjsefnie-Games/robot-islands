@@ -271,9 +271,9 @@ export type BuildingDefId =
   | 'sheet_metal_mill'
   | 'pipe_mill'
   | 'beam_mill'
-  | 'bearing_press'
-  | 'spring_winder'
-  | 'cable_drawer'
+  | 'bearing_assembler'
+  | 'spring_press'
+  | 'cable_mill'
   | 'battery_factory'
   | 'glass_panel_press'
   | 'coolant_synthesizer'
@@ -1272,9 +1272,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '▬',
   },
   // Phase 6 — T2 mechanical fasteners (§6.3)
-  bearing_press: {
-    id: 'bearing_press',
-    displayName: 'Bearing Press',
+  bearing_assembler: {
+    id: 'bearing_assembler',
+    displayName: 'Bearing Assembler',
     category: 'manufacturing',
     tier: 2,
     footprint: SHAPES.square2,
@@ -1284,9 +1284,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
     glyph: '◉',
   },
-  spring_winder: {
-    id: 'spring_winder',
-    displayName: 'Spring Winder',
+  spring_press: {
+    id: 'spring_press',
+    displayName: 'Spring Press',
     category: 'manufacturing',
     tier: 2,
     footprint: SHAPES.square2,
@@ -1297,9 +1297,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '⌇',
   },
   // Phase 6 — T2 mechanical components (§6.3)
-  cable_drawer: {
-    id: 'cable_drawer',
-    displayName: 'Cable Drawer',
+  cable_mill: {
+    id: 'cable_mill',
+    displayName: 'Cable Mill',
     category: 'manufacturing',
     tier: 2,
     footprint: SHAPES.square2,
