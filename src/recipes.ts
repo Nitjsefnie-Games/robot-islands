@@ -2750,8 +2750,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   electrolyzer: {
     cycleSec: 33, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
-    inputs: { fresh_water: 1 },
-    outputs: { hydrogen: 1, oxygen: 1 },
+    inputs: { fresh_water: 9 },
+    outputs: { hydrogen: 1, oxygen: 8 },
     category: 'chemistry',
   },
   biofuel_plant: {
@@ -2858,8 +2858,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // rebalanced for idle-game scale, step #19 (×40: was 20s); bumped 800→1200
     // to reduce XP-arbitrage per Agent C finding (T0 saltwater → T2-weight outputs).
     cycleSec: 400,
-    inputs: { saltwater: 2 },
-    outputs: { chlorine: 1, sodium_hydroxide: 1 },
+    inputs: { salt: 117, fresh_water: 36 },
+    outputs: { chlorine: 71, sodium_hydroxide: 80, hydrogen: 2 },
     category: 'chemistry',
     // Real co-output per §7.5; consumer in §7.3 alumina chain.
   },
@@ -2917,9 +2917,10 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   air_separator: {
     cycleSec: 200, // rebalanced for idle-game scale, step #19 (×20: was 30s); 2026-05-18 ÷3 for display visibility (was 600s)
-    inputs: {},
-    outputs: { nitrogen: 1, oxygen: 1, argon: 1 },
+    inputs: { air: 100 },
+    outputs: { nitrogen: 75.5, oxygen: 23.2, argon: 1.3 },
     category: 'chemistry',
+    exogenousFlow: 'atmosphere',
   },
   cryo_lab: {
     cycleSec: 400, // rebalanced for idle-game scale, step #19 (×20: was 60s); 2026-05-18 ÷3 for display visibility (was 1200s)

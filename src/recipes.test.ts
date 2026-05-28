@@ -92,6 +92,9 @@ describe('recipe graph completeness (step 18)', () => {
     // memetic_core is a T5 component with no producer recipe yet;
     // exempt until a lab is added.
     producers.add('memetic_core');
+    // air is an exogenous-flow resource (atmosphere intake, §3.3);
+    // no producer recipe exists by design.
+    producers.add('air');
     const violations: { recipeId: string; missing: ResourceId }[] = [];
     for (const [recipeId, recipe] of Object.entries(RECIPES)) {
       if (!recipe) continue;
@@ -930,9 +933,9 @@ describe('§7.5 sodium_hydroxide as real chlor-alkali co-output (Task 5.2)', () 
   });
   it('chlor_alkali_plant outputs both chlorine and sodium_hydroxide', () => {
     expect(RECIPES.chlor_alkali_plant).toBeDefined();
-    expect(RECIPES.chlor_alkali_plant!.outputs.chlorine).toBe(1);
-    expect(RECIPES.chlor_alkali_plant!.outputs.sodium_hydroxide).toBe(1);
-    expect(RECIPES.chlor_alkali_plant!.inputs).toEqual({ saltwater: 2 });
+    expect(RECIPES.chlor_alkali_plant!.outputs.chlorine).toBe(71);
+    expect(RECIPES.chlor_alkali_plant!.outputs.sodium_hydroxide).toBe(80);
+    expect(RECIPES.chlor_alkali_plant!.inputs).toEqual({ salt: 117, fresh_water: 36 });
     expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(400); // rebalanced Task 16.6 (was 800; later 1200; 2026-05-18 ÷3 → 400)
   });
 });
@@ -949,9 +952,11 @@ describe('§7.5 liquid_nitrogen via cryo_air_separator (Task 5.4)', () => {
     expect(RECIPES.cryo_air_separator!.cycleSec).toBe(133);
     expect(RECIPES.cryo_air_separator!.category).toBe('chemistry');
   });
-  it('air_separator recipe is unchanged (still outputs nitrogen + oxygen + argon)', () => {
+  it('air_separator recipe outputs nitrogen + oxygen + argon per rev-16 §3.3', () => {
     expect(RECIPES.air_separator).toBeDefined();
-    expect(RECIPES.air_separator!.outputs).toEqual({ nitrogen: 1, oxygen: 1, argon: 1 });
+    expect(RECIPES.air_separator!.outputs).toEqual({ nitrogen: 75.5, oxygen: 23.2, argon: 1.3 });
+    expect(RECIPES.air_separator!.inputs).toEqual({ air: 100 });
+    expect(RECIPES.air_separator!.exogenousFlow).toBe('atmosphere');
   });
 });
 

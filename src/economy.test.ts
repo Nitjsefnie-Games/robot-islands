@@ -207,6 +207,25 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     expect(state.inventory.coal).toBe(50); // not eaten
     expect(state.inventory.bolt).toBe(0); // none produced
   });
+
+  it('air_separator produces N2/O2/Ar continuously with zero air inventory (atmosphere intake)', () => {
+    // Strip power so the test doesn't need a power plant.
+    const { power: _p, ...airSepRest } = BUILDING_DEFS.air_separator;
+    const defs: DefCatalog = { ...BUILDING_DEFS, air_separator: airSepRest as BuildingDef };
+    const airSep: PlacedBuilding = { id: 'b-air', defId: 'air_separator', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [airSep],
+      inventory: blankInventory(),
+      level: 15, // T3 building requires tier 3 unlock
+    });
+    // Tick one full cycle (200 s).
+    advanceIsland(state, 200_000, { defs });
+    expect(state.inventory.nitrogen).toBeCloseTo(75.5, 9);
+    expect(state.inventory.oxygen).toBeCloseTo(23.2, 9);
+    expect(state.inventory.argon).toBeCloseTo(1.3, 9);
+    // air is exogenous — never accrued, never decremented.
+    expect(state.inventory.air ?? 0).toBe(0);
+  });
 });
 
 describe('tutorial production flags (lubricantProduced / boltProduced)', () => {
