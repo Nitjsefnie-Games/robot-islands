@@ -1189,7 +1189,18 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x405080, // spacetime indigo
     stroke: 0x101020,
     power: { consumes: 1500 },
-    placementCost: { spacetime_fragment: 5, exotic_alloy: 20, reality_anchor: 2 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: teleporter_pad (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, reality_anchor are §6 fantasy.
+    // 111.42 t total (steel_beam 110000 + concrete 1200 + exotic_alloy 80 + reality_anchor 40 + microchip 30 + wire 75).
+    placementCost: {
+      steel_beam: 2200,
+      concrete: 1200,
+      exotic_alloy: 80,
+      reality_anchor: 40,
+      microchip: 300,
+      wire: 150
+    },
     glyph: '⧗',
   },
   // §8.8 T4 logistics: Power Substation (2x2). Inter-island power-cable
@@ -2181,7 +2192,18 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x100020,
     power: { produces: 8000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 50, steel: 100, microchip: 50 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: fusion_core (rev-16 §4.3) × 1.2 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, reality_anchor are §6 fantasy.
+    // 1251.30 t total (steel_beam 750000 + magnet 500000 + exotic_alloy 600 + microchip 100 + cryo_coolant 500 + reality_anchor 100).
+    placementCost: {
+      steel_beam: 15000,
+      magnet: 10000,
+      exotic_alloy: 600,
+      microchip: 1000,
+      cryo_coolant: 500,
+      reality_anchor: 100
+    },
     glyph: '⚡',
   },
   // §8.3: Reality Forge — T5 manufacturing. Consumes T4 components +
@@ -2198,7 +2220,12 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x100040,
     power: { consumes: 3000 },
     // §14 placeholder — tune in Appendix A. 4×4 footprint bumps T5 base.
-    placementCost: { steel: 200, microchip: 100 },
+    // cycle-break (P4C9): removed plasma_charge from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: pyroforge (rev-16 §4.3) × 1.4 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, plasma_charge are §6 fantasy.
+    // 755.88 t total (steel_beam 750000 + clay 5000 + microchip 80 + ceramic_insulator 500 + exotic_alloy 300).
+    placementCost: { steel_beam: 15000, clay: 5000, microchip: 800, ceramic_insulator: 500, exotic_alloy: 300 },
     glyph: '✺',
   },
   // §8.4: Singularity Battery — "effectively infinite electrical power
@@ -2218,7 +2245,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x0a0a30,
     power: { consumes: 0 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 50, steel: 100, microchip: 50 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: flywheel_array (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy are §6 fantasy.
+    // 458.90 t total (steel_beam 400000 + concrete 3000 + battery 30000 + heavy_cable 24000 + microchip 100 + gear 1600 + exotic_alloy 200).
+    placementCost: {
+      steel_beam: 8000,
+      concrete: 3000,
+      battery: 6000,
+      heavy_cable: 3000,
+      microchip: 1000,
+      gear: 800,
+      exotic_alloy: 200
+    },
     glyph: '▦',
   },
   // §8.9 / §13.3: Time Lock — banks offline-time stockpile per island and
@@ -2236,7 +2275,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x400060,
     power: { consumes: 1500 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: skill_forge (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — ai_core, reality_anchor are §6 fantasy.
+    // 30.42 t total (steel_beam 30000 + microchip 40 + ai_core 50 + reality_anchor 30 + wire 100 + ceramic_insulator 100 + glass 100).
+    placementCost: {
+      steel_beam: 600,
+      microchip: 400,
+      ai_core: 50,
+      reality_anchor: 30,
+      wire: 200,
+      ceramic_insulator: 100,
+      glass: 100
+    },
     glyph: '✺',
   },
   // §8.9 / §13.3: Genesis Chamber — free-creation of T1-T4 resources from
@@ -2254,7 +2305,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x205020,
     power: { consumes: 2500 },
     // §14 placeholder — tune in Appendix A. 4×4 footprint bumps T5 base.
-    placementCost: { reality_anchor: 100, steel: 200, microchip: 100 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: quantum_chip_fab (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — ai_core, reality_anchor are §6 fantasy.
+    // 608.00 t total (steel_beam 600000 + glass 6000 + microchip 300 + ceramic_insulator 1500 + silicon_wafer 52 + ai_core 100 + reality_anchor 50).
+    placementCost: {
+      steel_beam: 12000,
+      glass: 6000,
+      microchip: 3000,
+      ceramic_insulator: 1500,
+      silicon_wafer: 400,
+      ai_core: 100,
+      reality_anchor: 50
+    },
     glyph: '✺',
   },
   // §8.9 / §13.3: Universe Editor — reassigns an island's biome and
@@ -2273,7 +2336,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x500020,
     power: { consumes: 4000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: quantum_manipulator (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — ai_core, reality_anchor are §6 fantasy.
+    // 227.77 t total (steel_beam 225000 + ceramic_insulator 1500 + cryo_coolant 800 + microchip 50 + wire 150 + glass 200 + ai_core 40 + reality_anchor 30).
+    placementCost: {
+      steel_beam: 4500,
+      ceramic_insulator: 1500,
+      cryo_coolant: 800,
+      microchip: 500,
+      wire: 300,
+      glass: 200,
+      ai_core: 40,
+      reality_anchor: 30
+    },
     glyph: '✺',
   },
   // §8.9 / §13.3: Lattice Node — one per networked T5 island; activates
@@ -2292,7 +2368,18 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x205040,
     power: { consumes: 800 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 50, steel: 100, microchip: 50 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: teleporter_pad (rev-16 §4.3) × 1.4 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, reality_anchor, ai_core are §6 fantasy.
+    // 125.29 t total (steel_beam 125000 + microchip 40 + wire 100 + exotic_alloy 80 + reality_anchor 40 + ai_core 30).
+    placementCost: {
+      steel_beam: 2500,
+      microchip: 400,
+      wire: 200,
+      exotic_alloy: 80,
+      reality_anchor: 40,
+      ai_core: 30
+    },
     glyph: '✺',
   },
   // §11.6: Path Drone Foundry — T5 logistics building that launches path-
@@ -2307,7 +2394,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a6b78,
     stroke: 0x14222a,
     power: { consumes: 50 },
-    placementCost: { steel: 50, microchip: 20, quantum_chip: 2 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: self_replication_lab (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — ai_core, quantum_chip are §6 fantasy.
+    // 152.58 t total (steel_beam 150000 + concrete 1500 + microchip 50 + wire 150 + gear 400 + pipe 400 + ai_core 30 + quantum_chip 50).
+    placementCost: {
+      steel_beam: 3000,
+      concrete: 1500,
+      microchip: 500,
+      wire: 300,
+      gear: 200,
+      pipe: 100,
+      ai_core: 30,
+      quantum_chip: 50
+    },
     glyph: '✈',
   },
   // §13.3: Probability Engine — boosts effective scan radius for rare islands
@@ -2321,7 +2421,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x9070c0, // exotic violet
     stroke: 0x301050,
     power: { consumes: 80 },
-    placementCost: { steel: 40, quantum_chip: 4, exotic_alloy: 10 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: quantum_manipulator (rev-16 §4.3) × 1.2 (transcendent scale).
+    // spec-mandate: no real analog — quantum_chip are §6 fantasy.
+    // 202.19 t total (steel_beam 200000 + ceramic_insulator 1200 + cryo_coolant 600 + microchip 40 + wire 125 + glass 150 + quantum_chip 80).
+    placementCost: {
+      steel_beam: 4000,
+      ceramic_insulator: 1200,
+      cryo_coolant: 600,
+      microchip: 400,
+      wire: 250,
+      glass: 150,
+      quantum_chip: 80
+    },
     glyph: '⚄',
   },
   // §13.4 / §14.1: Ascendant Assembly — T5 building dedicated to crafting
@@ -2343,7 +2455,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x504010,
     power: { consumes: 4000 },
     // §14 placeholder — tune in Appendix A. 4×4 footprint bumps T5 base.
-    placementCost: { reality_anchor: 100, steel: 200, microchip: 100 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: quantum_chip_fab (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — ai_core, reality_anchor are §6 fantasy.
+    // 709.39 t total (steel_beam 700000 + glass 7000 + microchip 350 + ceramic_insulator 1800 + silicon_wafer 65 + ai_core 120 + reality_anchor 60).
+    placementCost: {
+      steel_beam: 14000,
+      glass: 7000,
+      microchip: 3500,
+      ceramic_insulator: 1800,
+      silicon_wafer: 500,
+      ai_core: 120,
+      reality_anchor: 60
+    },
     glyph: '✺',
   },
   // §13.4 Genesis Forge: produces the genesis_cell T5 transcendent
@@ -2361,7 +2485,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x60d0a0, // genesis mint
     stroke: 0x205040,
     power: { consumes: 4000 },
-    placementCost: { reality_anchor: 100, steel: 200, microchip: 100 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: pyroforge (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, plasma_charge, reality_anchor are §6 fantasy.
+    // 807.30 t total (steel_beam 800000 + clay 6000 + microchip 100 + ceramic_insulator 600 + exotic_alloy 400 + plasma_charge 150 + reality_anchor 50).
+    placementCost: {
+      steel_beam: 16000,
+      clay: 6000,
+      microchip: 1000,
+      ceramic_insulator: 600,
+      exotic_alloy: 400,
+      plasma_charge: 150,
+      reality_anchor: 50
+    },
     glyph: '✺',
   },
   // -------------------------------------------------------------------------
@@ -3981,7 +4117,19 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x5a0a4a,
     stroke: 0x200020,
     power: { consumes: 4000 },
-    placementCost: { steel: 100, reality_anchor: 30, microchip: 30 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: trench_drill (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, ai_core are §6 fantasy.
+    // 61.79 t total (steel_beam 60000 + exotic_alloy 150 + carbon_steel 700 + microchip 20 + wire 100 + heavy_cable 800 + ai_core 20).
+    placementCost: {
+      steel_beam: 1200,
+      exotic_alloy: 150,
+      carbon_steel: 700,
+      microchip: 200,
+      wire: 200,
+      heavy_cable: 100,
+      ai_core: 20
+    },
     glyph: '✦',
   },
   neutronium_extractor: {
@@ -3993,7 +4141,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x303040,
     stroke: 0x101018,
     power: { consumes: 4000 },
-    placementCost: { steel: 100, reality_anchor: 30, microchip: 30 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: nodule_concentrator (rev-16 §4.3) × 1.2 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy are §6 fantasy.
+    // 104.03 t total (steel_beam 100000 + exotic_alloy 150 + carbon_steel 1000 + sulfuric_acid 1288 + microchip 20 + pipe 1200 + wire 75 + concrete 300).
+    placementCost: {
+      steel_beam: 2000,
+      exotic_alloy: 150,
+      carbon_steel: 1000,
+      sulfuric_acid: 700,
+      microchip: 200,
+      pipe: 300,
+      wire: 150,
+      concrete: 300
+    },
     glyph: '✦',
   },
   // Phase 12 — T5 component labs (Task 12.2)
@@ -4006,7 +4167,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa040c0,
     stroke: 0x401060,
     power: { consumes: 1500 },
-    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: singularity_sensor_lab (rev-16 §4.3) × 1.4 (transcendent scale).
+    // spec-mandate: no real analog — quantum_chip, ai_core are §6 fantasy.
+    // 61.51 t total (steel_beam 60000 + concrete 800 + quantum_chip 150 + microchip 30 + glass 200 + wire 100 + ceramic_insulator 200 + ai_core 30).
+    placementCost: {
+      steel_beam: 1200,
+      concrete: 800,
+      quantum_chip: 150,
+      microchip: 300,
+      glass: 200,
+      wire: 200,
+      ceramic_insulator: 200,
+      ai_core: 30
+    },
     glyph: '✺',
   },
   dimensional_fold_lab: {
@@ -4018,7 +4192,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6020a0,
     stroke: 0x201040,
     power: { consumes: 1500 },
-    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: singularity_sensor_lab (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — quantum_chip, exotic_alloy are §6 fantasy.
+    // 56.27 t total (steel_beam 55000 + concrete 700 + quantum_chip 120 + microchip 25 + glass 150 + wire 75 + ceramic_insulator 150 + exotic_alloy 50).
+    placementCost: {
+      steel_beam: 1100,
+      concrete: 700,
+      quantum_chip: 120,
+      microchip: 250,
+      glass: 150,
+      wire: 150,
+      ceramic_insulator: 150,
+      exotic_alloy: 50
+    },
     glyph: '✺',
   },
   causal_regulator_lab: {
@@ -4030,7 +4217,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4080a0,
     stroke: 0x104060,
     power: { consumes: 1500 },
-    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: accelerator_core_lab (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, ai_core are §6 fantasy.
+    // 81.50 t total (steel_beam 80000 + exotic_alloy 250 + concrete 700 + optical_glass 200 + microchip 20 + wire 100 + ceramic_insulator 200 + ai_core 30).
+    placementCost: {
+      steel_beam: 1600,
+      exotic_alloy: 250,
+      concrete: 700,
+      optical_glass: 200,
+      microchip: 200,
+      wire: 200,
+      ceramic_insulator: 200,
+      ai_core: 30
+    },
     glyph: '✺',
   },
   // Phase 12 — T5 component labs (Task 12.3)
@@ -4043,7 +4243,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa060c0,
     stroke: 0x401060,
     power: { consumes: 1500 },
-    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: singularity_sensor_lab (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — quantum_chip, plasma_charge are §6 fantasy.
+    // 66.74 t total (steel_beam 65000 + concrete 900 + quantum_chip 180 + microchip 35 + glass 250 + wire 125 + ceramic_insulator 200 + plasma_charge 50).
+    placementCost: {
+      steel_beam: 1300,
+      concrete: 900,
+      quantum_chip: 180,
+      microchip: 350,
+      glass: 250,
+      wire: 250,
+      ceramic_insulator: 200,
+      plasma_charge: 50
+    },
     glyph: '✺',
   },
   aether_beacon_lab: {
@@ -4055,7 +4268,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x60a040,
     stroke: 0x204010,
     power: { consumes: 1500 },
-    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    // cycle-break (P4C9): removed aether_beacon from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: singularity_sensor_lab (rev-16 §4.3) × 1.4 (transcendent scale).
+    // spec-mandate: no real analog — quantum_chip, aether_beacon are §6 fantasy.
+    // 61.42 t total (steel_beam 60000 + concrete 800 + quantum_chip 140 + microchip 28 + glass 180 + wire 90 + ceramic_insulator 180).
+    placementCost: {
+      steel_beam: 1200,
+      concrete: 800,
+      quantum_chip: 140,
+      microchip: 280,
+      glass: 180,
+      wire: 180,
+      ceramic_insulator: 180
+    },
     glyph: '✺',
   },
   reality_engine_lab: {
@@ -4067,7 +4293,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x804060,
     stroke: 0x401030,
     power: { consumes: 1500 },
-    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    // cycle-break (P4C9): removed reality_engine from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: quantum_manipulator (rev-16 §4.3) × 1.4 (transcendent scale).
+    // spec-mandate: no real analog — reality_engine, ai_core are §6 fantasy.
+    // 253.03 t total (steel_beam 250000 + ceramic_insulator 1600 + cryo_coolant 900 + microchip 60 + wire 175 + glass 250 + ai_core 50).
+    placementCost: {
+      steel_beam: 5000,
+      ceramic_insulator: 1600,
+      cryo_coolant: 900,
+      microchip: 600,
+      wire: 350,
+      glass: 250,
+      ai_core: 50
+    },
     glyph: '✺',
   },
   singularity_battery_factory: {
@@ -4079,7 +4318,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x2a2a48,
     stroke: 0x101020,
     power: { consumes: 1500 },
-    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    // cycle-break (P4C9): removed singularity_battery_unit from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: fuel_rod_assembler (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — singularity_battery_unit are §6 fantasy.
+    // 66.77 t total (steel_beam 65000 + concrete 700 + lead_ingot 350 + microchip 20 + wire 100 + ceramic_insulator 200 + pipe 400).
+    placementCost: {
+      steel_beam: 1300,
+      concrete: 700,
+      lead_ingot: 350,
+      microchip: 200,
+      wire: 200,
+      ceramic_insulator: 200,
+      pipe: 100
+    },
     glyph: '✺',
   },
   aetheric_conduit: {
@@ -4092,7 +4344,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x203060,
     power: { consumes: 60000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
+    // cycle-break (P4C9): removed aetheric_current from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: vent_tap (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, aetheric_current are §6 fantasy.
+    // 51.97 t total (steel_beam 50000 + exotic_alloy 150 + carbon_steel 700 + optical_glass 200 + microchip 20 + wire 100 + heavy_cable 800).
+    placementCost: {
+      steel_beam: 1000,
+      exotic_alloy: 150,
+      carbon_steel: 700,
+      optical_glass: 200,
+      microchip: 200,
+      wire: 200,
+      heavy_cable: 100
+    },
     glyph: '✦',
   },
   spacetime_resonator: {
@@ -4105,7 +4370,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x301040,
     power: { consumes: 100000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
+    // cycle-break (P4C9): removed spacetime_fragment from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: vent_tap (rev-16 §4.3) × 1.4 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, spacetime_fragment are §6 fantasy.
+    // 46.61 t total (steel_beam 45000 + exotic_alloy 130 + carbon_steel 600 + optical_glass 150 + microchip 15 + wire 75 + heavy_cable 640).
+    placementCost: {
+      steel_beam: 900,
+      exotic_alloy: 130,
+      carbon_steel: 600,
+      optical_glass: 150,
+      microchip: 150,
+      wire: 150,
+      heavy_cable: 80
+    },
     glyph: '✦',
   },
   eldritch_sieve: {
@@ -4118,7 +4396,21 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x100008,
     power: { consumes: 80000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
+    // cycle-break (P4C9): removed dark_matter from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: nodule_concentrator (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, dark_matter are §6 fantasy.
+    // 114.32 t total (steel_beam 110000 + exotic_alloy 150 + carbon_steel 1100 + sulfuric_acid 1472 + microchip 20 + pipe 1200 + wire 75 + concrete 300).
+    placementCost: {
+      steel_beam: 2200,
+      exotic_alloy: 150,
+      carbon_steel: 1100,
+      sulfuric_acid: 800,
+      microchip: 200,
+      pipe: 300,
+      wire: 150,
+      concrete: 300
+    },
     glyph: '✦',
   },
 
@@ -4134,7 +4426,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x401008,
     power: { consumes: 4000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
+    // cycle-break (P4C9): removed plasma_charge from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: plasma_containment_assembler (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, plasma_charge are §6 fantasy.
+    // 81.97 t total (steel_beam 80000 + exotic_alloy 350 + concrete 900 + microchip 20 + ceramic_insulator 200 + wire 100 + pipe 400).
+    placementCost: {
+      steel_beam: 1600,
+      exotic_alloy: 350,
+      concrete: 900,
+      microchip: 200,
+      ceramic_insulator: 200,
+      wire: 200,
+      pipe: 100
+    },
     glyph: '✺',
   },
   eldritch_refiner: {
@@ -4147,7 +4452,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x201020,
     power: { consumes: 5000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
+    // cycle-break (P4C9): removed eldritch_processor from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: carbon_forge (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — eldritch_processor are §6 fantasy.
+    // 153.82 t total (steel_beam 150000 + concrete 1500 + ceramic_insulator 700 + microchip 50 + glass 300 + pipe 1200 + wire 75).
+    placementCost: {
+      steel_beam: 3000,
+      concrete: 1500,
+      ceramic_insulator: 700,
+      microchip: 500,
+      glass: 300,
+      pipe: 300,
+      wire: 150
+    },
     glyph: '✺',
   },
   phase_refiner: {
@@ -4160,7 +4478,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x10204a,
     power: { consumes: 5000 },
     // §14 placeholder — tune in Appendix A.
-    placementCost: { reality_anchor: 75, steel: 150, microchip: 75 },
+    // cycle-break (P4C9): removed phase_converter from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: carbon_forge (rev-16 §4.3) × 1.2 (transcendent scale).
+    // spec-mandate: no real analog — phase_converter are §6 fantasy.
+    // 143.25 t total (steel_beam 140000 + concrete 1300 + ceramic_insulator 600 + microchip 40 + glass 250 + pipe 1000 + wire 60).
+    placementCost: {
+      steel_beam: 2800,
+      concrete: 1300,
+      ceramic_insulator: 600,
+      microchip: 400,
+      glass: 250,
+      pipe: 250,
+      wire: 120
+    },
     glyph: '✺',
   },
   // Phase 16.2 — §6.6 memetic_core producer (Task 16.2). Closes the
@@ -4174,7 +4505,12 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x802040, // deep crimson — eldritch family
     stroke: 0x300818,
     power: { consumes: 1500 },
-    placementCost: { steel: 200, reality_anchor: 50, microchip: 50 },
+    // cycle-break (P4C9): removed memetic_core from placementCost to escape circular-deps invariant.
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: quantum_chip_fab (rev-16 §4.3) × 1.4 (transcendent scale).
+    // spec-mandate: no real analog — memetic_core are §6 fantasy.
+    // 607.85 t total (steel_beam 600000 + glass 6000 + microchip 300 + ceramic_insulator 1500 + silicon_wafer 52).
+    placementCost: { steel_beam: 12000, glass: 6000, microchip: 3000, ceramic_insulator: 1500, silicon_wafer: 400 },
     glyph: '⌬',
   },
   // -------------------------------------------------------------------------
@@ -4360,7 +4696,20 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x301050,
     // Antenna placeholder — tune in Appendix A.
     power: { consumes: 150 },
-    placementCost: { reality_anchor: 40, steel: 80, microchip: 40 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: antenna_t4 (rev-16 §4.3) × 1.5 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, ai_core are §6 fantasy.
+    // 51.76 t total (steel_beam 50000 + concrete 1200 + microchip 20 + glass 200 + wire 100 + ceramic_insulator 200 + exotic_alloy 30 + ai_core 10).
+    placementCost: {
+      steel_beam: 1000,
+      concrete: 1200,
+      microchip: 200,
+      glass: 200,
+      wire: 200,
+      ceramic_insulator: 200,
+      exotic_alloy: 30,
+      ai_core: 10
+    },
     glyph: '⟁',
   },
   antenna_t6: {
@@ -4567,7 +4916,22 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa040c0, // exotic violet
     stroke: 0x300040,
     power: { consumes: 1500 },
-    placementCost: { exotic_alloy: 10, ai_core: 2, casimir_energy: 1 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: nodule_concentrator (rev-16 §4.3) × 1.4 (transcendent scale).
+    // spec-mandate: no real analog — exotic_alloy, ai_core, casimir_energy are §6 fantasy.
+    // 129.66 t total (steel_beam 125000 + exotic_alloy 180 + carbon_steel 1200 + sulfuric_acid 1656 + microchip 20 + pipe 1200 + wire 75 + concrete 300 + ai_core 30 + casimir_energy 0).
+    placementCost: {
+      steel_beam: 2500,
+      exotic_alloy: 180,
+      carbon_steel: 1200,
+      sulfuric_acid: 900,
+      microchip: 200,
+      pipe: 300,
+      wire: 150,
+      concrete: 300,
+      ai_core: 30,
+      casimir_energy: 10
+    },
     oceanPlacement: true,
     terrainReqs: ['shallows', 'deep'],
     glyph: '◈',
@@ -4581,7 +4945,21 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6090c0, // distiller cobalt
     stroke: 0x102040,
     power: { consumes: 1200 },
-    placementCost: { exotic_alloy: 8, ai_core: 1, optical_glass: 20 },
+    // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
+    // Closest analog: cryo_containment_assembler (rev-16 §4.3) × 1.3 (transcendent scale).
+    // spec-mandate: no real analog — ai_core are §6 fantasy.
+    // 61.63 t total (steel_beam 60000 + cryogenic_compound 500 + concrete 500 + microchip 20 + glass 200 + wire 100 + ceramic_insulator 200 + optical_glass 100 + ai_core 15).
+    placementCost: {
+      steel_beam: 1200,
+      cryogenic_compound: 500,
+      concrete: 500,
+      microchip: 200,
+      glass: 200,
+      wire: 200,
+      ceramic_insulator: 200,
+      optical_glass: 100,
+      ai_core: 15
+    },
     oceanPlacement: true,
     terrainReqs: ['shallows', 'deep'],
     glyph: '≋',
