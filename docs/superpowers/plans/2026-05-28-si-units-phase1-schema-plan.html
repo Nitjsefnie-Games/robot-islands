@@ -552,14 +552,87 @@
               <li><strong>Fantasy with sub-calibration</strong> (helium_3 at 1 g, antimatter at 1 ng per rev-16 §3.6): use the rescaled mass; the volume/energy fields stay omitted unless §2.2 names them.</li>
             </ul>
           </li>
-          <li>For each resource, decide <code>terminal</code> from rev-16 §3.5.3 + §3.5.5:
-            <ul class="body">
-              <li><code>'consumed'</code> — default for any resource appearing in at least one recipe's <code>inputs</code>. Includes all T0 raws (Mine / Logger output is the producer; downstream recipes consume).</li>
-              <li><code>'expansion-hook:&lt;note&gt;'</code> — mercury, natural_gas (currently produced, no consumer). Other Phase-2-introduced resources (co2, refinery_gas, wood_tar, water_vapor, mill_scale, cryo_coolant_vented) do NOT exist in <code>ResourceId</code> yet — Phase 1 covers only the current 252.</li>
-              <li><code>'gameplay-sink'</code> — 60 skill crystals (<code>mining_crystal_t1</code> through <code>oceanography_crystal_t3</code>), <code>ascendant_core</code>, <code>genesis_cell</code>, the in-flight satellite/drone states (<code>scanner_sat</code>, <code>relay_sat</code>, <code>sweeper_sat</code>, <code>repair_drone</code>).</li>
-            </ul>
+          <li>Enumerate the produced / consumed sets via the TS module
+            system (NOT regex parsing — see methodology callout below).
+            Write a one-off <code>src/_phase1-audit.ts</code> that
+            imports <code>RECIPES</code> + <code>ALL_RESOURCES</code>
+            from <code>./recipes.js</code> and prints two sorted lists:
+            <code>producedButNotConsumed</code> (set of ResourceIds in
+            any <code>recipe.outputs</code> ∪ <code>recipe.rotateOutputs</code>
+            minus the set in any <code>recipe.inputs</code>), and
+            <code>consumedButNotProduced</code> (the other direction —
+            informational only). Run it via
+            <code>npx tsx src/_phase1-audit.ts</code>. Delete the file
+            before committing.
+            <div class="code"><pre><span class="cm">// src/_phase1-audit.ts — temp scratch, delete before commit.</span>
+<span class="kw">import</span> { RECIPES, ALL_RESOURCES, <span class="kw">type</span> ResourceId } <span class="kw">from</span> <span class="str">'./recipes.js'</span>;
+<span class="kw">const</span> produced = <span class="kw">new</span> Set&lt;ResourceId&gt;();
+<span class="kw">const</span> consumed = <span class="kw">new</span> Set&lt;ResourceId&gt;();
+<span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> Object.<span class="fn">values</span>(RECIPES)) {
+  <span class="kw">if</span> (!r) <span class="kw">continue</span>;
+  Object.<span class="fn">keys</span>(r.outputs).<span class="fn">forEach</span>((k) =&gt; produced.<span class="fn">add</span>(k <span class="kw">as</span> ResourceId));
+  <span class="kw">for</span> (<span class="kw">const</span> rot <span class="kw">of</span> r.rotateOutputs ?? [])
+    Object.<span class="fn">keys</span>(rot).<span class="fn">forEach</span>((k) =&gt; produced.<span class="fn">add</span>(k <span class="kw">as</span> ResourceId));
+  Object.<span class="fn">keys</span>(r.inputs).<span class="fn">forEach</span>((k) =&gt; consumed.<span class="fn">add</span>(k <span class="kw">as</span> ResourceId));
+}
+<span class="kw">const</span> producedButNotConsumed = [...produced].<span class="fn">filter</span>((r) =&gt; !consumed.<span class="fn">has</span>(r)).<span class="fn">sort</span>();
+<span class="kw">const</span> consumedButNotProduced = [...consumed].<span class="fn">filter</span>((r) =&gt; !produced.<span class="fn">has</span>(r)).<span class="fn">sort</span>();
+console.<span class="fn">log</span>(<span class="str">'producedButNotConsumed:'</span>, producedButNotConsumed);
+console.<span class="fn">log</span>(<span class="str">'consumedButNotProduced:'</span>, consumedButNotProduced);
+console.<span class="fn">log</span>(<span class="str">'ALL_RESOURCES count:'</span>, ALL_RESOURCES.length);</pre></div>
           </li>
-          <li>Cross-check terminal-tag decisions against the existing <code>TERMINAL_BYPRODUCTS</code> + <code>STARTER_TERRAIN</code> sets in <a class="cite">balance.test.ts:79</a>. Resources in <code>TERMINAL_BYPRODUCTS</code> that have no consumer today (e.g. <code>antimatter_propellant</code>, <code>repair_pack</code>, <code>orbital_insertion_package</code>) are candidates for <code>'gameplay-sink'</code> — flag any ambiguities.</li>
+          <li>For each resource, decide <code>terminal</code> by walking
+            the EXHAUSTIVE decision procedure (in this order — first
+            match wins):
+            <ol class="body">
+              <li><strong>Step A — gameplay-sink explicit set</strong> →
+                <code>'gameplay-sink'</code>. The set is:
+                <ul class="body">
+                  <li>All 60 skill crystals — every <code>ResourceId</code>
+                    matching <code>*_crystal_t[123]</code>
+                    (<code>mining_crystal_t1</code>,
+                    <code>agriculture_crystal_t2</code>, etc. —
+                    20 domains × 3 tiers). Confirm via grep
+                    <code>grep -nE '_crystal_t[1-3]' src/recipes.ts</code>.</li>
+                  <li><code>ascendant_core</code>, <code>genesis_cell</code>
+                    (milestone flags).</li>
+                  <li>In-flight orbital states:
+                    <code>scanner_sat</code>, <code>relay_sat</code>,
+                    <code>sweeper_sat</code>, <code>repair_drone</code>,
+                    and any sibling in-flight state surfaced by
+                    <code>TERMINAL_BYPRODUCTS</code> in
+                    <a class="cite">balance.test.ts:79</a> that has no
+                    recipe consumer in your audit's
+                    <code>consumed</code> set.</li>
+                </ul>
+              </li>
+              <li><strong>Step B — canonical expansion-hooks</strong> →
+                <code>'expansion-hook:&lt;canonical note&gt;'</code>:
+                <ul class="body">
+                  <li><code>mercury</code> →
+                    <code>'expansion-hook:amalgamation / chlor-alkali Hg-cell variant'</code></li>
+                  <li><code>natural_gas</code> →
+                    <code>'expansion-hook:ammonia / syngas / gas-turbine'</code></li>
+                </ul>
+              </li>
+              <li><strong>Step C — any other resource in
+                <code>producedButNotConsumed</code> from the audit
+                above</strong> →
+                <code>'expansion-hook:Phase 2 supplies consumer'</code>.
+                These are intermediates (galvanized_steel, tool_steel,
+                bronze, brass, biofuel, etc.) whose downstream consumer
+                recipes ship in Phase 2 of the rework. Phase 2 commits
+                will retag them to <code>'consumed'</code> as the
+                consumers land. <strong>Do not</strong> investigate
+                each individually; the audit's set membership IS the
+                decision.</li>
+              <li><strong>Step D — default</strong> →
+                <code>'consumed'</code>. Every remaining resource.
+                Phase-1-commit-2's invariant test only fires on
+                <code>terminal === 'consumed' &amp;&amp; produced &amp;&amp; unconsumed</code>;
+                steps A–C above are precisely what keeps it green.</li>
+            </ol>
+          </li>
           <li>Add <code>RECIPE_SPECULATIVE</code> with the 17 fantasy recipe ids from rev-16 §9.1 fantasy-chemistry list. Cross-check against <a class="cite">recipes.ts:1530</a>, <a class="cite">recipes.ts:1542</a>, <a class="cite">recipes.ts:1620</a>, <a class="cite">recipes.ts:1939</a>, <a class="cite">recipes.ts:1956</a> for the recipe-id spellings actually in the file (the spec gives canonical names; the codebase may differ in casing or subscript). Use grep:
             <div class="code"><pre>grep -nE "(pyroforge|reality_forge|antimatter_refinery|casimir_tap|memetic|eldritch|phase_converter|time_crystal)" src/recipes.ts</pre></div>
           </li>
@@ -575,6 +648,35 @@
           <code>npx tsc --noEmit</code>. <strong>Do not</strong> work around
           this with <code>Partial</code> or index access — the strict map IS
           the contract.
+        </div>
+
+        <div class="callout crit">
+          <div class="ct">Methodology — no regex on TS source</div>
+          To enumerate <code>RECIPES</code>'s inputs / outputs, use the
+          TS module system (the <code>src/_phase1-audit.ts</code> scratch
+          file above). <strong>Do NOT</strong> write a Python or Node
+          regex parser over <code>src/recipes.ts</code>. The codebase
+          uses unquoted keys (<code>iron_ore: 1</code>, not
+          <code>'iron_ore': 1</code>); a naive parser assuming Python /
+          JSON quote conventions returns empty results and the
+          implementer loops on the silent failure. Each iteration of
+          "tweak the regex, re-run" is 30+ seconds wasted; eight such
+          iterations is the prior-art failure mode (kimi subagent
+          recalibration, 2026-05-22). The audit script is one
+          import-and-loop — write it that way.
+        </div>
+
+        <div class="callout">
+          <div class="ct">No bouncing ambiguity back</div>
+          The terminal-tag decision procedure (Step 3 above) is
+          <strong>exhaustive and deterministic</strong>. Every resource
+          falls into exactly one of A / B / C / D. If you find yourself
+          deliberating "should this be expansion-hook or consumed?",
+          re-read the procedure — the audit's
+          <code>producedButNotConsumed</code> set membership IS the
+          decision for the ambiguous cases. The implementer does not
+          ask the lead "narrow or literal interpretation?"; the lead
+          has already chosen literal-via-audit-set-membership above.
         </div>
 
         <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx tsc --noEmit</code> exits 0. <code>npm test</code> green (test count unchanged from Phase 0). Manually count <code>RESOURCE_META</code> entries — should match <code>ALL_RESOURCES.length</code> (252 per spec §03). Spot-check 5 fantasy recipes in <code>RECIPE_SPECULATIVE</code> appear as keys in the <code>RECIPES</code> Partial map.</div>

@@ -538,11 +538,41 @@
         yet — Phase 1's <code>RESOURCE_META</code> covers only the current
         252; Phase 2 extends it with the new entries when the resources are
         added to <code>ResourceId</code>).</p>
-      <p class="body"><strong>Default <code>'consumed'</code> for the
-        unsurveyed majority.</strong> Most T0-T2 resources have at least
-        one recipe consumer today; Phase 1's grep-driven audit confirms
-        each. The explicit-tag list above is exhaustive — anything not
-        listed gets <code>'consumed'</code>.</p>
+      <p class="body"><strong>Decision procedure (exhaustive,
+        in order).</strong> For every <code>ResourceId</code>:</p>
+      <ol class="body">
+        <li>If it is in the <code>'gameplay-sink'</code> explicit set
+          (60 skill crystals + <code>ascendant_core</code> +
+          <code>genesis_cell</code> + the in-flight orbital states
+          <code>scanner_sat</code> / <code>relay_sat</code> /
+          <code>sweeper_sat</code> / <code>repair_drone</code> + any
+          item in <code>balance.test.ts</code>'s <code>TERMINAL_BYPRODUCTS</code>
+          set with no recipe consumer today) → <code>'gameplay-sink'</code>.</li>
+        <li>Else if it is <code>mercury</code> or <code>natural_gas</code>
+          → <code>'expansion-hook:&lt;canonical note&gt;'</code> per the
+          spec text above.</li>
+        <li>Else if it is <strong>produced today</strong> (appears in
+          any <code>recipe.outputs</code> or <code>recipe.rotateOutputs</code>)
+          <strong>and has no recipe consumer today</strong> (does not
+          appear in any <code>recipe.inputs</code>) →
+          <code>'expansion-hook:Phase 2 supplies consumer'</code>.
+          Phase 2 commits will retag these to <code>'consumed'</code>
+          as the consumer recipes land.</li>
+        <li>Else → <code>'consumed'</code>. The Phase-1-commit-2
+          invariant test (spec §05) only flags
+          <code>terminal === 'consumed' &amp;&amp; produced &amp;&amp; unconsumed</code>,
+          so steps 1–3 above keep it green.</li>
+      </ol>
+      <p class="body">The decision is mechanical given the produced /
+        consumed sets. The implementer must enumerate those sets via
+        the TS module system (write a one-off
+        <code>src/_phase1-audit.ts</code> that imports <code>RECIPES</code>
+        and <code>ALL_RESOURCES</code> and prints the set diff, run via
+        <code>npx tsx</code>; delete the file after committing).
+        <strong>Do NOT</strong> write regex parsers over the TS source —
+        the codebase uses unquoted keys (<code>iron_ore: 1</code>, not
+        <code>'iron_ore': 1</code>) and offline parsers loop on the
+        unfamiliar shape.</p>
     </section>
 
     <!-- ============================================================= -->
