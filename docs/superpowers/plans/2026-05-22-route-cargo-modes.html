@@ -744,7 +744,7 @@ EOF
 <span class="add">      route.mode,</span>
 <span class="add">      route.cargo.map((e) =&gt; `${e.resourceId}:${e.weight ?? 1}:${e.sourceFloorPct ?? ''}`).join(','),</span>
       route.draining ? 'D' : '',
-    ].join('');
+    ].join('\u001f');
   }</pre></div></div>
           </div>
         </div>
