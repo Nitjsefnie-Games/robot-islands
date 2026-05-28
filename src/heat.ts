@@ -254,7 +254,9 @@ export function resolveHeatAssignments(
     const ratio = Math.min(1, supply / demand);
     for (const c of srcConsumers) {
       const prev = heatThrottleFactor.get(c.id) ?? 0;
-      heatThrottleFactor.set(c.id, Math.max(prev, ratio));
+      const next = Math.max(prev, ratio);
+      heatThrottleFactor.set(c.id, next);
+      if (next < MIN_HEAT_FACTOR) hasHeat.set(c.id, false);
     }
   }
 
