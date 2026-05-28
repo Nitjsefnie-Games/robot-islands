@@ -116,18 +116,23 @@ export interface VehicleStats {
   readonly weatherMultiplier: number;
 }
 
+// rev-16 §6.2: cubic-drag invariant `speed² × tilesPerFuel = 0.03125`.
+// Fuel-per-second scales as v³ (cruise drag P ∝ v³). T1 anchor preserved;
+// T2-T4 retabled per rev-16 §6.2 table.
 export const SHIP_STATS: Record<VehicleTier, VehicleStats> = {
-  1: { speed: 0.25, tilesPerFuel: 0.5, maxKits: 1, failureRate: 0.02, weatherMultiplier: 1.0 },
-  2: { speed: 0.30, tilesPerFuel: 2, maxKits: 2, failureRate: 0.015, weatherMultiplier: 0.9 },
-  3: { speed: 0.40, tilesPerFuel: 3.5, maxKits: 2, failureRate: 0.01, weatherMultiplier: 0.8 },
-  4: { speed: 0.50, tilesPerFuel: 5, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
+  1: { speed: 0.25, tilesPerFuel: 0.5000, maxKits: 1, failureRate: 0.020, weatherMultiplier: 1.0 },
+  2: { speed: 0.40, tilesPerFuel: 0.1953, maxKits: 2, failureRate: 0.015, weatherMultiplier: 0.9 },
+  3: { speed: 0.60, tilesPerFuel: 0.0868, maxKits: 2, failureRate: 0.010, weatherMultiplier: 0.8 },
+  4: { speed: 1.00, tilesPerFuel: 0.0313, maxKits: 3, failureRate: 0.005, weatherMultiplier: 0.7 },
 };
 
+// rev-16 §6.2: cubic-drag invariant `speed² × tilesPerFuel = 0.121`.
+// T1 anchor preserved. T2-T4 retabled.
 export const HELICOPTER_STATS: Record<VehicleTier, VehicleStats> = {
-  1: { speed: 0.55, tilesPerFuel: 0.4, maxKits: 1, failureRate: 0.025, weatherMultiplier: 1.3 }, // fast but fuel-thirsty, fragile, weather-vulnerable
-  2: { speed: 0.75, tilesPerFuel: 0.5, maxKits: 1, failureRate: 0.01, weatherMultiplier: 1.2 },
-  3: { speed: 0.95, tilesPerFuel: 1.5, maxKits: 1, failureRate: 0.008, weatherMultiplier: 1.0 },
-  4: { speed: 1.20, tilesPerFuel: 2.5, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
+  1: { speed: 0.55, tilesPerFuel: 0.4000, maxKits: 1, failureRate: 0.025, weatherMultiplier: 1.3 },
+  2: { speed: 0.85, tilesPerFuel: 0.1675, maxKits: 1, failureRate: 0.015, weatherMultiplier: 1.1 },
+  3: { speed: 1.30, tilesPerFuel: 0.0716, maxKits: 2, failureRate: 0.008, weatherMultiplier: 0.9 },
+  4: { speed: 1.85, tilesPerFuel: 0.0354, maxKits: 2, failureRate: 0.005, weatherMultiplier: 0.7 },
 };
 
 // ---------------------------------------------------------------------------
