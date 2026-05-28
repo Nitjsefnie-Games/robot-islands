@@ -1,3 +1,5 @@
+import SunCalc from 'suncalc';
+
 // Pure day-night cycle math per SPEC §2.7.
 //
 // The world has a 24-real-hour cycle. Phase ∈ [0, 1) drives solar
@@ -59,8 +61,8 @@ export function dayPhaseName(nowMs: number): DayPhase {
 }
 
 /**
- * Number of sub-segments each ramp quadrant (dawn, dusk) is divided into for
- * the §15.3 piecewise integration. The integrator samples
+ * 8 sub-segments per 6h quadrant of the astronomy curve (32 total per day).
+ * Used by the §15.3 piecewise integration. The integrator samples
  * `solarMultiplier(t)` at the start of each segment and treats it as
  * constant within the segment; without sub-segmentation, a long dawn /
  * dusk segment would integrate at the start-of-segment multiplier (e.g.
@@ -72,28 +74,24 @@ export function dayPhaseName(nowMs: number): DayPhase {
  */
 export const SOLAR_RAMP_SEGMENTS = 8;
 
-/**
- * Solar-producer multiplier for the current phase. Linearly interpolates
- * 0 → 1 over Dawn, holds at 1.0 across Day, interpolates 1 → 0 over Dusk,
- * holds at 0.0 across Night. The integral over a full Dawn or Dusk quadrant
- * is exactly 0.5 — so long-window solar output preserves the prior
- * piecewise-constant model's quadrant total, only the in-window shape
- * differs.
- */
-export function solarMultiplier(nowMs: number): number {
-  const p = dayPhase(nowMs);
-  if (p < 0.25) {
-    // Dawn: position within the quadrant ∈ [0, 1) maps to mul ∈ [0, 1).
-    return p / 0.25;
-  }
-  if (p < 0.5) {
-    return 1.0;
-  }
-  if (p < 0.75) {
-    // Dusk: position within the quadrant ∈ [0, 1) maps to mul = 1 - position.
-    return 1.0 - (p - 0.5) / 0.25;
-  }
-  return 0.0;
+/** Real-astronomy solar insolation factor at the player's geographic
+ *  location and the current wall-clock time. Returns 0 below horizon,
+ *  sin(altitude) ∈ [0, 1] above. Drives `computeRates`'s solar power
+ *  multiplier per SPEC §15.3 the same way the trapezoidal curve did.
+ *
+ *  When either lat or lon is null (no picker run yet), returns 0 —
+ *  solar buildings produce nothing until the player picks a location.
+ *  main.ts blocks bootstrap on the picker so this only fires for
+ *  fixture / test paths that explicitly pass null. */
+export function solarMultiplier(
+  nowMs: number,
+  lat: number | null,
+  lon: number | null,
+): number {
+  if (lat == null || lon == null) return 0;
+  const pos = SunCalc.getPosition(new Date(nowMs), lat, lon);
+  if (pos.altitude <= 0) return 0;
+  return Math.sin(pos.altitude);
 }
 
 /**
@@ -129,22 +127,8 @@ export function nextPhaseBoundaryMs(nowMs: number): number {
  * Mirrors `nextMaintenanceBoundaryMs` in `maintenance.ts`.
  */
 export function nextSolarBoundaryMs(nowMs: number): number | null {
-  const p = dayPhase(nowMs);
-  // Day (0.25-0.50) and Night (0.75-1.00) are flat; segment is bounded by
-  // the next quadrant transition. Defer to nextPhaseBoundaryMs.
-  if (p >= 0.25 && p < 0.5) return nextPhaseBoundaryMs(nowMs);
-  if (p >= 0.75) return nextPhaseBoundaryMs(nowMs);
-  // Dawn (0.00-0.25) or Dusk (0.50-0.75): sub-segment the quadrant.
-  // Position within the quadrant in [0, 1).
-  const quadStartPhase = p < 0.25 ? 0 : 0.5;
-  const posInQuad = (p - quadStartPhase) / 0.25;
-  // Width of one sub-segment in phase units within the quadrant.
-  const subWidth = 1 / SOLAR_RAMP_SEGMENTS;
-  // Next sub-segment index (1..SOLAR_RAMP_SEGMENTS). The last sub-boundary
-  // lands exactly on the quadrant end.
-  const nextSubIdx = Math.floor(posInQuad / subWidth) + 1;
-  const nextPosInQuad = Math.min(nextSubIdx * subWidth, 1);
-  const nextPhase = quadStartPhase + nextPosInQuad * 0.25;
-  const phaseDelta = nextPhase - p;
-  return nowMs + phaseDelta * DAY_DURATION_MS;
+  const totalSegmentsPerDay = SOLAR_RAMP_SEGMENTS * 4;  // 32 per day
+  const segmentMs = DAY_DURATION_MS / totalSegmentsPerDay;
+  const nowSegment = Math.floor(nowMs / segmentMs);
+  return (nowSegment + 1) * segmentMs;
 }
