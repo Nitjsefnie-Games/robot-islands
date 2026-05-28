@@ -1,0 +1,1798 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units rework Phase 2 — recipe restoichiometry · implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 36px;
+      line-height: 1.16; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    h1 code {
+      font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px;
+      color: #C9B98A;
+    }
+    .prompt-box {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok     { color: var(--olive); }
+    .summary .v.warn   { color: var(--warn); }
+
+    .toc { background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+
+    section { margin-bottom: 56px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 25px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    h3.sub {
+      font-family: var(--serif); font-weight: 500; font-size: 17px;
+      color: var(--slate); margin: 20px 0 8px;
+    }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 12px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 5px; }
+
+    /* milestone timeline */
+    .milestones { display: flex; flex-direction: column; gap: 0; }
+    .milestone { display: grid; grid-template-columns: 110px 28px 1fr;
+      gap: 0 18px; position: relative; }
+    .milestone .when { text-align: right; font-family: var(--mono);
+      font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+    .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+    .milestone .dot { width: 14px; height: 14px; border-radius: 50%;
+      background: var(--white); border: 3px solid var(--clay);
+      margin-top: 4px; flex-shrink: 0; }
+    .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+    .milestone .dot.gate { background: var(--warn); border-color: var(--warn); }
+    .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+    .milestone:last-child .line { display: none; }
+    .milestone .body { padding-bottom: 30px; }
+    .milestone .body h3 {
+      font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin-bottom: 4px;
+    }
+    .milestone .body p { font-size: 13.5px; color: var(--gray-500);
+      margin-bottom: 10px; max-width: 700px; }
+    .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .milestone .tag {
+      font-family: var(--mono); font-size: 11.5px;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+    }
+    .milestone .tag.est { color: var(--warn); }
+    .milestone .tag.ok  { color: var(--olive); }
+
+    /* phase card */
+    .phase-card {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 22px 26px;
+    }
+    .phase-card h4 {
+      font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      margin: 18px 0 8px;
+    }
+    .phase-card h4:first-child { margin-top: 0; }
+    .verify, .rollback {
+      background: var(--gray-150); border-radius: 8px;
+      padding: 12px 16px; font-size: 13.5px; margin-top: 14px;
+    }
+    .verify strong { color: var(--olive); }
+    .rollback strong { color: var(--warn); }
+
+    /* code panel */
+    .code {
+      background: #121110; border-radius: 12px;
+      padding: 16px 20px; overflow-x: auto; margin: 10px 0;
+    }
+    .code pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .code .kw  { color: var(--clay); }
+    .code .str { color: var(--olive); }
+    .code .cm  { color: var(--gray-500); }
+    .code .fn  { color: #C9B98A; }
+    .code .new { background: rgba(143, 165, 110, 0.13); display: block; }
+
+    /* table */
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; }
+    .tbl td.ok { color: var(--olive); }
+    .tbl td.warn { color: var(--warn); }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* callout */
+    .callout {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px;
+    }
+    .callout .ct {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px;
+    }
+    .callout.crit { border-left-color: var(--rust); }
+    .callout.crit .ct { color: var(--rust); }
+    .callout.ok { border-left-color: var(--olive); }
+    .callout.ok .ct { color: var(--olive); }
+
+    /* risk table */
+    .risks {
+      border: var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat); color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · robot-islands · SI-units rework · Phase 2</div>
+      <h1>Recipe restoichiometry — <code>RECIPES</code> rewrites, <code>exogenousFlow</code>, CO₂ accrual, mass-balance auditor</h1>
+      <div class="prompt-box">
+        <span class="label">Spec</span>
+        Companion spec at
+        <code>specs/2026-05-28-si-units-phase2-recipes</code>.
+        Phase 2 of a 7-phase SI-units rework. Lands the rev-16 §3
+        recipe rewrites (5 chains + the §3.9 cohort, ~24 recipes), adds 9
+        new resources to the catalog, renames 3 buildings to match the
+        cohort discipline, wires a CO₂ accrual hook into the segment
+        integrator at <a class="cite">economy.ts:1582</a>, and ships a
+        vitest mass-balance auditor that walks every recipe and asserts
+        Σ inputs × mass = Σ outputs × mass (modulo
+        <code>exogenousFlow</code> tags and
+        <code>RECIPE_SPECULATIVE</code> exemptions).
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Effort</div><div class="v accent">~24 hours</div></div>
+      <div class="cell"><div class="k">Phases</div><div class="v">12 (Phase 0–11)</div></div>
+      <div class="cell"><div class="k">Commits</div><div class="v">11</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v ok">~6 source · 3 test</div></div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Phases</span>
+      <a href="#p0">Phase 0 — Baseline</a>
+      <a href="#p1">Phase 1 — Resources</a>
+      <a href="#p2">Phase 2 — exogenousFlow field</a>
+      <a href="#p3">Phase 3 — Smelting chain</a>
+      <a href="#p4">Phase 4 — Lime + cement</a>
+      <a href="#p5">Phase 5 — Electrochem + air</a>
+      <a href="#p6">Phase 6 — Refining + cryo</a>
+      <a href="#p7">Phase 7 — §3.9 cohort + renames</a>
+      <a href="#p8">Phase 8 — CO₂ accrual hook</a>
+      <a href="#p9">Phase 9 — Mass-balance auditor</a>
+      <a href="#p10">Phase 10 — Fixture sweep</a>
+      <a href="#p11">Phase 11 — Live-save replay</a>
+      <a href="#vmatrix">Verification matrix</a>
+      <a href="#risks">Risks</a>
+      <a href="#notes">Implementation notes</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">00</span><h2>Milestone timeline</h2></div>
+      <p class="sec-intro">Eleven commits across twelve phases. Phase 0 is
+        baseline-only (no commit). Phases run sequentially — each must
+        leave the suite green (or with explicitly surfaced fixture
+        rewrites scheduled for Phase 10) before the next begins. Phase 9
+        is the auditor binding-gate: every non-speculative recipe must
+        balance once it lands. Phase 11 is the live-save sanity gate.</p>
+
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">step 0</div>
+          <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 0 — Baseline (no commit)</h3>
+            <p>Confirm Phase 1 (schema v15, <code>RESOURCE_META</code>, <code>RECIPE_SPECULATIVE</code>, <code>state.co2Kg</code>) is landed and the suite is green. No code change.</p>
+            <div class="tags"><span class="tag est">~20 min</span><span class="tag">npm test</span><span class="tag">grep RESOURCE_META</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 1</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 1 — 9 new resources to catalog</h3>
+            <p>Adds <code>co</code>, <code>co2</code>, <code>refinery_gas</code>, <code>wood_tar</code>, <code>water_vapor</code>, <code>aviation_kerosene_crude</code>, <code>mill_scale</code>, <code>calcium_sulfonate</code>, <code>air</code>, <code>cryo_coolant_vented</code> to <code>ResourceId</code> + <code>ALL_RESOURCES</code> + <code>XP_WEIGHT</code> + <code>RESOURCE_META</code> + <code>storage-categories.ts</code>. Declared but not yet produced.</p>
+            <div class="tags"><span class="tag est">~90 min</span><span class="tag">recipes.ts</span><span class="tag">storage-categories.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 2</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 2 — <code>exogenousFlow</code> + <code>biogenic</code> on Recipe interface</h3>
+            <p>Pure additive: extends <code>Recipe</code> at <a class="cite">recipes.ts:1138</a> with <code>exogenousFlow?</code>, <code>exogenousFlowKg?</code>, <code>biogenic?</code>. No recipes use the fields yet.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">recipes.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 3</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 3 — Smelting chain rewrite (§3.1)</h3>
+            <p>Rewrites <code>smelter</code>, <code>coke_oven</code>, <code>blast_furnace</code>, <code>steel_mill</code>, <code>electric_arc_furnace</code>. New <code>co</code> + <code>co2</code> + <code>refinery_gas</code> + <code>wood_tar</code> outputs come online. Existing smelter-ratio tests get updated inline.</p>
+            <div class="tags"><span class="tag est">~150 min</span><span class="tag">recipes.ts</span><span class="tag">recipes.test.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 4</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 4 — Lime / cement / brick / charcoal (§3.2)</h3>
+            <p>Five recipes (limekiln, brick_kiln, charcoal_kiln, cement_mill, concrete_plant). Three carry <code>exogenousFlow</code> tags (fuel-CO₂ on limekiln + cement; water-vapor evaporation on concrete).</p>
+            <div class="tags"><span class="tag est">~90 min</span><span class="tag">recipes.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 5</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 5 — Electrochem + atmosphere intake (§3.3)</h3>
+            <p>Rewrites <code>electrolyzer</code>, <code>chlor_alkali_plant</code>, <code>air_separator</code>. Adds the <code>computeRates</code> patch: <code>exogenousFlow: 'atmosphere'</code> bypasses the inventory-availability check for the <code>air</code> input.</p>
+            <div class="tags"><span class="tag est">~90 min</span><span class="tag">recipes.ts</span><span class="tag">economy.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 6</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 6 — Refining + cryo-expander (§3.4, §3.7)</h3>
+            <p>Five recipes (naphtha_cracker, diesel_refinery, kerosene_refinery, lubricant_refinery, cryogenic_generator). LPG-mix folded into <code>refinery_gas</code> per spec §07.</p>
+            <div class="tags"><span class="tag est">~120 min</span><span class="tag">recipes.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 7</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 7 — §3.9 cohort (7 recipes) + 3 building renames</h3>
+            <p>Rewrites <code>beam_mill</code>, <code>metal_rolling_mill</code>, <code>sheet_mill</code>, <code>pipe_mill</code>, plus the three renamed defs (<code>cable_drawer→cable_mill</code>, <code>spring_winder→spring_press</code>, <code>bearing_press→bearing_assembler</code>) at the recipe + def + UI label level. Live save has no occurrences of the old ids (grep confirmed) — no migration needed.</p>
+            <div class="tags"><span class="tag est">~180 min</span><span class="tag">recipes.ts</span><span class="tag">building-defs.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 8</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 8 — CO₂ accrual hook</h3>
+            <p>Inside <code>advanceIsland</code>'s segment integrator at <a class="cite">economy.ts:1582</a>, accrue <code>co2</code> output mass + <code>'fuel-combustion-CO₂'</code> exogenous flow into <code>state.co2Kg</code>. Phase-1 field is already there; this commit wires the writes.</p>
+            <div class="tags"><span class="tag est">~90 min</span><span class="tag">economy.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 9</div>
+          <div class="dot-col"><span class="dot gate"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 9 — Mass-balance auditor (binding gate)</h3>
+            <p>NEW <code>src/mass-balance.test.ts</code>. Walks every recipe, computes Δ, asserts 0 modulo exemptions. Snapshot against rev-16 §3.8's 25 worked examples. <strong>Binding gate:</strong> every non-speculative recipe must pass.</p>
+            <div class="tags"><span class="tag est">~120 min</span><span class="tag">mass-balance.test.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 10</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 10 — Test fixture sweep</h3>
+            <p>Update chain-walk fixtures + recipe-ratio assertions in <code>economy.test.ts</code> + any test hard-coding renamed IDs or smelter-1:1 expectations. Surface every red, fix in a single commit.</p>
+            <div class="tags"><span class="tag est">~150 min</span><span class="tag">*.test.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 11</div>
+          <div class="dot-col"><span class="dot gate"></span></div>
+          <div class="body">
+            <h3>Phase 11 — Live-save replay sanity (binding gate)</h3>
+            <p><code>profile-economy.ts /tmp/robot-islands-save.json</code>. Must not throw. Inventory must not go NaN or negative. 24h offline catchup completes. Mean tick within ±20% of Phase 0 baseline.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">profile artifact</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p0">
+      <div class="sec-head"><span class="num">01</span><h2>Phase 0 — Baseline</h2></div>
+      <p class="sec-intro">No code change. Confirm Phase 1 (schema v15
+        scaffolding) is landed, the suite is green, and the profile script
+        runs on the live save without errors.</p>
+
+      <div class="phase-card">
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Verify Phase 1 landed. Grep must confirm the prerequisites are present:
+            <div class="code"><pre>grep -nE 'RESOURCE_META|RECIPE_SPECULATIVE|massPerUnitKg' src/recipes.ts | head -5
+grep -nE 'co2Kg|auraAmpVersion' src/economy.ts | head -5
+grep -n "SCHEMA_VERSION = 15" src/persistence.ts</pre></div>
+            All three must produce matches. If any is empty, <strong>STOP</strong> — Phase 1 has not landed; Phase 2 implementation is blocked.
+          </li>
+          <li>Run the full test suite. Confirm green.
+            <div class="code"><pre>npm test</pre></div>
+          </li>
+          <li>Run the economy profiler against the live save dump and capture the baseline tick numbers:
+            <div class="code"><pre>npx tsx scripts/profile-economy.ts /tmp/robot-islands-save.json</pre></div>
+            <p class="body">Capture: home-island mean, p99, 24h catchup, current top-3 hot frames. These will be the Phase 11 sanity comparators.</p>
+          </li>
+          <li>Confirm the live save does NOT contain old building ids that would force a migration:
+            <div class="code"><pre>grep -cE 'cable_drawer|spring_winder|bearing_press' /tmp/robot-islands-save.json</pre></div>
+            <p class="body">Expected output: <code>0</code>. (Verified during plan authoring — no migration needed; renames in Phase 7 touch source only.)</p>
+          </li>
+          <li>Record observed numbers + grep results in a scratch file. If suite is red, fix that before Phase 1 of this rework starts.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0. Phase 1 prerequisite greps non-empty. Profile script completes without throwing. Live-save id grep returns 0.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;N/A — no changes made.</div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p1">
+      <div class="sec-head"><span class="num">02</span><h2>Phase 1 — 9 new resources to catalog</h2></div>
+      <p class="sec-intro">Pure additive — declare every new
+        <code>ResourceId</code>, register meta, slot into storage
+        categories. No recipe references them yet, so the suite stays
+        green by default. This is the safest non-trivial commit in the
+        sequence.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts</code> — extend <code>ResourceId</code> union at <a class="cite">recipes.ts:46-415</a>; extend <code>ALL_RESOURCES</code> at <a class="cite">recipes.ts:417</a>; extend <code>XP_WEIGHT</code> at <a class="cite">recipes.ts:738</a>; extend <code>RESOURCE_META</code> (Phase 1 record) with the 10 new entries.</li>
+          <li><code>src/storage-categories.ts</code> — extend the resource → category map with the 9 new ResourceIds (LPG-mix folded into <code>refinery_gas</code> so 9 net additions).</li>
+        </ul>
+
+        <h4>Resource roster — per spec §08</h4>
+        <table class="tbl">
+          <thead><tr>
+            <th>ResourceId</th>
+            <th>massPerUnitKg</th>
+            <th>Storage cat.</th>
+            <th>XP w.</th>
+            <th>terminal tag (RESOURCE_META)</th>
+          </tr></thead>
+          <tbody>
+            <tr><td class="slate">co</td><td class="num">1</td><td class="mono">liquid_gas</td><td class="num">3</td><td class="mono">expansion-hook:CO afterburn / oxidation chain</td></tr>
+            <tr><td class="slate">co2</td><td class="num">1</td><td class="mono">liquid_gas</td><td class="num">3</td><td class="mono">expansion-hook:weather penalty + sequestration (Phase 6)</td></tr>
+            <tr><td class="slate">refinery_gas</td><td class="num">1</td><td class="mono">liquid_gas</td><td class="num">3</td><td class="mono">expansion-hook:residential heating / petrochem feedstock</td></tr>
+            <tr><td class="slate">wood_tar</td><td class="num">1</td><td class="mono">liquid_gas</td><td class="num">3</td><td class="mono">expansion-hook:creosote / wood-preservative chain</td></tr>
+            <tr><td class="slate">water_vapor</td><td class="num">1</td><td class="mono">liquid_gas</td><td class="num">3</td><td class="mono">expansion-hook:condensing-loop / humidity / fresh-water reclamation</td></tr>
+            <tr><td class="slate">aviation_kerosene_crude</td><td class="num">0.81</td><td class="mono">liquid_gas</td><td class="num">3</td><td class="mono">consumed (kerosene_refinery)</td></tr>
+            <tr><td class="slate">mill_scale</td><td class="num">1</td><td class="mono">dry_goods</td><td class="num">3</td><td class="mono">expansion-hook:scrap remelt / cement kiln aggregate</td></tr>
+            <tr><td class="slate">calcium_sulfonate</td><td class="num">1</td><td class="mono">dry_goods</td><td class="num">3</td><td class="mono">consumed (lubricant_refinery)</td></tr>
+            <tr><td class="slate">air</td><td class="num">1</td><td class="mono">liquid_gas</td><td class="num">0</td><td class="mono">consumed (air_separator via exogenousFlow)</td></tr>
+            <tr><td class="slate">cryo_coolant_vented</td><td class="num">1</td><td class="mono">liquid_gas</td><td class="num">3</td><td class="mono">expansion-hook:re-liquefaction loop / closed-cycle recovery</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Pseudocode</h4>
+        <div class="code"><pre><span class="cm">// recipes.ts:46-415 — ResourceId union additions.</span>
+<span class="kw">export type</span> ResourceId =
+  <span class="cm">/* …existing 252 variants… */</span>
+<span class="new">  | <span class="str">'co'</span></span>
+<span class="new">  | <span class="str">'co2'</span></span>
+<span class="new">  | <span class="str">'refinery_gas'</span></span>
+<span class="new">  | <span class="str">'wood_tar'</span></span>
+<span class="new">  | <span class="str">'water_vapor'</span></span>
+<span class="new">  | <span class="str">'aviation_kerosene_crude'</span></span>
+<span class="new">  | <span class="str">'mill_scale'</span></span>
+<span class="new">  | <span class="str">'calcium_sulfonate'</span></span>
+<span class="new">  | <span class="str">'air'</span></span>
+<span class="new">  | <span class="str">'cryo_coolant_vented'</span></span>;
+
+<span class="cm">// recipes.ts:417 — ALL_RESOURCES append (must be the literal array;</span>
+<span class="cm">// ResourceId is derived as `(typeof ALL_RESOURCES)[number]` in the real</span>
+<span class="cm">// source — confirm before edit; if so, mutate ALL_RESOURCES only).</span>
+<span class="kw">export const</span> ALL_RESOURCES = [
+  <span class="cm">/* …existing… */</span>,
+<span class="new">  <span class="str">'co'</span>, <span class="str">'co2'</span>, <span class="str">'refinery_gas'</span>, <span class="str">'wood_tar'</span>, <span class="str">'water_vapor'</span>,</span>
+<span class="new">  <span class="str">'aviation_kerosene_crude'</span>, <span class="str">'mill_scale'</span>, <span class="str">'calcium_sulfonate'</span>,</span>
+<span class="new">  <span class="str">'air'</span>, <span class="str">'cryo_coolant_vented'</span>,</span>
+] <span class="kw">as const</span>;
+
+<span class="cm">// recipes.ts:738 — XP_WEIGHT additions.</span>
+<span class="kw">export const</span> XP_WEIGHT: Readonly&lt;Record&lt;ResourceId, <span class="kw">number</span>&gt;&gt; = {
+  <span class="cm">/* …existing… */</span>
+<span class="new">  co: 3, co2: 3, refinery_gas: 3, wood_tar: 3, water_vapor: 3,</span>
+<span class="new">  aviation_kerosene_crude: 3, mill_scale: 3, calcium_sulfonate: 3,</span>
+<span class="new">  air: 0,            <span class="cm">// exogenous; never xp-rewards</span></span>
+<span class="new">  cryo_coolant_vented: 3,</span>
+};
+
+<span class="cm">// RESOURCE_META — extend the record (Phase 1 lands the type; this</span>
+<span class="cm">// commit fills the new keys).</span>
+<span class="new"><span class="kw">const</span> RESOURCE_META_PHASE2_ADD = {</span>
+<span class="new">  co:                      { massPerUnitKg: 1,    terminal: <span class="str">'expansion-hook:CO afterburn / oxidation chain'</span> },</span>
+<span class="new">  co2:                     { massPerUnitKg: 1,    terminal: <span class="str">'expansion-hook:weather penalty + sequestration (Phase 6)'</span> },</span>
+<span class="new">  refinery_gas:            { massPerUnitKg: 1,    terminal: <span class="str">'expansion-hook:residential heating / petrochem feedstock'</span> },</span>
+<span class="new">  wood_tar:                { massPerUnitKg: 1,    terminal: <span class="str">'expansion-hook:creosote / wood-preservative chain'</span> },</span>
+<span class="new">  water_vapor:             { massPerUnitKg: 1,    terminal: <span class="str">'expansion-hook:condensing-loop / humidity / fresh-water reclamation'</span> },</span>
+<span class="new">  aviation_kerosene_crude: { massPerUnitKg: 0.81, terminal: <span class="str">'consumed (kerosene_refinery)'</span> },</span>
+<span class="new">  mill_scale:              { massPerUnitKg: 1,    terminal: <span class="str">'expansion-hook:scrap remelt / cement kiln aggregate / brick pigment'</span> },</span>
+<span class="new">  calcium_sulfonate:       { massPerUnitKg: 1,    terminal: <span class="str">'consumed (lubricant_refinery)'</span> },</span>
+<span class="new">  air:                     { massPerUnitKg: 1,    terminal: <span class="str">'consumed (air_separator via exogenousFlow)'</span> },</span>
+<span class="new">  cryo_coolant_vented:     { massPerUnitKg: 1,    terminal: <span class="str">'expansion-hook:re-liquefaction loop / closed-cycle recovery'</span> },</span>
+<span class="new">};</span></pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Open <code>src/recipes.ts</code>. Read the existing <code>ResourceId</code> shape — if it's derived from <code>ALL_RESOURCES</code> (the canonical pattern in this codebase), append <em>only</em> to <code>ALL_RESOURCES</code>; the union picks up automatically. If it's a hand-rolled union, edit both.</li>
+          <li>Append the 10 new entries to <code>XP_WEIGHT</code> with the values in the table above.</li>
+          <li>Append the 10 new entries to <code>RESOURCE_META</code> with mass + terminal per the table.</li>
+          <li>Open <code>src/storage-categories.ts</code>. Append the 9 new entries (LPG-mix is folded into <code>refinery_gas</code>; <code>air</code> gets <code>liquid_gas</code> by convention even though its inventory is never tracked).</li>
+          <li>Run <code>tsc -b</code> — must be clean. <code>noUnusedLocals</code> is fine because every new resource appears in at least one record literal.</li>
+          <li>Run <code>npm test</code>. The category-coverage invariant test and the <code>RESOURCE_META</code>-completeness test should both stay green; no recipe references these resources yet, so chain tests are unaffected.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>tsc -b</code> clean. <code>ALL_RESOURCES.length</code> grew by exactly 10. Storage-category invariant test still passes (every ResourceId has a category).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. No state-file impact — no recipe ever produced these resources yet.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(recipes): add 9 new resources to ALL_RESOURCES + meta + storage cats
+
+Per Phase 2 spec §08 (and rev-16 foundation §3.5.5). New resources are
+declared but not yet referenced by any recipe — pure catalog additive.
+
+  co, co2, refinery_gas, wood_tar, water_vapor,
+  aviation_kerosene_crude, mill_scale, calcium_sulfonate,
+  air, cryo_coolant_vented
+
+Touchpoints: ResourceId union, ALL_RESOURCES, XP_WEIGHT, RESOURCE_META,
+storage-categories.ts. LPG-mix from rev-16 §3.4 naphtha_cracker is
+folded into refinery_gas (functionally equivalent expansion-hook); no
+10th new resource.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p2">
+      <div class="sec-head"><span class="num">03</span><h2>Phase 2 — <code>exogenousFlow</code> + <code>biogenic</code> on Recipe</h2></div>
+      <p class="sec-intro">Extend the <code>Recipe</code> interface at
+        <a class="cite">recipes.ts:1138</a> with three optional fields.
+        No recipe references them yet; the audited mass-balance invariant
+        gains the vocabulary it needs in Phase 9. Pure additive — strict
+        TS allows omitting optional fields.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts</code> — extend <code>Recipe</code> interface at <a class="cite">recipes.ts:1138</a>.</li>
+        </ul>
+
+        <h4>Pseudocode</h4>
+        <div class="code"><pre><span class="cm">// recipes.ts:1138 — extend Recipe.</span>
+<span class="kw">export interface</span> Recipe {
+  <span class="kw">readonly</span> cycleSec: <span class="kw">number</span>;
+  <span class="cm">/* …existing inputs / outputs / category fields… */</span>
+<span class="new">  <span class="cm">/** Per Phase 2 spec §9. Names a legitimate mass-balance violation that</span></span>
+<span class="new"><span class="cm">   *  the mass-balance auditor must skip. Recognized values:</span></span>
+<span class="new"><span class="cm">   *  'fuel-combustion-CO₂', 'atmosphere', 'BF-top-gas-trace',</span></span>
+<span class="new"><span class="cm">   *  'electrode-graphite-consumed', 'evaporation-water-vapor',</span></span>
+<span class="new"><span class="cm">   *  'hydrocracker-light-ends-vented',</span></span>
+<span class="new"><span class="cm">   *  'hydrotreatment-H2S-and-light-gas', 'process-losses + HCl',</span></span>
+<span class="new"><span class="cm">   *  'saltwater_cell-encapsulates-electrolyte'. */</span></span>
+<span class="new">  <span class="kw">readonly</span> exogenousFlow?: <span class="kw">string</span>;</span>
+<span class="new">  <span class="cm">/** Magnitude of the exogenous flow in kg per cycle. REQUIRED when</span></span>
+<span class="new"><span class="cm">   *  exogenousFlow === 'fuel-combustion-CO₂' (consumed by the Phase 8</span></span>
+<span class="new"><span class="cm">   *  CO₂ accrual hook). Optional otherwise — for tags that are</span></span>
+<span class="new"><span class="cm">   *  audit-only the integrator does not read this field. */</span></span>
+<span class="new">  <span class="kw">readonly</span> exogenousFlowKg?: <span class="kw">number</span>;</span>
+<span class="new">  <span class="cm">/** Marks a recipe as biogenic-CO₂ (charcoal_kiln, biomass_plant).</span></span>
+<span class="new"><span class="cm">   *  Phase 2 does NOT apply a discount; Phase 6 weather coupling reads</span></span>
+<span class="new"><span class="cm">   *  this to compute a forest-regrowth net-zero offset. */</span></span>
+<span class="new">  <span class="kw">readonly</span> biogenic?: <span class="kw">true</span>;</span>
+}</pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Open <code>src/recipes.ts</code> at the <code>Recipe</code> interface (line 1138). Insert the three optional readonly fields.</li>
+          <li>Run <code>tsc -b</code>. No existing recipe sets these fields, so existing literals remain valid.</li>
+          <li>Run <code>npm test</code>. No behaviour change.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>tsc -b</code> clean. Grep <code>exogenousFlow</code> across <code>src/</code> finds only the interface declaration; no recipe sets it yet.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(recipes): add exogenousFlow + exogenousFlowKg + biogenic to Recipe
+
+Extends the Recipe interface with three optional readonly fields per
+Phase 2 spec §9. No recipe references them yet — pure type-additive.
+Consumed by Phase 8 (CO₂ accrual) and Phase 9 (mass-balance auditor).
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p3">
+      <div class="sec-head"><span class="num">04</span><h2>Phase 3 — Smelting chain (§3.1)</h2></div>
+      <p class="sec-intro">Rewrites five recipes per rev-16 §3.1. The
+        <code>co</code> resource gets its first emission site
+        (smelter + steel_mill). <code>refinery_gas</code> and
+        <code>wood_tar</code> first appear at <code>coke_oven</code>.
+        Tests that hard-code the old smelter 1:1 ratio update inline.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts</code> — rewrite 5 recipe defs at <a class="cite">recipes.ts:1363</a> (smelter), <a class="cite">:1418</a> (coke_oven), <a class="cite">:1424</a> (blast_furnace), <a class="cite">:1430</a> (steel_mill), <a class="cite">:1498-1503</a> (electric_arc_furnace).</li>
+          <li><code>src/recipes.test.ts</code> — update fixture cases that assert the old smelter / blast_furnace / steel_mill ratios. These were verified BEFORE values in §1 of the spec.</li>
+        </ul>
+
+        <h4>Recipe rewrites — per spec §04 / rev-16 §3.1</h4>
+        <table class="tbl">
+          <thead><tr>
+            <th>Recipe</th>
+            <th>file:line</th>
+            <th>AFTER (verbatim)</th>
+            <th>exogenousFlow</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="slate">smelter</td>
+              <td class="mono"><a class="cite">recipes.ts:1363</a></td>
+              <td class="mono">10 iron_ore + 3 coal → 6 iron_ingot + 2 slag + 5 co</td>
+              <td>(none; 13 = 13)</td>
+            </tr>
+            <tr>
+              <td class="slate">coke_oven</td>
+              <td class="mono"><a class="cite">recipes.ts:1418</a></td>
+              <td class="mono">10 coal → 7 coke + 0.4 wood_tar + 0.5 hydrogen + 1 co2 + 1.1 refinery_gas</td>
+              <td>(none; 10 = 10)</td>
+            </tr>
+            <tr>
+              <td class="slate">blast_furnace</td>
+              <td class="mono"><a class="cite">recipes.ts:1424</a></td>
+              <td class="mono">35 iron_ore + 18 coke + 10 limestone → 20 pig_iron + 6 slag + 35 co2</td>
+              <td><code>'BF-top-gas-trace'</code>, <code>exogenousFlowKg</code>: 0 (Δ −2 audit-tolerated)</td>
+            </tr>
+            <tr>
+              <td class="slate">steel_mill</td>
+              <td class="mono"><a class="cite">recipes.ts:1430</a></td>
+              <td class="mono">100 pig_iron + 7 quicklime + 9 oxygen → 85 steel + 23 slag + 7 co + 1 co2</td>
+              <td>(none; 116 = 116)</td>
+            </tr>
+            <tr>
+              <td class="slate">electric_arc_furnace</td>
+              <td class="mono"><a class="cite">recipes.ts:1498-1503</a></td>
+              <td class="mono">100 scrap + 3 quicklime → 95 steel + 5 slag + 1 co2</td>
+              <td><code>'electrode-graphite-consumed'</code>, <code>exogenousFlowKg</code>: 0 (Δ −2 audit-tolerated)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Pseudocode (smelter as canonical exemplar)</h4>
+        <div class="code"><pre><span class="cm">// recipes.ts:1363 — smelter rewrite.</span>
+smelter: {
+  cycleSec: 27,
+<span class="new">  inputs:  { iron_ore: 10, coal: 3 },</span>
+<span class="new">  outputs: { iron_ingot: 6, slag: 2, co: 5 },</span>
+  category: <span class="str">'smelting'</span>,
+  <span class="cm">/* …rest existing… */</span>
+},</pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Apply the 5 rewrites verbatim per the table. Preserve <code>cycleSec</code> exactly (existing values per rev-16 §9.1 — round-number set preserved).</li>
+          <li>On <code>blast_furnace</code> + <code>electric_arc_furnace</code>, set <code>exogenousFlow</code> tag; <code>exogenousFlowKg</code> defaults to 0 (the integrator hook in Phase 8 only reads non-zero for <code>'fuel-combustion-CO₂'</code>).</li>
+          <li>Grep for tests that hard-code these recipe outputs:
+            <div class="code"><pre>grep -nE 'smelter|blast_furnace|steel_mill|coke_oven|electric_arc_furnace' src/*.test.ts</pre></div>
+          </li>
+          <li>For each match, update the expected I/O to match the new shape. The category test for these recipes (smelting) should be unaffected.</li>
+          <li>Run <code>npm test</code>. Mass-balance auditor doesn't exist yet (Phase 9); the test suite gates on recipe-shape fixtures, smelting chain progression, and category invariants only.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. The five rewritten recipes assert their new I/O shape in <code>recipes.test.ts</code>. Chain-walk tests in <code>economy.test.ts</code> may need recalibration in Phase 10; if any are red right now, mark them with <code>it.skip</code> + a TODO referencing Phase 10 commit-N.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. No save-file impact — recipe defs are pure data; pre-existing inventory still loads.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>refactor(recipes): rewrite smelting chain per rev-16 §3.1
+
+Five recipes rewritten with real-chemistry stoichiometry:
+  smelter:              10 iron_ore + 3 coal → 6 ingot + 2 slag + 5 co
+  coke_oven:            10 coal → 7 coke + 0.4 tar + 0.5 H2 + 1 co2 + 1.1 rgas
+  blast_furnace:        35 iron_ore + 18 coke + 10 limestone → 20 pig + 6 slag + 35 co2
+  steel_mill:           100 pig + 7 quicklime + 9 oxygen → 85 steel + 23 slag + 7 co + 1 co2
+  electric_arc_furnace: 100 scrap + 3 quicklime → 95 steel + 5 slag + 1 co2
+
+blast_furnace + EAF carry exogenousFlow tags for audit-tolerated Δ −2
+(BF-top-gas-trace and electrode-graphite-consumed respectively, per
+rev-16 §3.8). New resources first emitted: co (smelter, steel_mill),
+co2 (multiple), refinery_gas + wood_tar (coke_oven).
+
+Existing smelter-1:1 ratio assertions in recipes.test.ts updated to
+match the new shape; chain-walk fixtures recalibrated in Phase 10.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes
+Source-of-truth: docs/superpowers/plans/2026-05-27-si-units-rework-foundation §3.1
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p4">
+      <div class="sec-head"><span class="num">05</span><h2>Phase 4 — Lime / cement / brick / charcoal (§3.2)</h2></div>
+      <p class="sec-intro">Five recipes. Three introduce exogenous-fuel CO₂
+        via the new <code>exogenousFlow</code> field. charcoal_kiln is
+        biogenic (Phase 6 will discount). brick_kiln + cement_mill emit
+        water_vapor / require fuel-CO₂.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts</code> — rewrite 5 recipe defs at <a class="cite">recipes.ts:2188</a> (limekiln), <a class="cite">:2200</a> (brick_kiln), <a class="cite">:2212</a> (cement_mill), <a class="cite">:2218</a> (concrete_plant), <a class="cite">:2224</a> (charcoal_kiln).</li>
+        </ul>
+
+        <h4>Recipe rewrites — per spec §05 / rev-16 §3.2</h4>
+        <table class="tbl">
+          <thead><tr>
+            <th>Recipe</th>
+            <th>file:line</th>
+            <th>AFTER</th>
+            <th>exogenousFlow</th>
+            <th>exogFlowKg</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="slate">limekiln</td>
+              <td class="mono"><a class="cite">recipes.ts:2188</a></td>
+              <td class="mono">25 limestone → 14 quicklime + 11 co2</td>
+              <td><code>'fuel-combustion-CO₂'</code></td>
+              <td class="num">5</td>
+            </tr>
+            <tr>
+              <td class="slate">brick_kiln</td>
+              <td class="mono"><a class="cite">recipes.ts:2200</a></td>
+              <td class="mono">6 clay → 5 brick + 1 water_vapor</td>
+              <td>(none)</td>
+              <td class="num">—</td>
+            </tr>
+            <tr>
+              <td class="slate">charcoal_kiln</td>
+              <td class="mono"><a class="cite">recipes.ts:2224</a></td>
+              <td class="mono">8 wood → 2 charcoal + 1 wood_tar + 2 co2 + 3 water_vapor</td>
+              <td>(none; <code>biogenic: true</code>)</td>
+              <td class="num">—</td>
+            </tr>
+            <tr>
+              <td class="slate">cement_mill</td>
+              <td class="mono"><a class="cite">recipes.ts:2212</a></td>
+              <td class="mono">8 quicklime + 2 clay + 1 sand → 11 cement</td>
+              <td><code>'fuel-combustion-CO₂'</code></td>
+              <td class="num">4</td>
+            </tr>
+            <tr>
+              <td class="slate">concrete_plant</td>
+              <td class="mono"><a class="cite">recipes.ts:2218</a></td>
+              <td class="mono">1 cement + 2 sand + 3 stone + 0.5 fresh_water → 6 concrete</td>
+              <td><code>'evaporation-water-vapor'</code></td>
+              <td class="num">— (audit-only)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout">
+          <div class="ct">Fractional inputs</div>
+          <code>concrete_plant</code> takes <code>0.5 fresh_water</code> per
+          cycle. The piecewise integrator handles non-integer batches
+          naturally — confirm by reading the existing inventory accrual
+          (no integer rounding at the segment level; integer rounding is
+          UI-display-only).
+        </div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Apply the 5 rewrites at the cited lines.</li>
+          <li>On <code>limekiln</code> + <code>cement_mill</code>, set <code>exogenousFlow: 'fuel-combustion-CO₂'</code> + <code>exogenousFlowKg: 5</code> / <code>4</code> respectively. These two recipes are the only sites where the Phase 8 CO₂-integrator reads <code>exogenousFlowKg</code>.</li>
+          <li>On <code>charcoal_kiln</code>, set <code>biogenic: true</code>. The integrator still accrues the CO₂ outputs to <code>state.co2Kg</code> (Phase 6 weather coupling can later discount via the <code>biogenic</code> tag).</li>
+          <li>On <code>concrete_plant</code>, set <code>exogenousFlow: 'evaporation-water-vapor'</code>. The auditor accepts the Δ −0.5; the integrator no-ops on this tag.</li>
+          <li>Run <code>npm test</code>. Test rewrites for these specific recipes (if any hard-coded the old shape) go inline.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>RECIPES.limekiln.exogenousFlowKg === 5</code>. <code>RECIPES.cement_mill.exogenousFlowKg === 4</code>. <code>RECIPES.charcoal_kiln.biogenic === true</code>.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>refactor(recipes): rewrite lime/cement/brick/charcoal per rev-16 §3.2
+
+Five recipes rewritten with process-CO₂ and fuel-CO₂ separation:
+  limekiln:       25 limestone → 14 quicklime + 11 co2  [+5 fuel-co2]
+  brick_kiln:     6 clay → 5 brick + 1 water_vapor
+  charcoal_kiln:  8 wood → 2 charcoal + 1 tar + 2 co2 + 3 water_vapor [biogenic]
+  cement_mill:    8 quicklime + 2 clay + 1 sand → 11 cement  [+4 fuel-co2]
+  concrete_plant: 1 cement + 2 sand + 3 stone + 0.5 water → 6 concrete
+
+limekiln + cement_mill carry exogenousFlow: 'fuel-combustion-CO₂' with
+exogenousFlowKg consumed by the Phase 8 integrator hook. charcoal_kiln
+flagged biogenic (Phase 6 weather discount). concrete_plant tags
+'evaporation-water-vapor' for Δ −0.5 audit tolerance.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes
+Source-of-truth: docs/superpowers/plans/2026-05-27-si-units-rework-foundation §3.2
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p5">
+      <div class="sec-head"><span class="num">06</span><h2>Phase 5 — Electrochem + atmosphere intake (§3.3)</h2></div>
+      <p class="sec-intro">Three recipes rewrite. The interesting bit: the
+        new <code>exogenousFlow: 'atmosphere'</code> mechanism in
+        <code>computeRates</code> for <code>air_separator</code>'s input
+        side. <code>air</code> is declared as an input but never decremented
+        from inventory.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts</code> — rewrite 3 recipe defs at <a class="cite">recipes.ts:2403</a> (electrolyzer), <a class="cite">:2509</a> (chlor_alkali_plant), <a class="cite">:2570</a> (air_separator).</li>
+          <li><code>src/economy.ts</code> — extend <code>computeRates</code> to bypass the inventory check when an input has <code>exogenousFlow: 'atmosphere'</code> on the recipe.</li>
+        </ul>
+
+        <h4>Recipe rewrites — per spec §06 / rev-16 §3.3</h4>
+        <table class="tbl">
+          <thead><tr>
+            <th>Recipe</th>
+            <th>file:line</th>
+            <th>AFTER</th>
+            <th>exogenousFlow</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="slate">electrolyzer</td>
+              <td class="mono"><a class="cite">recipes.ts:2403</a></td>
+              <td class="mono">9 fresh_water → 1 hydrogen + 8 oxygen</td>
+              <td>(none; 9 = 9)</td>
+            </tr>
+            <tr>
+              <td class="slate">chlor_alkali_plant</td>
+              <td class="mono"><a class="cite">recipes.ts:2509</a></td>
+              <td class="mono">117 salt + 36 fresh_water → 71 chlorine + 80 sodium_hydroxide + 2 hydrogen</td>
+              <td>(none; 153 = 153)</td>
+            </tr>
+            <tr>
+              <td class="slate">air_separator</td>
+              <td class="mono"><a class="cite">recipes.ts:2570</a></td>
+              <td class="mono">100 air → 75.5 nitrogen + 23.2 oxygen + 1.3 argon</td>
+              <td><code>'atmosphere'</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>computeRates patch</h4>
+        <div class="code"><pre><span class="cm">// economy.ts — inside computeRates, the input-availability check.</span>
+<span class="cm">// BEFORE: every input must have stockpile &gt; 0 to count as available.</span>
+<span class="cm">// AFTER: inputs whose recipe declares exogenousFlow: 'atmosphere' for</span>
+<span class="cm">// THAT specific resource are treated as always-satisfied.</span>
+
+<span class="kw">for</span> (<span class="kw">const</span> [inputId, perCycleAmount] <span class="kw">of</span> Object.<span class="fn">entries</span>(recipe.inputs)) {
+<span class="new">  <span class="cm">// Atmosphere intake — bypass inventory check; never decrement.</span></span>
+<span class="new">  <span class="kw">if</span> (recipe.exogenousFlow === <span class="str">'atmosphere'</span> && inputId === <span class="str">'air'</span>) {</span>
+<span class="new">    <span class="kw">continue</span>;</span>
+<span class="new">  }</span>
+  <span class="cm">// …existing availability + supply-pool logic unchanged…</span>
+}</pre></div>
+
+        <p class="body"><strong>Scope guard.</strong> The bypass is narrow:
+          only when both <code>recipe.exogenousFlow === 'atmosphere'</code>
+          AND the specific input id is <code>'air'</code>. This prevents
+          mis-tagged recipes (where a future contributor sets <code>'atmosphere'</code>
+          on a recipe with non-air inputs) from accidentally treating
+          stone or iron_ore as exogenous.</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Apply the 3 recipe rewrites at the cited lines.</li>
+          <li>Locate the input-availability section of <code>computeRates</code> in <code>src/economy.ts</code>. Add the early-<code>continue</code> guard above (~3 lines).</li>
+          <li>Verify the decrement-side ALSO skips <code>air</code> (the integrator decrements input inventories during accrual; that path needs the same guard). If they share a code path: one patch covers both. If separate: two patches.</li>
+          <li>Run <code>npm test</code>. Add a focused test asserting that an isolated <code>air_separator</code> building produces N2/O2/Ar continuously with zero <code>air</code> in any inventory.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. Focused test: <code>advanceIsland</code> on a state with 1× air_separator + 0 air inventory + ample power produces nitrogen / oxygen / argon at the expected rates. <code>state.inv.air ?? 0 === 0</code> after the tick (never accrued, never decremented).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. The recipe edits and the computeRates guard land together; rolling back one without the other leaves <code>air_separator</code> dead-locked.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>refactor(recipes,economy): rewrite electrochem + atmosphere intake
+
+Three recipes rewritten per rev-16 §3.3:
+  electrolyzer:       9 water → 1 H2 + 8 O2
+  chlor_alkali_plant: 117 salt + 36 water → 71 Cl + 80 NaOH + 2 H2
+  air_separator:      100 air → 75.5 N2 + 23.2 O2 + 1.3 Ar
+
+air_separator carries exogenousFlow: 'atmosphere'. computeRates is
+extended to bypass the inventory-availability check (and the matching
+decrement path) when recipe.exogenousFlow === 'atmosphere' && input
+id === 'air'. The guard is narrowly scoped to prevent mis-tagged
+recipes from leaking the exemption to other inputs.
+
+chlor_alkali_plant input changes from saltwater to refined salt
+(rev-16 §3.3: the existing evaporator chain already produces salt;
+chlor-alkali now consumes it directly).
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes §06
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p6">
+      <div class="sec-head"><span class="num">07</span><h2>Phase 6 — Refining + cryo-expander (§3.4 + §3.7)</h2></div>
+      <p class="sec-intro">Five recipe rewrites. <code>naphtha_cracker</code>
+        folds rev-16's LPG-mix into <code>refinery_gas</code> (avoiding a
+        10th new resource — see spec §07). <code>cryogenic_generator</code>
+        keeps its def-id but its recipe re-shapes around
+        <code>cryo_coolant_vented</code>.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts</code> — rewrite 5 recipe defs at <a class="cite">recipes.ts:1402-1407</a> (cryogenic_generator), <a class="cite">:2440</a> (naphtha_cracker), <a class="cite">:2528-2536</a> (lubricant_refinery), <a class="cite">:2537</a> (diesel_refinery), <a class="cite">:2592</a> (kerosene_refinery).</li>
+        </ul>
+
+        <h4>Recipe rewrites — per spec §07 / rev-16 §3.4 + §3.7</h4>
+        <table class="tbl">
+          <thead><tr>
+            <th>Recipe</th>
+            <th>file:line</th>
+            <th>AFTER</th>
+            <th>exogenousFlow</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="slate">naphtha_cracker</td>
+              <td class="mono"><a class="cite">recipes.ts:2440</a></td>
+              <td class="mono">20 crude_oil → 3 naphtha + 3 aviation_kerosene_crude + 5 diesel + 6 heavy_oil + 3 refinery_gas</td>
+              <td>(none; 20 = 20 with LPG fold)</td>
+            </tr>
+            <tr>
+              <td class="slate">diesel_refinery</td>
+              <td class="mono"><a class="cite">recipes.ts:2537</a></td>
+              <td class="mono">10 heavy_oil + 1 hydrogen → 10 diesel + 0.2 sulfur</td>
+              <td><code>'hydrocracker-light-ends-vented'</code> (Δ −0.8)</td>
+            </tr>
+            <tr>
+              <td class="slate">kerosene_refinery</td>
+              <td class="mono"><a class="cite">recipes.ts:2592</a></td>
+              <td class="mono">10 aviation_kerosene_crude + 1 hydrogen → 10 aviation_kerosene</td>
+              <td><code>'hydrotreatment-H2S-and-light-gas'</code> (Δ −1)</td>
+            </tr>
+            <tr>
+              <td class="slate">lubricant_refinery</td>
+              <td class="mono"><a class="cite">recipes.ts:2528-2536</a></td>
+              <td class="mono">5 heavy_oil + 5 chlorine + 1 calcium_sulfonate → 10 lubricant</td>
+              <td><code>'process-losses + HCl'</code> (Δ −1)</td>
+            </tr>
+            <tr>
+              <td class="slate">cryogenic_generator</td>
+              <td class="mono"><a class="cite">recipes.ts:1402-1407</a></td>
+              <td class="mono">1 cryo_coolant + 1 fresh_water → 4 unit·s electrical + 0.7 cryo_coolant_vented + 0.3 nitrogen</td>
+              <td>(none; mass-balanced on coolant fraction)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout">
+          <div class="ct">Cryo-expander naming</div>
+          Per rev-16 §9.1, the building def-id stays
+          <code>cryogenic_generator</code>. The display name in
+          <code>building-defs.ts</code> may update to "Cryo Expander" for
+          player-facing clarity — this is cosmetic and optional. Do NOT
+          rename the def-id (would force a v15→v16 schema migration that
+          spec §07 explicitly avoids).
+        </div>
+
+        <div class="callout">
+          <div class="ct">LPG-mix fold</div>
+          rev-16 §3.4 has <code>naphtha_cracker</code> outputting 2
+          refinery_gas + 1 LPG-mix (= 3 distinct outputs). Phase 2 folds
+          LPG-mix into <code>refinery_gas</code>, yielding 3 refinery_gas
+          total. Mass-balance is preserved (20 = 20). This is the explicit
+          choice from spec §07.
+        </div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Apply the 5 recipe rewrites at the cited lines.</li>
+          <li>Set the three refinery <code>exogenousFlow</code> tags (light-ends, H2S, HCl). <code>exogenousFlowKg</code> is unset on these (the integrator no-ops; the auditor accepts ±5% Δ).</li>
+          <li>For <code>cryogenic_generator</code>, the new <code>cryo_coolant_vented</code> output expands the recipe — confirm the recipe shape supports the multi-output pattern (existing recipes already do: <code>steel_mill</code> outputs 4 different resources).</li>
+          <li>Run <code>npm test</code>. Recipe-shape fixtures update inline.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>RECIPES.naphtha_cracker.outputs.refinery_gas === 3</code> (LPG fold). <code>RECIPES.cryogenic_generator.outputs.cryo_coolant_vented === 0.7</code>.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>refactor(recipes): rewrite refining + cryo-expander per rev-16 §3.4 + §3.7
+
+Five recipes rewritten:
+  naphtha_cracker:    20 crude → 3 naphtha + 3 avk + 5 diesel + 6 ho + 3 rgas
+  diesel_refinery:    10 ho + 1 H2 → 10 diesel + 0.2 sulfur [light-ends vented]
+  kerosene_refinery:  10 avk + 1 H2 → 10 av_kerosene [H2S + light-gas]
+  lubricant_refinery: 5 ho + 5 Cl + 1 ca_sulfonate → 10 lubricant [HCl + losses]
+  cryogenic_generator: 1 coolant + 1 water → 4 unit·s elec + 0.7 vented + 0.3 N2
+
+rev-16 §3.4 LPG-mix folded into refinery_gas (3 total) — avoids a
+10th new resource per Phase 2 spec §07. The cryo_coolant_vented output
+ships the new resource as an expansion-hook (no re-liquefaction loop
+in Phase 2). cryogenic_generator def-id unchanged — display name may
+re-label cosmetically.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes §07
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p7">
+      <div class="sec-head"><span class="num">08</span><h2>Phase 7 — §3.9 cohort + 3 building renames</h2></div>
+      <p class="sec-intro">Seven cohort recipes plus three building renames.
+        This is the largest single commit by surface area — the renames
+        ripple through ID unions + def tables + UI labels + (potentially)
+        tests. Phase 0 confirmed the live save has no occurrences of the
+        old ids, so no save migration is required.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts</code> — 7 cohort recipe rewrites + 3 RecipeId union renames. Cohort recipes at <a class="cite">recipes.ts:2546</a>, <a class="cite">:2878</a>, <a class="cite">:2880</a>, <a class="cite">:2883</a>, <a class="cite">:2889</a>, <a class="cite">:2896</a>, <a class="cite">:2902</a>, <a class="cite">:2909</a>. RecipeId union at <a class="cite">recipes.ts:267</a>.</li>
+          <li><code>src/building-defs.ts</code> — 3 BuildingDefId renames at <a class="cite">building-defs.ts:274-276</a>; matching def entries at <a class="cite">building-defs.ts:1267-1294</a>.</li>
+          <li>Grep <code>src/</code> for any UI / label / test reference to the three old ids — replace inline.</li>
+        </ul>
+
+        <h4>Cohort recipe rewrites — per spec §03 / rev-16 §3.9</h4>
+        <table class="tbl">
+          <thead><tr>
+            <th>RecipeId (old → new)</th>
+            <th>file:line</th>
+            <th>AFTER</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="slate">beam_mill (unchanged)</td>
+              <td class="mono"><a class="cite">recipes.ts:2546</a></td>
+              <td class="mono">105 steel → 2 steel_beam + 5 mill_scale</td>
+            </tr>
+            <tr>
+              <td class="slate">metal_rolling_mill (unchanged)</td>
+              <td class="mono"><a class="cite">recipes.ts:2880</a></td>
+              <td class="mono">11 steel → 20 wire + 1 mill_scale</td>
+            </tr>
+            <tr>
+              <td class="slate">(sheet_metal recipe) → <strong>sheet_mill</strong></td>
+              <td class="mono"><a class="cite">recipes.ts:2878</a></td>
+              <td class="mono">53 steel → 10 sheet_metal + 3 mill_scale</td>
+            </tr>
+            <tr>
+              <td class="slate">pipe_mill (unchanged)</td>
+              <td class="mono"><a class="cite">recipes.ts:2883</a></td>
+              <td class="mono">42 steel → 10 pipe + 2 mill_scale</td>
+            </tr>
+            <tr>
+              <td class="slate"><strong>cable_drawer → cable_mill</strong></td>
+              <td class="mono"><a class="cite">recipes.ts:2909</a></td>
+              <td class="mono">42 steel → 5 heavy_cable + 2 mill_scale</td>
+            </tr>
+            <tr>
+              <td class="slate"><strong>spring_winder → spring_press</strong></td>
+              <td class="mono"><a class="cite">recipes.ts:2902</a></td>
+              <td class="mono">11 steel → 50 spring + 1 mill_scale</td>
+            </tr>
+            <tr>
+              <td class="slate"><strong>bearing_press → bearing_assembler</strong></td>
+              <td class="mono"><a class="cite">recipes.ts:2896</a></td>
+              <td class="mono">28 steel + 3 lubricant → 100 bearing + 1 mill_scale</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Rename touchpoints — three ids</h4>
+        <div class="code"><pre><span class="cm">// recipes.ts:267 — RecipeId union.</span>
+<span class="kw">export type</span> RecipeId =
+  <span class="cm">/* …existing… */</span>
+<span class="new">  | <span class="str">'cable_mill'</span>          <span class="cm">// was 'cable_drawer'</span></span>
+<span class="new">  | <span class="str">'spring_press'</span>        <span class="cm">// was 'spring_winder'</span></span>
+<span class="new">  | <span class="str">'bearing_assembler'</span>;  <span class="cm">// was 'bearing_press'</span>
+
+<span class="cm">// building-defs.ts:274-276 — BuildingDefId union.</span>
+<span class="kw">export type</span> BuildingDefId =
+  <span class="cm">/* …existing… */</span>
+<span class="new">  | <span class="str">'bearing_assembler'</span></span>
+<span class="new">  | <span class="str">'spring_press'</span></span>
+<span class="new">  | <span class="str">'cable_mill'</span>;</span>
+
+<span class="cm">// building-defs.ts:1267, 1279, 1292 — def entries.</span>
+<span class="new">bearing_assembler: {</span>
+<span class="new">  id: <span class="str">'bearing_assembler'</span>,</span>
+<span class="new">  displayName: <span class="str">'Bearing Assembler'</span>,</span>
+  <span class="cm">/* …rest existing fields verbatim… */</span>
+},
+<span class="new">spring_press: {</span>
+<span class="new">  id: <span class="str">'spring_press'</span>,</span>
+<span class="new">  displayName: <span class="str">'Spring Press'</span>,</span>
+  <span class="cm">/* …rest… */</span>
+},
+<span class="new">cable_mill: {</span>
+<span class="new">  id: <span class="str">'cable_mill'</span>,</span>
+<span class="new">  displayName: <span class="str">'Cable Mill'</span>,</span>
+  <span class="cm">/* …rest… */</span>
+},</pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Grep first to confirm the rename surface:
+            <div class="code"><pre>grep -rnE 'cable_drawer|spring_winder|bearing_press' src/</pre></div>
+            <p class="body">Expected sites: <code>recipes.ts:267</code> (RecipeId union), <code>recipes.ts:2896/2902/2909</code> (recipe defs), <code>building-defs.ts:274-276</code> (BuildingDefId union), <code>building-defs.ts:1267/1279/1292</code> (def entries), plus any UI / tooltip references and tests. Walk the full list.</p>
+          </li>
+          <li>Apply the three renames to <code>recipes.ts</code> and <code>building-defs.ts</code> first (the type-level rename forces TypeScript to flag every stale reference).</li>
+          <li>Apply the 7 cohort recipe rewrites at the cited lines. The 4 unchanged-id recipes (<code>beam_mill</code>, <code>metal_rolling_mill</code>, <code>pipe_mill</code>, the recipe at <code>:2878</code>) and the 3 renamed-id recipes are all rewritten in this commit — keep them together because the cohort discipline is one coherent edit.</li>
+          <li>Add <code>mill_scale</code> output to each cohort recipe (yields per the table above).</li>
+          <li>For the recipe at <code>:2878</code>, also rename its key from <code>sheet_metal_press</code> (or whatever the current key is — confirm by reading the file) to <code>sheet_mill</code> to match the cohort discipline; this is a 4th rename in addition to the 3 in the spec table. Spec §02 / §03 calls this out: "sheet_mill" is the cohort-discipline name.</li>
+          <li>TypeScript will compile-flag every consumer of the old ids. Fix each one by name (UI label callers, recipe lookups, test fixtures).</li>
+          <li>Run <code>npm test</code>. Fixture rewrites for the cohort recipe ratios land in the same commit (every old <code>1 steel → N component</code> assertion is now incorrect).</li>
+        </ol>
+
+        <div class="callout crit">
+          <div class="ct">Compile-error guard</div>
+          The TypeScript union renames are the safety net. If you forget
+          to update a caller, the compiler complains by name; <code>tsc -b</code>
+          must be clean before commit. Resist the urge to silence with
+          <code>as any</code> — the rename surface IS the audit. Update the
+          caller properly.
+        </div>
+
+        <h4>Save-migration check (informational)</h4>
+        <p class="body">Phase 0 confirmed <code>/tmp/robot-islands-save.json</code>
+          contains zero occurrences of the three old ids. No save migration
+          required. If a future regression reintroduces the old ids in a
+          save, the load-side type assertion will surface immediately —
+          <code>placedBuildings[i].defId</code> is typed
+          <code>BuildingDefId</code>, so a stale id throws on
+          deserialization, not silently.</p>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>tsc -b</code> clean — every stale reference fixed. <code>npm test</code> green (with fixture rewrites for cohort ratios applied inline). Grep <code>cable_drawer|spring_winder|bearing_press</code> across <code>src/</code> returns zero matches.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. No save-file impact (no live save uses the renamed ids).</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>refactor(recipes,defs): §3.9 cohort rewrite + 3 building renames
+
+Seven T2 mechanical-component cohort recipes rewritten with
+mass-exact stoichiometry per rev-16 §3.9:
+
+  beam_mill:           105 steel → 2 beam + 5 mill_scale
+  metal_rolling_mill:  11 steel → 20 wire + 1 mill_scale
+  sheet_mill:          53 steel → 10 sheet + 3 mill_scale
+  pipe_mill:           42 steel → 10 pipe + 2 mill_scale
+  cable_mill:          42 steel → 5 heavy_cable + 2 mill_scale
+  spring_press:        11 steel → 50 spring + 1 mill_scale
+  bearing_assembler:   28 steel + 3 lubricant → 100 bearing + 1 mill_scale
+
+Three building renames per rev-16 §3.9 cohort discipline:
+
+  cable_drawer    → cable_mill
+  spring_winder   → spring_press
+  bearing_press   → bearing_assembler
+
+Live save has zero occurrences of the old ids (grep verified at Phase
+0) — no v15→v16 migration required. cable_mill changes its input from
+wire-derived to steel-derived per rev-16 §3.9; pre-rev-14 wire→cable
+shortcut retired. Players with wire stockpiles will need to bootstrap
+through the steel cascade for heavy_cable production (intentional;
+documented in spec §16 risks).
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes §03 + §12
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p8">
+      <div class="sec-head"><span class="num">09</span><h2>Phase 8 — CO₂ accrual hook</h2></div>
+      <p class="sec-intro">Wires <code>state.co2Kg</code> (Phase 1 field) to
+        the segment integrator inside <code>advanceIsland</code> at
+        <a class="cite">economy.ts:1582</a>. Two write sites: one for
+        <code>co2</code> as a recipe output, one for
+        <code>'fuel-combustion-CO₂'</code> exogenous flow.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/economy.ts</code> — inside <code>advanceIsland</code> at <a class="cite">economy.ts:~1600</a> (the per-segment integrator). Locate where output deltas are accrued to <code>state.inv[outputId]</code>; insert the CO₂ side-effect immediately after.</li>
+        </ul>
+
+        <h4>Pseudocode (per spec §10)</h4>
+        <div class="code"><pre><span class="cm">// economy.ts — inside the segment integrator's per-building accrual loop.</span>
+<span class="cm">// The existing loop iterates over each producing building's per-cycle</span>
+<span class="cm">// output rates; we hook CO₂ here.</span>
+
+<span class="kw">for</span> (<span class="kw">const</span> b <span class="kw">of</span> producingBuildings) {
+  <span class="kw">const</span> recipe = <span class="fn">resolveRecipe</span>(b, state, nowMs);
+  <span class="kw">if</span> (!recipe) <span class="kw">continue</span>;
+  <span class="kw">const</span> rates = perBuildingOutputRates[b.id];
+  <span class="kw">if</span> (!rates) <span class="kw">continue</span>;
+
+  <span class="kw">for</span> (<span class="kw">const</span> [outputId, rate] <span class="kw">of</span> Object.<span class="fn">entries</span>(rates)) {
+    <span class="cm">// …existing inventory accrual: state.inv[outputId] += rate * segDur…</span>
+<span class="new">    <span class="kw">if</span> (outputId === <span class="str">'co2'</span>) {</span>
+<span class="new">      state.co2Kg += rate * segmentDurationSec;</span>
+<span class="new">    }</span>
+  }
+
+<span class="new">  <span class="cm">// Exogenous-flow CO₂: recipes whose fuel burn produces CO₂ outside</span></span>
+<span class="new">  <span class="cm">// the recipe's input/output ledger. Magnitude = per-cycle constant</span></span>
+<span class="new">  <span class="cm">// × cycles-this-segment, where cycles = primary-output-rate / primary-yield.</span></span>
+<span class="new">  <span class="kw">if</span> (recipe.exogenousFlow === <span class="str">'fuel-combustion-CO₂'</span> && recipe.exogenousFlowKg) {</span>
+<span class="new">    <span class="kw">const</span> primary = <span class="fn">primaryOutput</span>(b, recipe);  <span class="cm">// e.g. 'quicklime' for limekiln</span></span>
+<span class="new">    <span class="kw">const</span> primaryRate = rates[primary] ?? 0;</span>
+<span class="new">    <span class="kw">const</span> primaryPerCycle = recipe.outputs[primary] ?? 1;</span>
+<span class="new">    <span class="kw">const</span> cyclesThisSegment = (primaryRate * segmentDurationSec) / primaryPerCycle;</span>
+<span class="new">    state.co2Kg += recipe.exogenousFlowKg * cyclesThisSegment;</span>
+<span class="new">  }</span>
+}</pre></div>
+
+        <p class="body"><strong>primaryOutput helper.</strong> If a
+          <code>primaryOutput</code> helper doesn't exist, write a tiny
+          one inline: it's the output id with the largest per-cycle
+          quantity (the "headline" output). For limekiln that's
+          <code>quicklime</code>; for cement_mill, <code>cement</code>.
+          The cycles-per-segment computation needs this to convert from
+          "rate of primary output" back to "rate of recipe cycles."</p>
+
+        <div class="callout">
+          <div class="ct">Why not just use the primary recipe rate directly?</div>
+          The cleanest expression of "how many cycles this segment" is
+          <code>recipeRate × segDur</code>, where <code>recipeRate</code>
+          is the rate of <em>cycles</em>, not the rate of any specific
+          output. If <code>computeRates</code> already exposes a
+          per-building <em>cycle rate</em> (vs the per-output rate map),
+          use it directly and avoid the primary-output detour. Confirm
+          by reading the existing rate shape — the integrator's
+          existing math knows the answer.
+        </div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Locate the per-segment per-building output accrual loop in <code>advanceIsland</code>. Read it carefully — the existing inventory delta is the model for the CO₂ delta.</li>
+          <li>Add the <code>outputId === 'co2'</code> direct accrual (alongside the inventory accrual, not replacing it; <code>co2</code> goes BOTH to inventory AND to <code>state.co2Kg</code>).</li>
+          <li>Add the exogenous-flow accrual. Use whatever per-cycle rate is most readily available in the existing math — primary-output cycle conversion is the fallback.</li>
+          <li>Add a focused test (in <code>economy.test.ts</code> or a new file): single coal_gen building running for 60 in-game seconds emits the expected CO₂ via <code>'fuel-combustion-CO₂'</code> (per rev-16 §7.2 coal emission factor). Same shape for limekiln (process CO₂ + exogenous fuel CO₂) — expect both contributions in <code>state.co2Kg</code>.</li>
+          <li>Run <code>npm test</code>. Other than the new CO₂ test, no test should regress.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. New CO₂ accrual test passes. <code>state.co2Kg</code> grows monotonically over a long advanceIsland call. Existing inventory-delta tests for <code>co2</code> as a normal output (e.g. blast_furnace producing 35 co2) still pass — the inventory write and the CO₂ pool write are independent.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. <code>state.co2Kg</code> stays at its Phase 1 seed value (0). No save-file impact — the field is persisted but defaults to 0.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(economy): CO₂ accrual hook in advanceIsland segment integrator
+
+When a recipe produces co2 as an output, the produced rate × segment
+duration accrues to state.co2Kg (in addition to the normal inventory
+write). When a recipe declares exogenousFlow: 'fuel-combustion-CO₂',
+the per-cycle exogenousFlowKg × cycles-this-segment also accrues.
+
+Two recipes use the exogenous CO₂ path: limekiln (+5 kg/cycle) and
+cement_mill (+4 kg/cycle), per rev-16 §3.2 + §7.2. All other co2
+sources (blast_furnace, steel_mill, coke_oven, charcoal_kiln,
+electric_arc_furnace) are inventory outputs and accrue via the
+direct path.
+
+state.co2Kg is read by Phase 6's weather coupling; Phase 2 only
+writes. Biogenic recipes (charcoal_kiln) accrue without discount;
+the biogenic flag is consumed in Phase 6.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes §10
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p9">
+      <div class="sec-head"><span class="num">10</span><h2>Phase 9 — Mass-balance auditor (binding gate)</h2></div>
+      <p class="sec-intro">New vitest file. Walks every recipe in
+        <code>RECIPES</code>, computes Δ = Σ outputs × mass − Σ inputs × mass,
+        asserts |Δ| &lt; 0.001 modulo exemptions. Phases 1-8 set up the
+        vocabulary; Phase 9 enforces it. <strong>Binding gate.</strong></p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/mass-balance.test.ts</code> — NEW file, ~80 lines.</li>
+        </ul>
+
+        <h4>Pseudocode — per spec §11</h4>
+        <div class="code"><pre><span class="cm">// src/mass-balance.test.ts</span>
+<span class="kw">import</span> { describe, it, expect } <span class="kw">from</span> <span class="str">'vitest'</span>;
+<span class="kw">import</span> {
+  RECIPES, RESOURCE_META, RECIPE_SPECULATIVE,
+  <span class="kw">type</span> RecipeId, <span class="kw">type</span> ResourceId,
+} <span class="kw">from</span> <span class="str">'./recipes'</span>;
+
+<span class="kw">describe</span>(<span class="str">'mass-balance auditor — every recipe in RECIPES'</span>, () =&gt; {
+  <span class="kw">for</span> (<span class="kw">const</span> [recipeId, recipe] <span class="kw">of</span> Object.<span class="fn">entries</span>(RECIPES)) {
+    <span class="kw">if</span> (!recipe) <span class="kw">continue</span>;
+
+    <span class="kw">it</span>(`${recipeId} mass-balances`, () =&gt; {
+      <span class="cm">// Speculative recipes (fantasy chemistry) are exempt.</span>
+      <span class="kw">if</span> (RECIPE_SPECULATIVE[recipeId <span class="kw">as</span> RecipeId]) <span class="kw">return</span>;
+
+      <span class="kw">const</span> sumMass = (m: Record&lt;<span class="kw">string</span>, <span class="kw">number</span> | <span class="kw">undefined</span>&gt;) =&gt;
+        Object.<span class="fn">entries</span>(m).<span class="fn">reduce</span>(
+          (acc, [r, n]) =&gt;
+            acc + (n ?? 0) * RESOURCE_META[r <span class="kw">as</span> ResourceId].massPerUnitKg,
+          0,
+        );
+
+      <span class="kw">const</span> inputMass  = <span class="fn">sumMass</span>(recipe.inputs);
+      <span class="kw">const</span> outputMass = <span class="fn">sumMass</span>(recipe.outputs);
+      <span class="kw">const</span> delta = outputMass - inputMass;
+
+      <span class="cm">// exogenousFlow declares a legitimate Δ. Auditor accepts ±5% input mass + 0.5 kg.</span>
+      <span class="kw">if</span> (recipe.exogenousFlow) {
+        <span class="fn">expect</span>(
+          <span class="fn">Math.abs</span>(delta),
+          `${recipeId} declared exogenousFlow=${recipe.exogenousFlow} but |Δ|=${<span class="fn">Math.abs</span>(delta)} exceeds tolerance`,
+        ).<span class="fn">toBeLessThanOrEqual</span>(inputMass * 0.05 + 0.5);
+        <span class="kw">return</span>;
+      }
+
+      <span class="cm">// No exemption — exact mass balance (float tolerance).</span>
+      <span class="fn">expect</span>(
+        <span class="fn">Math.abs</span>(delta),
+        `${recipeId} Δ = ${delta.<span class="fn">toFixed</span>(4)} (inputMass=${inputMass}, outputMass=${outputMass})`,
+      ).<span class="fn">toBeLessThan</span>(0.001);
+    });
+  }
+});</pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Create <code>src/mass-balance.test.ts</code> with the code above.</li>
+          <li>Run <code>npx vitest run src/mass-balance.test.ts</code>. Every non-speculative recipe should pass — Phases 3-7 already aligned them with rev-16 §3 numerics.</li>
+          <li>If any recipe fails: <strong>do not loosen the tolerance.</strong> Either (a) the recipe has a typo from a Phase 3-7 rewrite — go fix it and re-run; or (b) it legitimately violates balance and needs an <code>exogenousFlow</code> tag added (cross-reference rev-16 §3.8 to confirm).</li>
+          <li>Cross-check the auditor's reported Δs against the 25 rev-16 §3.8 worked examples. Every Δ shown there should reproduce exactly (cell_press → 0, BF → −2, EAF → −2, limekiln → 0, etc.).</li>
+          <li>Run <code>npm test</code>. Full suite green.</li>
+        </ol>
+
+        <div class="callout crit">
+          <div class="ct">Binding gate</div>
+          Phase 9 is a hard gate. <strong>Every</strong> recipe in
+          <code>RECIPES</code> must satisfy the auditor or carry an
+          <code>exogenousFlow</code> tag or appear in
+          <code>RECIPE_SPECULATIVE</code>. If a recipe fails and the
+          implementer can't classify which of the three categories it
+          belongs to, <strong>stop and re-read</strong> rev-16 §3.8 for
+          that recipe. Adding an unjustified <code>exogenousFlow</code>
+          tag to pass the gate is a regression dressed as a fix.
+        </div>
+
+        <h4>11.2 Test fixtures (rev-16 §3.8 cross-check, optional)</h4>
+        <p class="body">As an additional consistency check, the auditor can
+          dump the per-recipe Δ map to a snapshot and assert against a
+          file containing the rev-16 §3.8 table. Divergence would surface
+          a future recipe drift. Phase 2 lands the auditor without the
+          snapshot; the snapshot is "nice to have" and can ship in a
+          follow-up if Phase 11 reveals drift.</p>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx vitest run src/mass-balance.test.ts</code> produces N green tests where N = recipe count − speculative count. No recipe carries an <code>exogenousFlow</code> tag without entry in spec §9.2. Every Δ reported matches rev-16 §3.8 to the kg.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. The auditor is informational; rolling back drops the regression net but leaves all recipe data intact.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>test(recipes): mass-balance auditor — every recipe Δ = 0 modulo exemptions
+
+NEW src/mass-balance.test.ts. Walks every entry in RECIPES, computes
+Σ outputs × mass − Σ inputs × mass via RESOURCE_META.massPerUnitKg,
+asserts |Δ| &lt; 0.001 unless:
+  (a) RECIPE_SPECULATIVE[recipeId] is set — fantasy-chemistry exempt;
+  (b) recipe.exogenousFlow is set — auditor accepts |Δ| ≤ 5% × inputMass + 0.5 kg.
+
+All non-speculative recipes pass after Phases 1-8 align stoichiometry
+with rev-16 §3. The 25 worked examples in rev-16 §3.8 are reproduced
+by this auditor's output (cell_press Δ = 0, BF Δ = −2, EAF Δ = −2,
+limekiln Δ = 0 with fuel-CO₂ tag, …).
+
+This commit is the binding gate for Phase 2: the auditor protects
+every future recipe edit against silent mass drift.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes §11
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p10">
+      <div class="sec-head"><span class="num">11</span><h2>Phase 10 — Fixture sweep</h2></div>
+      <p class="sec-intro">Catch-all commit for tests that depended on the
+        old BEFORE values. Some fixture updates land inline with their
+        Phase 3-7 recipe rewrites; Phase 10 sweeps the residue —
+        chain-walk tests, persistence round-trips, UI snapshots, any
+        test where the old recipe ratio was load-bearing.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/economy.test.ts</code> — chain-walk fixtures that simulate iron → steel chains depend on the smelter / coke_oven / BF / steel_mill ratios. The §12.9 rev-16 chain walk is the canonical reference for the new expected output rates.</li>
+          <li><code>src/recipes.test.ts</code> — residual recipe-shape assertions.</li>
+          <li><code>src/persistence-load.test.ts</code> / <code>src/persistence.test.ts</code> — if any persistence-round-trip fixture loads a state with placedBuildings keyed by the renamed defs, update the fixture.</li>
+          <li>Any other <code>*.test.ts</code> file flagged by grep for old recipe ids / values.</li>
+        </ul>
+
+        <h4>Grep audit</h4>
+        <div class="code"><pre><span class="cm"># Find tests that may carry stale assertions:</span>
+grep -nE <span class="str">'smelter|blast_furnace|steel_mill|chlor_alkali|air_separator'</span> src/*.test.ts
+grep -nE <span class="str">'cable_drawer|spring_winder|bearing_press'</span> src/*.test.ts
+grep -nE <span class="str">'1 steel.*[123] '</span> src/*.test.ts  <span class="cm"># cohort 1:N pattern leak</span></pre></code>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Run <code>npm test</code> at HEAD. Capture the full failure list.</li>
+          <li>For each red test, classify:
+            <ul class="body">
+              <li><strong>Stale recipe-ratio expectation</strong> — update the expected output to match the new recipe shape (cross-reference rev-16 §3 or run the auditor's reported numbers).</li>
+              <li><strong>Stale building id</strong> — replace <code>cable_drawer</code> / <code>spring_winder</code> / <code>bearing_press</code> with the new ids.</li>
+              <li><strong>Persistence fixture</strong> — update the snapshot or fixture JSON.</li>
+              <li><strong>UI snapshot</strong> — re-baseline (delete the snapshot file, re-run vitest to regenerate; visually confirm the new label is correct).</li>
+            </ul>
+          </li>
+          <li>Apply fixes commit-by-commit if the change set is large, OR as one sweep if focused. The plan budgets ONE commit for the sweep.</li>
+          <li>Run <code>npm test</code>. Full suite green.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0. Grep for stale ids returns zero matches in <code>src/*.test.ts</code>. The chain-walk tests now exercise the new smelter 10:3:6 ratio + the new cohort 105:2:5 etc.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert returns to the post-Phase-9 state. The auditor remains; only the chain-walk fixture rewrites disappear, restoring the test reds that Phase 10 fixed.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>test: sweep stale recipe-ratio + building-id fixtures post Phase 2
+
+Residue cleanup after Phases 3-8 recipe rewrites + Phase 7 building
+renames. Fixtures touched:
+
+  - economy.test.ts chain-walk fixtures (iron → steel chain ratios)
+  - recipes.test.ts recipe-shape assertions (smelter, BF, steel_mill,
+    chlor-alkali, air_separator, cohort recipes)
+  - persistence fixtures (placedBuildings defId renames, if any)
+  - UI snapshots (building tooltips for renamed defs)
+
+No semantic test logic changes — only the expected values + ids
+update to match the new recipe shapes and def ids.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes §14
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p11">
+      <div class="sec-head"><span class="num">12</span><h2>Phase 11 — Live-save replay (binding gate)</h2></div>
+      <p class="sec-intro">Final validation. Run the profile script against
+        the live save under the Phase-2-rewritten recipes. <strong>Binding
+        gate:</strong> no NaN, no throw, no negative inventory; mean tick
+        within ±20 % of Phase 0 baseline; 24h offline catchup completes.</p>
+
+      <div class="phase-card">
+        <h4>Procedure</h4>
+        <ol class="body">
+          <li>Run the profiler:
+            <div class="code"><pre>npx tsx scripts/profile-economy.ts /tmp/robot-islands-save.json</pre></div>
+          </li>
+          <li>Capture, comparing against Phase 0 baseline:
+            <ul class="body">
+              <li>home-island mean tick (ms)</li>
+              <li>home-island p99 (ms)</li>
+              <li>24h offline catchup wall time (ms)</li>
+              <li>Final <code>state.co2Kg</code> on home island after 24h catchup (rev-16 §7.2 predicts a positive, plausibly &lt; 10 t for typical play)</li>
+              <li>Any NaN or negative inventory entries (must be zero)</li>
+            </ul>
+          </li>
+          <li>If the profile throws — diagnose by recipe id. The most likely failure is a renamed building still referenced in a derived UI cache, or a recipe whose new input doesn't exist as an output of any upstream recipe (e.g. <code>calcium_sulfonate</code> as a lubricant_refinery input — confirm an extractor recipe exists or that pre-rev-14 stockpile carries it).</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Steady-state shift is expected</div>
+          Recipe rewrites change steady-state output rates. A 24h catchup
+          under Phase 2 will produce noticeably different inventory totals
+          than under Phase 0 — that's the point. The gate is "no NaN, no
+          throw," not "identical numbers."
+        </div>
+
+        <h4>If the gate fails</h4>
+        <ul class="body">
+          <li><strong>Profile throws on advanceIsland.</strong> Read the stack. Most likely: a recipe references an output id that's missing from <code>RESOURCE_META</code> (Phase 1 omission). Fix by completing the meta record.</li>
+          <li><strong>Mean tick regression &gt; 20 %.</strong> Phase 2 doesn't change hot-path shape — recipe size grew (multi-output blast_furnace, steel_mill) so per-tick allocations might tick up. Run <code>--cpu-prof</code> to confirm no <em>new</em> hot frame appeared; minor allocation drift is expected.</li>
+          <li><strong>state.co2Kg is NaN.</strong> Phase 8's primary-output lookup divided by 0. Diagnose by logging <code>recipe.outputs[primary]</code>; the fix is to fall back to <code>cycleSec</code>-based cycle-rate when the primary-output yield is 0 (shouldn't happen for fuel-CO₂ recipes — limekiln + cement_mill both have non-zero primary outputs).</li>
+          <li><strong>Negative inventory.</strong> Phase 5's <code>exogenousFlow: 'atmosphere'</code> bypass is too broad — it's decrementing air anyway. Re-read the patch and confirm both the availability check AND the inventory write skip <code>air</code>.</li>
+        </ul>
+
+        <h4>Measured impact (post-implementation, populated by implementer)</h4>
+        <p class="body">The implementer fills in this table in the final
+          commit body. Sample shape:</p>
+        <table class="tbl">
+          <thead><tr>
+            <th>Metric</th>
+            <th>Phase 0 baseline</th>
+            <th>Phase 11 post-impl</th>
+            <th>Δ</th>
+          </tr></thead>
+          <tbody>
+            <tr><td class="slate">Home mean tick</td><td class="mono">(captured)</td><td class="mono">(captured)</td><td class="mono">±?</td></tr>
+            <tr><td class="slate">Home p99</td><td class="mono">(captured)</td><td class="mono">(captured)</td><td class="mono">±?</td></tr>
+            <tr><td class="slate">24h offline catchup</td><td class="mono">(captured)</td><td class="mono">(captured)</td><td class="mono">±?</td></tr>
+            <tr><td class="slate">Final state.co2Kg (home)</td><td class="num">0</td><td class="num">(captured)</td><td class="ok">positive (expected)</td></tr>
+            <tr><td class="slate">NaN / negative inv events</td><td class="num">0</td><td class="num ok">0 (required)</td><td>—</td></tr>
+            <tr><td class="slate">Mass-balance auditor</td><td class="num">N/A</td><td class="num ok">all green</td><td>—</td></tr>
+          </tbody>
+        </table>
+
+        <p class="body"><strong>Test suite final.</strong> <code>npm test</code>
+          green: existing N tests + ~30-50 new tests for Phase 2 (new
+          recipe shapes + CO₂ accrual + mass-balance auditor entries).
+          Some previously load-bearing fixtures were rewritten inline in
+          Phases 3-7 + Phase 10; net test-count change documented in the
+          commit body.</p>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;Profile script exits 0. No NaN or negative inventory entries. <code>state.co2Kg</code> &gt; 0 after 24h catchup on a save with any CO₂-emitting building. Mass-balance auditor green. Full <code>npm test</code> green.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;If the gate fails fundamentally (NaN on the home island, mean tick &gt; 2×), roll back to Phase 0 baseline and re-diagnose. The granular per-phase commits let the implementer bisect to the failing phase.</div>
+
+        <h4>Final commit message</h4>
+        <div class="code"><pre>perf(recipes): document Phase 2 live-save replay impact
+
+Phases 1-10 land the SI-units recipe rewrites + the mass-balance
+auditor. Live-save replay against /tmp/robot-islands-save.json
+(home L? / ? buildings):
+
+  metric                      before    after     delta
+  ----                        ------    -----     -----
+  mean tick (home)            ? ms      ? ms      ?
+  p99 (home)                  ? ms      ? ms      ?
+  24h offline catchup         ? ms      ? ms      ?
+  state.co2Kg (home, 24h)     0 kg      ? kg      first non-zero
+  Mass-balance auditor        N/A       N/N pass  ✓
+  NaN / negative inventory    0         0         clean
+
+Phase 2 is complete. The catalog now mass-balances per rev-16 §3,
+state.co2Kg accrues from the integrator, three buildings renamed
+per cohort discipline, mass-balance auditor protects every future
+recipe edit. Phase 3 (heat-throttle + drag-curve) is unblocked.
+
+Tests: N/N passing.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase2-recipes
+Source-of-truth: docs/superpowers/plans/2026-05-27-si-units-rework-foundation §3
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="vmatrix">
+      <div class="sec-head"><span class="num">13</span><h2>Verification matrix</h2></div>
+      <p class="sec-intro">Cross-reference: every spec requirement → phase
+        delivering it → test or measurement verifying it.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Spec requirement</th>
+          <th>Phase</th>
+          <th>Verifying test / measurement</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">9 new resources in ALL_RESOURCES + meta + categories</td>
+            <td class="mono">Phase 1</td>
+            <td>Existing storage-category invariant test; <code>ALL_RESOURCES.length</code> grew by 10</td>
+          </tr>
+          <tr>
+            <td class="slate">Recipe interface has exogenousFlow + exogenousFlowKg + biogenic</td>
+            <td class="mono">Phase 2</td>
+            <td><code>tsc -b</code> clean; consumers in Phase 8 + Phase 9 read the fields</td>
+          </tr>
+          <tr>
+            <td class="slate">Smelting chain rewritten per §3.1</td>
+            <td class="mono">Phase 3</td>
+            <td>Recipe-shape assertions in <code>recipes.test.ts</code> + Phase 9 auditor green for smelter / coke_oven / BF / steel_mill / EAF</td>
+          </tr>
+          <tr>
+            <td class="slate">Lime/cement/charcoal/brick per §3.2 + fuel-CO₂ tags</td>
+            <td class="mono">Phase 4</td>
+            <td>Phase 9 auditor green; limekiln + cement_mill carry <code>exogenousFlowKg</code></td>
+          </tr>
+          <tr>
+            <td class="slate">Electrochem + air exogenous-flow handling</td>
+            <td class="mono">Phase 5</td>
+            <td>Phase 9 auditor green; focused air_separator test asserts no air decrement</td>
+          </tr>
+          <tr>
+            <td class="slate">Refining chain + cryo per §3.4 + §3.7</td>
+            <td class="mono">Phase 6</td>
+            <td>Phase 9 auditor green for refinery recipes; cryo_coolant_vented emitted by cryogenic_generator</td>
+          </tr>
+          <tr>
+            <td class="slate">§3.9 cohort rewrite + 3 building renames</td>
+            <td class="mono">Phase 7</td>
+            <td><code>tsc -b</code> clean (rename forces every caller to update); cohort recipes assert new ratios in tests</td>
+          </tr>
+          <tr>
+            <td class="slate">CO₂ accrual hook in advanceIsland</td>
+            <td class="mono">Phase 8</td>
+            <td>Focused coal_gen + limekiln test: <code>state.co2Kg</code> matches §7.2 emission factor</td>
+          </tr>
+          <tr>
+            <td class="slate">Mass-balance auditor: every recipe Δ = 0 modulo exemptions</td>
+            <td class="mono">Phase 9</td>
+            <td><code>vitest src/mass-balance.test.ts</code> N/N green; Δs match rev-16 §3.8 table</td>
+          </tr>
+          <tr>
+            <td class="slate">Fixture sweep: all preexisting tests rebaseline to new recipe shapes</td>
+            <td class="mono">Phase 10</td>
+            <td><code>npm test</code> green after sweep</td>
+          </tr>
+          <tr>
+            <td class="slate">Live save: no NaN, no throw, no neg inventory</td>
+            <td class="mono">Phase 11</td>
+            <td><code>profile-economy.ts</code> against <code>/tmp/robot-islands-save.json</code> exits 0; <code>state.co2Kg</code> &gt; 0</td>
+          </tr>
+          <tr>
+            <td class="slate">No v15→v16 schema migration required</td>
+            <td class="mono">Phases 0 + 7</td>
+            <td>Phase 0 grep on live save returned 0 occurrences of renamed ids; Phase 1's v15 schema is the only bump</td>
+          </tr>
+          <tr>
+            <td class="slate">RESOURCE_META.terminal tags match rev-16 §3.5.5</td>
+            <td class="mono">Phase 1</td>
+            <td>Manual cross-check against rev-16 foundation §3.5.5 during code review</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="risks">
+      <div class="sec-head"><span class="num">14</span><h2>Risks &amp; mitigations</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">A recipe rewrite gets the BEFORE/AFTER inverted — Phase 9 catches "obviously broken" Δ, but a recipe that's mass-balanced for the WRONG reason (e.g. wrong cycleSec) still passes the auditor.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Each Phase 3-7 commit's diff is small enough to review in isolation. Cross-check every recipe against the spec's tables (§04-§07). The Phase 9 auditor is a backstop, not a substitute for review.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The cohort cable_mill input switch (3 wire → 42 steel) breaks the existing heavy_cable production chain for players with wire stockpiles but no steel.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Expected per rev-16 §3.9 cohort discipline. Documented in spec §16 risks. The live save replay (Phase 11) surfaces any deadlock; the player workaround is bootstrapping through the steel cascade.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 9 auditor fails on a recipe the implementer didn't predict — debugging which Δ is real vs which is a tag-miss costs days.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Commit order rewrites first (Phases 3-7, recipes-only), auditor last (Phase 9). Each rewrite commit verifies its specific recipe shape inline. The auditor catches the residue. Rev-16 §3.8's 25 worked examples are the canonical truth — any auditor-reported Δ should map to a §3.8 row.</div>
+        </div>
+        <div class="row">
+          <div class="cell">The Phase 5 <code>computeRates</code> patch leaks the atmosphere bypass to non-air inputs of mis-tagged recipes (future contributor sets <code>'atmosphere'</code> on a recipe with stone as input).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">The guard is double-keyed: <code>recipe.exogenousFlow === 'atmosphere' && inputId === 'air'</code>. The narrow guard prevents collateral damage. Phase 9 auditor still demands mass balance for any non-air input.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 8 CO₂ accrual integrates over the wrong segment width — kg accumulates incorrectly during dawn/dusk solar-ramp sub-segments.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Hook uses <code>segmentDurationSec</code> consistently with the existing inventory accrual. The math matches the pre-existing inventory-delta pattern; a regression here would also corrupt iron_ingot rates (already covered by chain-walk tests).</div>
+        </div>
+        <div class="row">
+          <div class="cell">A building rename misses a UI tooltip / build-palette label / screenshot test, breaking the player-visible name on first load.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">TypeScript rename forces every typed caller to fix. Untyped strings (UI label literals, screenshot fixture asserts) are caught by Phase 10's grep sweep + the test re-run.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A v14→v15 migration regression silently leaves a renamed defId in a state still in inventory (somehow) — the load-side type cast fails at runtime.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Phase 0 grep on <code>/tmp/robot-islands-save.json</code> confirms zero occurrences — no live save needs the migration. Spec §12.1 documents the contingency: extend <code>migrateV14toV15</code> with a defId-rename pass IF a future save surfaces the old ids; not Phase 2 work.</div>
+        </div>
+        <div class="row">
+          <div class="cell">naphtha_cracker's LPG-fold-into-refinery_gas causes a downstream chain that wanted LPG-mix separately (e.g. a residential-heating expansion-hook) to break later.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">LPG and refinery_gas are functionally equivalent expansion-hooks per spec §07. If Phase 3+ introduces a recipe needing them split, that's the right time to add the resource — not now. Phase 2's choice is documented and reversible.</div>
+        </div>
+        <div class="row">
+          <div class="cell">RESOURCE_META.massPerUnitKg = 0.81 on aviation_kerosene_crude causes a recipe whose only output is this resource to "lose mass" against an integer-input recipe — the auditor flags a false positive.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">naphtha_cracker has 5 outputs and 1 input; the 0.81 density doesn't cause a Δ false positive in isolation. Cross-checked against rev-16 §3.8: 20 = 3 × 0.81 + 3 × ? + 5 × ? + 6 × ? + 3 × ? — the spec's mass numbers already account for the 0.81 density. Confirm during Phase 9.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Phase 2 takes &gt;24 h (the briefing budget). Subagent stalls on a per-recipe lookup question with no way to escalate.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Brief is exhaustive about file:line. If the subagent hits an ambiguity (e.g. RESOURCE_META shape from Phase 1 doesn't match expectation), it commits the partial work + reports the ambiguity to the lead via mailbox. The lead resolves and the subagent resumes.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="notes">
+      <div class="sec-head"><span class="num">15</span><h2>Implementation notes</h2></div>
+      <p class="sec-intro">Practical context for the implementer that didn't
+        rise to the level of a spec requirement.</p>
+
+      <ul class="body">
+        <li><strong>Commit cadence.</strong> 11 commits across ~24 h budget = ~2 h/commit average. Phase 7 (cohort + renames) is the largest single commit (~3 h); Phase 0 + Phase 11 are small (no source + measurement-only respectively).</li>
+        <li><strong>Order matters.</strong> Phase 1 (resources) and Phase 2 (Recipe interface) MUST land before Phase 3+ — they're the vocabulary every later commit consumes. Phase 8 (CO₂ hook) MUST land before Phase 11 (replay would otherwise leave <code>state.co2Kg</code> at 0). Phase 9 (auditor) MUST land before Phase 10 (sweep) — the auditor reveals which fixtures are stale.</li>
+        <li><strong>Read Phase 1 source first.</strong> Several fields (<code>state.co2Kg</code>, <code>RESOURCE_META</code>, <code>RECIPE_SPECULATIVE</code>) are Phase 1 introductions. Phase 0 grep confirms they exist; the implementer should also read the Phase 1 commit's diff to understand the shapes before consuming them.</li>
+        <li><strong>cycleSec is preserved.</strong> Rev-16 §9.1 explicitly keeps the existing round-number cycleSec set ("for player legibility"). Every recipe rewrite preserves its current cycleSec — only <code>inputs</code> and <code>outputs</code> change.</li>
+        <li><strong>Multi-output recipes already exist.</strong> The integrator handles them today (steel_mill produces 4 outputs in some current rewrites). The new multi-output recipes (coke_oven → 5 outputs, naphtha_cracker → 5 outputs) reuse the same mechanism — no integrator change for output multiplicity, only the new CO₂ side-effect in Phase 8.</li>
+        <li><strong>The biogenic flag is forward-looking.</strong> Phase 2 sets <code>biogenic: true</code> on <code>charcoal_kiln</code> (and optionally on <code>biomass_plant</code> if it produces CO₂) but does NOT apply a discount. Phase 6 weather coupling will read it.</li>
+        <li><strong>Don't add unjustified exogenousFlow tags.</strong> Each tag corresponds to a real-world process per spec §9.2. If a recipe fails the auditor, the fix is either (a) correct the stoichiometry, (b) verify the recipe maps to a rev-16 §3.8 worked example with a tag, or (c) escalate. Adding a tag to silence an auditor failure is the regression vector this whole rework is designed to prevent.</li>
+        <li><strong>Persistence stays at v15.</strong> Phase 1 bumped the schema; Phase 2 ships zero schema changes. <code>SUPPORTED_LOAD_VERSIONS</code> stays at <code>[15]</code> (plus whatever migration paths Phase 1 added).</li>
+        <li><strong>Subagent brief contract.</strong> The lead session executes Phase 2 via <code>kimi -p &lt;phase-brief&gt;</code> per commit (typically). Each phase brief includes: spec section reference, file:line citations from the plan, the verify gate, and the commit message template. Phase 9 + Phase 11 binding gates must NOT be silenced if they fail; the subagent reports back to the lead instead of force-passing.</li>
+        <li><strong>The 25 worked examples are gold.</strong> Rev-16 foundation §3.8 (~line 1104+ of the foundation HTML) contains the canonical Δ for every audited recipe. When the auditor reports a Δ, the first cross-check is the §3.8 row; if they match, the recipe is correct (whether Δ is 0 or, e.g., −2 with a tag); if not, the recipe needs a fix.</li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan · Phase 2 of 7 · generated 2026-05-28 ·
+        spec at <code>specs/2026-05-28-si-units-phase2-recipes</code> ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16</p>
+    </div>
+
+  </div>
+</body>
+</html>

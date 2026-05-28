@@ -1,0 +1,368 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units rework — master index + execution contract</title>
+  <style>
+    :root {
+      --ivory: #1B1A17; --slate: #F5F3EC; --clay: #D97757; --oat: #3A352B;
+      --olive: #8FA56E; --rust: #E08B7F; --warn: #E0B47F;
+      --gray-150: #2E2C27; --gray-300: #3A3833; --gray-500: #8F8D82;
+      --gray-700: #CFCCC2; --white: #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px; --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 1080px; margin: 0 auto; }
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    h1 code { font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px; color: #C9B98A; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 48px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok { color: var(--olive); }
+    .summary .v.warn { color: var(--warn); }
+    .decision { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .decision .d-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px; }
+    .decision .d-head { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em; }
+    h3.sub { font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin: 26px 0 10px; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 6px; }
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; color: var(--clay); }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .phase-link { color: var(--clay); text-decoration: none; }
+    .phase-link:hover { text-decoration: underline; }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Master spec · robot-islands · SI-units rework · index + execution contract</div>
+      <h1>SI-units rework — 7-phase master</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Index for the SI-units rework. The rev-16 foundation doc
+        (<a class="cite">docs/superpowers/plans/2026-05-27-si-units-rework-foundation.html</a>)
+        is the source-of-truth design; this master spec decomposes the
+        implementation into 7 sequential phases, each with its own
+        per-phase spec + per-phase plan. The user mid-stream directive
+        for real-astronomy solar (Phase 6) is captured in the Phase 6
+        spec verbatim. Sequential execution via
+        <code>subagent-driven-development</code>; no human checkpoint
+        between phases except the final Phase 7 human playtest.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Phases</div><div class="v accent">7</div></div>
+      <div class="cell"><div class="k">Total subagent effort</div><div class="v warn">~108 h</div></div>
+      <div class="cell"><div class="k">Manual playtest</div><div class="v">~8 h (Phase 7)</div></div>
+      <div class="cell"><div class="k">Schema bumps</div><div class="v ok">1 (v14 → v15)</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Execution contract</div>
+      <div class="d-head">Sequential phase execution via subagent-driven-development on master/main. No git worktrees. Phases land in order; each phase's plan is its commit-by-commit walkthrough.</div>
+      <div class="d-body"><strong>Per-phase shape.</strong> Each phase
+        has TWO artifacts: a SPEC (the WHAT and the WHY) at
+        <code>docs/superpowers/specs/2026-05-28-si-units-phase&lt;N&gt;-*.html</code>
+        and a PLAN (the HOW, commit-by-commit) at
+        <code>docs/superpowers/plans/2026-05-28-si-units-phase&lt;N&gt;-*-plan.html</code>.
+        Both are HTML-only per the global doc-format doctrine.</div>
+      <div class="d-body"><strong>Subagent strategy.</strong> Per
+        <a class="cite">CLAUDE.md</a> the implementation subagent is
+        kimi via Bash (<code>kimi -w /root/robot-islands -p &lt;brief&gt;
+        --quiet --yolo</code>). Each phase's plan provides per-commit
+        briefs sized for kimi to consume one commit at a time. Claude
+        Opus reviews each subagent commit at the per-phase boundary;
+        any phase that doesn't pass review rolls back without affecting
+        subsequent phases.</div>
+      <div class="d-body"><strong>Sequential, no breaks.</strong> Per
+        user directive (2026-05-28): phases execute back-to-back, no
+        human approval gate between phases (except Phase 7's playtest).
+        Subagent-driven-development reads the next phase's plan as soon
+        as the prior phase lands on master. The lead session monitors
+        but does not block per-phase.</div>
+      <div class="d-body"><strong>Test gate per phase.</strong>
+        Each phase ends with <code>npm test</code> green +
+        <code>npx tsc --noEmit</code> clean. A red test surfaces
+        immediately; the implementer fixes before the next phase begins.</div>
+      <div class="d-body"><strong>Phase 7 human playtest.</strong>
+        The only manual gate. Per rev-16 §11.4 tutorial UX cannot be
+        subagent-verified. ~8 h of in-browser playthrough at
+        https://islands.nitjsefni.eu/ after Phase 7 subagent work lands.
+        Expect 2-4 fix commits during the playtest.</div>
+    </div>
+
+    <!-- ============================================================= -->
+    <section id="phases">
+      <div class="sec-head"><span class="num">01</span><h2>The 7 phases</h2></div>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>#</th>
+          <th>Phase</th>
+          <th>Subagent h</th>
+          <th>Spec</th>
+          <th>Plan</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="num">1</td>
+            <td class="slate">Schema + terminal tags + F12 + lat/lon</td>
+            <td class="num">~12</td>
+            <td class="mono"><a class="phase-link" href="2026-05-28-si-units-phase1-schema.html">phase1-schema</a></td>
+            <td class="mono"><a class="phase-link" href="../plans/2026-05-28-si-units-phase1-schema-plan.html">plan</a></td>
+          </tr>
+          <tr>
+            <td class="num">2</td>
+            <td class="slate">Recipe restoichiometry + cohort + CO₂ + 9 new resources + 3 building renames</td>
+            <td class="num">~24</td>
+            <td class="mono"><a class="phase-link" href="2026-05-28-si-units-phase2-recipes.html">phase2-recipes</a></td>
+            <td class="mono"><a class="phase-link" href="../plans/2026-05-28-si-units-phase2-recipes-plan.html">plan</a></td>
+          </tr>
+          <tr>
+            <td class="num">3</td>
+            <td class="slate">Heat throttle + cubic drag (solar deferred to Phase 6)</td>
+            <td class="num">~10</td>
+            <td class="mono"><a class="phase-link" href="2026-05-28-si-units-phase3-engines.html">phase3-engines</a></td>
+            <td class="mono"><a class="phase-link" href="../plans/2026-05-28-si-units-phase3-engines-plan.html">plan</a></td>
+          </tr>
+          <tr>
+            <td class="num">4</td>
+            <td class="slate">Per-building BOMs (240) + storage rescale + reachability invariant</td>
+            <td class="num">~24</td>
+            <td class="mono"><a class="phase-link" href="2026-05-28-si-units-phase4-boms.html">phase4-boms</a></td>
+            <td class="mono"><a class="phase-link" href="../plans/2026-05-28-si-units-phase4-boms-plan.html">plan</a></td>
+          </tr>
+          <tr>
+            <td class="num">5</td>
+            <td class="slate">CO₂ sinks (wastewater, scrubber, plant_a_tree)</td>
+            <td class="num">~4</td>
+            <td class="mono"><a class="phase-link" href="2026-05-28-si-units-phase5-co2-sinks.html">phase5-co2-sinks</a></td>
+            <td class="mono"><a class="phase-link" href="../plans/2026-05-28-si-units-phase5-co2-sinks-plan.html">plan</a></td>
+          </tr>
+          <tr>
+            <td class="num">6</td>
+            <td class="slate">Real-astronomy solar + map picker + weather coupling + coal_gen retune</td>
+            <td class="num">~18</td>
+            <td class="mono"><a class="phase-link" href="2026-05-28-si-units-phase6-weather-realtime.html">phase6-weather-realtime</a></td>
+            <td class="mono"><a class="phase-link" href="../plans/2026-05-28-si-units-phase6-weather-realtime-plan.html">plan</a></td>
+          </tr>
+          <tr>
+            <td class="num">7</td>
+            <td class="slate">Tutorial (32 steps) + home terrain + reachability gate + 8h playtest</td>
+            <td class="num">~16 + 8h playtest</td>
+            <td class="mono"><a class="phase-link" href="2026-05-28-si-units-phase7-tutorial.html">phase7-tutorial</a></td>
+            <td class="mono"><a class="phase-link" href="../plans/2026-05-28-si-units-phase7-tutorial-plan.html">plan</a></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top: 18px"><strong>Total:</strong>
+        ~108 h subagent + ~8 h human playtest.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="dependencies">
+      <div class="sec-head"><span class="num">02</span><h2>Dependency DAG</h2></div>
+
+      <p class="body">Sequential execution per user directive. The
+        natural dependency order:</p>
+
+      <ul class="body">
+        <li><strong>Phase 1 → all others.</strong> Schema fields
+          (RESOURCE_META, RECIPE_SPECULATIVE, heat KW fields, co2Kg,
+          lat/lon) are foundations everything else reads.</li>
+        <li><strong>Phase 2 → Phase 3, 4, 5, 6.</strong> Recipe rewrites
+          + new resources land before placement-cost BOMs (Phase 4),
+          CO₂ sinks (Phase 5), and weather coupling (Phase 6) can use
+          the new chains.</li>
+        <li><strong>Phase 3 → Phase 6.</strong> Phase 3's heat throttle
+          + drag retable doesn't depend on Phase 4-5, but Phase 6's
+          full-suite retune needs the engines stable.</li>
+        <li><strong>Phase 4 → Phase 7.</strong> The reachability
+          invariant uses Phase 4's BOMs; Phase 7's tutorial walks
+          through them.</li>
+        <li><strong>Phase 5 → Phase 6.</strong> CO₂ drains land before
+          weather coupling so the climate-crisis chain has an exit
+          path.</li>
+        <li><strong>Phase 6 → Phase 7.</strong> The map picker fires
+          before the tutorial; Phase 7's step 1 is the picker.</li>
+        <li><strong>Phase 7 — final.</strong> No phase depends on
+          Phase 7's tutorial; it's the player-facing wrapper.</li>
+      </ul>
+
+      <p class="body">All phases land in numeric order; no parallel
+        execution. Sequential execution simplifies the dependency
+        contract and avoids merge conflicts on the long-lived files
+        (recipes.ts, building-defs.ts, economy.ts) that multiple
+        phases touch.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="schema-decisions">
+      <div class="sec-head"><span class="num">03</span><h2>Schema decisions baked in</h2></div>
+      <p class="sec-intro">Locked at brainstorm time; not subject to
+        per-phase reconsideration.</p>
+
+      <ul class="body">
+        <li><strong>Single <code>RESOURCE_META</code> exhaustive
+          Record</strong> with required <code>massPerUnitKg</code> +
+          <code>terminal</code>, optional <code>volumePerUnitL</code> +
+          <code>energyPerUnitKWh</code>. Compile-time enforcement.</li>
+        <li><strong>Sparse <code>RECIPE_SPECULATIVE</code></strong> —
+          only fantasy recipes appear. Real-chemistry recipes carry no
+          entry; the auditor's contract is "absent = must mass-balance."</li>
+        <li><strong><code>BuildingDef.heatSource.thermalKW?</code> +
+          <code>BuildingDef.heatDemandKW?</code></strong> — both
+          optional. Boolean N:1 fallback when either is absent.</li>
+        <li><strong><code>IslandState.co2Kg</code></strong>,
+          <strong><code>SerializedWorld.totalCo2Kg</code></strong>,
+          <strong><code>SerializedWorld.playerLat: number | null</code></strong>,
+          <strong><code>SerializedWorld.playerLon: number | null</code></strong>
+          — all introduced by Phase 1's v14 → v15 migration.</li>
+        <li><strong>Per-resource terminal tag</strong> (not per-recipe-output)
+          per rev-16 §10.9 resolution.</li>
+        <li><strong>ai_core sub-calibration: 1 unit = 1 kg single
+          chip</strong> per rev-9 implementation-time resolution (a).</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="conventions">
+      <div class="sec-head"><span class="num">04</span><h2>Conventions enforced across all phases</h2></div>
+
+      <ul class="body">
+        <li><strong>Every commit message ends with
+          <code>Co-Authored-By: Claude Opus 4.7 (1M context)
+          &lt;noreply@anthropic.com&gt;</code></strong> when claude
+          authors; <code>Co-Authored-By: Kimi K2.6
+          &lt;noreply@kimi.com&gt;</code> when kimi authors the
+          implementation commit.</li>
+        <li><strong>Numbers come from rev-16 verbatim.</strong> The
+          implementer does NOT re-derive recipe ratios, BOMs, or
+          calibration constants. Rev-16 §X.Y is the canonical
+          source.</li>
+        <li><strong>No multipliers on placement costs.</strong> Per
+          rev-16 §4.2 — every BOM is its derived embodied mass; no
+          early-game-cheap reductions, no narrative-cost inflations.</li>
+        <li><strong>HTML-only docs.</strong> Per global CLAUDE.md
+          doctrine — specs, plans, audits are HTML; persisted to
+          <code>docs/superpowers/{specs,plans}/</code>; published via
+          <code>docs_hub.py</code>.</li>
+        <li><strong>Mass-balance auditor</strong> as vitest assertion
+          (Phase 2). Walks every recipe; fails if Δ ≠ 0 absent
+          <code>exogenousFlow</code> or <code>RECIPE_SPECULATIVE</code>
+          exemption.</li>
+        <li><strong>Reachability invariant</strong> as vitest binding
+          gate (Phase 4 introduces, Phase 7 extends). 45-min target;
+          parametric env var <code>TUTORIAL_DEADLINE_MIN</code> for
+          tuning.</li>
+        <li><strong>File:line citations</strong> in spec + plan use
+          <code>&lt;a class="cite"&gt;file.ts:line&lt;/a&gt;</code>.</li>
+        <li><strong>Verification badges</strong> per spec template:
+          <code>vbadge v</code> verified, <code>vbadge u</code>
+          unverified projection, <code>vbadge x</code> corrected
+          from prior draft.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="changelog">
+      <div class="sec-head"><span class="num">05</span><h2>User mid-stream changes from rev-16</h2></div>
+
+      <ul class="body">
+        <li><strong>Real-astronomy solar replaces sin-scale 22% CF</strong> (rev-16 §7.1). The user directed Phase 6 to use SunCalc + lat/lon + map picker. Phase 3's solar work is skipped — Phase 6 replaces the trapezoidal curve directly.</li>
+        <li><strong>Wall-clock = game-clock 1:1</strong>. The current daynight model already runs on real-ms; Phase 6's astronomy uses real wall-clock time at the player's chosen lat/lon.</li>
+        <li><strong>Sequential execution</strong>, not parallel. All phases land in order on master.</li>
+        <li><strong>Per-phase specs + per-phase plans</strong>, all written upfront in this brainstorm cycle.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="execution">
+      <div class="sec-head"><span class="num">06</span><h2>Execution kickoff</h2></div>
+
+      <p class="body">When all 7 specs + 7 plans are reviewed and
+        approved by the user, the lead session invokes
+        <code>/superpowers:subagent-driven-development</code> with the
+        Phase 1 plan as the starting point. The flow:</p>
+
+      <ol class="body">
+        <li>Read <code>plans/2026-05-28-si-units-phase1-schema-plan.html</code>.</li>
+        <li>For each commit in the plan: dispatch a kimi subagent with the per-commit brief.</li>
+        <li>Review the commit on master; if green, proceed to next commit.</li>
+        <li>At Phase 1 completion, proceed to Phase 2's plan.</li>
+        <li>Continue through Phase 7.</li>
+        <li>Phase 7 subagent commits land; pause for the 8 h human playtest.</li>
+        <li>Apply playtest fix commits; declare full rework complete.</li>
+      </ol>
+
+      <p class="body"><strong>Rollback discipline.</strong> Any phase
+        can roll back by reverting its commits — schema, recipes, BOMs,
+        engines all stripe additive changes (Phase 1's schema is the
+        only schema bump; subsequent phases just populate fields and
+        add behaviour). A red Phase N rolls back only Phase N; Phases
+        1..N-1 stay in place.</p>
+    </section>
+
+    <div class="footer">
+      <p>Master spec · 7-phase index · generated 2026-05-28 ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16 ·
+        user-driven changes from rev-16 noted in §05</p>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,1016 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SI-units Phase 5 — CO₂ sinks + plant_a_tree — implementation plan</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1120px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 40px; max-width: 880px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 36px;
+      line-height: 1.16; color: var(--slate); margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    h1 code {
+      font-family: var(--mono); font-size: 0.78em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); padding: 1px 6px; border-radius: 6px;
+      color: #C9B98A;
+    }
+    .prompt-box {
+      background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      font-size: 14.5px; color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      display: block; margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent { color: var(--clay); }
+    .summary .v.ok     { color: var(--olive); }
+
+    .toc { background: var(--gray-150); border: var(--border);
+      border-radius: var(--radius); padding: 14px 20px; margin-bottom: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px; }
+    .toc .lbl { font-family: var(--mono); font-size: 11px; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+    .toc a { color: var(--clay); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    a.cite { color: var(--clay); font-family: var(--mono); font-size: 0.86em; text-decoration: none; }
+    a.cite:hover { text-decoration: underline; }
+
+    section { margin-bottom: 56px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px;
+      background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 25px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    h3.sub {
+      font-family: var(--serif); font-weight: 500; font-size: 17px;
+      color: var(--slate); margin: 20px 0 8px;
+    }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 22px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 12px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    ul.body, ol.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li, ol.body li { margin-bottom: 5px; }
+
+    /* milestone timeline */
+    .milestones { display: flex; flex-direction: column; gap: 0; }
+    .milestone { display: grid; grid-template-columns: 110px 28px 1fr;
+      gap: 0 18px; position: relative; }
+    .milestone .when { text-align: right; font-family: var(--mono);
+      font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+    .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+    .milestone .dot { width: 14px; height: 14px; border-radius: 50%;
+      background: var(--white); border: 3px solid var(--clay);
+      margin-top: 4px; flex-shrink: 0; }
+    .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+    .milestone .dot.gate { background: var(--warn); border-color: var(--warn); }
+    .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+    .milestone:last-child .line { display: none; }
+    .milestone .body { padding-bottom: 30px; }
+    .milestone .body h3 {
+      font-family: var(--serif); font-weight: 500; font-size: 18px;
+      color: var(--slate); margin-bottom: 4px;
+    }
+    .milestone .body p { font-size: 13.5px; color: var(--gray-500);
+      margin-bottom: 10px; max-width: 700px; }
+    .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .milestone .tag {
+      font-family: var(--mono); font-size: 11.5px;
+      background: var(--gray-150); border: 1px solid var(--gray-300);
+      border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+    }
+    .milestone .tag.est { color: var(--warn); }
+    .milestone .tag.ok  { color: var(--olive); }
+
+    /* phase card */
+    .phase-card {
+      background: var(--white); border: var(--border);
+      border-radius: var(--radius); padding: 22px 26px;
+    }
+    .phase-card h4 {
+      font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500);
+      margin: 18px 0 8px;
+    }
+    .phase-card h4:first-child { margin-top: 0; }
+    .verify, .rollback {
+      background: var(--gray-150); border-radius: 8px;
+      padding: 12px 16px; font-size: 13.5px; margin-top: 14px;
+    }
+    .verify strong { color: var(--olive); }
+    .rollback strong { color: var(--warn); }
+
+    /* code panel */
+    .code {
+      background: #121110; border-radius: 12px;
+      padding: 16px 20px; overflow-x: auto; margin: 10px 0;
+    }
+    .code pre {
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      color: #F5F3EC; white-space: pre;
+    }
+    .code .kw  { color: var(--clay); }
+    .code .str { color: var(--olive); }
+    .code .cm  { color: var(--gray-500); }
+    .code .fn  { color: #C9B98A; }
+    .code .new { background: rgba(143, 165, 110, 0.13); display: block; }
+
+    /* table */
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0;
+      overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500);
+      background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12px; }
+    .tbl td.num { font-family: var(--mono); font-size: 12px; text-align: right; }
+    .tbl td.ok { color: var(--olive); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* callout */
+    .callout {
+      background: var(--white); border: var(--border);
+      border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 16px 20px; margin: 14px 0;
+      font-size: 13.5px; color: var(--gray-700); max-width: 880px;
+    }
+    .callout .ct {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--warn); margin-bottom: 4px;
+    }
+    .callout.crit { border-left-color: var(--rust); }
+    .callout.crit .ct { color: var(--rust); }
+    .callout.ok { border-left-color: var(--olive); }
+    .callout.ok .ct { color: var(--olive); }
+
+    /* risk table */
+    .risks {
+      border: var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat); color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · robot-islands · SI-units rework · Phase 5</div>
+      <h1>CO₂ sinks — <code>wastewater_treatment</code>, <code>exhaust_scrubber</code>, <code>plant_a_tree</code></h1>
+      <div class="prompt-box">
+        <span class="label">Spec</span>
+        Companion spec at <code>specs/2026-05-28-si-units-phase5-co2-sinks</code>.
+        Phase 2 of the SI-units rework wired CO₂ <em>accrual</em>
+        (producer-side emissions add to <code>state.co2Kg</code>); Phase 5
+        wires the <em>drains</em>. Two existing T2 buildings
+        (<code>wastewater_treatment</code>, <code>exhaust_scrubber</code>)
+        gain an optional <code>co2CaptureKgPerCycle</code> field; one new
+        T1 building (<code>plant_a_tree</code>) enters the catalog as a
+        pure CO₂ sink. The drain integrator hook in
+        <code>advanceIsland</code>'s segment loop subtracts kg-per-cycle
+        from <code>state.co2Kg</code> per running sink, clamped at zero.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Effort</div><div class="v accent">~4 hours</div></div>
+      <div class="cell"><div class="k">Sub-phases</div><div class="v">5 (Phase 0–4)</div></div>
+      <div class="cell"><div class="k">Commits</div><div class="v">4</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v ok">3 source · 1 test</div></div>
+    </div>
+
+    <div class="toc">
+      <span class="lbl">Phases</span>
+      <a href="#p0">Phase 0 — Baseline</a>
+      <a href="#p1">Phase 1 — BuildingDef + extensions</a>
+      <a href="#p2">Phase 2 — plant_a_tree + recipe</a>
+      <a href="#p3">Phase 3 — Drain integrator</a>
+      <a href="#p4">Phase 4 — Tests</a>
+      <a href="#vmatrix">Verification matrix</a>
+      <a href="#risks">Risks</a>
+    </div>
+
+    <!-- ============================================================= -->
+    <section>
+      <div class="sec-head"><span class="num">00</span><h2>Milestone timeline</h2></div>
+      <p class="sec-intro">Four commits, each independently revertable. Phase 4 is
+        the binding test gate — the rework is broken if the new tests don't
+        green and the existing ~2300-test suite stays green.</p>
+
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">step 0</div>
+          <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 0 — Baseline (no commit)</h3>
+            <p>Confirm Phases 1-4 of the SI-units rework are landed. <code>state.co2Kg</code> exists; accrual hook in <code>advanceIsland</code> increments it. Suite is green.</p>
+            <div class="tags"><span class="tag est">~10 min</span><span class="tag">npm test</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 1</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 1 — Extend <code>BuildingDef</code> + wire existing sinks</h3>
+            <p>Add two optional fields to the <code>BuildingDef</code> interface in <code>building-defs.ts</code>: <code>co2CaptureKgPerCycle?: number</code> and <code>co2CaptureAdjacency?: ReadonlyArray&lt;BuildingDefId&gt;</code>. Extend <code>wastewater_treatment</code> and <code>exhaust_scrubber</code> defs with the values per spec §02. ~15 LOC.</p>
+            <div class="tags"><span class="tag est">~30 min</span><span class="tag">building-defs.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 2</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 2 — <code>plant_a_tree</code> def + no-op recipe + category</h3>
+            <p>Add the new T1 def to <code>BUILDING_DEFS</code>. Add an <code>'environment'</code> entry to <code>RecipeCategory</code> at <a class="cite">recipes.ts:1111</a> and <a class="cite">recipes.ts:1121</a> (<code>ALL_RECIPE_CATEGORIES</code>). Add the no-op recipe to <code>RECIPES</code>. ~25 LOC.</p>
+            <div class="tags"><span class="tag est">~45 min</span><span class="tag">building-defs.ts</span><span class="tag">recipes.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 3</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Phase 3 — Drain hook in <code>advanceIsland</code> segment loop</h3>
+            <p>Append the drain block to the segment integrator, right after Phase 2's accrual hook. Includes the zero-clamp (<code>Math.max(0, ...)</code>), the adjacency gate (read <code>co2CaptureAdjacency</code>, lookup neighbors), and the running-factor scaling. ~25 LOC in <code>economy.ts</code>.</p>
+            <div class="tags"><span class="tag est">~75 min</span><span class="tag">economy.ts</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="when">step 4</div>
+          <div class="dot-col"><span class="dot gate"></span></div>
+          <div class="body">
+            <h3>Phase 4 — Correctness tests (binding gate)</h3>
+            <p>~8 new test cases in <code>economy.test.ts</code> per spec §06: single-source accrual, adjacent-scrubber drain, standalone wastewater, plant_a_tree slow drain, zero-clamp, adjacency gate behaviour, default-on absence-of-adjacency, and existing-suite continuity.</p>
+            <div class="tags"><span class="tag est">~75 min</span><span class="tag">economy.test.ts</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p0">
+      <div class="sec-head"><span class="num">01</span><h2>Phase 0 — Baseline</h2></div>
+      <p class="sec-intro">No code change. Establish that Phases 1-4 of the
+        SI-units rework are landed and the suite is green before touching
+        anything.</p>
+
+      <div class="phase-card">
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Confirm <code>state.co2Kg</code> exists on <code>IslandState</code> (added in Phase 1 of the rework).</li>
+          <li>Confirm Phase 2's accrual hook is live — grep for <code>state.co2Kg +=</code> or <code>co2Kg = state.co2Kg +</code> inside <code>advanceIsland</code>'s segment loop in <a class="cite">economy.ts</a> (expected near line ~1600, after the rate-integration step).
+            <div class="code"><pre>grep -nE 'state\.co2Kg\s*[+-]?=' src/economy.ts</pre></div>
+          </li>
+          <li>Run the full test suite. Confirm green.
+            <div class="code"><pre>npm test</pre></div>
+          </li>
+          <li>Note the test count. The Phase 4 commit body cites delta vs. this baseline.</li>
+          <li>If <code>state.co2Kg</code> isn't on <code>IslandState</code>, or the accrual hook isn't wired, Phase 5 can't start — go back to Phase 1/2 of the rework first.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> exits 0. <code>state.co2Kg</code> grep returns at least one match in <code>advanceIsland</code>. No git changes yet.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;N/A — no changes made.</div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p1">
+      <div class="sec-head"><span class="num">02</span><h2>Phase 1 — <code>BuildingDef</code> + sink extensions</h2></div>
+      <p class="sec-intro">Smallest diff that defines the schema. No runtime
+        behaviour changes yet — the new fields are not yet read by the
+        integrator (that lands in Phase 3).</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/building-defs.ts</code> — extend <code>BuildingDef</code> interface (~near the existing <code>adjacencyBuffs?</code> declaration at <a class="cite">building-defs.ts:461</a>).</li>
+          <li><code>src/building-defs.ts:1621</code> — extend <code>wastewater_treatment</code> def.</li>
+          <li><code>src/building-defs.ts:1639</code> — extend <code>exhaust_scrubber</code> def.</li>
+        </ul>
+
+        <h4>Interface extension</h4>
+        <div class="code"><pre><span class="cm">// src/building-defs.ts — add two optional fields to BuildingDef.</span>
+<span class="kw">export interface</span> BuildingDef {
+  <span class="cm">/* …existing fields… */</span>
+<span class="new">  <span class="cm">/** §si-units rev-16 §7.4: CO₂ captured per recipe cycle when this</span></span>
+<span class="new"><span class="cm">   *  building is running. Drained from `state.co2Kg` by the integrator</span></span>
+<span class="new"><span class="cm">   *  in `advanceIsland`. Clamped at zero — sinks don't go negative. */</span></span>
+<span class="new">  readonly co2CaptureKgPerCycle?: number;</span>
+<span class="new">  <span class="cm">/** §si-units rev-16 §7.4: optional adjacency gate for CO₂ capture.</span></span>
+<span class="new"><span class="cm">   *  If set, the drain fires only when at least one 4-neighbor</span></span>
+<span class="new"><span class="cm">   *  building's defId matches an entry. Absent → drain unconditionally</span></span>
+<span class="new"><span class="cm">   *  (wastewater_treatment uses the unconditional path). */</span></span>
+<span class="new">  readonly co2CaptureAdjacency?: ReadonlyArray&lt;BuildingDefId&gt;;</span>
+}</pre></div>
+
+        <h4><code>wastewater_treatment</code> — extend at <a class="cite">building-defs.ts:1621</a></h4>
+        <div class="code"><pre>  wastewater_treatment: {
+    id: <span class="str">'wastewater_treatment'</span>,
+    displayName: <span class="str">'Wastewater Treatment'</span>,
+    category: <span class="str">'special'</span>,
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x4a7060,
+    stroke: 0x0a1810,
+    power: { consumes: 30 },
+    placementCost: { steel: 50, gear: 10 },
+    glyph: <span class="str">'⌇'</span>,
+<span class="new">    <span class="cm">// §si-units rev-16 §7.4: algae bioreactor / activated-sludge analog</span></span>
+<span class="new">    <span class="cm">// absorbs CO₂. Unconditional drain — no adjacency gate.</span></span>
+<span class="new">    co2CaptureKgPerCycle: 5,</span>
+  },</pre></div>
+
+        <h4><code>exhaust_scrubber</code> — extend at <a class="cite">building-defs.ts:1639</a></h4>
+        <div class="code"><pre>  exhaust_scrubber: {
+    id: <span class="str">'exhaust_scrubber'</span>,
+    displayName: <span class="str">'Exhaust Scrubber'</span>,
+    category: <span class="str">'special'</span>,
+    tier: 2,
+    footprint: SHAPES.single,
+    fill: 0x807060,
+    stroke: 0x201810,
+    power: { consumes: 20 },
+    placementCost: { steel: 30, gear: 5 },
+    glyph: <span class="str">'⌗'</span>,
+<span class="new">    <span class="cm">// §si-units rev-16 §7.4: post-combustion flue-gas capture, gated on</span></span>
+<span class="new">    <span class="cm">// adjacency to a CO₂-producing source per real-world operation.</span></span>
+<span class="new">    co2CaptureKgPerCycle: 20,</span>
+<span class="new">    co2CaptureAdjacency: [<span class="str">'coal_gen'</span>, <span class="str">'biomass_plant'</span>, <span class="str">'cement_mill'</span>, <span class="str">'limekiln'</span>],</span>
+  },</pre></div>
+
+        <div class="callout">
+          <div class="ct">Aside — adjacency-source list</div>
+          The four ids (<code>coal_gen</code>, <code>biomass_plant</code>,
+          <code>cement_mill</code>, <code>limekiln</code>) are the high-emission
+          buildings already wired to the existing soft-gate exhaust-scrubber
+          adjacency at <a class="cite">building-defs.ts:1116</a>,
+          <a class="cite">building-defs.ts:2947</a>, etc. Phase 5 doesn't add
+          new gates — it reuses the existing emission-class membership.
+          If a future Phase adds a fifth emitter, append its id here.
+        </div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Extend the <code>BuildingDef</code> interface with the two optional fields.</li>
+          <li>Add the <code>co2CaptureKgPerCycle: 5</code> line to <code>wastewater_treatment</code> at line 1621.</li>
+          <li>Add the two new lines to <code>exhaust_scrubber</code> at line 1639.</li>
+          <li>Run <code>npx tsc -b</code>. Must be clean under <code>strict</code> + <code>noUnusedLocals</code>.</li>
+          <li>Run <code>npm test</code>. The suite must remain green — the new fields are not yet read.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>npx tsc -b</code> clean. <code>grep -n 'co2CaptureKgPerCycle' src/building-defs.ts</code> shows 3 matches (interface + 2 defs).</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. The fields are unread; no save-file impact.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(si-units): add co2CaptureKgPerCycle field to BuildingDef
+
+Adds two optional schema fields to BuildingDef:
+  - co2CaptureKgPerCycle: drained per recipe cycle when running
+  - co2CaptureAdjacency: optional 4-neighbor gate on the drain
+
+Extends wastewater_treatment (5 kg/cycle, unconditional) and
+exhaust_scrubber (20 kg/cycle, gated to coal_gen / biomass_plant /
+cement_mill / limekiln adjacency) per SI-units rework rev-16 §7.4.
+
+The integrator hook lands in a follow-up commit; this commit is
+no-op at runtime — fields exist but are not yet read.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase5-co2-sinks
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p2">
+      <div class="sec-head"><span class="num">03</span><h2>Phase 2 — <code>plant_a_tree</code> def + no-op recipe</h2></div>
+      <p class="sec-intro">New T1 placeable building. 1×1 footprint, forest
+        biome only, zero power, zero inputs, zero outputs. Pure CO₂ sink at
+        0.1 kg/cycle. Synthetic no-op recipe is the implementer path picked
+        in spec §03.1.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/recipes.ts:1111</code> — extend <code>RecipeCategory</code> with <code>'environment'</code>.</li>
+          <li><code>src/recipes.ts:1121</code> — extend <code>ALL_RECIPE_CATEGORIES</code> with the same.</li>
+          <li><code>src/recipes.ts</code> (RECIPES table, RecipeId union) — add <code>plant_a_tree</code> no-op recipe.</li>
+          <li><code>src/building-defs.ts</code> (BUILDING_DEFS, BuildingDefId union) — add the <code>plant_a_tree</code> def.</li>
+        </ul>
+
+        <h4>Category extension — <a class="cite">recipes.ts:1111</a></h4>
+        <div class="code"><pre><span class="kw">export type</span> RecipeCategory =
+  | <span class="str">'extraction'</span>
+  | <span class="str">'smelting'</span>
+  | <span class="str">'chemistry'</span>
+  | <span class="str">'manufacturing'</span>
+  | <span class="str">'electronics'</span>
+  | <span class="str">'power'</span>
+  | <span class="str">'logistics'</span>
+<span class="new">  | <span class="str">'environment'</span>;</span>
+
+<span class="kw">export const</span> ALL_RECIPE_CATEGORIES: ReadonlyArray&lt;RecipeCategory&gt; = [
+  <span class="str">'extraction'</span>,
+  <span class="str">'smelting'</span>,
+  <span class="str">'chemistry'</span>,
+  <span class="str">'manufacturing'</span>,
+  <span class="str">'electronics'</span>,
+  <span class="str">'power'</span>,
+  <span class="str">'logistics'</span>,
+<span class="new">  <span class="str">'environment'</span>,</span>
+];</pre></div>
+
+        <div class="callout">
+          <div class="ct">Aside — category-keyed records</div>
+          Adding a category may force defaults in places that initialise
+          per-category records (e.g. skill-tree multipliers default to 1.0).
+          Grep <code>ALL_RECIPE_CATEGORIES</code> for consumers; if any
+          construct a complete record over the array, the new entry will
+          automatically default. If a code path enumerates the union
+          explicitly via switch, <code>tsc -b</code> exhaustiveness will
+          flag it — fix on the same commit.
+        </div>
+
+        <h4>No-op recipe</h4>
+        <div class="code"><pre><span class="cm">// src/recipes.ts — append to RECIPES table.</span>
+<span class="new">  plant_a_tree: {</span>
+<span class="new">    cycleSec: 60,</span>
+<span class="new">    inputs: {},</span>
+<span class="new">    outputs: {},</span>
+<span class="new">    category: <span class="str">'environment'</span>,</span>
+<span class="new">  },</span></pre></div>
+
+        <p class="body"><strong>RecipeId union</strong> typically derives from
+          the <code>RECIPES</code> table via <code>keyof typeof RECIPES</code>
+          or an explicit union — confirm by re-reading the local file. If the
+          union is explicit, append <code>| 'plant_a_tree'</code>; if derived,
+          no action needed.</p>
+
+        <h4>Building def</h4>
+        <div class="code"><pre><span class="cm">// src/building-defs.ts — append to BUILDING_DEFS table.</span>
+<span class="new">  plant_a_tree: {</span>
+<span class="new">    id: <span class="str">'plant_a_tree'</span>,</span>
+<span class="new">    displayName: <span class="str">'Plant a Tree'</span>,</span>
+<span class="new">    category: <span class="str">'special'</span>,</span>
+<span class="new">    tier: 1,</span>
+<span class="new">    footprint: SHAPES.single,</span>
+<span class="new">    fill: 0x4a8030,           <span class="cm">// forest-canopy green</span></span>
+<span class="new">    stroke: 0x0a2008,</span>
+<span class="new">    power: {},                <span class="cm">// no power draw</span></span>
+<span class="new">    placementCost: { wood: 5, fresh_water: 1 },</span>
+<span class="new">    glyph: <span class="str">'🌲'</span>,</span>
+<span class="new">    requiredBiomes: [<span class="str">'forest'</span>],</span>
+<span class="new">    co2CaptureKgPerCycle: 0.1,</span>
+<span class="new">  },</span></pre></div>
+
+        <p class="body"><strong>BuildingDefId union</strong> typically also
+          derives via <code>keyof typeof BUILDING_DEFS</code>. If explicit,
+          add <code>| 'plant_a_tree'</code>; if derived, nothing more.
+          The <code>co2CaptureAdjacency</code> field is intentionally
+          absent — plant_a_tree drains unconditionally when its no-op
+          recipe progresses.</p>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Extend <code>RecipeCategory</code> at <a class="cite">recipes.ts:1111</a> with <code>'environment'</code>.</li>
+          <li>Add the same to <code>ALL_RECIPE_CATEGORIES</code> at <a class="cite">recipes.ts:1121</a>.</li>
+          <li>Add the no-op recipe entry to <code>RECIPES</code>.</li>
+          <li>Run <code>npx tsc -b</code>. If any switch-on-RecipeCategory becomes non-exhaustive, fix in the same commit (default to <code>1.0</code> for skill-multiplier records, <code>noop</code>/skip for behavioural switches).</li>
+          <li>Add the <code>plant_a_tree</code> def to <code>BUILDING_DEFS</code>.</li>
+          <li>Update the BuildingDefId / RecipeId unions if they're explicit (sniff by grepping for the leftmost existing id).</li>
+          <li>Run <code>npm test</code>. Suite must remain green — plant_a_tree exists but no integrator code references it yet.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>npx tsc -b</code> clean. <code>grep -n 'plant_a_tree' src/</code> shows entries in both <code>recipes.ts</code> and <code>building-defs.ts</code>.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. No save-file impact since no save has yet placed a plant_a_tree.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(si-units): add plant_a_tree T1 def + 'environment' category
+
+New T1 building, 1×1 footprint, forest-biome only, zero power.
+No inputs or outputs — pure CO₂ sink at 0.1 kg/cycle on a 60 s
+no-op recipe. Placement cost 5 wood + 1 fresh_water (sapling +
+initial watering — hand-rolled, no BOM source).
+
+Adds an 'environment' RecipeCategory for skill-tree / specialization
+tagging. Per-category multiplier defaults pick up the new entry
+automatically (record-keyed by the ALL_RECIPE_CATEGORIES array).
+
+The integrator drain hook lands in the next commit; this one is
+no-op at runtime — the def is placeable but the CO₂ sink mechanic
+is wired in Phase 3.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase5-co2-sinks §03
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p3">
+      <div class="sec-head"><span class="num">04</span><h2>Phase 3 — Drain integrator hook</h2></div>
+      <p class="sec-intro">The runtime payoff. Append the drain block to
+        <code>advanceIsland</code>'s segment loop, immediately after Phase 2
+        of the rework's accrual hook. Reads
+        <code>def.co2CaptureKgPerCycle</code>, applies the adjacency gate
+        when set, scales by segment duration and recipe cycle, clamps at
+        zero.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/economy.ts</code> — segment integrator inside <code>advanceIsland</code>, after the existing CO₂ accrual hook (approx line ~1600 per the rework's Phase 2 plan).</li>
+        </ul>
+
+        <h4>Reuse — adjacency helper</h4>
+        <p class="body">The 4-neighbor matching logic is already implemented
+          in <a class="cite">adjacency.ts:93</a> as the private
+          <code>neighborMatches</code> + the public <code>computeBuffStack</code>
+          path. Phase 5 doesn't reuse those directly — it needs a much
+          lighter "does ANY neighbor's defId appear in the gate list?"
+          check. Inline that as a small local helper inside
+          <code>economy.ts</code> (or factor into a new
+          <code>hasAnyNeighborWithDefId</code> export in
+          <code>adjacency.ts</code> — implementer choice; the former is
+          smaller, the latter is symmetric with existing factoring).</p>
+
+        <h4>Pseudocode — drain block</h4>
+        <div class="code"><pre><span class="cm">// economy.ts — append to the segment integrator, after Phase 2's accrual.</span>
+<span class="cm">// `segmentDurationSec` is the integrated time slice; `b` is a placed</span>
+<span class="cm">// building; `def` is the matching BuildingDef.</span>
+
+<span class="new"><span class="kw">for</span> (<span class="kw">const</span> b <span class="kw">of</span> state.buildings) {</span>
+<span class="new">  <span class="kw">const</span> def = BUILDING_DEFS[b.defId];</span>
+<span class="new">  <span class="kw">const</span> capture = def.co2CaptureKgPerCycle ?? 0;</span>
+<span class="new">  <span class="kw">if</span> (capture &lt;= 0) <span class="kw">continue</span>;</span>
+
+<span class="new">  <span class="cm">// Adjacency gate — present on exhaust_scrubber only in Phase 5.</span></span>
+<span class="new">  <span class="kw">if</span> (def.co2CaptureAdjacency) {</span>
+<span class="new">    <span class="kw">const</span> has = <span class="fn">hasNeighborWithAnyDefId</span>(b, state.buildings, def.co2CaptureAdjacency);</span>
+<span class="new">    <span class="kw">if</span> (!has) <span class="kw">continue</span>;</span>
+<span class="new">  }</span>
+
+<span class="new">  <span class="cm">// Cycles this segment — derived from recipe cycleSec, scaled by the</span></span>
+<span class="new">  <span class="cm">// running factor (heat throttle, brownout, etc.). resolveRecipe is</span></span>
+<span class="new">  <span class="cm">// the same path the rate integrator uses; running factor mirrors the</span></span>
+<span class="new">  <span class="cm">// production scaling so a half-throttled scrubber drains at half rate.</span></span>
+<span class="new">  <span class="kw">const</span> recipe = <span class="fn">resolveRecipe</span>(def, b, terrainAt, ctx?.inventory ?? state.inventory);</span>
+<span class="new">  <span class="kw">if</span> (!recipe) <span class="kw">continue</span>;  <span class="cm">// recipe-less building somehow → skip</span></span>
+<span class="new">  <span class="kw">const</span> factor = <span class="fn">runningFactorFor</span>(b, state, recipe);</span>
+<span class="new">  <span class="kw">const</span> cyclesThisSegment = (segmentDurationSec / recipe.cycleSec) * factor;</span>
+
+<span class="new">  <span class="kw">const</span> drainKg = capture * cyclesThisSegment;</span>
+<span class="new">  state.co2Kg = <span class="fn">Math.max</span>(0, state.co2Kg - drainKg);</span>
+<span class="new">}</span></pre></div>
+
+        <h4>Helper — <code>hasNeighborWithAnyDefId</code></h4>
+        <p class="body">Local to <code>economy.ts</code> (or co-located with
+          the rest of the adjacency primitives if the implementer prefers
+          factoring). Walks the focal's 4-neighbor border via the existing
+          <code>borderTiles</code> / <code>footprintKeySet</code> primitives
+          from <code>adjacency.ts</code>; returns <code>true</code> on first
+          matching neighbor.</p>
+
+        <div class="code"><pre><span class="new"><span class="kw">function</span> <span class="fn">hasNeighborWithAnyDefId</span>(</span>
+<span class="new">  focal: PlacedBuilding,</span>
+<span class="new">  buildings: ReadonlyArray&lt;PlacedBuilding&gt;,</span>
+<span class="new">  defIds: ReadonlyArray&lt;BuildingDefId&gt;,</span>
+<span class="new">): <span class="kw">boolean</span> {</span>
+<span class="new">  <span class="kw">const</span> fp = <span class="fn">footprintKeySet</span>(focal, BUILDING_DEFS);</span>
+<span class="new">  <span class="kw">const</span> border = <span class="fn">borderTiles</span>(fp);</span>
+<span class="new">  <span class="kw">const</span> wanted = <span class="kw">new</span> Set(defIds);</span>
+<span class="new">  <span class="kw">for</span> (<span class="kw">const</span> other <span class="kw">of</span> buildings) {</span>
+<span class="new">    <span class="kw">if</span> (other.id === focal.id) <span class="kw">continue</span>;</span>
+<span class="new">    <span class="kw">if</span> (!wanted.<span class="fn">has</span>(other.defId)) <span class="kw">continue</span>;</span>
+<span class="new">    <span class="kw">if</span> (<span class="fn">touchesBorder</span>(other, border, BUILDING_DEFS)) <span class="kw">return</span> <span class="kw">true</span>;</span>
+<span class="new">  }</span>
+<span class="new">  <span class="kw">return</span> <span class="kw">false</span>;</span>
+<span class="new">}</span></pre></div>
+
+        <div class="callout crit">
+          <div class="ct">Load-bearing detail — zero clamp</div>
+          The <code>Math.max(0, state.co2Kg - drainKg)</code> clamp is
+          essential. Phase 6 (Weather) reads <code>state.co2Kg</code> for
+          storm-probability thresholds. If the integrator allowed negative
+          values, a heavily-scrubbed island would have negative CO₂ — when
+          summed for world-total emissions, Phase 6's weather logic would
+          behave erratically (negative summands cancelling other islands'
+          emissions). The clamp is the correctness contract.
+        </div>
+
+        <div class="callout">
+          <div class="ct">Order of operations</div>
+          Per spec §04 closing paragraph: <strong>accrual fires first, drain second</strong>
+          within each segment. This matches real industrial behaviour — a
+          scrubber captures emissions <em>after</em> the gen produces them,
+          not before. Don't reorder.
+        </div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Locate the existing CO₂ accrual hook in <code>advanceIsland</code>'s segment loop. The drain block goes immediately after it, before the segment loop body's closing brace.</li>
+          <li>Add the <code>hasNeighborWithAnyDefId</code> helper near the top of <code>economy.ts</code> (or in <code>adjacency.ts</code>; export from there if so).</li>
+          <li>Verify the helper imports — <code>footprintKeySet</code>, <code>borderTiles</code>, <code>touchesBorder</code> from <a class="cite">adjacency.ts</a>; <code>PlacedBuilding</code>, <code>BuildingDef</code>, <code>BuildingDefId</code> from <a class="cite">building-defs.ts</a>.</li>
+          <li>Insert the drain block.</li>
+          <li>Run <code>npx tsc -b</code> — must be clean.</li>
+          <li>Run <code>npm test</code>. Existing tests must remain green. New tests land in Phase 4.</li>
+        </ol>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npm test</code> green. <code>tsc -b</code> clean. <code>grep -nE 'co2CaptureKgPerCycle|hasNeighborWithAnyDefId' src/economy.ts</code> finds the new block.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. Phase 1+2 schema remains (harmless without the reader); save files load identically.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>feat(si-units): wire CO₂ sink drain in advanceIsland segment loop
+
+Drains state.co2Kg per running sink with co2CaptureKgPerCycle &gt; 0.
+Optional adjacency gate (co2CaptureAdjacency) restricts the drain
+to buildings with a matching 4-neighbor — exhaust_scrubber requires
+adjacency to coal_gen / biomass_plant / cement_mill / limekiln.
+
+Drain math:
+  cycles_this_segment = (segmentDurationSec / recipe.cycleSec) × runningFactor
+  drainKg = co2CaptureKgPerCycle × cycles_this_segment
+  state.co2Kg = max(0, state.co2Kg - drainKg)
+
+The zero clamp is load-bearing — Phase 6 weather thresholds work
+from absolute non-negative kg.
+
+Order vs. Phase 2 accrual: accrual first, drain second, per industrial
+operation. Tests in next commit.
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase5-co2-sinks §04
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="p4">
+      <div class="sec-head"><span class="num">05</span><h2>Phase 4 — Correctness tests (binding gate)</h2></div>
+      <p class="sec-intro">~8 new test cases in <code>economy.test.ts</code>
+        covering the §06 scenarios from the spec. Append a new
+        <code>describe('CO₂ sinks', …)</code> block rather than scattering
+        into existing suites.</p>
+
+      <div class="phase-card">
+        <h4>Files</h4>
+        <ul class="body">
+          <li><code>src/economy.test.ts</code> — append a new <code>describe</code> block. Reuse the file's existing <code>makeIsland()</code> / placement helpers.</li>
+        </ul>
+
+        <h4>Test list — 8 cases</h4>
+        <table class="tbl">
+          <thead><tr>
+            <th>#</th>
+            <th>Test name</th>
+            <th>What it asserts</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="num">1</td>
+              <td class="slate">single-source accrual baseline</td>
+              <td>coal_gen alone for 60 s → <code>state.co2Kg</code> matches Phase 2's accrual model exactly. Establishes the baseline for net-CO₂ deltas. Asserts <code>≈ 72.6 kg</code> (1.21 kg/s × 60 s) within float tolerance.</td>
+            </tr>
+            <tr>
+              <td class="num">2</td>
+              <td class="slate">adjacent exhaust_scrubber drains 20 kg/cycle</td>
+              <td>coal_gen + adjacent exhaust_scrubber, 60 s. Net <code>≈ 52.6 kg</code> (accrual 72.6, drain 20). Confirms accrual + drain compose correctly per segment.</td>
+            </tr>
+            <tr>
+              <td class="num">3</td>
+              <td class="slate">non-adjacent scrubber does NOT drain</td>
+              <td>coal_gen + exhaust_scrubber placed 5 tiles away (not 4-neighbor). Net <code>≈ 72.6 kg</code> (drain didn't fire). Confirms the adjacency gate works.</td>
+            </tr>
+            <tr>
+              <td class="num">4</td>
+              <td class="slate">scrubber adjacent to non-emitter does NOT drain</td>
+              <td>exhaust_scrubber adjacent to a logger (not in co2CaptureAdjacency list). Even though scrubber is running, no drain. Net change: <code>= 0</code>. Confirms only matching neighbor defIds trip the gate.</td>
+            </tr>
+            <tr>
+              <td class="num">5</td>
+              <td class="slate">standalone wastewater_treatment drains unconditionally</td>
+              <td>wastewater_treatment isolated, state.co2Kg seeded to 100 kg. After 60 s (1 cycle): <code>= 95 kg</code>. Confirms the no-adjacency-field path drains without a neighbor check.</td>
+            </tr>
+            <tr>
+              <td class="num">6</td>
+              <td class="slate">zero clamp — drain at empty pool stays at zero</td>
+              <td>wastewater_treatment, state.co2Kg = 0. After 60 s: <code>= 0</code> (not negative). Critical for Phase 6 correctness.</td>
+            </tr>
+            <tr>
+              <td class="num">7</td>
+              <td class="slate">plant_a_tree slow drain</td>
+              <td>plant_a_tree on forest tile, state.co2Kg = 10 kg. After 600 s (10 min, 10 cycles): <code>= 9 kg</code> (10 × 0.1 = 1 kg drained). Confirms the no-input / no-output path works through the synthetic recipe.</td>
+            </tr>
+            <tr>
+              <td class="num">8</td>
+              <td class="slate">multiple scrubbers stack additively</td>
+              <td>coal_gen + 3 adjacent exhaust_scrubbers, 60 s. Accrual 72.6, drain 60 (3 × 20). Net <code>≈ 12.6 kg</code>. Confirms drains compose across multiple sinks.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Test skeleton — 3 representative cases</h4>
+        <div class="code"><pre><span class="kw">describe</span>(<span class="str">'CO₂ sinks (Phase 5)'</span>, () =&gt; {
+  <span class="kw">it</span>(<span class="str">'baseline: coal_gen alone accrues ~72.6 kg in 60 s'</span>, () =&gt; {
+    <span class="kw">const</span> { state, terrainAt } = <span class="fn">makeIsland</span>([
+      { defId: <span class="str">'coal_gen'</span>, x: 5, y: 5 },
+    ]);
+    state.inventory.coal = 10_000;  <span class="cm">// avoid input starvation</span>
+    state.co2Kg = 0;
+    <span class="fn">advanceIsland</span>(state, terrainAt, 60_000);
+    <span class="fn">expect</span>(state.co2Kg).<span class="fn">toBeCloseTo</span>(72.6, 1);
+  });
+
+  <span class="kw">it</span>(<span class="str">'adjacent exhaust_scrubber drains 20 kg/cycle'</span>, () =&gt; {
+    <span class="kw">const</span> { state, terrainAt } = <span class="fn">makeIsland</span>([
+      { defId: <span class="str">'coal_gen'</span>, x: 5, y: 5 },
+      { defId: <span class="str">'exhaust_scrubber'</span>, x: 7, y: 5 },  <span class="cm">// 4-neighbor</span>
+    ]);
+    state.inventory.coal = 10_000;
+    state.co2Kg = 0;
+    <span class="fn">advanceIsland</span>(state, terrainAt, 60_000);
+    <span class="fn">expect</span>(state.co2Kg).<span class="fn">toBeCloseTo</span>(52.6, 1);  <span class="cm">// 72.6 − 20</span>
+  });
+
+  <span class="kw">it</span>(<span class="str">'zero clamp — drain at empty pool stays at zero'</span>, () =&gt; {
+    <span class="kw">const</span> { state, terrainAt } = <span class="fn">makeIsland</span>([
+      { defId: <span class="str">'wastewater_treatment'</span>, x: 5, y: 5 },
+    ]);
+    state.co2Kg = 0;
+    <span class="fn">advanceIsland</span>(state, terrainAt, 60_000);
+    <span class="fn">expect</span>(state.co2Kg).<span class="fn">toBe</span>(0);
+  });
+
+  <span class="cm">// Tests 3, 4, 5, 7, 8 follow the same shape — see test list table above.</span>
+});</pre></div>
+
+        <h4>Steps</h4>
+        <ol class="body">
+          <li>Open <code>src/economy.test.ts</code>; find an idiomatic location for the new <code>describe</code> block (e.g. after the last existing top-level <code>describe</code>).</li>
+          <li>Reuse the file's existing <code>makeIsland()</code> helper if present; otherwise factor a local helper following the file's convention. Each test should be self-contained — no shared mutable state across <code>it()</code> blocks.</li>
+          <li>For Test 4 (logger adjacency), pick any non-emitter id that exists in the catalog. <code>logger</code> is canonical; verify the def-id by grep before writing the test.</li>
+          <li>For Test 7 (plant_a_tree), make sure the <code>makeIsland</code> helper threads a forest biome through <code>terrainAt</code> — plant_a_tree's biome gate must pass or the recipe won't run.</li>
+          <li>Run <code>npx vitest run src/economy.test.ts</code> — all new tests must pass.</li>
+          <li>Run the full <code>npm test</code>. Expected delta: +8 tests, all green; no existing test goes red.</li>
+          <li>Record before/after test counts for the commit message.</li>
+        </ol>
+
+        <div class="callout">
+          <div class="ct">Float tolerance — toBeCloseTo</div>
+          The integrator's <code>cycles_this_segment = duration / cycleSec</code>
+          accumulates float drift across segments. Use
+          <code>toBeCloseTo(value, 1)</code> (1 decimal place) on all kg-quantity
+          assertions, not <code>toBe(value)</code>. The zero-clamp test
+          (#6) is the only exception — <code>0</code> is exact.
+        </div>
+
+        <div class="verify"><strong>VERIFY</strong> &nbsp;<code>npx vitest run -t 'CO₂ sinks'</code> shows 8 passing. Full <code>npm test</code> green; total count goes up by exactly 8.</div>
+        <div class="rollback"><strong>ROLLBACK</strong> &nbsp;Single-commit revert. Phase 1-3 mechanics remain in place and continue working without the test coverage; not recommended but harmless.</div>
+
+        <h4>Commit message</h4>
+        <div class="code"><pre>test(si-units): CO₂ sink accrual + drain integration tests
+
+Eight new cases under describe('CO₂ sinks (Phase 5)'), covering:
+  - single-source accrual baseline (coal_gen alone)
+  - adjacent exhaust_scrubber drains 20 kg/cycle
+  - non-adjacent scrubber does NOT drain
+  - scrubber adjacent to non-emitter does NOT drain
+  - standalone wastewater_treatment drains unconditionally
+  - zero clamp — drain at empty pool stays at zero
+  - plant_a_tree slow drain on forest tile
+  - 3 adjacent scrubbers stack drains additively
+
+Tests: NNNN/NNNN passing (+8 from baseline).
+
+Spec: docs/superpowers/specs/2026-05-28-si-units-phase5-co2-sinks §06
+
+Co-Authored-By: Claude Opus 4.7 (1M context) &lt;noreply@anthropic.com&gt;</pre></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="vmatrix">
+      <div class="sec-head"><span class="num">06</span><h2>Verification matrix</h2></div>
+      <p class="sec-intro">Cross-reference: every spec requirement → phase
+        delivering it → test verifying it.</p>
+
+      <table class="tbl">
+        <thead><tr>
+          <th>Spec requirement</th>
+          <th>Phase</th>
+          <th>Verifying test / measurement</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">BuildingDef gains co2Capture fields; existing sinks wired (5 / 20 kg)</td>
+            <td class="mono">Phase 1</td>
+            <td>tsc -b clean; Phase 4 Tests 2, 5 (drain values match)</td>
+          </tr>
+          <tr>
+            <td class="slate">plant_a_tree T1 def + 'environment' category</td>
+            <td class="mono">Phase 2</td>
+            <td>Phase 4 Test 7 (drains in forest); tsc -b clean across any exhaustive RecipeCategory switch</td>
+          </tr>
+          <tr>
+            <td class="slate">plant_a_tree forest-biome gate</td>
+            <td class="mono">Phase 2</td>
+            <td>Existing biome-gate infra picks up the def; Phase 4 Test 7 verifies it runs in forest</td>
+          </tr>
+          <tr>
+            <td class="slate">Drain hook in advanceIsland segment loop</td>
+            <td class="mono">Phase 3</td>
+            <td>Phase 4 Tests 1-8 collectively exercise the hot path</td>
+          </tr>
+          <tr>
+            <td class="slate">Zero clamp (state.co2Kg never negative)</td>
+            <td class="mono">Phase 3</td>
+            <td>Phase 4 Test 6 (exact-zero assertion)</td>
+          </tr>
+          <tr>
+            <td class="slate">Adjacency gate (any 4-neighbor matches)</td>
+            <td class="mono">Phase 3</td>
+            <td>Phase 4 Tests 2, 3, 4 (positive, geometric-miss, defId-miss)</td>
+          </tr>
+          <tr>
+            <td class="slate">Multiple sinks compose additively</td>
+            <td class="mono">Phase 3</td>
+            <td>Phase 4 Test 8 (3 scrubbers × 20 kg)</td>
+          </tr>
+          <tr>
+            <td class="slate">Order: accrual before drain within segment</td>
+            <td class="mono">Phase 3</td>
+            <td>Phase 4 Test 2 (net 52.6 = accrual 72.6 − drain 20; correct only if accrual fires first)</td>
+          </tr>
+          <tr>
+            <td class="slate">Existing suite continuity</td>
+            <td class="mono">Phase 4</td>
+            <td>Final npm test green; count = pre + 8</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="risks">
+      <div class="sec-head"><span class="num">07</span><h2>Risks &amp; mitigations</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">The synthetic no-op recipe pattern (<code>inputs: {}, outputs: {}</code>) interacts badly with <code>computeRates</code> — e.g. an empty outputs map could be treated as "nothing to produce → recipe doesn't run", short-circuiting the cycle counter.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Phase 4 Test 7 (plant_a_tree drains 1 kg over 10 min) is the canary. If it fails, fall back to spec §03.1 option (b): treat any building with <code>co2CaptureKgPerCycle &gt; 0</code> and no real recipe as "always running at fixed 60s cadence" via a synthetic running-gate branch in the integrator. Trade-off: more bespoke code, but bypasses the empty-outputs edge case entirely.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Adding <code>'environment'</code> to <code>RecipeCategory</code> breaks an exhaustive switch elsewhere — e.g. skill-tree per-category multiplier construction, or a UI label switch in a recipe panel.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell"><code>tsc -b</code> in strict mode will flag any non-exhaustive switch — fix on the same Phase 2 commit. Per-category record-keyed defaults (via <code>ALL_RECIPE_CATEGORIES</code> iteration) pick up automatically. Grep <code>RecipeCategory</code> consumers before commit to short-list affected sites.</div>
+        </div>
+        <div class="row">
+          <div class="cell">A scrubber adjacent to TWO matching emitters double-drains (because the adjacency gate has no count).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">By design — the gate is a boolean ("any matching neighbor present?"), not a count. Spec §08 risk row 1 explicitly accepts this. Phase 4 doesn't test multi-emitter-per-scrubber, but the math is identical to single-emitter (drain is fixed per cycle).</div>
+        </div>
+        <div class="row">
+          <div class="cell"><code>plant_a_tree</code> with no placementCost source — the <code>{ wood: 5, fresh_water: 1 }</code> is hand-rolled, not derived from a BOM. Future BOM-derivation work may need to revise.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Spec §03 explicitly flags this as "hand-rolled." If the §15 BOM pipeline later produces a canonical value, this def updates with that revision; the CO₂-sink mechanic is independent of placement cost.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="open">
+      <div class="sec-head"><span class="num">08</span><h2>Implementation notes</h2></div>
+      <p class="sec-intro">Useful context for the implementer that didn't
+        rise to the level of a spec requirement.</p>
+
+      <ul class="body">
+        <li><strong>plant_a_tree biome gate.</strong> The <code>requiredBiomes: ['forest']</code> field plugs into the existing biome-gate infrastructure (same path used by Pyroforge's volcanic gate at <a class="cite">building-defs.ts:1686</a>). No new code; just data. Test 7 has to thread a forest <code>terrainAt</code> through <code>makeIsland</code> for the recipe to fire.</li>
+        <li><strong>Recipe "running" semantics for no-op recipes.</strong> The integrator already handles maintenance recipes with empty outputs (recipes that consume but produce nothing). The no-op recipe (empty inputs AND empty outputs) is an extension of that pattern. If <code>computeRates</code> short-circuits on empty outputs, the fallback in spec §03.1 option (b) is the escape hatch — but try option (a) first.</li>
+        <li><strong>Test <code>makeIsland</code> helpers.</strong> <code>economy.test.ts</code> has a local convention for constructing minimal islands. Re-read the file's helper patterns before writing tests; do NOT introduce a new pattern.</li>
+        <li><strong>Keep helpers module-private.</strong> <code>hasNeighborWithAnyDefId</code> stays in <code>economy.ts</code> unless a second caller materialises. If Phase 6 weather needs the same shape, factor at that point — not preemptively.</li>
+        <li><strong>No persistence migration needed.</strong> The new <code>BuildingDef</code> fields are static catalog data, not runtime state. <code>SUPPORTED_LOAD_VERSIONS</code> is untouched; existing saves load identically.</li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan · generated 2026-05-28 ·
+        spec at <code>specs/2026-05-28-si-units-phase5-co2-sinks</code> ·
+        source-of-truth <code>plans/2026-05-27-si-units-rework-foundation</code> rev-16 §7.4 ·
+        follows Phases 1-4 of the SI-units rework</p>
+    </div>
+
+  </div>
+</body>
+</html>
