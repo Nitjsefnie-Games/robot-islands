@@ -1739,8 +1739,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §8.5 T2 power: Cryogenic Generator burns cryo_coolant as fuel.
   cryogenic_generator: {
     cycleSec: 20,
-    inputs: { cryo_coolant: 1 },
-    outputs: {},
+    inputs: { cryo_coolant: 1, fresh_water: 1 },
+    outputs: { cryo_coolant_vented: 0.7, nitrogen: 0.3 },
     category: 'power',
   },
   // §8.5 T3 power: Nuclear Reactor burns nuclear_fuel_rod (T4 endgame
@@ -2789,8 +2789,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // rebalanced for idle-game scale, step #19 (×40: was 15s); bumped 600→1000
     // to reduce XP-arbitrage: T0/T1 inputs → T2-weight outputs at T1 throughput.
     cycleSec: 333,
-    inputs: { crude_oil: 1 },
-    outputs: { naphtha: 1 },
+    inputs: { crude_oil: 20 },
+    outputs: { naphtha: 3, aviation_kerosene_crude: 3, diesel: 5, heavy_oil: 6, refinery_gas: 3 },
     category: 'chemistry',
   },
   // Phase 4 — T2 deep-fraction crude oil cracker (§7.4)
@@ -2875,18 +2875,20 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   lubricant_refinery: {
     cycleSec: 333, // rebalanced for idle-game scale, step #19 (×40: was 25s); 2026-05-18 ÷3 for display visibility (was 1000s)
-    inputs: { crude_oil: 1, chlorine: 1 },
-    outputs: { lubricant: 1 },
+    inputs: { heavy_oil: 5, chlorine: 5, calcium_sulfonate: 1 },
+    outputs: { lubricant: 10 },
     category: 'chemistry',
+    exogenousFlow: 'process-losses + HCl',
     // Lubricant feeds the §4.7 per-tier maintenance recipes (see
     // `src/maintenance.ts:65-78` — every tier from T1 to T6 lists
     // lubricant in its bill of materials).
   },
   diesel_refinery: {
     cycleSec: 400, // rebalanced for idle-game scale, step #19 (×40: was 30s); 2026-05-18 ÷3 for display visibility (was 1200s)
-    inputs: { crude_oil: 2, naphtha: 1 },
-    outputs: { diesel: 1 },
+    inputs: { heavy_oil: 10, hydrogen: 1 },
+    outputs: { diesel: 10, sulfur: 0.2 },
     category: 'chemistry',
+    exogenousFlow: 'hydrocracker-light-ends-vented',
     // §11.7 drone tier: diesel = T2 drone fuel. The drone fuel-tier
     // selection isn't wired into drones.ts yet — diesel is a
     // stockpile-only fuel until §11.7 lands.
@@ -2940,9 +2942,10 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   kerosene_refinery: {
     cycleSec: 400, // rebalanced for idle-game scale, step #19 (×20: was 60s); 2026-05-18 ÷3 for display visibility (was 1200s)
-    inputs: { crude_oil: 3, hydrogen: 1 },
-    outputs: { aviation_kerosene: 1 },
+    inputs: { aviation_kerosene_crude: 10, hydrogen: 1 },
+    outputs: { aviation_kerosene: 10 },
     category: 'chemistry',
+    exogenousFlow: 'hydrotreatment-H2S-and-light-gas',
     // §11.7: aviation_kerosene = T3 drone fuel. Drone fuel-tier
     // selection STILL-DEFERRED.
   },

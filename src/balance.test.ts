@@ -113,6 +113,9 @@ describe('Balance — every consumed resource has at least one producer', () => 
     // T1 composite (§12.3) — Foundation Kit assembly recipe handled
     // outside the per-building RECIPES map (placement-time consumable).
     'foundation_kit',
+    // Phase 2 §3.4 — calcium_sulfonate is an expansion-hook resource
+    // (lubricant additive); producer recipe lands in Phase 10.
+    'calcium_sulfonate',
     // T2 components built outside the basic recipes map — computing-module chain
     // shipped in step 9 (pcb_etcher → circuit_assembler → processor_fab →
     // compute_module_fab).
