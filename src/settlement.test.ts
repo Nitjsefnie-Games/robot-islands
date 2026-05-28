@@ -192,7 +192,8 @@ describe('per-tier vehicle stats', () => {
     const { world, homeSpec, homeState, targetSpec, islandStates } = makeTestWorld();
     homeState.inventory.foundation_kit = 1;
     homeState.inventory.biofuel = 10;
-    const r = dispatchVehicle(world, homeSpec, homeState, targetSpec, 'ship', 3, 9, 1, 0);
+    homeState.inventory.aviation_kerosene = 400;
+    const r = dispatchVehicle(world, homeSpec, homeState, targetSpec, 'ship', 3, 346, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
@@ -204,7 +205,8 @@ describe('per-tier vehicle stats', () => {
     const { world, homeSpec, homeState, targetSpec, islandStates } = makeTestWorld();
     homeState.inventory.foundation_kit = 1;
     homeState.inventory.biofuel = 10;
-    const r = dispatchVehicle(world, homeSpec, homeState, targetSpec, 'ship', 4, 6, 1, 0);
+    homeState.inventory.cryogenic_hydrogen = 1000;
+    const r = dispatchVehicle(world, homeSpec, homeState, targetSpec, 'ship', 4, 959, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
@@ -216,7 +218,8 @@ describe('per-tier vehicle stats', () => {
     const { world, homeSpec, homeState, targetSpec, islandStates } = makeTestWorld();
     homeState.inventory.foundation_kit = 1;
     homeState.inventory.biofuel = 10;
-    const r = dispatchVehicle(world, homeSpec, homeState, targetSpec, 'ship', 2, 15, 1, 0);
+    homeState.inventory.diesel = 200;
+    const r = dispatchVehicle(world, homeSpec, homeState, targetSpec, 'ship', 2, 154, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
@@ -263,7 +266,7 @@ describe('§12.4 starter building inscription', () => {
     homeState.inventory.biofuel = 50;
     homeState.inventory.diesel = 50;
     homeState.inventory.aviation_kerosene = 50;
-    homeState.inventory.cryogenic_hydrogen = 50;
+    homeState.inventory.cryogenic_hydrogen = 1000;
     homeState.inventory.foundation_kit = 3;
     const islandStates = new Map<string, IslandState>([['home', homeState]]);
     return { world, home, homeState, target, islandStates };
@@ -271,7 +274,7 @@ describe('§12.4 starter building inscription', () => {
 
   it('T4 ship into a Volcanic r=7 colony: every starter is inscribed and unique', () => {
     const { world, home, homeState, target, islandStates } = makeArrivalSetup(7);
-    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 6, 1, 0);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 959, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
@@ -293,7 +296,7 @@ describe('§12.4 starter building inscription', () => {
 
   it('T4 ship into an Arctic r=7 colony: every starter is inscribed', () => {
     const { world, home, homeState, target, islandStates } = makeArrivalSetup(7);
-    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 6, 1, 0);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 959, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
@@ -306,7 +309,7 @@ describe('§12.4 starter building inscription', () => {
 
   it('T4 ship into a Plains r=14 colony: 5 unique inscribed starters', () => {
     const { world, home, homeState, target, islandStates } = makeArrivalSetup(14);
-    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 6, 1, 0);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 959, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
@@ -324,7 +327,7 @@ describe('§12.4 starter building inscription', () => {
     // Two parallel settlements with the same target geometry — assertions on
     // starter coords must match exactly.
     const a = makeArrivalSetup(7);
-    const ra = dispatchVehicle(a.world, a.home, a.homeState, a.target, 'ship', 4, 6, 1, 0);
+    const ra = dispatchVehicle(a.world, a.home, a.homeState, a.target, 'ship', 4, 959, 1, 0);
     expect(ra.ok).toBe(true);
     if (!ra.ok) return;
     tickVehicles(a.world, a.islandStates, ra.vehicle.expectedArrivalTime + 1);
@@ -335,7 +338,7 @@ describe('§12.4 starter building inscription', () => {
     _resetVehicleIdCounter();
     _resetRouteIdCounter();
     const b = makeArrivalSetup(7);
-    const rb = dispatchVehicle(b.world, b.home, b.homeState, b.target, 'ship', 4, 6, 1, 0);
+    const rb = dispatchVehicle(b.world, b.home, b.homeState, b.target, 'ship', 4, 959, 1, 0);
     expect(rb.ok).toBe(true);
     if (!rb.ok) return;
     tickVehicles(b.world, b.islandStates, rb.vehicle.expectedArrivalTime + 1);
@@ -555,8 +558,8 @@ describe('dispatchVehicle', () => {
     // Add helipad + T2 fuel → succeeds.
     home.buildings.push({ id: 'hp', defId: 'helipad', x: 1, y: 1 });
     homeState.level = 5;
-    homeState.inventory.diesel = 100;
-    const r2 = dispatchVehicle(world, home, homeState, target, 'helicopter', 2, 60, 1, 0);
+    homeState.inventory.diesel = 200;
+    const r2 = dispatchVehicle(world, home, homeState, target, 'helicopter', 2, 180, 1, 0);
     expect(r2.ok).toBe(true);
   });
 
@@ -666,10 +669,10 @@ describe('tickVehicles', () => {
     const { world, home, homeState, target, islandStates } = setup();
     home.buildings.push({ id: 'hp', defId: 'helipad', x: 1, y: 1 });
     homeState.level = 5;
-    homeState.inventory.diesel = 100;
-    // Helicopter T2: speed 0.75 t/s, eff 0.5 tiles/fuel. 30 tile trip = 40s. Need
-    // 30/0.5 = 60 fuel min. Use 60 fuel.
-    dispatchVehicle(world, home, homeState, target, 'helicopter', 2, 60, 1, 0);
+    homeState.inventory.diesel = 200;
+    // Helicopter T2: speed 0.85 t/s, tilesPerFuel 0.1675. 30 tile trip ≈ 35.3s.
+    // Need ceil(30/0.1675) = 180 fuel min.
+    dispatchVehicle(world, home, homeState, target, 'helicopter', 2, 180, 1, 0);
     tickVehicles(world, islandStates, 41_000);
     expect(target.populated).toBe(true);
     const heliBuilding = target.buildings.find((b) => b.defId === 'helipad');
@@ -776,25 +779,26 @@ describe('dispatchVehicle — §11.7 tier-matched fuel', () => {
     const { world, home, homeState, target } = tieredSetup(5);
     home.buildings.push({ id: 'hp', defId: 'helipad', x: 1, y: 1 });
     homeState.inventory.biofuel = 999;
-    homeState.inventory.diesel = 100;
-    // helicopter T2 eff 0.5 t/fuel: 30 tile trip needs ≥ 60 fuel.
-    const r = dispatchVehicle(world, home, homeState, target, 'helicopter', 2, 60, 1, 0);
+    homeState.inventory.diesel = 200;
+    // helicopter T2 tilesPerFuel 0.1675: 30 tile trip needs ceil(30/0.1675)=180 fuel.
+    const r = dispatchVehicle(world, home, homeState, target, 'helicopter', 2, 180, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.vehicle.fuelResource).toBe('diesel');
-    expect(homeState.inventory.diesel).toBe(40);
+    expect(homeState.inventory.diesel).toBe(20);
     expect(homeState.inventory.biofuel).toBe(999);
   });
 
   it('T3 island (level 15) consumes aviation_kerosene, NOT biofuel', () => {
     const { world, home, homeState, target } = tieredSetup(15);
     homeState.inventory.biofuel = 999;
-    homeState.inventory.aviation_kerosene = 50;
-    const r = dispatchVehicle(world, home, homeState, target, 'ship', 3, 9, 1, 0);
+    homeState.inventory.aviation_kerosene = 400;
+    // ship T3 tilesPerFuel 0.0868: 30 tile trip needs ceil(30/0.0868)=346 fuel.
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 3, 346, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.vehicle.fuelResource).toBe('aviation_kerosene');
-    expect(homeState.inventory.aviation_kerosene).toBe(41);
+    expect(homeState.inventory.aviation_kerosene).toBe(54);
     expect(homeState.inventory.biofuel).toBe(999);
   });
 
@@ -814,12 +818,13 @@ describe('dispatchVehicle — §11.7 tier-matched fuel', () => {
 
   it('T4 island (level 30) consumes cryogenic_hydrogen', () => {
     const { world, home, homeState, target } = tieredSetup(30);
-    homeState.inventory.cryogenic_hydrogen = 50;
-    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 6, 1, 0);
+    homeState.inventory.cryogenic_hydrogen = 1000;
+    // ship T4 tilesPerFuel 0.0313: 30 tile trip needs ceil(30/0.0313)=959 fuel.
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 4, 959, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.vehicle.fuelResource).toBe('cryogenic_hydrogen');
-    expect(homeState.inventory.cryogenic_hydrogen).toBe(44);
+    expect(homeState.inventory.cryogenic_hydrogen).toBe(41);
   });
 });
 
@@ -884,7 +889,7 @@ describe('mechanical failure §12.5', () => {
     });
     const world = freshWorld([origin, target]);
     const originState = makeIslandState({ id: 'home', level: 5 });
-    originState.inventory.diesel = 100;
+    originState.inventory.diesel = 200;
     originState.inventory.foundation_kit = 1;
 
     let launchTime = 0;
@@ -894,7 +899,7 @@ describe('mechanical failure §12.5', () => {
       launchTime += 1;
     }
 
-    const result = dispatchVehicle(world, origin, originState, target, 'helicopter', 2, 60, 1, launchTime);
+    const result = dispatchVehicle(world, origin, originState, target, 'helicopter', 2, 180, 1, launchTime);
     expect(result.ok).toBe(true);
     const v = (result as any).vehicle as SettlementVehicle;
 
@@ -1450,5 +1455,22 @@ describe('settleViaSpacetimeAnchor', () => {
     const res = settleViaSpacetimeAnchor(s.world, s.islandStates, 'origin', 'target', 5000);
     expect(res.ok).toBe(false);
     expect(s.originState.inventory.foundation_kit_refined).toBe(1);
+  });
+});
+
+
+describe('vehicle drag — cubic invariant (rev-16 §6.2)', () => {
+  it('every ship tier satisfies speed² × tilesPerFuel = 0.03125', () => {
+    for (const tier of [1, 2, 3, 4] as const) {
+      const { speed, tilesPerFuel } = SHIP_STATS[tier];
+      expect(speed * speed * tilesPerFuel).toBeCloseTo(0.03125, 3);
+    }
+  });
+
+  it('every heli tier satisfies speed² × tilesPerFuel = 0.121', () => {
+    for (const tier of [1, 2, 3, 4] as const) {
+      const { speed, tilesPerFuel } = HELICOPTER_STATS[tier];
+      expect(speed * speed * tilesPerFuel).toBeCloseTo(0.121, 2);
+    }
   });
 });

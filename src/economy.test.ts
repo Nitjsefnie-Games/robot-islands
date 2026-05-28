@@ -4206,3 +4206,56 @@ describe('advanceIsland perf-regression gate', () => {
     expect(dt).toBeLessThan(20);
   });
 });
+
+
+describe('heat throttle end-to-end via computeRates', () => {
+  /** Catalog that strips power and gates from coke_oven so the ONLY
+   *  rate-limiting factor in the fixture is the heat throttle. */
+  function throttleIsolatedCatalog(): DefCatalog {
+    const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    const { power: _power, gates: _gates, ...cokeRest } = base.coke_oven;
+    base.coke_oven = cokeRest as BuildingDef;
+    return base;
+  }
+  const THROTTLE_ISOLATED: DefCatalog = throttleIsolatedCatalog();
+
+  const PLASMA_HEATER: PlacedBuilding = { id: 'ph-1', defId: 'plasma_heater', x: 0, y: 0 };
+
+  it('computeRates: plasma_heater + 4 coke_ovens throttles output to ~76.7%', () => {
+    const state = makeState({
+      level: 5,
+      buildings: [
+        PLASMA_HEATER,
+        { id: 'co-1', defId: 'coke_oven', x: 2, y: 0 },
+        { id: 'co-2', defId: 'coke_oven', x: 0, y: 2 },
+        { id: 'co-3', defId: 'coke_oven', x: -2, y: 0 },
+        { id: 'co-4', defId: 'coke_oven', x: 0, y: -2 },
+      ],
+      inventory: { ...blankInventory(), coal: 1000 },
+    });
+    const { byBuilding } = computeRates(state, { defs: THROTTLE_ISOLATED });
+
+    // Nominal coke_oven rate = 1 cycle / 133 s.
+    const nominal = 1 / 133;
+    const expected = nominal * (184 / 240);
+
+    for (const id of ['co-1', 'co-2', 'co-3', 'co-4']) {
+      const entry = byBuilding.find((b) => b.building.id === id);
+      expect(entry?.effectiveRate).toBeCloseTo(expected, 3);
+    }
+  });
+
+  it('computeRates: plasma_heater + 1 coke_oven runs at full nominal rate', () => {
+    const state = makeState({
+      level: 5,
+      buildings: [
+        PLASMA_HEATER,
+        { id: 'co-1', defId: 'coke_oven', x: 2, y: 0 },
+      ],
+      inventory: { ...blankInventory(), coal: 1000 },
+    });
+    const { byBuilding } = computeRates(state, { defs: THROTTLE_ISOLATED });
+    const entry = byBuilding.find((b) => b.building.id === 'co-1');
+    expect(entry?.effectiveRate).toBeCloseTo(1 / 133, 3);
+  });
+});

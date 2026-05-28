@@ -6,10 +6,60 @@
 // adjacency surface; "adjacent" means any source-footprint tile lies in that
 // border.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { PlacedBuilding } from './buildings.js';
-import { resolveHeatAssignments } from './heat.js';
+import { resolveHeatAssignments, MIN_HEAT_FACTOR } from './heat.js';
+
+vi.mock('./building-defs.js', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('./building-defs.js')>();
+  return {
+    ...mod,
+    BUILDING_DEFS: {
+      ...mod.BUILDING_DEFS,
+      __test_source_no_kw: {
+        id: '__test_source_no_kw',
+        displayName: 'Test Source',
+        category: 'power',
+        tier: 1,
+        footprint: { tiles: [{ dx: 0, dy: 0 }] },
+        fill: 0,
+        stroke: 0,
+        heatSource: { freeOrCoal: 'free' },
+        glyph: 'S',
+      },
+      __test_consumer_no_kw: {
+        id: '__test_consumer_no_kw',
+        displayName: 'Test Consumer',
+        category: 'smelting',
+        tier: 1,
+        footprint: { tiles: [{ dx: 0, dy: 0 }] },
+        fill: 0,
+        stroke: 0,
+        requiresHeat: true,
+        glyph: 'C',
+      },
+      __test_large_coal_source: {
+        id: '__test_large_coal_source',
+        displayName: 'Test Large Coal Source',
+        category: 'power',
+        tier: 1,
+        footprint: {
+          tiles: [
+            { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 3, dy: 0 },
+            { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 }, { dx: 3, dy: 1 },
+            { dx: 0, dy: 2 }, { dx: 1, dy: 2 }, { dx: 2, dy: 2 }, { dx: 3, dy: 2 },
+            { dx: 0, dy: 3 }, { dx: 1, dy: 3 }, { dx: 2, dy: 3 }, { dx: 3, dy: 3 },
+          ],
+        },
+        fill: 0,
+        stroke: 0,
+        heatSource: { freeOrCoal: 'free', thermalKW: 830 },
+        glyph: 'L',
+      },
+    } as any,
+  };
+});
 
 // Layout helpers — every test sets up a small array of PlacedBuilding and
 // hands it to the resolver. Building dims are baked into the catalog
@@ -201,15 +251,17 @@ describe('resolveHeatAssignments — §5.2', () => {
   });
 
   it('Plasma Heater also acts as a free heat source per §8.6', () => {
-    // Plasma Heater 2×2 at (3,0). Border of BF (3×3 at 0,0) includes column
-    // 3 rows 0..2 → overlaps plasma heater tiles (3,0) and (3,1).
+    // Plasma Heater 2×2 at (2,0). Coke Oven 2×2 at (0,0) has east border at
+    // column 2 rows 0..1 → overlaps plasma heater tiles (2,0) and (2,1).
+    // Uses coke_oven (60 kW) instead of blast_furnace (3000 kW) so the ratio
+    // 184/60 = 3.07 > 1 stays above MIN_HEAT_FACTOR.
     const buildings: PlacedBuilding[] = [
-      { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 },
-      { id: 'ph', defId: 'plasma_heater', x: 3, y: 0 },
+      { id: 'co', defId: 'coke_oven', x: 0, y: 0 },
+      { id: 'ph', defId: 'plasma_heater', x: 2, y: 0 },
     ];
     const res = resolveHeatAssignments(buildings);
-    expect(res.hasHeat.get('bf')).toBe(true);
-    expect(res.assignedSource.get('bf')).toBe('ph');
+    expect(res.hasHeat.get('co')).toBe(true);
+    expect(res.assignedSource.get('co')).toBe('ph');
     expect(res.coalConsumersByFurnace.size).toBe(0);
   });
 
@@ -246,5 +298,109 @@ describe('resolveHeatAssignments — §5.2', () => {
     expect(res.hasHeat.get('co-e')).toBe(true);
     expect(res.hasHeat.get('co-s')).toBe(true);
     expect(res.coalConsumersByFurnace.size).toBe(0);
+  });
+});
+
+
+describe('heat — proportional throttle (rev-16 §5.1)', () => {
+  it('fully feeds 3 coke_ovens (180 kW demand) from plasma_heater (184 kW)', () => {
+    const buildings: PlacedBuilding[] = [
+      { id: 'ph', defId: 'plasma_heater', x: 0, y: 0 },
+      { id: 'co-1', defId: 'coke_oven', x: 2, y: 0 },
+      { id: 'co-2', defId: 'coke_oven', x: 0, y: 2 },
+      { id: 'co-3', defId: 'coke_oven', x: -2, y: 0 },
+    ];
+    const result = resolveHeatAssignments(buildings);
+    for (const id of ['co-1', 'co-2', 'co-3']) {
+      expect(result.heatThrottleFactor.get(id)).toBe(1);
+    }
+  });
+
+  it('partially throttles 4 coke_ovens (240 kW demand) from plasma_heater (184 kW)', () => {
+    const buildings: PlacedBuilding[] = [
+      { id: 'ph', defId: 'plasma_heater', x: 0, y: 0 },
+      { id: 'co-1', defId: 'coke_oven', x: 2, y: 0 },
+      { id: 'co-2', defId: 'coke_oven', x: 0, y: 2 },
+      { id: 'co-3', defId: 'coke_oven', x: -2, y: 0 },
+      { id: 'co-4', defId: 'coke_oven', x: 0, y: -2 },
+    ];
+    const result = resolveHeatAssignments(buildings);
+    for (const id of ['co-1', 'co-2', 'co-3', 'co-4']) {
+      expect(result.heatThrottleFactor.get(id)).toBeCloseTo(184 / 240, 3);
+    }
+  });
+
+  it('throttles 5 coke_ovens (300 kW demand) to 0.61 each from plasma_heater', () => {
+    const buildings: PlacedBuilding[] = [
+      { id: 'ph', defId: 'plasma_heater', x: 0, y: 0 },
+      { id: 'co-1', defId: 'coke_oven', x: -2, y: -1 },
+      { id: 'co-2', defId: 'coke_oven', x: -2, y: 1 },
+      { id: 'co-3', defId: 'coke_oven', x: 0, y: -2 },
+      { id: 'co-4', defId: 'coke_oven', x: 0, y: 2 },
+      { id: 'co-5', defId: 'coke_oven', x: 2, y: -1 },
+    ];
+    const result = resolveHeatAssignments(buildings);
+    for (const id of ['co-1', 'co-2', 'co-3', 'co-4', 'co-5']) {
+      expect(result.heatThrottleFactor.get(id)).toBeCloseTo(184 / 300, 3);
+    }
+  });
+});
+
+describe('heat — boolean fallback (pre-Phase-3 compat)', () => {
+  it('sets throttle=1.0 when source has no thermalKW', () => {
+    const buildings: PlacedBuilding[] = [
+      { id: 'src', defId: '__test_source_no_kw' as any, x: 0, y: 0 },
+      { id: 'cons', defId: '__test_consumer_no_kw' as any, x: 1, y: 0 },
+    ];
+    const result = resolveHeatAssignments(buildings);
+    expect(result.heatThrottleFactor.get('cons')).toBe(1);
+    expect(result.hasHeat.get('cons')).toBe(true);
+  });
+
+  it('sets throttle=1.0 when consumer has no heatDemandKW (demand=0)', () => {
+    const buildings: PlacedBuilding[] = [
+      { id: 'src', defId: '__test_source_no_kw' as any, x: 0, y: 0 },
+      { id: 'cons', defId: '__test_consumer_no_kw' as any, x: 1, y: 0 },
+    ];
+    const result = resolveHeatAssignments(buildings);
+    expect(result.heatThrottleFactor.get('cons')).toBe(1);
+  });
+});
+
+describe('heat — brownout below MIN_HEAT_FACTOR', () => {
+  it('fusion_core fully feeds 1 blast_furnace (capped at 1.0)', () => {
+    const buildings: PlacedBuilding[] = [
+      { id: 'fc', defId: 'fusion_core', x: 0, y: 0 },
+      { id: 'bf-1', defId: 'blast_furnace', x: 4, y: 0 },
+    ];
+    const result = resolveHeatAssignments(buildings);
+    expect(result.heatThrottleFactor.get('bf-1')).toBe(1);
+  });
+
+  it('coal_furnace + 1 blast_furnace throttles to 0.277 (above threshold)', () => {
+    const buildings: PlacedBuilding[] = [
+      { id: 'bf-1', defId: 'blast_furnace', x: 0, y: 0 },
+      { id: 'cf', defId: 'coal_furnace', x: 3, y: 1 },
+    ];
+    const result = resolveHeatAssignments(buildings);
+    expect(result.heatThrottleFactor.get('bf-1')).toBeCloseTo(830 / 3000, 3);
+    expect(result.hasHeat.get('bf-1')).toBe(true);
+  });
+
+  it('coal_furnace + 5 blast_furnaces brownouts (below threshold)', () => {
+    // Uses a 4×4 mock source (thermalKW 830) so 5 adjacent 3×3 BFs fit.
+    const buildings: PlacedBuilding[] = [
+      { id: 'src', defId: '__test_large_coal_source' as any, x: 0, y: 0 },
+      { id: 'bf-1', defId: 'blast_furnace', x: -3, y: -2 },
+      { id: 'bf-2', defId: 'blast_furnace', x: -3, y: 1 },
+      { id: 'bf-3', defId: 'blast_furnace', x: -2, y: 4 },
+      { id: 'bf-4', defId: 'blast_furnace', x: 0, y: -3 },
+      { id: 'bf-5', defId: 'blast_furnace', x: 1, y: 4 },
+    ];
+    const result = resolveHeatAssignments(buildings);
+    for (const id of ['bf-1', 'bf-2', 'bf-3', 'bf-4', 'bf-5']) {
+      expect(result.heatThrottleFactor.get(id)).toBeLessThan(MIN_HEAT_FACTOR);
+      expect(result.hasHeat.get(id)).toBe(false);
+    }
   });
 });
