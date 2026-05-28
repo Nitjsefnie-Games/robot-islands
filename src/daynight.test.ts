@@ -48,79 +48,61 @@ describe('dayPhase', () => {
 
   it('nowMs=0 lands in the Day quadrant (fixture-default alignment)', () => {
     // The epoch phase offset is calibrated so fixture-default `lastTick=0`
-    // lands at full solar (multiplier 1.0), keeping pre-existing
-    // power-balance tests passing.
+    // lands in the Day quadrant.
     expect(dayPhaseName(0)).toBe('day');
-    expect(solarMultiplier(0, 0, 0)).toBe(1.0);
+    // solarMultiplier uses real astronomy; Date(0) at (0,0) is midnight,
+    // so use a known noon for the full-solar fixture.
+    const noon = new Date('2026-03-20T12:00:00Z').getTime();
+    expect(solarMultiplier(noon, 0, 0)).toBeCloseTo(1.0, 2);
   });
 });
 
-describe('solarMultiplier + dayPhaseName per quadrant', () => {
-  // Anchor: nowMs=0 is phase 0.375 (Day, multiplier 1.0). Quadrant boundaries
-  // relative to nowMs=0 (one DAY_DURATION_MS = 24h, one quadrant = 6h):
-  //   Dawn  phase [0.00, 0.25) — t/day ∈ [-0.375, -0.125) → t ∈ [-9h, -3h)
-  //   Day   phase [0.25, 0.50) — t/day ∈ [-0.125, +0.125) → t ∈ [-3h, +3h)
-  //   Dusk  phase [0.50, 0.75) — t/day ∈ [+0.125, +0.375) → t ∈ [+3h, +9h)
-  //   Night phase [0.75, 1.00) — t/day ∈ [+0.375, +0.625) → t ∈ [+9h, +15h)
-  //
-  // Under the §2.7 linear-ramp model:
-  //   Dawn quadrant: midpoint mul = 0.5, start = 0, end (just-before-Day) ≈ 1
-  //   Day quadrant: 1.0 throughout
-  //   Dusk quadrant: midpoint mul = 0.5, start = 1, end (just-before-Night) ≈ 0
-  //   Night quadrant: 0.0 throughout
-  const HOUR = 60 * 60 * 1000;
-
-  it('quadrant names align with t-anchors', () => {
-    expect(dayPhaseName(-6 * HOUR)).toBe('dawn');
-    expect(dayPhaseName(0)).toBe('day');
-    expect(dayPhaseName(6 * HOUR)).toBe('dusk');
-    expect(dayPhaseName(12 * HOUR)).toBe('night');
+describe('solarMultiplier — astronomy', () => {
+  it('returns ~1.0 at equator noon on the spring equinox', () => {
+    const t = new Date('2026-03-20T12:00:00Z').getTime();
+    expect(solarMultiplier(t, 0, 0)).toBeCloseTo(1.0, 2);
   });
 
-  it('Dawn: start=0, midpoint=0.5, just-before-end≈1', () => {
-    // Dawn quadrant t ∈ [-9h, -3h). Midpoint t = -6h.
-    expect(solarMultiplier(-9 * HOUR, 0, 0)).toBeCloseTo(0, 9);
-    expect(solarMultiplier(-6 * HOUR, 0, 0)).toBeCloseTo(0.5, 9);
-    expect(solarMultiplier(-3 * HOUR - 1, 0, 0)).toBeGreaterThan(0.999);
+  it('returns ~0.80 at 60°N noon on June solstice', () => {
+    const t = new Date('2026-06-21T12:00:00Z').getTime();
+    expect(solarMultiplier(t, 60, 0)).toBeCloseTo(0.80, 1);
   });
 
-  it('Day: flat 1.0 across the quadrant', () => {
-    expect(solarMultiplier(-3 * HOUR, 0, 0)).toBe(1.0);
-    expect(solarMultiplier(0, 0, 0)).toBe(1.0);
-    expect(solarMultiplier(3 * HOUR - 1, 0, 0)).toBe(1.0);
+  it('returns ~0.10 at 60°N noon on December solstice', () => {
+    const t = new Date('2026-12-21T12:00:00Z').getTime();
+    expect(solarMultiplier(t, 60, 0)).toBeCloseTo(0.10, 1);
   });
 
-  it('Dusk: start=1, midpoint=0.5, just-before-end≈0', () => {
-    // Dusk quadrant t ∈ [+3h, +9h). Midpoint t = +6h.
-    expect(solarMultiplier(3 * HOUR, 0, 0)).toBe(1.0);
-    expect(solarMultiplier(6 * HOUR, 0, 0)).toBeCloseTo(0.5, 9);
-    expect(solarMultiplier(9 * HOUR - 1, 0, 0)).toBeLessThan(0.001);
-  });
-
-  it('Night: flat 0.0 across the quadrant', () => {
-    expect(solarMultiplier(9 * HOUR, 0, 0)).toBe(0.0);
-    expect(solarMultiplier(12 * HOUR, 0, 0)).toBe(0.0);
-    expect(solarMultiplier(15 * HOUR - 1, 0, 0)).toBe(0.0);
-  });
-
-  it('is continuous: no jump > 1/SOLAR_RAMP_SEGMENTS between 1ms-apart samples inside Dawn/Dusk', () => {
-    // Snap-detector. Per quadrant (6h = 21,600,000 ms), 1ms phase change is
-    // ~4.6e-8, so mul change ≤ 4.6e-8 — well below the 1/8 = 0.125 bound.
-    // Catches any reintroduction of piecewise-constant logic mid-quadrant.
-    const maxAllowedJump = 1 / SOLAR_RAMP_SEGMENTS;
-    // Sample 1000 points inside the dawn quadrant and 1000 inside dusk.
-    for (const quadStart of [-9 * HOUR, 3 * HOUR]) {
-      for (let i = 0; i < 1000; i++) {
-        const t = quadStart + Math.floor((i / 1000) * QUADRANT_MS);
-        // Stay strictly inside the quadrant (avoid the boundary, which IS
-        // continuous in the ramp model but the next ms is in a different
-        // quadrant).
-        if (t + 1 >= quadStart + QUADRANT_MS) continue;
-        const a = solarMultiplier(t, 0, 0);
-        const b = solarMultiplier(t + 1, 0, 0);
-        expect(Math.abs(b - a)).toBeLessThan(maxAllowedJump);
-      }
+  it('returns 0 throughout polar night at 84°N on Dec 21', () => {
+    const dec21 = new Date('2026-12-21T00:00:00Z').getTime();
+    for (let h = 0; h < 24; h++) {
+      const t = dec21 + h * 60 * 60 * 1000;
+      expect(solarMultiplier(t, 84, 0)).toBe(0);
     }
+  });
+
+  it('is monotonic ascending across a sunrise transition', () => {
+    // At (40.7128, -74.0060) on Mar 20, sun rises around 11:05 UTC.
+    const base = new Date('2026-03-20T11:00:00Z').getTime();
+    let prev = -1;
+    for (let m = 0; m <= 120; m++) {
+      const t = base + m * 60 * 1000;
+      const mul = solarMultiplier(t, 40.7128, -74.0060);
+      expect(mul).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = mul;
+    }
+  });
+});
+
+describe('solarMultiplier — null inputs', () => {
+  it.each([
+    [0],
+    [new Date('2026-06-21T12:00:00Z').getTime()],
+    [new Date('2026-12-21T00:00:00Z').getTime()],
+  ])('returns 0 at t=%s regardless of nowMs', (t) => {
+    expect(solarMultiplier(t, null, null)).toBe(0);
+    expect(solarMultiplier(t, 0, null)).toBe(0);
+    expect(solarMultiplier(t, null, 0)).toBe(0);
   });
 });
 
@@ -165,61 +147,45 @@ describe('nextPhaseBoundaryMs', () => {
 });
 
 describe('nextSolarBoundaryMs', () => {
-  const HOUR = 60 * 60 * 1000;
+  const SEGMENT_MS = DAY_DURATION_MS / (SOLAR_RAMP_SEGMENTS * 4);
 
-  it('inside Day: returns next quadrant boundary (start of Dusk)', () => {
-    // t=0 is mid-Day. Multiplier is constant 1.0 throughout Day, so the next
-    // moment the value changes is the Day→Dusk transition at t = 3h.
+  it('returns the next segment boundary at t = 0', () => {
     const b = nextSolarBoundaryMs(0);
     expect(b).not.toBeNull();
-    expect(b!).toBeCloseTo(3 * HOUR, 9);
+    expect(b!).toBeCloseTo(SEGMENT_MS, 6);
   });
 
-  it('inside Night: returns next quadrant boundary (start of Dawn)', () => {
-    // t=12h is mid-Night. Multiplier is constant 0.0 throughout Night, so the
-    // next moment the value changes is the Night→Dawn transition at t = 15h.
-    const b = nextSolarBoundaryMs(12 * HOUR);
-    expect(b).not.toBeNull();
-    expect(b!).toBeCloseTo(15 * HOUR, 9);
-  });
-
-  it('at Dawn start: next boundary lands (quadrant_ms / N) into the quadrant', () => {
-    // Dawn starts at t = -9h (phase 0). Sub-segment width is QUADRANT_MS/N.
-    const dawnStart = -9 * HOUR;
-    const b = nextSolarBoundaryMs(dawnStart);
-    expect(b).not.toBeNull();
-    expect(b!).toBeCloseTo(dawnStart + QUADRANT_MS / SOLAR_RAMP_SEGMENTS, 6);
-  });
-
-  it('at Dawn quadrant midpoint: next boundary is the (5/N)-th sub-segment', () => {
-    // Dawn midpoint = -6h. Position within quadrant = 0.5 = 4/8. Next sub-
-    // boundary is at index 5 → (5/8) of the quadrant from dawn start.
-    const dawnStart = -9 * HOUR;
-    const t = -6 * HOUR;
+  it('returns the next segment boundary inside a segment', () => {
+    const t = SEGMENT_MS / 2;
     const b = nextSolarBoundaryMs(t);
     expect(b).not.toBeNull();
-    expect(b!).toBeCloseTo(dawnStart + (5 * QUADRANT_MS) / SOLAR_RAMP_SEGMENTS, 6);
+    expect(b!).toBeCloseTo(SEGMENT_MS, 6);
   });
 
-  it('at Dusk start: next boundary lands (quadrant_ms / N) into the quadrant', () => {
-    const duskStart = 3 * HOUR;
-    const b = nextSolarBoundaryMs(duskStart);
+  it('returns the next segment boundary at the start of a segment', () => {
+    const t = SEGMENT_MS * 5;
+    const b = nextSolarBoundaryMs(t);
     expect(b).not.toBeNull();
-    expect(b!).toBeCloseTo(duskStart + QUADRANT_MS / SOLAR_RAMP_SEGMENTS, 6);
+    expect(b!).toBeCloseTo(SEGMENT_MS * 6, 6);
   });
 
-  it('last sub-segment of Dawn ends exactly on Dawn→Day boundary', () => {
-    // One ms before the last sub-boundary, the function should return the
-    // quadrant-end timestamp (clamped, not overshooting into Day).
-    const dawnStart = -9 * HOUR;
-    const lastSubStart = dawnStart + ((SOLAR_RAMP_SEGMENTS - 1) * QUADRANT_MS) / SOLAR_RAMP_SEGMENTS;
-    const b = nextSolarBoundaryMs(lastSubStart);
+  it('gap is exactly one segment width', () => {
+    for (const t of [0, SEGMENT_MS * 3, SEGMENT_MS * 10, SEGMENT_MS * 31]) {
+      const b = nextSolarBoundaryMs(t);
+      expect(b).not.toBeNull();
+      expect(b! - t).toBeCloseTo(SEGMENT_MS, 6);
+    }
+  });
+
+  it('wraps cleanly across day boundary', () => {
+    const lastSegmentStart = SEGMENT_MS * 31;
+    const b = nextSolarBoundaryMs(lastSegmentStart);
     expect(b).not.toBeNull();
-    expect(b!).toBeCloseTo(dawnStart + QUADRANT_MS, 6);
+    expect(b!).toBeCloseTo(SEGMENT_MS * 32, 6);
   });
 
-  it('is strictly greater than nowMs for samples across all quadrants', () => {
-    for (const t of [-9 * HOUR, -6 * HOUR, 0, 3 * HOUR, 6 * HOUR, 12 * HOUR, 15 * HOUR]) {
+  it('is strictly greater than nowMs for samples across the day', () => {
+    for (const t of [0, SEGMENT_MS, SEGMENT_MS * 8, SEGMENT_MS * 16, SEGMENT_MS * 24, SEGMENT_MS * 31]) {
       const b = nextSolarBoundaryMs(t);
       expect(b).not.toBeNull();
       expect(b!).toBeGreaterThan(t);

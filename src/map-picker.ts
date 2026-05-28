@@ -34,6 +34,25 @@ export interface MapPickerOptions {
   onCancel?: () => void;
 }
 
+/** Convert a click in SVG-pixel space to lat/lon using the equirectangular
+ *  projection the modal's 360×180 viewBox employs. */
+export function clickToLatLon(
+  xPx: number, yPx: number,
+  rectWidth: number, rectHeight: number,
+): { lat: number; lon: number } {
+  const lon = (xPx / rectWidth) * 360 - 180;
+  const lat = 90 - (yPx / rectHeight) * 180;
+  const clampedLat = Math.max(-90, Math.min(90, lat));
+  const clampedLon = Math.max(-180, Math.min(180, lon));
+  return { lat: clampedLat, lon: clampedLon };
+}
+
+/** Bootstrap predicate: show the picker on first session when the player
+ *  has not yet chosen a location. */
+export function shouldShowPicker(world: { playerLat: number | null; playerLon: number | null }): boolean {
+  return world.playerLat == null || world.playerLon == null;
+}
+
 export function showMapPicker(opts: MapPickerOptions): void {
   ensureStylesOnce();
 
@@ -75,12 +94,8 @@ export function showMapPicker(opts: MapPickerOptions): void {
     const xPx = e.clientX - rect.left;
     const yPx = e.clientY - rect.top;
 
-    const lon = (xPx / rect.width) * 360 - 180;
-    const lat = 90 - (yPx / rect.height) * 180;
-    const clampedLat = Math.max(-90, Math.min(90, lat));
-    const clampedLon = Math.max(-180, Math.min(180, lon));
-
-    updatePin(clampedLat, clampedLon);
+    const { lat, lon } = clickToLatLon(xPx, yPx, rect.width, rect.height);
+    updatePin(lat, lon);
   });
 
   confirmBtn.addEventListener('click', () => {

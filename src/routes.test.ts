@@ -81,10 +81,18 @@ function makeState(id: string, over: Partial<IslandState> = {}): IslandState {
     ...over,
   };
 }
+const NOON = new Date('2026-03-20T12:00:00Z').getTime();
+
 function makeWorld(routes: Route[] = [], islands: IslandSpec[] = []): WorldState {
   return { islands, drones: [], routes, vehicles: [], revealedCells: new Set(), satellites: [], repairDrones: [],
     debrisFields: [], endgameState: { achieved: new Set(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [],
-    commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, seed: 'test-seed', oceanCells: new Map(), depthRevealedCells: new Set() };
+    commPackets: [], totalCo2Kg: 0, playerLat: 0, playerLon: 0, seed: 'test-seed', oceanCells: new Map(), depthRevealedCells: new Set() };
+}
+
+/** Thread `world` into every island's local-power ctx so solarMultiplier
+ *  sees lat/lon = (0, 0). */
+function balance(world: WorldState, states: Map<string, IslandState>) {
+  return computeCableNetworkBalance(world, states, () => ({ world }));
 }
 
 function makeIslandSpec(id: string, cx: number, cy: number): IslandSpec {
@@ -665,7 +673,7 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     const a = makeState('a', { buildings: [mine('a')] });
     const world = makeWorld();
     const states = new Map<string, IslandState>([['a', a]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const bal = balances.get('a')!;
     expect(bal).toBeDefined();
     expect(bal.unified).toBe(false);
@@ -679,32 +687,32 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     // A: 2 solars (100W produced), no consumers → surplus 100W.
     // B: 2 mines (50W consumed), no producers → deficit 50W.
     // required = min(100, 50) = 50. Capacity 40W < 50 → gate fails.
-    const a = makeState('a', { buildings: solars('a', 2) });
+    const a = makeState('a', { buildings: solars('a', 2), lastTick: NOON });
     const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
     const world = makeWorld([cableRoute('a', 'b', 40)]);
     const states = new Map<string, IslandState>([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const balA = balances.get('a')!;
     const balB = balances.get('b')!;
     // Same referent — both islands map to the same component balance.
     expect(balA).toBe(balB);
-    expect(balA.producedTotal).toBe(100);
+    expect(balA.producedTotal).toBeCloseTo(100, 0);
     expect(balA.consumedTotal).toBe(50);
-    expect(balA.requiredTransmission).toBe(50);
+    expect(balA.requiredTransmission).toBeCloseTo(50, 0);
     expect(balA.cableCapacityTotal).toBe(40);
     expect(balA.unified).toBe(false);
   });
 
   it('two islands, cable capacity 100W vs required 80W → gate PASSES, unified', () => {
-    const a = makeState('a', { buildings: solars('a', 2) });
+    const a = makeState('a', { buildings: solars('a', 2), lastTick: NOON });
     const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
     const world = makeWorld([cableRoute('a', 'b', 100)]);
     const states = new Map<string, IslandState>([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const bal = balances.get('a')!;
-    expect(bal.producedTotal).toBe(100);
+    expect(bal.producedTotal).toBeCloseTo(100, 0);
     expect(bal.consumedTotal).toBe(50);
-    expect(bal.requiredTransmission).toBe(50);
+    expect(bal.requiredTransmission).toBeCloseTo(50, 0);
     expect(bal.cableCapacityTotal).toBe(100);
     expect(bal.unified).toBe(true);
     // Brownout factor: 100/80 = 1.25 → clamped to 1.0 (oversupplied).
@@ -721,8 +729,8 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     //   C = 5 mines           (0, 125 → local deficit 125).
     // totalSurplus = 75 + 50 = 125. totalDeficit = 125. required = min = 125.
     // Capacity: A-B cable 80 + B-C cable 30 = 110 < 125 → gate fails.
-    const a = makeState('a', { buildings: [...solars('a', 2), mine('a-x', 0, 4)] });
-    const b = makeState('b', { buildings: [...solars('b', 2), mine('b1', 0, 4), mine('b2', 4, 4)] });
+    const a = makeState('a', { buildings: [...solars('a', 2), mine('a-x', 0, 4)], lastTick: NOON });
+    const b = makeState('b', { buildings: [...solars('b', 2), mine('b1', 0, 4), mine('b2', 4, 4)], lastTick: NOON });
     const c = makeState('c', {
       buildings: [
         mine('c1', 0, 0),
@@ -734,13 +742,13 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     });
     const world = makeWorld([cableRoute('a', 'b', 80), cableRoute('b', 'c', 30)]);
     const states = new Map<string, IslandState>([['a', a], ['b', b], ['c', c]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const bal = balances.get('a')!;
     expect(balances.get('b')).toBe(bal);
     expect(balances.get('c')).toBe(bal);
-    expect(bal.producedTotal).toBe(200);
+    expect(bal.producedTotal).toBeCloseTo(200, 0);
     expect(bal.consumedTotal).toBe(200);
-    expect(bal.requiredTransmission).toBe(125);
+    expect(bal.requiredTransmission).toBeCloseTo(125, 0);
     expect(bal.cableCapacityTotal).toBe(110);
     expect(bal.unified).toBe(false);
   });
@@ -748,8 +756,8 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
   it('A→B→C chain with capacity below required → gate FAILS', () => {
     // Same per-island setup as above (surplus 125, deficit 125, required 125),
     // but cable capacity A-B=20 + B-C=10 = 30 < 80 → gate fails, cables inert.
-    const a = makeState('a', { buildings: [...solars('a', 2), mine('a-x', 0, 4)] });
-    const b = makeState('b', { buildings: [...solars('b', 2), mine('b1', 0, 4), mine('b2', 4, 4)] });
+    const a = makeState('a', { buildings: [...solars('a', 2), mine('a-x', 0, 4)], lastTick: NOON });
+    const b = makeState('b', { buildings: [...solars('b', 2), mine('b1', 0, 4), mine('b2', 4, 4)], lastTick: NOON });
     const c = makeState('c', {
       buildings: [
         mine('c1', 0, 0),
@@ -761,17 +769,17 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     });
     const world = makeWorld([cableRoute('a', 'b', 20), cableRoute('b', 'c', 10)]);
     const states = new Map<string, IslandState>([['a', a], ['b', b], ['c', c]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const bal = balances.get('a')!;
-    expect(bal.requiredTransmission).toBe(125);
+    expect(bal.requiredTransmission).toBeCloseTo(125, 0);
     expect(bal.cableCapacityTotal).toBe(30);
     expect(bal.unified).toBe(false);
   });
 
   it('disjoint components: {A,B} cable, {C} alone — separate components', () => {
     // {A, B} connected by A-B cable; C has no cable.
-    const a = makeState('a', { buildings: [...solars('a', 2), mine('a-x', 0, 4)] });
-    const b = makeState('b', { buildings: [...solars('b', 2), mine('b1', 0, 4), mine('b2', 4, 4)] });
+    const a = makeState('a', { buildings: [...solars('a', 2), mine('a-x', 0, 4)], lastTick: NOON });
+    const b = makeState('b', { buildings: [...solars('b', 2), mine('b1', 0, 4), mine('b2', 4, 4)], lastTick: NOON });
     const c = makeState('c', {
       buildings: [
         mine('c1', 0, 0),
@@ -781,13 +789,13 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     });
     const world = makeWorld([cableRoute('a', 'b', 80)]);
     const states = new Map<string, IslandState>([['a', a], ['b', b], ['c', c]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const balAB = balances.get('a')!;
     expect(balances.get('b')).toBe(balAB);
     // {A, B}: prod=200, cons=75, surplus=125, deficit=0, required=0,
     // gate trivially passes (vacuous — a cable exists but nothing needs to
     // traverse it).
-    expect(balAB.producedTotal).toBe(200);
+    expect(balAB.producedTotal).toBeCloseTo(200, 0);
     expect(balAB.consumedTotal).toBe(75);
     expect(balAB.requiredTransmission).toBe(0);
     expect(balAB.unified).toBe(true);
@@ -803,18 +811,18 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
   it('Spacetime Anchor link makes gate trivially pass regardless of capacity', () => {
     // Same surplus/deficit setup as the "gate fails" test (req=50 > cap=5)
     // but with a spacetime link in addition — gate must pass.
-    const a = makeState('a', { buildings: solars('a', 2) });
+    const a = makeState('a', { buildings: solars('a', 2), lastTick: NOON });
     const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
     const world = makeWorld([
       cableRoute('a', 'b', 5), // intentionally undersized
       spacetimeRoute('a', 'b'),
     ]);
     const states = new Map<string, IslandState>([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const bal = balances.get('a')!;
-    expect(bal.producedTotal).toBe(100);
+    expect(bal.producedTotal).toBeCloseTo(100, 0);
     expect(bal.consumedTotal).toBe(50);
-    expect(bal.requiredTransmission).toBe(50);
+    expect(bal.requiredTransmission).toBeCloseTo(50, 0);
     expect(bal.cableCapacityTotal).toBe(Infinity);
     expect(bal.unified).toBe(true);
   });
@@ -822,11 +830,11 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
   it('Spacetime Anchor as the SOLE link still passes gate (no cables present)', () => {
     // Edge case: a spacetime-only component with no cables. Capacity should
     // still be Infinity, gate passes, islands unify.
-    const a = makeState('a', { buildings: solars('a', 2) });
+    const a = makeState('a', { buildings: solars('a', 2), lastTick: NOON });
     const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
     const world = makeWorld([spacetimeRoute('a', 'b')]);
     const states = new Map<string, IslandState>([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const bal = balances.get('a')!;
     expect(balances.get('b')).toBe(bal);
     expect(bal.cableCapacityTotal).toBe(Infinity);
@@ -836,11 +844,11 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
   it('ignores non-power-link routes (cargo) when building components', () => {
     // A cargo route from A→B doesn't merge them into a power component:
     // each island remains in its own trivial component.
-    const a = makeState('a', { buildings: solars('a', 2) });
+    const a = makeState('a', { buildings: solars('a', 2), lastTick: NOON });
     const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
     const world = makeWorld([cargoRoute('a', 'b', 'iron_ore', [], 1)]);
     const states = new Map<string, IslandState>([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     // Two separate trivial components.
     expect(balances.get('a')).not.toBe(balances.get('b'));
     expect(balances.get('a')!.cableCapacityTotal).toBe(0);
@@ -1120,7 +1128,7 @@ describe('§9.5 / §15.1 mass_driver route type', () => {
     const r = massDriverRoute('a', 'b', 'iron_ore');
     const world = makeWorld([r]);
     const states = new Map([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     // Both islands should be in their OWN trivial components — mass_driver
     // is not a power link, so no shared cable component.
     expect(balances.get('a')?.cableCapacityTotal).toBe(0);
@@ -1211,33 +1219,33 @@ describe('§4 submarine_cable RouteType', () => {
     // A: 2 solars (100W produced), no consumers → surplus 100W.
     // B: 2 mines (50W consumed), no producers → deficit 50W.
     // required = min(100, 50) = 50. Submarine cable capacity 40W < 50 → fails.
-    const a = makeState('a', { buildings: solars('a', 2) });
+    const a = makeState('a', { buildings: solars('a', 2), lastTick: NOON });
     const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
     const world = makeWorld([submarineCableRoute('a', 'b', 40)]);
     const states = new Map<string, IslandState>([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const balA = balances.get('a')!;
     const balB = balances.get('b')!;
     // Same referent — both islands map to the same component.
     expect(balA).toBe(balB);
-    expect(balA.producedTotal).toBe(100);
+    expect(balA.producedTotal).toBeCloseTo(100, 0);
     expect(balA.consumedTotal).toBe(50);
-    expect(balA.requiredTransmission).toBe(50);
+    expect(balA.requiredTransmission).toBeCloseTo(50, 0);
     expect(balA.cableCapacityTotal).toBe(40);
     expect(balA.unified).toBe(false);
   });
 
   it('submarine_cable routes contribute to §5.3 unified pool — gate PASSES when oversized', () => {
     // Mirror of the land-cable "100W > 80W required → passes" test at routes.test.ts:725.
-    const a = makeState('a', { buildings: solars('a', 2) });
+    const a = makeState('a', { buildings: solars('a', 2), lastTick: NOON });
     const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
     const world = makeWorld([submarineCableRoute('a', 'b', 100)]);
     const states = new Map<string, IslandState>([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const bal = balances.get('a')!;
-    expect(bal.producedTotal).toBe(100);
+    expect(bal.producedTotal).toBeCloseTo(100, 0);
     expect(bal.consumedTotal).toBe(50);
-    expect(bal.requiredTransmission).toBe(50);
+    expect(bal.requiredTransmission).toBeCloseTo(50, 0);
     expect(bal.cableCapacityTotal).toBe(100);
     expect(bal.unified).toBe(true);
   });
@@ -1246,16 +1254,16 @@ describe('§4 submarine_cable RouteType', () => {
     // Mixed-type component: one land cable + one submarine cable both connect A↔B.
     // Their capacities add (mirrors the chain test at routes.test.ts:742) — proving
     // the new RouteType is just another bucket in the §5.3 capacity sum.
-    const a = makeState('a', { buildings: solars('a', 2) });
+    const a = makeState('a', { buildings: solars('a', 2), lastTick: NOON });
     const b = makeState('b', { buildings: [mine('b1', 0, 0), mine('b2', 4, 0)] });
     const world = makeWorld([
       cableRoute('a', 'b', 30),
       submarineCableRoute('a', 'b', 60),
     ]);
     const states = new Map<string, IslandState>([['a', a], ['b', b]]);
-    const balances = computeCableNetworkBalance(world, states);
+    const balances = balance(world, states);
     const bal = balances.get('a')!;
-    expect(bal.requiredTransmission).toBe(50);
+    expect(bal.requiredTransmission).toBeCloseTo(50, 0);
     expect(bal.cableCapacityTotal).toBe(90); // 30 + 60
     expect(bal.unified).toBe(true); // 90 ≥ 80
   });

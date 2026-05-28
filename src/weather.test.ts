@@ -15,6 +15,9 @@ import {
   hasForecastStation,
   WEATHER_FORECAST_LOOKAHEAD_MS,
   BASE_WEATHER_VISIBILITY_TILES,
+  co2WeatherMultiplier,
+  sumIslandCo2,
+  rollHeatwave,
 } from './weather.js';
 import type { IslandSpec, WorldState } from './world.js';
 
@@ -652,5 +655,49 @@ describe('rollVehicleDestruction', () => {
     const result = rollVehicleDestruction(seed, path, 1.0, 'vehicle-1');
     expect(result.destroyed).toBe(true);
     expect(result.atCellIndex).toBe(0);
+  });
+});
+
+
+describe('co2WeatherMultiplier — band edges', () => {
+  it.each([
+    [0, 1.0], [50, 1.0], [99, 1.0],
+    [100, 1.1], [500, 1.1], [9999, 1.1],
+    [10_000, 1.3], [50_000, 1.3], [99_999, 1.3],
+    [100_000, 1.6], [500_000, 1.6], [1_000_000, 1.6],
+  ])('co2WeatherMultiplier(%i) = %f', (co2, mul) => {
+    expect(co2WeatherMultiplier(co2)).toBe(mul);
+  });
+});
+
+describe('sumIslandCo2 — aggregation', () => {
+  it('sums co2Kg across the islandStates map', () => {
+    const states = new Map<string, { co2Kg?: number }>([
+      ['a', { co2Kg: 1000 }],
+      ['b', { co2Kg: 2500 }],
+      ['c', { co2Kg: 0 }],
+    ]);
+    expect(sumIslandCo2({ islandStates: states })).toBe(3500);
+  });
+  it('treats missing co2Kg as 0', () => {
+    const states = new Map<string, { co2Kg?: number }>([['a', {}]]);
+    expect(sumIslandCo2({ islandStates: states })).toBe(0);
+  });
+});
+
+describe('rollHeatwave — deterministic + threshold', () => {
+  it('returns null below 10t CO₂', () => {
+    expect(rollHeatwave('s', 1, 9999)).toBeNull();
+  });
+  it('fires roughly 5% of the time at >10t (1000 days, expect 50±15)', () => {
+    let hits = 0;
+    for (let d = 0; d < 1000; d++) {
+      if (rollHeatwave('s', d, 50_000)) hits++;
+    }
+    expect(hits).toBeGreaterThanOrEqual(30);
+    expect(hits).toBeLessThan(65);
+  });
+  it('same seed + day → same result (replayable)', () => {
+    expect(rollHeatwave('s', 42, 50_000)).toEqual(rollHeatwave('s', 42, 50_000));
   });
 });
