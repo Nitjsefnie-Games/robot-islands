@@ -24,7 +24,7 @@
 // linear and exact. The integration converges in O(events × resources)
 // regardless of `now - lastTick`, so multi-day offline catchup is cheap.
 
-import { checkGates, computeBuffStack } from './adjacency.js';
+import { borderTiles, checkGates, computeBuffStack, footprintKeySet, touchesBorder } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { nextConstructionCompletionMs, tickConstruction } from './construction.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
@@ -55,6 +55,23 @@ import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WE
 import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition } from './skilltree.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
+
+/** Returns true if any 4-neighbor of `focal` has a `defId` in `defIds`. */
+function hasNeighborWithAnyDefId(
+  focal: PlacedBuilding,
+  buildings: ReadonlyArray<PlacedBuilding>,
+  defIds: ReadonlyArray<BuildingDefId>,
+): boolean {
+  const fp = footprintKeySet(focal, BUILDING_DEFS);
+  const border = borderTiles(fp);
+  const wanted = new Set(defIds);
+  for (const other of buildings) {
+    if (other.id === focal.id) continue;
+    if (!wanted.has(other.defId)) continue;
+    if (touchesBorder(other, border, BUILDING_DEFS)) return true;
+  }
+  return false;
+}
 
 /** Per-battery-def electrical buffer capacity in W-seconds. Summed across
  *  every operational battery on an island to compute total cap. Buildings
@@ -1796,6 +1813,29 @@ export function advanceIsland(
         if (br.recipe.exogenousFlow === 'fuel-combustion-CO₂' && br.recipe.exogenousFlowKg) {
           state.co2Kg += br.recipe.exogenousFlowKg * br.effectiveRate * dtSec;
         }
+      }
+      // §si-units rev-16 §7.4: CO₂ sink drain — accrual fires before, drain after.
+      const rateById = new Map<string, number>();
+      for (const br of byBuilding) {
+        rateById.set(br.building.id, br.effectiveRate);
+      }
+      for (const b of state.buildings) {
+        const def = BUILDING_DEFS[b.defId];
+        const capture = def.co2CaptureKgPerCycle ?? 0;
+        if (capture <= 0) continue;
+
+        // Adjacency gate — exhaust_scrubber requires adjacency to a CO₂ emitter.
+        if (def.co2CaptureAdjacency) {
+          const has = hasNeighborWithAnyDefId(b, state.buildings, def.co2CaptureAdjacency);
+          if (!has) continue;
+        }
+
+        const recipe = resolveRecipe(def, b, ctx?.terrainAt, ctx?.inventory ?? state.inventory);
+        const cyclesThisSegment = recipe
+          ? (rateById.get(b.id) ?? 0) * dtSec
+          : dtSec / 60;
+        const drainKg = capture * cyclesThisSegment;
+        state.co2Kg = Math.max(0, state.co2Kg - drainKg);
       }
       accrueXp(state, production, consumption, dtSec, 1, skillMul.xpGain);
       // §13.3 Battery buffer — apply charge/discharge over the segment.
