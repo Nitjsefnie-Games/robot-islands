@@ -1046,7 +1046,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     // BOM source: Roberts, *Engineering Workshop* — light assembly bench.
     // 150 kg stone pad + 60 kg wood bench + 40 kg iron fixtures + 10 kg bolt hardware = 260 kg.
-    placementCost: { stone: 150, wood: 60, iron_ingot: 40, bolt: 10 },
+    placementCost: { stone: 150, wood: 60, iron_ingot: 40, bolt: 200 },
     glyph: '⚙',
   },
   // §12.3: Kit Assembler Enriched — T3 variant producing Foundation Kit Enriched.
