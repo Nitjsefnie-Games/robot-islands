@@ -411,7 +411,18 @@ export type ResourceId =
   | 'submarine_crystal_t3'
   | 'oceanography_crystal_t1'
   | 'oceanography_crystal_t2'
-  | 'oceanography_crystal_t3';
+  | 'oceanography_crystal_t3'
+// Phase 2 — SI-units rework new resources (§08)
+| 'co'
+| 'co2'
+| 'refinery_gas'
+| 'wood_tar'
+| 'water_vapor'
+| 'aviation_kerosene_crude'
+| 'mill_scale'
+| 'calcium_sulfonate'
+| 'air'
+| 'cryo_coolant_vented';
 
 /** All known resources, useful for iterating to initialise inventories. */
 export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
@@ -720,6 +731,17 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   'oceanography_crystal_t1',
   'oceanography_crystal_t2',
   'oceanography_crystal_t3',
+  // Phase 2 — SI-units rework new resources (§08)
+  'co',
+  'co2',
+  'refinery_gas',
+  'wood_tar',
+  'water_vapor',
+  'aviation_kerosene_crude',
+  'mill_scale',
+  'calcium_sulfonate',
+  'air',
+  'cryo_coolant_vented',
 ];
 
 /**
@@ -1064,6 +1086,17 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   oceanography_crystal_t1: 100,
   oceanography_crystal_t2: 300,
   oceanography_crystal_t3: 1000,
+  // Phase 2 — SI-units rework new resources (§08)
+  co: 3,
+  co2: 3,
+  refinery_gas: 3,
+  wood_tar: 3,
+  water_vapor: 3,
+  aviation_kerosene_crude: 3,
+  mill_scale: 3,
+  calcium_sulfonate: 3,
+  air: 0,
+  cryo_coolant_vented: 3,
 };
 
 export interface ResourceMeta {
@@ -1326,6 +1359,17 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   oceanography_crystal_t1: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   oceanography_crystal_t2: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   oceanography_crystal_t3: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
+  // Phase 2 — SI-units rework new resources (§08)
+  co: { massPerUnitKg: 1, terminal: 'expansion-hook:CO afterburn / oxidation chain' },
+  co2: { massPerUnitKg: 1, terminal: 'expansion-hook:weather penalty + sequestration (Phase 6)' },
+  refinery_gas: { massPerUnitKg: 1, terminal: 'expansion-hook:residential heating / petrochem feedstock' },
+  wood_tar: { massPerUnitKg: 1, terminal: 'expansion-hook:creosote / wood-preservative chain' },
+  water_vapor: { massPerUnitKg: 1, terminal: 'expansion-hook:condensing-loop / humidity / fresh-water reclamation' },
+  aviation_kerosene_crude: { massPerUnitKg: 0.81, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  mill_scale: { massPerUnitKg: 1, terminal: 'expansion-hook:scrap remelt / cement kiln aggregate / brick pigment' },
+  calcium_sulfonate: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  air: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  cryo_coolant_vented: { massPerUnitKg: 1, terminal: 'expansion-hook:re-liquefaction loop / closed-cycle recovery' },
 };
 
 export const RECIPE_SPECULATIVE: Readonly<Partial<Record<RecipeId, 'fantasy chemistry' | 'narrative cost' | true>>> = {

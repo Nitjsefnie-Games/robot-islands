@@ -353,6 +353,17 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   oceanography_crystal_t1: 'rare',
   oceanography_crystal_t2: 'rare',
   oceanography_crystal_t3: 'rare',
+  // Phase 2 — SI-units rework new resources (§08)
+  co: 'liquid',
+  co2: 'liquid',
+  refinery_gas: 'liquid',
+  wood_tar: 'liquid',
+  water_vapor: 'liquid',
+  aviation_kerosene_crude: 'liquid',
+  mill_scale: 'misc',
+  calcium_sulfonate: 'liquid',
+  air: 'liquid',
+  cryo_coolant_vented: 'liquid',
 };
 
 /** Filter chips shown above the resource list. `'all'` is the default. */
