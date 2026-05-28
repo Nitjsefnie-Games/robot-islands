@@ -1064,7 +1064,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xa0a060,
     stroke: 0x4a3520,
     power: { consumes: 150 },
-    placementCost: { steel: 80, microchip: 5 },
+    // BOM source: enriched kit-assembly line — CNC frame + automated feed.
+    // 800 steel_beam frame + 12000 concrete pad + 300 gear transmission + 80 microchip control + 300 bolt hardware ≈ 52.6 t.
+    placementCost: { steel_beam: 800, concrete: 12000, gear: 300, microchip: 80, bolt: 300 },
     glyph: '⚙',
   },
   // §12.3: Kit Assembler Refined — T4 variant producing Foundation Kit Refined.
@@ -1130,7 +1132,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc8a040, // patron gold
     stroke: 0x4a3510,
     power: { consumes: 100 },
-    placementCost: { steel: 50, gear: 20, microchip: 10, glass: 20 },
+    // BOM source: automated cargo-clearance terminal — steel frame + glass canopy.
+    // 400 steel_beam frame + 6000 concrete pad + 250 glass canopy + 50 microchip control + 120 wire comms ≈ 26.3 t.
+    placementCost: { steel_beam: 400, concrete: 6000, glass: 250, microchip: 50, wire: 120 },
     glyph: '⚜',
   },
   // §8.8 T3 logistics: Airship Dock (3x3). T3 long-range airship-route
@@ -1310,7 +1314,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x3a5a7a,
     power: { consumes: 40 },
     requiresHeat: true,
-    placementCost: { steel: 10, gear: 5 },
+    // BOM source: Linde-BOS converter vessel — refractory-lined steel shell.
+    // 1000 steel_beam vessel + 10000 concrete pad + 300 pipe tuyère + 200 gear ladle + 50 microchip control ≈ 61.6 t.
+    placementCost: { steel_beam: 1000, concrete: 10000, pipe: 300, gear: 200, microchip: 50 },
     glyph: '△',
   },
   // §6.7 Slag reprocessing: T2 smelting (2×2). Consumes accumulated slag
@@ -1447,7 +1453,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a7040,
     stroke: 0x1a3010,
     power: { consumes: 200 },
-    placementCost: { steel: 80, microchip: 5, glass: 10 },
+    // BOM source: Panasonic Gigafactory module — cleanroom shell + conveyor grid.
+    // 2000 steel_beam frame + 20000 concrete pad + 500 glass partition + 100 microchip control + 300 wire bus + 200 pipe HVAC ≈ 121.5 t.
+    placementCost: { steel_beam: 2000, concrete: 20000, glass: 500, microchip: 100, wire: 300, pipe: 200 },
     glyph: '🔋',
   },
   // Phase 6 — T2 glass_panel (§6.3)
@@ -1549,7 +1557,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc0c4cb,
     stroke: 0x50545a,
     power: { consumes: 500 },
-    placementCost: { steel: 80, microchip: 5 },
+    // BOM source: Alcoa Hall-Héroult cellhouse — carbon cathode + busbar frame.
+    // 800 steel_beam frame + 10000 concrete pad + 200 pipe cooling + 150 gear pot-ram + 50 microchip control ≈ 51.1 t.
+    placementCost: { steel_beam: 800, concrete: 10000, pipe: 200, gear: 150, microchip: 50 },
     glyph: '△',
   },
   tank: {
@@ -1681,8 +1691,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 200 },
     // rev-16 §5.3: 200 kW elec × 92% transferred-arc eff (ABB).
     heatSource: { freeOrCoal: 'free', thermalKW: 184 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 120, microchip: 40, stone: 30 },
+    // BOM source: Tetronics DC plasma torch — skid-mounted arc furnace.
+    // 1500 steel_beam vessel + 12000 concrete pad + 400 ceramic_insulator nozzle + 200 pipe cooling + 80 microchip control ≈ 88.2 t.
+    placementCost: { steel_beam: 1500, concrete: 12000, ceramic_insulator: 400, pipe: 200, microchip: 80 },
     glyph: '♨',
   },
   electric_arc_furnace: {
@@ -1702,7 +1713,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §4.5 gating adjacency demonstration: hard heat_source gate.
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Nucor EAF shell + transformer bay reference.
-    // 1200 steel_beam shell + 15000 concrete pad + 500 ceramic_insulator + 200 gear + 200 pipe + 80 microchip ≈ 77.7 t.
+    // 1200 steel_beam shell + 15000 concrete pad + 500 ceramic_insulator + 200 gear + 200 pipe + 80 microchip ≈ 76.7 t.
     placementCost: { steel_beam: 1200, concrete: 15000, ceramic_insulator: 500, gear: 200, pipe: 200, microchip: 80 },
     glyph: '△',
   },
@@ -1720,7 +1731,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1a1830,
     storage: { category: 'rare', capacity: 5000 },
     // BOM source: UL-rated bank vault enclosure — reinforced concrete + steel liner.
-    // 800 steel_beam frame + 12000 concrete shell + 300 stone foundation + 100 microchip + 200 wire ≈ 53.1 t.
+    // 800 steel_beam frame + 12000 concrete shell + 300 stone foundation + 100 microchip + 200 wire ≈ 52.4 t.
     placementCost: { steel_beam: 800, concrete: 12000, stone: 300, microchip: 100, wire: 200 },
     glyph: '▦',
   },
@@ -1739,7 +1750,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x2a1a40,
     power: { consumes: 200 },
     // BOM source: offshore jack-up platform leg + deck segment.
-    // 2000 steel_beam truss + 25000 concrete pad + 500 stone ballast + 150 microchip + 300 wire ≈ 125.2 t.
+    // 2000 steel_beam truss + 25000 concrete pad + 500 stone ballast + 150 microchip + 300 wire ≈ 125.7 t.
     placementCost: { steel_beam: 2000, concrete: 25000, stone: 500, microchip: 150, wire: 300 },
     glyph: '⬢',
   },
@@ -3075,7 +3086,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 250 },
     requiresHeat: true,
     gates: [{ matchType: 'heat_source', hard: true }],
-    placementCost: { stone: 200, iron_ingot: 80, wood: 30 },
+    // BOM source: AOD converter + continuous caster — refractory-lined vessel.
+    // 1000 steel_beam vessel + 12000 concrete pad + 300 pipe argon-lance + 200 gear drive + 60 microchip control ≈ 63.6 t.
+    placementCost: { steel_beam: 1000, concrete: 12000, pipe: 300, gear: 200, microchip: 60 },
     glyph: '◈',
   },
 
@@ -3120,7 +3133,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 250 },
     requiresHeat: true,
     gates: [{ matchType: 'heat_source', hard: true }],
-    placementCost: { stone: 200, iron_ingot: 80, wood: 30 },
+    // BOM source: ESR remelt furnace + forging press — heavy tool-steel bay.
+    // 900 steel_beam frame + 11000 concrete pad + 250 pipe cooling + 180 gear press + 50 microchip control ≈ 57.4 t.
+    placementCost: { steel_beam: 900, concrete: 11000, pipe: 250, gear: 180, microchip: 50 },
     glyph: '◈',
   },
 
@@ -3371,7 +3386,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc06080, // phosphor rose
     stroke: 0x502030,
     power: { consumes: 200 },
-    placementCost: { stone: 120, iron_ingot: 40, wood: 15 },
+    // BOM source: USGS phosphoric-acid reactor — digestion vessel + scrubber stack.
+    // 800 steel_beam vessel + 8000 concrete pad + 200 pipe scrubber + 150 gear agitator + 100 glass sight-port ≈ 49.2 t.
+    placementCost: { steel_beam: 800, concrete: 8000, pipe: 200, gear: 150, glass: 100 },
     glyph: '◇',
   },
   chlor_alkali_plant: {
@@ -3467,8 +3484,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x686878, // metallic-silicon grey
     stroke: 0x202028,
     power: { consumes: 250 },
-    // §14 placeholder — tune in Appendix A.
-    placementCost: { steel: 100, stone: 20 },
+    // BOM source: Metso C jaw-crusher + ball-mill installation — steel frame + concrete pad.
+    // 350 steel_beam frame + 5000 concrete pad + 100 gear drive + 50 pipe dust-collection + 300 stone foundation ≈ 23.2 t.
+    placementCost: { steel_beam: 350, concrete: 5000, gear: 100, pipe: 50, stone: 300 },
     glyph: '◈',
   },
   air_separator: {
@@ -3517,8 +3535,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x204060,
     power: { consumes: 400 },
     // BOM source: NIST cryogenic research lab — dewar bay + shielding.
-    // 600 steel_beam frame + 12000 concrete pad + 300 ceramic_insulator + 150 pipe + 80 microchip ≈ 43.6 t.
-    placementCost: { steel_beam: 600, concrete: 12000, ceramic_insulator: 300, pipe: 150, microchip: 80 },
+    // cycle-break (P4C2b/P4C7): concrete added to bring t/m² into 5–50 band.
+    // 600 steel_beam frame + 15000 concrete pad + 300 ceramic_insulator + 150 pipe + 80 microchip ≈ 45.9 t.
+    placementCost: { steel_beam: 600, concrete: 15000, ceramic_insulator: 300, pipe: 150, microchip: 80 },
     glyph: '❄',
   },
   cryo_compressor: {
@@ -3545,7 +3564,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x302840,
     power: { consumes: 350 },
     // BOM source: ChemEng. handbook — fluid catalytic cracker + fractionator.
-    // 1000 steel_beam vessel + 18000 concrete pad + 500 pipe + 150 gear + 100 microchip ≈ 69.3 t.
+    // 1000 steel_beam vessel + 18000 concrete pad + 500 pipe + 150 gear + 100 microchip ≈ 70.3 t.
     placementCost: { steel_beam: 1000, concrete: 18000, pipe: 500, gear: 150, microchip: 100 },
     glyph: '◇',
   },
@@ -3559,7 +3578,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x103040,
     power: { consumes: 600 },
     // BOM source: ASML DUV lithography bay — cleanroom shell only.
-    // 1500 steel_beam frame + 20000 concrete pad + 500 glass + 200 wire ≈ 95.1 t.
+    // 1500 steel_beam frame + 20000 concrete pad + 500 glass + 200 wire ≈ 95.6 t.
     placementCost: { steel_beam: 1500, concrete: 20000, glass: 500, wire: 200 },
     glyph: '◈',
   },
@@ -3602,9 +3621,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x6080a0, // doping-chamber slate-blue
     stroke: 0x203040,
     power: { consumes: 150 },
-    // BOM source: TSMC fab — dielectric deposition chamber enclosure.
-    // 600 steel_beam frame + 8000 concrete pad + 200 glass + 50 microchip + 80 wire ≈ 38.2 t.
-    placementCost: { steel_beam: 600, concrete: 8000, glass: 200, microchip: 50, wire: 80 },
+    // BOM source: TSMC fab — dielectric deposition chamber enclosure (more glass + microchip for CVD stack).
+    // 600 steel_beam frame + 8000 concrete pad + 250 glass dielectric + 80 microchip control + 100 wire feed ≈ 38.3 t.
+    placementCost: { steel_beam: 600, concrete: 8000, glass: 250, microchip: 80, wire: 100 },
     glyph: '◈',
   },
   resistor_doping: {
@@ -3632,7 +3651,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x202830,
     power: { consumes: 250 },
     // BOM source: TSMC fab — DRAM test + burn-in cleanroom bay.
-    // 1200 steel_beam frame + 18000 concrete pad + 400 glass + 120 microchip + 200 wire ≈ 77.2 t.
+    // 1200 steel_beam frame + 18000 concrete pad + 400 glass + 120 microchip + 200 wire ≈ 78.5 t.
     placementCost: { steel_beam: 1200, concrete: 18000, glass: 400, microchip: 120, wire: 200 },
     glyph: '◈',
   },
@@ -3679,7 +3698,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x506070,
     power: { consumes: 100 },
     requiredTile: ['diamond_vein'],
-    placementCost: { stone: 80, iron_ingot: 25, wood: 10 },
+    // BOM source: De Beers open-pit diamond-recovery plant — rotary pan + sorting house.
+    // 300 steel_beam frame + 4500 concrete pad + 80 gear drive + 60 pipe slurry + 400 stone foundation ≈ 20.3 t.
+    placementCost: { steel_beam: 300, concrete: 4500, gear: 80, pipe: 60, stone: 400 },
     glyph: '◆',
   },
   // Phase 10 — T3 minerals + alloy (Task 10.3)
@@ -4277,9 +4298,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.single,
     fill: 0x6088c0,
     stroke: 0x102038,
-    // Antenna placeholder — tune in Appendix A.
-    power: { consumes: 25 },
-    placementCost: { steel: 100, microchip: 25 },
+    // BOM source: telecom relay mast — guyed steel tower base.
+    // 80 steel_beam mast + 1200 concrete pad + 30 microchip transceiver + 60 wire feed ≈ 5.2 t.
+    placementCost: { steel_beam: 80, concrete: 1200, microchip: 30, wire: 60 },
     glyph: '⟁',
   },
   antenna_t4: {
@@ -4399,7 +4420,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4080a0,
     stroke: 0x143048,
     power: { consumes: 400 },
-    placementCost: { carbon_steel: 80, wire: 30, microchip: 15 },
+    // BOM source: NOAA open-water intake platform — pump skid + filter stack.
+    // 300 steel_beam frame + 5000 concrete pad + 80 gear pump + 100 pipe intake + 100 wire control + 20 microchip sensor ≈ 20.6 t.
+    placementCost: { steel_beam: 300, concrete: 5000, gear: 80, pipe: 100, wire: 100, microchip: 20 },
     oceanPlacement: true,
     terrainReqs: ['shallows', 'deep'],
     glyph: '≈',
@@ -4472,7 +4495,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x204050,
     power: { consumes: 800 },
     // BOM source: ChemEng. handbook — multi-effect distillation rig + brine heater.
-    // 1000 steel_beam vessel + 15000 concrete pad + 400 pipe + 200 gear + 120 microchip ≈ 69.3 t.
+    // 1000 steel_beam vessel + 15000 concrete pad + 400 pipe + 200 gear + 120 microchip ≈ 67.0 t.
     placementCost: { steel_beam: 1000, concrete: 15000, pipe: 400, gear: 200, microchip: 120 },
     oceanPlacement: true,
     terrainReqs: ['shallows', 'deep'],
@@ -4563,7 +4586,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4a90d9,
     stroke: 0x2a6099,
     power: { consumes: 30 },
-    placementCost: { steel: 10, microchip: 5, gear: 5 },
+    // BOM source: SMT pick-and-place line — cleanroom bay + reflow oven.
+    // 350 steel_beam frame + 4500 concrete pad + 50 microchip control + 100 wire bus + 70 gear conveyor + 60 glass partition ≈ 22.3 t.
+    placementCost: { steel_beam: 350, concrete: 4500, microchip: 50, wire: 100, gear: 70, glass: 60 },
     glyph: '◈',
   },
   processor_fab: {
@@ -4616,7 +4641,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0x4070a0,
     stroke: 0x102040,
     power: { consumes: 25 },
-    placementCost: { steel: 10, microchip: 2, glass: 10 },
+    // BOM source: NOAA ASOS tower enclosure — instrument shelter + anemometer mast.
+    // 350 steel_beam mast + 4500 concrete pad + 250 glass instrument housing + 40 microchip sensor + 80 wire comms ≈ 22.3 t.
+    placementCost: { steel_beam: 350, concrete: 4500, glass: 250, microchip: 40, wire: 80 },
     glyph: '☁',
   },
 };
