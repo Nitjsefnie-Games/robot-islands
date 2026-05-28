@@ -574,6 +574,15 @@ export interface BuildingDef {
    *  empty = no adjacency buff (default). Resolution: `computeBuffStack`
    *  in `adjacency.ts`, called from `computeRates`. */
   readonly adjacencyBuffs?: ReadonlyArray<AdjacencyBuff>;
+  /** §si-units rev-16 §7.4: CO₂ captured per recipe cycle when this
+   *  building is running. Drained from `state.co2Kg` by the integrator
+   *  in `advanceIsland`. Clamped at zero — sinks don't go negative. */
+  readonly co2CaptureKgPerCycle?: number;
+  /** §si-units rev-16 §7.4: optional adjacency gate for CO₂ capture.
+   *  If set, the drain fires only when at least one 4-neighbor
+   *  building's defId matches an entry. Absent → drain unconditionally
+   *  (wastewater_treatment uses the unconditional path). */
+  readonly co2CaptureAdjacency?: ReadonlyArray<BuildingDefId>;
   /** §4.5 gating adjacency requirements. Hard gates zero output; soft gates
    *  degrade by `degradeMul`. Resolution: `checkGates` in `adjacency.ts`. */
   readonly gates?: ReadonlyArray<GateRequirement>;
@@ -1826,6 +1835,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 200 steel_beam + 8000 concrete + 100 gear + 150 pipe + 2000 clay = 20.8 t.
     placementCost: { steel_beam: 200, concrete: 8000, gear: 100, pipe: 150, clay: 2000 },
     glyph: '⌇',
+    // §si-units rev-16 §7.4: algae bioreactor / activated-sludge analog
+    // absorbs CO₂. Unconditional drain — no adjacency gate.
+    co2CaptureKgPerCycle: 5,
   },
   // §8.7 T2 emissions: Exhaust Scrubber (1x1). Required for clean
   // operation of high-emission buildings. Consumer-side wiring lives on
@@ -1846,6 +1858,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 80 steel_beam + 1500 concrete + 30 gear + 50 pipe + 500 clay = 6.3 t.
     placementCost: { steel_beam: 80, concrete: 1500, gear: 30, pipe: 50, clay: 500 },
     glyph: '⌗',
+    // §si-units rev-16 §7.4: post-combustion flue-gas capture, gated on
+    // adjacency to a CO₂-producing source per real-world operation.
+    co2CaptureKgPerCycle: 20,
+    co2CaptureAdjacency: ['coal_gen', 'biomass_plant', 'cement_mill', 'limekiln'],
   },
   // -------------------------------------------------------------------------
   // T4 (levels 30-50) — endgame chain per §6.5 / §8.5 / §9.5
