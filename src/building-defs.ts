@@ -548,6 +548,10 @@ export interface BuildingDef {
   readonly heatSource?: {
     readonly freeOrCoal: 'free' | 'coal';
     readonly coalPerCycle?: number;
+    /** Thermal output in kW per rev-16 §5.3. Phase 3 reads this to
+     *  throttle consumers proportionally when supply < demand.
+     *  Phase 1 declares only. */
+    readonly thermalKW?: number;
   };
   /** §5.2 heat-consumer declaration. When `true`, the building requires at
    *  least one adjacent Heat Source in its 4-neighbor footprint border to
@@ -557,6 +561,10 @@ export interface BuildingDef {
    *  set on the T1 Smelter — the basic smelter remains the bootstrap
    *  unconditional iron→ingot link (a Smelter without heat is intentional). */
   readonly requiresHeat?: boolean;
+  /** Heat demand in kW — Phase 3 of the SI-units rework wires the
+   *  proportional-throttle consumer side per rev-16 §5.1. Phase 1
+   *  declares only. */
+  readonly heatDemandKW?: number;
   /** §4.5 buff-adjacency entries. Each entry contributes additively up to
    *  its `maxMatches` cap; entries compose multiplicatively. Undefined or
    *  empty = no adjacency buff (default). Resolution: `computeBuffStack`
