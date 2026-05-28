@@ -141,6 +141,14 @@ export function co2WeatherMultiplier(totalCo2Kg: number): number {
   return 1.6;
 }
 
+/** §7.4 Heatwave roll. Returns 'heatwave' state or null based on CO₂ threshold + RNG.
+ *  Bands: <10t = always null; ≥10t = ~5% per dwell; deterministic by (seed, day).  */
+export function rollHeatwave(seed: string, day: number, totalCo2Kg: number): 'heatwave' | null {
+  if (totalCo2Kg < 10_000) return null;
+  const rng = makeSeededRng(`${seed}::heatwave::${day}`);
+  return (rng() < 0.05) ? 'heatwave' : null;
+}
+
 export function sumIslandCo2(world: { islandStates?: Map<string, { co2Kg?: number }> }): number {
   let sum = 0;
   if (world.islandStates) {

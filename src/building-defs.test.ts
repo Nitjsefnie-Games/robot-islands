@@ -295,6 +295,10 @@ describe('BUILDING_DEFS catalog', () => {
     expect(list).toEqual(keys);
   });
 
+  it('coal_gen produces 50 units of power (rev-16 §10.3)', () => {
+    expect(BUILDING_DEFS.coal_gen.power?.produces).toBe(50);
+  });
+
   it('every def declares positive integer footprint dimensions', () => {
     for (const id of KNOWN_DEF_IDS) {
       const def = BUILDING_DEFS[id];
