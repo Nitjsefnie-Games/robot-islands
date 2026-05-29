@@ -35,6 +35,7 @@ import {
   setGenesisTarget,
   spendTimeLock,
   batteryCapacityWs,
+  BATTERY_CAPACITY_WS,
   xpForLevel,
   type DefCatalog,
   type IslandState,
@@ -3042,6 +3043,14 @@ describe('Singularity Battery', () => {
     const state = makeState();
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0, disabled: true });
     expect(batteryCapacityWs(state, effectiveSkillMultipliers(state))).toBe(0);
+  });
+
+  it('battery capacities are MWh-scale under the kW power unit', () => {
+    // value is (power-unit)·seconds; power unit is now kW → 5_000*3600 kW·s = 5 MWh
+    expect(BATTERY_CAPACITY_WS.battery_bank).toBe(5_000 * 3600);
+    // a 5 MW coal_gen surplus fills it in ~1 h: 5 MWh / 5 MW = 1 h
+    const hoursToFill = (BATTERY_CAPACITY_WS.battery_bank! / 3600) / 5000; // (kWh)/(kW)
+    expect(hoursToFill).toBeCloseTo(1, 5);
   });
 });
 
