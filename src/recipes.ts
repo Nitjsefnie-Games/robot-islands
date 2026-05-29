@@ -1367,7 +1367,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   water_vapor: { massPerUnitKg: 1, terminal: 'expansion-hook:condensing-loop / humidity / fresh-water reclamation' },
   aviation_kerosene_crude: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
   mill_scale: { massPerUnitKg: 1, terminal: 'expansion-hook:scrap remelt / cement kiln aggregate / brick pigment' },
-  calcium_sulfonate: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  calcium_sulfonate: { massPerUnitKg: 1, terminal: 'consumed' },
   air: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
   cryo_coolant_vented: { massPerUnitKg: 1, terminal: 'expansion-hook:re-liquefaction loop / closed-cycle recovery' },
 };
