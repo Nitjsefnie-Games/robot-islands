@@ -385,16 +385,16 @@
       <a href="#s3">03 · New functions</a>
       <a href="#s4">04 · Phase thresholds</a>
       <a href="#s5">05 · Consumer migration</a>
-      <a href="#s6">06 · weather() change</a>
+      <a href="#s6">06 · weather (unchanged)</a>
       <a href="#s7">07 · Verification</a>
       <a href="#s8">08 · Risks</a>
       <a href="#s9">09 · Out of scope</a>
     </nav>
 
     <div class="summary">
-      <div class="cell"><div class="k">Scope</div><div class="v accent">5 consumers + 1 signature</div></div>
-      <div class="cell"><div class="k">Files touched</div><div class="v">~7 src + SPEC</div></div>
-      <div class="cell"><div class="k">Risk</div><div class="v">Medium</div></div>
+      <div class="cell"><div class="k">Scope</div><div class="v accent">4 O(1) consumers</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">4 src + SPEC</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
       <div class="cell"><div class="k">Synthetic clock</div><div class="v ok">Kept as fallback</div></div>
     </div>
 
@@ -407,10 +407,14 @@
         <em>label</em>, the screen tint, weather modulation, the during-night
         gate, and the integrator's segment boundaries.</div>
       <div class="d-body">We do <em>not</em> delete the synthetic helpers: they
-        keep their passing test suite and become the deterministic fallback when
-        no location is set (fixtures / pre-picker frames). The label readout
-        becomes <strong>phase + countdown</strong> ("Night · sunrise in 7h12m"),
-        not a percentage, because real phases are not equal-length.</div>
+        become the deterministic no-location fallback <em>and</em> keep driving
+        <strong>weather phase-modulation, which stays synthetic</strong> — real
+        astronomy in weather's ~216k-iteration epoch-replay loop was measured at
+        170×–9000× the cost for an imperceptible storm-rate tweak (§6). The four
+        migrated consumers are all O(1) per call, so no caching is needed. The
+        label readout becomes <strong>phase + countdown</strong>
+        ("Night · sunrise in 7h12m"), not a percentage — real phases are not
+        equal-length.</div>
     </div>
 
     <section id="s1">
@@ -451,7 +455,7 @@ real sun altitude at Brno         = <span class="k">below horizon</span> <span c
             <li>Weather boost keyed to real Night/Dawn at the player location.</li>
             <li>during-night gate from <code>realPhaseName</code>.</li>
             <li>Integrator boundary from <code>nextRealPhaseBoundaryMs</code>.</li>
-            <li>Synthetic clock retained as null-location fallback only.</li>
+            <li>Weather modulation stays synthetic (perf — §6); synthetic clock also the null-location fallback.</li>
           </ul></div>
         </div>
       </div>
@@ -498,8 +502,8 @@ CIVIL  = -6° = -0.10472 rad
     </section>
 
     <section id="s5">
-      <div class="sec-head"><span class="num">05</span><h2>Consumer migration — the 5 sites</h2></div>
-      <p class="sec-intro">Each behavioral consumer switches to a real-sun function with the player's coordinates. <code>nextSolarBoundaryMs</code> (32 fixed segments) is untouched — solar integration is already faithful.</p>
+      <div class="sec-head"><span class="num">05</span><h2>Consumer migration — the 4 sites</h2></div>
+      <p class="sec-intro">Each behavioral consumer switches to a real-sun function with the player's coordinates — all O(1) per call. <code>nextSolarBoundaryMs</code> (32 fixed segments) is untouched — solar integration is already faithful. Weather (consumer #5) is excluded — see §06.</p>
       <div class="changes">
         <div class="change">
           <div class="file">hud.ts:384–387</div>
@@ -528,38 +532,31 @@ CIVIL  = -6° = -0.10472 rad
             boolean stays constant within each segment. lat/lon reachable (same
             source <code>computeRates</code>' line-784 <code>solarMultiplier</code> uses).</div>
         </div>
-        <div class="change">
-          <div class="file">weather.ts:179 (weather loop)</div>
-          <div class="what"><span class="lead">Real phase modulation.</span>
-            <code>realPhaseName(t, lat, lon)</code> — requires the signature change
-            in §06.</div>
-        </div>
       </div>
     </section>
 
     <section id="s6">
-      <div class="sec-head"><span class="num">06</span><h2><code>weather()</code> signature change</h2></div>
-      <p class="sec-intro"><code>weather()</code> has 38 references across 9 files. Optional trailing params keep every existing caller and test untouched.</p>
-      <p class="body">New signature:
-        <code>weather(seed, cx, cy, nowMs, biome?, totalCo2Kg = 0, lat = null, lon = null)</code>.
-        Inside the loop, <code>realPhaseName(t, lat, lon)</code> with null/null
-        delegates to <code>dayPhaseName(t)</code> — so <strong>every caller and
-        test that omits lat/lon keeps its current deterministic behavior</strong>
-        (<code>weather.test.ts</code> stays green).</p>
-      <p class="body">Only the callers that must reflect the real sun <em>and</em>
-        have the player location are updated, so simulation and display agree:
-        <code>economy.ts:634</code> (during-storm gate),
-        <code>routes.ts:577</code>, <code>hover-tooltip.ts:287/293</code>,
-        <code>weather-overlay.ts:144/159</code>. Re-run
-        <code>findReferences</code> before editing to confirm no positional-arg
-        caller breaks.</p>
-      <p class="body"><strong>Determinism (accepted):</strong> re-anchoring to the
-        real sun changes weather history for the real-location path — existing
-        seeds replay differently. <strong>Performance:</strong> the loop runs up
-        to 1,000,000 iterations calling the phase fn each time; the implementer
-        must <em>measure</em> a representative iteration count first and memoize
-        phase per integration step if 2× SunCalc/iteration is material — decide on
-        the measurement, not assumption.</p>
+      <div class="sec-head"><span class="num">06</span><h2><code>weather()</code> — unchanged (stays synthetic)</h2></div>
+      <p class="sec-intro">A measured decision: <code>weather()</code> is not modified.</p>
+      <p class="body"><code>weather()</code> replays deterministically from the
+        Unix epoch to <code>nowMs</code> in ~135-minute dwell steps —
+        <strong>~216,000 iterations per call</strong> — and the overlay calls it
+        once per visible cell. Measured cost per call of swapping its
+        per-iteration <code>dayPhaseName</code> (a pure modulo, &lt;1 ms) for real
+        astronomy:</p>
+<pre>synthetic dayPhaseName (current)        <span class="k">&lt; 1 ms</span>
+real sun, 2× getPosition / iteration   <span class="k">174 ms</span>  <span class="c">→ ~9 s per overlay rebuild (≈50 cells)</span>
+real sun + per-day getTimes cache      <span class="k">~53 ms</span>  <span class="c">first-call warmup, then O(1)</span></pre>
+      <p class="body">The phase-boost weather drives is an invisible ±25 %
+        severe-storm weight tweak over a 56-year historical replay — the player
+        never perceives "weather time-of-day." Per user decision it
+        <strong>stays on the synthetic clock</strong>. Consequences: no signature
+        change, so its 38 references across 9 files
+        (<code>economy.ts</code>, <code>routes.ts</code>,
+        <code>hover-tooltip.ts</code>, <code>weather-overlay.ts</code>, tests) are
+        untouched and <code>weather.test.ts</code> is unaffected; and
+        <code>dayPhaseName</code> keeps a genuine production consumer, so the
+        synthetic clock is live code, not vestigial.</p>
     </section>
 
     <section id="s7">
@@ -585,29 +582,19 @@ CIVIL  = -6° = -0.10472 rad
           <div class="cell head">Mitigation</div>
         </div>
         <div class="row">
-          <div class="cell">SunCalc in weather's up-to-1M-iteration loop becomes a hot path.</div>
+          <div class="cell">Integrator under-integrates across a real night→day transition during offline catchup.</div>
           <div class="cell"><span class="sev med">MED</span></div>
-          <div class="cell">Measure representative iteration count first; memoize phase per integration step (phase changes slowly as <code>t</code> advances in dwell chunks).</div>
+          <div class="cell"><code>nextRealPhaseBoundaryMs</code> returns real crossing times so the night boolean is constant per segment; polar fallback bounds the segment to <code>QUADRANT_MS</code>. Covered by a multi-day-catchup test.</div>
         </div>
         <div class="row">
-          <div class="cell"><code>weather()</code> positional-arg caller breaks when two trailing optionals are added.</div>
-          <div class="cell"><span class="sev med">MED</span></div>
-          <div class="cell"><code>findReferences</code> enumeration before edit; trailing optionals default to null so existing arity is preserved.</div>
-        </div>
-        <div class="row">
-          <div class="cell">Integrator under-integrates across a real night→day transition.</div>
-          <div class="cell"><span class="sev med">MED</span></div>
-          <div class="cell"><code>nextRealPhaseBoundaryMs</code> returns real crossing times so the night boolean is constant per segment; polar fallback bounds the segment to <code>QUADRANT_MS</code>.</div>
-        </div>
-        <div class="row">
-          <div class="cell">Weather history changes for existing saves (re-anchored seeds).</div>
+          <div class="cell">Real-sun calls (<code>getPosition</code>/<code>getTimes</code>) add per-frame cost to HUD + tint.</div>
           <div class="cell"><span class="sev low">LOW</span></div>
-          <div class="cell">Explicitly accepted by the user. Pre-release; no save-compat guarantee for weather replay.</div>
+          <div class="cell">O(1) per frame — a handful of calls, ~microseconds. The expensive path (weather's 216k loop) is explicitly excluded (§6).</div>
         </div>
         <div class="row">
-          <div class="cell">Display weather diverges from simulated weather if a render caller forgets lat/lon.</div>
+          <div class="cell">Polar / high-latitude location yields Invalid Date from <code>getTimes</code>.</div>
           <div class="cell"><span class="sev low">LOW</span></div>
-          <div class="cell">All render callers (hover-tooltip, weather-overlay) updated in the same change; a smoke check compares overlay vs HUD.</div>
+          <div class="cell"><code>realPhaseName</code> uses altitude (never NaN); <code>nextSunEvent</code> returns null (countdown omitted); <code>nextRealPhaseBoundaryMs</code> falls back to <code>now + QUADRANT_MS</code>. Explicit polar test.</div>
         </div>
       </div>
     </section>
@@ -616,6 +603,10 @@ CIVIL  = -6° = -0.10472 rad
       <div class="sec-head"><span class="num">09</span><h2>Out of scope</h2></div>
       <p class="sec-intro">Considered and deliberately deferred.</p>
       <div class="deferred">
+        <div class="defer">
+          <div class="dt">Migrating weather() phase modulation to the real sun</div>
+          <div class="dd">Measured infeasible (170×–9000× cost in its epoch-replay loop) for an imperceptible storm-rate boost; stays synthetic (§6). A future weather-replay redesign could revisit it.</div>
+        </div>
         <div class="defer">
           <div class="dt">Deleting the synthetic helpers</div>
           <div class="dd"><code>dayPhase</code>/<code>dayPhaseName</code>/<code>nextPhaseBoundaryMs</code>/<code>EPOCH_PHASE_OFFSET</code> are retained as the null-location fallback (user chose "keep", not "retire").</div>
