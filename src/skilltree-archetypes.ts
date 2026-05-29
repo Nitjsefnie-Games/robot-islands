@@ -291,49 +291,38 @@ export const NETWORK_FILLER_NODES = NETWORK_FILLER_ARCHETYPES.flatMap(generateFi
 // ---------------------------------------------------------------------------
 
 export const LAUNCH_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C6b: padSafety (padExplosionReduceMul) demoted — launch.notable.blastDeflector
+  // keeps it alive. satFuel (satFuelReserveMul) demoted — launch.notable.reserveTanks
+  // keeps it alive. 2 kept chains.
   {
     idPrefix: 'launch.success', effectKind: 'launchSuccessAdditive',
     subPath: 'launch', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
   },
   {
-    idPrefix: 'launch.padSafety', effectKind: 'padExplosionReduceMul',
-    subPath: 'launch', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
-  },
-  {
     idPrefix: 'launch.satBuffer', effectKind: 'satBufferCapMul',
     subPath: 'launch', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
-  },
-  {
-    idPrefix: 'launch.satFuel', effectKind: 'satFuelReserveMul',
-    subPath: 'launch', growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
   },
 ];
 export const LAUNCH_FILLER_NODES = LAUNCH_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const COMMUNICATION_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C6b: deliberately-sparse 1-chain sub-path (spec-approved).
+  // satBuffer (satBufferCapMul) rehomed to launch.satBuffer filler + notables
+  // (e.g. electronics.notable.satBandwidth). scanner (scannerCoverageMul)
+  // rehomed to discovery.scannerCoverage + oceanography.scannerCoverage fillers.
   {
     idPrefix: 'communication.commRange', effectKind: 'commRangeMul',
     subPath: 'communication', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
-  },
-  {
-    idPrefix: 'communication.satBuffer', effectKind: 'satBufferCapMul',
-    subPath: 'communication', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
-  },
-  {
-    idPrefix: 'communication.scanner', effectKind: 'scannerCoverageMul',
-    subPath: 'communication', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
 ];
 export const COMMUNICATION_FILLER_NODES = COMMUNICATION_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const DISCOVERY_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C6b: scannerDwell (scannerDwellRateMul) demoted — discovery.notable.dwellOptimization
+  // keeps it alive. 2 kept chains.
   {
     idPrefix: 'discovery.scannerCoverage', effectKind: 'scannerCoverageMul',
     subPath: 'discovery', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
-  },
-  {
-    idPrefix: 'discovery.scannerDwell', effectKind: 'scannerDwellRateMul',
-    subPath: 'discovery', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'discovery.droneScan', effectKind: 'droneScanRadiusMul',
@@ -343,13 +332,11 @@ export const DISCOVERY_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const DISCOVERY_FILLER_NODES = DISCOVERY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const RESILIENCE_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C6b: repairDrone (repairDroneReliabilityMul) demoted — resilience.notable.redundantSystems
+  // keeps it alive. 2 kept chains.
   {
     idPrefix: 'resilience.debris', effectKind: 'debrisProtectionMul',
     subPath: 'resilience', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
-  },
-  {
-    idPrefix: 'resilience.repairDrone', effectKind: 'repairDroneReliabilityMul',
-    subPath: 'resilience', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'resilience.maintenance', effectKind: 'maintenanceThresholdMul',
