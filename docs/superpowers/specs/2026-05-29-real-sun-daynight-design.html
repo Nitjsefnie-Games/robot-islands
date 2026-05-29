@@ -1,0 +1,640 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-sun day-night cycle — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 1040px; }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ---------- TOC ---------- */
+    .toc {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin: 28px 0 56px;
+    }
+    .toc a {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--gray-700);
+      text-decoration: none;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 8px;
+      padding: 6px 11px;
+    }
+    .toc a:hover { border-color: var(--clay); color: var(--slate); }
+
+    /* ---------- summary strip ---------- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 760px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 60px; scroll-margin-top: 20px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 740px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 800px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      color: var(--gray-700);
+      overflow-x: auto;
+      margin-bottom: 16px;
+      max-width: 800px;
+      line-height: 1.5;
+    }
+    pre .c { color: var(--gray-500); }
+    pre .k { color: var(--clay); }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td code { white-space: nowrap; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* ---------- comparison ("X vs Y") cards ---------- */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- checklist ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 800px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- risk table ---------- */
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    /* ---------- deferred / out-of-scope cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · §2.7</div>
+      <h1>Real-sun day-night cycle</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        At 21:43 local time in Brno (the in-game location), the HUD showed
+        <code>Dawn 78% · solar 0.0×</code> — a fake "Dawn" label next to the real
+        sun's zero output. The cause is a second, synthetic clock that drives the
+        labels, tint, weather, and a gameplay gate independently of the player's
+        location, while solar <em>power</em> already follows real astronomy. This
+        spec migrates the behavioral consumers onto the real sun and keeps the
+        synthetic clock only as the no-location fallback.
+      </div>
+    </header>
+
+    <nav class="toc">
+      <a href="#s1">01 · Root cause</a>
+      <a href="#s2">02 · Two clocks</a>
+      <a href="#s3">03 · New functions</a>
+      <a href="#s4">04 · Phase thresholds</a>
+      <a href="#s5">05 · Consumer migration</a>
+      <a href="#s6">06 · weather() change</a>
+      <a href="#s7">07 · Verification</a>
+      <a href="#s8">08 · Risks</a>
+      <a href="#s9">09 · Out of scope</a>
+    </nav>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Scope</div><div class="v accent">5 consumers + 1 signature</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">~7 src + SPEC</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v">Medium</div></div>
+      <div class="cell"><div class="k">Synthetic clock</div><div class="v ok">Kept as fallback</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Add real-sun functions alongside the synthetic ones; switch every behavioral consumer; keep the synthetic clock as the null-location fallback.</div>
+      <div class="d-body"><code>solarMultiplier</code> already computes the true sun
+        at the player's coordinates via SunCalc — power is correct. The fix is to
+        stop the synthetic UTC-quadrant clock from driving the phase
+        <em>label</em>, the screen tint, weather modulation, the during-night
+        gate, and the integrator's segment boundaries.</div>
+      <div class="d-body">We do <em>not</em> delete the synthetic helpers: they
+        keep their passing test suite and become the deterministic fallback when
+        no location is set (fixtures / pre-picker frames). The label readout
+        becomes <strong>phase + countdown</strong> ("Night · sunrise in 7h12m"),
+        not a percentage, because real phases are not equal-length.</div>
+    </div>
+
+    <section id="s1">
+      <div class="sec-head"><span class="num">01</span><h2>Root cause</h2></div>
+      <p class="sec-intro">Numeric confirmation that the reported "Dawn 78%" is the synthetic clock, not the real sun.</p>
+      <p class="body"><code>dayPhase(now)</code> maps Unix-epoch wall-clock time
+        through a fixed <code>EPOCH_PHASE_OFFSET = 0.375</code> into four equal
+        6-hour quadrants — with <strong>no dependence on the player's
+        location</strong>. At 19:43 UTC (= 21:43 CEST in Brno):</p>
+<pre>phase = (19.717/24 + 0.375) mod 1 = <span class="k">0.1965</span>   <span class="c">→ quadrant 'dawn'</span>
+frac  = (0.1965 × 4) mod 1        = <span class="k">0.786</span>    <span class="c">→ "Dawn 78%"  (exactly as reported)</span>
+real sun altitude at Brno         = <span class="k">below horizon</span> <span class="c">→ solar 0.0×</span></pre>
+      <p class="body">The label and the solar multiplier disagree because they
+        read different clocks. SPEC §2.7 documents the synthetic model and is now
+        out of date relative to the intended behavior (track the real sun).</p>
+    </section>
+
+    <section id="s2">
+      <div class="sec-head"><span class="num">02</span><h2>Two clocks, before &amp; after</h2></div>
+      <p class="sec-intro">What drives each consumer today, and what will drive it after the change.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Before — synthetic UTC quadrants</div>
+          <div class="col-body"><ul>
+            <li>HUD phase label &amp; % from <code>dayPhase</code>/<code>dayPhaseName</code>.</li>
+            <li>Screen tint cross-fade from synthetic phase distance.</li>
+            <li>Weather severe-storm boost keyed to synthetic Night/Dawn.</li>
+            <li>during-night economy gate from synthetic <code>dayPhaseName</code>.</li>
+            <li>Integrator segment boundary from synthetic <code>nextPhaseBoundaryMs</code>.</li>
+            <li>Only <code>solarMultiplier</code> (power) was real.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After — real sun at player coordinates</div>
+          <div class="col-body"><ul>
+            <li>Label name from <code>realPhaseName</code>; countdown from <code>nextSunEvent</code>.</li>
+            <li>Tint base + cross-fade from real altitude near h=0 / h=−6°.</li>
+            <li>Weather boost keyed to real Night/Dawn at the player location.</li>
+            <li>during-night gate from <code>realPhaseName</code>.</li>
+            <li>Integrator boundary from <code>nextRealPhaseBoundaryMs</code>.</li>
+            <li>Synthetic clock retained as null-location fallback only.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s3">
+      <div class="sec-head"><span class="num">03</span><h2>New pure functions in <code>daynight.ts</code></h2></div>
+      <p class="sec-intro">All take <code>(nowMs, lat: number | null, lon: number | null)</code>, no PixiJS/DOM. Null lat/lon delegates to the synthetic clock.</p>
+      <p class="body"><strong>realPhaseName</strong> — altitude-based, never NaN
+        (<code>getPosition</code> always returns a number):</p>
+<pre><span class="c">// null lat/lon → dayPhaseName(nowMs)  (synthetic fallback)</span>
+h      = SunCalc.getPosition(nowMs, lat, lon).altitude        <span class="c">// radians</span>
+rising = SunCalc.getPosition(nowMs + 60_000, lat, lon).altitude &gt; h
+CIVIL  = -6° = -0.10472 rad
+  h &gt;= 0                 <span class="k">→ 'day'</span>
+  h &gt;= CIVIL &amp;&amp;  rising  <span class="k">→ 'dawn'</span>
+  h &gt;= CIVIL &amp;&amp; !rising  <span class="k">→ 'dusk'</span>
+  h &lt;  CIVIL             <span class="k">→ 'night'</span></pre>
+      <p class="body"><strong>nextSunEvent</strong> →
+        <code>{ kind: 'sunrise' | 'sunset'; atMs } | null</code>. Earliest
+        <code>getTimes</code> sunrise/sunset strictly after <code>now</code> over
+        today+tomorrow; its <code>kind</code> is automatically the meaningful one
+        (sun up → next is sunset; down → sunrise). <code>null</code> on null
+        lat/lon or polar (Invalid Date / NaN guarded).</p>
+      <p class="body"><strong>nextRealPhaseBoundaryMs</strong> → earliest of the
+        four real transitions (sunrise, sunset, civil dawn, civil dusk) strictly
+        after <code>now</code>. Fallbacks (never NaN): null lat/lon →
+        <code>nextPhaseBoundaryMs(now)</code>; polar (no candidate) →
+        <code>now + QUADRANT_MS</code>.</p>
+    </section>
+
+    <section id="s4">
+      <div class="sec-head"><span class="num">04</span><h2>Phase thresholds</h2></div>
+      <p class="sec-intro">The altitude bands that define each phase. Geometric horizon for sunrise/sunset; civil twilight (−6°) for the dawn/dusk bands (user-approved).</p>
+      <table class="tbl">
+        <thead><tr><th>Phase</th><th>Altitude condition</th><th>Direction</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">day</td><td><code>h ≥ 0°</code></td><td>—</td><td>Sun above horizon</td></tr>
+          <tr><td class="slate">dawn</td><td><code>−6° ≤ h &lt; 0°</code></td><td>rising</td><td>Morning twilight before sunrise</td></tr>
+          <tr><td class="slate">dusk</td><td><code>−6° ≤ h &lt; 0°</code></td><td>falling</td><td>Evening twilight after sunset</td></tr>
+          <tr><td class="slate">night</td><td><code>h &lt; −6°</code></td><td>—</td><td>Sun well below horizon</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s5">
+      <div class="sec-head"><span class="num">05</span><h2>Consumer migration — the 5 sites</h2></div>
+      <p class="sec-intro">Each behavioral consumer switches to a real-sun function with the player's coordinates. <code>nextSolarBoundaryMs</code> (32 fixed segments) is untouched — solar integration is already faithful.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">hud.ts:384–387</div>
+          <div class="what"><span class="lead">Label → phase + countdown.</span>
+            <code>realPhaseName</code> for the name, <code>nextSunEvent</code> for
+            "sunrise/sunset in Xh Ym". Null event → omit countdown. Drop the % readout.</div>
+        </div>
+        <div class="change">
+          <div class="file">daynight-tint.ts:61 (currentTint)</div>
+          <div class="what"><span class="lead">Tint → real phase + altitude fade.</span>
+            Base tint by <code>realPhaseName</code>; cross-fade window expressed in
+            altitude near h=0 / h=−6° instead of synthetic phase distance. lat/lon
+            plumbed from the tint mount in <code>main.ts</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">economy.ts:639 (during-night gate)</div>
+          <div class="what"><span class="lead">Real night check.</span>
+            <code>realPhaseName(nowMs, world.playerLat, world.playerLon) === 'night'</code>.
+            <code>world</code> already in scope.</div>
+        </div>
+        <div class="change">
+          <div class="file">economy.ts:1786 (advanceIsland)</div>
+          <div class="what"><span class="lead">Real integrator boundary.</span>
+            <code>nextRealPhaseBoundaryMs(t + wallOffset, lat, lon) − wallOffset</code>.
+            Keeps the §15.3 piecewise-constant invariant — the now-real night
+            boolean stays constant within each segment. lat/lon reachable (same
+            source <code>computeRates</code>' line-784 <code>solarMultiplier</code> uses).</div>
+        </div>
+        <div class="change">
+          <div class="file">weather.ts:179 (weather loop)</div>
+          <div class="what"><span class="lead">Real phase modulation.</span>
+            <code>realPhaseName(t, lat, lon)</code> — requires the signature change
+            in §06.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s6">
+      <div class="sec-head"><span class="num">06</span><h2><code>weather()</code> signature change</h2></div>
+      <p class="sec-intro"><code>weather()</code> has 38 references across 9 files. Optional trailing params keep every existing caller and test untouched.</p>
+      <p class="body">New signature:
+        <code>weather(seed, cx, cy, nowMs, biome?, totalCo2Kg = 0, lat = null, lon = null)</code>.
+        Inside the loop, <code>realPhaseName(t, lat, lon)</code> with null/null
+        delegates to <code>dayPhaseName(t)</code> — so <strong>every caller and
+        test that omits lat/lon keeps its current deterministic behavior</strong>
+        (<code>weather.test.ts</code> stays green).</p>
+      <p class="body">Only the callers that must reflect the real sun <em>and</em>
+        have the player location are updated, so simulation and display agree:
+        <code>economy.ts:634</code> (during-storm gate),
+        <code>routes.ts:577</code>, <code>hover-tooltip.ts:287/293</code>,
+        <code>weather-overlay.ts:144/159</code>. Re-run
+        <code>findReferences</code> before editing to confirm no positional-arg
+        caller breaks.</p>
+      <p class="body"><strong>Determinism (accepted):</strong> re-anchoring to the
+        real sun changes weather history for the real-location path — existing
+        seeds replay differently. <strong>Performance:</strong> the loop runs up
+        to 1,000,000 iterations calling the phase fn each time; the implementer
+        must <em>measure</em> a representative iteration count first and memoize
+        phase per integration step if 2× SunCalc/iteration is material — decide on
+        the measurement, not assumption.</p>
+    </section>
+
+    <section id="s7">
+      <div class="sec-head"><span class="num">07</span><h2>Verification</h2></div>
+      <p class="sec-intro">New tests target the real-sun functions; the synthetic and <code>solarMultiplier</code> suites must stay green unmodified.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>realPhaseName, Brno late-May post-dusk instant.</strong> Returns <code>'night'</code> (the bug regression — must NOT be <code>'dawn'</code>).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>realPhaseName rising vs falling near horizon.</strong> Distinguishes <code>'dawn'</code> from <code>'dusk'</code>; equator equinox noon → <code>'day'</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Null lat/lon identity.</strong> <code>realPhaseName/nextRealPhaseBoundaryMs</code> with null equal <code>dayPhaseName/nextPhaseBoundaryMs</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Polar (84°N, Dec 21).</strong> realPhaseName never <code>'day'</code>; nextSunEvent null; nextRealPhaseBoundaryMs finite (≤ now + QUADRANT_MS); no NaN/throw.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>weather() real path.</strong> Brno night instant boosts severe-storm weight vs day; omitting lat/lon reproduces the synthetic result.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm test green.</strong> Full suite passes; synthetic-clock + solarMultiplier suites unchanged.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Browser smoke.</strong> Build + reload <code>islands.nitjsefni.eu</code>; the HUD reads a sane phase + countdown for the current Brno time.</div></div>
+      </div>
+    </section>
+
+    <section id="s8">
+      <div class="sec-head"><span class="num">08</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">SunCalc in weather's up-to-1M-iteration loop becomes a hot path.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Measure representative iteration count first; memoize phase per integration step (phase changes slowly as <code>t</code> advances in dwell chunks).</div>
+        </div>
+        <div class="row">
+          <div class="cell"><code>weather()</code> positional-arg caller breaks when two trailing optionals are added.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell"><code>findReferences</code> enumeration before edit; trailing optionals default to null so existing arity is preserved.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Integrator under-integrates across a real night→day transition.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell"><code>nextRealPhaseBoundaryMs</code> returns real crossing times so the night boolean is constant per segment; polar fallback bounds the segment to <code>QUADRANT_MS</code>.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Weather history changes for existing saves (re-anchored seeds).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Explicitly accepted by the user. Pre-release; no save-compat guarantee for weather replay.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Display weather diverges from simulated weather if a render caller forgets lat/lon.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">All render callers (hover-tooltip, weather-overlay) updated in the same change; a smoke check compares overlay vs HUD.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s9">
+      <div class="sec-head"><span class="num">09</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Considered and deliberately deferred.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Deleting the synthetic helpers</div>
+          <div class="dd"><code>dayPhase</code>/<code>dayPhaseName</code>/<code>nextPhaseBoundaryMs</code>/<code>EPOCH_PHASE_OFFSET</code> are retained as the null-location fallback (user chose "keep", not "retire").</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Per-cell (per-longitude) sun variation</div>
+          <div class="dd">The player has a single global location; weather time-of-day uses that one location, not per-island longitude.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Changing <code>solarMultiplier</code> / <code>nextSolarBoundaryMs</code></div>
+          <div class="dd">Already correct and location-aware; untouched.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands · generated 2026-05-29 · supersedes the synthetic-clock model in SPEC §2.7 · companion Markdown at <code>docs/superpowers/specs/2026-05-29-real-sun-daynight-design.md</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
