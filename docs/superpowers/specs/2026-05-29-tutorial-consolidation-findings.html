@@ -1,0 +1,248 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutorial consolidation — findings &amp; locked design (paused)</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B;
+      --olive:#8FA56E; --rust:#E08B7F; --warn:#E0B47F;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82;
+      --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700);
+      line-height:1.58; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { max-width:1080px; margin:0 auto; }
+    header.page-head { margin-bottom:40px; max-width:880px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em;
+      text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:36px; line-height:1.14;
+      color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .context-box { background:var(--gray-150); border:var(--border); border-radius:var(--radius);
+      padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .context-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:48px; }
+    @media (max-width:900px){ .summary{ grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:var(--border); border-radius:var(--radius); padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:16px; color:var(--slate); font-weight:600; }
+    .summary .v.accent{ color:var(--clay);} .summary .v.ok{ color:var(--olive);} .summary .v.warn{ color:var(--warn);}
+    .decision { background:var(--white); border:var(--border); border-left:4px solid var(--clay);
+      border-radius:var(--radius); padding:22px 26px; margin-bottom:52px; }
+    .decision .d-tag { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.07em; color:var(--clay); margin-bottom:8px; }
+    .decision .d-head { font-family:var(--serif); font-size:21px; font-weight:500;
+      color:var(--slate); margin-bottom:10px; letter-spacing:-0.01em; }
+    .decision .d-body { font-size:14.5px; color:var(--gray-700); max-width:820px; }
+    .decision .d-body + .d-body { margin-top:8px; }
+    section { margin-bottom:56px; scroll-margin-top:24px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate);
+      padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:25px; color:var(--slate); letter-spacing:-0.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:820px; margin-bottom:22px; }
+    h3.sub { font-family:var(--serif); font-weight:500; font-size:17px; color:var(--slate); margin:22px 0 10px; }
+    p.body { font-size:14.5px; max-width:820px; margin-bottom:14px; }
+    p.body strong { color:var(--slate); }
+    ul.body { font-size:14.5px; max-width:820px; margin:0 0 14px 22px; }
+    ul.body li { margin-bottom:7px; }
+    ol.body { font-size:14.5px; max-width:820px; margin:0 0 14px 22px; }
+    ol.body li { margin-bottom:8px; }
+    code { font-family:var(--mono); font-size:0.88em; background:var(--gray-150);
+      border:1px solid var(--gray-300); border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    .tbl { width:100%; border:var(--border); border-radius:var(--radius); border-collapse:separate;
+      border-spacing:0; overflow:hidden; font-size:13px; margin-bottom:8px; }
+    .tbl th,.tbl td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em;
+      color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl td.slate { color:var(--slate); font-weight:600; }
+    .tbl td.mono { font-family:var(--mono); font-size:12px; color:var(--clay); }
+    .tbl tbody tr:hover { background:var(--gray-150); }
+    .compare { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @media (max-width:820px){ .compare{ grid-template-columns:1fr;} }
+    .compare .col { background:var(--white); border:var(--border); border-radius:var(--radius); overflow:hidden; }
+    .compare .col-head { padding:12px 18px; font-family:var(--mono); font-size:11.5px; text-transform:uppercase;
+      letter-spacing:0.06em; border-bottom:var(--border); }
+    .compare .col.bad .col-head { background:#2E211C; color:var(--rust); }
+    .compare .col.good .col-head { background:#232A1C; color:var(--olive); }
+    .compare .col-body { padding:16px 18px; font-size:13.5px; }
+    .compare .col-body ul { list-style:none; }
+    .compare .col-body li { margin:7px 0; padding-left:18px; position:relative; }
+    .compare .col.bad li:before { content:'\2715'; position:absolute; left:0; color:var(--rust); }
+    .compare .col.good li:before { content:'\2713'; position:absolute; left:0; color:var(--olive); }
+    .checklist { display:flex; flex-direction:column; gap:10px; max-width:860px; }
+    .check { display:flex; gap:12px; align-items:flex-start; background:var(--white);
+      border:var(--border); border-radius:10px; padding:12px 16px; }
+    .check .box { width:18px; height:18px; border-radius:5px; border:2px solid var(--gray-500); flex-shrink:0; margin-top:2px; }
+    .check .box.done { background:var(--olive); border-color:var(--olive); }
+    .check .ck-text { font-size:14px; color:var(--gray-700); }
+    .check .ck-text strong { color:var(--slate); }
+    .deferred { display:flex; flex-direction:column; gap:14px; max-width:880px; }
+    .defer { background:var(--white); border:var(--border); border-left:4px solid var(--gray-500);
+      border-radius:10px; padding:16px 20px; }
+    .defer.active { border-left-color:var(--clay); }
+    .defer .dt { font-weight:600; font-size:15px; color:var(--slate); margin-bottom:4px; }
+    .defer .dd { font-size:13.5px; color:var(--gray-500); }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:64px; padding-top:22px; border-top:1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Findings &amp; locked design · robot-islands · tutorial consolidation · PAUSED</div>
+      <h1>One tutorial, not two — findings &amp; locked design</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        The app renders <strong>two tutorials at once</strong> with conflicting
+        instructions. This doc captures the diagnosis, the user-approved design
+        decisions, and the correctness/reachability findings gathered during the
+        brainstorm. Work was <strong>paused mid-flight</strong> to run the energy
+        SI rebalance first; this is the resume point. Source-of-truth companion:
+        <code>docs/superpowers/specs/2026-05-29-tutorial-consolidation-findings.md</code>.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Systems found</div><div class="v accent">2 (must become 1)</div></div>
+      <div class="cell"><div class="k">Chain depth</div><div class="v">T0 → T5</div></div>
+      <div class="cell"><div class="k">Proposed steps</div><div class="v">~51</div></div>
+      <div class="cell"><div class="k">Status</div><div class="v warn">paused / pre-spec</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Consolidate onto the Phase-7 hint-overlay framework; retire the legacy objective banner entirely.</div>
+      <div class="d-body">Both systems live in <code>tutorial.ts</code> and both
+        run every frame. The Phase-7 overlay (<code>TUTORIAL_STEPS</code> →
+        <code>refreshTutorialHint</code>) is economy-aligned; the legacy banner
+        (<code>_OBJECTIVES</code> → <code>renderTutorialBanner</code>) is stale
+        and softlocks new players. Keep the overlay, remove the banner path,
+        port the legacy <code>check()</code> predicates into step triggers.</div>
+      <div class="d-body"><strong>Not yet done:</strong> the full step chain
+        (incl. texts) must be written out and re-approved before implementation
+        — the user will not accept the spec without it.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>The two systems</h2></div>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Legacy banner — retire</div>
+          <div class="col-body"><ul>
+            <li><code>_OBJECTIVES</code> (~50) → <code>checkObjectives</code> → <code>renderTutorialBanner</code> (<code>#tutorial-banner</code>, main.ts:1862)</li>
+            <li>Stale content: step 1 = build <code>wind_turbine</code> for "30 steel, 10 wood" — real cost 800 steel_beam + aluminum + magnet + wire → impossible first build = softlock</li>
+            <li>Has working <code>check()</code> predicates (salvage these)</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">Phase-7 overlay — keep</div>
+          <div class="col-body"><ul>
+            <li><code>TUTORIAL_STEPS</code> (32) → <code>currentStep</code> → <code>refreshTutorialHint</code> (<code>.tutorial-hint</code>, main.ts:2100)</li>
+            <li>Economy-aligned content; per-step <code>triggerCondition</code> + <code>dismissalCondition</code></li>
+            <li>Weakness: ~6 triggers are <code>() =&gt; false</code> stubs (the deferred "Phase 5 wire-up")</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Locked decisions</h2></div>
+      <ol class="body">
+        <li><strong>Single source of truth = Phase-7 overlay.</strong> Remove <code>renderTutorialBanner</code> + <code>checkObjectives</code> from the ticker; delete <code>_OBJECTIVES</code> after porting predicates.</li>
+        <li><strong>List shape:</strong> legacy granular chain as spine, Phase-7 mechanic concepts folded in. One ordered list, full depth T0→T5, every step trigger wired.</li>
+        <li><strong>Content:</strong> static, hand-verified strings (numbers from <code>building-defs.ts</code>/<code>recipes.ts</code>). Guard test: each step's <code>targetDefId</code>/<code>targetRecipeId</code> exists and stated tile matches the def's <code>requiredTile</code>.</li>
+        <li><strong>First steps:</strong> location picker → starting-inventory orientation → bootstrap power → renewable materials.</li>
+        <li><strong>Overlay → LEFT corner</strong> (currently covers right-side buttons); harden CSS (max-width / word-wrap / overflow); concise hints.</li>
+        <li><strong>Wire all triggers</strong> — replace every <code>() =&gt; false</code> stub with a real predicate from the existing helpers.</li>
+        <li><strong>Stone-slot conflict → add a 2nd 2×2 <code>stone</code> cluster to the home island</strong> (see §04).</li>
+      </ol>
+      <p class="body"><strong>Open:</strong> keep per-step XP bump (<code>xpBumpPercentForCompletion</code>)? · restore any folded legacy steps? · explicit "Gears: Assembler" step? · <strong>add</strong> a "Scale your power / brownout" step after Bootstrap Power.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Correctness findings</h2></div>
+      <p class="sec-intro">This is fundamentally a correctness rewrite — the tutorial must match real tiles, costs, recipes, and reachability.</p>
+      <h3 class="sub">The "freshwater" bug (representative)</h3>
+      <p class="body">Phase-7 step 02 says "freshwater cluster." There is no freshwater tile — <code>water_wheel.requiredTile = ['water']</code>. The home water cluster is tile-type <code>'water'</code>; comments mislabel it "fresh-water" (a <code>fresh_water</code> <em>resource</em> exists, from a Well, but no such tile). All texts must use real tile names.</p>
+      <h3 class="sub">Legacy gap: Smelter needs clay, no clay step</h3>
+      <p class="body"><code>smelter</code> costs <code>stone 400 / clay 100 / wood 20</code>; starter has 0 clay and the legacy chain had no clay step. → insert a <strong>Clay Pit Extractor</strong> step (<code>clay_pit_extractor</code>, <code>stone 140 / wood 80</code>, tile <code>clay_pit</code>) before the Smelter.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Home-island terrain &amp; the stone conflict</h2></div>
+      <p class="sec-intro">Verified from <code>island.ts</code> <code>defaultTerrainAt</code>. Early steps can only instruct buildings whose required tiles exist on home.</p>
+      <table class="tbl">
+        <thead><tr><th>Tile</th><th>Location</th><th>Feeds</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">ore (6)</td><td>(-7..-5, 2..3)</td><td>Mine → iron_ore</td></tr>
+          <tr><td class="mono">coal 2×2</td><td>(8..9, 5..6)</td><td>Mine → coal</td></tr>
+          <tr><td class="mono">tree 2×2</td><td>(6..7, -3..-4)</td><td>Logger</td></tr>
+          <tr><td class="mono">water 2×2</td><td>(-1..0, -5..-4)</td><td>Water Wheel / Well / Coastal Pump</td></tr>
+          <tr><td class="mono">clay_pit 2×2</td><td>(5..6, 7..8)</td><td>Clay Pit Extractor</td></tr>
+          <tr><td class="mono">copper_vein 2×2</td><td>(-7..-6, -6..-7)</td><td>Copper Mine</td></tr>
+          <tr><td class="mono">limestone 2×2</td><td>(-9..-8, 7..8)</td><td>Limestone Quarry</td></tr>
+          <tr><td class="mono">oil_well 2×2</td><td>(-4..-3, 8..9)</td><td>Pump Jack</td></tr>
+          <tr><td class="mono">sand 2×2</td><td>(10..11, -1..0)</td><td>Sand Pit</td></tr>
+          <tr><td class="mono">stone 2×2</td><td>(-11..-10, 4..5)</td><td><strong>Quarry OR Quartz Mine — conflict</strong></td></tr>
+          <tr><td class="mono">grass</td><td>everywhere else</td><td>Windmill + all tile-none buildings</td></tr>
+        </tbody>
+      </table>
+      <p class="body"><strong>Conflict:</strong> <code>quarry</code> and <code>quartz_mine</code> are both 2×2 (<code>SHAPES.square2</code>) and both <code>requiredTile:['stone']</code>; home has one stone patch. No <code>'quartz'</code> tile exists — quartz piggybacks on stone. Procedural islands scatter stone as single tiles (won't fit 2×2) except mountain/arctic. <strong>Resolution: add a second home stone cluster.</strong></p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Starting-inventory reachability</h2></div>
+      <p class="sec-intro">Starter (rev-9): stone 1200, wood 600, iron_ore 30, coal 80, iron_ingot 60, bolt 25, limestone 15, saltwater_cell 4, foundation_kit 1.</p>
+      <p class="body"><strong>Verdict: just-sufficient to start, but power-bound — not material-bound.</strong></p>
+      <ul class="body">
+        <li><strong>iron_ingot (60)</strong> is the tightest material, but the iron-replenishers — Mine, Clay Pit, Smelter — cost <strong>0 iron_ingot</strong>, so iron production is always bootstrappable. No iron softlock.</li>
+        <li><strong>First settlement is free</strong> — 1 foundation_kit in the starter (no 200-bolt Kit Assembler needed to start).</li>
+        <li><strong>Power is the binding constraint.</strong> Supply: Windmill 15, Water Wheel 20. Draw: Mine 25, Quarry 30, Clay Pit 30, Smelter 50, Workshop 60. One source can't fully run even one Mine; the full early set ≈ 200 ≈ 13 windmills ≈ 1000+ wood vs 600 starter. Saved by brownout (<code>factor = min(1, produced/consumed)</code>, throttle not stop) and the <strong>0-power Logger</strong> (free wood) — the ramp climbs out.</li>
+        <li>Player starts with <strong>zero power buildings</strong> → first build must be power (confirms first-steps ordering). This is the deferred rev-17 reachability gate.</li>
+      </ul>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Map-picker work completed this session</h2></div>
+      <p class="sec-intro">Separate from the tutorial; already merged into the working tree, tests green.</p>
+      <div class="checklist">
+        <div class="check"><div class="box done"></div><div class="ck-text"><strong>Real world map.</strong> Replaced the placeholder; Natural Earth <code>countries-110m</code> merged + d3-geo plate-carrée projection; antimeridian artifacts fixed.</div></div>
+        <div class="check"><div class="box done"></div><div class="ck-text"><strong>Country borders.</strong> <code>mesh(a≠b)</code>, <code>fill:none</code> + <code>non-scaling-stroke</code>.</div></div>
+        <div class="check"><div class="box done"></div><div class="ck-text"><strong>Zoom + pan + red pin.</strong> viewBox scroll-zoom, drag-pan, pointer click-vs-drag picking, fixed pin coords, red marker. Confirm button text centered.</div></div>
+        <div class="check"><div class="box done"></div><div class="ck-text"><strong>Asset pipeline.</strong> <code>scripts/gen-map-path.mjs</code> + <code>d3-geo</code>/<code>topojson-client</code> devDeps. 14 tests green.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Not done:</strong> moving the <em>tutorial</em> overlay to the left corner — that's tutorial-implementation scope, not map-picker.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Related follow-ups surfaced</h2></div>
+      <div class="deferred">
+        <div class="defer active">
+          <div class="dt">Energy units — IN PROGRESS (next pass)</div>
+          <div class="dd">SI rework defined "1 unit power = 100 kW" (§2.1) but never applied it. Power values are raw abstract numbers; <code>hud.ts:577</code> labels them <code>"W"</code> — water wheel reads "20W" when the anchor implies 2 MW (realism note says 20 kW). Being fixed now via the energy SI rebalance.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Action costs not SI-rescaled</div>
+          <div class="dd"><code>terrain_modifier</code>, <code>land_reclamation_hub</code>, <code>platform_constructor</code> had placement BOMs rescaled in Phase 4, but their operation costs remain pre-SI placeholders (land reclamation <code>5·r²</code> stone; platform constructor still spends <code>steel</code> ×5/tile, not <code>steel_beam</code>).</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Tutorial consolidation findings · generated 2026-05-29 · PAUSED for energy SI rebalance · companion: <code>2026-05-29-tutorial-consolidation-findings.md</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
