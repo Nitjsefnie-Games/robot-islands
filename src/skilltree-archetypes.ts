@@ -22,6 +22,10 @@ export interface FillerArchetype {
   readonly baseCost: number;
   readonly costGrowth: number;
   readonly count: number;
+  /** First depth index for the chain (default 1). Used to tier-gate a chain
+   *  by starting it deeper. E.g. startDepth: 3 means nodes have depth 3,4,5…
+   *  and ids <prefix>.3, <prefix>.4, <prefix>.5… */
+  readonly startDepth?: number;
 }
 
 /** Human-readable label for an effect kind. Pre-fixed with the catalog's
@@ -75,12 +79,13 @@ function effectLabel(kind: SkillEffect['kind'], extra?: Record<string, unknown>)
 export function generateFillerNodes(arch: FillerArchetype): RawSkillNode[] {
   const nodes: RawSkillNode[] = [];
   const label = effectLabel(arch.effectKind, arch.effectExtra);
+  const start = arch.startDepth ?? 1;
   let cost = arch.baseCost;
   for (let d = 0; d < arch.count; d++) {
     nodes.push({
-      id: `${arch.idPrefix}.${d + 1}` as NodeId,
+      id: `${arch.idPrefix}.${start + d}` as NodeId,
       subPath: arch.subPath,
-      depth: d + 1,
+      depth: start + d,
       cost: Math.round(cost),
       effect: { kind: arch.effectKind, ...(arch.effectExtra ?? {}) } as SkillEffect,
       description: `${label} per node`,

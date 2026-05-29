@@ -87,6 +87,47 @@ describe('generateFillerNodes', () => {
     const nodes = generateFillerNodes(arch);
     expect(nodes[0]!.effect).toEqual({ kind: 'mineYieldBonusMul' });
   });
+
+  it('respects startDepth — nodes start at the given depth and id suffix', () => {
+    const arch: FillerArchetype = {
+      idPrefix: 'test.magic',
+      effectKind: 'mineYieldBonusMul',
+      subPath: 'mining',
+      growth: 1.10,
+      baseCost: 5,
+      costGrowth: 1.3,
+      count: 4,
+      startDepth: 3,
+    };
+    const nodes = generateFillerNodes(arch);
+    expect(nodes).toHaveLength(4);
+    expect(nodes.map((n) => n.depth)).toEqual([3, 4, 5, 6]);
+    expect(nodes.map((n) => n.id)).toEqual([
+      'test.magic.3',
+      'test.magic.4',
+      'test.magic.5',
+      'test.magic.6',
+    ]);
+  });
+
+  it('omitting startDepth yields depth 1..N and ids .1..<N> (regression guard)', () => {
+    const arch: FillerArchetype = {
+      idPrefix: 'test.default',
+      effectKind: 'mineYieldBonusMul',
+      subPath: 'mining',
+      growth: 1.10,
+      baseCost: 1,
+      costGrowth: 1.2,
+      count: 3,
+    };
+    const nodes = generateFillerNodes(arch);
+    expect(nodes.map((n) => n.depth)).toEqual([1, 2, 3]);
+    expect(nodes.map((n) => n.id)).toEqual([
+      'test.default.1',
+      'test.default.2',
+      'test.default.3',
+    ]);
+  });
 });
 
 describe('MINING_FILLER_NODES', () => {
