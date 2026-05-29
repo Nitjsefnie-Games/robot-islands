@@ -52,7 +52,8 @@ describe('skilltree graph integration', () => {
   });
 
   it('depth-1 filler is buyable end-to-end via buyNode', () => {
-    const state = makeState();
+    // depth 1/2 require tier 2 (level ≥ 5) under the §9.3 depth→tier gate.
+    const state = makeState({ level: 5 });
     const target = 'mining.recipeRate.1';
     expect(state.unlockedNodes.has(target)).toBe(false);
     buyNode(DEFAULT_GRAPH, state, target);
@@ -60,7 +61,7 @@ describe('skilltree graph integration', () => {
   });
 
   it('depth-2 filler is buyable via buyNode after depth-1 is owned (auto-owns intermediates)', () => {
-    const state = makeState();
+    const state = makeState({ level: 5 });
     // First buy the root depth-1 node
     buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.1');
     expect(state.unlockedNodes.has('mining.recipeRate.1')).toBe(true);
@@ -120,7 +121,9 @@ describe('skilltree graph integration', () => {
   });
 
   it('costToUnlock returns cheapest path for a chain node when entry is owned', () => {
-    const state = makeState();
+    // depth-3 target requires tier 3 (level ≥ 15) under the §9.3 gate, else
+    // costToUnlock tier-filters the depth-3 node out and returns null.
+    const state = makeState({ level: 15 });
     // Own depth-1 so depth-3 becomes reachable
     state.unlockedNodes.add('mining.recipeRate.1');
     const result = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, 'mining.recipeRate.3');
