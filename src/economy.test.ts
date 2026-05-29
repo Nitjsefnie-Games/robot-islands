@@ -53,6 +53,7 @@ import { effectiveSkillMultipliers, type SkillMultipliers, type NodeId, type Ski
 import * as skilltreeModule from './skilltree.js';
 import { FULL_CATALOG } from './skilltree-catalog.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
+import type { WorldState } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
 import { islandInscribedAny } from './island.js';
 
@@ -3852,6 +3853,16 @@ describe('conditionalBonus', () => {
     const state = makeState();
     // nowMs = 0 → dayPhase = 0.375 → day.
     expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, undefined, 0)).toBe(false);
+  });
+
+  it('evaluateConditionalEffectCondition — during-night uses the real sun when a location is set', () => {
+    const state = makeState();
+    // Brno; minimal world carrying only the player location the gate reads.
+    const world = { playerLat: 49.20, playerLon: 16.61 } as unknown as WorldState;
+    const nightMs = new Date('2026-05-29T19:43:00Z').getTime(); // sun at -7.7° → night
+    const dayMs = new Date('2026-05-29T10:00:00Z').getTime();   // sun up → day
+    expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, world, nightMs)).toBe(true);
+    expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, world, dayMs)).toBe(false);
   });
 
   it('evaluateConditionalEffectCondition — networked-to-N-T3-islands with enough T3+ networked islands → true', () => {
