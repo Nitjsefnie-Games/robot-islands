@@ -546,6 +546,8 @@ function inputAvail(
   recipe: Recipe,
   externalSupply: Record<ResourceId, number>,
   baseRate: number,
+  /** §9.3 magic divisor on per-cycle input demand (≥1; 1 = no effect). */
+  recipeInputDiv: number,
   inventory?: Record<ResourceId, number>,
 ): number {
   let factor = 1;
@@ -560,7 +562,7 @@ function inputAvail(
     // stockpile checks read from the unified pool instead of local state.
     const stock = inventory?.[id] ?? state.inventory[id] ?? 0;
     if (stock > 0) continue; // stockpile satisfies demand
-    const demand = (needPerCycle ?? 0) * baseRate;
+    const demand = ((needPerCycle ?? 0) / recipeInputDiv) * baseRate;
     if (demand <= 0) continue;
     const supply = externalSupply[id] ?? 0;
     if (supply <= 0) return 0; // no inventory + no inflow = stalled
@@ -806,6 +808,18 @@ export function computeRates(
   // one side is buffed). Power multipliers apply in pass 3.
   const skillMul = effectiveSkillMultipliers(state);
   layerConditionalBonuses(skillMul, state, ctx?.world, DEFAULT_GRAPH, nowMs);
+  // §9.3 magic `recipeInputMul` lever (resolved field: `recipeInput`, ≥1).
+  // Divides per-cycle input DEMAND (pass 2) and actual DRAWDOWN (pass 4) so a
+  // building with the lever consumes fewer inputs while producing identical
+  // outputs. `recipeInput` is never layered by conditional bonuses, so it's
+  // safe to read off the injected (frozen) `ctx.baseMult` directly when
+  // present — analogous to the read-only injected-mult path in
+  // `cap()`/`outputAvail` (mechanism differs: cap() threads the full
+  // SkillMultipliers object and recomputes as fallback; here we resolve a
+  // scalar and fall back to the already-computed skillMul). In production
+  // `ctx.baseMult.recipeInput === skillMul.recipeInput` (both fold the same
+  // state), so this is a strict no-op; the injection seam exists for tests.
+  const recipeInputDiv = ctx?.baseMult?.recipeInput ?? skillMul.recipeInput;
   // §4.5 buff-adjacency stack is per-building, not global — computed
   // lazily inside the pass-1 loop and stashed on the Tentative entry so
   // pass-2's nominalRate sees the same multiplier (preserves
@@ -1083,7 +1097,7 @@ export function computeRates(
         externalSupply[id] = (externalSupply[id] ?? 0) - (yld ?? 0) * te.baseRate;
       }
     }
-    inputAvailByIdx[i] = inputAvail(state, te.recipe, externalSupply, nominalRate, ctx?.inventory);
+    inputAvailByIdx[i] = inputAvail(state, te.recipe, externalSupply, nominalRate, recipeInputDiv, ctx?.inventory);
   }
 
   // Pass 3: power balance. A building is `active` for §5.1 iff:
@@ -1290,7 +1304,11 @@ export function computeRates(
       if (te.recipe.exogenousFlow === 'atmosphere' && id === 'air') {
         continue;
       }
-      const delta = (need ?? 0) * effectiveRate;
+      // Divides actual drawdown. In the constrained-supply regime this cancels
+      // the matching site-1 inflation of inputAvail (net consumption flat,
+      // throughput up); when inputs are stocked, site-1 is skipped and only
+      // this divisor acts. See the recipeInputDiv resolution block above.
+      const delta = ((need ?? 0) * effectiveRate) / recipeInputDiv;
       consumption[id] = (consumption[id] ?? 0) + delta;
       net[id] = (net[id] ?? 0) - delta;
     }
@@ -1712,6 +1730,9 @@ export function advanceIsland(
   for (let safety = 0; safety < 10000; safety++) {
     if (t >= nowMs) break;
     // §13.3 acceleration multiplier from Time Lock spend.
+    // NB: this overrides any caller-supplied ctx.baseMult — test multiplier
+    // injection (e.g. recipeInput) must call computeRates directly, not
+    // advanceIsland.
     const effectiveCtx: RatesContext = {
       ...ctx,
       accelerationMul: state.accelerationRemainingMin > 0 ? 3 : 1,
