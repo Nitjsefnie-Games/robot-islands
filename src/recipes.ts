@@ -2904,14 +2904,15 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // Real co-output per §7.5; consumer in §7.3 alumina chain.
   },
   chemical_reactor: {
-    cycleSec: 1563.6, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: { salt: 1, fresh_water: 2 },
-    outputs: { chlorine: 1, sodium_hydroxide: 1 },
+    // Task 0.2 — calcium_sulfonate producer (closes lubricant-chain gap).
+    // Replaces the §7.5 electrolysis placeholder (chlorine + NaOH covered by
+    // chlor_alkali_plant; this building now hosts the grease/additive chemistry).
+    // Mass balance: sulfur(1×1) + quicklime(1×1) + heavy_oil(1×1) = 3 kg in
+    //               calcium_sulfonate(3×1) = 3 kg out  →  Δ = 0 ✓
+    cycleSec: 2345.4, // auto-derived (gen-cyclesec): density × footprint × M
+    inputs: { sulfur: 1, quicklime: 1, heavy_oil: 1 },
+    outputs: { calcium_sulfonate: 3 },
     category: 'chemistry',
-    // §7.5 spec: Salt + power (electrolysis) → Chlorine + Sodium hydroxide.
-    // Downstream consumers are wired: chlorine feeds Lubricant Refinery
-    // (this file), sodium_hydroxide feeds Bauxite Refinery for alumina
-    // (chain in `bauxite_refinery` above).
   },
   lubricant_refinery: {
     cycleSec: 614.3, // auto-derived (gen-cyclesec): density × footprint × M
