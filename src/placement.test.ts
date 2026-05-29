@@ -20,11 +20,13 @@ import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
+  applyUpgrade,
   buildingAtTile,
   demolishBuilding,
   findOceanBuildingAt,
   placeBuilding,
   placementCostFor,
+  upgradeCost,
   validatePlacement,
 } from './placement.js';
 import {
@@ -38,6 +40,7 @@ import type { IslandSpec } from './world.js';
 import type { IslandState } from './economy.js';
 import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
+import { upgradeConstructionMs, BASE_CONSTRUCTION_MS_BY_TIER } from './construction.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1463,5 +1466,185 @@ describe('tierBypass in validatePlacement', () => {
     state.unlockedNodes.add('tier.3');
     const v = validatePlacement(spec, state, 'fusion_core', 0, 0, 0, graph);
     expect(v.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Floor-upgrade action (Task 3.4)
+// ---------------------------------------------------------------------------
+
+describe('upgradeCost', () => {
+  it('returns each placementCost entry × 0.8', () => {
+    // Mine: { stone: 200, wood: 80 } → ×0.8
+    const mine = BUILDING_DEFS.mine;
+    expect(upgradeCost(mine)).toEqual({ stone: 160, wood: 64 });
+  });
+
+  it('returns empty record for a def with no placementCost', () => {
+    // Some legacy / free defs may lack placementCost.
+    const def = { ...BUILDING_DEFS.mine, placementCost: undefined };
+    expect(upgradeCost(def)).toEqual({});
+  });
+
+  it('preserves fractional values when ×0.8 is non-integer', () => {
+    // Workshop: { wood: 150, stone: 100, iron_ingot: 30 } → ×0.8
+    const ws = BUILDING_DEFS.workshop;
+    expect(upgradeCost(ws)).toEqual({ wood: 120, stone: 80, iron_ingot: 24 });
+  });
+});
+
+describe('upgradeConstructionMs', () => {
+  it('returns base × (level + 1) for a T1 def', () => {
+    const base = BASE_CONSTRUCTION_MS_BY_TIER[1];
+    expect(upgradeConstructionMs(BUILDING_DEFS.mine, 1)).toBe(base * 2);
+    expect(upgradeConstructionMs(BUILDING_DEFS.mine, 9)).toBe(base * 10);
+  });
+
+  it('returns base × (level + 1) for a T3 def', () => {
+    const base = BASE_CONSTRUCTION_MS_BY_TIER[3];
+    expect(upgradeConstructionMs(BUILDING_DEFS.capacitor_bank, 2)).toBe(base * 3);
+    expect(upgradeConstructionMs(BUILDING_DEFS.capacitor_bank, 5)).toBe(base * 6);
+  });
+});
+
+describe('applyUpgrade', () => {
+  it('rejects when floorLevel is already 9 (max)', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, floorLevel: 9 };
+    spec.buildings.push(b);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('max-floor');
+  });
+
+  it('rejects with not-found when the buildingId is absent', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const r = applyUpgrade(spec, state, 'no-such-id');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('not-found');
+  });
+
+  it('rejects with insufficient-resources when inventory is short', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.stone = 0;
+    state.inventory.wood = 0;
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(b);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.reason === 'insufficient-resources') {
+      expect(r.missing).toEqual({ stone: 160, wood: 64 });
+    } else {
+      throw new Error(`unexpected result: ${JSON.stringify(r)}`);
+    }
+    // No mutation on rejection.
+    expect(b.floorLevel).toBeUndefined();
+    expect(state.inventory.stone).toBe(0);
+    expect(state.inventory.wood).toBe(0);
+  });
+
+  it('deducts upgradeCost and increments floorLevel on success', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.stone = 300;
+    state.inventory.wood = 200;
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(b);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    expect(b.floorLevel).toBe(1);
+    expect(state.inventory.stone).toBe(140); // 300 - 160
+    expect(state.inventory.wood).toBe(136);  // 200 - 64
+  });
+
+  it('sets constructionRemainingMs > 0 so isOperational becomes false', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(b);
+    // Pre-condition: no construction, so operational.
+    expect((b.constructionRemainingMs ?? 0)).toBe(0);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    expect(b.constructionRemainingMs).toBeGreaterThan(0);
+  });
+
+  it('adds +base capacity to storageCaps for a generic Crate (cargoLabel only)', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const b: PlacedBuilding = { id: 'b1', defId: 'crate', x: 0, y: 0, cargoLabel: 'copper_ore' };
+    spec.buildings.push(b);
+    // Seed initial cap contribution from the placed crate at L0.
+    const beforeCopper = (state.storageCaps.copper_ore ?? 0) + 500;
+    state.storageCaps.copper_ore = beforeCopper;
+    const beforeIron = state.storageCaps.iron_ore ?? 0;
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    // Delta is exactly +500 (base capacity).
+    expect(state.storageCaps.copper_ore).toBe(beforeCopper + 500);
+    // Unrelated resource untouched.
+    expect(state.storageCaps.iron_ore).toBe(beforeIron);
+  });
+
+  it('adds +base capacity to storageCaps for a specialized Silo (category-wide)', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const b: PlacedBuilding = { id: 'b1', defId: 'silo', x: 0, y: 0 };
+    spec.buildings.push(b);
+    // Seed initial cap contribution from the placed silo at L0.
+    const beforeDry: Partial<Record<ResourceId, number>> = {};
+    for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      if (RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods') {
+        beforeDry[r] = (state.storageCaps[r] ?? 0) + 200000;
+        state.storageCaps[r] = beforeDry[r]!;
+      }
+    }
+    const beforeLiquid = state.storageCaps.fresh_water ?? 0;
+    const result = applyUpgrade(spec, state, 'b1');
+    expect(result.ok).toBe(true);
+    // Every dry_goods resource gets +200000.
+    for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      if (RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods') {
+        expect(state.storageCaps[r]).toBe((beforeDry[r] ?? 0) + 200000);
+      }
+    }
+    // Unrelated liquid_gas resource untouched.
+    expect(state.storageCaps.fresh_water).toBe(beforeLiquid);
+  });
+
+  it('leaves storageCaps unchanged for a non-storage def', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(b);
+    const before = { ...state.storageCaps };
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    for (const r2 of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      expect(state.storageCaps[r2]).toBe(before[r2]);
+    }
+  });
+
+  it('chains two upgrades (L0→L1→L2) deducting cost each time', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.stone = 1000;
+    state.inventory.wood = 1000;
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(b);
+    const r1 = applyUpgrade(spec, state, 'b1');
+    expect(r1.ok).toBe(true);
+    expect(b.floorLevel).toBe(1);
+    // constructionRemainingMs set by first upgrade.
+    (b as { constructionRemainingMs?: number }).constructionRemainingMs = 0;
+    const r2 = applyUpgrade(spec, state, 'b1');
+    expect(r2.ok).toBe(true);
+    expect(b.floorLevel).toBe(2);
+    // Deducted twice.
+    expect(state.inventory.stone).toBe(1000 - 160 * 2);
+    expect(state.inventory.wood).toBe(1000 - 64 * 2);
   });
 });

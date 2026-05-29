@@ -36,8 +36,8 @@ import {
   footprintTiles,
 } from './shape-mask.js';
 export { rotateShape, type ShapeMask };
-import { floorScaledCapacity, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
-import { constructionTimeFor } from './construction.js';
+import { floorLevel, floorScaledCapacity, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import { constructionTimeFor, upgradeConstructionMs } from './construction.js';
 import type { IslandState } from './economy.js';
 import { tileInscribedInEllipse } from './island.js';
 import { footprintMatches } from './ocean-cell.js';
@@ -105,6 +105,20 @@ export function placementCostFor(
   def: BuildingDef,
 ): Partial<Record<ResourceId, number>> {
   return def.placementCost ?? {};
+}
+
+/** Pure: compute the upgrade-cost basket for raising a building one floor.
+ *  Flat 0.8× the def's placementCost (NOT L-scaled). Empty if the def has
+ *  no placementCost. */
+export function upgradeCost(
+  def: BuildingDef,
+): Partial<Record<ResourceId, number>> {
+  const base = def.placementCost ?? {};
+  const cost: Partial<Record<ResourceId, number>> = {};
+  for (const [r, n] of Object.entries(base) as Array<[ResourceId, number]>) {
+    if (n > 0) cost[r] = n * 0.8;
+  }
+  return cost;
 }
 
 /** Pure: compute the shortfall per resource for a placement cost against the
@@ -681,6 +695,66 @@ export interface DemolishResult {
  * after the building was already removed) doesn't corrupt state. Pure
  * function in the §15.3-pure-layer sense: no DOM, no PixiJS.
  */
+export type UpgradeResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: 'not-found' | 'max-floor' | 'insufficient-resources';
+      readonly missing?: Partial<Record<ResourceId, number>>;
+    };
+
+/** Apply one floor-upgrade to an existing building.
+ *
+ *  Pinned behaviour (lead decisions):
+ *  - Rejects when current floorLevel === 9 (already at max).
+ *  - Rejects when inventory can't afford `upgradeCost(def)`.
+ *  - On success: deducts cost, increments floorLevel by 1, sets
+ *    constructionRemainingMs = upgradeConstructionMs(def, newL), and adds
+ *    +storage.capacity (base ×1) to the relevant storageCaps.
+ *  - The building pauses during construction (existing isOperational gating).
+ */
+export function applyUpgrade(
+  spec: IslandSpec,
+  state: IslandState,
+  buildingId: string,
+): UpgradeResult {
+  const b = spec.buildings.find((bb) => bb.id === buildingId);
+  if (!b) return { ok: false, reason: 'not-found' };
+  const def = BUILDING_DEFS[b.defId];
+  const L = floorLevel(b);
+  if (L === 9) return { ok: false, reason: 'max-floor' };
+  const cost = upgradeCost(def);
+  const missing = affordabilityShortfall(state.inventory, cost);
+  if (Object.keys(missing).length > 0) {
+    return { ok: false, reason: 'insufficient-resources', missing };
+  }
+  // Deduct cost.
+  for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+    if (n <= 0) continue;
+    state.inventory[r] = (state.inventory[r] ?? 0) - n;
+  }
+  const newL = L + 1;
+  b.floorLevel = newL;
+  (b as { constructionRemainingMs?: number }).constructionRemainingMs = upgradeConstructionMs(def, newL);
+  // Storage-cap delta: +base capacity (the ×1 increment).
+  const storage = def.storage;
+  if (storage) {
+    const delta = storage.capacity;
+    if (storage.category === 'generic') {
+      if (b.cargoLabel !== undefined) {
+        state.storageCaps[b.cargoLabel] = (state.storageCaps[b.cargoLabel] ?? 0) + delta;
+      }
+    } else {
+      for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+        if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
+          state.storageCaps[r] = (state.storageCaps[r] ?? 0) + delta;
+        }
+      }
+    }
+  }
+  return { ok: true };
+}
+
 export function demolishBuilding(
   spec: IslandSpec,
   state: IslandState,

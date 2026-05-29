@@ -37,6 +37,14 @@ export function constructionTimeFor(def: BuildingDef, constructionTimeMul: numbe
   return Math.round(base / constructionTimeMul);
 }
 
+/** Upgrade construction time for raising a building to `level` (the NEW level).
+ *  Scales as base × (level + 1), so the L9 upgrade takes 10× base. Does NOT
+ *  divide by Robotics constructionTimeMul — the brief pins raw base × (L+1). */
+export function upgradeConstructionMs(def: BuildingDef, level: number): number {
+  const base = BASE_CONSTRUCTION_MS_BY_TIER[def.tier];
+  return base * (level + 1);
+}
+
 /** True iff the building is operational (construction complete). Pure read,
  *  undefined-safe for legacy saves. */
 export function isOperational(b: PlacedBuilding): boolean {
