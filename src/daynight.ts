@@ -169,6 +169,36 @@ export function nextSunEvent(
 }
 
 /**
+ * Wall-clock time of the next real day-phase transition strictly after `nowMs`
+ * at the player's location: the earliest of civil dawn (h=-6° rising), sunrise
+ * (h=0 rising), sunset (h=0 falling), civil dusk (h=-6° falling), over the
+ * location-days bracketing `nowMs`. The economy integrator clamps each segment
+ * to this so the now-real during-night boolean stays constant within a segment
+ * (§15.3 piecewise-constant-rate invariant).
+ *
+ * Fallbacks (never NaN): null lat/lon → synthetic `nextPhaseBoundaryMs`; no
+ * valid candidate (polar day/night — all events Invalid Date) → nowMs +
+ * QUADRANT_MS (phase is constant across a polar day anyway, so the exact bound
+ * is immaterial; this keeps the integrator advancing in bounded steps).
+ */
+export function nextRealPhaseBoundaryMs(
+  nowMs: number,
+  lat: number | null,
+  lon: number | null,
+): number {
+  if (lat == null || lon == null) return nextPhaseBoundaryMs(nowMs);
+  let best = Infinity;
+  for (const dayOffset of [0, 1]) {
+    const times = SunCalc.getTimes(new Date(nowMs + dayOffset * DAY_DURATION_MS), lat, lon);
+    for (const ev of [times.dawn, times.sunrise, times.sunset, times.dusk]) {
+      const ms = ev.getTime();
+      if (!Number.isNaN(ms) && ms > nowMs && ms < best) best = ms;
+    }
+  }
+  return Number.isFinite(best) ? best : nowMs + QUADRANT_MS;
+}
+
+/**
  * Wall-clock timestamp of the next phase boundary strictly after `nowMs`.
  * The event-driven economy integrator uses this to bound a segment so the
  * solar multiplier stays constant across the segment — without this, a
