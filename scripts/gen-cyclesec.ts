@@ -51,9 +51,9 @@ console.error(`\n${derivedRows.length} derived, ${excludedRows.length} excluded 
 if (write) {
   let src = readFileSync('src/recipes.ts', 'utf8');
   for (const [id, , newC] of derivedRows) {
-    const re = new RegExp(`(\\n  ${id}: \\{[\\s\\S]*?cycleSec: )([\\d.]+)`);
+    const re = new RegExp(`(\\n  ${id}: \\{[\\s\\S]*?cycleSec: )([\\d.]+)(,[^\\n]*)`);
     if (!re.test(src)) { console.error(`WARN: could not splice ${id}`); continue; }
-    src = src.replace(re, `$1${newC}`);
+    src = src.replace(re, `$1${newC}, // auto-derived (gen-cyclesec): density × footprint × M`);
   }
   writeFileSync('src/recipes.ts', src);
 }
