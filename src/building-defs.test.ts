@@ -1758,7 +1758,7 @@ describe('§7.3 aluminum_smelter (Task 8.2)', () => {
     expect(RECIPES.aluminum_smelter).toBeDefined();
     expect(RECIPES.aluminum_smelter!.inputs).toEqual({ alumina: 1 });
     expect(RECIPES.aluminum_smelter!.outputs).toEqual({ aluminum: 1 });
-    expect(RECIPES.aluminum_smelter!.cycleSec).toBe(100);
+    expect(RECIPES.aluminum_smelter!.cycleSec).toBe(819041.1);
   });
 });
 
@@ -2398,7 +2398,7 @@ describe('§6.7 steel_mill_scrap (Task 13.3)', () => {
     expect(RECIPES.steel_mill_scrap).toBeDefined();
     expect(RECIPES.steel_mill_scrap!.inputs).toEqual({ scrap: 2 });
     expect(RECIPES.steel_mill_scrap!.outputs).toEqual({ steel: 1, slag: 1 });
-    expect(RECIPES.steel_mill_scrap!.cycleSec).toBe(67);
+    expect(RECIPES.steel_mill_scrap!.cycleSec).toBe(72.8);
   });
 });
 

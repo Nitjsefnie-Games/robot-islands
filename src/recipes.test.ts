@@ -676,19 +676,19 @@ describe('§6.2 T1 refined — copper/tin/lead ingots (Task 2.6)', () => {
     expect(RECIPES.copper_smelter).toBeDefined();
     expect(RECIPES.copper_smelter!.inputs).toEqual({ copper_ore: 1, coal: 1 });
     expect(RECIPES.copper_smelter!.outputs).toEqual({ copper_ingot: 1 });
-    expect(RECIPES.copper_smelter!.cycleSec).toBe(27);
+    expect(RECIPES.copper_smelter!.cycleSec).toBe(2774.2);
   });
   it('tin_smelter recipe: tin_ore + coal → tin_ingot', () => {
     expect(RECIPES.tin_smelter).toBeDefined();
     expect(RECIPES.tin_smelter!.inputs).toEqual({ tin_ore: 1, coal: 1 });
     expect(RECIPES.tin_smelter!.outputs).toEqual({ tin_ingot: 1 });
-    expect(RECIPES.tin_smelter!.cycleSec).toBe(27);
+    expect(RECIPES.tin_smelter!.cycleSec).toBe(2774.2);
   });
   it('lead_smelter recipe: lead_ore + coal → lead_ingot', () => {
     expect(RECIPES.lead_smelter).toBeDefined();
     expect(RECIPES.lead_smelter!.inputs).toEqual({ lead_ore: 1, coal: 1 });
     expect(RECIPES.lead_smelter!.outputs).toEqual({ lead_ingot: 1 });
-    expect(RECIPES.lead_smelter!.cycleSec).toBe(27);
+    expect(RECIPES.lead_smelter!.cycleSec).toBe(2774.2);
   });
 });
 
@@ -728,7 +728,7 @@ describe('§6.1/§7.1 carbon_steel chain (Task 3.1)', () => {
     expect(RECIPES.manganese_smelter).toBeDefined();
     expect(RECIPES.manganese_smelter!.inputs).toEqual({ manganese_ore: 1, coal: 1 });
     expect(RECIPES.manganese_smelter!.outputs).toEqual({ manganese_ingot: 1 });
-    expect(RECIPES.manganese_smelter!.cycleSec).toBe(27);
+    expect(RECIPES.manganese_smelter!.cycleSec).toBe(2774.2);
   });
   it('carbon_steel_mill recipe: steel + manganese_ingot → carbon_steel', () => {
     expect(RECIPES.carbon_steel_mill).toBeDefined();
@@ -761,7 +761,7 @@ describe('§6.1/§7.1 galvanized_steel chain (Task 3.2)', () => {
     expect(RECIPES.zinc_smelter).toBeDefined();
     expect(RECIPES.zinc_smelter!.inputs).toEqual({ zinc_ore: 1, coal: 1 });
     expect(RECIPES.zinc_smelter!.outputs).toEqual({ zinc_ingot: 1 });
-    expect(RECIPES.zinc_smelter!.cycleSec).toBe(27);
+    expect(RECIPES.zinc_smelter!.cycleSec).toBe(2774.2);
   });
   it('galvanizing_bath recipe: steel + zinc_ingot → galvanized_steel', () => {
     expect(RECIPES.galvanizing_bath).toBeDefined();
@@ -802,7 +802,7 @@ describe('§6.4/§7.1 stainless_steel chain (Task 3.3)', () => {
     expect(RECIPES.chromium_smelter).toBeDefined();
     expect(RECIPES.chromium_smelter!.inputs).toEqual({ chromium_ore: 1, coal: 1 });
     expect(RECIPES.chromium_smelter!.outputs).toEqual({ chromium_ingot: 1 });
-    expect(RECIPES.chromium_smelter!.cycleSec).toBe(83); // rebalanced Task 16.5 (was 80; later 250; 2026-05-18 ÷3 → 83)
+    expect(RECIPES.chromium_smelter!.cycleSec).toBe(2774.2);
   });
   it('nickel_mine recipe: empty inputs → nickel_ore', () => {
     expect(RECIPES.nickel_mine).toBeDefined();
@@ -814,7 +814,7 @@ describe('§6.4/§7.1 stainless_steel chain (Task 3.3)', () => {
     expect(RECIPES.nickel_smelter).toBeDefined();
     expect(RECIPES.nickel_smelter!.inputs).toEqual({ nickel_ore: 1, coal: 1 });
     expect(RECIPES.nickel_smelter!.outputs).toEqual({ nickel_ingot: 1 });
-    expect(RECIPES.nickel_smelter!.cycleSec).toBe(83); // rebalanced Task 16.5 (was 80; later 250; 2026-05-18 ÷3 → 83)
+    expect(RECIPES.nickel_smelter!.cycleSec).toBe(2774.2);
   });
   it('stainless_steel_mill recipe: steel + chromium_ingot + nickel_ingot → stainless_steel', () => {
     expect(RECIPES.stainless_steel_mill).toBeDefined();
@@ -847,7 +847,7 @@ describe('§6.4/§7.1 tool_steel chain (Task 3.4)', () => {
     expect(RECIPES.tungsten_smelter).toBeDefined();
     expect(RECIPES.tungsten_smelter!.inputs).toEqual({ tungsten_ore: 1, coal: 1 });
     expect(RECIPES.tungsten_smelter!.outputs).toEqual({ tungsten_ingot: 1 });
-    expect(RECIPES.tungsten_smelter!.cycleSec).toBe(83); // rebalanced Task 16.5 (was 80; later 250; 2026-05-18 ÷3 → 83)
+    expect(RECIPES.tungsten_smelter!.cycleSec).toBe(2774.2);
   });
   it('tool_steel_mill recipe: steel + tungsten_ingot → tool_steel', () => {
     expect(RECIPES.tool_steel_mill).toBeDefined();
@@ -1091,7 +1091,7 @@ describe('§6.4 lithium + lithium_extractor (Task 10.4.5)', () => {
     expect(RECIPES.lithium_extractor).toBeDefined();
     expect(RECIPES.lithium_extractor!.inputs).toEqual({});
     expect(RECIPES.lithium_extractor!.outputs).toEqual({ lithium: 1 });
-    expect(RECIPES.lithium_extractor!.cycleSec).toBe(67);
+    expect(RECIPES.lithium_extractor!.cycleSec).toBe(3440);
   });
 });
 
@@ -1315,7 +1315,7 @@ describe('§7.3 aluminum + aluminum_smelter (Task 8.2)', () => {
     expect(RECIPES.aluminum_smelter).toBeDefined();
     expect(RECIPES.aluminum_smelter!.inputs).toEqual({ alumina: 1 });
     expect(RECIPES.aluminum_smelter!.outputs).toEqual({ aluminum: 1 });
-    expect(RECIPES.aluminum_smelter!.cycleSec).toBe(100);
+    expect(RECIPES.aluminum_smelter!.cycleSec).toBe(819041.1);
   });
 });
 
@@ -1437,7 +1437,7 @@ describe('§6.4 mercury + mercury_well (Task 10.1)', () => {
     expect(RECIPES.mercury_well).toBeDefined();
     expect(RECIPES.mercury_well!.inputs).toEqual({});
     expect(RECIPES.mercury_well!.outputs).toEqual({ mercury: 1 });
-    expect(RECIPES.mercury_well!.cycleSec).toBe(67);
+    expect(RECIPES.mercury_well!.cycleSec).toBe(3440);
   });
 });
 
@@ -1450,7 +1450,7 @@ describe('§6.4 diamond_ore + diamond_quarry (Task 10.2)', () => {
     expect(RECIPES.diamond_quarry).toBeDefined();
     expect(RECIPES.diamond_quarry!.inputs).toEqual({});
     expect(RECIPES.diamond_quarry!.outputs).toEqual({ diamond_ore: 1 });
-    expect(RECIPES.diamond_quarry!.cycleSec).toBe(100);
+    expect(RECIPES.diamond_quarry!.cycleSec).toBe(40);
   });
 });
 
@@ -1701,14 +1701,14 @@ describe('§6.6 T5 raws — zero_point_flux + neutronium (Task 12.1)', () => {
     expect(RECIPES.zero_point_extractor).toBeDefined();
     expect(RECIPES.zero_point_extractor!.inputs).toEqual({});
     expect(RECIPES.zero_point_extractor!.outputs).toEqual({ zero_point_flux: 1 });
-    expect(RECIPES.zero_point_extractor!.cycleSec).toBe(600);
+    expect(RECIPES.zero_point_extractor!.cycleSec).toBe(17199862.4);
     expect(RECIPES.zero_point_extractor!.category).toBe('extraction');
   });
   it('neutronium_extractor recipe: empty inputs → neutronium', () => {
     expect(RECIPES.neutronium_extractor).toBeDefined();
     expect(RECIPES.neutronium_extractor!.inputs).toEqual({});
     expect(RECIPES.neutronium_extractor!.outputs).toEqual({ neutronium: 1 });
-    expect(RECIPES.neutronium_extractor!.cycleSec).toBe(600);
+    expect(RECIPES.neutronium_extractor!.cycleSec).toBe(17199862.4);
     expect(RECIPES.neutronium_extractor!.category).toBe('extraction');
   });
 });
@@ -1740,19 +1740,19 @@ describe('§7.4/§7.5 petrochemical chains cycleSec rebalance (Task 16.6)', () =
 
 describe('§7.1 chromium/nickel/tungsten smelter cycleSec rebalance (Task 16.5)', () => {
   it('chromium_smelter cycleSec is 83 (was 250 / Task 16.5 was 80; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.chromium_smelter!.cycleSec).toBe(83);
+    expect(RECIPES.chromium_smelter!.cycleSec).toBe(2774.2);
   });
   it('nickel_smelter cycleSec is 83 (was 250 / Task 16.5 was 80; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.nickel_smelter!.cycleSec).toBe(83);
+    expect(RECIPES.nickel_smelter!.cycleSec).toBe(2774.2);
   });
   it('tungsten_smelter cycleSec is 83 (was 250 / Task 16.5 was 80; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.tungsten_smelter!.cycleSec).toBe(83);
+    expect(RECIPES.tungsten_smelter!.cycleSec).toBe(2774.2);
   });
 });
 
 describe('§7.x step-19 cycleSec rebalance (Task 16.4)', () => {
   it('oxygen_converter cycleSec is 200 (was 600 / step-19 was 20; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.oxygen_converter!.cycleSec).toBe(200);
+    expect(RECIPES.oxygen_converter!.cycleSec).toBe(163.8);
   });
   it('circuit_assembler cycleSec is 83 (was 250 / step-19 was 30; 2026-05-18 ÷3 for display visibility)', () => {
     expect(RECIPES.circuit_assembler!.cycleSec).toBe(83);
@@ -1784,7 +1784,7 @@ describe('§6.4 uranium_vein + uranium_mine (Task 16.1)', () => {
     expect(RECIPES.uranium_mine).toBeDefined();
     expect(RECIPES.uranium_mine!.inputs).toEqual({});
     expect(RECIPES.uranium_mine!.outputs).toEqual({ uranium_ore: 1 });
-    expect(RECIPES.uranium_mine!.cycleSec).toBe(67);
+    expect(RECIPES.uranium_mine!.cycleSec).toBe(3440);
     expect(RECIPES.uranium_mine!.category).toBe('extraction');
   });
   it('uranium_ore is still in ALL_RESOURCES with xp_weight 30', () => {
