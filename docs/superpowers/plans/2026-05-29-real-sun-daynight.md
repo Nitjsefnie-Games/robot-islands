@@ -616,10 +616,10 @@ import { dayPhaseName, nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier
 with:
 
 ```ts
-import { nextRealPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
+import { nextPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
 ```
 
-(`dayPhaseName` and `nextPhaseBoundaryMs` had no other consumers in `economy.ts`; `nextRealPhaseBoundaryMs` is used in Task 7.)
+(Drop only `dayPhaseName` — its sole `economy.ts` consumer is the gate edited below. **Keep `nextPhaseBoundaryMs`**: line 1786 still calls it until Task 7, so removing it here would break compilation of this commit. Task 7 swaps it.)
 
 - [ ] **Step 4: Switch the during-night gate**
 
@@ -662,11 +662,25 @@ git commit -m "feat(economy): during-night gate tracks the real sun at player lo
 **Files:**
 - Modify: `src/economy.ts` (integrator boundary, line 1786, inside `advanceIsland`)
 
-The substituted function (`nextRealPhaseBoundaryMs`) is unit-tested in Task 3; this is the one-line wiring. For existing economy tests `ctx.world` is absent/has no `playerLat`, so lat/lon resolve to null → synthetic `nextPhaseBoundaryMs` → byte-identical integrator behaviour. The real boundary path is exercised only when a location is set.
+For existing economy tests `ctx.world` is absent/has no `playerLat`, so lat/lon resolve to null → synthetic `nextPhaseBoundaryMs` → byte-identical integrator behaviour. The new wiring test (Step 3) exercises the real boundary path across a genuine Brno civil-dusk crossing — guarding against the perf-vs-wall domain / `wallOffset`-sign / lat-lon-plumbing bugs that the Task 3 unit test of the pure function cannot catch.
 
-- [ ] **Step 1: Replace the boundary computation**
+- [ ] **Step 1: Swap `nextPhaseBoundaryMs` → `nextRealPhaseBoundaryMs` in the import**
 
-In `src/economy.ts`, replace line 1786:
+In `src/economy.ts`, the import edited in Task 6 currently reads:
+
+```ts
+import { nextPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
+```
+
+Replace it with:
+
+```ts
+import { nextRealPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
+```
+
+- [ ] **Step 2: Replace the boundary computation at line 1786**
+
+In `src/economy.ts`, replace:
 
 ```ts
     const nextPhaseMs = nextPhaseBoundaryMs(t + wallOffset) - wallOffset;
@@ -680,20 +694,51 @@ with:
     const nextPhaseMs = nextRealPhaseBoundaryMs(t + wallOffset, phaseLat, phaseLon) - wallOffset;
 ```
 
-- [ ] **Step 2: Type-check the whole project**
+- [ ] **Step 3: Write the integrator wiring test**
+
+In `src/economy.test.ts` (ensure `WorldState` is imported from `./world.js` — added in Task 6), add this test inside the same `describe` block that contains the other `advanceIsland` resource tests (e.g. near the Mine tests around line 167). It integrates across wall 17:00Z→20:00Z in Brno — crossing the real sunset (18:47Z) and civil dusk (19:28Z) — so `nextRealPhaseBoundaryMs` returns those real crossings as segment bounds:
+
+```ts
+  it('advanceIsland integrates cleanly across a real civil-dusk boundary (Brno)', () => {
+    const state = makeState({
+      buildings: [MINE],
+      inventory: { ...blankInventory() },
+    });
+    const ctx = {
+      defs: POWER_FREE,
+      world: { playerLat: 49.20, playerLon: 16.61 } as unknown as WorldState,
+    };
+    const spanMs = 3 * 60 * 60 * 1000;                       // 3h perf-domain span
+    const wallEnd = new Date('2026-05-29T20:00:00Z').getTime(); // ends after dusk (19:28Z)
+    advanceIsland(state, spanMs, ctx, wallEnd);              // wall 17:00Z → 20:00Z
+    // Wiring guard: completes, advances lastTick, no NaN/Infinity from a bad
+    // boundary (a perf/wall domain or sign error would stall lastTick or poison
+    // the integral). MINE is power-free so iron_ore accrues a finite positive amount.
+    expect(state.lastTick).toBe(spanMs);
+    expect(Number.isFinite(state.inventory.iron_ore)).toBe(true);
+    expect(state.inventory.iron_ore).toBeGreaterThan(0);
+  });
+```
+
+- [ ] **Step 4: Run the wiring test**
+
+Run: `npx vitest run src/economy.test.ts -t "real civil-dusk boundary"`
+Expected: PASS — `lastTick === spanMs`, `iron_ore` finite and > 0.
+
+- [ ] **Step 5: Type-check the whole project**
 
 Run: `npx tsc -b`
-Expected: PASS — `nextRealPhaseBoundaryMs` now used; no unused imports; strict-clean.
+Expected: PASS — `nextRealPhaseBoundaryMs` now used; `nextPhaseBoundaryMs` no longer imported in `economy.ts` (still exported from `daynight.ts` for the null fallback + weather); strict-clean.
 
-- [ ] **Step 3: Run the full economy suite (regression guard)**
+- [ ] **Step 6: Run the full economy suite (regression guard)**
 
 Run: `npx vitest run src/economy.test.ts`
-Expected: PASS — all pre-existing economy tests green (null-location fallback keeps integrator behaviour identical), plus the Task 6 real-sun gate test.
+Expected: PASS — all pre-existing economy tests green (null-location fallback keeps integrator behaviour identical), plus the Task 6 real-sun gate test and the Step 3 wiring test.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/economy.ts
+git add src/economy.ts src/economy.test.ts
 git commit -m "feat(economy): integrator phase boundaries follow the real sun"
 ```
 
