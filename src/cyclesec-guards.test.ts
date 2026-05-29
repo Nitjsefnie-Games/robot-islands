@@ -2,18 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { RECIPES } from './recipes.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import {
-  M,
-  densityForRecipe,
   buildingForRecipe,
-  outputKg,
   shouldDeriveCycleSec,
   archetypeForRecipe,
 } from './recipe-density.js';
-
-// Re-export M so the import is used (it is part of the recipe-density API).
-void M;
-void densityForRecipe;
-void outputKg;
 
 describe('coal loop energy-return is physically sane (§ rebalance: EROI grounded, not ad-hoc)', () => {
   // EROI = (electrical energy a generator yields per unit coal) / (energy spent mining that coal).
