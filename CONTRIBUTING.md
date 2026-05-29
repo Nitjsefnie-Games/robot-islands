@@ -18,8 +18,14 @@ Name branches by intent and kind, e.g. `feat/power-brownouts`, `fix/ocean-tint-b
 1. **Branch** — cut a feature branch from an up-to-date `master` (above).
 2. **PR** — push the branch and open a pull request for review. The PR is where the work is reviewed and discussed; nothing lands on `master` un-reviewed.
 3. **Rebase** — before integrating, `git rebase master` so the branch sits directly on top of current `master` (resolve conflicts on the branch, never on `master`). Then fast-forward `master` onto the rebased tip — keeping history linear (see below). No merge commits.
+4. **Delete** — once merged, delete the branch, both locally and on the remote. Merged branches are not kept around; `master` carries the history.
 
-This reverses the repo's earlier "commit straight onto `master`" habit. From now on `master` only ever receives reviewed, rebased branch tips.
+```
+git branch -d feature-x
+git push origin --delete feature-x
+```
+
+This reverses the repo's earlier "commit straight onto `master`" habit. From now on `master` only ever receives reviewed, rebased branch tips, and merged branches are deleted.
 
 ## History convention: rebase, not merge
 
