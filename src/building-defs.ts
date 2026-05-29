@@ -743,7 +743,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xd97a18,
     stroke: 0x4a2400,
-    power: { produces: 50 },  // rev-16 §10.3: 12.5 MW thermal × ~40% = 5 MW electrical = 50 unit
+    power: { produces: 5000 },  // energy SI rebalance: 5 MW electrical (5000 kW)
     // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25.
     // Small coal-fired steam generator: 500 steel_beam + 200 clay fire-brick + 100 stone
     // foundation + 50 pipe + 10 microchip control = ~1000 kg.
@@ -873,7 +873,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x3e7a36,
     stroke: 0x1a3a16,
-    power: { produces: 80 },
+    power: { produces: 1000 },  // energy SI rebalance: 1 MW electrical (1000 kW)
     // BOM source: USDA ARS biomass-boiler reference.
     // 400 steel_beam boiler + 150 clay fire-brick + 100 stone pad + 30 pipe + 80 wood fuel = ~850 kg.
     placementCost: { steel_beam: 400, clay: 150, stone: 100, pipe: 30, wood: 80 },
@@ -924,7 +924,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.single,
     fill: 0xc0c8d0, // pale steel-blue
     stroke: 0x404850,
-    power: { produces: 40, kind: 'wind' },
+    power: { produces: 100, kind: 'wind' },  // energy SI rebalance: 100 kW
     requiredTile: ['water'],
     // BOM source: NREL ATB-2024 land-based wind.
     // 800 steel_beam tower + 50 aluminum nacelle + 200 stone foundation + 5 magnet + 30 wire = 1315 kg.
@@ -1033,7 +1033,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xc04020, // magma orange
     stroke: 0x401005,
-    power: { produces: 200 },
+    power: { produces: 1000 },  // energy SI rebalance: 1 MW electrical (1000 kW)
     requiredBiomes: ['volcanic'],
     // rev-16 §5.3: 1 MW typical low-grade geothermal well (IRENA).
     heatSource: { freeOrCoal: 'free', thermalKW: 1000 },
@@ -1707,7 +1707,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x70c0e0, // cryo cyan
     stroke: 0x103060,
-    power: { produces: 400 },
+    power: { produces: 3000 },  // energy SI rebalance: 3 MW electrical (3000 kW)
     requiredTile: ['ice'],
     // BOM source: Linde cryocooler datasheet.
     // 500 steel_beam + 100 ceramic_insulator + 50 gear + 30 glass + 20 pipe = 810 kg.
@@ -1807,7 +1807,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square4,
     fill: 0x80b070, // reactor green
     stroke: 0x204010,
-    power: { produces: 2000 },
+    power: { produces: 200000 },  // energy SI rebalance: 200 MW electrical (200000 kW)
     // BOM source: IAEA ARIS NuScale SMR.
     // 200000 steel_beam vessel + 600000 concrete shield + 30000 lead_ingot shielding
     // + 2000 microchip control + 500 pipe cooling = 832 t.
@@ -1896,7 +1896,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square4,
     fill: 0x4a90c8, // cool electric blue
     stroke: 0x1a3050,
-    power: { produces: 5000 },
+    power: { produces: 300000 },  // energy SI rebalance: 300 MW electrical (300000 kW)
     // rev-16 §5.3: ITER Q=10 thermal 1 GW = 1_000_000 kW.
     heatSource: { freeOrCoal: 'free', thermalKW: 1000000 },
     // BOM source: ITER Tokamak technical reports.
@@ -2221,7 +2221,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x3a0a4a, // deep void violet
     stroke: 0x100020,
-    power: { produces: 8000 },
+    power: { produces: 1000000 },  // energy SI rebalance: 1 GW electrical (1000000 kW)
     // §14 placeholder — tune in Appendix A.
     // BOM source: extrapolated from T4 endgame analogs per rev-16 §4.5.
     // Closest analog: fusion_core (rev-16 §4.3) × 1.2 (transcendent scale).
@@ -5028,7 +5028,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §3 spec literal: ~2 kW passive producer; no consumes, no recipe.
     // Wired into §5.1 power balance via def.power.produces alone, like
     // solar_panel / nuclear_reactor — no per-tick fuel burn.
-    power: { produces: 2000 },
+    power: { produces: 20000 },  // energy SI rebalance: 20 MW electrical (20000 kW)
     // BOM source: spec-mandate: deep-sea geothermal harness — no real analog at T6 scale.
     // Closest real analog: OTEC floating platform containment × 0.4 (scaled).
     // spec-mandate: no real analog — exotic_alloy, ai_core, plasma_containment_vessel are §6 fantasy.
