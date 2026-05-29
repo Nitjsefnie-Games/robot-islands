@@ -132,6 +132,42 @@ export function realPhaseName(
   return hNext > h ? 'dawn' : 'dusk';
 }
 
+export interface SunEvent {
+  readonly kind: 'sunrise' | 'sunset';
+  readonly atMs: number;
+}
+
+/**
+ * Earliest sunrise/sunset strictly after `nowMs` at the player's location, with
+ * its kind. Scans the location-days bracketing `nowMs` (today + tomorrow) so an
+ * event later today or early tomorrow is always found; the earliest future
+ * crossing's kind is automatically the meaningful one (sun up → next is sunset;
+ * down → sunrise). Returns null when lat/lon is null, or where SunCalc yields no
+ * sunrise/sunset (Invalid Date → NaN, guarded) — e.g. polar day/night.
+ */
+export function nextSunEvent(
+  nowMs: number,
+  lat: number | null,
+  lon: number | null,
+): SunEvent | null {
+  if (lat == null || lon == null) return null;
+  let best: SunEvent | null = null;
+  for (const dayOffset of [0, 1]) {
+    const times = SunCalc.getTimes(new Date(nowMs + dayOffset * DAY_DURATION_MS), lat, lon);
+    const events: ReadonlyArray<{ kind: 'sunrise' | 'sunset'; date: Date }> = [
+      { kind: 'sunrise', date: times.sunrise },
+      { kind: 'sunset', date: times.sunset },
+    ];
+    for (const e of events) {
+      const ms = e.date.getTime();
+      if (!Number.isNaN(ms) && ms > nowMs && (best === null || ms < best.atMs)) {
+        best = { kind: e.kind, atMs: ms };
+      }
+    }
+  }
+  return best;
+}
+
 /**
  * Wall-clock timestamp of the next phase boundary strictly after `nowMs`.
  * The event-driven economy integrator uses this to bound a segment so the
