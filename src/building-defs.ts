@@ -948,7 +948,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { wood: 80, stone: 20, iron_ingot: 3 },
     glyph: '※',
   },
-  // §8.5 T2 battery — 5 kWh power buffer. Zero standby; charges from
+  // §8.5 T2 battery — 5 MWh power buffer. Zero standby; charges from
   // any island power surplus, discharges into deficit. Capacity is set
   // via the BATTERY_CAPACITY_WS table in economy.ts (Task 4).
   battery_bank: {
@@ -965,7 +965,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { saltwater_cell: 20, wire: 15, steel_beam: 5, lead_ingot: 30 },
     glyph: '▭',
   },
-  // §8.5 T3 capacitor bank — 100 kWh power buffer. Zero standby; charges
+  // §8.5 T3 capacitor bank — 100 MWh power buffer. Zero standby; charges
   // from any island power surplus, discharges into deficit.
   capacitor_bank: {
     id: 'capacitor_bank',
@@ -981,7 +981,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { capacitor: 100, microchip: 50, steel_beam: 30, wire: 20, coolant: 10 },
     glyph: '▥',
   },
-  // §8.5 T4 flywheel array — 2 MWh power buffer. Zero standby; same
+  // §8.5 T4 flywheel array — 2 GWh power buffer. Zero standby; same
   // charge/discharge wiring as the smaller battery_bank / capacitor_bank.
   flywheel_array: {
     id: 'flywheel_array',
@@ -2254,13 +2254,13 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel_beam: 15000, clay: 5000, microchip: 800, ceramic_insulator: 500, exotic_alloy: 300 },
     glyph: '✺',
   },
-  // §8.4: Singularity Battery — "effectively infinite electrical power
-  // storage" per spec. Wired into the §5.1 power balance: contributes to
-  // the shared `batteryStoredWs` buffer (summed across all battery tiers)
-  // that charges from surplus and discharges into deficits (see `economy.ts`
-  // brownout path). Per the §8.4 note ("not a resource storage building")
-  // this def carries NO `storage` contribution — it never raises any
-  // resource cap. Zero standby — generalised battery system has no idle draw.
+  // §8.4: Singularity Battery — 50 GWh power buffer ("effectively infinite
+  // electrical power storage" per spec). Wired into the §5.1 power balance:
+  // contributes to the shared `batteryStoredWs` buffer (summed across all
+  // battery tiers) that charges from surplus and discharges into deficits
+  // (see `economy.ts` brownout path). Per the §8.4 note ("not a resource
+  // storage building") this def carries NO `storage` contribution — it never
+  // raises any resource cap. Zero standby — generalised battery system has no idle draw.
   singularity_battery: {
     id: 'singularity_battery',
     displayName: 'Singularity Battery',

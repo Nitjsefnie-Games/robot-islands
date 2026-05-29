@@ -73,9 +73,16 @@ function hasNeighborWithAnyDefId(
   return false;
 }
 
-/** Per-battery-def electrical buffer capacity in W-seconds. Summed across
- *  every operational battery on an island to compute total cap. Buildings
- *  not in this table contribute 0 — non-battery buildings ignore the path. */
+/** Per-battery-def electrical buffer capacity in (power-unit)·seconds.
+ *  Since the canonical power unit is now kW, these values are kW·seconds:
+ *    battery_bank        = 5_000   * 3600 kW·s = 5 MWh
+ *    capacitor_bank      = 100_000 * 3600 kW·s = 100 MWh
+ *    flywheel_array      = 2_000_000 * 3600 kW·s = 2 GWh
+ *    singularity_battery = 50_000_000 * 3600 kW·s = 50 GWh
+ *  The constant is named BATTERY_CAPACITY_WS for continuity; the "WS"
+ *  suffix now means (power-unit)·seconds with power-unit = kW.
+ *  Summed across every operational battery on an island to compute total cap.
+ *  Buildings not in this table contribute 0 — non-battery buildings ignore the path. */
 export const BATTERY_CAPACITY_WS: Readonly<Partial<Record<BuildingDefId, number>>> = {
   battery_bank:        5_000      * 3600,
   capacitor_bank:      100_000    * 3600,
