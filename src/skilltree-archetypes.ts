@@ -35,7 +35,6 @@ function effectLabel(kind: SkillEffect['kind'], extra?: Record<string, unknown>)
   const cat = category ? `${category} ` : '';
   switch (kind) {
     case 'recipeRateMul':              return `${cat}recipe rate`;
-    case 'storageCapMul':              return 'uniform storage cap';
     case 'storageCategoryCapMul':      return `${cat}storage cap`;
     case 'powerProductionMul':         return 'power production';
     case 'powerConsumptionMul':        return 'power consumption';
