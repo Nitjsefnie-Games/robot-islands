@@ -584,7 +584,7 @@ real sun + per-day getTimes cache      <span class="k">~53 ms</span>  <span clas
         <div class="row">
           <div class="cell">Integrator under-integrates across a real night→day transition during offline catchup.</div>
           <div class="cell"><span class="sev med">MED</span></div>
-          <div class="cell"><code>nextRealPhaseBoundaryMs</code> returns real crossing times so the night boolean is constant per segment; polar fallback bounds the segment to <code>QUADRANT_MS</code>. Covered by a multi-day-catchup test.</div>
+          <div class="cell"><code>nextRealPhaseBoundaryMs</code> returns real crossing times so the night boolean is constant per segment; polar fallback bounds the segment to <code>QUADRANT_MS</code>. Covered by an integrator wiring test that crosses a real Brno civil-dusk boundary.</div>
         </div>
         <div class="row">
           <div class="cell">Real-sun calls (<code>getPosition</code>/<code>getTimes</code>) add per-frame cost to HUD + tint.</div>
