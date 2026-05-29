@@ -1658,7 +1658,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // bare-defId lookup is preserved for tests + saved games that never had
   // a tile-aware path.
   mine: {
-    cycleSec: 20, // rebalanced for idle-game scale, step #19 (×10: was 5s); 2026-05-18 ÷3 for display visibility (was 50s)
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { iron_ore: 1 },
     exogenousFlow: 'terrain',
@@ -1669,21 +1669,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // footprint → coal. Inputs/cycleSec/category identical so a build-order
   // change in placement doesn't shift any other downstream rate.
   mine_on_ore: {
-    cycleSec: 20, // rebalanced for idle-game scale, step #19 (×10: was 5s); 2026-05-18 ÷3 for display visibility (was 50s)
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { iron_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   mine_on_coal: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { coal: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   logger: {
-    cycleSec: 1404.1, // rebalanced for idle-game scale, step #19 (×10: was 4s); 2026-05-18 ÷3 for display visibility (was 40s)
+    cycleSec: 1404.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { wood: 1 },
     exogenousFlow: 'terrain',
@@ -1691,7 +1691,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // §8.1 T2 Heavy Logger: 3× wood throughput vs T1 Logger.
   heavy_logger: {
-    cycleSec: 351,
+    cycleSec: 351, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { wood: 1 },
     exogenousFlow: 'terrain',
@@ -1702,7 +1702,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // variants like copper / nickel land alongside their resource catalog
   // additions).
   deep_mine: {
-    cycleSec: 13.3,
+    cycleSec: 13.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { iron_ore: 1 },
     exogenousFlow: 'terrain',
@@ -1711,7 +1711,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T1 smelting — rebalanced for idle-game scale, step #19 (×10)
   smelter: {
-    cycleSec: 2981.3, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
+    cycleSec: 2981.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ore: 10, coal: 3 },
     outputs: { iron_ingot: 6, slag: 2, co: 5 },
     category: 'smelting',
@@ -1719,7 +1719,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T1 manufacturing — rebalanced for idle-game scale, step #19 (×10)
   workshop: {
-    cycleSec: 4300, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
+    cycleSec: 4300, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ore: 1, coal: 1 },
     outputs: { bolt: 1 },
     category: 'manufacturing',
@@ -1728,7 +1728,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // home-Plains-only inputs so battery_bank no longer chains through the
   // T3 lithium gate. Wire is the T2-chokepoint bottleneck per spec §05.
   cell_press: {
-    cycleSec: 537495.7,
+    cycleSec: 537495.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { saltwater: 1, iron_ingot: 1, wire: 1 },
     outputs: { saltwater_cell: 1 },
     category: 'manufacturing',
@@ -1771,13 +1771,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T2 smelting — rebalanced for idle-game scale, step #19 (×40)
   coke_oven: {
-    cycleSec: 214998.3, // rebalanced for idle-game scale, step #19 (×40: was 10s); 2026-05-18 ÷3 for display visibility (was 400s)
+    cycleSec: 214998.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { coal: 10 },
     outputs: { coke: 7, wood_tar: 0.4, hydrogen: 0.5, co2: 1, refinery_gas: 1.1 },
     category: 'smelting',
   },
   blast_furnace: {
-    cycleSec: 6217.4, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
+    cycleSec: 6217.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ore: 35, coke: 18, limestone: 10 },
     outputs: { pig_iron: 20, slag: 6, co2: 35 },
     category: 'smelting',
@@ -1785,7 +1785,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     exogenousFlowKg: 0,
   },
   steel_mill: {
-    cycleSec: 4222.6, // rebalanced for idle-game scale, step #19 (×40: was 15s); 2026-05-18 ÷3 for display visibility (was 600s)
+    cycleSec: 4222.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { pig_iron: 100, quicklime: 7, oxygen: 9 },
     outputs: { steel: 85, slag: 23, co: 7, co2: 1 },
     category: 'smelting',
@@ -1797,14 +1797,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // matching BuildingDefId) selected at runtime by `resolveRecipe` when the
   // base Steel Mill building has scrap on hand but no pig_iron stockpile.
   steel_mill_from_scrap: {
-    cycleSec: 72.8,
+    cycleSec: 72.8, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { scrap: 2 },
     outputs: { steel: 1, slag: 1 },
     category: 'smelting',
   },
   // §6.7: Steel Mill Scrap — alternate T2 recipe using 2 scrap → 1 steel + 1 slag.
   steel_mill_scrap: {
-    cycleSec: 72.8,
+    cycleSec: 72.8, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { scrap: 2 },
     outputs: { steel: 1, slag: 1 },
     category: 'smelting',
@@ -1815,14 +1815,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §5.2 heat-source adjacency required.
   oxygen_converter: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
-    cycleSec: 163.8,
+    cycleSec: 163.8, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { pig_iron: 1, scrap: 1, oxygen: 2 },
     outputs: { steel: 2 },
     category: 'smelting',
   },
   // §6.7 Slag reprocessing — T2 smelting-byproduct refiner.
   slag_reprocessor: {
-    cycleSec: 8322.5,        // slow — reflects "low yield" §6.7; 2026-05-18 ÷3 for display visibility (was 1200s)
+    cycleSec: 8322.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { slag: 10 },  // batch input keeps the yield low
     outputs: { gold_ore: 1, silver_ore: 1, rare_earth: 1 },
     category: 'smelting',
@@ -1833,7 +1833,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T2 manufacturing — rebalanced for idle-game scale, step #19 (×40)
   assembler: {
-    cycleSec: 573.3, // rebalanced for idle-game scale, step #19 (×40: was 8s); 2026-05-18 ÷3 for display visibility (was 320s)
+    cycleSec: 573.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ingot: 1, bolt: 2 },
     outputs: { gear: 1 },
     category: 'manufacturing',
@@ -1845,7 +1845,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // simplifies the bill to resources already in the catalog (iron_ingot,
   // wood, bolt) since Brick/Glass aren't catalogued yet.
   kit_assembler: {
-    cycleSec: 28666.4, // rebalanced for idle-game scale, step #19 (×10: was 60s); 2026-05-18 ÷3 for display visibility (was 600s)
+    cycleSec: 28666.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ingot: 5, wood: 10, bolt: 5 },
     outputs: { foundation_kit: 1 },
     category: 'manufacturing',
@@ -1853,7 +1853,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T3 smelting (higher-throughput steel alternative) — rebalanced for idle-game scale, step #19 (×20)
   electric_arc_furnace: {
-    cycleSec: 8908.6, // rebalanced for idle-game scale, step #19 (×20: was 6s); 2026-05-18 ÷3 for display visibility (was 120s)
+    cycleSec: 8908.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { scrap: 100, quicklime: 3 },
     outputs: { steel: 95, slag: 5, co2: 1 },
     category: 'smelting',
@@ -1888,7 +1888,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // from Steel + Helium-3 fuel. Per §9.5, only producer of Exotic Alloy in
   // the world. §5.2 heat-source adjacency required (see heat.ts).
   pyroforge: {
-    cycleSec: 3822.2, // rebalanced for idle-game scale, step #19 (×60: was 60s); 2026-05-18 ÷3 for display visibility (was 3600s)
+    cycleSec: 3822.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 5, helium_3: 1 },
     outputs: { exotic_alloy: 1 },
     category: 'smelting',
@@ -1900,7 +1900,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // power draw; currently a tuning placeholder, modelled at static 1200W
   // pending balance pass.
   cryogenic_compute_center: {
-    cycleSec: 7166609.3, // rebalanced for idle-game scale, step #19 (×60: was 90s); 2026-05-18 ÷3 for display visibility (was 5400s)
+    cycleSec: 7166609.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 3, quantum_chip: 1, argon: 1 },
     outputs: { ai_core: 1 },
     category: 'electronics',
@@ -1910,7 +1910,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Antimatter Capsules from Hydrogen + Exotic Alloy + Microchip.
   // Not biome-locked. Tagged `electronics` per §7.11.
   particle_accelerator: {
-    cycleSec: 1,
+    cycleSec: 1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { hydrogen: 10, exotic_alloy: 1, microchip: 5 },
     outputs: { antimatter_capsule: 1 },
     category: 'electronics',
@@ -1919,7 +1919,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Phase 11 — T4 endgame (Task 11.2): Quantum Chip Fabricator replaces
   // particle_accelerator as the quantum_chip producer.
   quantum_chip_fab: {
-    cycleSec: 3822191.6,
+    cycleSec: 3822191.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 4, pig_iron: 4 },
     outputs: { quantum_chip: 1 },
     category: 'electronics',
@@ -1927,7 +1927,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 11 — T4 endgame (Task 11.1): Quantum Manipulator → time_crystal.
   quantum_manipulator: {
-    cycleSec: 764438.3,
+    cycleSec: 764438.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { helium_3: 1, exotic_alloy: 1 },
     outputs: { time_crystal: 1 },
     category: 'manufacturing',
@@ -1936,7 +1936,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Phase 16.1 — §6.4 uranium extractor (Task 16.1). Closes the uranium_ore
   // producer gap: previously uranium_ore had no extractor, only a consumer.
   uranium_mine: {
-    cycleSec: 3440,
+    cycleSec: 3440, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { uranium_ore: 1 },
     exogenousFlow: 'terrain',
@@ -1945,7 +1945,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 11 — T4 endgame (Task 11.3): Fuel Rod Assembler → nuclear_fuel_rod.
   fuel_rod_assembler: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { uranium_ore: 5, stainless_steel: 2, coolant: 2 },
     outputs: { nuclear_fuel_rod: 1 },
     category: 'manufacturing',
@@ -1953,31 +1953,31 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 11 — T4 endgame (Task 11.4): Five T4 component assemblers.
   plasma_containment_assembler: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 1, magnet: 4, steel: 5 },
     outputs: { plasma_containment_vessel: 1 },
     category: 'manufacturing',
   },
   singularity_sensor_lab: {
-    cycleSec: 2687478.5,
+    cycleSec: 2687478.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quantum_chip: 1, optical_fiber: 4, magnet: 2 },
     outputs: { singularity_sensor: 1 },
     category: 'electronics',
   },
   cryo_containment_assembler: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { cryogenic_compound: 1, stainless_steel: 2, glass_fiber: 4 },
     outputs: { cryo_containment_unit: 1 },
     category: 'manufacturing',
   },
   accelerator_core_lab: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { magnet: 8, exotic_alloy: 1, optical_fiber: 4 },
     outputs: { particle_accelerator_core: 1 },
     category: 'electronics',
   },
   self_replication_lab: {
-    cycleSec: 127.4,
+    cycleSec: 127.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { ai_core: 1, microchip: 8, electric_motor: 4, computing_module: 2 },
     outputs: { self_replication_module: 1 },
     category: 'manufacturing',
@@ -1989,7 +1989,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Optical fiber + glass fiber recipes can land later as separate def-ids
   // if needed, or via a recipe-rotation extension.
   carbon_forge: {
-    cycleSec: 1528.9,
+    cycleSec: 1528.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wood: 5, coke: 2 },
     outputs: { carbon_fiber: 1 },
     category: 'smelting',
@@ -1998,7 +1998,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §04: Skill Forge — first crystal recipe (Mining Crystal T1).
   // Confirms the craft pipeline works end-to-end before adding all 45 recipes.
   skill_forge: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ore: 100, microchip: 4, reality_anchor: 1 },
     outputs: { mining_crystal_t1: 1 },
     category: 'electronics',
@@ -2006,355 +2006,355 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Task 6: remaining crystal recipes (57 new recipes for 19 families × 3 tiers + mining T2/T3).
   skill_forge_mining_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 50, microchip: 8, reality_anchor: 2 },
     outputs: { mining_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_mining_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { mining_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_forestry_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wood: 100, microchip: 4, reality_anchor: 1 },
     outputs: { forestry_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_forestry_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { lumber: 50, microchip: 8, reality_anchor: 2 },
     outputs: { forestry_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_forestry_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { carbon_fiber: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { forestry_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_drilling_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { stone: 100, microchip: 4, reality_anchor: 1 },
     outputs: { drilling_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_drilling_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 50, microchip: 8, reality_anchor: 2 },
     outputs: { drilling_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_drilling_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { diamond_ore: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { drilling_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_robotics_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { gear: 20, microchip: 4, reality_anchor: 1 },
     outputs: { robotics_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_robotics_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { electric_motor: 10, microchip: 8, reality_anchor: 2 },
     outputs: { robotics_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_robotics_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { ai_core: 2, quantum_chip: 2, reality_anchor: 4 },
     outputs: { robotics_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_smelting_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ore: 100, coke: 20, reality_anchor: 1 },
     outputs: { smelting_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_smelting_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 30, microchip: 8, reality_anchor: 2 },
     outputs: { smelting_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_smelting_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { smelting_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_chemistry_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { sulfur: 50, microchip: 4, reality_anchor: 1 },
     outputs: { chemistry_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_chemistry_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { sulfuric_acid: 30, microchip: 8, reality_anchor: 2 },
     outputs: { chemistry_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_chemistry_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy_seed: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { chemistry_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_electronics_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { microchip: 20, wire: 20, reality_anchor: 1 },
     outputs: { electronics_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_electronics_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quantum_chip: 5, microchip: 10, reality_anchor: 2 },
     outputs: { electronics_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_electronics_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { ai_core: 2, quantum_chip: 5, reality_anchor: 4 },
     outputs: { electronics_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_power_systems_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { coal: 100, microchip: 4, reality_anchor: 1 },
     outputs: { power_systems_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_power_systems_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { battery: 20, microchip: 8, reality_anchor: 2 },
     outputs: { power_systems_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_power_systems_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { nuclear_fuel_rod: 5, ai_core: 2, reality_anchor: 4 },
     outputs: { power_systems_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_storage_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wood: 100, microchip: 4, reality_anchor: 1 },
     outputs: { storage_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_storage_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 30, microchip: 8, reality_anchor: 2 },
     outputs: { storage_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_storage_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { foundation_kit_refined: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { storage_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_transport_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { bolt: 50, microchip: 4, reality_anchor: 1 },
     outputs: { transport_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_transport_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { gear: 20, microchip: 8, reality_anchor: 2 },
     outputs: { transport_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_transport_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel_beam: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { transport_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_network_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wire: 50, microchip: 4, reality_anchor: 1 },
     outputs: { network_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_network_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { optical_fiber: 20, microchip: 8, reality_anchor: 2 },
     outputs: { network_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_network_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quantum_chip: 5, ai_core: 2, reality_anchor: 4 },
     outputs: { network_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_launch_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 50, microchip: 4, reality_anchor: 1 },
     outputs: { launch_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_launch_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { fuel_cell: 10, microchip: 8, reality_anchor: 2 },
     outputs: { launch_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_launch_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { ascendant_core: 1, ai_core: 2, reality_anchor: 4 },
     outputs: { launch_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_communication_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { copper_ingot: 50, microchip: 4, reality_anchor: 1 },
     outputs: { communication_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_communication_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { transistor: 20, microchip: 8, reality_anchor: 2 },
     outputs: { communication_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_communication_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { tachyonic_transmitter: 2, ai_core: 2, reality_anchor: 4 },
     outputs: { communication_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_discovery_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quartz: 50, microchip: 4, reality_anchor: 1 },
     outputs: { discovery_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_discovery_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { glass: 30, microchip: 8, reality_anchor: 2 },
     outputs: { discovery_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_discovery_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { scanner_sat: 1, ai_core: 2, reality_anchor: 4 },
     outputs: { discovery_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_resilience_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { brick: 100, microchip: 4, reality_anchor: 1 },
     outputs: { resilience_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_resilience_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { concrete: 50, microchip: 8, reality_anchor: 2 },
     outputs: { resilience_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_resilience_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { repair_pack: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { resilience_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_patronage_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { plank: 50, microchip: 4, reality_anchor: 1 },
     outputs: { patronage_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_patronage_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { lumber: 30, microchip: 8, reality_anchor: 2 },
     outputs: { patronage_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_patronage_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { foundation_kit_enriched: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { patronage_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_aquaculture_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { fresh_water: 100, microchip: 4, reality_anchor: 1 },
     outputs: { aquaculture_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_aquaculture_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { salt: 50, microchip: 8, reality_anchor: 2 },
     outputs: { aquaculture_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_aquaculture_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { heavy_water: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { aquaculture_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_hydroprocessing_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { crude_oil: 50, microchip: 4, reality_anchor: 1 },
     outputs: { hydroprocessing_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_hydroprocessing_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { diesel: 30, microchip: 8, reality_anchor: 2 },
     outputs: { hydroprocessing_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_hydroprocessing_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { cryogenic_hydrogen: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { hydroprocessing_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_submarine_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 50, microchip: 4, reality_anchor: 1 },
     outputs: { submarine_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_submarine_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { battery: 20, microchip: 8, reality_anchor: 2 },
     outputs: { submarine_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_submarine_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { fuel_cell: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { submarine_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_oceanography_t1: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { sand: 100, microchip: 4, reality_anchor: 1 },
     outputs: { oceanography_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_oceanography_t2: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { glass: 30, microchip: 8, reality_anchor: 2 },
     outputs: { oceanography_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_oceanography_t3: {
-    cycleSec: 286.7,
+    cycleSec: 286.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { optical_fiber: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { oceanography_crystal_t3: 1 },
     category: 'electronics',
@@ -2382,13 +2382,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 12 — T5 transcendent field extractors (Task 12.1)
   zero_point_extractor: {
-    cycleSec: 17199862.4,
+    cycleSec: 17199862.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { zero_point_flux: 1 },
     category: 'extraction',
   },
   neutronium_extractor: {
-    cycleSec: 17199862.4,
+    cycleSec: 17199862.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { neutronium: 1 },
     category: 'extraction',
@@ -2396,19 +2396,19 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 12 — T5 component labs (Task 12.2)
   probability_calculator_lab: {
-    cycleSec: 7644383.3,
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quantum_chip: 4, casimir_energy: 1, ai_core: 1 },
     outputs: { probability_calculator: 1 },
     category: 'manufacturing',
   },
   dimensional_fold_lab: {
-    cycleSec: 7644383.3,
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { spacetime_fragment: 1, exotic_alloy: 2, eldritch_processor: 1 },
     outputs: { dimensional_fold: 1 },
     category: 'manufacturing',
   },
   causal_regulator_lab: {
-    cycleSec: 7644383.3,
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { time_crystal: 1, phase_converter: 2, reality_anchor: 1 },
     outputs: { causal_regulator: 1 },
     category: 'manufacturing',
@@ -2416,25 +2416,25 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 12 — T5 component labs (Task 12.3)
   tachyonic_transmitter_lab: {
-    cycleSec: 7644383.3,
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { tachyon_stream: 1, optical_fiber: 8, ai_core: 1 },
     outputs: { tachyonic_transmitter: 1 },
     category: 'manufacturing',
   },
   aether_beacon_lab: {
-    cycleSec: 7644383.3,
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { aetheric_current: 1, casimir_energy: 1, magnet: 4 },
     outputs: { aether_beacon: 1 },
     category: 'manufacturing',
   },
   reality_engine_lab: {
-    cycleSec: 7644383.3,
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { reality_anchor: 1, dimensional_fold: 1, causal_regulator: 1 },
     outputs: { reality_engine: 1 },
     category: 'manufacturing',
   },
   singularity_battery_factory: {
-    cycleSec: 23888.7,
+    cycleSec: 23888.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { phase_converter: 2, dark_matter: 1, casimir_energy: 1 },
     outputs: { singularity_battery_unit: 1 },
     category: 'manufacturing',
@@ -2443,7 +2443,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T5 manufacturing — Reality Forge. §7.12 spec literal: 24h cycle.
   // 2026-05-18 ÷3 for display visibility → now 8h cycle.
   reality_forge: {
-    cycleSec: 42999.7, // 24h per §7.12; 2026-05-18 ÷3 for display visibility (was 86400s)
+    cycleSec: 42999.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { ai_core: 4, antimatter_capsule: 1, time_crystal: 1, exotic_alloy: 1 },
     outputs: { reality_anchor: 1 },
     category: 'manufacturing',
@@ -2461,98 +2461,98 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T1 extraction (§7.1 / §8.1 raws) — rebalanced for idle-game scale, step #19 (×10).
   // All have empty `inputs` and a single-resource output — same shape as the existing Mine/Logger.
   quarry: {
-    cycleSec: 40, // rebalanced for idle-game scale, step #19 (×10: was 6s); 2026-05-18 ÷3 for display visibility (was 60s)
+    cycleSec: 40, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { stone: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   sand_pit: {
-    cycleSec: 40, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
+    cycleSec: 40, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { sand: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   well: {
-    cycleSec: 16.4, // rebalanced for idle-game scale, step #19 (×10: was 3s); 2026-05-18 ÷3 for display visibility (was 30s)
+    cycleSec: 16.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { fresh_water: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   coastal_pump: {
-    cycleSec: 16.4, // rebalanced for idle-game scale, step #19 (×10: was 4s); 2026-05-18 ÷3 for display visibility (was 40s)
+    cycleSec: 16.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { saltwater: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   quartz_mine: {
-    cycleSec: 40, // rebalanced for idle-game scale, step #19 (×10: was 12s); 2026-05-18 ÷3 for display visibility (was 120s)
+    cycleSec: 40, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { quartz: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   limestone_quarry: {
-    cycleSec: 40, // slightly slower than iron Mine (50s) — limestone is bulk industrial; 2026-05-18 ÷3 for display visibility (was 60s)
+    cycleSec: 40, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { limestone: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   clay_pit_extractor: {
-    cycleSec: 40,
+    cycleSec: 40, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { clay: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   sulfur_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { sulfur: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   phosphate_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { phosphate: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   graphite_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { graphite: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   copper_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { copper_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   tin_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { tin_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   lead_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { lead_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   bauxite_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { bauxite: 1 },
     exogenousFlow: 'terrain',
@@ -2561,7 +2561,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   limekiln: {
-    cycleSec: 119443.5,
+    cycleSec: 119443.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { limestone: 25 },
     outputs: { quicklime: 14, co2: 11 },
     exogenousFlow: 'fuel-combustion-CO₂',
@@ -2569,25 +2569,25 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'chemistry',
   },
   lime_slaker: {
-    cycleSec: 905.3,
+    cycleSec: 905.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quicklime: 1, fresh_water: 1 },
     outputs: { slaked_lime: 1 },
     category: 'chemistry',
   },
   brick_kiln: {
-    cycleSec: 64499.5,
+    cycleSec: 64499.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { clay: 6 },
     outputs: { brick: 5, water_vapor: 1 },
     category: 'chemistry',
   },
   mortar_mixer: {
-    cycleSec: 905.3,
+    cycleSec: 905.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { sand: 1, quicklime: 1 },
     outputs: { mortar: 1 },
     category: 'chemistry',
   },
   cement_mill: {
-    cycleSec: 9957.8,
+    cycleSec: 9957.8, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quicklime: 8, clay: 2, sand: 1 },
     outputs: { cement: 11 },
     exogenousFlow: 'fuel-combustion-CO₂',
@@ -2595,71 +2595,71 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'chemistry',
   },
   concrete_plant: {
-    cycleSec: 5431.5,
+    cycleSec: 5431.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { cement: 1, sand: 2, stone: 3, fresh_water: 0.5 },
     outputs: { concrete: 6 },
     exogenousFlow: 'evaporation-water-vapor',
     category: 'chemistry',
   },
   charcoal_kiln: {
-    cycleSec: 171998.6,
+    cycleSec: 171998.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wood: 8 },
     outputs: { charcoal: 2, wood_tar: 1, co2: 2, water_vapor: 3 },
     biogenic: true,
     category: 'chemistry',
   },
   plank_mill: {
-    cycleSec: 171998.6,
+    cycleSec: 171998.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { lumber: 1 },
     outputs: { plank: 2 },
     category: 'manufacturing',
   },
   copper_smelter: {
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { copper_ore: 1, coal: 1 },
     outputs: { copper_ingot: 1 },
     category: 'smelting',
   },
   tin_smelter: {
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { tin_ore: 1, coal: 1 },
     outputs: { tin_ingot: 1 },
     category: 'smelting',
   },
   lead_smelter: {
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { lead_ore: 1, coal: 1 },
     outputs: { lead_ingot: 1 },
     category: 'smelting',
   },
   solder_alloyer: {
-    cycleSec: 5548.3,
+    cycleSec: 5548.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { tin_ingot: 1, lead_ingot: 1 },
     outputs: { solder: 2 },
     category: 'manufacturing',
   },
   // Phase 7 — Bronze + Brass (§7.2)
   bronze_alloyer: {
-    cycleSec: 5548.3,
+    cycleSec: 5548.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { copper_ingot: 1, tin_ingot: 1 },
     outputs: { bronze: 2 },
     category: 'manufacturing',
   },
   brass_alloyer: {
-    cycleSec: 5548.3,
+    cycleSec: 5548.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { copper_ingot: 1, zinc_ingot: 1 },
     outputs: { brass: 2 },
     category: 'manufacturing',
   },
   // Phase 8 — Aluminum chain (§7.3)
   alumina_refinery: {
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { bauxite: 1, sodium_hydroxide: 1 },
     outputs: { alumina: 1 },
     category: 'chemistry',
   },
   aluminum_smelter: {
-    cycleSec: 819041.1,
+    cycleSec: 819041.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { alumina: 1 },
     outputs: { aluminum: 1 },
     category: 'smelting',
@@ -2667,45 +2667,45 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 3 — T2-T3 steel alloy chains (§6.1 / §6.4 / §7.1)
   manganese_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { manganese_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   manganese_smelter: {
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { manganese_ore: 1, coal: 1 },
     outputs: { manganese_ingot: 1 },
     category: 'smelting',
   },
   carbon_steel_mill: {
-    cycleSec: 152.9,
+    cycleSec: 152.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 1, manganese_ingot: 1 },
     outputs: { carbon_steel: 1 },
     category: 'manufacturing',
   },
   zinc_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { zinc_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   zinc_smelter: {
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { zinc_ore: 1, coal: 1 },
     outputs: { zinc_ingot: 1 },
     category: 'smelting',
   },
   galvanizing_bath: {
-    cycleSec: 152.9,
+    cycleSec: 152.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 1, zinc_ingot: 1 },
     outputs: { galvanized_steel: 1 },
     category: 'manufacturing',
   },
   chromium_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { chromium_ore: 1 },
     exogenousFlow: 'terrain',
@@ -2714,13 +2714,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   chromium_smelter: {
     // bumped from 80s → 250s: T1-speed smelting T3-weight ingots was an XP-arbitrage
     // exploit (Agent C finding — T1 80s smelter producing VI-15 outputs).
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { chromium_ore: 1, coal: 1 },
     outputs: { chromium_ingot: 1 },
     category: 'smelting',
   },
   nickel_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { nickel_ore: 1 },
     exogenousFlow: 'terrain',
@@ -2728,19 +2728,19 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   nickel_smelter: {
     // bumped from 80s → 250s: XP-arbitrage fix — same rationale as chromium_smelter.
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { nickel_ore: 1, coal: 1 },
     outputs: { nickel_ingot: 1 },
     category: 'smelting',
   },
   stainless_steel_mill: {
-    cycleSec: 152.9,
+    cycleSec: 152.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 1, chromium_ingot: 1, nickel_ingot: 1 },
     outputs: { stainless_steel: 1 },
     category: 'manufacturing',
   },
   tungsten_mine: {
-    cycleSec: 20,
+    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { tungsten_ore: 1 },
     exogenousFlow: 'terrain',
@@ -2748,13 +2748,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   tungsten_smelter: {
     // bumped from 80s → 250s: XP-arbitrage fix — same rationale as chromium_smelter.
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { tungsten_ore: 1, coal: 1 },
     outputs: { tungsten_ingot: 1 },
     category: 'smelting',
   },
   tool_steel_mill: {
-    cycleSec: 152.9,
+    cycleSec: 152.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 1, tungsten_ingot: 1 },
     outputs: { tool_steel: 1 },
     category: 'manufacturing',
@@ -2762,13 +2762,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T1 manufacturing / chemistry — T0 raws → T1 refined. Rebalanced for idle-game scale, step #19 (×10).
   lumber_mill: {
-    cycleSec: 85999.3, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
+    cycleSec: 85999.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wood: 1 },
     outputs: { lumber: 1 },
     category: 'manufacturing',
   },
   glassworks: {
-    cycleSec: 22337.5, // rebalanced for idle-game scale, step #19 (×10: was 12s); 2026-05-18 ÷3 for display visibility (was 120s)
+    cycleSec: 22337.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { sand: 1 },
     outputs: { glass: 1 },
     category: 'manufacturing',
@@ -2778,7 +2778,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // gating ships when chemistry recipes that depend on heat also do.
   },
   evaporator: {
-    cycleSec: 19111, // rebalanced for idle-game scale, step #19 (×10: was 15s); 2026-05-18 ÷3 for display visibility (was 150s)
+    cycleSec: 19111, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { saltwater: 1 },
     outputs: { salt: 1 },
     category: 'manufacturing',
@@ -2787,13 +2787,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // consumer for the alumina + lubricant chains.
   },
   electrolyzer: {
-    cycleSec: 206398.3, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
+    cycleSec: 206398.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { fresh_water: 9 },
     outputs: { hydrogen: 1, oxygen: 8 },
     category: 'chemistry',
   },
   biofuel_plant: {
-    cycleSec: 358.3, // rebalanced for idle-game scale, step #19 (×10: was 15s); 2026-05-18 ÷3 for display visibility (was 150s)
+    cycleSec: 358.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wood: 2 },
     outputs: { biofuel: 1 },
     category: 'chemistry',
@@ -2803,7 +2803,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T2 extraction — petrochemical raws. Rebalanced for idle-game scale, step #19 (×40).
   pump_jack: {
-    cycleSec: 430, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
+    cycleSec: 430, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { crude_oil: 1 },
     exogenousFlow: 'terrain',
@@ -2812,7 +2812,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // implemented via `requiredTile` in building-defs.ts.
   },
   gas_extractor: {
-    cycleSec: 430, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
+    cycleSec: 430, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { natural_gas: 1 },
     exogenousFlow: 'terrain',
@@ -2828,7 +2828,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   naphtha_cracker: {
     // rebalanced for idle-game scale, step #19 (×40: was 15s); bumped 600→1000
     // to reduce XP-arbitrage: T0/T1 inputs → T2-weight outputs at T1 throughput.
-    cycleSec: 546,
+    cycleSec: 546, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { crude_oil: 20 },
     outputs: { naphtha: 3, aviation_kerosene_crude: 3, diesel: 5, heavy_oil: 6, refinery_gas: 3 },
     category: 'chemistry',
@@ -2837,59 +2837,59 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   crude_oil_cracker: {
     // bumped 600→1200: produces 3 outputs (heavy_oil, tar, asphalt) — longer
     // pace is proportionally fair; also closes XP-arbitrage per Agent C finding.
-    cycleSec: 81.9,
+    cycleSec: 81.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { crude_oil: 3 },
     outputs: { heavy_oil: 1, tar: 1, asphalt: 1 },
     category: 'chemistry',
   },
   // Phase 4 — T2 plastic precursor polymerizer (§7.4)
   plastic_polymerizer_a: {
-    cycleSec: 358.3,
+    cycleSec: 358.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { naphtha: 1 },
     outputs: { plastic_precursor: 1 },
     category: 'chemistry',
   },
   // Phase 4 — T2 split plastic presses (§7.4)
   rigid_plastic_press: {
-    cycleSec: 358.3,
+    cycleSec: 358.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { plastic_precursor: 1 },
     outputs: { rigid_plastic: 1 },
     category: 'manufacturing',
   },
   flexible_plastic_press: {
-    cycleSec: 358.3,
+    cycleSec: 358.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { plastic_precursor: 1 },
     outputs: { flexible_plastic: 1 },
     category: 'manufacturing',
   },
   rubber_synthesizer: {
-    cycleSec: 358.3,
+    cycleSec: 358.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { plastic_precursor: 1 },
     outputs: { synthetic_rubber: 1 },
     category: 'manufacturing',
   },
   // Phase 5 — T2 chemistry chain (§7.5)
   sulfuric_acid_plant: {
-    cycleSec: 1438.5,
+    cycleSec: 1438.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { sulfur: 1, fresh_water: 2 },
     outputs: { sulfuric_acid: 1 },
     category: 'chemistry',
   },
   hcl_plant: {
-    cycleSec: 930.4,
+    cycleSec: 930.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { salt: 1, sulfuric_acid: 1 },
     outputs: { hydrochloric_acid: 1 },
     category: 'chemistry',
   },
   // Phase 5 — T3 chemistry chain (§7.5)
   phosphor_plant: {
-    cycleSec: 781.8,
+    cycleSec: 781.8, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { phosphate: 1, sulfuric_acid: 1 },
     outputs: { phosphor: 1 },
     category: 'chemistry',
   },
   cryo_air_separator: {
-    cycleSec: 19.6,
+    cycleSec: 19.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { nitrogen: 1 },
     outputs: { liquid_nitrogen: 1 },
     category: 'chemistry',
@@ -2897,14 +2897,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   chlor_alkali_plant: {
     // rebalanced for idle-game scale, step #19 (×40: was 20s); bumped 800→1200
     // to reduce XP-arbitrage per Agent C finding (T0 saltwater → T2-weight outputs).
-    cycleSec: 877193,
+    cycleSec: 877193, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { salt: 117, fresh_water: 36 },
     outputs: { chlorine: 71, sodium_hydroxide: 80, hydrogen: 2 },
     category: 'chemistry',
     // Real co-output per §7.5; consumer in §7.3 alumina chain.
   },
   chemical_reactor: {
-    cycleSec: 1563.6,           // matches chlor_alkali_plant — electrolysis pace; 2026-05-18 ÷3 for display visibility (was 800s)
+    cycleSec: 1563.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { salt: 1, fresh_water: 2 },
     outputs: { chlorine: 1, sodium_hydroxide: 1 },
     category: 'chemistry',
@@ -2914,7 +2914,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // (chain in `bauxite_refinery` above).
   },
   lubricant_refinery: {
-    cycleSec: 614.3, // rebalanced for idle-game scale, step #19 (×40: was 25s); 2026-05-18 ÷3 for display visibility (was 1000s)
+    cycleSec: 614.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { heavy_oil: 5, chlorine: 5, calcium_sulfonate: 1 },
     outputs: { lubricant: 10 },
     category: 'chemistry',
@@ -2924,7 +2924,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // lubricant in its bill of materials).
   },
   diesel_refinery: {
-    cycleSec: 626.6, // rebalanced for idle-game scale, step #19 (×40: was 30s); 2026-05-18 ÷3 for display visibility (was 1200s)
+    cycleSec: 626.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { heavy_oil: 10, hydrogen: 1 },
     outputs: { diesel: 10, sulfur: 0.2 },
     category: 'chemistry',
@@ -2934,7 +2934,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // stockpile-only fuel until §11.7 lands.
   },
   metal_rolling_mill: {
-    cycleSec: 3784, // rebalanced for idle-game scale, step #19 (×40: was 10s); 2026-05-18 ÷3 for display visibility (was 400s)
+    cycleSec: 3784, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 11 },
     outputs: { wire: 20, mill_scale: 1 },
     category: 'manufacturing',
@@ -2948,7 +2948,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T3 chemistry / electronics — rebalanced for idle-game scale, step #19 (×20).
   silicon_crusher: {
-    cycleSec: 2774.2, // rebalanced for idle-game scale, step #19 (×20: was 30s); 2026-05-18 ÷3 for display visibility (was 600s)
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quartz: 1 },
     outputs: { silicon: 1 },
     category: 'smelting',
@@ -2958,20 +2958,20 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // the wafer-intermediate chain is unwired.
   },
   air_separator: {
-    cycleSec: 1960.1, // rebalanced for idle-game scale, step #19 (×20: was 30s); 2026-05-18 ÷3 for display visibility (was 600s)
+    cycleSec: 1960.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { air: 100 },
     outputs: { nitrogen: 75.5, oxygen: 23.2, argon: 1.3 },
     category: 'chemistry',
     exogenousFlow: 'atmosphere',
   },
   cryo_lab: {
-    cycleSec: 19.6, // rebalanced for idle-game scale, step #19 (×20: was 60s); 2026-05-18 ÷3 for display visibility (was 1200s)
+    cycleSec: 19.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { hydrogen: 1, nitrogen: 1 },
     outputs: { cryo_coolant: 1 },
     category: 'chemistry',
   },
   cryo_compressor: {
-    cycleSec: 19.6, // rebalanced for idle-game scale, step #19 (×20: was 90s); 2026-05-18 ÷3 for display visibility (was 1800s)
+    cycleSec: 19.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { hydrogen: 1, cryo_coolant: 1 },
     outputs: { cryogenic_hydrogen: 1 },
     category: 'chemistry',
@@ -2981,7 +2981,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // remains STILL-DEFERRED.
   },
   kerosene_refinery: {
-    cycleSec: 273, // rebalanced for idle-game scale, step #19 (×20: was 60s); 2026-05-18 ÷3 for display visibility (was 1200s)
+    cycleSec: 273, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { aviation_kerosene_crude: 10, hydrogen: 1 },
     outputs: { aviation_kerosene: 10 },
     category: 'chemistry',
@@ -2990,7 +2990,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // selection STILL-DEFERRED.
   },
   lithography_lab: {
-    cycleSec: 67187, // rebalanced for idle-game scale, step #19 (×20: was 120s); 2026-05-18 ÷3 for display visibility (was 2400s)
+    cycleSec: 67187, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { silicon: 1, wire: 1 },
     outputs: { microchip: 1 },
     category: 'electronics',
@@ -3000,40 +3000,40 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 9 — Task 9.1: high-purity silicon → wafer (§7.7)
   wafer_lab: {
-    cycleSec: 155276.5,
+    cycleSec: 155276.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { silicon: 1 },
     outputs: { silicon_wafer: 1 },
     category: 'electronics',
   },
   // Phase 9 — Task 9.2: wafer + graphite → transistor / capacitor / resistor (§7.7)
   transistor_doping: {
-    cycleSec: 10749.9,
+    cycleSec: 10749.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { silicon_wafer: 1, graphite: 1 },
     outputs: { transistor: 4 },
     category: 'electronics',
   },
   capacitor_doping: {
-    cycleSec: 53749.6,
+    cycleSec: 53749.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { silicon_wafer: 1, graphite: 1 },
     outputs: { capacitor: 4 },
     category: 'electronics',
   },
   resistor_doping: {
-    cycleSec: 10749.9,
+    cycleSec: 10749.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { silicon_wafer: 1, graphite: 1 },
     outputs: { resistor: 4 },
     category: 'electronics',
   },
   // Phase 9 — Task 9.3: Memory Lab (§7.7). PCB + transistors + capacitors + resistors + solder → memory_module.
   memory_lab: {
-    cycleSec: 119443.5,
+    cycleSec: 119443.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { pcb: 1, transistor: 4, capacitor: 4, resistor: 4, solder: 1 },
     // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
     outputs: { memory_module: 2 },
     category: 'electronics',
   },
   drilling_rig: {
-    cycleSec: 1.5, // rebalanced for idle-game scale, step #19 (×20: was 120s); 2026-05-18 ÷3 for display visibility (was 2400s)
+    cycleSec: 1.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { helium_3: 1 },
     exogenousFlow: 'terrain',
@@ -3054,21 +3054,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §8.10 lower bound (600-720s); multiplied ×8 for idle-game scale.
   // Power consumption per §8.10 is in the 60-100 kW range (very large).
   aetheric_conduit: {
-    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 600s); 2026-05-18 ÷3 for display visibility (was 4800s)
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { aetheric_current: 1 },
     rotateOutputs: [{ aetheric_current: 1 }, { quantum_foam: 1 }],
     category: 'extraction',
   },
   spacetime_resonator: {
-    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 720s); 2026-05-18 ÷3 for display visibility (was 5760s)
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { spacetime_fragment: 1 },
     rotateOutputs: [{ spacetime_fragment: 1 }, { tachyon_stream: 1 }],
     category: 'extraction',
   },
   eldritch_sieve: {
-    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 720s); 2026-05-18 ÷3 for display visibility (was 5760s)
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { dark_matter: 1 },
     rotateOutputs: [{ dark_matter: 1 }, { strange_matter: 1 }, { higgs_flux: 1 }],
@@ -3077,7 +3077,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T5 refining (§7.12 step-18 closure) — rebalanced for idle-game scale, step #19 (×8).
   plasma_forge: {
-    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 600s); 2026-05-18 ÷3 for display visibility (was 4800s)
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 1, casimir_energy: 1 },
     outputs: { plasma_charge: 1 },
     category: 'manufacturing',
@@ -3085,13 +3085,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // fuel-tier selection STILL-DEFERRED.
   },
   eldritch_refiner: {
-    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 1200s); 2026-05-18 ÷3 for display visibility (was 9600s)
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { dark_matter: 1, strange_matter: 1 },
     outputs: { eldritch_processor: 1 },
     category: 'manufacturing',
   },
   phase_refiner: {
-    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 1200s); 2026-05-18 ÷3 for display visibility (was 9600s)
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { aetheric_current: 1, tachyon_stream: 1 },
     outputs: { phase_converter: 1 },
     category: 'manufacturing',
@@ -3115,7 +3115,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // auto-flip block), opening the T6 launch UI.
   // 2026-05-18 ÷3 for display visibility → now 40 min cycle (was 2h).
   ascendant_assembly: {
-    cycleSec: 429996.6,
+    cycleSec: 429996.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5, computing_module: 2 },
     outputs: { ascendant_core: 1 },
     category: 'manufacturing',
@@ -3129,7 +3129,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // no finish state and the game continues indefinitely.
   // 2026-05-18 ÷3 for display visibility → now 8h cycle (was 24h).
   genesis_forge: {
-    cycleSec: 429996.6,
+    cycleSec: 429996.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { reality_anchor: 4, zero_point_flux: 1, causal_regulator: 2, memetic_core: 1 },
     outputs: { genesis_cell: 1 },
     category: 'manufacturing',
@@ -3141,7 +3141,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // + cryogenic_hydrogen).
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle (was 30 min).
   antimatter_refinery: {
-    cycleSec: 1, // 30 min per §7.12; 2026-05-18 ÷3 for display visibility (was 1800s)
+    cycleSec: 1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { antimatter_capsule: 1, plasma_containment_vessel: 1, cryogenic_hydrogen: 5 },
     outputs: { antimatter_propellant: 1 },
     category: 'manufacturing',
@@ -3150,7 +3150,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Scanner Sat Assembly. 30-min cycle.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   scanner_sat_assembly: {
-    cycleSec: 9555479.1,
+    cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 4, ai_core: 2, spacetime_fragment: 1, aluminum: 50, orbital_insertion_package: 1 },
     outputs: { scanner_sat: 1 },
     category: 'manufacturing',
@@ -3159,7 +3159,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Relay Sat Assembly. 30-min cycle.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   relay_sat_assembly: {
-    cycleSec: 9555479.1,
+    cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 200, orbital_insertion_package: 1 },
     outputs: { relay_sat: 1 },
     category: 'manufacturing',
@@ -3168,7 +3168,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Sweeper Sat Assembly. 30-min cycle.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   sweeper_sat_assembly: {
-    cycleSec: 9555479.1,
+    cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 4, ai_core: 1, carbon_steel: 100, magnet: 20, orbital_insertion_package: 1 },
     outputs: { sweeper_sat: 1 },
     category: 'manufacturing',
@@ -3179,7 +3179,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // optics. Per-sat fields locked at peakBoost=0.7, rHalf=200 tiles.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   mirror_sat_assembly: {
-    cycleSec: 9555479.1,
+    cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 4, ai_core: 1, aluminum: 150, optical_glass: 10, orbital_insertion_package: 1 },
     outputs: { mirror_sat: 1 },
     category: 'manufacturing',
@@ -3189,7 +3189,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // payload required by every §14.7 launch. 30-min cycle.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   oip_assembly: {
-    cycleSec: 9555479.1,
+    cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ingot: 100, brick: 30, glass: 20, carbon_fiber: 10, ai_core: 5 },
     outputs: { orbital_insertion_package: 1 },
     category: 'manufacturing',
@@ -3198,7 +3198,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.12 / §14.10: Repair Pack Assembly. 10-min cycle.
   // 2026-05-18 ÷3 for display visibility → now ~3.3-min cycle (200s).
   repair_pack_assembly: {
-    cycleSec: 127.4,
+    cycleSec: 127.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 1, lubricant: 5, microchip: 5 },
     outputs: { repair_pack: 1 },
     category: 'manufacturing',
@@ -3207,7 +3207,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.12 / §14.10: Repair Drone Assembly. 20-min cycle.
   // 2026-05-18 ÷3 for display visibility → now ~6.7-min cycle (400s).
   repair_drone_assembly: {
-    cycleSec: 25481.3,
+    cycleSec: 25481.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 2, carbon_steel: 50, foundation_kit: 1 },
     outputs: { repair_drone: 1 },
     category: 'manufacturing',
@@ -3216,7 +3216,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §12.3: Kit Assembler Enriched (T3). 10-min cycle.
   // 2026-05-18 ÷3 for display visibility → now ~3.3-min cycle (200s).
   kit_assembler_enriched: {
-    cycleSec: 85999.3,
+    cycleSec: 85999.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 5, microchip: 1, wire: 5, gear: 5 },
     outputs: { foundation_kit_enriched: 1 },
     category: 'manufacturing',
@@ -3225,7 +3225,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §12.3: Kit Assembler Refined (T4). 20-min cycle.
   // 2026-05-18 ÷3 for display visibility → now ~6.7-min cycle (400s).
   kit_assembler_refined: {
-    cycleSec: 101925.1,
+    cycleSec: 101925.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { stainless_steel: 5, quantum_chip: 1, fuel_cell: 1, computing_module: 1 },
     outputs: { foundation_kit_refined: 1 },
     category: 'manufacturing',
@@ -3238,21 +3238,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Produces the T3 electronics intermediates that feed T4+ assembly recipes.
   // ---------------------------------------------------------------------------
   pcb_etcher: {
-    cycleSec: 49142.5,
+    cycleSec: 49142.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wire: 1, glass: 1 },
     outputs: { pcb: 1 },
     category: 'electronics',
   },
   circuit_assembler: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
-    cycleSec: 143.3,
+    cycleSec: 143.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { pcb: 1, microchip: 2, steel: 1 },
     outputs: { circuit_board: 1 },
     category: 'electronics',
   },
   processor_fab: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
-    cycleSec: 358330.5,
+    cycleSec: 358330.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { circuit_board: 2, microchip: 4, exotic_alloy: 1 },
     // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
     outputs: { processor: 2 },
@@ -3260,7 +3260,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   compute_module_fab: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
-    cycleSec: 2388869.8,
+    cycleSec: 2388869.8, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { processor: 2, circuit_board: 4, quantum_chip: 1 },
     // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
     outputs: { computing_module: 2 },
@@ -3268,66 +3268,66 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 6 — T2 mechanical components (§6.3 / §7.1)
   sheet_mill: {
-    cycleSec: 18231.9,
+    cycleSec: 18231.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 53 },
     outputs: { sheet_metal: 10, mill_scale: 3 },
     category: 'manufacturing',
   },
   pipe_mill: {
-    cycleSec: 14447.9,
+    cycleSec: 14447.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 42 },
     outputs: { pipe: 10, mill_scale: 2 },
     category: 'manufacturing',
   },
   beam_mill: {
-    cycleSec: 36119.7,
+    cycleSec: 36119.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 105 },
     outputs: { steel_beam: 2, mill_scale: 5 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 mechanical fasteners (§6.3)
   bearing_assembler: {
-    cycleSec: 2665978.7,
+    cycleSec: 2665978.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 28, lubricant: 3 },
     outputs: { bearing: 100, mill_scale: 1 },
     category: 'manufacturing',
   },
   spring_press: {
-    cycleSec: 945992.4,
+    cycleSec: 945992.4, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 11 },
     outputs: { spring: 50, mill_scale: 1 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 mechanical components (§6.3)
   cable_mill: {
-    cycleSec: 14447.9,
+    cycleSec: 14447.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { steel: 42 },
     outputs: { heavy_cable: 5, mill_scale: 2 },
     category: 'manufacturing',
   },
   // Phase 6 — T3 battery (§6.3 / §7.9)
   battery_factory: {
-    cycleSec: 119443.5,
+    cycleSec: 119443.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { lithium: 1, rigid_plastic: 1, wire: 2 },
     outputs: { battery: 1 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 glass_panel (§6.3)
   glass_panel_press: {
-    cycleSec: 67012.5,
+    cycleSec: 67012.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { glass: 2 },
     outputs: { glass_panel: 1 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 coolant + ceramic_insulator (§6.3)
   coolant_synthesizer: {
-    cycleSec: 716.7,
+    cycleSec: 716.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { fresh_water: 2, salt: 1, naphtha: 1 },
     outputs: { coolant: 2 },
     category: 'chemistry',
   },
   ceramic_kiln: {
-    cycleSec: 10749.9,
+    cycleSec: 10749.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { clay: 2, sand: 1 },
     outputs: { ceramic_insulator: 1 },
     category: 'manufacturing',
@@ -3335,7 +3335,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 10 — T3 minerals + alloy (Task 10.1)
   mercury_well: {
-    cycleSec: 3440,
+    cycleSec: 3440, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { mercury: 1 },
     exogenousFlow: 'terrain',
@@ -3343,7 +3343,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 10 — T3 minerals + alloy (Task 10.2)
   diamond_quarry: {
-    cycleSec: 40,
+    cycleSec: 40, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { diamond_ore: 1 },
     exogenousFlow: 'terrain',
@@ -3351,21 +3351,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 10 — T3 minerals + alloy (Task 10.3)
   cryo_compound_lab: {
-    cycleSec: 19.6,
+    cycleSec: 19.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { liquid_nitrogen: 1, cryo_coolant: 1 },
     outputs: { cryogenic_compound: 1 },
     category: 'chemistry',
   },
   // Phase 10 — T3 minerals + alloy (Task 10.4)
   mag_alloyer: {
-    cycleSec: 2774.2,
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ingot: 2, rare_earth: 1 },
     outputs: { magnetic_alloy: 1 },
     category: 'manufacturing',
   },
   // Phase 10b — T3 minerals + alloy (Task 10.4.5)
   lithium_extractor: {
-    cycleSec: 3440,
+    cycleSec: 3440, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { lithium: 1 },
     exogenousFlow: 'terrain',
@@ -3373,74 +3373,74 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 10b — T3 power components (Task 10.5)
   mag_forge: {
-    cycleSec: 138708.6,
+    cycleSec: 138708.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { magnetic_alloy: 1, wire: 2 },
     outputs: { magnet: 1 },
     category: 'manufacturing',
   },
   // Phase 10b — T3 power components (Task 10.6)
   motor_assembly: {
-    cycleSec: 2866.6,
+    cycleSec: 2866.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { magnet: 1, wire: 4, steel: 1 },
     outputs: { electric_motor: 1 },
     category: 'manufacturing',
   },
   // Phase 10b — T3 power components (Task 10.7)
   generator_lab: {
-    cycleSec: 14333.2,
+    cycleSec: 14333.2, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { magnet: 1, wire: 5, steel: 1, bearing: 2 },
     outputs: { generator: 1 },
     category: 'manufacturing',
   },
   // Phase 10c — T3 mechanical assemblies (Task 10.8)
   pump_assembly: {
-    cycleSec: 2293.3,
+    cycleSec: 2293.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { electric_motor: 1, pipe: 2, bearing: 1 },
     outputs: { pump: 1 },
     category: 'manufacturing',
   },
   hydraulic_assembly: {
-    cycleSec: 4300,
+    cycleSec: 4300, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { pipe: 2, lubricant: 2, bearing: 1, spring: 1 },
     outputs: { hydraulic_actuator: 1 },
     category: 'manufacturing',
   },
   pneumatic_assembly: {
-    cycleSec: 2866.6,
+    cycleSec: 2866.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { pipe: 2, bearing: 1, spring: 1 },
     outputs: { pneumatic_actuator: 1 },
     category: 'manufacturing',
   },
   // Phase 10c — T3 power components (Task 10.9)
   solar_cell_lab: {
-    cycleSec: 1343739.3,
+    cycleSec: 1343739.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { silicon_wafer: 1, glass: 2, aluminum: 1 },
     outputs: { solar_cell: 1 },
     category: 'electronics',
   },
   // Phase 10c — T3 power components (Task 10.10)
   fuel_cell_lab: {
-    cycleSec: 1433.3,
+    cycleSec: 1433.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { hydrogen: 2, rare_earth: 1, flexible_plastic: 1 },
     outputs: { fuel_cell: 1 },
     category: 'manufacturing',
   },
   // Phase 10c — T3 glass/ceramics (Task 10.11)
   optical_glass_kiln: {
-    cycleSec: 10749.9,
+    cycleSec: 10749.9, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { quartz: 2 },
     outputs: { optical_glass: 1 },
     category: 'manufacturing',
   },
   // Phase 10c — T3 fiber spinners (Task 10.12)
   glass_fiber_spinner: {
-    cycleSec: 67012.5,
+    cycleSec: 67012.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { glass: 2 },
     outputs: { glass_fiber: 3 },
     category: 'manufacturing',
   },
   optical_fiber_drawer: {
-    cycleSec: 688,
+    cycleSec: 688, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { optical_glass: 1 },
     outputs: { optical_fiber: 2 },
     category: 'manufacturing',
@@ -3449,7 +3449,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Phase 16.2 — §6.6 memetic_core producer (Task 16.2). Closes the
   // memetic_core producer gap. T5 building: eldritch + spacetime → memetic_core.
   memetic_forge: {
-    cycleSec: 7644383.3,
+    cycleSec: 7644383.3, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { eldritch_processor: 1, spacetime_fragment: 1, ai_core: 2 },
     outputs: { memetic_core: 1 },
     category: 'manufacturing',
@@ -3486,7 +3486,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // 10 new ResourceIds from the resource summary in §3.
   seawater_intake_rig: {
     // §3 catalog: 2 recipes (dilute_brine, trace deuterium).
-    cycleSec: 4.1,
+    cycleSec: 4.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { dilute_brine: 1 },
     rotateOutputs: [
@@ -3497,7 +3497,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   open_water_extractor: {
     // §3 catalog: 2 recipes (concentrated_brine, He-3 dilute).
-    cycleSec: 4.1,
+    cycleSec: 4.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { concentrated_brine: 1 },
     rotateOutputs: [
@@ -3508,7 +3508,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   nodule_harvester: {
     // §3 catalog: 3 recipes (Mn / Re / Co nodules).
-    cycleSec: 4.1,
+    cycleSec: 4.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { mn_nodule: 1 },
     rotateOutputs: [
@@ -3522,7 +3522,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // §3 catalog: 3 recipes (methane_hydrate, heavy_isotope_slurry,
     // vent_sulfide). Slower cycle for T4 endgame extractor (cf. drilling_rig
     // at 800s — trench drill is mid-T4, faster than helium_3).
-    cycleSec: 4.1,
+    cycleSec: 4.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { methane_hydrate: 1 },
     rotateOutputs: [
@@ -3534,7 +3534,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   vent_tap: {
     // §3 catalog: 2 recipes (vent_sulfide, vent_exotic).
-    cycleSec: 4.1,
+    cycleSec: 4.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { vent_sulfide: 1 },
     rotateOutputs: [
@@ -3583,7 +3583,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // so rotateOutputs remains the correct shape here — unlike the
     // nodule_concentrator / vent_mineral_refinery cases where the §3
     // chain examples specify distinct per-output feedstocks.
-    cycleSec: 19.6,
+    cycleSec: 19.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { dilute_brine: 5 },
     outputs: { lithium_brine: 1 },
     rotateOutputs: [
@@ -3595,13 +3595,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Nodule Concentrator per-output variants. See block comment above.
   nodule_concentrator_re: {
-    cycleSec: 347.5,
+    cycleSec: 347.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { re_nodule: 2, sulfuric_acid: 1 },
     outputs: { rare_earth_concentrate: 1 },
     category: 'chemistry',
   },
   nodule_concentrator_co: {
-    cycleSec: 347.5,
+    cycleSec: 347.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { co_nodule: 2, sulfuric_acid: 1 },
     outputs: { refined_cobalt: 1 },
     category: 'chemistry',
@@ -3609,13 +3609,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Vent Mineral Refinery per-output variants. See block comment above.
   // Casimir_energy gates both per §8.10 Casimir Tap T5 exotic gating.
   vent_mineral_refinery_exotic: {
-    cycleSec: 347.5,
+    cycleSec: 347.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { vent_exotic: 1, casimir_energy: 1 },
     outputs: { exotic_alloy_seed: 1 },
     category: 'chemistry',
   },
   vent_mineral_refinery_tritium: {
-    cycleSec: 347.5,
+    cycleSec: 347.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { heavy_isotope_slurry: 1, casimir_energy: 1 },
     outputs: { tritium_seed: 1 },
     category: 'chemistry',
@@ -3627,7 +3627,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // concentrated_brine — the earlier microchip co-input was an overreach
     // (rationale referenced "precision control electronics", but the spec
     // lists no such input).
-    cycleSec: 19.6,
+    cycleSec: 19.6, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { concentrated_brine: 4 },
     outputs: { heavy_water: 1 },
     category: 'chemistry',
