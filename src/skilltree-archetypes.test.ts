@@ -131,8 +131,10 @@ describe('generateFillerNodes', () => {
 });
 
 describe('MINING_FILLER_NODES', () => {
-  it('produces ~24 nodes from 4 archetypes', () => {
-    expect(MINING_FILLER_NODES).toHaveLength(24);
+  // v2 rebalance (C4): storageCap (dry_goods) rehomed to storage sub-path;
+  // rareTrickle demoted to notable. Mining fillers are now 2 families: 8 recipeRate + 5 yieldBonus = 13.
+  it('produces 13 nodes from 2 archetypes', () => {
+    expect(MINING_FILLER_NODES).toHaveLength(13);
   });
 
   it('all nodes have unique ids', () => {
@@ -157,14 +159,11 @@ describe('MINING_FILLER_NODES', () => {
     }
   });
 
-  it('storageCap archetype contributes 7 dry_goods cap nodes', () => {
+  it('no storageCategoryCapMul filler in mining (rehomed to storage)', () => {
     const capNodes = MINING_FILLER_NODES.filter(
       (n) => n.effect.kind === 'storageCategoryCapMul',
     );
-    expect(capNodes).toHaveLength(7);
-    for (const n of capNodes) {
-      expect((n.effect as { category: string }).category).toBe('dry_goods');
-    }
+    expect(capNodes).toHaveLength(0);
   });
 
   it('yieldBonus archetype contributes 5 mineYieldBonusMul nodes', () => {
@@ -174,11 +173,11 @@ describe('MINING_FILLER_NODES', () => {
     expect(yieldNodes).toHaveLength(5);
   });
 
-  it('rareTrickle archetype contributes 4 mineRareTrickleMul nodes', () => {
+  it('no mineRareTrickleMul filler in mining (demoted to notable)', () => {
     const trickleNodes = MINING_FILLER_NODES.filter(
       (n) => n.effect.kind === 'mineRareTrickleMul',
     );
-    expect(trickleNodes).toHaveLength(4);
+    expect(trickleNodes).toHaveLength(0);
   });
 });
 

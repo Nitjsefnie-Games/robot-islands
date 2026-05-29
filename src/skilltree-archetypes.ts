@@ -105,18 +105,11 @@ export const MINING_FILLER_ARCHETYPES: FillerArchetype[] = [
     effectExtra: { category: 'extraction' }, subPath: 'mining',
     growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
-  {
-    idPrefix: 'mining.storageCap', effectKind: 'storageCategoryCapMul',
-    effectExtra: { category: 'dry_goods' }, subPath: 'mining',
-    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
-  },
+  // storageCap (dry_goods) rehomed to storage sub-path; rareTrickle demoted to
+  // notable (mining.notable.heliumSeep keeps mineRareTrickleMul alive in the pool).
   {
     idPrefix: 'mining.yieldBonus', effectKind: 'mineYieldBonusMul',
     subPath: 'mining', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
-  },
-  {
-    idPrefix: 'mining.rareTrickle', effectKind: 'mineRareTrickleMul',
-    subPath: 'mining', growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
   },
 ];
 export const MINING_FILLER_NODES = MINING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -127,18 +120,11 @@ export const FORESTRY_FILLER_ARCHETYPES: FillerArchetype[] = [
     effectExtra: { category: 'extraction' }, subPath: 'forestry',
     growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
-  {
-    idPrefix: 'forestry.storageCap', effectKind: 'storageCategoryCapMul',
-    effectExtra: { category: 'dry_goods' }, subPath: 'forestry',
-    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
-  },
+  // storageCap (dry_goods) rehomed to storage sub-path; exoticTrickle demoted to
+  // notable (forestry.notable.exoticInoculation keeps loggerExoticTrickleMul alive).
   {
     idPrefix: 'forestry.yieldBonus', effectKind: 'loggerYieldBonusMul',
     subPath: 'forestry', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
-  },
-  {
-    idPrefix: 'forestry.exoticTrickle', effectKind: 'loggerExoticTrickleMul',
-    subPath: 'forestry', growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
   },
 ];
 export const FORESTRY_FILLER_NODES = FORESTRY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -149,19 +135,9 @@ export const DRILLING_FILLER_ARCHETYPES: FillerArchetype[] = [
     effectExtra: { category: 'extraction' }, subPath: 'drilling',
     growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
-  {
-    idPrefix: 'drilling.storageCap', effectKind: 'storageCategoryCapMul',
-    effectExtra: { category: 'liquid_gas' }, subPath: 'drilling',
-    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
-  },
-  {
-    idPrefix: 'drilling.yieldBonus', effectKind: 'mineYieldBonusMul',
-    subPath: 'drilling', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
-  },
-  {
-    idPrefix: 'drilling.rareTrickle', effectKind: 'mineRareTrickleMul',
-    subPath: 'drilling', growth: 1.10, baseCost: 3, costGrowth: 1.7, count: 4,
-  },
+  // storageCap (liquid_gas) rehomed to storage sub-path; yieldBonus (mineYieldBonusMul)
+  // was a duplicate of mining's — dropped per spec; rareTrickle demoted to notable
+  // (drilling.notable.heliumSeep keeps mineRareTrickleMul alive via mining branch).
   {
     idPrefix: 'drilling.drillYield', effectKind: 'drillYieldBonusMul',
     subPath: 'drilling', growth: 1.10,
