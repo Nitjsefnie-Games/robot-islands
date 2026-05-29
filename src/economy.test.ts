@@ -53,7 +53,6 @@ import { effectiveSkillMultipliers, type SkillMultipliers, type NodeId, type Ski
 import * as skilltreeModule from './skilltree.js';
 import { FULL_CATALOG } from './skilltree-catalog.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
-import type { WorldState } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
 import { islandInscribedAny } from './island.js';
 
@@ -184,14 +183,16 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     });
     const ctx = {
       defs: POWER_FREE,
-      world: { playerLat: 49.20, playerLon: 16.61 } as unknown as WorldState,
+      world: { ...dayWorld(), playerLat: 49.20, playerLon: 16.61 },
     };
     const spanMs = 3 * 60 * 60 * 1000;                       // 3h perf-domain span
     const wallEnd = new Date('2026-05-29T20:00:00Z').getTime(); // ends after dusk (19:28Z)
     advanceIsland(state, spanMs, ctx, wallEnd);              // wall 17:00Z → 20:00Z
-    // Wiring guard: completes, advances lastTick, no NaN/Infinity from a bad
-    // boundary (a perf/wall domain or sign error would stall lastTick or poison
-    // the integral). MINE is power-free so iron_ore accrues a finite positive amount.
+    // Wiring smoke test: with a real location set, advanceIsland completes across
+    // a real sunset/civil-dusk crossing, advances lastTick to the target, and
+    // produces finite output (guards against a crash / NaN / non-advancing loop).
+    // Note: MINE is phase-flat, so this does NOT discriminate a boundary sign/domain
+    // error — the during-night gate's real-sun behavior is covered by the gate test.
     expect(state.lastTick).toBe(spanMs);
     expect(Number.isFinite(state.inventory.iron_ore)).toBe(true);
     expect(state.inventory.iron_ore).toBeGreaterThan(0);
@@ -3878,7 +3879,7 @@ describe('conditionalBonus', () => {
   it('evaluateConditionalEffectCondition — during-night uses the real sun when a location is set', () => {
     const state = makeState();
     // Brno; minimal world carrying only the player location the gate reads.
-    const world = { playerLat: 49.20, playerLon: 16.61 } as unknown as WorldState;
+    const world = { ...dayWorld(), playerLat: 49.20, playerLon: 16.61 };
     const nightMs = new Date('2026-05-29T19:43:00Z').getTime(); // sun at -7.7° → night
     const dayMs = new Date('2026-05-29T10:00:00Z').getTime();   // sun up → day
     expect(evaluateConditionalEffectCondition({ kind: 'during-night' }, state, world, nightMs)).toBe(true);
