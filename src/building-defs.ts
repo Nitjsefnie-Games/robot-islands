@@ -415,7 +415,7 @@ export type BuildingDefId =
   // intermediates and finals (lithium_brine, salt, bromine,
   // rare_earth_concentrate, refined_cobalt, exotic_alloy_seed, tritium_seed,
   // heavy_water). Geothermal Vent Generator has NO recipe — it's a passive
-  // 2 kW producer (cf. solar_panel / nuclear_reactor / fusion_core), wired
+  // 20 MW producer (20000 kW) (cf. solar_panel / nuclear_reactor / fusion_core), wired
   // into the §5.1 power balance through def.power.produces alone.
   | 'brine_distillation_rig'
   | 'nodule_concentrator'
@@ -1884,7 +1884,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // T4 (levels 30-50) — endgame chain per §6.5 / §8.5 / §9.5
   // -------------------------------------------------------------------------
   // §8.5: Fusion Core — universal T4 power source, Helium-3 fuel, massive
-  // output (5000W). Not biome-locked. Per §5.2 / §8.5 also acts as a free
+  // output (300000 kW = 300 MW). Not biome-locked. Per §5.2 / §8.5 also acts as a free
   // Heat Source — the `heatSource` flag below makes adjacent heat consumers
   // operate at zero fuel cost, in addition to the building's electrical
   // contribution.
@@ -2208,7 +2208,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // -------------------------------------------------------------------------
   // §8.5 / §8.10: Casimir Tap — T5 power source AND raw extractor for
   // Casimir energy / Zero-point flux. Step-13 simplification: declared as a
-  // power producer (8000W placeholder; §8.5 says "free vacuum energy") with
+  // power producer (1000000 kW = 1 GW; §8.5 says "free vacuum energy") with
   // a slow recipe emitting `casimir_energy`. Full §8.10 dual-output cycle
   // (Casimir energy OR Zero-point flux per cycle) is STILL-DEFERRED; the
   // §8.10 30-minute cycle time is shipped (1800s) — step-13 recipe uses it for the
