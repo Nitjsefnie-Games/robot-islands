@@ -113,8 +113,8 @@ import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
-import { checkDismissals, checkObjectives, markCompleted, xpBumpPercentForCompletion, type ObjectiveId } from './tutorial.js';
-import { refreshTutorialHint, renderTutorialBanner } from './tutorial-ui.js';
+import { checkDismissals, markCompleted, xpBumpPercentForCompletion } from './tutorial.js';
+import { refreshTutorialHint } from './tutorial-ui.js';
 
 /** Pan speed for keyboard input, in screen-pixels-per-frame. */
 const PAN_PX_PER_TICK = 8;
@@ -1674,7 +1674,6 @@ async function main(): Promise<void> {
   // `advanceIsland`'s piecewise integration handles whatever elapsed interval
   // the frame brings (matters on tab-blur catch-up).
   let lastFrameMs = performance.now();
-  let lastRenderedObjective: ObjectiveId | null = null;
   app.ticker.add(() => {
     let dx = 0;
     let dy = 0;
@@ -1838,45 +1837,6 @@ async function main(): Promise<void> {
       islandPower.set(s.id, power);
     }
     if (needRebuild) rebuildWorldLayers();
-    // Task 3: tutorial objective banner — check completion after every
-    // economy advance so placement / level-up events are reflected immediately.
-    if (worldState.tutorialState) {
-      const tut = worldState.tutorialState;
-      // Capture pre-size BEFORE checkObjectives mutates `completed`, so
-      // the 1-indexed completion index used by xpBumpPercentForCompletion
-      // reflects the original (pre-tick) count.
-      const preSize = tut.completed.size;
-      const newlyCompleted = checkObjectives(tut, worldState);
-      // Per-objective one-shot XP bump applied to the home island only.
-      // The N-th completion (1-indexed across the whole completed Set,
-      // assigned in the order newlyCompleted reports them this tick) injects
-      // N% of xpForLevel(level+1) into state.xp. levelUpIfReady on the next
-      // tick handles any level crossings the bump causes.
-      if (newlyCompleted.length > 0) {
-        const home = worldState.islandStates?.get('home');
-        if (home) {
-          for (let i = 0; i < newlyCompleted.length; i++) {
-            const completionIndex = preSize + i + 1; // 1-indexed
-            const pct = xpBumpPercentForCompletion(completionIndex);
-            home.xp += (pct / 100) * xpForLevel(home.level + 1);
-          }
-        }
-      }
-      const current = tut.current;
-      const needsUpdate = newlyCompleted.length > 0 || lastRenderedObjective !== current;
-
-      if (needsUpdate) {
-        const banner = renderTutorialBanner(worldState.tutorialState);
-        const old = document.getElementById('tutorial-banner');
-        if (old) {
-          if (banner) old.replaceWith(banner);
-          else old.remove();
-        } else if (banner) {
-          document.body.appendChild(banner);
-        }
-        lastRenderedObjective = current;
-      }
-    }
     // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
     // islands for ellipse overlaps. At most ONE merge runs per tick — the
     // pair with the largest combined tile count wins; remaining overlaps
@@ -2101,8 +2061,21 @@ async function main(): Promise<void> {
 
     // Phase 7 §05 — tutorial polling. Runs once per frame; predicates are O(1)
     // reads off the world, so the cost is negligible.
-    for (const id of checkDismissals(worldState)) {
-      markCompleted(worldState, id);
+    // Capture completed-set size BEFORE dismissals mutate it so the 1-indexed
+    // completionIndex for xpBumpPercentForCompletion stays consistent across
+    // multiple same-tick dismissals.
+    const dismissedSteps = checkDismissals(worldState);
+    if (dismissedSteps.length > 0) {
+      const preSize = worldState.tutorialState?.completed.size ?? 0;
+      const home = worldState.islandStates?.get('home');
+      for (let i = 0; i < dismissedSteps.length; i++) {
+        markCompleted(worldState, dismissedSteps[i]!);
+        if (home) {
+          const completionIndex = preSize + i + 1; // 1-indexed
+          const pct = xpBumpPercentForCompletion(completionIndex);
+          home.xp += (pct / 100) * xpForLevel(home.level + 1);
+        }
+      }
     }
     refreshTutorialHint(worldState);
 
