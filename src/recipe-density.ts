@@ -127,11 +127,15 @@ export function buildingForRecipe(recipeId: string): BuildingDefId {
   return (variant[recipeId] ?? recipeId) as BuildingDefId;
 }
 
+/** Recipe id → its archetype key (undefined if unmapped). */
+export function archetypeForRecipe(recipeId: string): Archetype | undefined {
+  return BUILDING_ARCHETYPE[buildingForRecipe(recipeId)];
+}
+
 /** Recipe id → areal density. Throws if unmapped (the coverage test forbids that). */
 export function densityForRecipe(recipeId: string): number {
-  const b = buildingForRecipe(recipeId);
-  const arch = BUILDING_ARCHETYPE[b];
-  if (!arch) throw new Error(`no archetype for building ${b} (recipe ${recipeId})`);
+  const arch = archetypeForRecipe(recipeId);
+  if (!arch) throw new Error(`no archetype for building ${buildingForRecipe(recipeId)} (recipe ${recipeId})`);
   return ARCHETYPE_DENSITY[arch];
 }
 
