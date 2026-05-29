@@ -1748,8 +1748,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1a3a78,
     // energy SI rebalance: 10 MW electric-process; arc IS the heat (no requiresHeat)
     power: { consumes: 10000 },
-    // rev-16 §5.3: residual refractory hold-temp; main heat from electrodes.
-    heatDemandKW: 80,
     // BOM source: Nucor EAF shell + transformer bay reference.
     // 1200 steel_beam shell + 15000 concrete pad + 500 ceramic_insulator + 200 gear + 200 pipe + 80 microchip ≈ 76.7 t.
     placementCost: { steel_beam: 1200, concrete: 15000, ceramic_insulator: 500, gear: 200, pipe: 200, microchip: 80 },
