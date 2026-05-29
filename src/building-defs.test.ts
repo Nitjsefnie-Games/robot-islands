@@ -299,6 +299,14 @@ describe('BUILDING_DEFS catalog', () => {
     expect(BUILDING_DEFS.coal_gen.power?.produces).toBe(5000);
   });
 
+  it('electric_arc_furnace is pure-electric 10 MW (no requiresHeat)', () => {
+    expect(BUILDING_DEFS.electric_arc_furnace.power?.consumes).toBe(10000);
+    expect(BUILDING_DEFS.electric_arc_furnace.requiresHeat).toBeFalsy();
+  });
+  it('aluminum_smelter draws 10 MW (Hall-Héroult electrolysis)', () => {
+    expect(BUILDING_DEFS.aluminum_smelter.power?.consumes).toBe(10000);
+  });
+
   it('every def declares positive integer footprint dimensions', () => {
     for (const id of KNOWN_DEF_IDS) {
       const def = BUILDING_DEFS[id];
