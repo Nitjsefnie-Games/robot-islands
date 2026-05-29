@@ -172,17 +172,11 @@ export const DRILLING_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const DRILLING_FILLER_NODES = DRILLING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const ROBOTICS_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // §4: manufacturing-rate rehomed to robotics (replaces constructionTime/parallelBuild/droneScan fillers).
   {
-    idPrefix: 'robotics.constructionTime', effectKind: 'constructionTimeMul',
-    subPath: 'robotics', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
-  },
-  {
-    idPrefix: 'robotics.parallelBuild', effectKind: 'parallelBuildCapAdd',
-    subPath: 'robotics', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
-  },
-  {
-    idPrefix: 'robotics.droneScan', effectKind: 'droneScanRadiusMul',
-    subPath: 'robotics', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
+    idPrefix: 'robotics.recipeRate', effectKind: 'recipeRateMul',
+    effectExtra: { category: 'manufacturing' }, subPath: 'robotics',
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 8,
   },
   {
     idPrefix: 'robotics.droneFuel', effectKind: 'droneFuelEfficiencyMul',
