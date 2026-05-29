@@ -71,6 +71,8 @@ function makeWorld(opts: {
     endgameState: { activePhase: null, phases: {} } as unknown as WorldState['endgameState'],
     latticeActive: false,
     latticeNodeIslands: [],
+    recentBuildAttempts: new Set(),
+    recentBuildAttemptTs: new Map(),
   } as unknown as WorldState;
 }
 

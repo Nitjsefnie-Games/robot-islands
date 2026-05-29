@@ -54,6 +54,8 @@ import { showMapPicker } from './map-picker.js';
 import { mountModal } from './ui-modal.js';
 import type { IslandState } from './economy.js';
 import type { WorldState } from './world.js';
+import { skipAll, restart } from './tutorial.js';
+import { refreshTutorialHint } from './tutorial-ui.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers — exported for tests
@@ -477,6 +479,47 @@ export function mountSettingsUi(
       saveSection.appendChild(saveNote);
 
       body.appendChild(saveSection);
+
+      // ---- Tutorial section ------------------------------------------------
+      const tutSection = document.createElement('div');
+      tutSection.style.display = 'flex';
+      tutSection.style.flexDirection = 'column';
+      tutSection.style.gap = '6px';
+
+      const tutHeading = document.createElement('div');
+      tutHeading.style.display = 'flex';
+      tutHeading.style.alignItems = 'baseline';
+      tutHeading.style.justifyContent = 'space-between';
+      tutHeading.style.paddingBottom = '4px';
+      tutHeading.style.borderBottom = '1px solid var(--ri-rule)';
+
+      const tutHeadingLabel = document.createElement('span');
+      tutHeadingLabel.textContent = 'TUTORIAL';
+      tutHeadingLabel.className = 'ri-caps';
+      tutHeadingLabel.style.color = 'var(--ri-accent)';
+      tutHeading.appendChild(tutHeadingLabel);
+      tutSection.appendChild(tutHeading);
+
+      const tutBtnRow = document.createElement('div');
+      tutBtnRow.style.display = 'flex';
+      tutBtnRow.style.flexWrap = 'wrap';
+      tutBtnRow.style.gap = '6px';
+      tutBtnRow.style.paddingTop = '6px';
+
+      const skipBtn = makeButton('Skip Tutorial', () => {
+        skipAll(deps.world);
+        refreshTutorialHint(deps.world);
+      });
+      tutBtnRow.appendChild(skipBtn);
+
+      const restartBtn = makeButton('Restart Tutorial', () => {
+        restart(deps.world);
+        refreshTutorialHint(deps.world);
+      });
+      tutBtnRow.appendChild(restartBtn);
+
+      tutSection.appendChild(tutBtnRow);
+      body.appendChild(tutSection);
     },
     buildFooter(footer) {
       const footerL = document.createElement('span');

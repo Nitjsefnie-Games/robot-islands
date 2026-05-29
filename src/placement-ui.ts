@@ -630,6 +630,12 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
   } {
     if (!active || activeDefId === null) return { ok: false };
     const def = BUILDING_DEFS[activeDefId];
+    function recordRejection(): void {
+      const world = deps.getWorld?.();
+      if (!world || activeDefId === null) return;
+      world.recentBuildAttempts.add(activeDefId);
+      world.recentBuildAttemptTs.set(activeDefId, performance.now());
+    }
     const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
     // §4 ocean-layer (Task 10): ocean defs route through their own
     // placement flow (validateOceanPlacement + anchor picker). The land
@@ -652,6 +658,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       }
       const ov = validateOceanPlacement(world, activeDefId, cellX, cellY);
       if (!ov.ok) {
+        recordRejection();
         // Surface the specific ocean-validator reason via `oceanReason`
         // (parallel field, not collapsed into the land `PlacementReason`
         // union — see the union's "disjoint" type comment in placement.ts).
@@ -666,6 +673,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       // Validator guarantees cands.length > 0 (else `no-anchor-in-range`),
       // but defense-in-depth: bail if it's empty here too.
       if (cands.length === 0) {
+        recordRejection();
         return { ok: false, oceanReason: 'no-anchor-in-range' };
       }
       // Kick off the anchor picker. The commit completes asynchronously
@@ -720,6 +728,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
           // Insufficient resources / queue-full on the anchor — surface
           // through the cancel path; the player can re-arm with different
           // inventory.
+          recordRejection();
           cancel();
         }
       });
@@ -738,7 +747,10 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       localY,
       rotation,
     );
-    if (!v.ok) return { ok: false, reason: v.reason };
+    if (!v.ok) {
+      recordRejection();
+      return { ok: false, reason: v.reason };
+    }
     // §14: `placeBuilding` re-checks the cost gate between validate and
     // commit (defensive: another sibling production tick could have
     // consumed inventory in the gap). On the rare race, fall through to
@@ -757,7 +769,10 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       def.terrainModifier === true ? activeTerrainTarget : undefined,
       def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
     );
-    if (!result.ok) return { ok: false, reason: result.reason };
+    if (!result.ok) {
+      recordRejection();
+      return { ok: false, reason: result.reason };
+    }
     cancel();
     deps.onPlaced();
     return { ok: true };

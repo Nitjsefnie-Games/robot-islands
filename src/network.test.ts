@@ -92,6 +92,8 @@ describe('computeSharedNetworkState', () => {
     playerLon: null,
       oceanCells: new Map(),
       depthRevealedCells: new Set(),
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     } as WorldState;
 
     const graph: Graph = {
@@ -204,6 +206,8 @@ describe('computeSharedNetworkState', () => {
     playerLon: null,
       oceanCells: new Map(),
       depthRevealedCells: new Set(),
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     } as WorldState;
 
     const graph: Graph = {
@@ -285,6 +289,8 @@ describe('computeSharedNetworkState', () => {
     playerLon: null,
       oceanCells: new Map(),
       depthRevealedCells: new Set(),
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     } as WorldState;
 
     const graph: Graph = {
@@ -396,6 +402,8 @@ describe('computeSharedNetworkState', () => {
     playerLon: null,
       oceanCells: new Map(),
       depthRevealedCells: new Set(),
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     } as WorldState;
 
     const graph: Graph = {

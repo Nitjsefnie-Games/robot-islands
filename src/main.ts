@@ -113,8 +113,8 @@ import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
-import { checkObjectives, xpBumpPercentForCompletion, type ObjectiveId } from './tutorial.js';
-import { renderTutorialBanner } from './tutorial-ui.js';
+import { checkDismissals, checkObjectives, markCompleted, xpBumpPercentForCompletion, type ObjectiveId } from './tutorial.js';
+import { refreshTutorialHint, renderTutorialBanner } from './tutorial-ui.js';
 
 /** Pan speed for keyboard input, in screen-pixels-per-frame. */
 const PAN_PX_PER_TICK = 8;
@@ -2091,6 +2091,24 @@ async function main(): Promise<void> {
     // without moving the cursor afterward. repaintHover is cheap when
     // hoveredBuilding is unchanged (one Graphics.clear + redraw at most).
     repaintHover();
+
+    // Phase 7 §05 — tutorial polling. Runs once per frame; predicates are O(1)
+    // reads off the world, so the cost is negligible.
+    for (const id of checkDismissals(worldState)) {
+      markCompleted(worldState, id);
+    }
+    refreshTutorialHint(worldState);
+
+    // recentBuildAttempts TTL — 5 s window
+    if (worldState.recentBuildAttempts.size > 0) {
+      const now = performance.now();
+      for (const [defId, ts] of worldState.recentBuildAttemptTs) {
+        if (now - ts > 5000) {
+          worldState.recentBuildAttempts.delete(defId);
+          worldState.recentBuildAttemptTs.delete(defId);
+        }
+      }
+    }
   });
 
   // Recenter the camera's reference point on resize so the world doesn't

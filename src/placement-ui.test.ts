@@ -172,7 +172,7 @@ function makeOceanWorld(
   islands: IslandSpec[],
   oceanCells: Map<string, OceanCellSpec> = new Map(),
 ): WorldState {
-  return { islands, oceanCells } as unknown as WorldState;
+  return { islands, oceanCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() } as unknown as WorldState;
 }
 
 /** Stage cell (0, 0) as shallows so an `open_water_extractor` (terrainReqs:

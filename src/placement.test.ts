@@ -934,7 +934,7 @@ function makeOceanWorld(
   oceanCells: Map<string, OceanCellSpec>,
   islands: IslandSpec[],
 ): WorldState {
-  return { oceanCells, islands } as unknown as WorldState;
+  return { oceanCells, islands, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() } as unknown as WorldState;
 }
 
 /** Build a `Map<cellKey, OceanCellSpec>` from a list of (cellX, cellY,

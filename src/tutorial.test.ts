@@ -25,6 +25,8 @@ function makeWorld(over: Partial<WorldState> = {}): WorldState {
     playerLon: null,
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
+    recentBuildAttempts: new Set(),
+    recentBuildAttemptTs: new Map(),
     ...over,
   };
 }

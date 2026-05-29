@@ -24,7 +24,7 @@ import { Container } from 'pixi.js';
 
 import { terrainAtForBiome } from './biomes.js';
 import type { ModifierId } from './biomes.js';
-import { BUILDING_DEFS } from './building-defs.js';
+import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import { renderBuildings } from './buildings.js';
 import { CELL_SIZE_TILES } from './constants.js';
@@ -823,6 +823,13 @@ export interface WorldState {
   playerLat: number | null;
   /** §si-units Phase 1 — player geo-longitude in [-180, +180] or null. */
   playerLon: number | null;
+  /** Phase 7 §05 — set of building def-ids the player tried to place
+   *  but failed. 5 s TTL maintained by main.ts; consumed by tutorial
+   *  steps 9 + 10 (copper / limestone) and step 25 (biome gating).
+   *  NOT persisted. */
+  recentBuildAttempts: Set<BuildingDefId>;
+  /** Parallel timestamp map for TTL cleanup. NOT persisted. */
+  recentBuildAttemptTs: Map<BuildingDefId, number>;
 
 }
 
@@ -905,7 +912,7 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
   // Sat upgrades populate it as the player builds those revealers.
   const depthRevealedCells = new Set<string>();
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
 }
 
 /**

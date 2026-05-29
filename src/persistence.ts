@@ -761,6 +761,8 @@ export function deserializeWorld(
     generatedCells: deserializeGeneratedCells(islands, snapshot.world.generatedCells),
     oceanCells: new Map(snapshot.world.oceanCells ?? []),
     depthRevealedCells: new Set(snapshot.world.depthRevealedCells ?? []),
+    recentBuildAttempts: new Set(),
+    recentBuildAttemptTs: new Map(),
   };
 
   const islandStates = new Map<string, IslandState>();
