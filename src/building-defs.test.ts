@@ -307,6 +307,12 @@ describe('BUILDING_DEFS catalog', () => {
     expect(BUILDING_DEFS.aluminum_smelter.power?.consumes).toBe(10000);
   });
 
+  it('consumer tier nudges land at SI kW', () => {
+    expect(BUILDING_DEFS.quarry.power?.consumes).toBe(25);
+    expect(BUILDING_DEFS.chromium_smelter.power?.consumes).toBe(80);
+    expect(BUILDING_DEFS.glass_fiber_spinner.power?.consumes).toBe(200);
+  });
+
   it('every def declares positive integer footprint dimensions', () => {
     for (const id of KNOWN_DEF_IDS) {
       const def = BUILDING_DEFS[id];
@@ -2039,13 +2045,13 @@ describe('§8.1 T2 extraction buildings', () => {
   });
 
   describe('§6.3 T2 bearing_assembler + spring_press (Task 6.2)', () => {
-    it('bearing_assembler is T2, 2x2, manufacturing, consumes 80W', () => {
+    it('bearing_assembler is T2, 2x2, manufacturing, consumes 60W', () => {
       const def = BUILDING_DEFS.bearing_assembler;
       expect(def).toBeDefined();
       expect(def.tier).toBe(2);
       expect(def.footprint.tiles.length).toBe(4);
       expect(def.category).toBe('manufacturing');
-      expect(def.power?.consumes).toBe(80);
+      expect(def.power?.consumes).toBe(60);
     });
     it('spring_press is T2, 2x2, manufacturing, consumes 60W', () => {
       const def = BUILDING_DEFS.spring_press;

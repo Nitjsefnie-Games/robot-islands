@@ -1449,7 +1449,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x8a9098,
     stroke: 0x3a4048,
-    power: { consumes: 80 },
+    power: { consumes: 60 },
     // BOM source: IspatGuru, "Bearing assembly line" — raceway grinder + press.
     // 10000 concrete + 6000 stone + 3000 iron_ingot + 200 gear + 2000 clay + 300 copper_ingot = 21.7 t.
     placementCost: { concrete: 10000, stone: 6000, iron_ingot: 3000, gear: 200, clay: 2000, copper_ingot: 300 },
@@ -2754,7 +2754,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xa8a094, // pale stone-grey
     stroke: 0x403828,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['stone'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Manual dimension-stone quarry: 120 kg stone blocks + 80 kg wood frame + 30 kg iron picks = 230 kg.
@@ -2814,7 +2814,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xb0b8d0, // pale silica-grey
     stroke: 0x484858,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['stone'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small silica vein open cut: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -2829,7 +2829,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xc8c0a8, // pale calcareous beige
     stroke: 0x60584a,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['limestone'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Manual limestone quarry face: 150 kg stone blocks + 80 kg wood frame + 30 kg iron picks = 260 kg.
@@ -2844,7 +2844,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xa67555, // earthen red
     stroke: 0x5a3a2a,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['clay_pit'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Manual clay-pit winch and screen: 140 kg stone lining + 80 kg wood frame = 220 kg.
@@ -2860,7 +2860,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xd0c020, // pale sulfur-yellow
     stroke: 0x605810,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['sulfur_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small sulfur deposit open pit: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -2875,7 +2875,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xd5b04a, // mustard-tan
     stroke: 0x6a5018,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['phosphate_deposit'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small phosphate rock quarry: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -2890,7 +2890,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x2a2a2e, // anthracite gray
     stroke: 0x101012,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['graphite_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small graphite vein adit: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -2905,7 +2905,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xb87333, // copper oxide orange
     stroke: 0x5a3018,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['copper_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small copper-oxide pit head-frame: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -2920,7 +2920,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xc0c4cb, // pale tin-grey
     stroke: 0x505458,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['tin_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small cassiterite placer pit: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -2935,7 +2935,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x4a4a52, // dark lead-grey
     stroke: 0x202024,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['lead_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small galena open-cut head-frame: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -2950,7 +2950,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xd07845, // bauxite ochre
     stroke: 0x6a4028,
-    power: { consumes: 30 },
+    power: { consumes: 25 },
     requiredTile: ['bauxite_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small open-pit bauxite extractor: 150 kg foundation stone + 80 kg wood frame + 30 kg iron picks = 260 kg.
@@ -2982,7 +2982,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xc4c0b0, // pale slaked-lime beige
     stroke: 0x605850,
-    power: { consumes: 30 },
+    power: { consumes: 60 },
     // BOM source: Roberts, *Engineering Workshop* — slaking tank.
     // 150 kg stone tank + 30 kg wood frame + 20 kg iron paddle = 200 kg.
     placementCost: { stone: 150, wood: 30, iron_ingot: 20 },
@@ -3147,7 +3147,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x7e4d6f,
     stroke: 0x3a2030,
-    power: { consumes: 40 },
+    power: { consumes: 35 },
     requiredTile: ['manganese_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small pyrolusite surface cut: 160 kg stone + 80 kg wood + 30 kg iron picks = 270 kg.
@@ -3192,7 +3192,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x8c93a0,
     stroke: 0x3a4048,
-    power: { consumes: 40 },
+    power: { consumes: 35 },
     requiredTile: ['zinc_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small sphalerite open cut: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -3237,7 +3237,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x5c6068,
     stroke: 0x202428,
-    power: { consumes: 40 },
+    power: { consumes: 35 },
     requiredTile: ['chromium_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small chromite strip-mine head-frame: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -3252,7 +3252,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x5c6068,
     stroke: 0x202428,
-    power: { consumes: 50 },
+    power: { consumes: 80 },
     // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
     // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
     placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
@@ -3266,7 +3266,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xa0a098,
     stroke: 0x484840,
-    power: { consumes: 40 },
+    power: { consumes: 35 },
     requiredTile: ['nickel_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small laterite nickel pit: 150 kg stone + 80 kg wood + 30 kg iron picks = 260 kg.
@@ -3281,7 +3281,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xa0a098,
     stroke: 0x484840,
-    power: { consumes: 50 },
+    power: { consumes: 80 },
     // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
     // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
     placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
@@ -3313,7 +3313,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x4a5060,
     stroke: 0x1a2028,
-    power: { consumes: 40 },
+    power: { consumes: 35 },
     requiredTile: ['tungsten_vein'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small wolframite vein adit: 160 kg stone + 80 kg wood + 30 kg iron picks = 270 kg.
@@ -3328,7 +3328,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x4a5060,
     stroke: 0x1a2028,
-    power: { consumes: 50 },
+    power: { consumes: 80 },
     // BOM source: Roberts, *Engineering Workshop* — small reverberatory furnace.
     // 200 kg stone firebricks + 80 kg iron frame + 30 kg wood formwork + 40 kg clay lining = 350 kg.
     placementCost: { stone: 200, iron_ingot: 80, wood: 30, clay: 40 },
@@ -3986,7 +3986,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x6080a0,
     stroke: 0x203040,
-    power: { consumes: 200 },
+    power: { consumes: 180 },
     // BOM source: IspatGuru, "Magnetic core pressing line" — press + annealing bay.
     // 600 steel_beam frame + 7000 concrete pad + 250 ceramic_insulator + 100 pipe + 60 microchip ≈ 38.3 t.
     placementCost: { steel_beam: 600, concrete: 7000, ceramic_insulator: 250, pipe: 100, microchip: 60 },
@@ -4001,7 +4001,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x507090,
     stroke: 0x182838,
-    power: { consumes: 150 },
+    power: { consumes: 180 },
     // BOM source: ABB electric motor assembly line — stator winding + test bay.
     // 400 steel_beam frame + 5000 concrete pad + 150 gear + 100 wire + 60 microchip ≈ 26.3 t.
     placementCost: { steel_beam: 400, concrete: 5000, gear: 150, wire: 100, microchip: 60 },
@@ -4031,7 +4031,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x405880,
     stroke: 0x182838,
-    power: { consumes: 150 },
+    power: { consumes: 100 },
     // BOM source: Grundfos centrifugal pump assembly line — casing + impeller test.
     // 400 steel_beam frame + 5000 concrete pad + 120 gear + 100 pipe + 60 microchip ≈ 26.4 t.
     placementCost: { steel_beam: 400, concrete: 5000, gear: 120, pipe: 100, microchip: 60 },
@@ -4121,7 +4121,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xa0c0d8,
     stroke: 0x304050,
-    power: { consumes: 150 },
+    power: { consumes: 200 },
     requiresHeat: true,
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Owens Corning glass-melting furnace + fiber-forming bushing.
