@@ -247,8 +247,8 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
     expect(home.cx).toBe(0);
     expect(home.cy).toBe(0);
     expect(home.biome).toBe('plains');
-    expect(home.majorRadius).toBe(14);
-    expect(home.minorRadius).toBe(14);
+    expect(home.majorRadius).toBe(16);
+    expect(home.minorRadius).toBe(16);
     expect(home.discovered).toBe(true);
     expect(home.modifiers).toEqual(['stable']);
   });

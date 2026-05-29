@@ -354,6 +354,18 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   const sandTiles: ReadonlyArray<readonly [number, number]> = [
     [10, -1], [11, -1], [10, 0], [11, 0],
   ];
+  // Task 0.3 — 2nd stone 2×2 cluster. North band (y=-11..-10, x=3..4),
+  // inscribed in the r16 disk and clear of every existing cluster.
+  // Enables a second Quarry placement on the home island.
+  const stoneClusterTiles2: ReadonlyArray<readonly [number, number]> = [
+    [3, -11], [4, -11], [3, -10], [4, -10],
+  ];
+  // Task 0.3 — sulfur_vein 2×2 cluster. North band (y=-11..-10, x=-3..-2),
+  // inscribed in the r16 disk and clear of every existing cluster.
+  // Bootstrap seed for the sulfur-processing chain.
+  const sulfurTiles: ReadonlyArray<readonly [number, number]> = [
+    [-3, -11], [-2, -11], [-3, -10], [-2, -10],
+  ];
 
   for (const t of waterTiles) if (t[0] === x && t[1] === y) return 'water';
   for (const t of coalTiles) if (t[0] === x && t[1] === y) return 'coal';
@@ -364,6 +376,8 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   for (const t of clayTiles) if (t[0] === x && t[1] === y) return 'clay_pit';
   for (const t of sandTiles) if (t[0] === x && t[1] === y) return 'sand';
   for (const t of stoneClusterTiles) if (t[0] === x && t[1] === y) return 'stone';
+  for (const t of stoneClusterTiles2) if (t[0] === x && t[1] === y) return 'stone';
+  for (const t of sulfurTiles) if (t[0] === x && t[1] === y) return 'sulfur_vein';
   for (const t of oreTiles) if (t[0] === x && t[1] === y) return 'ore';
   return 'grass';
 }
