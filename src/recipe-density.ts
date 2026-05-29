@@ -87,7 +87,7 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   reality_forge: 'fantasy_reality', casimir_tap: 'fantasy_casimir',
   particle_accelerator: 'fantasy_t4', quantum_manipulator: 'fantasy_t4',
   // power / special (no real analog; anchored to nearest real archetype or tier band)
-  cell_press: 'assembly',
+  cell_press: 'battery_cells',
   coal_gen: 'assembly', biomass_plant: 'assembly', nuclear_reactor: 'assembly',
   fusion_core: 'fantasy_t4',
   plant_a_tree: 'assembly',
@@ -99,8 +99,8 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   aether_beacon_lab: 'fantasy_t5', reality_engine_lab: 'fantasy_t5',
   singularity_battery_factory: 'battery_cells',
   lattice_node: 'fantasy_t5', universe_editor: 'fantasy_t5',
-  plasma_forge: 'assembly', eldritch_refiner: 'fantasy_t5', phase_refiner: 'fantasy_t5',
-  memetic_forge: 'assembly', genesis_forge: 'assembly', ascendant_assembly: 'assembly',
+  plasma_forge: 'fantasy_t5', eldritch_refiner: 'fantasy_t5', phase_refiner: 'fantasy_t5',
+  memetic_forge: 'fantasy_t5', genesis_forge: 'fantasy_t4', ascendant_assembly: 'fantasy_t4',
   // T6 satellite assemblies + manufacturing
   scanner_sat_assembly: 'fantasy_satellite', relay_sat_assembly: 'fantasy_satellite',
   sweeper_sat_assembly: 'fantasy_satellite', mirror_sat_assembly: 'fantasy_satellite',
