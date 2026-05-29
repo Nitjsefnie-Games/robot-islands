@@ -31,6 +31,18 @@ sun was below the horizon (`solar 0.0×`).
 (cosmetic **and** gameplay). Do **not** delete the synthetic helpers — they are
 repurposed as the no-location fallback (§4).
 
+**Weather is excluded (measured decision, 2026-05-29).** `weather()` replays
+deterministically from the Unix epoch to `nowMs` in ~135-minute dwell steps —
+about **216,000 iterations per call**, and the weather overlay calls it per
+visible cell. Replacing its per-iteration synthetic `dayPhaseName` with real
+astronomy was measured at **174 ms/call** naive (≈9 s per overlay rebuild at
+~50 cells) or **~53 ms warmup** with a per-day cache — versus <1 ms today. The
+phase-boost it drives is an invisible ±25 % severe-storm weight tweak over a
+56-year historical replay; the player never perceives "weather time-of-day."
+Per user decision, **`weather()` stays on the synthetic clock**, untouched. The
+other four consumers all call real-sun functions O(1) (once per frame or per
+integrator segment), so no caching is needed anywhere.
+
 ## 2. Approach: add real-sun functions, switch consumers, keep synthetic as fallback
 
 Rather than rewrite the synthetic helpers (which have a dedicated, passing test
@@ -104,58 +116,45 @@ and any pre-picker frame. In all real-sun functions, `null` lat/lon **delegates
 to the synthetic clock** (§3). This is why the synthetic helpers are retained:
 they are the deterministic no-location fallback, not dead code.
 
-## 5. Consumer migration (the 5 sites)
+## 5. Consumer migration (the 4 migrated sites)
 
 | # | Site | Function | Change |
 |---|---|---|---|
 | 1 | `hud.ts:384-387` | label | `realPhaseName` for the name; `nextSunEvent` for the countdown, displaying its `kind` + `atMs − now` (the kind is already correct per §3.2). Format: `Night · sunrise in 7h12m · solar 0.0×`. `nextSunEvent` null → omit the countdown segment entirely. Drop the `% through quadrant`. |
-| 2 | `daynight-tint.ts:61` | `currentTint` | Pick the base tint by `realPhaseName`. Replace the synthetic-phase cross-fade with an **altitude-proximity** cross-fade near the `h=0` / `h=-6°` boundaries (blend window expressed in altitude, not phase units). lat/lon plumbed from the caller (`main.ts` tint mount). |
-| 3 | `economy.ts:639` | `evaluateConditionalEffectCondition` (`during-night`) | `realPhaseName(nowMs, world.playerLat, world.playerLon) === 'night'`. `world` is already in scope. |
-| 4 | `economy.ts:1786` | `advanceIsland` integrator | `nextPhaseMs = nextRealPhaseBoundaryMs(t + wallOffset, lat, lon) - wallOffset`. lat/lon reachable in `advanceIsland` (same source `computeRates`'s `solarMultiplier` call at line 784 already uses). Keeps the §15.3 piecewise-constant invariant: the now-real `during-night` boolean stays constant within each segment. `nextSolarBoundaryMs` (32 fixed segments) is **untouched**. |
-| 5 | `weather.ts:179` | `weather` loop | Phase modulation uses `realPhaseName(t, lat, lon)`. **Signature change** — see §6. |
+| 2 | `daynight-tint.ts:61` | `currentTint` | Pick the base tint by `realPhaseName`. Replace the synthetic-phase cross-fade with an **altitude-proximity** cross-fade near the `h=0` / `h=-6°` boundaries (blend window expressed in altitude, not phase units). `lat`/`lon` added as **optional trailing params** (default null → synthetic fallback) so existing one-arg `daynight-tint.test.ts` cases stay green; `main.ts:2079` passes `world.playerLat/playerLon`. |
+| 3 | `economy.ts:639` | `evaluateConditionalEffectCondition` (`during-night`) | `realPhaseName(nowMs, world?.playerLat ?? null, world?.playerLon ?? null) === 'night'`. `world` is already a param. |
+| 4 | `economy.ts:1786` | `advanceIsland` integrator | `nextPhaseMs = nextRealPhaseBoundaryMs(t + wallOffset, lat, lon) - wallOffset`, with `lat/lon = ctx?.world?.playerLat/Lon ?? null` (same source `computeRates`'s line-784 `solarMultiplier` already uses). Keeps the §15.3 piecewise-constant invariant: the now-real `during-night` boolean stays constant within each segment. `nextSolarBoundaryMs` (32 fixed segments) is **untouched**. |
 
-## 6. `weather()` signature change
+All four are O(1) per call (once per frame, or per integrator segment during
+catchup — segment count is bounded by the 32/day solar boundaries plus cap
+events). No caching is needed anywhere.
 
-`weather()` has **38 references across 9 files** (`economy.ts`, `routes.ts`,
-`hover-tooltip.ts`, `weather-overlay.ts`, plus tests). To avoid touching all of
-them:
+## 6. `weather()` — unchanged (stays synthetic)
 
-- Add two **optional trailing** params:
-  `weather(seed, cx, cy, nowMs, biome?, totalCo2Kg = 0, lat: number | null = null, lon: number | null = null)`.
-- Inside the loop, `realPhaseName(t, lat, lon)` — with null/null this delegates
-  to `dayPhaseName(t)`, so **every existing caller and test that omits lat/lon
-  keeps its current deterministic behavior** (`weather.test.ts` stays green).
-- Update only the callers that must reflect the real sun **and** that have the
-  player location available, so simulation and display agree:
-  - `economy.ts:634` (during-storm gate) — pass `world.playerLat/playerLon`.
-  - `routes.ts:577` — pass player location (verify it has `world`).
-  - `hover-tooltip.ts:287/293` and `weather-overlay.ts:144/159` (display) — pass
-    player location so the shown weather matches the simulated weather.
-- `findReferences` (LSP) re-run before editing to confirm the caller list and
-  that no positional-arg caller breaks when two trailing optionals are added.
+`weather()` is **not modified**. As quantified in §1's scope note, real
+astronomy in its ~216,000-iteration epoch-replay loop costs 170×–9000× more than
+the synthetic modulo, for a phase-boost the player cannot perceive as
+time-of-day. It keeps calling `dayPhaseName(t)`. Consequently:
 
-**Determinism note (accepted by user):** re-anchoring the modulation to the real
-sun changes weather *history* for the real-location path. Existing seeds replay
-differently. This is intended.
-
-**Performance:** `weather()` loops up to `MAX_ITERATIONS = 1_000_000` calling the
-phase function per iteration; real typical counts are far lower (it breaks when
-the accumulated dwell passes `nowMs`). Each `realPhaseName` does ~2
-`SunCalc.getPosition` calls. The implementer must **measure** a representative
-`weather()` call's iteration count first; if it is large enough that 2× SunCalc
-per iteration is material, memoize the phase per integration step (the loop
-advances `t` in dwell-sized chunks, so phase changes slowly) rather than
-recomputing each iteration. Decide based on the measurement, not assumption.
+- **No signature change**, so its 38 references across 9 files
+  (`economy.ts`, `routes.ts`, `hover-tooltip.ts`, `weather-overlay.ts`, tests)
+  are all untouched, and `weather.test.ts` is unaffected.
+- `dayPhaseName` retains a genuine production consumer (weather), reinforcing —
+  alongside the null-location fallback (§4) — that the synthetic clock is live
+  code, not vestigial.
 
 ## 7. SPEC §2.7 update
 
 §2.7 currently describes the synthetic 4-equal-quadrant model and states
 "Time-of-day is global … there is no longitude variation." Update it to describe
-the real-sun model: phase and solar output derive from the sun's true altitude
-at the player's chosen coordinates; phases are not equal-length and vary by
-season/latitude; the synthetic quadrant clock remains only as the no-location
-fallback. Preserve the existing Mirror-Sat additive-boost and weather-modulation
-prose (those mechanics are unchanged; only the phase *source* changes).
+the real-sun model: the **phase label, screen tint, during-night gate, and
+integrator boundaries** derive from the sun's true altitude at the player's
+chosen coordinates; phases are not equal-length and vary by season/latitude. The
+synthetic quadrant clock remains for two roles: the no-location fallback, and
+**weather phase-modulation** (which stays synthetic for performance — §6).
+Preserve the existing Mirror-Sat additive-boost prose. Note explicitly that
+weather's ±25 % Night/Dawn severe-storm boost is keyed to the synthetic clock,
+not the real sun.
 
 ## 8. Testing
 
@@ -177,18 +176,22 @@ New `daynight.test.ts` cases (synthetic-clock cases stay as-is):
   - Strictly `> nowMs` for samples across a Brno day.
   - Null lat/lon → equals `nextPhaseBoundaryMs(now)`.
   - Polar → finite (`≤ now + QUADRANT_MS`), never NaN.
-- `weather()` real-sun path: passing Brno lat/lon at a night instant boosts
-  severe-storm weight vs. the same call with day-instant; omitting lat/lon
-  reproduces the pre-change (synthetic) result.
-- `daynight-tint` `currentTint`: returns the night tint for a Brno night instant.
+- `daynight-tint` `currentTint`: returns the night tint for a Brno night instant
+  (with lat/lon); a one-arg call still returns the synthetic result (regression
+  guard for the optional-param default).
+
+`weather()` is unmodified, so `weather.test.ts` needs no new cases and must
+remain green unchanged.
 
 Full `npm test` must pass; pre-existing `solarMultiplier` and synthetic-clock
 suites must remain green (they are not modified).
 
 ## 9. Out of scope
 
+- **Migrating `weather()` phase modulation to the real sun** — measured
+  infeasible (170×–9000× cost in its epoch-replay loop) for an imperceptible
+  boost; stays synthetic (§6). A future weather-replay redesign could revisit it.
 - Deleting the synthetic helpers (`dayPhase`/`dayPhaseName`/`nextPhaseBoundaryMs`/
-  `EPOCH_PHASE_OFFSET`) — explicitly retained as the fallback.
-- Per-cell (per-longitude) sun variation — the player has a single global
-  location; weather time-of-day uses that one location.
+  `EPOCH_PHASE_OFFSET`) — explicitly retained (fallback + weather consumer).
+- Per-cell (per-longitude) sun variation — the player has a single global location.
 - Changing `solarMultiplier` or `nextSolarBoundaryMs` — already correct.
