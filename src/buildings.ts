@@ -101,6 +101,9 @@ export interface PlacedBuilding {
    *  ≡ no active toxicity period. Forward-compat: legacy saves load with
    *  the field absent and behave normally. */
   toxicityExpiryMs?: number;
+  /** Floor-upgrade level L ∈ [0,9] → 1..10 floors (§ floor-upgrade mechanic). Optional;
+   *  absent ≡ 0 (forward-compat: pre-v16 saves and un-upgraded buildings omit it). */
+  readonly floorLevel?: number;
   /** True if the building's footprint no longer matches terrain after biome change. */
   invalid?: boolean;
   /** terrain_modifier v5 — player's pick for the target TerrainKind, chosen
@@ -178,6 +181,11 @@ export function findOperationalBuilding(
     return b as PlacedBuilding;
   }
   return undefined;
+}
+
+/** Effective floor level, clamped to the valid [0,9] range (1..10 floors). */
+export function floorLevel(b: { floorLevel?: number }): number {
+  return Math.max(0, Math.min(9, b.floorLevel ?? 0));
 }
 
 export type ConvertToServitorResult =

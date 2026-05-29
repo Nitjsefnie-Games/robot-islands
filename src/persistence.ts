@@ -76,7 +76,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 15 as const;
+export const SCHEMA_VERSION = 16 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -84,7 +84,7 @@ export const SCHEMA_VERSION = 15 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -427,6 +427,11 @@ export type SerializedSnapshotV14 = Omit<SaveSnapshot, 'v' | 'world' | 'islandSt
   }>;
 };
 
+/** v15 top-level snapshot shape. Structurally identical to v16 (SaveSnapshot)
+ *  except the v literal. The v15 → v16 migration only bumps the version:
+ *  floorLevel is optional on PlacedBuilding so absence in v15 ≡ 0 at read time. */
+export type SerializedSnapshotV15 = Omit<SaveSnapshot, 'v'> & { readonly v: 15 };
+
 /** v13 → v14: reset per-island level, xp, unspentSkillPoints, and skill-tree
  *  progression (unlockedNodes, unlockedEdges, socketBindings). Preserves
  *  buildings, inventory, drones, routes, satellites — everything outside the
@@ -469,6 +474,12 @@ export function migrateV14toV15(s: SerializedSnapshotV14): SaveSnapshot {
       state: { ...entry.state, co2Kg: 0 },
     })),
   } as unknown as SaveSnapshot;
+}
+
+/** v15 → v16: additive version bump only. PlacedBuilding.floorLevel is optional;
+ *  absent in v15 saves is handled by the floorLevel() helper at read time. */
+export function migrateV15toV16(s: SerializedSnapshotV15): SaveSnapshot {
+  return { ...s, v: 16 as const } as unknown as SaveSnapshot;
 }
 
 export interface SaveSnapshot {
@@ -618,7 +629,7 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Walk v7 → v8 → v9 → v10 → v11 → v12 → v13 → v14 migration chain.
+  // Walk v7 → v8 → v9 → v10 → v11 → v12 → v13 → v14 → v15 → v16 migration chain.
   if ((snapshot as unknown as { v: number }).v === 7) {
     snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7) as unknown as SaveSnapshot;
   }
@@ -642,6 +653,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 14) {
     snapshot = migrateV14toV15(snapshot as unknown as SerializedSnapshotV14);
+  }
+  if ((snapshot as unknown as { v: number }).v === 15) {
+    snapshot = migrateV15toV16(snapshot as unknown as SerializedSnapshotV15);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
