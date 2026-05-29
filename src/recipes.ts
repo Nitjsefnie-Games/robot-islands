@@ -1658,7 +1658,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // bare-defId lookup is preserved for tests + saved games that never had
   // a tile-aware path.
   mine: {
-    cycleSec: 17, // rebalanced for idle-game scale, step #19 (×10: was 5s); 2026-05-18 ÷3 for display visibility (was 50s)
+    cycleSec: 20, // rebalanced for idle-game scale, step #19 (×10: was 5s); 2026-05-18 ÷3 for display visibility (was 50s)
     inputs: {},
     outputs: { iron_ore: 1 },
     exogenousFlow: 'terrain',
@@ -1669,21 +1669,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // footprint → coal. Inputs/cycleSec/category identical so a build-order
   // change in placement doesn't shift any other downstream rate.
   mine_on_ore: {
-    cycleSec: 17, // rebalanced for idle-game scale, step #19 (×10: was 5s); 2026-05-18 ÷3 for display visibility (was 50s)
+    cycleSec: 20, // rebalanced for idle-game scale, step #19 (×10: was 5s); 2026-05-18 ÷3 for display visibility (was 50s)
     inputs: {},
     outputs: { iron_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   mine_on_coal: {
-    cycleSec: 10, // 2026-05-23 coal loop rebalance — mirrors commit 9cda2aa (Heavy Logger 9 wood/10s pattern). 1:1 pair net = +0.4 coal/s.
+    cycleSec: 20,
     inputs: {},
-    outputs: { coal: 9 },
+    outputs: { coal: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   logger: {
-    cycleSec: 13, // rebalanced for idle-game scale, step #19 (×10: was 4s); 2026-05-18 ÷3 for display visibility (was 40s)
+    cycleSec: 1404.1, // rebalanced for idle-game scale, step #19 (×10: was 4s); 2026-05-18 ÷3 for display visibility (was 40s)
     inputs: {},
     outputs: { wood: 1 },
     exogenousFlow: 'terrain',
@@ -1691,9 +1691,9 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // §8.1 T2 Heavy Logger: 3× wood throughput vs T1 Logger.
   heavy_logger: {
-    cycleSec: 10,
+    cycleSec: 351,
     inputs: {},
-    outputs: { wood: 9 },
+    outputs: { wood: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
@@ -1702,16 +1702,16 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // variants like copper / nickel land alongside their resource catalog
   // additions).
   deep_mine: {
-    cycleSec: 20,
+    cycleSec: 13.3,
     inputs: {},
-    outputs: { iron_ore: 3 },
+    outputs: { iron_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
 
   // T1 smelting — rebalanced for idle-game scale, step #19 (×10)
   smelter: {
-    cycleSec: 27, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
+    cycleSec: 2981.3, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
     inputs: { iron_ore: 10, coal: 3 },
     outputs: { iron_ingot: 6, slag: 2, co: 5 },
     category: 'smelting',
@@ -1771,13 +1771,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T2 smelting — rebalanced for idle-game scale, step #19 (×40)
   coke_oven: {
-    cycleSec: 133, // rebalanced for idle-game scale, step #19 (×40: was 10s); 2026-05-18 ÷3 for display visibility (was 400s)
+    cycleSec: 214998.3, // rebalanced for idle-game scale, step #19 (×40: was 10s); 2026-05-18 ÷3 for display visibility (was 400s)
     inputs: { coal: 10 },
     outputs: { coke: 7, wood_tar: 0.4, hydrogen: 0.5, co2: 1, refinery_gas: 1.1 },
     category: 'smelting',
   },
   blast_furnace: {
-    cycleSec: 160, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
+    cycleSec: 6217.4, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
     inputs: { iron_ore: 35, coke: 18, limestone: 10 },
     outputs: { pig_iron: 20, slag: 6, co2: 35 },
     category: 'smelting',
@@ -1785,7 +1785,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     exogenousFlowKg: 0,
   },
   steel_mill: {
-    cycleSec: 200, // rebalanced for idle-game scale, step #19 (×40: was 15s); 2026-05-18 ÷3 for display visibility (was 600s)
+    cycleSec: 4222.6, // rebalanced for idle-game scale, step #19 (×40: was 15s); 2026-05-18 ÷3 for display visibility (was 600s)
     inputs: { pig_iron: 100, quicklime: 7, oxygen: 9 },
     outputs: { steel: 85, slag: 23, co: 7, co2: 1 },
     category: 'smelting',
@@ -1797,14 +1797,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // matching BuildingDefId) selected at runtime by `resolveRecipe` when the
   // base Steel Mill building has scrap on hand but no pig_iron stockpile.
   steel_mill_from_scrap: {
-    cycleSec: 200,
+    cycleSec: 72.8,
     inputs: { scrap: 2 },
     outputs: { steel: 1, slag: 1 },
     category: 'smelting',
   },
   // §6.7: Steel Mill Scrap — alternate T2 recipe using 2 scrap → 1 steel + 1 slag.
   steel_mill_scrap: {
-    cycleSec: 67,
+    cycleSec: 72.8,
     inputs: { scrap: 2 },
     outputs: { steel: 1, slag: 1 },
     category: 'smelting',
@@ -1815,14 +1815,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §5.2 heat-source adjacency required.
   oxygen_converter: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
-    cycleSec: 200,
+    cycleSec: 163.8,
     inputs: { pig_iron: 1, scrap: 1, oxygen: 2 },
     outputs: { steel: 2 },
     category: 'smelting',
   },
   // §6.7 Slag reprocessing — T2 smelting-byproduct refiner.
   slag_reprocessor: {
-    cycleSec: 400,        // slow — reflects "low yield" §6.7; 2026-05-18 ÷3 for display visibility (was 1200s)
+    cycleSec: 8322.5,        // slow — reflects "low yield" §6.7; 2026-05-18 ÷3 for display visibility (was 1200s)
     inputs: { slag: 10 },  // batch input keeps the yield low
     outputs: { gold_ore: 1, silver_ore: 1, rare_earth: 1 },
     category: 'smelting',
@@ -1853,7 +1853,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T3 smelting (higher-throughput steel alternative) — rebalanced for idle-game scale, step #19 (×20)
   electric_arc_furnace: {
-    cycleSec: 40, // rebalanced for idle-game scale, step #19 (×20: was 6s); 2026-05-18 ÷3 for display visibility (was 120s)
+    cycleSec: 8908.6, // rebalanced for idle-game scale, step #19 (×20: was 6s); 2026-05-18 ÷3 for display visibility (was 120s)
     inputs: { scrap: 100, quicklime: 3 },
     outputs: { steel: 95, slag: 5, co2: 1 },
     category: 'smelting',
@@ -1888,7 +1888,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // from Steel + Helium-3 fuel. Per §9.5, only producer of Exotic Alloy in
   // the world. §5.2 heat-source adjacency required (see heat.ts).
   pyroforge: {
-    cycleSec: 1200, // rebalanced for idle-game scale, step #19 (×60: was 60s); 2026-05-18 ÷3 for display visibility (was 3600s)
+    cycleSec: 3822.2, // rebalanced for idle-game scale, step #19 (×60: was 60s); 2026-05-18 ÷3 for display visibility (was 3600s)
     inputs: { steel: 5, helium_3: 1 },
     outputs: { exotic_alloy: 1 },
     category: 'smelting',
@@ -1936,7 +1936,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Phase 16.1 — §6.4 uranium extractor (Task 16.1). Closes the uranium_ore
   // producer gap: previously uranium_ore had no extractor, only a consumer.
   uranium_mine: {
-    cycleSec: 67,
+    cycleSec: 3440,
     inputs: {},
     outputs: { uranium_ore: 1 },
     exogenousFlow: 'terrain',
@@ -1989,7 +1989,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Optical fiber + glass fiber recipes can land later as separate def-ids
   // if needed, or via a recipe-rotation extension.
   carbon_forge: {
-    cycleSec: 200,
+    cycleSec: 1528.9,
     inputs: { wood: 5, coke: 2 },
     outputs: { carbon_fiber: 1 },
     category: 'smelting',
@@ -2382,13 +2382,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 12 — T5 transcendent field extractors (Task 12.1)
   zero_point_extractor: {
-    cycleSec: 600,
+    cycleSec: 17199862.4,
     inputs: {},
     outputs: { zero_point_flux: 1 },
     category: 'extraction',
   },
   neutronium_extractor: {
-    cycleSec: 600,
+    cycleSec: 17199862.4,
     inputs: {},
     outputs: { neutronium: 1 },
     category: 'extraction',
@@ -2461,28 +2461,28 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T1 extraction (§7.1 / §8.1 raws) — rebalanced for idle-game scale, step #19 (×10).
   // All have empty `inputs` and a single-resource output — same shape as the existing Mine/Logger.
   quarry: {
-    cycleSec: 20, // rebalanced for idle-game scale, step #19 (×10: was 6s); 2026-05-18 ÷3 for display visibility (was 60s)
+    cycleSec: 40, // rebalanced for idle-game scale, step #19 (×10: was 6s); 2026-05-18 ÷3 for display visibility (was 60s)
     inputs: {},
     outputs: { stone: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   sand_pit: {
-    cycleSec: 27, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
+    cycleSec: 40, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
     inputs: {},
     outputs: { sand: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   well: {
-    cycleSec: 10, // rebalanced for idle-game scale, step #19 (×10: was 3s); 2026-05-18 ÷3 for display visibility (was 30s)
+    cycleSec: 16.4, // rebalanced for idle-game scale, step #19 (×10: was 3s); 2026-05-18 ÷3 for display visibility (was 30s)
     inputs: {},
     outputs: { fresh_water: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   coastal_pump: {
-    cycleSec: 13, // rebalanced for idle-game scale, step #19 (×10: was 4s); 2026-05-18 ÷3 for display visibility (was 40s)
+    cycleSec: 16.4, // rebalanced for idle-game scale, step #19 (×10: was 4s); 2026-05-18 ÷3 for display visibility (was 40s)
     inputs: {},
     outputs: { saltwater: 1 },
     exogenousFlow: 'terrain',
@@ -2496,14 +2496,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'extraction',
   },
   limestone_quarry: {
-    cycleSec: 20, // slightly slower than iron Mine (50s) — limestone is bulk industrial; 2026-05-18 ÷3 for display visibility (was 60s)
+    cycleSec: 40, // slightly slower than iron Mine (50s) — limestone is bulk industrial; 2026-05-18 ÷3 for display visibility (was 60s)
     inputs: {},
     outputs: { limestone: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
   clay_pit_extractor: {
-    cycleSec: 20,
+    cycleSec: 40,
     inputs: {},
     outputs: { clay: 1 },
     exogenousFlow: 'terrain',
@@ -2615,19 +2615,19 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
   copper_smelter: {
-    cycleSec: 27,
+    cycleSec: 2774.2,
     inputs: { copper_ore: 1, coal: 1 },
     outputs: { copper_ingot: 1 },
     category: 'smelting',
   },
   tin_smelter: {
-    cycleSec: 27,
+    cycleSec: 2774.2,
     inputs: { tin_ore: 1, coal: 1 },
     outputs: { tin_ingot: 1 },
     category: 'smelting',
   },
   lead_smelter: {
-    cycleSec: 27,
+    cycleSec: 2774.2,
     inputs: { lead_ore: 1, coal: 1 },
     outputs: { lead_ingot: 1 },
     category: 'smelting',
@@ -2659,7 +2659,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'chemistry',
   },
   aluminum_smelter: {
-    cycleSec: 100,
+    cycleSec: 819041.1,
     inputs: { alumina: 1 },
     outputs: { aluminum: 1 },
     category: 'smelting',
@@ -2674,7 +2674,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'extraction',
   },
   manganese_smelter: {
-    cycleSec: 27,
+    cycleSec: 2774.2,
     inputs: { manganese_ore: 1, coal: 1 },
     outputs: { manganese_ingot: 1 },
     category: 'smelting',
@@ -2693,7 +2693,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'extraction',
   },
   zinc_smelter: {
-    cycleSec: 27,
+    cycleSec: 2774.2,
     inputs: { zinc_ore: 1, coal: 1 },
     outputs: { zinc_ingot: 1 },
     category: 'smelting',
@@ -2714,7 +2714,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   chromium_smelter: {
     // bumped from 80s → 250s: T1-speed smelting T3-weight ingots was an XP-arbitrage
     // exploit (Agent C finding — T1 80s smelter producing VI-15 outputs).
-    cycleSec: 83,
+    cycleSec: 2774.2,
     inputs: { chromium_ore: 1, coal: 1 },
     outputs: { chromium_ingot: 1 },
     category: 'smelting',
@@ -2728,7 +2728,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   nickel_smelter: {
     // bumped from 80s → 250s: XP-arbitrage fix — same rationale as chromium_smelter.
-    cycleSec: 83,
+    cycleSec: 2774.2,
     inputs: { nickel_ore: 1, coal: 1 },
     outputs: { nickel_ingot: 1 },
     category: 'smelting',
@@ -2748,7 +2748,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   tungsten_smelter: {
     // bumped from 80s → 250s: XP-arbitrage fix — same rationale as chromium_smelter.
-    cycleSec: 83,
+    cycleSec: 2774.2,
     inputs: { tungsten_ore: 1, coal: 1 },
     outputs: { tungsten_ingot: 1 },
     category: 'smelting',
@@ -2803,7 +2803,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T2 extraction — petrochemical raws. Rebalanced for idle-game scale, step #19 (×40).
   pump_jack: {
-    cycleSec: 160, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
+    cycleSec: 430, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
     inputs: {},
     outputs: { crude_oil: 1 },
     exogenousFlow: 'terrain',
@@ -2812,7 +2812,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // implemented via `requiredTile` in building-defs.ts.
   },
   gas_extractor: {
-    cycleSec: 160, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
+    cycleSec: 430, // rebalanced for idle-game scale, step #19 (×40: was 12s); 2026-05-18 ÷3 for display visibility (was 480s)
     inputs: {},
     outputs: { natural_gas: 1 },
     exogenousFlow: 'terrain',
@@ -2948,7 +2948,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T3 chemistry / electronics — rebalanced for idle-game scale, step #19 (×20).
   silicon_crusher: {
-    cycleSec: 200, // rebalanced for idle-game scale, step #19 (×20: was 30s); 2026-05-18 ÷3 for display visibility (was 600s)
+    cycleSec: 2774.2, // rebalanced for idle-game scale, step #19 (×20: was 30s); 2026-05-18 ÷3 for display visibility (was 600s)
     inputs: { quartz: 1 },
     outputs: { silicon: 1 },
     category: 'smelting',
@@ -3033,7 +3033,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'electronics',
   },
   drilling_rig: {
-    cycleSec: 800, // rebalanced for idle-game scale, step #19 (×20: was 120s); 2026-05-18 ÷3 for display visibility (was 2400s)
+    cycleSec: 1.5, // rebalanced for idle-game scale, step #19 (×20: was 120s); 2026-05-18 ÷3 for display visibility (was 2400s)
     inputs: {},
     outputs: { helium_3: 1 },
     exogenousFlow: 'terrain',
@@ -3054,21 +3054,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §8.10 lower bound (600-720s); multiplied ×8 for idle-game scale.
   // Power consumption per §8.10 is in the 60-100 kW range (very large).
   aetheric_conduit: {
-    cycleSec: 1600, // rebalanced for idle-game scale, step #19 (×8: was 600s); 2026-05-18 ÷3 for display visibility (was 4800s)
+    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 600s); 2026-05-18 ÷3 for display visibility (was 4800s)
     inputs: {},
     outputs: { aetheric_current: 1 },
     rotateOutputs: [{ aetheric_current: 1 }, { quantum_foam: 1 }],
     category: 'extraction',
   },
   spacetime_resonator: {
-    cycleSec: 1920, // rebalanced for idle-game scale, step #19 (×8: was 720s); 2026-05-18 ÷3 for display visibility (was 5760s)
+    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 720s); 2026-05-18 ÷3 for display visibility (was 5760s)
     inputs: {},
     outputs: { spacetime_fragment: 1 },
     rotateOutputs: [{ spacetime_fragment: 1 }, { tachyon_stream: 1 }],
     category: 'extraction',
   },
   eldritch_sieve: {
-    cycleSec: 1920, // rebalanced for idle-game scale, step #19 (×8: was 720s); 2026-05-18 ÷3 for display visibility (was 5760s)
+    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 720s); 2026-05-18 ÷3 for display visibility (was 5760s)
     inputs: {},
     outputs: { dark_matter: 1 },
     rotateOutputs: [{ dark_matter: 1 }, { strange_matter: 1 }, { higgs_flux: 1 }],
@@ -3335,7 +3335,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 10 — T3 minerals + alloy (Task 10.1)
   mercury_well: {
-    cycleSec: 67,
+    cycleSec: 3440,
     inputs: {},
     outputs: { mercury: 1 },
     exogenousFlow: 'terrain',
@@ -3343,7 +3343,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 10 — T3 minerals + alloy (Task 10.2)
   diamond_quarry: {
-    cycleSec: 100,
+    cycleSec: 40,
     inputs: {},
     outputs: { diamond_ore: 1 },
     exogenousFlow: 'terrain',
@@ -3365,7 +3365,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 10b — T3 minerals + alloy (Task 10.4.5)
   lithium_extractor: {
-    cycleSec: 67,
+    cycleSec: 3440,
     inputs: {},
     outputs: { lithium: 1 },
     exogenousFlow: 'terrain',
@@ -3486,7 +3486,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // 10 new ResourceIds from the resource summary in §3.
   seawater_intake_rig: {
     // §3 catalog: 2 recipes (dilute_brine, trace deuterium).
-    cycleSec: 60,
+    cycleSec: 4.1,
     inputs: {},
     outputs: { dilute_brine: 1 },
     rotateOutputs: [
@@ -3497,7 +3497,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   open_water_extractor: {
     // §3 catalog: 2 recipes (concentrated_brine, He-3 dilute).
-    cycleSec: 80,
+    cycleSec: 4.1,
     inputs: {},
     outputs: { concentrated_brine: 1 },
     rotateOutputs: [
@@ -3508,7 +3508,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   nodule_harvester: {
     // §3 catalog: 3 recipes (Mn / Re / Co nodules).
-    cycleSec: 100,
+    cycleSec: 4.1,
     inputs: {},
     outputs: { mn_nodule: 1 },
     rotateOutputs: [
@@ -3522,7 +3522,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // §3 catalog: 3 recipes (methane_hydrate, heavy_isotope_slurry,
     // vent_sulfide). Slower cycle for T4 endgame extractor (cf. drilling_rig
     // at 800s — trench drill is mid-T4, faster than helium_3).
-    cycleSec: 120,
+    cycleSec: 4.1,
     inputs: {},
     outputs: { methane_hydrate: 1 },
     rotateOutputs: [
@@ -3534,7 +3534,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   vent_tap: {
     // §3 catalog: 2 recipes (vent_sulfide, vent_exotic).
-    cycleSec: 120,
+    cycleSec: 4.1,
     inputs: {},
     outputs: { vent_sulfide: 1 },
     rotateOutputs: [
