@@ -94,6 +94,44 @@ export function solarMultiplier(
   return Math.sin(pos.altitude);
 }
 
+/** Civil twilight threshold (sun 6° below the geometric horizon), in radians.
+ *  Bounds the Dawn/Dusk bands; below it is Night. */
+export const CIVIL_TWILIGHT_RAD = (-6 * Math.PI) / 180;
+
+/** Sun altitude in radians at the player's location, or null when lat/lon is
+ *  unset. Centralises the SunCalc call for the real-sun phase + tint helpers. */
+export function solarAltitude(
+  nowMs: number,
+  lat: number | null,
+  lon: number | null,
+): number | null {
+  if (lat == null || lon == null) return null;
+  return SunCalc.getPosition(new Date(nowMs), lat, lon).altitude;
+}
+
+/**
+ * Real-astronomy day-phase name at the player's location. Altitude-based and
+ * NaN-free (SunCalc.getPosition always returns a finite altitude), so polar
+ * night never yields 'day' and midnight sun is always 'day'.
+ *
+ * Null lat/lon delegates to the synthetic `dayPhaseName` (the no-location
+ * fallback — fixtures / tests / pre-picker frames).
+ */
+export function realPhaseName(
+  nowMs: number,
+  lat: number | null,
+  lon: number | null,
+): DayPhase {
+  const h = solarAltitude(nowMs, lat, lon);
+  if (h == null) return dayPhaseName(nowMs);
+  if (h >= 0) return 'day';
+  if (h < CIVIL_TWILIGHT_RAD) return 'night';
+  // Twilight band: rising → dawn, falling → dusk. lat/lon are non-null here, so
+  // the 60s-ahead sample is non-null too.
+  const hNext = solarAltitude(nowMs + 60_000, lat, lon)!;
+  return hNext > h ? 'dawn' : 'dusk';
+}
+
 /**
  * Wall-clock timestamp of the next phase boundary strictly after `nowMs`.
  * The event-driven economy integrator uses this to bound a segment so the

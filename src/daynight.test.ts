@@ -10,6 +10,7 @@ import {
   dayPhaseName,
   nextPhaseBoundaryMs,
   nextSolarBoundaryMs,
+  realPhaseName,
   solarMultiplier,
 } from './daynight.js';
 
@@ -190,5 +191,43 @@ describe('nextSolarBoundaryMs', () => {
       expect(b).not.toBeNull();
       expect(b!).toBeGreaterThan(t);
     }
+  });
+});
+
+describe('realPhaseName — real sun', () => {
+  it("returns 'night' at 21:43 in Brno (reported-bug regression — not 'dawn')", () => {
+    const t = new Date('2026-05-29T19:43:00Z').getTime(); // 21:43 CEST, sun at -7.7°
+    expect(realPhaseName(t, 49.20, 16.61)).toBe('night');
+  });
+
+  it("returns 'day' at the equator on the equinox at noon", () => {
+    const t = new Date('2026-03-20T12:00:00Z').getTime();
+    expect(realPhaseName(t, 0, 0)).toBe('day');
+  });
+
+  it("returns 'dawn' while rising through morning twilight at Brno", () => {
+    const t = new Date('2026-05-29T02:40:00Z').getTime(); // between civil dawn and sunrise
+    expect(realPhaseName(t, 49.20, 16.61)).toBe('dawn');
+  });
+
+  it("returns 'dusk' while falling through evening twilight at Brno", () => {
+    const t = new Date('2026-05-29T19:00:00Z').getTime(); // between sunset and civil dusk
+    expect(realPhaseName(t, 49.20, 16.61)).toBe('dusk');
+  });
+
+  it('delegates to synthetic dayPhaseName when lat/lon is null', () => {
+    for (const t of [0, 1234, DAY_DURATION_MS * 3.7]) {
+      expect(realPhaseName(t, null, null)).toBe(dayPhaseName(t));
+    }
+  });
+
+  it("never returns 'day' during polar night and does not throw", () => {
+    const t = new Date('2026-12-21T12:00:00Z').getTime();
+    expect(realPhaseName(t, 84, 0)).toBe('night');
+  });
+
+  it("returns 'day' under the midnight sun", () => {
+    const t = new Date('2026-06-21T12:00:00Z').getTime();
+    expect(realPhaseName(t, 84, 0)).toBe('day');
   });
 });
