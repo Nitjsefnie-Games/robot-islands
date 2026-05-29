@@ -10,11 +10,11 @@ function expectedCycleSec(id: string): number {
   return Math.max(1, Math.round((outputKg(r) / (densityForRecipe(id) * fp * M)) * 10) / 10);
 }
 
-describe('cycleSec matches the density formula (Phase 1 categories)', () => {
+describe('cycleSec matches the density formula (all categories)', () => {
   for (const id of Object.keys(RECIPES)) {
     const r = (RECIPES as any)[id];
     if (!r) continue;
-    if (!['extraction', 'smelting'].includes(r.category)) continue;
+
     if (!shouldDeriveCycleSec(r)) continue; // power/no-output keep hand-authored cycleSec
     it(`${id} cycleSec is generator-derived`, () => {
       expect(r.cycleSec).toBe(expectedCycleSec(id));

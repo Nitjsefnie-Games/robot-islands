@@ -1710,7 +1710,7 @@ describe('§7.2 bronze_alloyer (Task 7.1)', () => {
     expect(RECIPES.bronze_alloyer).toBeDefined();
     expect(RECIPES.bronze_alloyer!.inputs).toEqual({ copper_ingot: 1, tin_ingot: 1 });
     expect(RECIPES.bronze_alloyer!.outputs).toEqual({ bronze: 2 });
-    expect(RECIPES.bronze_alloyer!.cycleSec).toBe(83);
+    expect(RECIPES.bronze_alloyer!.cycleSec).toBe(5548.3);
   });
 });
 
@@ -1726,7 +1726,7 @@ describe('§7.2 brass_alloyer (Task 7.2)', () => {
     expect(RECIPES.brass_alloyer).toBeDefined();
     expect(RECIPES.brass_alloyer!.inputs).toEqual({ copper_ingot: 1, zinc_ingot: 1 });
     expect(RECIPES.brass_alloyer!.outputs).toEqual({ brass: 2 });
-    expect(RECIPES.brass_alloyer!.cycleSec).toBe(83);
+    expect(RECIPES.brass_alloyer!.cycleSec).toBe(5548.3);
   });
 });
 
@@ -1742,7 +1742,7 @@ describe('§7.3 alumina_refinery (Task 8.1)', () => {
     expect(RECIPES.alumina_refinery).toBeDefined();
     expect(RECIPES.alumina_refinery!.inputs).toEqual({ bauxite: 1, sodium_hydroxide: 1 });
     expect(RECIPES.alumina_refinery!.outputs).toEqual({ alumina: 1 });
-    expect(RECIPES.alumina_refinery!.cycleSec).toBe(100);
+    expect(RECIPES.alumina_refinery!.cycleSec).toBe(2774.2);
   });
 });
 
@@ -2206,7 +2206,7 @@ describe('§6.5 quantum_chip_fab (T4 quantum_chip producer, Task 11.2)', () => {
     expect(RECIPES.quantum_chip_fab).toBeDefined();
     expect(RECIPES.quantum_chip_fab!.inputs).toEqual({ steel: 4, pig_iron: 4 });
     expect(RECIPES.quantum_chip_fab!.outputs).toEqual({ quantum_chip: 1 });
-    expect(RECIPES.quantum_chip_fab!.cycleSec).toBe(900);
+    expect(RECIPES.quantum_chip_fab!.cycleSec).toBe(3822191.6);
   });
 });
 
@@ -2225,7 +2225,7 @@ describe('§6.5 quantum_manipulator (T4 time_crystal producer, Task 11.1)', () =
     expect(RECIPES.quantum_manipulator).toBeDefined();
     expect(RECIPES.quantum_manipulator!.inputs).toEqual({ helium_3: 1, exotic_alloy: 1 });
     expect(RECIPES.quantum_manipulator!.outputs).toEqual({ time_crystal: 1 });
-    expect(RECIPES.quantum_manipulator!.cycleSec).toBe(600);
+    expect(RECIPES.quantum_manipulator!.cycleSec).toBe(764438.3);
   });
 });
 
@@ -2244,7 +2244,7 @@ describe('§6.5 fuel_rod_assembler (T4 nuclear_fuel_rod producer, Task 11.3)', (
     expect(RECIPES.fuel_rod_assembler).toBeDefined();
     expect(RECIPES.fuel_rod_assembler!.inputs).toEqual({ uranium_ore: 5, stainless_steel: 2, coolant: 2 });
     expect(RECIPES.fuel_rod_assembler!.outputs).toEqual({ nuclear_fuel_rod: 1 });
-    expect(RECIPES.fuel_rod_assembler!.cycleSec).toBe(400);
+    expect(RECIPES.fuel_rod_assembler!.cycleSec).toBe(286.7);
   });
 });
 
@@ -2263,7 +2263,7 @@ describe('plasma_containment_assembler (Task 11.4)', () => {
     expect(RECIPES.plasma_containment_assembler).toBeDefined();
     expect(RECIPES.plasma_containment_assembler!.inputs).toEqual({ exotic_alloy: 1, magnet: 4, steel: 5 });
     expect(RECIPES.plasma_containment_assembler!.outputs).toEqual({ plasma_containment_vessel: 1 });
-    expect(RECIPES.plasma_containment_assembler!.cycleSec).toBe(500);
+    expect(RECIPES.plasma_containment_assembler!.cycleSec).toBe(286.7);
   });
 });
 
@@ -2282,7 +2282,7 @@ describe('singularity_sensor_lab (Task 11.4)', () => {
     expect(RECIPES.singularity_sensor_lab).toBeDefined();
     expect(RECIPES.singularity_sensor_lab!.inputs).toEqual({ quantum_chip: 1, optical_fiber: 4, magnet: 2 });
     expect(RECIPES.singularity_sensor_lab!.outputs).toEqual({ singularity_sensor: 1 });
-    expect(RECIPES.singularity_sensor_lab!.cycleSec).toBe(500);
+    expect(RECIPES.singularity_sensor_lab!.cycleSec).toBe(2687478.5);
   });
 });
 
@@ -2301,7 +2301,7 @@ describe('cryo_containment_assembler (Task 11.4)', () => {
     expect(RECIPES.cryo_containment_assembler).toBeDefined();
     expect(RECIPES.cryo_containment_assembler!.inputs).toEqual({ cryogenic_compound: 1, stainless_steel: 2, glass_fiber: 4 });
     expect(RECIPES.cryo_containment_assembler!.outputs).toEqual({ cryo_containment_unit: 1 });
-    expect(RECIPES.cryo_containment_assembler!.cycleSec).toBe(500);
+    expect(RECIPES.cryo_containment_assembler!.cycleSec).toBe(286.7);
   });
 });
 
@@ -2320,7 +2320,7 @@ describe('accelerator_core_lab (Task 11.4)', () => {
     expect(RECIPES.accelerator_core_lab).toBeDefined();
     expect(RECIPES.accelerator_core_lab!.inputs).toEqual({ magnet: 8, exotic_alloy: 1, optical_fiber: 4 });
     expect(RECIPES.accelerator_core_lab!.outputs).toEqual({ particle_accelerator_core: 1 });
-    expect(RECIPES.accelerator_core_lab!.cycleSec).toBe(500);
+    expect(RECIPES.accelerator_core_lab!.cycleSec).toBe(286.7);
   });
 });
 
@@ -2339,7 +2339,7 @@ describe('self_replication_lab (Task 11.4)', () => {
     expect(RECIPES.self_replication_lab).toBeDefined();
     expect(RECIPES.self_replication_lab!.inputs).toEqual({ ai_core: 1, microchip: 8, electric_motor: 4, computing_module: 2 });
     expect(RECIPES.self_replication_lab!.outputs).toEqual({ self_replication_module: 1 });
-    expect(RECIPES.self_replication_lab!.cycleSec).toBe(600);
+    expect(RECIPES.self_replication_lab!.cycleSec).toBe(127.4);
   });
 });
 
@@ -2359,7 +2359,7 @@ describe('§12.3 kit_assembler_enriched (Task 13.2)', () => {
     expect(RECIPES.kit_assembler_enriched).toBeDefined();
     expect(RECIPES.kit_assembler_enriched!.inputs).toEqual({ steel: 5, microchip: 1, wire: 5, gear: 5 });
     expect(RECIPES.kit_assembler_enriched!.outputs).toEqual({ foundation_kit_enriched: 1 });
-    expect(RECIPES.kit_assembler_enriched!.cycleSec).toBe(200);
+    expect(RECIPES.kit_assembler_enriched!.cycleSec).toBe(85999.3);
   });
 });
 
@@ -2378,7 +2378,7 @@ describe('§12.3 kit_assembler_refined (Task 13.2)', () => {
     expect(RECIPES.kit_assembler_refined).toBeDefined();
     expect(RECIPES.kit_assembler_refined!.inputs).toEqual({ stainless_steel: 5, quantum_chip: 1, fuel_cell: 1, computing_module: 1 });
     expect(RECIPES.kit_assembler_refined!.outputs).toEqual({ foundation_kit_refined: 1 });
-    expect(RECIPES.kit_assembler_refined!.cycleSec).toBe(400);
+    expect(RECIPES.kit_assembler_refined!.cycleSec).toBe(101925.1);
   });
 });
 

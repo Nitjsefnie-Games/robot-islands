@@ -1719,7 +1719,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T1 manufacturing — rebalanced for idle-game scale, step #19 (×10)
   workshop: {
-    cycleSec: 33, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
+    cycleSec: 4300, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
     inputs: { iron_ore: 1, coal: 1 },
     outputs: { bolt: 1 },
     category: 'manufacturing',
@@ -1728,7 +1728,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // home-Plains-only inputs so battery_bank no longer chains through the
   // T3 lithium gate. Wire is the T2-chokepoint bottleneck per spec §05.
   cell_press: {
-    cycleSec: 40,
+    cycleSec: 537495.7,
     inputs: { saltwater: 1, iron_ingot: 1, wire: 1 },
     outputs: { saltwater_cell: 1 },
     category: 'manufacturing',
@@ -1833,7 +1833,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T2 manufacturing — rebalanced for idle-game scale, step #19 (×40)
   assembler: {
-    cycleSec: 107, // rebalanced for idle-game scale, step #19 (×40: was 8s); 2026-05-18 ÷3 for display visibility (was 320s)
+    cycleSec: 573.3, // rebalanced for idle-game scale, step #19 (×40: was 8s); 2026-05-18 ÷3 for display visibility (was 320s)
     inputs: { iron_ingot: 1, bolt: 2 },
     outputs: { gear: 1 },
     category: 'manufacturing',
@@ -1845,7 +1845,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // simplifies the bill to resources already in the catalog (iron_ingot,
   // wood, bolt) since Brick/Glass aren't catalogued yet.
   kit_assembler: {
-    cycleSec: 200, // rebalanced for idle-game scale, step #19 (×10: was 60s); 2026-05-18 ÷3 for display visibility (was 600s)
+    cycleSec: 28666.4, // rebalanced for idle-game scale, step #19 (×10: was 60s); 2026-05-18 ÷3 for display visibility (was 600s)
     inputs: { iron_ingot: 5, wood: 10, bolt: 5 },
     outputs: { foundation_kit: 1 },
     category: 'manufacturing',
@@ -1900,7 +1900,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // power draw; currently a tuning placeholder, modelled at static 1200W
   // pending balance pass.
   cryogenic_compute_center: {
-    cycleSec: 1800, // rebalanced for idle-game scale, step #19 (×60: was 90s); 2026-05-18 ÷3 for display visibility (was 5400s)
+    cycleSec: 7166609.3, // rebalanced for idle-game scale, step #19 (×60: was 90s); 2026-05-18 ÷3 for display visibility (was 5400s)
     inputs: { steel: 3, quantum_chip: 1, argon: 1 },
     outputs: { ai_core: 1 },
     category: 'electronics',
@@ -1910,7 +1910,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Antimatter Capsules from Hydrogen + Exotic Alloy + Microchip.
   // Not biome-locked. Tagged `electronics` per §7.11.
   particle_accelerator: {
-    cycleSec: 600,
+    cycleSec: 1,
     inputs: { hydrogen: 10, exotic_alloy: 1, microchip: 5 },
     outputs: { antimatter_capsule: 1 },
     category: 'electronics',
@@ -1919,7 +1919,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Phase 11 — T4 endgame (Task 11.2): Quantum Chip Fabricator replaces
   // particle_accelerator as the quantum_chip producer.
   quantum_chip_fab: {
-    cycleSec: 900,
+    cycleSec: 3822191.6,
     inputs: { steel: 4, pig_iron: 4 },
     outputs: { quantum_chip: 1 },
     category: 'electronics',
@@ -1927,7 +1927,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 11 — T4 endgame (Task 11.1): Quantum Manipulator → time_crystal.
   quantum_manipulator: {
-    cycleSec: 600,
+    cycleSec: 764438.3,
     inputs: { helium_3: 1, exotic_alloy: 1 },
     outputs: { time_crystal: 1 },
     category: 'manufacturing',
@@ -1945,7 +1945,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 11 — T4 endgame (Task 11.3): Fuel Rod Assembler → nuclear_fuel_rod.
   fuel_rod_assembler: {
-    cycleSec: 400,
+    cycleSec: 286.7,
     inputs: { uranium_ore: 5, stainless_steel: 2, coolant: 2 },
     outputs: { nuclear_fuel_rod: 1 },
     category: 'manufacturing',
@@ -1953,31 +1953,31 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 11 — T4 endgame (Task 11.4): Five T4 component assemblers.
   plasma_containment_assembler: {
-    cycleSec: 500,
+    cycleSec: 286.7,
     inputs: { exotic_alloy: 1, magnet: 4, steel: 5 },
     outputs: { plasma_containment_vessel: 1 },
     category: 'manufacturing',
   },
   singularity_sensor_lab: {
-    cycleSec: 500,
+    cycleSec: 2687478.5,
     inputs: { quantum_chip: 1, optical_fiber: 4, magnet: 2 },
     outputs: { singularity_sensor: 1 },
     category: 'electronics',
   },
   cryo_containment_assembler: {
-    cycleSec: 500,
+    cycleSec: 286.7,
     inputs: { cryogenic_compound: 1, stainless_steel: 2, glass_fiber: 4 },
     outputs: { cryo_containment_unit: 1 },
     category: 'manufacturing',
   },
   accelerator_core_lab: {
-    cycleSec: 500,
+    cycleSec: 286.7,
     inputs: { magnet: 8, exotic_alloy: 1, optical_fiber: 4 },
     outputs: { particle_accelerator_core: 1 },
     category: 'electronics',
   },
   self_replication_lab: {
-    cycleSec: 600,
+    cycleSec: 127.4,
     inputs: { ai_core: 1, microchip: 8, electric_motor: 4, computing_module: 2 },
     outputs: { self_replication_module: 1 },
     category: 'manufacturing',
@@ -1998,7 +1998,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §04: Skill Forge — first crystal recipe (Mining Crystal T1).
   // Confirms the craft pipeline works end-to-end before adding all 45 recipes.
   skill_forge: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { iron_ore: 100, microchip: 4, reality_anchor: 1 },
     outputs: { mining_crystal_t1: 1 },
     category: 'electronics',
@@ -2006,355 +2006,355 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Task 6: remaining crystal recipes (57 new recipes for 19 families × 3 tiers + mining T2/T3).
   skill_forge_mining_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { steel: 50, microchip: 8, reality_anchor: 2 },
     outputs: { mining_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_mining_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { exotic_alloy: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { mining_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_forestry_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { wood: 100, microchip: 4, reality_anchor: 1 },
     outputs: { forestry_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_forestry_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { lumber: 50, microchip: 8, reality_anchor: 2 },
     outputs: { forestry_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_forestry_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { carbon_fiber: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { forestry_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_drilling_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { stone: 100, microchip: 4, reality_anchor: 1 },
     outputs: { drilling_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_drilling_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { steel: 50, microchip: 8, reality_anchor: 2 },
     outputs: { drilling_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_drilling_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { diamond_ore: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { drilling_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_robotics_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { gear: 20, microchip: 4, reality_anchor: 1 },
     outputs: { robotics_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_robotics_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { electric_motor: 10, microchip: 8, reality_anchor: 2 },
     outputs: { robotics_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_robotics_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { ai_core: 2, quantum_chip: 2, reality_anchor: 4 },
     outputs: { robotics_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_smelting_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { iron_ore: 100, coke: 20, reality_anchor: 1 },
     outputs: { smelting_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_smelting_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { steel: 30, microchip: 8, reality_anchor: 2 },
     outputs: { smelting_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_smelting_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { exotic_alloy: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { smelting_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_chemistry_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { sulfur: 50, microchip: 4, reality_anchor: 1 },
     outputs: { chemistry_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_chemistry_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { sulfuric_acid: 30, microchip: 8, reality_anchor: 2 },
     outputs: { chemistry_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_chemistry_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { exotic_alloy_seed: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { chemistry_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_electronics_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { microchip: 20, wire: 20, reality_anchor: 1 },
     outputs: { electronics_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_electronics_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { quantum_chip: 5, microchip: 10, reality_anchor: 2 },
     outputs: { electronics_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_electronics_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { ai_core: 2, quantum_chip: 5, reality_anchor: 4 },
     outputs: { electronics_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_power_systems_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { coal: 100, microchip: 4, reality_anchor: 1 },
     outputs: { power_systems_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_power_systems_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { battery: 20, microchip: 8, reality_anchor: 2 },
     outputs: { power_systems_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_power_systems_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { nuclear_fuel_rod: 5, ai_core: 2, reality_anchor: 4 },
     outputs: { power_systems_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_storage_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { wood: 100, microchip: 4, reality_anchor: 1 },
     outputs: { storage_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_storage_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { steel: 30, microchip: 8, reality_anchor: 2 },
     outputs: { storage_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_storage_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { foundation_kit_refined: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { storage_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_transport_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { bolt: 50, microchip: 4, reality_anchor: 1 },
     outputs: { transport_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_transport_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { gear: 20, microchip: 8, reality_anchor: 2 },
     outputs: { transport_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_transport_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { steel_beam: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { transport_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_network_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { wire: 50, microchip: 4, reality_anchor: 1 },
     outputs: { network_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_network_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { optical_fiber: 20, microchip: 8, reality_anchor: 2 },
     outputs: { network_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_network_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { quantum_chip: 5, ai_core: 2, reality_anchor: 4 },
     outputs: { network_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_launch_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { steel: 50, microchip: 4, reality_anchor: 1 },
     outputs: { launch_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_launch_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { fuel_cell: 10, microchip: 8, reality_anchor: 2 },
     outputs: { launch_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_launch_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { ascendant_core: 1, ai_core: 2, reality_anchor: 4 },
     outputs: { launch_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_communication_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { copper_ingot: 50, microchip: 4, reality_anchor: 1 },
     outputs: { communication_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_communication_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { transistor: 20, microchip: 8, reality_anchor: 2 },
     outputs: { communication_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_communication_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { tachyonic_transmitter: 2, ai_core: 2, reality_anchor: 4 },
     outputs: { communication_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_discovery_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { quartz: 50, microchip: 4, reality_anchor: 1 },
     outputs: { discovery_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_discovery_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { glass: 30, microchip: 8, reality_anchor: 2 },
     outputs: { discovery_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_discovery_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { scanner_sat: 1, ai_core: 2, reality_anchor: 4 },
     outputs: { discovery_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_resilience_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { brick: 100, microchip: 4, reality_anchor: 1 },
     outputs: { resilience_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_resilience_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { concrete: 50, microchip: 8, reality_anchor: 2 },
     outputs: { resilience_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_resilience_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { repair_pack: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { resilience_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_patronage_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { plank: 50, microchip: 4, reality_anchor: 1 },
     outputs: { patronage_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_patronage_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { lumber: 30, microchip: 8, reality_anchor: 2 },
     outputs: { patronage_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_patronage_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { foundation_kit_enriched: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { patronage_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_aquaculture_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { fresh_water: 100, microchip: 4, reality_anchor: 1 },
     outputs: { aquaculture_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_aquaculture_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { salt: 50, microchip: 8, reality_anchor: 2 },
     outputs: { aquaculture_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_aquaculture_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { heavy_water: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { aquaculture_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_hydroprocessing_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { crude_oil: 50, microchip: 4, reality_anchor: 1 },
     outputs: { hydroprocessing_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_hydroprocessing_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { diesel: 30, microchip: 8, reality_anchor: 2 },
     outputs: { hydroprocessing_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_hydroprocessing_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { cryogenic_hydrogen: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { hydroprocessing_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_submarine_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { steel: 50, microchip: 4, reality_anchor: 1 },
     outputs: { submarine_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_submarine_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { battery: 20, microchip: 8, reality_anchor: 2 },
     outputs: { submarine_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_submarine_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { fuel_cell: 10, ai_core: 2, reality_anchor: 4 },
     outputs: { submarine_crystal_t3: 1 },
     category: 'electronics',
   },
   skill_forge_oceanography_t1: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { sand: 100, microchip: 4, reality_anchor: 1 },
     outputs: { oceanography_crystal_t1: 1 },
     category: 'electronics',
   },
   skill_forge_oceanography_t2: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { glass: 30, microchip: 8, reality_anchor: 2 },
     outputs: { oceanography_crystal_t2: 1 },
     category: 'electronics',
   },
   skill_forge_oceanography_t3: {
-    cycleSec: 120,
+    cycleSec: 286.7,
     inputs: { optical_fiber: 20, ai_core: 2, reality_anchor: 4 },
     outputs: { oceanography_crystal_t3: 1 },
     category: 'electronics',
@@ -2396,19 +2396,19 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 12 — T5 component labs (Task 12.2)
   probability_calculator_lab: {
-    cycleSec: 600,
+    cycleSec: 7644383.3,
     inputs: { quantum_chip: 4, casimir_energy: 1, ai_core: 1 },
     outputs: { probability_calculator: 1 },
     category: 'manufacturing',
   },
   dimensional_fold_lab: {
-    cycleSec: 600,
+    cycleSec: 7644383.3,
     inputs: { spacetime_fragment: 1, exotic_alloy: 2, eldritch_processor: 1 },
     outputs: { dimensional_fold: 1 },
     category: 'manufacturing',
   },
   causal_regulator_lab: {
-    cycleSec: 600,
+    cycleSec: 7644383.3,
     inputs: { time_crystal: 1, phase_converter: 2, reality_anchor: 1 },
     outputs: { causal_regulator: 1 },
     category: 'manufacturing',
@@ -2416,25 +2416,25 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 12 — T5 component labs (Task 12.3)
   tachyonic_transmitter_lab: {
-    cycleSec: 600,
+    cycleSec: 7644383.3,
     inputs: { tachyon_stream: 1, optical_fiber: 8, ai_core: 1 },
     outputs: { tachyonic_transmitter: 1 },
     category: 'manufacturing',
   },
   aether_beacon_lab: {
-    cycleSec: 600,
+    cycleSec: 7644383.3,
     inputs: { aetheric_current: 1, casimir_energy: 1, magnet: 4 },
     outputs: { aether_beacon: 1 },
     category: 'manufacturing',
   },
   reality_engine_lab: {
-    cycleSec: 600,
+    cycleSec: 7644383.3,
     inputs: { reality_anchor: 1, dimensional_fold: 1, causal_regulator: 1 },
     outputs: { reality_engine: 1 },
     category: 'manufacturing',
   },
   singularity_battery_factory: {
-    cycleSec: 600,
+    cycleSec: 23888.7,
     inputs: { phase_converter: 2, dark_matter: 1, casimir_energy: 1 },
     outputs: { singularity_battery_unit: 1 },
     category: 'manufacturing',
@@ -2443,7 +2443,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // T5 manufacturing — Reality Forge. §7.12 spec literal: 24h cycle.
   // 2026-05-18 ÷3 for display visibility → now 8h cycle.
   reality_forge: {
-    cycleSec: 28800, // 24h per §7.12; 2026-05-18 ÷3 for display visibility (was 86400s)
+    cycleSec: 42999.7, // 24h per §7.12; 2026-05-18 ÷3 for display visibility (was 86400s)
     inputs: { ai_core: 4, antimatter_capsule: 1, time_crystal: 1, exotic_alloy: 1 },
     outputs: { reality_anchor: 1 },
     category: 'manufacturing',
@@ -2561,7 +2561,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   limekiln: {
-    cycleSec: 40,
+    cycleSec: 119443.5,
     inputs: { limestone: 25 },
     outputs: { quicklime: 14, co2: 11 },
     exogenousFlow: 'fuel-combustion-CO₂',
@@ -2569,25 +2569,25 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'chemistry',
   },
   lime_slaker: {
-    cycleSec: 40,
+    cycleSec: 905.3,
     inputs: { quicklime: 1, fresh_water: 1 },
     outputs: { slaked_lime: 1 },
     category: 'chemistry',
   },
   brick_kiln: {
-    cycleSec: 40,
+    cycleSec: 64499.5,
     inputs: { clay: 6 },
     outputs: { brick: 5, water_vapor: 1 },
     category: 'chemistry',
   },
   mortar_mixer: {
-    cycleSec: 40,
+    cycleSec: 905.3,
     inputs: { sand: 1, quicklime: 1 },
     outputs: { mortar: 1 },
     category: 'chemistry',
   },
   cement_mill: {
-    cycleSec: 67,
+    cycleSec: 9957.8,
     inputs: { quicklime: 8, clay: 2, sand: 1 },
     outputs: { cement: 11 },
     exogenousFlow: 'fuel-combustion-CO₂',
@@ -2595,21 +2595,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'chemistry',
   },
   concrete_plant: {
-    cycleSec: 67,
+    cycleSec: 5431.5,
     inputs: { cement: 1, sand: 2, stone: 3, fresh_water: 0.5 },
     outputs: { concrete: 6 },
     exogenousFlow: 'evaporation-water-vapor',
     category: 'chemistry',
   },
   charcoal_kiln: {
-    cycleSec: 33,
+    cycleSec: 171998.6,
     inputs: { wood: 8 },
     outputs: { charcoal: 2, wood_tar: 1, co2: 2, water_vapor: 3 },
     biogenic: true,
     category: 'chemistry',
   },
   plank_mill: {
-    cycleSec: 27,
+    cycleSec: 171998.6,
     inputs: { lumber: 1 },
     outputs: { plank: 2 },
     category: 'manufacturing',
@@ -2633,27 +2633,27 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'smelting',
   },
   solder_alloyer: {
-    cycleSec: 67,
+    cycleSec: 5548.3,
     inputs: { tin_ingot: 1, lead_ingot: 1 },
     outputs: { solder: 2 },
     category: 'manufacturing',
   },
   // Phase 7 — Bronze + Brass (§7.2)
   bronze_alloyer: {
-    cycleSec: 83,
+    cycleSec: 5548.3,
     inputs: { copper_ingot: 1, tin_ingot: 1 },
     outputs: { bronze: 2 },
     category: 'manufacturing',
   },
   brass_alloyer: {
-    cycleSec: 83,
+    cycleSec: 5548.3,
     inputs: { copper_ingot: 1, zinc_ingot: 1 },
     outputs: { brass: 2 },
     category: 'manufacturing',
   },
   // Phase 8 — Aluminum chain (§7.3)
   alumina_refinery: {
-    cycleSec: 100,
+    cycleSec: 2774.2,
     inputs: { bauxite: 1, sodium_hydroxide: 1 },
     outputs: { alumina: 1 },
     category: 'chemistry',
@@ -2680,7 +2680,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'smelting',
   },
   carbon_steel_mill: {
-    cycleSec: 83,
+    cycleSec: 152.9,
     inputs: { steel: 1, manganese_ingot: 1 },
     outputs: { carbon_steel: 1 },
     category: 'manufacturing',
@@ -2699,7 +2699,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'smelting',
   },
   galvanizing_bath: {
-    cycleSec: 83,
+    cycleSec: 152.9,
     inputs: { steel: 1, zinc_ingot: 1 },
     outputs: { galvanized_steel: 1 },
     category: 'manufacturing',
@@ -2734,7 +2734,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'smelting',
   },
   stainless_steel_mill: {
-    cycleSec: 133,
+    cycleSec: 152.9,
     inputs: { steel: 1, chromium_ingot: 1, nickel_ingot: 1 },
     outputs: { stainless_steel: 1 },
     category: 'manufacturing',
@@ -2754,7 +2754,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'smelting',
   },
   tool_steel_mill: {
-    cycleSec: 133,
+    cycleSec: 152.9,
     inputs: { steel: 1, tungsten_ingot: 1 },
     outputs: { tool_steel: 1 },
     category: 'manufacturing',
@@ -2762,13 +2762,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T1 manufacturing / chemistry — T0 raws → T1 refined. Rebalanced for idle-game scale, step #19 (×10).
   lumber_mill: {
-    cycleSec: 27, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
+    cycleSec: 85999.3, // rebalanced for idle-game scale, step #19 (×10: was 8s); 2026-05-18 ÷3 for display visibility (was 80s)
     inputs: { wood: 1 },
     outputs: { lumber: 1 },
     category: 'manufacturing',
   },
   glassworks: {
-    cycleSec: 40, // rebalanced for idle-game scale, step #19 (×10: was 12s); 2026-05-18 ÷3 for display visibility (was 120s)
+    cycleSec: 22337.5, // rebalanced for idle-game scale, step #19 (×10: was 12s); 2026-05-18 ÷3 for display visibility (was 120s)
     inputs: { sand: 1 },
     outputs: { glass: 1 },
     category: 'manufacturing',
@@ -2778,7 +2778,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // gating ships when chemistry recipes that depend on heat also do.
   },
   evaporator: {
-    cycleSec: 50, // rebalanced for idle-game scale, step #19 (×10: was 15s); 2026-05-18 ÷3 for display visibility (was 150s)
+    cycleSec: 19111, // rebalanced for idle-game scale, step #19 (×10: was 15s); 2026-05-18 ÷3 for display visibility (was 150s)
     inputs: { saltwater: 1 },
     outputs: { salt: 1 },
     category: 'manufacturing',
@@ -2787,13 +2787,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // consumer for the alumina + lubricant chains.
   },
   electrolyzer: {
-    cycleSec: 33, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
+    cycleSec: 206398.3, // rebalanced for idle-game scale, step #19 (×10: was 10s); 2026-05-18 ÷3 for display visibility (was 100s)
     inputs: { fresh_water: 9 },
     outputs: { hydrogen: 1, oxygen: 8 },
     category: 'chemistry',
   },
   biofuel_plant: {
-    cycleSec: 50, // rebalanced for idle-game scale, step #19 (×10: was 15s); 2026-05-18 ÷3 for display visibility (was 150s)
+    cycleSec: 358.3, // rebalanced for idle-game scale, step #19 (×10: was 15s); 2026-05-18 ÷3 for display visibility (was 150s)
     inputs: { wood: 2 },
     outputs: { biofuel: 1 },
     category: 'chemistry',
@@ -2828,7 +2828,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   naphtha_cracker: {
     // rebalanced for idle-game scale, step #19 (×40: was 15s); bumped 600→1000
     // to reduce XP-arbitrage: T0/T1 inputs → T2-weight outputs at T1 throughput.
-    cycleSec: 333,
+    cycleSec: 546,
     inputs: { crude_oil: 20 },
     outputs: { naphtha: 3, aviation_kerosene_crude: 3, diesel: 5, heavy_oil: 6, refinery_gas: 3 },
     category: 'chemistry',
@@ -2837,59 +2837,59 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   crude_oil_cracker: {
     // bumped 600→1200: produces 3 outputs (heavy_oil, tar, asphalt) — longer
     // pace is proportionally fair; also closes XP-arbitrage per Agent C finding.
-    cycleSec: 400,
+    cycleSec: 81.9,
     inputs: { crude_oil: 3 },
     outputs: { heavy_oil: 1, tar: 1, asphalt: 1 },
     category: 'chemistry',
   },
   // Phase 4 — T2 plastic precursor polymerizer (§7.4)
   plastic_polymerizer_a: {
-    cycleSec: 133,
+    cycleSec: 358.3,
     inputs: { naphtha: 1 },
     outputs: { plastic_precursor: 1 },
     category: 'chemistry',
   },
   // Phase 4 — T2 split plastic presses (§7.4)
   rigid_plastic_press: {
-    cycleSec: 100,
+    cycleSec: 358.3,
     inputs: { plastic_precursor: 1 },
     outputs: { rigid_plastic: 1 },
     category: 'manufacturing',
   },
   flexible_plastic_press: {
-    cycleSec: 100,
+    cycleSec: 358.3,
     inputs: { plastic_precursor: 1 },
     outputs: { flexible_plastic: 1 },
     category: 'manufacturing',
   },
   rubber_synthesizer: {
-    cycleSec: 100,
+    cycleSec: 358.3,
     inputs: { plastic_precursor: 1 },
     outputs: { synthetic_rubber: 1 },
     category: 'manufacturing',
   },
   // Phase 5 — T2 chemistry chain (§7.5)
   sulfuric_acid_plant: {
-    cycleSec: 133,
+    cycleSec: 1438.5,
     inputs: { sulfur: 1, fresh_water: 2 },
     outputs: { sulfuric_acid: 1 },
     category: 'chemistry',
   },
   hcl_plant: {
-    cycleSec: 133,
+    cycleSec: 930.4,
     inputs: { salt: 1, sulfuric_acid: 1 },
     outputs: { hydrochloric_acid: 1 },
     category: 'chemistry',
   },
   // Phase 5 — T3 chemistry chain (§7.5)
   phosphor_plant: {
-    cycleSec: 200,
+    cycleSec: 781.8,
     inputs: { phosphate: 1, sulfuric_acid: 1 },
     outputs: { phosphor: 1 },
     category: 'chemistry',
   },
   cryo_air_separator: {
-    cycleSec: 133,
+    cycleSec: 19.6,
     inputs: { nitrogen: 1 },
     outputs: { liquid_nitrogen: 1 },
     category: 'chemistry',
@@ -2897,14 +2897,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   chlor_alkali_plant: {
     // rebalanced for idle-game scale, step #19 (×40: was 20s); bumped 800→1200
     // to reduce XP-arbitrage per Agent C finding (T0 saltwater → T2-weight outputs).
-    cycleSec: 400,
+    cycleSec: 877193,
     inputs: { salt: 117, fresh_water: 36 },
     outputs: { chlorine: 71, sodium_hydroxide: 80, hydrogen: 2 },
     category: 'chemistry',
     // Real co-output per §7.5; consumer in §7.3 alumina chain.
   },
   chemical_reactor: {
-    cycleSec: 267,           // matches chlor_alkali_plant — electrolysis pace; 2026-05-18 ÷3 for display visibility (was 800s)
+    cycleSec: 1563.6,           // matches chlor_alkali_plant — electrolysis pace; 2026-05-18 ÷3 for display visibility (was 800s)
     inputs: { salt: 1, fresh_water: 2 },
     outputs: { chlorine: 1, sodium_hydroxide: 1 },
     category: 'chemistry',
@@ -2914,7 +2914,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // (chain in `bauxite_refinery` above).
   },
   lubricant_refinery: {
-    cycleSec: 333, // rebalanced for idle-game scale, step #19 (×40: was 25s); 2026-05-18 ÷3 for display visibility (was 1000s)
+    cycleSec: 614.3, // rebalanced for idle-game scale, step #19 (×40: was 25s); 2026-05-18 ÷3 for display visibility (was 1000s)
     inputs: { heavy_oil: 5, chlorine: 5, calcium_sulfonate: 1 },
     outputs: { lubricant: 10 },
     category: 'chemistry',
@@ -2924,7 +2924,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // lubricant in its bill of materials).
   },
   diesel_refinery: {
-    cycleSec: 400, // rebalanced for idle-game scale, step #19 (×40: was 30s); 2026-05-18 ÷3 for display visibility (was 1200s)
+    cycleSec: 626.6, // rebalanced for idle-game scale, step #19 (×40: was 30s); 2026-05-18 ÷3 for display visibility (was 1200s)
     inputs: { heavy_oil: 10, hydrogen: 1 },
     outputs: { diesel: 10, sulfur: 0.2 },
     category: 'chemistry',
@@ -2934,7 +2934,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // stockpile-only fuel until §11.7 lands.
   },
   metal_rolling_mill: {
-    cycleSec: 133, // rebalanced for idle-game scale, step #19 (×40: was 10s); 2026-05-18 ÷3 for display visibility (was 400s)
+    cycleSec: 3784, // rebalanced for idle-game scale, step #19 (×40: was 10s); 2026-05-18 ÷3 for display visibility (was 400s)
     inputs: { steel: 11 },
     outputs: { wire: 20, mill_scale: 1 },
     category: 'manufacturing',
@@ -2958,20 +2958,20 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // the wafer-intermediate chain is unwired.
   },
   air_separator: {
-    cycleSec: 200, // rebalanced for idle-game scale, step #19 (×20: was 30s); 2026-05-18 ÷3 for display visibility (was 600s)
+    cycleSec: 1960.1, // rebalanced for idle-game scale, step #19 (×20: was 30s); 2026-05-18 ÷3 for display visibility (was 600s)
     inputs: { air: 100 },
     outputs: { nitrogen: 75.5, oxygen: 23.2, argon: 1.3 },
     category: 'chemistry',
     exogenousFlow: 'atmosphere',
   },
   cryo_lab: {
-    cycleSec: 400, // rebalanced for idle-game scale, step #19 (×20: was 60s); 2026-05-18 ÷3 for display visibility (was 1200s)
+    cycleSec: 19.6, // rebalanced for idle-game scale, step #19 (×20: was 60s); 2026-05-18 ÷3 for display visibility (was 1200s)
     inputs: { hydrogen: 1, nitrogen: 1 },
     outputs: { cryo_coolant: 1 },
     category: 'chemistry',
   },
   cryo_compressor: {
-    cycleSec: 600, // rebalanced for idle-game scale, step #19 (×20: was 90s); 2026-05-18 ÷3 for display visibility (was 1800s)
+    cycleSec: 19.6, // rebalanced for idle-game scale, step #19 (×20: was 90s); 2026-05-18 ÷3 for display visibility (was 1800s)
     inputs: { hydrogen: 1, cryo_coolant: 1 },
     outputs: { cryogenic_hydrogen: 1 },
     category: 'chemistry',
@@ -2981,7 +2981,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // remains STILL-DEFERRED.
   },
   kerosene_refinery: {
-    cycleSec: 400, // rebalanced for idle-game scale, step #19 (×20: was 60s); 2026-05-18 ÷3 for display visibility (was 1200s)
+    cycleSec: 273, // rebalanced for idle-game scale, step #19 (×20: was 60s); 2026-05-18 ÷3 for display visibility (was 1200s)
     inputs: { aviation_kerosene_crude: 10, hydrogen: 1 },
     outputs: { aviation_kerosene: 10 },
     category: 'chemistry',
@@ -2990,7 +2990,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // selection STILL-DEFERRED.
   },
   lithography_lab: {
-    cycleSec: 800, // rebalanced for idle-game scale, step #19 (×20: was 120s); 2026-05-18 ÷3 for display visibility (was 2400s)
+    cycleSec: 67187, // rebalanced for idle-game scale, step #19 (×20: was 120s); 2026-05-18 ÷3 for display visibility (was 2400s)
     inputs: { silicon: 1, wire: 1 },
     outputs: { microchip: 1 },
     category: 'electronics',
@@ -3000,33 +3000,33 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 9 — Task 9.1: high-purity silicon → wafer (§7.7)
   wafer_lab: {
-    cycleSec: 133,
+    cycleSec: 155276.5,
     inputs: { silicon: 1 },
     outputs: { silicon_wafer: 1 },
     category: 'electronics',
   },
   // Phase 9 — Task 9.2: wafer + graphite → transistor / capacitor / resistor (§7.7)
   transistor_doping: {
-    cycleSec: 67,
+    cycleSec: 10749.9,
     inputs: { silicon_wafer: 1, graphite: 1 },
     outputs: { transistor: 4 },
     category: 'electronics',
   },
   capacitor_doping: {
-    cycleSec: 67,
+    cycleSec: 53749.6,
     inputs: { silicon_wafer: 1, graphite: 1 },
     outputs: { capacitor: 4 },
     category: 'electronics',
   },
   resistor_doping: {
-    cycleSec: 67,
+    cycleSec: 10749.9,
     inputs: { silicon_wafer: 1, graphite: 1 },
     outputs: { resistor: 4 },
     category: 'electronics',
   },
   // Phase 9 — Task 9.3: Memory Lab (§7.7). PCB + transistors + capacitors + resistors + solder → memory_module.
   memory_lab: {
-    cycleSec: 167,
+    cycleSec: 119443.5,
     inputs: { pcb: 1, transistor: 4, capacitor: 4, resistor: 4, solder: 1 },
     // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
     outputs: { memory_module: 2 },
@@ -3077,7 +3077,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
 
   // T5 refining (§7.12 step-18 closure) — rebalanced for idle-game scale, step #19 (×8).
   plasma_forge: {
-    cycleSec: 1600, // rebalanced for idle-game scale, step #19 (×8: was 600s); 2026-05-18 ÷3 for display visibility (was 4800s)
+    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 600s); 2026-05-18 ÷3 for display visibility (was 4800s)
     inputs: { exotic_alloy: 1, casimir_energy: 1 },
     outputs: { plasma_charge: 1 },
     category: 'manufacturing',
@@ -3085,13 +3085,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // fuel-tier selection STILL-DEFERRED.
   },
   eldritch_refiner: {
-    cycleSec: 3200, // rebalanced for idle-game scale, step #19 (×8: was 1200s); 2026-05-18 ÷3 for display visibility (was 9600s)
+    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 1200s); 2026-05-18 ÷3 for display visibility (was 9600s)
     inputs: { dark_matter: 1, strange_matter: 1 },
     outputs: { eldritch_processor: 1 },
     category: 'manufacturing',
   },
   phase_refiner: {
-    cycleSec: 3200, // rebalanced for idle-game scale, step #19 (×8: was 1200s); 2026-05-18 ÷3 for display visibility (was 9600s)
+    cycleSec: 7644383.3, // rebalanced for idle-game scale, step #19 (×8: was 1200s); 2026-05-18 ÷3 for display visibility (was 9600s)
     inputs: { aetheric_current: 1, tachyon_stream: 1 },
     outputs: { phase_converter: 1 },
     category: 'manufacturing',
@@ -3115,7 +3115,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // auto-flip block), opening the T6 launch UI.
   // 2026-05-18 ÷3 for display visibility → now 40 min cycle (was 2h).
   ascendant_assembly: {
-    cycleSec: 2400,
+    cycleSec: 429996.6,
     inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5, computing_module: 2 },
     outputs: { ascendant_core: 1 },
     category: 'manufacturing',
@@ -3129,7 +3129,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // no finish state and the game continues indefinitely.
   // 2026-05-18 ÷3 for display visibility → now 8h cycle (was 24h).
   genesis_forge: {
-    cycleSec: 28800,
+    cycleSec: 429996.6,
     inputs: { reality_anchor: 4, zero_point_flux: 1, causal_regulator: 2, memetic_core: 1 },
     outputs: { genesis_cell: 1 },
     category: 'manufacturing',
@@ -3141,7 +3141,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // + cryogenic_hydrogen).
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle (was 30 min).
   antimatter_refinery: {
-    cycleSec: 600, // 30 min per §7.12; 2026-05-18 ÷3 for display visibility (was 1800s)
+    cycleSec: 1, // 30 min per §7.12; 2026-05-18 ÷3 for display visibility (was 1800s)
     inputs: { antimatter_capsule: 1, plasma_containment_vessel: 1, cryogenic_hydrogen: 5 },
     outputs: { antimatter_propellant: 1 },
     category: 'manufacturing',
@@ -3150,7 +3150,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Scanner Sat Assembly. 30-min cycle.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   scanner_sat_assembly: {
-    cycleSec: 600,
+    cycleSec: 9555479.1,
     inputs: { exotic_alloy: 4, ai_core: 2, spacetime_fragment: 1, aluminum: 50, orbital_insertion_package: 1 },
     outputs: { scanner_sat: 1 },
     category: 'manufacturing',
@@ -3159,7 +3159,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Relay Sat Assembly. 30-min cycle.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   relay_sat_assembly: {
-    cycleSec: 600,
+    cycleSec: 9555479.1,
     inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 200, orbital_insertion_package: 1 },
     outputs: { relay_sat: 1 },
     category: 'manufacturing',
@@ -3168,7 +3168,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Sweeper Sat Assembly. 30-min cycle.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   sweeper_sat_assembly: {
-    cycleSec: 600,
+    cycleSec: 9555479.1,
     inputs: { exotic_alloy: 4, ai_core: 1, carbon_steel: 100, magnet: 20, orbital_insertion_package: 1 },
     outputs: { sweeper_sat: 1 },
     category: 'manufacturing',
@@ -3179,7 +3179,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // optics. Per-sat fields locked at peakBoost=0.7, rHalf=200 tiles.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   mirror_sat_assembly: {
-    cycleSec: 600,
+    cycleSec: 9555479.1,
     inputs: { exotic_alloy: 4, ai_core: 1, aluminum: 150, optical_glass: 10, orbital_insertion_package: 1 },
     outputs: { mirror_sat: 1 },
     category: 'manufacturing',
@@ -3189,7 +3189,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // payload required by every §14.7 launch. 30-min cycle.
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
   oip_assembly: {
-    cycleSec: 600,
+    cycleSec: 9555479.1,
     inputs: { iron_ingot: 100, brick: 30, glass: 20, carbon_fiber: 10, ai_core: 5 },
     outputs: { orbital_insertion_package: 1 },
     category: 'manufacturing',
@@ -3198,7 +3198,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.12 / §14.10: Repair Pack Assembly. 10-min cycle.
   // 2026-05-18 ÷3 for display visibility → now ~3.3-min cycle (200s).
   repair_pack_assembly: {
-    cycleSec: 200,
+    cycleSec: 127.4,
     inputs: { exotic_alloy: 1, lubricant: 5, microchip: 5 },
     outputs: { repair_pack: 1 },
     category: 'manufacturing',
@@ -3207,7 +3207,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.12 / §14.10: Repair Drone Assembly. 20-min cycle.
   // 2026-05-18 ÷3 for display visibility → now ~6.7-min cycle (400s).
   repair_drone_assembly: {
-    cycleSec: 400,
+    cycleSec: 25481.3,
     inputs: { exotic_alloy: 2, carbon_steel: 50, foundation_kit: 1 },
     outputs: { repair_drone: 1 },
     category: 'manufacturing',
@@ -3216,7 +3216,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §12.3: Kit Assembler Enriched (T3). 10-min cycle.
   // 2026-05-18 ÷3 for display visibility → now ~3.3-min cycle (200s).
   kit_assembler_enriched: {
-    cycleSec: 200,
+    cycleSec: 85999.3,
     inputs: { steel: 5, microchip: 1, wire: 5, gear: 5 },
     outputs: { foundation_kit_enriched: 1 },
     category: 'manufacturing',
@@ -3225,7 +3225,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §12.3: Kit Assembler Refined (T4). 20-min cycle.
   // 2026-05-18 ÷3 for display visibility → now ~6.7-min cycle (400s).
   kit_assembler_refined: {
-    cycleSec: 400,
+    cycleSec: 101925.1,
     inputs: { stainless_steel: 5, quantum_chip: 1, fuel_cell: 1, computing_module: 1 },
     outputs: { foundation_kit_refined: 1 },
     category: 'manufacturing',
@@ -3238,21 +3238,21 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Produces the T3 electronics intermediates that feed T4+ assembly recipes.
   // ---------------------------------------------------------------------------
   pcb_etcher: {
-    cycleSec: 67,
+    cycleSec: 49142.5,
     inputs: { wire: 1, glass: 1 },
     outputs: { pcb: 1 },
     category: 'electronics',
   },
   circuit_assembler: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
-    cycleSec: 83,
+    cycleSec: 143.3,
     inputs: { pcb: 1, microchip: 2, steel: 1 },
     outputs: { circuit_board: 1 },
     category: 'electronics',
   },
   processor_fab: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
-    cycleSec: 400,
+    cycleSec: 358330.5,
     inputs: { circuit_board: 2, microchip: 4, exotic_alloy: 1 },
     // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
     outputs: { processor: 2 },
@@ -3260,7 +3260,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   compute_module_fab: {
     // rebalanced step-19 idle-game scale (missed in original sweep)
-    cycleSec: 400,
+    cycleSec: 2388869.8,
     inputs: { processor: 2, circuit_board: 4, quantum_chip: 1 },
     // output doubled: was 1 — XP-net-negative recipe fix (Agent C, VI < 0.15).
     outputs: { computing_module: 2 },
@@ -3268,66 +3268,66 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 6 — T2 mechanical components (§6.3 / §7.1)
   sheet_mill: {
-    cycleSec: 67,
+    cycleSec: 18231.9,
     inputs: { steel: 53 },
     outputs: { sheet_metal: 10, mill_scale: 3 },
     category: 'manufacturing',
   },
   pipe_mill: {
-    cycleSec: 67,
+    cycleSec: 14447.9,
     inputs: { steel: 42 },
     outputs: { pipe: 10, mill_scale: 2 },
     category: 'manufacturing',
   },
   beam_mill: {
-    cycleSec: 67,
+    cycleSec: 36119.7,
     inputs: { steel: 105 },
     outputs: { steel_beam: 2, mill_scale: 5 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 mechanical fasteners (§6.3)
   bearing_assembler: {
-    cycleSec: 67,
+    cycleSec: 2665978.7,
     inputs: { steel: 28, lubricant: 3 },
     outputs: { bearing: 100, mill_scale: 1 },
     category: 'manufacturing',
   },
   spring_press: {
-    cycleSec: 67,
+    cycleSec: 945992.4,
     inputs: { steel: 11 },
     outputs: { spring: 50, mill_scale: 1 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 mechanical components (§6.3)
   cable_mill: {
-    cycleSec: 67,
+    cycleSec: 14447.9,
     inputs: { steel: 42 },
     outputs: { heavy_cable: 5, mill_scale: 2 },
     category: 'manufacturing',
   },
   // Phase 6 — T3 battery (§6.3 / §7.9)
   battery_factory: {
-    cycleSec: 100,
+    cycleSec: 119443.5,
     inputs: { lithium: 1, rigid_plastic: 1, wire: 2 },
     outputs: { battery: 1 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 glass_panel (§6.3)
   glass_panel_press: {
-    cycleSec: 67,
+    cycleSec: 67012.5,
     inputs: { glass: 2 },
     outputs: { glass_panel: 1 },
     category: 'manufacturing',
   },
   // Phase 6 — T2 coolant + ceramic_insulator (§6.3)
   coolant_synthesizer: {
-    cycleSec: 100,
+    cycleSec: 716.7,
     inputs: { fresh_water: 2, salt: 1, naphtha: 1 },
     outputs: { coolant: 2 },
     category: 'chemistry',
   },
   ceramic_kiln: {
-    cycleSec: 83,
+    cycleSec: 10749.9,
     inputs: { clay: 2, sand: 1 },
     outputs: { ceramic_insulator: 1 },
     category: 'manufacturing',
@@ -3351,14 +3351,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 10 — T3 minerals + alloy (Task 10.3)
   cryo_compound_lab: {
-    cycleSec: 133,
+    cycleSec: 19.6,
     inputs: { liquid_nitrogen: 1, cryo_coolant: 1 },
     outputs: { cryogenic_compound: 1 },
     category: 'chemistry',
   },
   // Phase 10 — T3 minerals + alloy (Task 10.4)
   mag_alloyer: {
-    cycleSec: 100,
+    cycleSec: 2774.2,
     inputs: { iron_ingot: 2, rare_earth: 1 },
     outputs: { magnetic_alloy: 1 },
     category: 'manufacturing',
@@ -3373,74 +3373,74 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 10b — T3 power components (Task 10.5)
   mag_forge: {
-    cycleSec: 83,
+    cycleSec: 138708.6,
     inputs: { magnetic_alloy: 1, wire: 2 },
     outputs: { magnet: 1 },
     category: 'manufacturing',
   },
   // Phase 10b — T3 power components (Task 10.6)
   motor_assembly: {
-    cycleSec: 100,
+    cycleSec: 2866.6,
     inputs: { magnet: 1, wire: 4, steel: 1 },
     outputs: { electric_motor: 1 },
     category: 'manufacturing',
   },
   // Phase 10b — T3 power components (Task 10.7)
   generator_lab: {
-    cycleSec: 117,
+    cycleSec: 14333.2,
     inputs: { magnet: 1, wire: 5, steel: 1, bearing: 2 },
     outputs: { generator: 1 },
     category: 'manufacturing',
   },
   // Phase 10c — T3 mechanical assemblies (Task 10.8)
   pump_assembly: {
-    cycleSec: 100,
+    cycleSec: 2293.3,
     inputs: { electric_motor: 1, pipe: 2, bearing: 1 },
     outputs: { pump: 1 },
     category: 'manufacturing',
   },
   hydraulic_assembly: {
-    cycleSec: 100,
+    cycleSec: 4300,
     inputs: { pipe: 2, lubricant: 2, bearing: 1, spring: 1 },
     outputs: { hydraulic_actuator: 1 },
     category: 'manufacturing',
   },
   pneumatic_assembly: {
-    cycleSec: 100,
+    cycleSec: 2866.6,
     inputs: { pipe: 2, bearing: 1, spring: 1 },
     outputs: { pneumatic_actuator: 1 },
     category: 'manufacturing',
   },
   // Phase 10c — T3 power components (Task 10.9)
   solar_cell_lab: {
-    cycleSec: 133,
+    cycleSec: 1343739.3,
     inputs: { silicon_wafer: 1, glass: 2, aluminum: 1 },
     outputs: { solar_cell: 1 },
     category: 'electronics',
   },
   // Phase 10c — T3 power components (Task 10.10)
   fuel_cell_lab: {
-    cycleSec: 133,
+    cycleSec: 1433.3,
     inputs: { hydrogen: 2, rare_earth: 1, flexible_plastic: 1 },
     outputs: { fuel_cell: 1 },
     category: 'manufacturing',
   },
   // Phase 10c — T3 glass/ceramics (Task 10.11)
   optical_glass_kiln: {
-    cycleSec: 100,
+    cycleSec: 10749.9,
     inputs: { quartz: 2 },
     outputs: { optical_glass: 1 },
     category: 'manufacturing',
   },
   // Phase 10c — T3 fiber spinners (Task 10.12)
   glass_fiber_spinner: {
-    cycleSec: 100,
+    cycleSec: 67012.5,
     inputs: { glass: 2 },
     outputs: { glass_fiber: 3 },
     category: 'manufacturing',
   },
   optical_fiber_drawer: {
-    cycleSec: 133,
+    cycleSec: 688,
     inputs: { optical_glass: 1 },
     outputs: { optical_fiber: 2 },
     category: 'manufacturing',
@@ -3449,7 +3449,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Phase 16.2 — §6.6 memetic_core producer (Task 16.2). Closes the
   // memetic_core producer gap. T5 building: eldritch + spacetime → memetic_core.
   memetic_forge: {
-    cycleSec: 600,
+    cycleSec: 7644383.3,
     inputs: { eldritch_processor: 1, spacetime_fragment: 1, ai_core: 2 },
     outputs: { memetic_core: 1 },
     category: 'manufacturing',
@@ -3583,7 +3583,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // so rotateOutputs remains the correct shape here — unlike the
     // nodule_concentrator / vent_mineral_refinery cases where the §3
     // chain examples specify distinct per-output feedstocks.
-    cycleSec: 120,
+    cycleSec: 19.6,
     inputs: { dilute_brine: 5 },
     outputs: { lithium_brine: 1 },
     rotateOutputs: [
@@ -3595,13 +3595,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Nodule Concentrator per-output variants. See block comment above.
   nodule_concentrator_re: {
-    cycleSec: 240,
+    cycleSec: 347.5,
     inputs: { re_nodule: 2, sulfuric_acid: 1 },
     outputs: { rare_earth_concentrate: 1 },
     category: 'chemistry',
   },
   nodule_concentrator_co: {
-    cycleSec: 240,
+    cycleSec: 347.5,
     inputs: { co_nodule: 2, sulfuric_acid: 1 },
     outputs: { refined_cobalt: 1 },
     category: 'chemistry',
@@ -3609,13 +3609,13 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Vent Mineral Refinery per-output variants. See block comment above.
   // Casimir_energy gates both per §8.10 Casimir Tap T5 exotic gating.
   vent_mineral_refinery_exotic: {
-    cycleSec: 480,
+    cycleSec: 347.5,
     inputs: { vent_exotic: 1, casimir_energy: 1 },
     outputs: { exotic_alloy_seed: 1 },
     category: 'chemistry',
   },
   vent_mineral_refinery_tritium: {
-    cycleSec: 480,
+    cycleSec: 347.5,
     inputs: { heavy_isotope_slurry: 1, casimir_energy: 1 },
     outputs: { tritium_seed: 1 },
     category: 'chemistry',
@@ -3627,7 +3627,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // concentrated_brine — the earlier microchip co-input was an overreach
     // (rationale referenced "precision control electronics", but the spec
     // lists no such input).
-    cycleSec: 360,
+    cycleSec: 19.6,
     inputs: { concentrated_brine: 4 },
     outputs: { heavy_water: 1 },
     category: 'chemistry',
