@@ -103,7 +103,7 @@ export interface PlacedBuilding {
   toxicityExpiryMs?: number;
   /** Floor-upgrade level L ∈ [0,9] → 1..10 floors (§ floor-upgrade mechanic). Optional;
    *  absent ≡ 0 (forward-compat: pre-v16 saves and un-upgraded buildings omit it). */
-  readonly floorLevel?: number;
+  floorLevel?: number;
   /** True if the building's footprint no longer matches terrain after biome change. */
   invalid?: boolean;
   /** terrain_modifier v5 — player's pick for the target TerrainKind, chosen
