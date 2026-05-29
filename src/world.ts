@@ -26,7 +26,7 @@ import { terrainAtForBiome } from './biomes.js';
 import type { ModifierId } from './biomes.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
-import { renderBuildings } from './buildings.js';
+import { floorScaledCapacity, renderBuildings } from './buildings.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import { islandCells } from './discovery.js';
 import type { IslandState } from './economy.js';
@@ -1037,12 +1037,12 @@ export function aggregateStorageCaps(
     if (storage.category === 'generic') {
       const label = b.cargoLabel;
       if (label !== undefined) {
-        caps[label] = (caps[label] ?? 0) + storage.capacity;
+        caps[label] = (caps[label] ?? 0) + floorScaledCapacity(b, storage.capacity);
       }
     } else {
       for (const r of ALL_RESOURCES) {
         if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
-          caps[r] = (caps[r] ?? 0) + storage.capacity;
+          caps[r] = (caps[r] ?? 0) + floorScaledCapacity(b, storage.capacity);
         }
       }
     }

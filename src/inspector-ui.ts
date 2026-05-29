@@ -34,7 +34,7 @@ import {
 import { gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, placementCostFor } from './placement.js';
-import { convertToServitor, floorLevel, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { convertToServitor, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { computeRates } from './economy.js';
 import {
@@ -751,7 +751,7 @@ export function mountInspectorUi(
     if (!def.storage || def.storage.category !== 'generic') return;
     const oldLabel = b.cargoLabel;
     if (oldLabel === newLabel) return;
-    const cap = def.storage.capacity;
+    const cap = floorScaledCapacity(b, def.storage.capacity);
     if (oldLabel !== undefined) {
       const next = (target.state.storageCaps[oldLabel] ?? 0) - cap;
       target.state.storageCaps[oldLabel] = next < 0 ? 0 : next;

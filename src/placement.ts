@@ -36,7 +36,7 @@ import {
   footprintTiles,
 } from './shape-mask.js';
 export { rotateShape, type ShapeMask };
-import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import { floorScaledCapacity, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import { constructionTimeFor } from './construction.js';
 import type { IslandState } from './economy.js';
 import { tileInscribedInEllipse } from './island.js';
@@ -513,12 +513,12 @@ export function placeBuilding(
     if (storage.category === 'generic') {
       if (cargoLabel !== undefined) {
         state.storageCaps[cargoLabel] =
-          (state.storageCaps[cargoLabel] ?? 0) + storage.capacity;
+          (state.storageCaps[cargoLabel] ?? 0) + floorScaledCapacity(placed, storage.capacity);
       }
     } else {
       for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
         if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
-          state.storageCaps[r] = (state.storageCaps[r] ?? 0) + storage.capacity;
+          state.storageCaps[r] = (state.storageCaps[r] ?? 0) + floorScaledCapacity(placed, storage.capacity);
         }
       }
     }
@@ -708,7 +708,7 @@ export function demolishBuilding(
   const storage = def.storage;
   if (storage) {
     const stripResource = (r: ResourceId): void => {
-      const next = (state.storageCaps[r] ?? 0) - storage.capacity;
+      const next = (state.storageCaps[r] ?? 0) - floorScaledCapacity(b, storage.capacity);
       state.storageCaps[r] = next < 0 ? 0 : next;
       const have = state.inventory[r] ?? 0;
       const newCap = state.storageCaps[r] ?? 0;

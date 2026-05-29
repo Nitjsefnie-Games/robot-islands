@@ -7,9 +7,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { PlacedBuilding } from './buildings.js';
+import { floorScaledCapacity, type PlacedBuilding } from './buildings.js';
 import { computeRates, type IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory } from './storage-categories.js';
+import { aggregateStorageCaps } from './world.js';
 
 function blankInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -110,5 +112,54 @@ describe('floor level scales economy', () => {
     const ratesL3 = computeRates(stateL3);
 
     expect(ratesL3.power.produced).toBeCloseTo(ratesL0.power.produced * 4, 9);
+  });
+});
+
+describe('floorScaledCapacity helper', () => {
+  it('scales capacity ×(1+L)', () => {
+    expect(floorScaledCapacity({ floorLevel: 2 }, 100)).toBe(300);
+    expect(floorScaledCapacity({ floorLevel: 9 }, 100)).toBe(1000);
+  });
+
+  it('treats absent floorLevel as L0 → ×1', () => {
+    expect(floorScaledCapacity({}, 100)).toBe(100);
+  });
+
+  it('clamps out-of-range floorLevel via floorLevel/floorEffectMul', () => {
+    // floorLevel clamps to [0,9]; floorEffectMul(10) would be 11, but
+    // floorLevel({ floorLevel: 10 }) → 9, so effect is ×10.
+    expect(floorScaledCapacity({ floorLevel: 10 }, 100)).toBe(1000);
+    expect(floorScaledCapacity({ floorLevel: -1 }, 100)).toBe(100);
+  });
+});
+
+describe('aggregateStorageCaps scales by floorLevel', () => {
+  it('generic crate with floorLevel 2 contributes ×3', () => {
+    const crate: PlacedBuilding = {
+      id: 't-crate', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore', floorLevel: 2,
+    };
+    const caps = aggregateStorageCaps([crate]);
+    const base = RESOURCE_BASE_CAP.iron_ore ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY.iron_ore);
+    expect(caps.iron_ore).toBe(base + 500 * 3);
+  });
+
+  it('specialized silo with floorLevel 1 contributes ×2 to dry_goods', () => {
+    const silo: PlacedBuilding = {
+      id: 't-silo', defId: 'silo', x: 0, y: 0, floorLevel: 1,
+    };
+    const caps = aggregateStorageCaps([silo]);
+    const baseStone = RESOURCE_BASE_CAP.stone ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY.stone);
+    expect(caps.stone).toBe(baseStone + 200_000 * 2);
+    const baseHydrogen = RESOURCE_BASE_CAP.hydrogen ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY.hydrogen);
+    expect(caps.hydrogen).toBe(baseHydrogen); // not dry_goods
+  });
+
+  it('absent floorLevel behaves as L0 → ×1 (unchanged)', () => {
+    const crate: PlacedBuilding = {
+      id: 't-crate', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore',
+    };
+    const caps = aggregateStorageCaps([crate]);
+    const base = RESOURCE_BASE_CAP.iron_ore ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY.iron_ore);
+    expect(caps.iron_ore).toBe(base + 500);
   });
 });
