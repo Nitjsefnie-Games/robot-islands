@@ -58,9 +58,14 @@ describe('currentTint', () => {
   });
 
   it('returns the night tint for a Brno night instant (real sun)', () => {
-    const t = new Date('2026-05-29T19:43:00Z').getTime();
+    const t = new Date('2026-05-29T00:30:00Z').getTime();
     const tint = currentTint(t, 49.20, 16.61);
-    expect(tint.alpha).toBeGreaterThan(0.2); // night alpha is 0.32
+    expect(tint.alpha).toBeCloseTo(0.32, 2);
+  });
+
+  it('returns the day tint for a Brno day instant (real sun)', () => {
+    const t = new Date('2026-05-29T10:00:00Z').getTime();
+    expect(currentTint(t, 49.20, 16.61).alpha).toBe(0);
   });
 
   it('still returns the synthetic result for a one-arg call (fallback guard)', () => {

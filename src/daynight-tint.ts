@@ -12,7 +12,7 @@
 // smoothly during normal play and is invisible during offline catchup
 // (which integrates entire phases at a time).
 
-import { CIVIL_TWILIGHT_RAD, DAY_DURATION_MS, dayPhase, solarAltitude } from './daynight.js';
+import { CIVIL_TWILIGHT_RAD, DAY_DURATION_MS, dayPhase, realPhaseName, solarAltitude } from './daynight.js';
 
 const TRANSITION_MS = 10 * 60 * 1000;
 
@@ -82,9 +82,7 @@ export function currentTint(
     const t = Math.min(1, Math.max(0, (h - (CIVIL_TWILIGHT_RAD - TINT_FADE_RAD)) / (2 * TINT_FADE_RAD)));
     return blendTints(PHASE_TINT.night, twilight, t);
   }
-  if (h >= 0) return PHASE_TINT.day;
-  if (h < CIVIL_TWILIGHT_RAD) return PHASE_TINT.night;
-  return twilight;
+  return PHASE_TINT[realPhaseName(nowMs, lat, lon)];
 }
 
 /** Synthetic-quadrant tint — the pre-real-sun behaviour, retained as the
