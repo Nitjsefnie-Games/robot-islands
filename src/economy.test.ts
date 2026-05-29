@@ -1290,16 +1290,26 @@ describe('skill-tree integration (§9.3)', () => {
     expect(production.iron_ore).toBeCloseTo((1 / 20) * (1 + blast.magnitude) * (1 + deep.magnitude), 9);
   });
 
-  it('storage.notable.verticalSilo unlocked: effective caps are 1.20× the nominal storageCaps map', () => {
-    const state = makeState({
+  it('storage.notable.verticalSilo unlocked: dry-goods category cap rises by node magnitude', () => {
+    // C3a: verticalSilo is now dry_goods-only (was uniform storageCapMul).
+    // iron_ore is a dry_goods resource, so its cap rises by exactly the
+    // node's derived dry_goods-notable magnitude (the aura does NOT self-apply
+    // to a lone unlocked node). Magnitude is owned by the bijection/magnitudes
+    // test; this test owns *application* — that cap() routes through the
+    // dry_goods category mul. Same pattern as blastOptimization at ~:1255.
+    const node = FULL_CATALOG.find((n) => n.id === 'storage.notable.verticalSilo')!;
+    const base = makeState({
+      buildings: [MINE],
+      inventory: { ...blankInventory(), iron_ore: 100 },
+    });
+    const boosted = makeState({
       buildings: [MINE],
       inventory: { ...blankInventory(), iron_ore: 100 },
       unlockedNodes: new Set(['storage.notable.verticalSilo']),
     });
-    advanceIsland(state, 100_000, { defs: POWER_FREE });
-    // Effective cap is 120. Mine produces ~0.0588/s; after 100s inventory is
-    // ~105.88, well below the 120 cap so the mine never stalled.
-    expect(state.inventory.iron_ore).toBeCloseTo(105, 6);
+    const baseCap = cap(base, 'iron_ore');
+    const boostedCap = cap(boosted, 'iron_ore');
+    expect(boostedCap / baseCap).toBeCloseTo(1 + node.magnitude, 9);
   });
 });
 
@@ -4183,8 +4193,13 @@ describe('effectiveSkillMultipliers memoization', () => {
       buildings: [MINE],
       inventory: { ...blankInventory(), iron_ore: 50 },
     });
+    // C3a: storageCapMul catalog nodes are gone; use a dry_goods category-cap
+    // node (verticalSilo) — iron_ore is dry_goods so its cap rises by the
+    // node magnitude. Vehicle for the memoization-invalidation check.
     const storageNode = FULL_CATALOG.find(
-      (n) => n.effect.kind === 'storageCapMul',
+      (n) =>
+        n.effect.kind === 'storageCategoryCapMul' &&
+        n.effect.category === 'dry_goods',
     )!;
 
     // Tick once without the node. Cap reflects the base.

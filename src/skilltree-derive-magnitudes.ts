@@ -39,7 +39,6 @@ export const POOL_TARGETS: Readonly<Record<string, number>> = {
   'storageCategoryCapMul:liquid_gas': Math.sqrt(10),
   'storageCategoryCapMul:components': Math.sqrt(10),
   'storageCategoryCapMul:rare': Math.sqrt(10),
-  'storageCapMul': Math.sqrt(10),
   'routeCapacityMul': 10,
   'maintenanceThresholdMul': 10,
   'mineYieldBonusMul': Math.sqrt(10),

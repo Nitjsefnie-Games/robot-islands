@@ -266,24 +266,28 @@ export const POWER_SYSTEMS_FILLER_NODES = POWER_SYSTEMS_FILLER_ARCHETYPES.flatMa
 // ---------------------------------------------------------------------------
 
 export const STORAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C3a: storage is now ONE capacity lever-family, category-sliced into 4
+  // per-category cap chains. 4×4 = 16 filler; with 4 notables + 2 keystones
+  // that is 22 ≤ 23 (a 5th node anywhere would overflow to 24).
   {
-    idPrefix: 'storage.uniformCap', effectKind: 'storageCapMul',
-    subPath: 'storage', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
+    idPrefix: 'storage.capDry', effectKind: 'storageCategoryCapMul',
+    effectExtra: { category: 'dry_goods' }, subPath: 'storage',
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 4,
   },
   {
-    idPrefix: 'storage.categoryCap', effectKind: 'storageCategoryCapMul',
+    idPrefix: 'storage.capLiq', effectKind: 'storageCategoryCapMul',
+    effectExtra: { category: 'liquid_gas' }, subPath: 'storage',
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 4,
+  },
+  {
+    idPrefix: 'storage.capComp', effectKind: 'storageCategoryCapMul',
     effectExtra: { category: 'components' }, subPath: 'storage',
-    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 4,
   },
   {
-    idPrefix: 'storage.maintenance', effectKind: 'maintenanceThresholdMul',
-    subPath: 'storage', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
-  },
-  {
-    idPrefix: 'storage.manufacturing', effectKind: 'recipeRateMul',
-    effectExtra: { category: 'manufacturing' }, subPath: 'storage',
-    growth: 1.10,
-    baseCost: 1, costGrowth: 1.5, count: 8,
+    idPrefix: 'storage.capRare', effectKind: 'storageCategoryCapMul',
+    effectExtra: { category: 'rare' }, subPath: 'storage',
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 4,
   },
 ];
 export const STORAGE_FILLER_NODES = STORAGE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -443,19 +447,13 @@ export const AQUACULTURE_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const AQUACULTURE_FILLER_NODES = AQUACULTURE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const HYDROPROCESSING_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C3a: deliberately-sparse single-chain sub-path (spec-approved). The
+  // generic storageCapMul chain and the powerConsumptionMul chain were
+  // removed; only the chemistry recipe-rate chain remains.
   {
     idPrefix: 'hydroprocessing.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'chemistry' }, subPath: 'hydroprocessing',
     growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
-  },
-  {
-    idPrefix: 'hydroprocessing.powerConsumption', effectKind: 'powerConsumptionMul',
-    effectExtra: { reduce: true }, subPath: 'hydroprocessing',
-    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 6,
-  },
-  {
-    idPrefix: 'hydroprocessing.storageCap', effectKind: 'storageCapMul',
-    subPath: 'hydroprocessing', growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 5,
   },
 ];
 export const HYDROPROCESSING_FILLER_NODES = HYDROPROCESSING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);

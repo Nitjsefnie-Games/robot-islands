@@ -240,7 +240,7 @@ function storageCrystal(tier: 1 | 2 | 3, scale: number): CrystalDef {
     tier,
     eligibleSubPaths: ['storage' as SubPathId],
     nodes: [
-      { idSuffix: 'left', cost: 2 * tier, magnitude: baseArm * scale, effect: {"kind":"storageCapMul"}, description: `Storage capacity bonus (+Math.round(baseArm * scale * 100)%)`, position: { dx: -30, dy: 30 } },
+      { idSuffix: 'left', cost: 2 * tier, magnitude: baseArm * scale, effect: {"kind":"storageCategoryCapMul","category":"liquid_gas"}, description: `Liquid/gas storage capacity bonus`, position: { dx: -30, dy: 30 } },
       { idSuffix: 'right', cost: 2 * tier, magnitude: baseArm * scale, effect: {"kind":"storageCategoryCapMul","category":"dry_goods"}, description: `dry_goods storage cap bonus (+Math.round(baseArm * scale * 100)%)`, position: { dx: 30, dy: 30 } },
     ],
     edges: [

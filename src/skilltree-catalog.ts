@@ -330,8 +330,8 @@ export const STORAGE_NOTABLES: RawSkillNode[] = [
     subPath: 'storage',
     depth: 4,
     cost: 4,
-    effect: { kind: 'storageCapMul' },
-    description: 'Vertical Silos — uniform storage cap',
+    effect: { kind: 'storageCategoryCapMul', category: 'dry_goods' },
+    description: 'Vertical Silos — dry-goods storage cap',
     aura: { radius: 1, bonus: 0.10 }
   },
   {
@@ -536,8 +536,8 @@ export const HYDROPROCESSING_NOTABLES: RawSkillNode[] = [
     subPath: 'hydroprocessing',
     depth: 3,
     cost: 3,
-    effect: { kind: 'storageCapMul' },
-    description: 'Floating Tanks — uniform storage cap'
+    effect: { kind: 'storageCategoryCapMul', category: 'liquid_gas' },
+    description: 'Floating Tanks — liquid/gas storage cap'
   },
   {
     id: 'hydroprocessing.notable.membraneBreakthrough' as NodeId,
@@ -804,8 +804,8 @@ export const ROLE_ABSORPTION_KEYSTONES: RawSkillNode[] = [
   },
   {
     id: 'storage.keystone.masterCache' as NodeId,
-    subPath: 'storage', depth: 8, cost: 10, effect: { kind: 'storageCapMul' },
-    description: 'Master Cache — All storage caps expanded'
+    subPath: 'storage', depth: 8, cost: 10, effect: { kind: 'storageCategoryCapMul', category: 'components' },
+    description: 'Master Cache — components storage cap'
   },
   {
     id: 'power_systems.keystone.researchBeacon' as NodeId,
@@ -928,8 +928,8 @@ export const RULE_BREAKER_KEYSTONES: RawSkillNode[] = [
   },
   {
     id: 'storage.keystone.vaultMastery' as NodeId,
-    subPath: 'storage', depth: 7, cost: 8, effect: { kind: 'storageCapMul' },
-    description: 'Vault Mastery — uniform storage cap'
+    subPath: 'storage', depth: 7, cost: 8, effect: { kind: 'storageCategoryCapMul', category: 'rare' },
+    description: 'Vault Mastery — rare storage cap'
   },
   {
     id: 'network.keystone.meshMastery' as NodeId,
