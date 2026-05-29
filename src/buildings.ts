@@ -188,6 +188,11 @@ export function floorLevel(b: { floorLevel?: number }): number {
   return Math.max(0, Math.min(9, b.floorLevel ?? 0));
 }
 
+/** Floor-upgrade multiplier for throughput / power output / storage: ×(1+L). */
+export function floorEffectMul(level: number): number { return 1 + level; }
+/** Floor-upgrade multiplier for consumer power DRAW: ×(1+0.5L) (sub-linear vs output). */
+export function floorPowerDrawMul(level: number): number { return 1 + 0.5 * level; }
+
 export type ConvertToServitorResult =
   | { readonly ok: true; readonly cost: Partial<Record<ResourceId, number>> }
   | { readonly ok: false; readonly reason: 'building-not-found' | 'already-servitor' | 'insufficient-materials' };

@@ -34,7 +34,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import { hasOperationalBuilding, isOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding, floorLevel, floorEffectMul, floorPowerDrawMul, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { dayPhaseName, nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
@@ -938,7 +938,7 @@ export function computeRates(
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: gateResult.effectiveMul });
         continue;
       }
-      const baseRate = (1 / GENESIS_CYCLE_SEC) * gateResult.effectiveMul;
+      const baseRate = (1 / GENESIS_CYCLE_SEC) * gateResult.effectiveMul * floorEffectMul(floorLevel(b));
       tentative.push({ building: b, recipe: syntheticRecipe, baseRate, buffStack: 1, effectiveMul: gateResult.effectiveMul });
       tentSupply[target] = (tentSupply[target] ?? 0) + baseRate;
       continue;
@@ -1042,7 +1042,7 @@ export function computeRates(
     const cryoMul = Object.keys(recipe.outputs).some((r) => r.includes('cryo'))
       ? modifierMul.cryoRecipeRateMul
       : 1;
-    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul * heatFactor;
+    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul * heatFactor * floorEffectMul(floorLevel(b));
     tentative.push({ building: b, recipe, baseRate, buffStack, effectiveMul: gateResult.effectiveMul * heatFactor });
     const pass1Outputs = resolveRotatingOutput(recipe, t);
     for (const [r, yld] of Object.entries(pass1Outputs)) {
@@ -1070,7 +1070,7 @@ export function computeRates(
     // demand calculation matches actual consumption under the gate.
     // Without this, a halved consumer over-claims inputs and starves
     // siblings.
-    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul * te.effectiveMul;
+    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul * te.effectiveMul * floorEffectMul(floorLevel(te.building));
     const externalSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
     for (const r of Object.keys(tentSupply) as ResourceId[]) {
       externalSupply[r] = tentSupply[r] ?? 0;
@@ -1174,11 +1174,11 @@ export function computeRates(
     // currently only `wind_turbine`) get +50% wattage on `high_wind`
     // islands. Non-wind producers ignore the multiplier (defaults to 1×).
     const windFactor = def.power?.kind === 'wind' ? modifierMul.windPowerMul : 1;
-    powerProduced += producesBase * solarFactor * windFactor * skillMul.powerProduction;
+    powerProduced += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction;
     // §5.1 rebalance: per-building draw scales by nominal throughput fraction.
     // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
     // so we divide. Default 1.0 leaves draw untouched.
-    powerConsumed += ((def.power?.consumes ?? 0) * nominalThroughputFrac) / skillMul.powerConsumption;
+    powerConsumed += ((def.power?.consumes ?? 0) * floorPowerDrawMul(floorLevel(b)) * nominalThroughputFrac) / skillMul.powerConsumption;
   }
   // §13.3 Genesis Chamber tier-based power draw (converted kW → W).
   for (const b of validBuildings) {
