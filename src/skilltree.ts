@@ -350,6 +350,15 @@ export function tierRequiredForDepth(depth: number): Tier {
   return 2;
 }
 
+/** §9.3 depth→tier gate: true when `level` puts the island in (or above) the
+ *  tier band required to purchase a node at `depth`. Pure; the canonical
+ *  predicate behind the hard gate in `buyNode` and the path-exclusion in
+ *  `costToUnlock`. (Hoisted next to its tier-logic siblings for findability;
+ *  function declarations hoist, so call-site order is unaffected.) */
+function depthTierEligible(level: number, depth: number): boolean {
+  return tierForLevel(level) >= tierRequiredForDepth(depth);
+}
+
 /** Spec §9.3 placeholder is `2^(depth-1)`, but combined with the flat
  *  1-point-per-level grant that costs the full tree ~500k levels —
  *  every node past depth ~6 is unreachable. The 1.5 ramp keeps the
@@ -1320,13 +1329,22 @@ export function costToUnlock(
 ): CheapestPathResult | null {
   if (ownedNodes.has(target)) return { path: [], totalCost: 0 };
 
-  // Build adjacency from outgoing edges (since edges are directed).
+  // Build adjacency from outgoing edges (since edges are directed). §9.3 tier
+  // gate: drop any edge whose destination node is tier-locked at the island's
+  // current level, so cost/reachability never offers a path the hard gate in
+  // `buyNode` will reject. The target itself is included in this filter — a
+  // tier-locked target becomes unreachable (returns null), matching buyNode.
+  const nodeDepth = new Map<NodeId, number>();
+  for (const n of graph.nodes) nodeDepth.set(n.id as NodeId, n.depth);
+  const islandTier = tierForLevel(state.level);
   const adjacency = new Map<NodeId, Edge[]>();
   const allEdges: Edge[] = [
     ...graph.edges,
     ...graph.bridges.filter((b) => isBridgeActive(b, state, graph)),
   ];
   for (const e of allEdges) {
+    const toDepth = nodeDepth.get(e.to as NodeId);
+    if (toDepth !== undefined && islandTier < tierRequiredForDepth(toDepth)) continue;
     const list = adjacency.get(e.from as NodeId) ?? [];
     list.push(e);
     adjacency.set(e.from as NodeId, list);
@@ -1392,6 +1410,17 @@ function isRootNode(graph: Graph, nodeId: NodeId): boolean {
 export function buyNode(graph: Graph, state: IslandState, target: NodeId): void {
   if (state.unlockedNodes.has(target)) return;
 
+  // §9.3 hard tier gate (target). Checked before pathfinding so a tier-locked
+  // target always reports the tier reason — not a "unreachable" artifact of
+  // costToUnlock having filtered the tier-locked node out of the graph.
+  const targetNode = graph.nodes.find((n) => n.id === target);
+  if (targetNode && !depthTierEligible(state.level, targetNode.depth)) {
+    throw new Error(
+      `buyNode: node ${target} requires tier ${tierRequiredForDepth(targetNode.depth)} ` +
+        `(island is tier ${tierForLevel(state.level)})`,
+    );
+  }
+
   const result = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, target);
   if (result === null) {
     // Root-node fallback: no incoming edges → buy directly at node cost.
@@ -1400,6 +1429,10 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
     }
     const node = graph.nodes.find((n) => n.id === target);
     if (!node) throw new Error(`buyNode: unknown target ${target}`);
+    // No tier check here: the target precheck above already resolved this same
+    // node and threw if tier-locked, so by the time the root-fallback branch
+    // runs the target is provably tier-eligible (or `undefined` → handled by
+    // the "unknown target" throw above).
     if (state.unspentSkillPoints < node.cost) {
       throw new Error(
         `buyNode: insufficient SP (need ${node.cost}, have ${state.unspentSkillPoints})`,
@@ -1409,6 +1442,27 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
     state.unlockedNodes.add(target);
     state.auraAmpVersion++;
     return;
+  }
+
+  // §9.3 hard tier gate: every node that would be unlocked (each `e.to` on the
+  // path — the path's starting frontier node is already owned and not checked)
+  // must be tier-eligible; an under-tier intermediate blocks the whole purchase
+  // BEFORE any SP is charged or any node/edge is added.
+  //
+  // Today this loop is defensive backup: costToUnlock's edge-filter already
+  // drops tier-locked destinations, so no path it returns can contain one. It
+  // earns its keep if that filter is ever RELAXED (e.g. a future graphview
+  // tooltip fix that wants cost previews for locked nodes) — at which point a
+  // bridge could route a path cross-branch through a higher-tier intermediate
+  // that the single target precheck would not catch.
+  for (const e of result.path) {
+    const node = graph.nodes.find((n) => n.id === e.to);
+    if (node && !depthTierEligible(state.level, node.depth)) {
+      throw new Error(
+        `buyNode: node ${e.to} requires tier ${tierRequiredForDepth(node.depth)} ` +
+          `(island is tier ${tierForLevel(state.level)})`,
+      );
+    }
   }
 
   if (state.unspentSkillPoints < result.totalCost) {

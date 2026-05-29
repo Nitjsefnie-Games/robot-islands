@@ -613,10 +613,13 @@ describe('costToUnlock', () => {
     return { nodes, edges, bridges: [], graftSockets: [] } as Graph;
   }
 
+  // All test nodes are depth 1 (tier-2 floor → level ≥ 5). costToUnlock now
+  // tier-filters by state.level, so the duck-typed state carries a tier-eligible
+  // level; otherwise an absent level reads as tier 1 and filters every node out.
   it('finds cheapest path from owned R to Z (= 2+3+5 = 10)', () => {
     const g = mkGraph();
     const owned = new Set(['R']);
-    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned } as any, 'Z');
+    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned, level: 15 } as any, 'Z');
     expect(result).not.toBeNull();
     expect(result!.totalCost).toBe(10);
     expect(result!.path.map((e) => e.id)).toEqual(['e_RA', 'e_AX', 'e_XZ']);
@@ -625,7 +628,7 @@ describe('costToUnlock', () => {
   it('uses owned A as a starting frontier (cost = A→X→Z = 8)', () => {
     const g = mkGraph();
     const owned = new Set(['R', 'A']);
-    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned } as any, 'Z');
+    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned, level: 15 } as any, 'Z');
     expect(result).not.toBeNull();
     expect(result!.totalCost).toBe(8);
   });
@@ -633,7 +636,7 @@ describe('costToUnlock', () => {
   it('returns null when no path exists', () => {
     const g = mkGraph();
     const owned = new Set(['R']);
-    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned } as any, 'NOTREAL');
+    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned, level: 15 } as any, 'NOTREAL');
     expect(result).toBeNull();
   });
 });
@@ -666,9 +669,12 @@ describe('buyNode', () => {
     return { nodes, edges, bridges: [], graftSockets: [] } as Graph;
   }
 
+  // All mkGraph nodes are depth 1 → tier-2 floor (level ≥ 5). The depth→tier
+  // gate is exercised separately below; here we use a tier-2-eligible level so
+  // these path/SP assertions test only the cost mechanics, not the gate.
   it('buys Z from R-only state, auto-owns A and X intermediates', () => {
     const g = mkGraph();
-    const state = makeState({ unspentSkillPoints: 20 });
+    const state = makeState({ level: 5, unspentSkillPoints: 20 });
     state.unlockedNodes.add('R');
     buyNode(g, state, 'Z');
     expect(state.unspentSkillPoints).toBe(10); // 20 - 10
@@ -680,17 +686,148 @@ describe('buyNode', () => {
 
   it('throws on insufficient SP', () => {
     const g = mkGraph();
-    const state = makeState({ unspentSkillPoints: 5 });
+    const state = makeState({ level: 5, unspentSkillPoints: 5 });
     state.unlockedNodes.add('R');
     expect(() => buyNode(g, state, 'Z')).toThrow(/insufficient/);
   });
 
   it('is a no-op when target is already owned', () => {
     const g = mkGraph();
-    const state = makeState({ unspentSkillPoints: 10 });
+    const state = makeState({ level: 5, unspentSkillPoints: 10 });
     state.unlockedNodes.add('Z');
     buyNode(g, state, 'Z');
     expect(state.unspentSkillPoints).toBe(10);
+  });
+});
+
+describe('buyNode — depth→tier gate (§9.3, tierRequiredForDepth)', () => {
+  // Depth-graded chain R(1) → M(2) → D3(3) → D4(4). Tier requirements:
+  // depth 1/2 → tier 2 (level ≥ 5); depth 3 → tier 3 (level ≥ 15);
+  // depth 4 → tier 4 (level ≥ 30).
+  function mkNode(id: string, depth: number): SkillNode {
+    return {
+      id: id as import('./skilltree.js').NodeId,
+      subPath: 'mining',
+      depth,
+      cost: 0,
+      magnitude: 0,
+      effect: { kind: 'recipeRateMul', category: 'extraction' },
+      description: id,
+    };
+  }
+
+  function mkGraph(): Graph {
+    const nodes: SkillNode[] = [
+      mkNode('R', 1), mkNode('M', 2), mkNode('D3', 3), mkNode('D4', 4),
+    ];
+    const edges = [
+      { id: 'e_RM' as EdgeId, from: 'R' as import('./skilltree-graph.js').NodeId, to: 'M' as import('./skilltree-graph.js').NodeId, cost: 1 },
+      { id: 'e_MD3' as EdgeId, from: 'M' as import('./skilltree-graph.js').NodeId, to: 'D3' as import('./skilltree-graph.js').NodeId, cost: 1 },
+      { id: 'e_D3D4' as EdgeId, from: 'D3' as import('./skilltree-graph.js').NodeId, to: 'D4' as import('./skilltree-graph.js').NodeId, cost: 1 },
+    ];
+    return { nodes, edges, bridges: [], graftSockets: [] } as Graph;
+  }
+
+  it('throws when buying a depth-3 node on a tier-2 island (level 14 < 15)', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 14, unspentSkillPoints: 50 });
+    state.unlockedNodes.add('R');
+    state.unlockedNodes.add('M');
+    expect(() => buyNode(g, state, 'D3')).toThrow(/tier/i);
+    // No partial mutation: D3 not owned, SP untouched.
+    expect(state.unlockedNodes.has('D3')).toBe(false);
+    expect(state.unspentSkillPoints).toBe(50);
+  });
+
+  it('succeeds buying a depth-3 node on a tier-3 island (level 15)', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 15, unspentSkillPoints: 50 });
+    state.unlockedNodes.add('R');
+    state.unlockedNodes.add('M');
+    buyNode(g, state, 'D3');
+    expect(state.unlockedNodes.has('D3')).toBe(true);
+  });
+
+  it('blocks the whole purchase when an INTERMEDIATE node is under-tier', () => {
+    // From R(1) only, buying D3(3) would auto-unlock M(2) and D3(3). At level
+    // 14 (tier 2) M is fine but D3 violates → the whole purchase is rejected.
+    const g = mkGraph();
+    const state = makeState({ level: 14, unspentSkillPoints: 50 });
+    state.unlockedNodes.add('R');
+    expect(() => buyNode(g, state, 'D3')).toThrow(/tier/i);
+    expect(state.unlockedNodes.has('M')).toBe(false);
+    expect(state.unspentSkillPoints).toBe(50);
+  });
+
+  it('rejects a deeper depth-4 node at tier-3 (level 15 < 30), passing depth-3 first', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 15, unspentSkillPoints: 50 });
+    state.unlockedNodes.add('R');
+    state.unlockedNodes.add('M');
+    state.unlockedNodes.add('D3');
+    expect(() => buyNode(g, state, 'D4')).toThrow(/tier/i);
+  });
+
+  it('leaves depth-1/2 nodes purchasable at tier-2 (level 5), while depth-3 throws', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 5, unspentSkillPoints: 50 });
+    state.unlockedNodes.add('R');
+    // depth-2 buy is allowed at tier 2.
+    buyNode(g, state, 'M');
+    expect(state.unlockedNodes.has('M')).toBe(true);
+    // depth-3 buy is NOT allowed at tier 2.
+    expect(() => buyNode(g, state, 'D3')).toThrow(/tier/i);
+  });
+
+  it('root-fallback target is tier-gated too (depth-3 root at low tier throws)', () => {
+    // D3root has zero incoming edges → root-fallback path in buyNode.
+    const nodes: SkillNode[] = [mkNode('D3root', 3)];
+    const g = { nodes, edges: [], bridges: [], graftSockets: [] } as Graph;
+    const state = makeState({ level: 14, unspentSkillPoints: 50 });
+    expect(() => buyNode(g, state, 'D3root')).toThrow(/tier/i);
+    expect(state.unlockedNodes.has('D3root')).toBe(false);
+  });
+});
+
+describe('costToUnlock — tier-locked nodes excluded at low tier (§9.3)', () => {
+  function mkNode(id: string, depth: number): SkillNode {
+    return {
+      id: id as import('./skilltree.js').NodeId,
+      subPath: 'mining',
+      depth,
+      cost: 0,
+      magnitude: 0,
+      effect: { kind: 'recipeRateMul', category: 'extraction' },
+      description: id,
+    };
+  }
+
+  function mkGraph(): Graph {
+    const nodes: SkillNode[] = [mkNode('R', 1), mkNode('M', 2), mkNode('D3', 3)];
+    const edges = [
+      { id: 'e_RM' as EdgeId, from: 'R' as import('./skilltree-graph.js').NodeId, to: 'M' as import('./skilltree-graph.js').NodeId, cost: 1 },
+      { id: 'e_MD3' as EdgeId, from: 'M' as import('./skilltree-graph.js').NodeId, to: 'D3' as import('./skilltree-graph.js').NodeId, cost: 1 },
+    ];
+    return { nodes, edges, bridges: [], graftSockets: [] } as Graph;
+  }
+
+  it('returns null for a depth-3 target on a tier-2 island (level 14)', () => {
+    const g = mkGraph();
+    const owned = new Set(['R']);
+    const state = makeState({ level: 14 });
+    state.unlockedNodes = owned as Set<import('./skilltree.js').NodeId>;
+    const result = costToUnlock(g, owned, new Set(), state, 'D3');
+    expect(result).toBeNull();
+  });
+
+  it('finds the depth-3 path once the island is tier 3 (level 15)', () => {
+    const g = mkGraph();
+    const owned = new Set(['R']);
+    const state = makeState({ level: 15 });
+    state.unlockedNodes = owned as Set<import('./skilltree.js').NodeId>;
+    const result = costToUnlock(g, owned, new Set(), state, 'D3');
+    expect(result).not.toBeNull();
+    expect(result!.path.map((e) => e.id)).toEqual(['e_RM', 'e_MD3']);
   });
 });
 
