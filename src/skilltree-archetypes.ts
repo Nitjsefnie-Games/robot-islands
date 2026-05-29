@@ -214,6 +214,9 @@ export const ELECTRONICS_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const ELECTRONICS_FILLER_NODES = ELECTRONICS_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const POWER_SYSTEMS_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C6a: xpGain (xpGainMul) demoted — power_systems.notable.xpTelemetry keeps
+  // xpGainMul:(global) alive in the pool. batteryCapacity (batteryCapacityMul)
+  // demoted — power_systems.notable.electrochemistry keeps it alive. 2 kept chains.
   {
     idPrefix: 'powerSystems.production', effectKind: 'powerProductionMul',
     subPath: 'power_systems', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
@@ -222,16 +225,6 @@ export const POWER_SYSTEMS_FILLER_ARCHETYPES: FillerArchetype[] = [
     idPrefix: 'powerSystems.consumption', effectKind: 'powerConsumptionMul',
     effectExtra: { reduce: true }, subPath: 'power_systems',
     growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 7,
-  },
-  {
-    idPrefix: 'powerSystems.xpGain', effectKind: 'xpGainMul',
-    subPath: 'power_systems',
-    growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
-  },
-  {
-    idPrefix: 'powerSystems.batteryCapacity', effectKind: 'batteryCapacityMul',
-    subPath: 'power_systems', growth: 1.10,
-    baseCost: 1, costGrowth: 1.5, count: 8,
   },
 ];
 export const POWER_SYSTEMS_FILLER_NODES = POWER_SYSTEMS_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -268,6 +261,8 @@ export const STORAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const STORAGE_FILLER_NODES = STORAGE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const TRANSPORT_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C6a: droneFuel (droneFuelEfficiencyMul) rehomed to robotics — robotics.droneFuel
+  // filler already carries the pool. 2 kept chains.
   {
     idPrefix: 'transport.routeCapacity', effectKind: 'routeCapacityMul',
     subPath: 'transport', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
@@ -276,25 +271,17 @@ export const TRANSPORT_FILLER_ARCHETYPES: FillerArchetype[] = [
     idPrefix: 'transport.airshipRange', effectKind: 'airshipRangeMul',
     subPath: 'transport', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
-  {
-    idPrefix: 'transport.droneFuel', effectKind: 'droneFuelEfficiencyMul',
-    subPath: 'transport', growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
-  },
 ];
 export const TRANSPORT_FILLER_NODES = TRANSPORT_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const NETWORK_FILLER_ARCHETYPES: FillerArchetype[] = [
-  {
-    idPrefix: 'network.commRange', effectKind: 'commRangeMul',
-    subPath: 'network', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
-  },
+  // C6a: deliberately-sparse 1-chain sub-path (spec-approved). commRange
+  // (commRangeMul) rehomed to communication — communication.commRange filler
+  // carries the pool. scanner (scannerCoverageMul) rehomed to discovery —
+  // discovery.scannerCoverage + oceanography.scannerCoverage fillers carry the pool.
   {
     idPrefix: 'network.teleporter', effectKind: 'teleporterEfficiencyMul',
     subPath: 'network', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
-  },
-  {
-    idPrefix: 'network.scanner', effectKind: 'scannerCoverageMul',
-    subPath: 'network', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
 ];
 export const NETWORK_FILLER_NODES = NETWORK_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
