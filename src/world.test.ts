@@ -18,6 +18,7 @@ import {
   type IslandSpec,
 } from './world.js';
 import type { TerrainKind } from './island.js';
+import type { ResourceId } from './recipes.js';
 import { ALL_RESOURCES } from './recipes.js';
 
 function makeSpec(over: Partial<IslandSpec>): IslandSpec {
@@ -304,29 +305,30 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
     // contradicts §3.7's literal "empty" rule (see `startingInventory` in
     // world.ts for the justification).
     //
-    // Pins the §14 starter contract so a future regression to all-zero
-    // (or to a heavier seed) fails loudly. The kit gives enough for the
-    // first ~3-4 T1 buildings (Mine + Coal Gen + Antenna T1 + spare):
-    //   stone: 60, wood: 40, foundation_kit: 1
+    // Pins the rev-9 starter contract per rev-16 §12.9.3 + spec §03.
+    // 9 line items sized to reach 1x battery_bank in <= 45 min.
     const w = makeInitialWorld(0);
     const home = w.islands.find((s) => s.id === 'home')!;
     const state = makeInitialIslandState(home, 0);
-    // The starter bundle resources land at the §14-tuned figures.
-    expect(state.inventory.stone).toBe(60);
-    expect(state.inventory.wood).toBe(40);
-    expect(state.inventory.steel).toBe(30);
+    // The starter bundle resources land at the rev-9-tuned figures.
+    expect(state.inventory.stone).toBe(1200);
+    expect(state.inventory.wood).toBe(600);
+    expect(state.inventory.iron_ore).toBe(30);
+    expect(state.inventory.coal).toBe(80);
+    expect(state.inventory.iron_ingot).toBe(60);
+    expect(state.inventory.bolt).toBe(25);
+    expect(state.inventory.limestone).toBe(15);
+    expect(state.inventory.saltwater_cell).toBe(4);
     expect(state.inventory.foundation_kit).toBe(1);
-    // Every other resource stays at 0 — the kit is INTENTIONALLY minimal,
-    // not a "skip the early game" seed. Pre-§3.7 regression sentinels
-    // (coal/biofuel) still pin to 0 to catch any drift back to the
-    // heavily-seeded pre-cleanup state.
-    expect(state.inventory.coal).toBe(0);
-    expect(state.inventory.biofuel).toBe(0);
-    expect(state.inventory.iron_ore).toBe(0);
-    expect(state.inventory.iron_ingot).toBe(0);
+    // steel intentionally 0 — player walks the iron→steel chain.
+    expect(state.inventory.steel).toBe(0);
     // Every NON-starter resource is 0.
+    const starterResources = new Set<ResourceId>([
+      'stone', 'wood', 'iron_ore', 'coal', 'iron_ingot', 'bolt',
+      'limestone', 'saltwater_cell', 'foundation_kit',
+    ]);
     for (const r of ALL_RESOURCES) {
-      if (r === 'stone' || r === 'wood' || r === 'steel' || r === 'foundation_kit') continue;
+      if (starterResources.has(r)) continue;
       expect(state.inventory[r], `inventory.${r} should be 0`).toBe(0);
     }
   });
