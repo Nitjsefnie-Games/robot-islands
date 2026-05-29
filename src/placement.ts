@@ -113,7 +113,7 @@ export function placementCostFor(
 export function upgradeCost(
   def: BuildingDef,
 ): Partial<Record<ResourceId, number>> {
-  const base = def.placementCost ?? {};
+  const base = placementCostFor(def);
   const cost: Partial<Record<ResourceId, number>> = {};
   for (const [r, n] of Object.entries(base) as Array<[ResourceId, number]>) {
     if (n > 0) cost[r] = n * 0.8;

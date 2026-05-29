@@ -1487,9 +1487,10 @@ describe('upgradeCost', () => {
   });
 
   it('preserves fractional values when ×0.8 is non-integer', () => {
-    // Workshop: { wood: 150, stone: 100, iron_ingot: 30 } → ×0.8
-    const ws = BUILDING_DEFS.workshop;
-    expect(upgradeCost(ws)).toEqual({ wood: 120, stone: 80, iron_ingot: 24 });
+    // Real defs all have costs that are multiples of 5, so ×0.8 is integral.
+    // Use a synthetic def with a non-÷5 entry to genuinely exercise float path.
+    const def = { ...BUILDING_DEFS.mine, placementCost: { wood: 2 } };
+    expect(upgradeCost(def)).toEqual({ wood: 1.6 });
   });
 });
 
