@@ -44,7 +44,6 @@ const LEGACY_TEST_NODES: ReadonlyArray<SkillNode> = [
   { id: 'forestry.3', subPath: 'forestry', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'loggerExoticTrickleMul' }, description: '' },
   { id: 'power_systems.1', subPath: 'power_systems', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'powerProductionMul' }, description: '' },
   { id: 'power_systems.2', subPath: 'power_systems', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'powerConsumptionMul', reduce: true }, description: '' },
-  { id: 'storage.1', subPath: 'storage', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'storageCapMul' }, description: '' },
   { id: 'storage.2', subPath: 'storage', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'storageCategoryCapMul', category: 'rare' }, description: '' },
   { id: 'robotics.1', subPath: 'robotics', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'constructionTimeMul' }, description: '' },
   { id: 'robotics.2', subPath: 'robotics', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'parallelBuildCapAdd' }, description: '' },
@@ -302,7 +301,6 @@ describe('skill tree depth', () => {
     // 1.05 * 1.10 * 1.20 = 1.386
     expect(m.recipeRate.extraction).toBeCloseTo(1.386, 9);
     expect(m.recipeRate.smelting).toBe(1);
-    expect(m.storageCap).toBe(1);
     expect(m.powerProduction).toBe(1);
   });
 
@@ -338,7 +336,6 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.recipeRate.extraction).toBe(1);
     expect(m.recipeRate.smelting).toBe(1);
     expect(m.recipeRate.power).toBe(1);
-    expect(m.storageCap).toBe(1);
     expect(m.powerProduction).toBe(1);
     expect(m.powerConsumption).toBe(1);
   });
@@ -348,7 +345,6 @@ describe('effectiveSkillMultipliers', () => {
     const m = effectiveSkillMultipliers(s, LG);
     expect(m.recipeRate.extraction).toBeCloseTo(1.05, 9);
     expect(m.recipeRate.smelting).toBe(1);
-    expect(m.storageCap).toBe(1);
   });
 
   it('mining.1 + mining.2 split across recipeRate.extraction and mineYieldBonus', () => {
@@ -365,14 +361,6 @@ describe('effectiveSkillMultipliers', () => {
     const m = effectiveSkillMultipliers(s, LG);
     expect(m.recipeRate.extraction).toBeCloseTo(1.05, 9);
     expect(m.powerProduction).toBeCloseTo(1.05, 9);
-    expect(m.storageCap).toBe(1);
-  });
-
-  it('storage.1 applies a uniform 5% cap multiplier', () => {
-    const s = makeState({ unlockedNodes: new Set(['storage.1']) });
-    const m = effectiveSkillMultipliers(s, LG);
-    expect(m.storageCap).toBeCloseTo(1.05, 9);
-    expect(m.recipeRate.extraction).toBe(1);
   });
 
   it('robotics.1 boosts constructionTime; robotics.2 adds a parallel build slot', () => {
@@ -382,7 +370,6 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.parallelBuildBonus).toBeCloseTo(0.10, 9);
     expect(m.maintenanceThreshold).toBe(1);
     expect(m.recipeRate.extraction).toBe(1);
-    expect(m.storageCap).toBe(1);
     expect(m.powerProduction).toBe(1);
   });
 
@@ -439,7 +426,6 @@ describe('effectiveSkillMultipliers', () => {
     const m = effectiveSkillMultipliers(s, LG);
     expect(m.storageCategoryCap.rare).toBeCloseTo(1.10, 9);
     expect(m.storageCategoryCap.dry_goods).toBe(1);
-    expect(m.storageCap).toBe(1);
   });
 
   it('mining.2 wires mineYieldBonus; mining.3 adds rare helium_3 trickle rate', () => {
@@ -520,7 +506,6 @@ describe('effectiveSkillMultipliers', () => {
     const m = effectiveSkillMultipliers(s, { nodes: LG_BAT, edges: [], bridges: [], graftSockets: [] } as Graph);
     expect(m.batteryCapacity).toBeCloseTo(1.30, 9);
     expect(m.powerProduction).toBe(1); // negative assertion: cross-contamination guard
-    expect(m.storageCap).toBe(1); //                "
   });
 
   it('recipeInputMul nodes fold multiplicatively into recipeInputMul (1.2 × 1.1 = 1.32)', () => {
@@ -534,7 +519,6 @@ describe('effectiveSkillMultipliers', () => {
     const mul = effectiveSkillMultipliers(s, { nodes: LG_RIM, edges: [], bridges: [], graftSockets: [] } as Graph);
     expect(mul.recipeInput).toBeCloseTo(1.32, 5);
     expect(mul.powerConsumption).toBe(1); // negative assertion: cross-contamination guard
-    expect(mul.storageCap).toBe(1); //                "
   });
 });
 

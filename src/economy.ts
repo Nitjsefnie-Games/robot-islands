@@ -434,14 +434,13 @@ export function cap(
   const nominal = override?.[r] ?? state.storageCaps[r] ?? 0;
   if (nominal === 0) return 0;
   const resolvedMult = mult ?? effectiveSkillMultipliers(state);
-  const skillMul = resolvedMult.storageCap;
-  // Storage sub-path (depth ≥ 2): per-category cap multiplier on top of the
-  // uniform skill mul. Looks up the resource's storage category — if it
-  // hasn't been categorised yet (forward-compat with new resources) the
-  // lookup returns undefined and the category-mul defaults to 1.
+  // Storage sub-path (depth ≥ 2): per-category cap multiplier. Looks up the
+  // resource's storage category — if it hasn't been categorised yet
+  // (forward-compat with new resources) the lookup returns undefined and the
+  // category-mul defaults to 1.
   const cat = RESOURCE_STORAGE_CATEGORY[r];
   const catMul = cat ? resolvedMult.storageCategoryCap[cat] ?? 1 : 1;
-  const computedCap = nominal * skillMul * catMul;
+  const computedCap = nominal * catMul;
   if (opts?.ignoreGrace) return computedCap;
   const grace = state.starterInventoryGrace[r] ?? 0;
   return Math.max(computedCap, grace);
@@ -671,7 +670,12 @@ export function layerConditionalBonuses(
     const effect = node.effect;
     const m = 1 + effect.multiplier;
     if (effect.appliesTo === 'storage') {
-      (mul as { storageCap: number }).storageCap *= m;
+      // No-op: storage cap is now per-category (storageCategoryCapMul), there
+      // is no uniform storage-cap multiplier. 'storage' is also a *building*
+      // category, not a recipe category — no recipe consumes
+      // recipeRate['storage'] — so we explicitly drop this here rather than
+      // let it fall through to the recipe-rate branch and write a phantom key.
+      continue;
     } else if (effect.appliesTo === 'power') {
       (mul as { powerProduction: number }).powerProduction *= m;
     } else if (effect.appliesTo === 'xp') {

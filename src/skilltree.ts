@@ -66,7 +66,6 @@ export type NodeId = string;
  * requires both a case here and a fold in that function.
  *
  *   - `recipeRateMul`: multiplies the rate of every recipe matching `category`.
- *   - `storageCapMul`: multiplies every storage cap uniformly.
  *   - `powerProductionMul`: multiplies `building.power.produces`.
  *   - `powerConsumptionMul`: divides `building.power.consumes` (reduce = true
  *     means "lower consumption = good"; multiplier > 1 reduces draw).
@@ -82,7 +81,6 @@ export type StructuralEffectData =
 
 export type SkillEffect =
   | { readonly kind: 'recipeRateMul'; readonly category: RecipeCategory }
-  | { readonly kind: 'storageCapMul' }
   | { readonly kind: 'powerProductionMul' }
   | { readonly kind: 'powerConsumptionMul'; readonly reduce: true }
   | { readonly kind: 'placeholder' }
@@ -795,8 +793,6 @@ export function spendPoint(
 export interface SkillMultipliers {
   /** Per-category recipe rate multiplier. All categories present, default 1. */
   readonly recipeRate: Record<RecipeCategory, number>;
-  /** Uniform storage-cap multiplier. */
-  readonly storageCap: number;
   /** Multiplier applied to building.power.produces. */
   readonly powerProduction: number;
   /** Reduction multiplier applied to building.power.consumes — values > 1
@@ -841,8 +837,8 @@ export interface SkillMultipliers {
   readonly satFuelReserve: number;
   /** Resilience sub-path — DIVIDES repair-drone failure rate. */
   readonly repairDroneReliability: number;
-  /** Storage sub-path (depth >= 3 unique unlocks) — per-category cap mul.
-   *  Composes multiplicatively with the global `storageCap`. */
+  /** Per-category storage-cap multiplier (dry_goods/liquid_gas/components/rare).
+   *  Storage sub-path (depth >= 3 unique unlocks). */
   readonly storageCategoryCap: Record<StorageCategory, number>;
   /** Robotics sub-path primary axis — divides building construction time
    *  at placement. Larger = faster builds. */
@@ -890,7 +886,6 @@ function blankMultipliers(): SkillMultipliers {
   for (const c of ALL_STORAGE_CATEGORIES) storageCategoryCap[c] = 1;
   return {
     recipeRate,
-    storageCap: 1,
     powerProduction: 1,
     powerConsumption: 1,
     recipeInput: 1,
@@ -941,7 +936,6 @@ export function effectiveSkillMultipliers(
   // Mutate-in-place pattern; readonly types on the returned object describe
   // the consumer contract, not the local builder.
   const recipeRate = out.recipeRate as Record<RecipeCategory, number>;
-  let storageCap = 1;
   let powerProduction = 1;
   let powerConsumption = 1;
   let recipeInput = 1;
@@ -993,9 +987,6 @@ export function effectiveSkillMultipliers(
         recipeRate[node.effect.category] = cur * m;
         break;
       }
-      case 'storageCapMul':
-        storageCap *= m;
-        break;
       case 'powerProductionMul':
         powerProduction *= m;
         break;
@@ -1109,7 +1100,6 @@ export function effectiveSkillMultipliers(
   }
   return {
     recipeRate,
-    storageCap,
     powerProduction,
     powerConsumption,
     recipeInput,

@@ -4109,31 +4109,6 @@ describe('conditionalBonus', () => {
     expect(mul.recipeRate.extraction).toBe(1);
   });
 
-  it('layerConditionalBonuses multiplies storageCap when appliesTo is storage', () => {
-    const state = makeState({ unlockedNodes: new Set(['cond.2']) });
-    const graph: Graph = {
-      nodes: [
-        {
-          id: 'cond.2',
-          subPath: 'storage',
-          depth: 1,
-          cost: 1,
-          magnitude: 0.3,
-          effect: { kind: 'conditionalBonus', multiplier: 0.3, appliesTo: 'storage', condition: { kind: 'during-storm' } },
-          description: 'test',
-        },
-      ],
-      edges: [],
-      bridges: [],
-      graftSockets: [],
-    };
-    const mul = effectiveSkillMultipliers(state, graph);
-    expect(mul.storageCap).toBe(1);
-    const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
-    layerConditionalBonuses(mul, state, world, graph, 3_500_000);
-    expect(mul.storageCap).toBe(1.3);
-  });
-
   it('layerConditionalBonuses multiplies powerProduction when appliesTo is power', () => {
     const state = makeState({ unlockedNodes: new Set(['cond.3']) });
     const graph: Graph = {

@@ -201,7 +201,7 @@ describe('ALL_FILLER_NODES sanity', () => {
 
   it('every multiplier-kind filler has a positive magnitude in derived FULL_CATALOG', () => {
     const multiplierKinds = new Set([
-      'recipeRateMul', 'storageCapMul', 'storageCategoryCapMul', 'powerProductionMul',
+      'recipeRateMul', 'storageCategoryCapMul', 'powerProductionMul',
       'powerConsumptionMul', 'routeCapacityMul', 'commRangeMul', 'maintenanceThresholdMul',
       'scannerCoverageMul', 'debrisProtectionMul', 'droneFuelEfficiencyMul', 'airshipRangeMul',
       'padExplosionReduceMul', 'satBufferCapMul', 'scannerDwellRateMul', 'satFuelReserveMul',
