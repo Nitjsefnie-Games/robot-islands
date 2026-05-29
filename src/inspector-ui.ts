@@ -62,6 +62,7 @@ import {
 } from './world.js';
 import { editIslandBiome, UNIVERSE_EDITOR_COST } from './universe-editor.js';
 import { mountPanel, Zone } from './ui-zones.js';
+import { fmtPower } from './format.js';
 
 
 
@@ -1357,8 +1358,8 @@ export function mountInspectorUi(
       powerSection.wrap.style.display = '';
     } else {
       const parts: string[] = [];
-      if (prod > 0) parts.push(`+${prod}W produced`);
-      if (cons > 0) parts.push(`-${cons}W consumed`);
+      if (prod > 0) parts.push(`+${fmtPower(prod)} produced`);
+      if (cons > 0) parts.push(`-${fmtPower(cons)} consumed`);
       powerLine.textContent = parts.join('  ·  ');
       powerLine.style.color = 'var(--ri-fg-1)';
       powerSection.wrap.style.display = '';
