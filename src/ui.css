@@ -790,3 +790,56 @@ body.ri-dragging * {
   padding: 1px 7px;
   font-size: 9.5px;
 }
+
+/* tutorial hint overlay — Phase 7 §06 */
+.tutorial-hint {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: rgba(15, 18, 22, 0.92);
+  border: 1px solid #2d5878;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: #d6dde6;
+  z-index: 50;
+  cursor: pointer;
+  user-select: none;
+  animation: tut-fade-in 220ms ease-out;
+}
+.tutorial-hint:hover { border-color: #7dd3e8; }
+.tutorial-hint .tut-num {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7dd3e8;
+  margin-bottom: 4px;
+}
+.tutorial-hint .tut-mech {
+  font-weight: 600;
+  font-size: 14px;
+  color: #f5f3ec;
+  margin-bottom: 6px;
+}
+.tutorial-hint .tut-text { color: #cfccc2; margin-bottom: 8px; }
+.tutorial-hint .tut-action {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  color: #d97757;
+  margin-bottom: 6px;
+}
+.tutorial-hint .tut-hint-dismiss {
+  font-size: 10.5px;
+  color: #6c7280;
+  text-align: right;
+  font-style: italic;
+}
+@keyframes tut-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
