@@ -34,6 +34,7 @@ import {
   type RecipeId,
   type ResourceId,
 } from './recipes.js';
+import { outputKg } from './recipe-density.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import type { Graph } from './skilltree-graph.js';
@@ -323,8 +324,18 @@ describe('§6.7 Steel Mill scrap substitution (steel_mill_from_scrap)', () => {
     expect(r!.outputs).toEqual({ steel: 1, slag: 1 });
   });
 
-  it('steel_mill_from_scrap matches base steel_mill cycleSec (same output rate per §6.7)', () => {
-    expect(RECIPES.steel_mill_from_scrap!.cycleSec).toBe(RECIPES.steel_mill!.cycleSec);
+  it('steel_mill_from_scrap matches base steel_mill output throughput (same kg/s per §6.7)', () => {
+    // §6.7 guarantees the scrap substitution doesn't change the mill's *output
+    // rate*. Since the cycleSec rebalance (density × footprint × M), both recipes
+    // run on the same building class (bof_steel × square3), so they share an
+    // identical mass throughput — the meaningful invariant. The old assertion
+    // (cycleSec equality) was a stale proxy that only held while both recipes had
+    // equal output mass per cycle; the base was rewritten to 85 steel/cycle while
+    // the scrap variant kept its 1-steel yield, so equal cycleSec no longer means
+    // equal rate. Assert the real property: kg of output per second.
+    const fromScrap = outputKg(RECIPES.steel_mill_from_scrap!) / RECIPES.steel_mill_from_scrap!.cycleSec;
+    const base = outputKg(RECIPES.steel_mill!) / RECIPES.steel_mill!.cycleSec;
+    expect(fromScrap).toBeCloseTo(base, 4);
   });
 
   it('steel_mill_from_scrap is tagged as smelting (same category as base)', () => {
