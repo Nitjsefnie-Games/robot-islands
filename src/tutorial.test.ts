@@ -17,6 +17,7 @@ import {
 import { serializeWorld, deserializeWorld, type SaveSnapshot } from './persistence.js';
 import { makeInitialWorld } from './world.js';
 import type { IslandSpec, WorldState } from './world.js';
+import { BUILDING_DEFS } from './building-defs.js';
 
 // ---------------------------------------------------------------------------
 // Backward-compat helpers (pre-Phase-7 checkObjectives tests)
@@ -165,45 +166,48 @@ function makeTestIsland(id: string): { spec: IslandSpec; state: IslandState } {
 // ---------------------------------------------------------------------------
 
 describe('TUTORIAL_STEPS — integrity', () => {
-  it('has exactly 32 entries with unique ids', () => {
-    expect(TUTORIAL_STEPS.length).toBe(32);
+  it('has exactly 72 entries with unique ids', () => {
+    expect(TUTORIAL_STEPS.length).toBe(72);
     const ids = new Set(TUTORIAL_STEPS.map((s) => s.id));
-    expect(ids.size).toBe(32);
+    expect(ids.size).toBe(72);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 2. Per-step trigger + dismissal
+// 2. Guard — targetDefId resolves, requiredTile is named, no dead lambdas
 // ---------------------------------------------------------------------------
 
-describe('TUTORIAL_STEPS — per-step trigger + dismissal', () => {
-  for (const step of TUTORIAL_STEPS) {
-    const triggerReachable = !(
-      step.id === '11_construction_time' ||
-      step.id === '16_maintenance' ||
-      step.id === '20_antenna'
-    );
-
-    if (triggerReachable) {
-      it(`${step.id} fires on its trigger condition`, () => {
-        const w = makeWorldForTrigger(step.id);
-        expect(step.triggerCondition(w)).toBe(true);
-        expect(currentStep(w)?.id).toBe(step.id);
-      });
-    } else {
-      it.skip(`${step.id} fires on its trigger condition — TODO Phase 5 wire-up`, () => {
-        const w = makeWorldForTrigger(step.id);
-        expect(step.triggerCondition(w)).toBe(true);
-        expect(currentStep(w)?.id).toBe(step.id);
-      });
+describe('TUTORIAL_STEPS — guard', () => {
+  it('every targetDefId resolves to a real BUILDING_DEFS entry', () => {
+    for (const step of TUTORIAL_STEPS) {
+      if (step.targetDefId == null) continue;
+      expect(BUILDING_DEFS[step.targetDefId], `${step.id} → ${step.targetDefId}`).toBeDefined();
     }
+  });
 
-    it(`${step.id} dismisses on its dismissal condition`, () => {
-      const w = makeWorldForDismissal(step.id);
-      expect(step.dismissalCondition(w)).toBe(true);
-      expect(checkDismissals(w)).toContain(step.id);
-    });
-  }
+  it("each build step's hint/expectedAction names the target's requiredTile (when it has one)", () => {
+    for (const step of TUTORIAL_STEPS) {
+      if (step.targetDefId == null) continue;
+      const def: { requiredTile?: readonly string[] } = BUILDING_DEFS[step.targetDefId];
+      const tiles = def.requiredTile ?? [];
+      if (tiles.length === 0) continue; // target has no tile gate (e.g. smelter, copper_smelter)
+      const text = `${step.hint} ${step.expectedAction ?? ''}`.toLowerCase();
+      const named = tiles.some((t) => text.includes(t.toLowerCase()));
+      expect(named, `${step.id} (${step.targetDefId}) must name one of ${tiles.join('/')}`).toBe(true);
+    }
+  });
+
+  it('every step has real trigger + dismissal functions (no () => false stubs)', () => {
+    for (const step of TUTORIAL_STEPS) {
+      expect(typeof step.triggerCondition).toBe('function');
+      expect(typeof step.dismissalCondition).toBe('function');
+      // A trivial `() => false` body is forbidden — reject the literal.
+      const tBody = step.triggerCondition.toString().replace(/\s/g, '');
+      const dBody = step.dismissalCondition.toString().replace(/\s/g, '');
+      expect(tBody, `${step.id} trigger is a dead stub`).not.toMatch(/=>false$/);
+      expect(dBody, `${step.id} dismissal is a dead stub`).not.toMatch(/=>false$/);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -213,24 +217,111 @@ describe('TUTORIAL_STEPS — per-step trigger + dismissal', () => {
 describe('TUTORIAL_STEPS — ordering', () => {
   it('currentStep returns step 1 on a fresh world', () => {
     const w = makeTestWorld();
-    expect(currentStep(w)?.id).toBe('01_map_picker');
+    expect(currentStep(w)?.id).toBe('01_location');
   });
 
   it('currentStep returns step N+1 after step N is marked completed', () => {
     const w = makeTestWorld({ playerLat: 40 });
-    markCompleted(w, '01_map_picker');
-    expect(currentStep(w)?.id).toBe('02_bootstrap_power');
+    markCompleted(w, '01_location');
+    expect(currentStep(w)?.id).toBe('02_inventory');
   });
 
-  it('mid-tutorial state from a v15 save resumes at the right step', () => {
-    const w = makeTestWorld();
-    const home = w.islands[0]!;
-    home.buildings.push({ id: 'b1', defId: 'water_wheel', x: 0, y: 0 });
+  it('mid-tutorial state resumes at the right step', () => {
+    // playerLat set (01 dismissed) and 02 completed, but NO power building yet
+    // — so 03_power is the live step. (Pushing a water_wheel here would
+    // satisfy 03's dismissal and surface 04 instead.)
+    const w = makeTestWorld({ playerLat: 40 });
     w.tutorialState = {
-      completed: new Set(['01_map_picker', '02_bootstrap_power']),
-      current: '03_building_placement',
+      completed: new Set(['01_location', '02_inventory']),
+      current: '03_power',
     };
-    expect(currentStep(w)?.id).toBe('03_building_placement');
+    expect(currentStep(w)?.id).toBe('03_power');
+  });
+
+  it('the whole chain is walkable in order — every step reachable in sequence', () => {
+    // A single forward walk: assert the live step, satisfy its target/gate,
+    // mark it complete, repeat. If any trigger were dead/unreachable,
+    // currentStep would skip past it and the assert fails AT that step,
+    // naming it. Subsumes per-step trigger reachability + ordering.
+    const w = makeTestWorld();
+    const homeState = w.islandStates!.get('home')!;
+    homeState.inventory = {} as Record<ResourceId, number>;
+
+    const placeOnHome = (defId: string, x = 0, y = 0) => {
+      w.islands[0]!.buildings.push({
+        id: `${defId}_${x}_${y}`,
+        defId: defId as PlacedBuilding['defId'],
+        x,
+        y,
+      });
+    };
+
+    for (const expected of TUTORIAL_STEPS) {
+      expect(currentStep(w)?.id, `chain stalled before ${expected.id}`).toBe(expected.id);
+      if (expected.targetDefId) placeOnHome(expected.targetDefId);
+      switch (expected.id) {
+        case '01_location':
+          w.playerLat = 40;
+          break;
+        case '07_mine':
+          placeOnHome('mine', 1, 0); // 2nd mine → hasAdjacentSameType for 12_adjacency
+          homeState.inventory.iron_ore = 100; // → 10_smelter trigger
+          homeState.inventory.coal = 100;
+          break;
+        case '16_tier2':
+          homeState.level = 5;
+          break;
+        case '38_settle': {
+          const i2 = makeTestIsland('isl2');
+          i2.spec.populated = true;
+          w.islands.push(i2.spec);
+          w.islandStates!.set('isl2', i2.state);
+          break;
+        }
+        case '41_tier3':
+          homeState.level = 15;
+          break;
+        case '61_tier4':
+          homeState.level = 30;
+          break;
+        case '63_ai_core':
+          homeState.inventory.ai_core = 1;
+          break;
+        case '69_tier5':
+          homeState.level = 50; // ai_core already seen at step 63
+          break;
+        case '71_reality_anchor':
+          homeState.inventory.reality_anchor = 1;
+          break;
+        default:
+          break;
+      }
+      markCompleted(w, expected.id);
+    }
+    expect(currentStep(w)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3b. Dismissal lifecycle (checkDismissals)
+// ---------------------------------------------------------------------------
+
+describe('checkDismissals', () => {
+  it('reports a build step as dismissable once its target is placed', () => {
+    const w = makeTestWorld({ playerLat: 40 });
+    expect(checkDismissals(w)).not.toContain('03_power');
+    w.islands[0]!.buildings.push({ id: 'b1', defId: 'water_wheel', x: 0, y: 0 });
+    expect(checkDismissals(w)).toContain('03_power');
+  });
+
+  it('reports a concept step as dismissable after its TTL elapses', () => {
+    const w = makeTestWorld({ playerLat: 40 });
+    w.tutorialState = {
+      completed: new Set(),
+      current: null,
+      completedAt: { '02_inventory': 0 }, // long-elapsed → TTL satisfied
+    };
+    expect(checkDismissals(w)).toContain('02_inventory');
   });
 });
 
@@ -239,10 +330,10 @@ describe('TUTORIAL_STEPS — ordering', () => {
 // ---------------------------------------------------------------------------
 
 describe('skipAll + restart', () => {
-  it('skipAll fills completed with all 32 ids', () => {
+  it('skipAll fills completed with all 72 ids', () => {
     const w = makeTestWorld();
     skipAll(w);
-    expect(w.tutorialState!.completed.size).toBe(32);
+    expect(w.tutorialState!.completed.size).toBe(72);
     for (const step of TUTORIAL_STEPS) {
       expect(w.tutorialState!.completed.has(step.id)).toBe(true);
     }
@@ -265,7 +356,7 @@ describe('skipAll + restart', () => {
     const w = makeTestWorld();
     skipAll(w);
     restart(w);
-    expect(currentStep(w)?.id).toBe('01_map_picker');
+    expect(currentStep(w)?.id).toBe('01_location');
   });
 });
 
@@ -281,393 +372,24 @@ describe('persistence — tutorialState', () => {
     delete (json.world as unknown as Record<string, unknown>).tutorialState;
     const { world: restored } = deserializeWorld(json, 0, 0);
     expect(restored.tutorialState?.completed.size).toBe(0);
-    expect(currentStep(restored)?.id).toBe('01_map_picker');
+    expect(currentStep(restored)?.id).toBe('01_location');
   });
 
-  it('v15 save with mid-tutorial state round-trips identity', () => {
+  it('mid-tutorial state round-trips identity', () => {
     const world = makeInitialWorld(0);
     world.tutorialState = {
-      completed: new Set(['01_map_picker', '02_bootstrap_power']),
-      current: '03_building_placement',
+      completed: new Set(['01_location', '02_inventory']),
+      current: '03_power',
     };
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored } = deserializeWorld(json, 0, 0);
     expect(restored.tutorialState?.completed).toEqual(
-      new Set(['01_map_picker', '02_bootstrap_power']),
+      new Set(['01_location', '02_inventory']),
     );
-    expect(restored.tutorialState?.current).toBe('03_building_placement');
+    expect(restored.tutorialState?.current).toBe('03_power');
   });
 });
-
-// ---------------------------------------------------------------------------
-// Per-step world factories
-// ---------------------------------------------------------------------------
-
-function makeWorldForTrigger(stepId: string): WorldState {
-  const idx = TUTORIAL_STEPS.findIndex((s) => s.id === stepId);
-  const completedBefore =
-    idx > 0 ? new Set(TUTORIAL_STEPS.slice(0, idx).map((s) => s.id)) : new Set<string>();
-
-  const w = makeTestWorld();
-  w.tutorialState = { completed: completedBefore, current: null };
-
-  const home = w.islands[0]!;
-  const homeState = w.islandStates!.get('home')!;
-
-  switch (stepId) {
-    case '01_map_picker':
-      // playerLat is already null
-      break;
-
-    case '02_bootstrap_power':
-      w.playerLat = 40;
-      break;
-
-    case '03_building_placement':
-      w.playerLat = 40;
-      home.buildings.push({ id: 'b1', defId: 'water_wheel', x: 0, y: 0 });
-      break;
-
-    case '04_tile_gate':
-      w.playerLat = 40;
-      home.buildings.push({ id: 'b1', defId: 'water_wheel', x: 0, y: 0 });
-      home.buildings.push({ id: 'b2', defId: 'mine', x: 1, y: 0 });
-      break;
-
-    case '05_logger_placement':
-      w.playerLat = 40;
-      home.buildings.push({ id: 'b1', defId: 'water_wheel', x: 0, y: 0 });
-      home.buildings.push({ id: 'b2', defId: 'mine', x: 1, y: 0 });
-      homeState.inventory = { iron_ore: 1 } as Record<ResourceId, number>;
-      break;
-
-    case '06_iron_chain':
-      w.playerLat = 40;
-      home.buildings.push({ id: 'b1', defId: 'water_wheel', x: 0, y: 0 });
-      home.buildings.push({ id: 'b2', defId: 'mine', x: 1, y: 0 });
-      home.buildings.push({ id: 'b3', defId: 'logger', x: 2, y: 0 });
-      homeState.inventory = { iron_ore: 10, coal: 3 } as Record<ResourceId, number>;
-      break;
-
-    case '07_heat_budget':
-      w.playerLat = 40;
-      home.buildings.push({ id: 'b1', defId: 'coke_oven', x: 0, y: 0 });
-      break;
-
-    case '08_adjacency_buff':
-      home.buildings.push({ id: 'b1', defId: 'mine', x: 0, y: 0 });
-      home.buildings.push({ id: 'b2', defId: 'mine', x: 1, y: 0 });
-      break;
-
-    case '09_copper_prospect':
-      w.recentBuildAttempts.add('cell_press');
-      break;
-
-    case '10_limestone':
-      w.recentBuildAttempts.add('blast_furnace');
-      break;
-
-    case '11_construction_time':
-      // unreachable — guarded by .skip
-      break;
-
-    case '12_storage_caps':
-      homeState.inventory = { wood: 100 } as Record<ResourceId, number>;
-      (homeState as unknown as Record<string, unknown>).storageCaps = { wood: 100 } as Record<ResourceId, number>;
-      break;
-
-    case '13_battery_bootstrap':
-      homeState.inventory = { saltwater_cell: 4 } as Record<ResourceId, number>;
-      break;
-
-    case '14_day_night_solar':
-      home.buildings.push({ id: 'b1', defId: 'solar', x: 0, y: 0 });
-      break;
-
-    case '15_co2_tracker':
-      w.totalCo2Kg = 100;
-      break;
-
-    case '16_maintenance':
-      // unreachable — guarded by .skip
-      break;
-
-    case '17_drones':
-      home.buildings.push({ id: 'b1', defId: 'dronepad', x: 0, y: 0 });
-      break;
-
-    case '18_lighthouse':
-      home.buildings.push({ id: 'b1', defId: 'lighthouse_t1', x: 0, y: 0 });
-      break;
-
-    case '19_settlement': {
-      const island2 = makeTestIsland('island2');
-      island2.spec.populated = false;
-      island2.spec.discovered = true;
-      w.islands.push(island2.spec);
-      w.islandStates!.set('island2', island2.state);
-      (w as unknown as Record<string, unknown>).startingDiscovered = 1;
-      break;
-    }
-
-    case '20_antenna':
-      // unreachable — guarded by .skip
-      break;
-
-    case '21_cargo_routes': {
-      const island2 = makeTestIsland('island2');
-      island2.spec.populated = true;
-      island2.spec.discovered = true;
-      w.islands.push(island2.spec);
-      w.islandStates!.set('island2', island2.state);
-      break;
-    }
-
-    case '22_skill_tree':
-      homeState.level = 30;
-      break;
-
-    case '23_tier_t3':
-      home.buildings.push({ id: 'b1', defId: 'steel_mill', x: 0, y: 0 });
-      break;
-
-    case '24_reactor_toxicity':
-      home.buildings.push({ id: 'b1', defId: 'nuclear_reactor', x: 0, y: 0 });
-      break;
-
-    case '25_biome_gating':
-      w.recentBuildAttempts.add('pyroforge');
-      break;
-
-    case '26_weather_storms':
-      (w as unknown as Record<string, unknown>).activeStormCount = 1;
-      break;
-
-    case '27_land_reclamation':
-      home.buildings.push({ id: 'b1', defId: 'platform_constructor', x: 0, y: 0 });
-      break;
-
-    case '28_tier_t4':
-      homeState.inventory = { ai_core: 1 } as Record<ResourceId, number>;
-      break;
-
-    case '29_orbital':
-      home.buildings.push({ id: 'b1', defId: 'spaceport', x: 0, y: 0 });
-      break;
-
-    case '30_network_consciousness': {
-      for (let i = 2; i <= 10; i++) {
-        const isl = makeTestIsland(`island${i}`);
-        isl.spec.populated = true;
-        w.islands.push(isl.spec);
-        w.islandStates!.set(isl.spec.id, isl.state);
-      }
-      break;
-    }
-
-    case '31_tier_reset':
-      (w as unknown as Record<string, unknown>).tierResetTriggered = true;
-      break;
-
-    case '32_genesis_milestone':
-      homeState.inventory = { genesis_cell: 1 } as Record<ResourceId, number>;
-      break;
-
-    default:
-      throw new Error(`unknown stepId: ${stepId}`);
-  }
-
-  return w;
-}
-
-function makeWorldForDismissal(stepId: string): WorldState {
-  const w = makeTestWorld();
-  const home = w.islands[0]!;
-  const homeState = w.islandStates!.get('home')!;
-
-  switch (stepId) {
-    case '01_map_picker':
-      w.playerLat = 40;
-      break;
-
-    case '02_bootstrap_power':
-      home.buildings.push({ id: 'b1', defId: 'water_wheel', x: 0, y: 0 });
-      break;
-
-    case '03_building_placement':
-      home.buildings.push({ id: 'b1', defId: 'mine', x: 0, y: 0 });
-      break;
-
-    case '04_tile_gate':
-      homeState.inventory = { iron_ore: 1 } as Record<ResourceId, number>;
-      break;
-
-    case '05_logger_placement':
-      home.buildings.push({ id: 'b1', defId: 'logger', x: 0, y: 0 });
-      break;
-
-    case '06_iron_chain':
-      homeState.inventory = { iron_ingot: 1 } as Record<ResourceId, number>;
-      break;
-
-    case '07_heat_budget':
-      // dismissal: hasAdjacentHeat || !hasBuilding(['coke_oven'])
-      // fresh world has no coke_oven, so dismissal is true
-      break;
-
-    case '08_adjacency_buff':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '08_adjacency_buff': 0 },
-      };
-      break;
-
-    case '09_copper_prospect':
-      homeState.inventory = { copper_ingot: 1 } as Record<ResourceId, number>;
-      break;
-
-    case '10_limestone':
-      homeState.inventory = { limestone: 1 } as Record<ResourceId, number>;
-      break;
-
-    case '11_construction_time':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '11_construction_time': 0 },
-      };
-      break;
-
-    case '12_storage_caps':
-      // dismissal: hasBuilding(['crate','silo']) || !anyResourceAtCap
-      // fresh world has no resources at cap, so dismissal is true
-      break;
-
-    case '13_battery_bootstrap':
-      home.buildings.push({ id: 'b1', defId: 'battery_bank', x: 0, y: 0 });
-      break;
-
-    case '14_day_night_solar':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '14_day_night_solar': 0 },
-      };
-      break;
-
-    case '15_co2_tracker':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '15_co2_tracker': 0 },
-      };
-      break;
-
-    case '16_maintenance':
-      // dismissal: !anyBuildingNeedsMaintenance(w) which is always true
-      break;
-
-    case '17_drones':
-      (w as unknown as Record<string, unknown>).droneRoutes = new Set(['route1']);
-      break;
-
-    case '18_lighthouse': {
-      const island2 = makeTestIsland('island2');
-      island2.spec.discovered = true;
-      w.islands.push(island2.spec);
-      w.islandStates!.set('island2', island2.state);
-      (w as unknown as Record<string, unknown>).startingDiscovered = 1;
-      break;
-    }
-
-    case '19_settlement': {
-      const island2 = makeTestIsland('island2');
-      island2.spec.populated = true;
-      w.islands.push(island2.spec);
-      w.islandStates!.set('island2', island2.state);
-      break;
-    }
-
-    case '20_antenna':
-      home.buildings.push({ id: 'b1', defId: 'antenna_t1', x: 0, y: 0 });
-      break;
-
-    case '21_cargo_routes':
-      (w as unknown as Record<string, unknown>).cargoRoutes = new Set(['route1']);
-      break;
-
-    case '22_skill_tree':
-      homeState.unlockedNodes.add('mining.1');
-      break;
-
-    case '23_tier_t3':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '23_tier_t3': 0 },
-      };
-      break;
-
-    case '24_reactor_toxicity':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '24_reactor_toxicity': 0 },
-      };
-      break;
-
-    case '25_biome_gating':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '25_biome_gating': 0 },
-      };
-      break;
-
-    case '26_weather_storms':
-      // activeStormCount defaults to 0, so dismissal is true
-      break;
-
-    case '27_land_reclamation':
-      (w as unknown as Record<string, unknown>).reclaimedTileCount = 4;
-      break;
-
-    case '28_tier_t4':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '28_tier_t4': 0 },
-      };
-      break;
-
-    case '29_orbital':
-      w.satellites.push({ id: 'sat1' } as unknown as WorldState['satellites'][number]);
-      break;
-
-    case '30_network_consciousness':
-      w.tutorialState = {
-        completed: new Set(),
-        current: null,
-        completedAt: { '30_network_consciousness': 0 },
-      };
-      break;
-
-    case '31_tier_reset':
-      (w as unknown as Record<string, unknown>).tierResetCount = 1;
-      break;
-
-    case '32_genesis_milestone':
-      homeState.inventory = { genesis_cell: 1 } as Record<ResourceId, number>;
-      break;
-
-    default:
-      throw new Error(`unknown stepId: ${stepId}`);
-  }
-
-  return w;
-}
 
 // ---------------------------------------------------------------------------
 // Backward-compat checkObjectives tests (pre-Phase-7)
