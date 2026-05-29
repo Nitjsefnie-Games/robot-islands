@@ -1,0 +1,145 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cycleSec rebalance + floor-upgrade system — design spec</title>
+  <style>
+    :root{--ivory:#1B1A17;--slate:#F5F3EC;--clay:#D97757;--oat:#3A352B;--olive:#8FA56E;
+      --rust:#E08B7F;--warn:#E0B47F;--gray-150:#2E2C27;--gray-300:#3A3833;--gray-500:#8F8D82;
+      --gray-700:#CFCCC2;--white:#252420;--serif:ui-serif,Georgia,serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:ui-monospace,Menlo,monospace;
+      --radius:12px;--border:1.5px solid var(--gray-300);}
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:var(--sans);background:var(--ivory);color:var(--gray-700);line-height:1.58;padding:56px 32px 120px;-webkit-font-smoothing:antialiased;}
+    .page{max-width:1080px;margin:0 auto;}
+    header.page-head{margin-bottom:36px;max-width:880px;}
+    .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gray-500);margin-bottom:12px;}
+    h1{font-family:var(--serif);font-weight:500;font-size:35px;line-height:1.14;color:var(--slate);margin-bottom:18px;letter-spacing:-0.01em;}
+    .context-box{background:var(--gray-150);border:var(--border);border-radius:var(--radius);padding:16px 20px;font-size:14.5px;}
+    .context-box .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--gray-500);display:block;margin-bottom:6px;}
+    .formula{background:var(--white);border:var(--border);border-left:4px solid var(--clay);border-radius:var(--radius);padding:16px 20px;margin:28px 0;font-family:var(--mono);font-size:13px;color:#C9B98A;white-space:pre-wrap;line-height:1.5;}
+    section{margin-bottom:48px;}
+    .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;}
+    .sec-head .num{font-family:var(--mono);font-size:12px;background:var(--oat);color:var(--slate);padding:3px 9px;border-radius:8px;}
+    .sec-head h2{font-family:var(--serif);font-weight:500;font-size:24px;color:var(--slate);letter-spacing:-0.01em;}
+    .sec-intro{font-size:14.5px;color:var(--gray-500);max-width:820px;margin-bottom:16px;}
+    p.body{font-size:14.5px;max-width:820px;margin-bottom:12px;} p.body strong{color:var(--slate);}
+    ul.body,ol.body{font-size:14.5px;max-width:820px;margin:0 0 12px 22px;} li{margin-bottom:6px;}
+    code{font-family:var(--mono);font-size:0.88em;background:var(--gray-150);border:1px solid var(--gray-300);border-radius:5px;padding:1px 5px;color:#C9B98A;}
+    .tbl{width:100%;border:var(--border);border-radius:var(--radius);border-collapse:separate;border-spacing:0;overflow:hidden;font-size:13px;margin-bottom:8px;}
+    .tbl th,.tbl td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--gray-300);vertical-align:top;}
+    .tbl th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);background:var(--gray-150);font-weight:600;}
+    .tbl tr:last-child td{border-bottom:none;} .tbl td.slate{color:var(--slate);font-weight:600;} .tbl td.mono{font-family:var(--mono);font-size:12px;color:var(--clay);} .tbl tbody tr:hover{background:var(--gray-150);}
+    .phase{background:var(--white);border:var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:14px;}
+    .phase .pn{font-family:var(--mono);font-size:11px;color:var(--clay);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
+    .phase .pt{font-weight:600;color:var(--slate);font-size:15px;margin-bottom:4px;}
+    .phase .pd{font-size:13.5px;color:var(--gray-700);}
+    .footer{color:var(--gray-500);font-size:13px;margin-top:52px;padding-top:22px;border-top:1px solid var(--gray-300);}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · cycleSec rebalance + floor upgrades</div>
+      <h1>Production rates from real throughput, and a floor-upgrade system</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Follows the SI mass-balance rework (recipes kg-balanced) and the energy SI rebalance
+        (power in kW). This pass grounds <strong>time</strong>: recompute all <strong>249
+        recipe <code>cycleSec</code></strong> and normalize extraction amounts from real 24/7
+        nameplate throughput, area-normalized to our 1 m²/tile buildings — and add a universal
+        <strong>floor-upgrade</strong> mechanic so players scale per-tile throughput through play.
+      </div>
+    </header>
+
+    <div class="formula">throughput  = density[kg·s⁻¹·m⁻²] × footprint_m² × M × floorMul × skillMul
+cycleSec(base) = output_kg_per_cycle / (density × footprint_m² × M)
+output_kg      = Σ(output_units × RESOURCE_META.massPerUnitKg)        // total mass, all outputs
+M = 1.4535×10⁻³   (single global; fixes a 1-floor Mine at 20 s: 1/(8.6 × 4 × 20))
+footprint: single=1, 2×2=4, 2×3=6, 3×3=9, 4×4=16 m²   (1 tile = 1×1 m)</div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Why no math compression</h2></div>
+      <p class="body">Real areal densities span ~6 orders (water pump ~42 → wafer fab 6.4×10⁻⁵). A single multiplier can only slide that spread, not compress it — so the base rate stays <strong>pure real</strong>, and the playable dynamic range comes from <strong>play</strong>: floors ×(1+L) ≤×10, all-skills speed ×10 (already in <code>skilltree.ts</code> via multiplicative <code>recipeRateMul</code> + extractor yield bonuses), and building count — ×100+ per the player, plus offline catch-up. Base = the naive 1-floor / no-skill / 1-building rate.</p>
+      <table class="tbl"><thead><tr><th>recipe</th><th>base (1 floor, no skills)</th><th>maxed ×100</th></tr></thead><tbody>
+        <tr><td class="slate">Mine</td><td>20 s</td><td>0.2 s</td></tr>
+        <tr><td class="slate">Quarry</td><td>~40 s</td><td>0.4 s</td></tr>
+        <tr><td class="slate">Logger</td><td>~23 min</td><td>~14 s</td></tr>
+        <tr><td class="slate">Smelter (iron)</td><td>~50 min</td><td>~30 s</td></tr>
+        <tr><td class="slate">Glassworks</td><td>~6 h</td><td>~3.7 min</td></tr>
+        <tr><td class="slate">Lithography (microchip)</td><td>~14 d</td><td>~3.3 h</td></tr>
+        <tr><td class="slate">Quantum chip</td><td>~25 d</td><td>~6 h</td></tr>
+      </tbody></table>
+      <p class="body">…then ÷ building count, plus offline catch-up. The long base tail is by design.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Floor-upgrade mechanic (universal)</h2></div>
+      <p class="sec-intro">Per-building integer floor level <code>L ∈ [0,9]</code> (1–10 floors; cap 10). The physical story behind M: our buildings are effectively multi-story.</p>
+      <table class="tbl"><thead><tr><th>aspect</th><th>rule</th></tr></thead><tbody>
+        <tr><td class="slate">Effect (throughput / power output / storage cap / pad slots)</td><td class="mono">× (1 + L) → ≤ ×10</td></tr>
+        <tr><td class="slate">Consumer power draw</td><td class="mono">× (1 + 0.5·L) → ≤ ×5.5</td></tr>
+        <tr><td class="slate">Material cost of L-th upgrade</td><td class="mono">0.8 × base placementCost</td></tr>
+        <tr><td class="slate">Build time of L-th upgrade</td><td class="mono">base build time × (L + 1)</td></tr>
+        <tr><td class="slate">Applies to</td><td>every building (producers, consumers, generators, pads, storage)</td></tr>
+        <tr><td class="slate">Skills</td><td>multiplicative with existing rate/yield skills (×10 all-in)</td></tr>
+      </tbody></table>
+      <p class="body">×10 output for ×5.5 power is the efficiency reward for building up. Touches persistence (per-building <code>floorLevel</code> schema bump), <code>economy.ts</code> (scale throughput + power), placement/construction (upgrade cost + progressive time), storage/power-output scaling, and UI (per-building upgrade control).</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Areal density table (real, 24/7, production-unit footprint)</h2></div>
+      <p class="sec-intro">kg·s⁻¹·m⁻², from the density research (sources cited there). Becomes a per-building archetype→density lookup in the generator.</p>
+      <table class="tbl"><thead><tr><th>archetype</th><th>density</th><th>basis</th></tr></thead><tbody>
+        <tr><td class="slate">Water / fluid pump</td><td class="mono">~42</td><td>centrifugal pump skid</td></tr>
+        <tr><td class="slate">Hard-rock mining</td><td class="mono">8.6</td><td>PC9000 excavator 8000 t/h ÷ 259 m²</td></tr>
+        <tr><td class="slate">Surface quarrying</td><td class="mono">~4.3</td><td>excavator × 0.5 bulk</td></tr>
+        <tr><td class="slate">Air separation / cryo</td><td class="mono">3.9</td><td>ASU 3000 t O₂/d ÷ 9 m²</td></tr>
+        <tr><td class="slate">Crude refining</td><td class="mono">2.8</td><td>CDU 200 kbbl/d ÷ 113 m²</td></tr>
+        <tr><td class="slate">BOF steel</td><td class="mono">2.1</td><td>250 t/40 min ÷ 50 m²</td></tr>
+        <tr><td class="slate">EAF steel</td><td class="mono">1.3</td><td>300 t/60 min ÷ 64 m²</td></tr>
+        <tr><td class="slate">Blast furnace</td><td class="mono">0.75</td><td>10000 t/d ÷ 154 m²</td></tr>
+        <tr><td class="slate">Logging</td><td class="mono">0.49</td><td>feller-buncher ÷ 24 m²</td></tr>
+        <tr><td class="slate">Polymers / lubricant</td><td class="mono">0.48</td><td>gas-phase PE ÷ 20 m²</td></tr>
+        <tr><td class="slate">Oil/gas wellhead</td><td class="mono">0.40</td><td>1000 bbl/d ÷ 4 m²</td></tr>
+        <tr><td class="slate">Acids</td><td class="mono">0.22</td><td>547 t/d ÷ 28 m²</td></tr>
+        <tr><td class="slate">Cement kiln</td><td class="mono">0.19</td><td>10000 t/d ÷ 600 m²</td></tr>
+        <tr><td class="slate">Non-ferrous smelter</td><td class="mono">0.062</td><td>flash furnace ÷ 257 m²</td></tr>
+        <tr><td class="slate">Lime kiln</td><td class="mono">0.036</td><td>1000 t/d ÷ 320 m²</td></tr>
+        <tr><td class="slate">Electrolysis (est)</td><td class="mono">~0.03</td><td>~40 kt Cl₂/yr ÷ ~40 m²</td></tr>
+        <tr><td class="slate">Brick/ceramic kiln</td><td class="mono">0.016</td><td>tunnel kiln ÷ 432 m²</td></tr>
+        <tr><td class="slate">Coke/charcoal</td><td class="mono">0.008</td><td>30 t/20 h ÷ 52 m²</td></tr>
+        <tr><td class="slate">Glass furnace</td><td class="mono">0.0077</td><td>float tank ÷ 1500 m²</td></tr>
+        <tr><td class="slate">Battery cells</td><td class="mono">0.0032</td><td>10 GWh line ÷ 150 m²</td></tr>
+        <tr><td class="slate">Machining (gear/bolt)</td><td class="mono">~0.002</td><td>CNC ÷ 4 m²</td></tr>
+        <tr><td class="slate">PCB fab</td><td class="mono">~7×10⁻⁴</td><td>etch/plate line</td></tr>
+        <tr><td class="slate">Aluminum (Hall-Héroult)</td><td class="mono">1.4×10⁻⁴</td><td>1 t/d pot ÷ 80 m² (Faraday-limited)</td></tr>
+        <tr><td class="slate">Wafer fab / lithography</td><td class="mono">6.4×10⁻⁵</td><td>gigafab ÷ 30 m²</td></tr>
+        <tr><td class="slate">Fantasy / endgame</td><td class="mono">tier-anchored</td><td>wafer-fab floor × tier band (T4×1, T5×0.1, T6×0.01); extraction-flavored anchored to nearest real ×0.01–0.3</td></tr>
+      </tbody></table>
+      <p class="body"><strong>Extraction normalization:</strong> kill ad-hoc outliers (<code>mine_on_coal</code> 9/10 s, <code>heavy_logger</code> 9/10 s); rate lives purely in <code>cycleSec</code> from <code>density × footprint × M</code>. Multi-output recipes set <code>cycleSec</code> from <strong>total</strong> output mass.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Phasing</h2></div>
+      <div class="phase"><div class="pn">Phase 1</div><div class="pt">Density→cycleSec generator + extraction &amp; core chain</div><div class="pd">Reproducible generator (<code>density × footprint × M</code> → cycleSec from recipe outputs + <code>RESOURCE_META</code> + footprints + archetype/density map). Apply to extraction (42) + smelting (21) + the T1–T2 core chain; normalize extraction amounts. Throughput-sanity tests; fix broken cycleSec fixtures.</div></div>
+      <div class="phase"><div class="pn">Phase 2</div><div class="pt">Remaining recipe cycleSec</div><div class="pd">Chemistry, manufacturing, electronics, power-fuel, and fantasy/endgame (tier-anchored). Complete all 249; suite green.</div></div>
+      <div class="phase"><div class="pn">Phase 3 — final</div><div class="pt">Floor-upgrade system</div><div class="pd">Persistence schema bump (<code>floorLevel</code>), economy throughput/power scaling ×(1+L) / ×(1+0.5L), placement upgrade cost 0.8×, progressive build time ×(L+1), capacity/output scaling, UI upgrade control, multiplicative skill stacking. Tests + in-browser verify.</div></div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Verification &amp; risks</h2></div>
+      <ul class="body">
+        <li>cycleSec is generator-reproducible (a test re-derives a sample); no recipe outside its band; multi-output balances to total-mass throughput.</li>
+        <li>Floor mechanic: ×(1+L) effect, ×(1+0.5L) power, 0.8×/level cost, ×(L+1)/level time, cap 10; <code>floorLevel</code> round-trips persistence; UI works; skills stack multiplicatively.</li>
+        <li><code>npm test</code> green + <code>tsc</code> + build per phase; browser screenshot of an upgraded building.</li>
+        <li><strong>Risks:</strong> M re-tune (cheap — regenerate); fantasy anchoring is abstracted; large fixture churn (never change economy logic to pass a test); this <strong>supersedes the deferred coal-EROI retune</strong> (mine/coal rates now physics-derived — verify EROI sane); tutorial pacing hints may shift (reconcile on tutorial resume).</li>
+      </ul>
+    </section>
+
+    <div class="footer"><p>cycleSec rebalance + floor-upgrade system · design spec · 2026-05-29 · companion: density research · → writing-plans (phased)</p></div>
+  </div>
+</body>
+</html>
