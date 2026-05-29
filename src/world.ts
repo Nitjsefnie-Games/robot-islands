@@ -967,36 +967,29 @@ export function ensureCellGenerated(world: WorldState, cellX: number, cellY: num
  * was free — the player just placed a Solar Panel + Mine + Workshop and
  * production filled inventory before they ever needed materials. §14 added
  * placement costs (stone + wood for every T1 building) which makes the
- * all-zero starter impossibly slow: with no placeable buildings, no Mine
- * to produce iron_ore, no Workshop, the early game stalls.
+ * Rev-9 starter inventory per rev-16 §12.9.3 + Phase 7 design spec §03.
+ * 9 line items, sized so the player can reach 1x battery_bank in
+ * <= 45 minutes via the canonical tutorial chain. Replaces the
+ * pre-rev-9 4-resource starter (stone 60 / wood 40 / steel 30 / kit 1).
  *
- * The starter bundle below INTENTIONALLY contradicts §3.7's literal
- * "empty inventory" rule. The justification: all-zero starter + enforced
- * placement costs = unplayable. A minimal bootstrap kit lets the player
- * place a Mine (30 stone + 15 wood) + Coal Generator (50 + 25) on coal
- * tiles, plus an Antenna T1 (15 + 5) and a few more T1 buildings before
- * stone/wood production kicks in. Tuned to: enough for the first ~3-4
- * T1 buildings, not enough to skip the early-game extraction loop.
- *
- *   stone: 60          — Mine (30) + Antenna T1 (15) leaves 15 spare
- *   wood:  40          — Mine (15) + Antenna T1 (5)  leaves 20 spare
- *   foundation_kit: 1  — §12.3 starter kit for the first settlement
- *                        dispatch (Workshop/Kit Assembler recipes
- *                        refill it via stone+wood once production is up).
- *
- * §3.7 starter placeholder — tuned for first-build bootstrap.
+ * Reachability is gated by src/reachability.test.ts — DO NOT lower any
+ * value without re-checking that the 45-min invariant holds.
  */
 function startingInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
   for (const r of ALL_RESOURCES) inv[r] = 0;
-  // §3.7 starter placeholder — tuned for first-build bootstrap. 30 steel
-  // covers a single Wind Turbine (the night-safe T1 power option — see the
-  // `place_solar` tutorial step which now points at Wind, since spawning
-  // during the night phase with only Solar would stall the economy).
-  inv.stone = 60;
-  inv.wood = 40;
-  inv.steel = 30;
-  inv.foundation_kit = 1;
+  // rev-16 §12.9.3 — rev-9 starter. Sized to reach 1x battery_bank
+  // in <= 45 min via the cell_press chain.
+  inv.stone           = 1200;
+  inv.wood            = 600;
+  inv.iron_ore        = 30;
+  inv.coal            = 80;
+  inv.iron_ingot      = 60;
+  inv.bolt            = 25;
+  inv.limestone       = 15;
+  inv.saltwater_cell  = 4;
+  inv.foundation_kit  = 1;
+  // steel intentionally 0 — player walks the iron→steel chain.
   return inv;
 }
 

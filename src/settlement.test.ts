@@ -922,10 +922,10 @@ describe('§12.4 foundation kit decomposition', () => {
     const newState = islandStates.get(targetSpec.id);
     expect(newState).toBeDefined();
     // kit_assembler inputs: { iron_ingot: 5, wood: 10, bolt: 5 }
-    // startingInventory seeds wood=40, foundation_kit=1.
-    expect(newState!.inventory.iron_ingot).toBe(5);
-    expect(newState!.inventory.wood).toBe(50);
-    expect(newState!.inventory.bolt).toBe(5);
+    // rev-9 starter seeds iron_ingot=60, wood=600, bolt=25.
+    expect(newState!.inventory.iron_ingot).toBe(65);
+    expect(newState!.inventory.wood).toBe(610);
+    expect(newState!.inventory.bolt).toBe(30);
   });
 
   it('multiplies decomposition by foundationKitCount', () => {
@@ -937,9 +937,9 @@ describe('§12.4 foundation kit decomposition', () => {
     if (!r.ok) return;
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
     const newState = islandStates.get(targetSpec.id);
-    expect(newState!.inventory.iron_ingot).toBe(10);
-    expect(newState!.inventory.wood).toBe(60); // 40 starter + 20 from 2 kits
-    expect(newState!.inventory.bolt).toBe(10);
+    expect(newState!.inventory.iron_ingot).toBe(70);  // 60 starter + 10 from 2 kits
+    expect(newState!.inventory.wood).toBe(620);       // 600 starter + 20 from 2 kits
+    expect(newState!.inventory.bolt).toBe(35);        // 25 starter + 10 from 2 kits
   });
 });
 
@@ -958,10 +958,10 @@ describe('§12.4 Foundation Kit starter-inventory grace cap', () => {
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
     const newState = islandStates.get(targetSpec.id)!;
     // kit_assembler inputs: { iron_ingot: 5, wood: 10, bolt: 5 }
-    // startingInventory seeds wood=40, so wood = 50 after kit.
-    expect(newState.inventory.iron_ingot).toBe(5);
-    expect(newState.inventory.wood).toBe(50);
-    expect(newState.inventory.bolt).toBe(5);
+    // rev-9 starter seeds iron_ingot=60, wood=600, bolt=25.
+    expect(newState.inventory.iron_ingot).toBe(65);
+    expect(newState.inventory.wood).toBe(610);
+    expect(newState.inventory.bolt).toBe(30);
     expect(newState.starterInventoryGrace.iron_ingot).toBe(5);
     expect(newState.starterInventoryGrace.wood).toBe(10);
     expect(newState.starterInventoryGrace.bolt).toBe(5);
