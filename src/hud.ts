@@ -10,6 +10,7 @@ import { BUILDING_DEFS, type BuildingCategory, type BuildingDefId } from './buil
 import type { PlacedBuilding } from './buildings.js';
 import { dayPhase, dayPhaseName, solarMultiplier, type DayPhase } from './daynight.js';
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
+import { fmtPower } from './format.js';
 import { dispatchAction, type InputRegistry } from './input.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
 import {
@@ -574,7 +575,7 @@ export function mountHud(
     const powerV = document.createElement('span');
     powerV.classList.add('ri-kv__v');
     powerV.dataset.tone = pTone;
-    powerV.textContent = `${fmt(power.produced)}W / ${fmt(power.consumed)}W · ${power.factor.toFixed(2)}×`;
+    powerV.textContent = `${fmtPower(power.produced)} / ${fmtPower(power.consumed)} · ${power.factor.toFixed(2)}×`;
     powerKv.appendChild(powerK);
     powerKv.appendChild(powerV);
     body.appendChild(powerKv);
