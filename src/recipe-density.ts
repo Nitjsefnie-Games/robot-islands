@@ -110,7 +110,7 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   skill_forge: 'assembly',
 };
 
-const FOOTPRINT_M2: Record<string, number> = {
+export const FOOTPRINT_M2: Record<string, number> = {
   'SHAPES.single': 1, 'SHAPES.square2': 4, 'SHAPES.rect2x3': 6, 'SHAPES.rect3x2': 6,
   'SHAPES.square3': 9, 'SHAPES.square4': 16,
 };
