@@ -1,0 +1,175 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill-tree audit — over-noding, dilution, missing efficiency lever</title>
+  <style>
+    :root{--ivory:#1B1A17;--slate:#F5F3EC;--clay:#D97757;--oat:#3A352B;--olive:#8FA56E;
+      --rust:#E08B7F;--warn:#E0B47F;--gray-150:#2E2C27;--gray-300:#3A3833;--gray-500:#8F8D82;
+      --gray-700:#CFCCC2;--white:#252420;--serif:ui-serif,Georgia,serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:ui-monospace,Menlo,monospace;
+      --radius:12px;--border:1.5px solid var(--gray-300);}
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:var(--sans);background:var(--ivory);color:var(--gray-700);line-height:1.55;padding:56px 32px 120px;-webkit-font-smoothing:antialiased;}
+    .page{max-width:1140px;margin:0 auto;}
+    header.page-head{margin-bottom:32px;max-width:920px;}
+    .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gray-500);margin-bottom:12px;}
+    h1{font-family:var(--serif);font-weight:500;font-size:32px;line-height:1.16;color:var(--slate);margin-bottom:18px;letter-spacing:-0.01em;}
+    .context-box{background:var(--gray-150);border:var(--border);border-radius:var(--radius);padding:16px 20px;font-size:14px;}
+    .context-box .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--gray-500);display:block;margin-bottom:6px;}
+    .tldr{background:var(--white);border:var(--border);border-left:4px solid var(--clay);border-radius:var(--radius);padding:18px 22px;margin:26px 0 44px;font-size:14.5px;}
+    .tldr b{color:var(--slate);}
+    section{margin-bottom:44px;}
+    .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;}
+    .sec-head .num{font-family:var(--mono);font-size:12px;background:var(--oat);color:var(--slate);padding:3px 9px;border-radius:8px;}
+    .sec-head h2{font-family:var(--serif);font-weight:500;font-size:23px;color:var(--slate);letter-spacing:-0.01em;}
+    .sec-intro{font-size:14px;color:var(--gray-500);max-width:880px;margin-bottom:16px;}
+    p.body{font-size:14px;max-width:880px;margin-bottom:12px;} p.body strong{color:var(--slate);}
+    ol.body,ul.body{font-size:14px;max-width:880px;margin:0 0 12px 22px;} li{margin-bottom:7px;} li strong{color:var(--slate);}
+    code{font-family:var(--mono);font-size:0.86em;background:var(--gray-150);border:1px solid var(--gray-300);border-radius:5px;padding:1px 5px;color:#C9B98A;}
+    .tbl{width:100%;border:var(--border);border-radius:var(--radius);border-collapse:separate;border-spacing:0;overflow:hidden;font-size:13px;margin-bottom:10px;}
+    .tbl th,.tbl td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--gray-300);vertical-align:top;}
+    .tbl th{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);background:var(--gray-150);font-weight:600;}
+    .tbl tr:last-child td{border-bottom:none;} .tbl td.slate{color:var(--slate);font-weight:600;} .tbl td.n{font-family:var(--mono);text-align:right;color:var(--clay);font-weight:600;} .tbl tbody tr:hover{background:var(--gray-150);}
+    .tbl tr.bad td.slate,.tbl tr.bad td.n{color:var(--rust);} .tbl tr.ok td.n{color:var(--olive);}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;} @media(max-width:820px){.grid2{grid-template-columns:1fr;}}
+    .callout{background:var(--white);border:var(--border);border-left:4px solid var(--warn);border-radius:10px;padding:14px 18px;font-size:13.5px;margin:12px 0;max-width:900px;}
+    .footer{color:var(--gray-500);font-size:13px;margin-top:48px;padding-top:20px;border-top:1px solid var(--gray-300);}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-head">
+      <div class="eyebrow">Audit · robot-islands · skill-tree · foundation for the v2 rebalance spec</div>
+      <h1>Skill-tree audit — over-noding, per-node dilution, and a missing efficiency lever</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Builds on <code>2026-05-25-skilltree-rebalance-design</code> (v1, schema v14, implemented).
+        Data: live catalog survey via <code>vite-node</code> against <code>src/skilltree.ts</code>
+        (current schema v15). This audit is the foundation for the <strong>skill-tree rebalance v2</strong> spec.
+      </div>
+    </header>
+
+    <div class="tldr">
+      v1 fixed the <b>multiplier runaway</b> (×10⁹ → cap every pool at ×10 via calibrated
+      magnitudes) — but by <b>adding nodes</b> (its rule: "N≥5 per effect kind to avoid cliff
+      magnitudes"). That deliberate "many tiny nodes" choice is exactly why per-node gains are now
+      <b>imperceptible</b> (54 power nodes → ×10 = <b>+4.4 %/node</b>). The caps are right; the
+      <b>node counts &amp; per-node feel are wrong</b>, and one core lever — <b>material-input
+      efficiency</b> — doesn't exist. v2 reverses the tradeoff: same ×10 caps, far fewer/punchier
+      nodes, redundant paths merged, plus a new "magical" input-efficiency subpath.
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>How to measure over-noding</h2></div>
+      <p class="sec-intro">Raw effect-kind totals mislead without these three rules — the analysis v1 lacked.</p>
+      <ol class="body">
+        <li><strong>Generic + specific STACK.</strong> A generic effect applies on top of every specific variant, so effective nodes for one outcome = generic + that variant (storage generic <code>storageCapMul</code> 16 adds to each <code>storageCategoryCapMul:&lt;cat&gt;</code>).</li>
+        <li><strong>Group by ECONOMIC OUTCOME, not effect-kind name.</strong> Reducing consumer draw and raising producer output are the <em>same</em> lever ("power headroom"); recipe-rate and per-extractor yield both raise extraction throughput.</li>
+        <li><strong>Cap ≠ count.</strong> v1 capped each pool's total at ×10 but left counts high, so per-node = <code>cap^(1/N)</code>. At N=54 that's +4.4 %/node — a rounding error, not an upgrade.</li>
+      </ol>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Relationship to v1 (2026-05-25)</h2></div>
+      <table class="tbl">
+        <thead><tr><th>v1 did</th><th>consequence / gap for v2</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Capped every pool at ×10 via <code>m=C^(w/N)−1</code> (no clamp)</td><td>Caps correct — <strong>keep the framework</strong>.</td></tr>
+          <tr class="bad"><td class="slate">Added 48 nodes; rule "N≥5 to avoid cliff magnitudes"</td><td><strong>Root of the dilution.</strong> v2 reverses it: fewer nodes, bigger per-node.</td></tr>
+          <tr><td class="slate">Power = one net shrink-each pool (consume ÷√10 × produce ×√10)</td><td>Already grouped by outcome. Only the 54-node count is the issue.</td></tr>
+          <tr><td class="slate">Extraction = one shared pool (rate + per-building yield, 50/50)</td><td>Already grouped. Only the ~66 effective count is the issue.</td></tr>
+          <tr class="bad"><td class="slate">Added rate/yield/power/storage caps only</td><td><strong>No material-input-efficiency lever</strong> — v2 adds it.</td></tr>
+          <tr><td class="slate">Left <code>rebalance-magnitudes.py</code> + CI magnitude test</td><td>v2 reuses both (re-derive magnitudes for smaller N).</td></tr>
+        </tbody>
+      </table>
+      <p class="body">v1 wasn't wrong about the runaway; v2 is the <strong>second-order cleanup</strong> of the tradeoff v1 chose.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Data — current catalog (~553 nodes)</h2></div>
+      <div class="grid2">
+        <div>
+          <p class="sec-intro"><strong>recipeRateMul (100) by category</strong> — only extraction over:</p>
+          <table class="tbl"><thead><tr><th>category</th><th>nodes</th><th>verdict</th></tr></thead><tbody>
+            <tr class="bad"><td class="slate">extraction</td><td class="n">47</td><td>over</td></tr>
+            <tr><td class="slate">chemistry</td><td class="n">22</td><td>marginal</td></tr>
+            <tr class="ok"><td class="slate">smelting</td><td class="n">11</td><td>ok</td></tr>
+            <tr class="ok"><td class="slate">electronics</td><td class="n">11</td><td>ok</td></tr>
+            <tr class="ok"><td class="slate">manufacturing</td><td class="n">9</td><td>ok</td></tr>
+          </tbody></table>
+        </div>
+        <div>
+          <p class="sec-intro"><strong>storageCategoryCapMul</strong> — generic (16) stacks onto each:</p>
+          <table class="tbl"><thead><tr><th>category</th><th>specific</th><th>effective</th></tr></thead><tbody>
+            <tr class="bad"><td class="slate">dry_goods</td><td class="n">22</td><td class="n">38</td></tr>
+            <tr class="bad"><td class="slate">liquid_gas</td><td class="n">16</td><td class="n">32</td></tr>
+            <tr class="bad"><td class="slate">components</td><td class="n">8</td><td class="n">24</td></tr>
+            <tr class="bad"><td class="slate">rare</td><td class="n">8</td><td class="n">24</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+      <p class="sec-intro" style="margin-top:14px"><strong>Per-node magnitudes (from v1 §03) — the dilution, quantified:</strong></p>
+      <table class="tbl"><thead><tr><th>lever</th><th>N</th><th>per-node</th><th>feel</th></tr></thead><tbody>
+        <tr class="bad"><td class="slate">recipeRateMul:extraction</td><td class="n">47</td><td class="n">+2.5 %</td><td>imperceptible</td></tr>
+        <tr class="bad"><td class="slate">powerConsumptionMul</td><td class="n">37</td><td class="n">+3.2 %</td><td>imperceptible</td></tr>
+        <tr class="bad"><td class="slate">power headroom (consume+produce)</td><td class="n">54</td><td class="n">≈+4.4 %</td><td>imperceptible</td></tr>
+        <tr><td class="slate">commRangeMul</td><td class="n">33</td><td class="n">+7.2 %</td><td>weak</td></tr>
+        <tr><td class="slate">storageCategoryCapMul:dry_goods</td><td class="n">22</td><td class="n">+5.4 %</td><td>weak</td></tr>
+      </tbody></table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Over-noded levers (effective, ~15–20 cap)</h2></div>
+      <table class="tbl"><thead><tr><th>economic lever</th><th>effective</th><th>components</th><th>verdict</th></tr></thead><tbody>
+        <tr class="bad"><td class="slate">Mine throughput</td><td class="n">66</td><td>extraction-rate 47 + mineYield 19</td><td>worst (double-boosted)</td></tr>
+        <tr class="bad"><td class="slate">Power headroom</td><td class="n">54</td><td>consume 37 + produce 17</td><td>over</td></tr>
+        <tr class="bad"><td class="slate">Storage dry_goods</td><td class="n">38</td><td>generic 16 + 22</td><td>over</td></tr>
+        <tr class="bad"><td class="slate">commRangeMul</td><td class="n">33</td><td>generic</td><td>over</td></tr>
+        <tr class="bad"><td class="slate">scannerCoverageMul</td><td class="n">32</td><td>generic</td><td>over</td></tr>
+        <tr class="bad"><td class="slate">Storage liquid_gas</td><td class="n">32</td><td>16 + 16</td><td>over</td></tr>
+        <tr class="bad"><td class="slate">other extractors' throughput</td><td class="n">~54</td><td>extraction-rate 47 + per-extractor yield</td><td>over</td></tr>
+        <tr><td class="slate">Storage components / rare</td><td class="n">24</td><td>16 + 8</td><td>over</td></tr>
+        <tr><td class="slate">routeCapacity / chemistry-rate / maintenance</td><td class="n">20–22</td><td>generic / category</td><td>marginal</td></tr>
+      </tbody></table>
+      <div class="callout"><strong>Structural root cause:</strong> redundant paths boosting one outcome — extraction (category-rate <em>and</em> per-extractor yield), storage (generic <em>and</em> per-category), power (consume <em>and</em> produce). The fix is <strong>pick one path per lever</strong>, then cap the survivor.</div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Missing lever — material-input efficiency ("magical")</h2></div>
+      <ul class="body">
+        <li><strong>Gap:</strong> skills scale <em>time</em> (recipeRateMul), <em>yield</em>, <em>power</em>, <em>storage</em> — <strong>none scale the input→output ratio</strong> (<code>powerConsumptionMul</code> is power, not materials).</li>
+        <li><strong>Proposal:</strong> new effect kind <code>recipeInputMul {reduce:true}</code> — multiplies recipe <strong>input</strong> quantities (outputs unchanged) — as a subpath summing to <strong>÷1.5 input at full</strong> (≈33 % less material), across a small number of meaningful nodes.</li>
+        <li><strong>Why "magical":</strong> input below output <strong>violates the SI kg mass-balance</strong> the auditor enforces → must be <strong>exempted</strong> (like <code>RECIPE_SPECULATIVE</code>). That intentional break is the in-fiction "magic" and the reason to segregate it.</li>
+      </ul>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>v2 thesis &amp; recommendations (deltas from v1)</h2></div>
+      <ol class="body">
+        <li><strong>Keep</strong> v1's cap-per-pool framework, the <code>C^(w/N)−1</code> formula, pool definitions, magnitude CI test, and the ×10 / √10 / ÷10 / ×3-xp caps.</li>
+        <li><strong>Reverse "N≥5 / many tiny nodes."</strong> Contract each pool to <strong>~15–20 nodes</strong>; accept punchier per-node magnitudes (the cliffs v1 avoided are now wanted). Re-derive magnitudes for the smaller N.</li>
+        <li><strong>Merge redundant paths per outcome</strong> — keep ONE path per lever and cap it (extraction: per-extractor yield vs generic rate; storage: per-category vs generic; power: already net-capped, just cut the count).</li>
+        <li><strong>Add the magical input-efficiency subpath</strong> (<code>recipeInputMul</code>, ÷1.5, auditor-exempt).</li>
+        <li><strong>Migrate</strong> — removing node ids invalidates <code>unlockedNodes</code> → schema bump + reset the ladder like v1's v13→v14 (preserve buildings/inventory).</li>
+        <li><strong>Interaction:</strong> input-efficiency (÷1.5) + rate (×10) stack with the floor mechanic (×(1+L)) from the throughput pass — verify the combined ceilings are intended.</li>
+      </ol>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Open questions for the v2 spec</h2></div>
+      <ul class="body">
+        <li><strong>Node-count target</strong> — flat ~15–20, or core 15–20 / niche 3–4?</li>
+        <li><strong>Per-node band</strong> — ~1.2–1.6×/node, or a few hand-curated "notable" jumps + minimal filler?</li>
+        <li><strong>Which path to keep</strong> for extraction (category-rate vs per-extractor yield) and storage (generic vs per-category)?</li>
+        <li><strong>Magical subpath</strong> size/curve to reach ÷1.5; gated behind a tier?</li>
+        <li><strong>Sequencing</strong> — after throughput/floors + tutorial (default), or sooner?</li>
+      </ul>
+    </section>
+
+    <div class="footer"><p>Skill-tree v2 audit · 2026-05-29 · foundation for the skill-tree rebalance v2 spec · builds on 2026-05-25-skilltree-rebalance-design (v1) · data: live catalog survey (schema v15)</p></div>
+  </div>
+</body>
+</html>
