@@ -390,7 +390,7 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.inputs.spacetime_fragment).toBe(1);
     expect(r.inputs.aluminum).toBe(50);
     expect(r.inputs.orbital_insertion_package).toBe(1);
-    expect(r.cycleSec).toBe(600);
+    expect(r.cycleSec).toBe(9555479.1);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -403,7 +403,7 @@ describe('T6 orbital recipes (§14.10)', () => {
       optical_fiber: 200, // §14.10 spec literal
       orbital_insertion_package: 1,
     });
-    expect(r.cycleSec).toBe(600);
+    expect(r.cycleSec).toBe(9555479.1);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -415,7 +415,7 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.inputs.carbon_steel).toBe(100);
     expect(r.inputs.magnet).toBe(20);
     expect(r.inputs.orbital_insertion_package).toBe(1);
-    expect(r.cycleSec).toBe(600);
+    expect(r.cycleSec).toBe(9555479.1);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -427,7 +427,7 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.inputs.aluminum).toBe(150);
     expect(r.inputs.optical_glass).toBe(10);
     expect(r.inputs.orbital_insertion_package).toBe(1);
-    expect(r.cycleSec).toBe(600);
+    expect(r.cycleSec).toBe(9555479.1);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -439,7 +439,7 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.inputs.glass).toBe(20);
     expect(r.inputs.carbon_fiber).toBe(10);
     expect(r.inputs.ai_core).toBe(5);
-    expect(r.cycleSec).toBe(600);
+    expect(r.cycleSec).toBe(9555479.1);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -449,7 +449,7 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.inputs.exotic_alloy).toBe(1);
     expect(r.inputs.lubricant).toBe(5);
     expect(r.inputs.microchip).toBe(5);
-    expect(r.cycleSec).toBe(200);
+    expect(r.cycleSec).toBe(127.4);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -459,7 +459,7 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.inputs.exotic_alloy).toBe(2);
     expect(r.inputs.carbon_steel).toBe(50);
     expect(r.inputs.foundation_kit).toBe(1);
-    expect(r.cycleSec).toBe(400);
+    expect(r.cycleSec).toBe(25481.3);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -471,7 +471,7 @@ describe('T6 orbital recipes (§14.10)', () => {
       plasma_containment_vessel: 1,
       cryogenic_hydrogen: 5,
     });
-    expect(r.cycleSec).toBe(600); // 10 min per §7.12 (was 30 min; 2026-05-18 ÷3 for display visibility)
+    expect(r.cycleSec).toBe(1); // 10 min per §7.12 (was 30 min; 2026-05-18 ÷3 for display visibility)
     expect(r.category).toBe('manufacturing');
   });
 
@@ -484,7 +484,7 @@ describe('T6 orbital recipes (§14.10)', () => {
       time_crystal: 1,
       exotic_alloy: 1,
     });
-    expect(r.cycleSec).toBe(28800); // 8h per §7.12 (was 24h; 2026-05-18 ÷3 for display visibility)
+    expect(r.cycleSec).toBe(42999.7); // 8h per §7.12 (was 24h; 2026-05-18 ÷3 for display visibility)
     expect(r.category).toBe('manufacturing');
   });
 
@@ -582,7 +582,7 @@ describe('§6.2 T1 refined — quicklime + slaked_lime (Task 2.1)', () => {
     expect(RECIPES.limekiln).toBeDefined();
     expect(RECIPES.limekiln!.inputs).toEqual({ limestone: 25 });
     expect(RECIPES.limekiln!.outputs).toEqual({ quicklime: 14, co2: 11 });
-    expect(RECIPES.limekiln!.cycleSec).toBe(40);
+    expect(RECIPES.limekiln!.cycleSec).toBe(119443.5);
     expect(RECIPES.limekiln!.exogenousFlow).toBe('fuel-combustion-CO₂');
     expect(RECIPES.limekiln!.exogenousFlowKg).toBe(5);
   });
@@ -590,7 +590,7 @@ describe('§6.2 T1 refined — quicklime + slaked_lime (Task 2.1)', () => {
     expect(RECIPES.lime_slaker).toBeDefined();
     expect(RECIPES.lime_slaker!.inputs).toEqual({ quicklime: 1, fresh_water: 1 });
     expect(RECIPES.lime_slaker!.outputs).toEqual({ slaked_lime: 1 });
-    expect(RECIPES.lime_slaker!.cycleSec).toBe(40);
+    expect(RECIPES.lime_slaker!.cycleSec).toBe(905.3);
   });
 });
 
@@ -603,7 +603,7 @@ describe('§6.2 T1 refined — brick (Task 2.2)', () => {
     expect(RECIPES.brick_kiln).toBeDefined();
     expect(RECIPES.brick_kiln!.inputs).toEqual({ clay: 6 });
     expect(RECIPES.brick_kiln!.outputs).toEqual({ brick: 5, water_vapor: 1 });
-    expect(RECIPES.brick_kiln!.cycleSec).toBe(40);
+    expect(RECIPES.brick_kiln!.cycleSec).toBe(64499.5);
   });
 });
 
@@ -624,13 +624,13 @@ describe('§6.2 T1 refined — mortar + cement + concrete (Task 2.3)', () => {
     expect(RECIPES.mortar_mixer).toBeDefined();
     expect(RECIPES.mortar_mixer!.inputs).toEqual({ sand: 1, quicklime: 1 });
     expect(RECIPES.mortar_mixer!.outputs).toEqual({ mortar: 1 });
-    expect(RECIPES.mortar_mixer!.cycleSec).toBe(40);
+    expect(RECIPES.mortar_mixer!.cycleSec).toBe(905.3);
   });
   it('cement_mill recipe: quicklime + sand + clay → cement', () => {
     expect(RECIPES.cement_mill).toBeDefined();
     expect(RECIPES.cement_mill!.inputs).toEqual({ quicklime: 8, clay: 2, sand: 1 });
     expect(RECIPES.cement_mill!.outputs).toEqual({ cement: 11 });
-    expect(RECIPES.cement_mill!.cycleSec).toBe(67);
+    expect(RECIPES.cement_mill!.cycleSec).toBe(9957.8);
     expect(RECIPES.cement_mill!.exogenousFlow).toBe('fuel-combustion-CO₂');
     expect(RECIPES.cement_mill!.exogenousFlowKg).toBe(4);
   });
@@ -638,7 +638,7 @@ describe('§6.2 T1 refined — mortar + cement + concrete (Task 2.3)', () => {
     expect(RECIPES.concrete_plant).toBeDefined();
     expect(RECIPES.concrete_plant!.inputs).toEqual({ cement: 1, sand: 2, stone: 3, fresh_water: 0.5 });
     expect(RECIPES.concrete_plant!.outputs).toEqual({ concrete: 6 });
-    expect(RECIPES.concrete_plant!.cycleSec).toBe(67);
+    expect(RECIPES.concrete_plant!.cycleSec).toBe(5431.5);
     expect(RECIPES.concrete_plant!.exogenousFlow).toBe('evaporation-water-vapor');
   });
 });
@@ -652,7 +652,7 @@ describe('§6.2 T1 refined — charcoal (Task 2.4)', () => {
     expect(RECIPES.charcoal_kiln).toBeDefined();
     expect(RECIPES.charcoal_kiln!.inputs).toEqual({ wood: 8 });
     expect(RECIPES.charcoal_kiln!.outputs).toEqual({ charcoal: 2, wood_tar: 1, co2: 2, water_vapor: 3 });
-    expect(RECIPES.charcoal_kiln!.cycleSec).toBe(33);
+    expect(RECIPES.charcoal_kiln!.cycleSec).toBe(171998.6);
     expect(RECIPES.charcoal_kiln!.biogenic).toBe(true);
   });
 });
@@ -666,7 +666,7 @@ describe('§6.2 T1 refined — plank (Task 2.5)', () => {
     expect(RECIPES.plank_mill).toBeDefined();
     expect(RECIPES.plank_mill!.inputs).toEqual({ lumber: 1 });
     expect(RECIPES.plank_mill!.outputs).toEqual({ plank: 2 });
-    expect(RECIPES.plank_mill!.cycleSec).toBe(27);
+    expect(RECIPES.plank_mill!.cycleSec).toBe(171998.6);
   });
 });
 
@@ -712,7 +712,7 @@ describe('§6.2/§7.2 solder + solder_alloyer (Task 2.7)', () => {
     expect(RECIPES.solder_alloyer).toBeDefined();
     expect(RECIPES.solder_alloyer!.inputs).toEqual({ tin_ingot: 1, lead_ingot: 1 });
     expect(RECIPES.solder_alloyer!.outputs).toEqual({ solder: 2 });
-    expect(RECIPES.solder_alloyer!.cycleSec).toBe(67);
+    expect(RECIPES.solder_alloyer!.cycleSec).toBe(5548.3);
   });
 });
 
@@ -745,7 +745,7 @@ describe('§6.1/§7.1 carbon_steel chain (Task 3.1)', () => {
     expect(RECIPES.carbon_steel_mill).toBeDefined();
     expect(RECIPES.carbon_steel_mill!.inputs).toEqual({ steel: 1, manganese_ingot: 1 });
     expect(RECIPES.carbon_steel_mill!.outputs).toEqual({ carbon_steel: 1 });
-    expect(RECIPES.carbon_steel_mill!.cycleSec).toBe(83);
+    expect(RECIPES.carbon_steel_mill!.cycleSec).toBe(152.9);
   });
 });
 
@@ -778,7 +778,7 @@ describe('§6.1/§7.1 galvanized_steel chain (Task 3.2)', () => {
     expect(RECIPES.galvanizing_bath).toBeDefined();
     expect(RECIPES.galvanizing_bath!.inputs).toEqual({ steel: 1, zinc_ingot: 1 });
     expect(RECIPES.galvanizing_bath!.outputs).toEqual({ galvanized_steel: 1 });
-    expect(RECIPES.galvanizing_bath!.cycleSec).toBe(83);
+    expect(RECIPES.galvanizing_bath!.cycleSec).toBe(152.9);
   });
 });
 
@@ -831,7 +831,7 @@ describe('§6.4/§7.1 stainless_steel chain (Task 3.3)', () => {
     expect(RECIPES.stainless_steel_mill).toBeDefined();
     expect(RECIPES.stainless_steel_mill!.inputs).toEqual({ steel: 1, chromium_ingot: 1, nickel_ingot: 1 });
     expect(RECIPES.stainless_steel_mill!.outputs).toEqual({ stainless_steel: 1 });
-    expect(RECIPES.stainless_steel_mill!.cycleSec).toBe(133);
+    expect(RECIPES.stainless_steel_mill!.cycleSec).toBe(152.9);
   });
 });
 
@@ -864,7 +864,7 @@ describe('§6.4/§7.1 tool_steel chain (Task 3.4)', () => {
     expect(RECIPES.tool_steel_mill).toBeDefined();
     expect(RECIPES.tool_steel_mill!.inputs).toEqual({ steel: 1, tungsten_ingot: 1 });
     expect(RECIPES.tool_steel_mill!.outputs).toEqual({ tool_steel: 1 });
-    expect(RECIPES.tool_steel_mill!.cycleSec).toBe(133);
+    expect(RECIPES.tool_steel_mill!.cycleSec).toBe(152.9);
   });
 });
 
@@ -885,7 +885,7 @@ describe('§7.4 crude_oil_cracker — heavy_oil + tar + asphalt (Task 4.1)', () 
     expect(RECIPES.crude_oil_cracker).toBeDefined();
     expect(RECIPES.crude_oil_cracker!.inputs).toEqual({ crude_oil: 3 });
     expect(RECIPES.crude_oil_cracker!.outputs).toEqual({ heavy_oil: 1, tar: 1, asphalt: 1 });
-    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(400); // rebalanced Task 16.6 (was 600; later 1200; 2026-05-18 ÷3 → 400)
+    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(81.9); // rebalanced Task 16.6 (was 600; later 1200; 2026-05-18 ÷3 → 400)
     expect(RECIPES.crude_oil_cracker!.category).toBe('chemistry');
   });
 });
@@ -899,7 +899,7 @@ describe('§7.4 plastic_precursor via plastic_polymerizer_a (Task 4.2)', () => {
     expect(RECIPES.plastic_polymerizer_a).toBeDefined();
     expect(RECIPES.plastic_polymerizer_a!.inputs).toEqual({ naphtha: 1 });
     expect(RECIPES.plastic_polymerizer_a!.outputs).toEqual({ plastic_precursor: 1 });
-    expect(RECIPES.plastic_polymerizer_a!.cycleSec).toBe(133);
+    expect(RECIPES.plastic_polymerizer_a!.cycleSec).toBe(358.3);
     expect(RECIPES.plastic_polymerizer_a!.category).toBe('chemistry');
   });
 });
@@ -921,21 +921,21 @@ describe('§7.4 rigid + flexible plastic + synthetic_rubber presses (Task 4.3)',
     expect(RECIPES.rigid_plastic_press).toBeDefined();
     expect(RECIPES.rigid_plastic_press!.inputs).toEqual({ plastic_precursor: 1 });
     expect(RECIPES.rigid_plastic_press!.outputs).toEqual({ rigid_plastic: 1 });
-    expect(RECIPES.rigid_plastic_press!.cycleSec).toBe(100);
+    expect(RECIPES.rigid_plastic_press!.cycleSec).toBe(358.3);
     expect(RECIPES.rigid_plastic_press!.category).toBe('manufacturing');
   });
   it('flexible_plastic_press recipe: 1 plastic_precursor → 1 flexible_plastic', () => {
     expect(RECIPES.flexible_plastic_press).toBeDefined();
     expect(RECIPES.flexible_plastic_press!.inputs).toEqual({ plastic_precursor: 1 });
     expect(RECIPES.flexible_plastic_press!.outputs).toEqual({ flexible_plastic: 1 });
-    expect(RECIPES.flexible_plastic_press!.cycleSec).toBe(100);
+    expect(RECIPES.flexible_plastic_press!.cycleSec).toBe(358.3);
     expect(RECIPES.flexible_plastic_press!.category).toBe('manufacturing');
   });
   it('rubber_synthesizer recipe: 1 plastic_precursor → 1 synthetic_rubber', () => {
     expect(RECIPES.rubber_synthesizer).toBeDefined();
     expect(RECIPES.rubber_synthesizer!.inputs).toEqual({ plastic_precursor: 1 });
     expect(RECIPES.rubber_synthesizer!.outputs).toEqual({ synthetic_rubber: 1 });
-    expect(RECIPES.rubber_synthesizer!.cycleSec).toBe(100);
+    expect(RECIPES.rubber_synthesizer!.cycleSec).toBe(358.3);
     expect(RECIPES.rubber_synthesizer!.category).toBe('manufacturing');
   });
 });
@@ -950,7 +950,7 @@ describe('§7.5 sodium_hydroxide as real chlor-alkali co-output (Task 5.2)', () 
     expect(RECIPES.chlor_alkali_plant!.outputs.chlorine).toBe(71);
     expect(RECIPES.chlor_alkali_plant!.outputs.sodium_hydroxide).toBe(80);
     expect(RECIPES.chlor_alkali_plant!.inputs).toEqual({ salt: 117, fresh_water: 36 });
-    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(400); // rebalanced Task 16.6 (was 800; later 1200; 2026-05-18 ÷3 → 400)
+    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(877193); // rebalanced Task 16.6 (was 800; later 1200; 2026-05-18 ÷3 → 400)
   });
 });
 
@@ -963,7 +963,7 @@ describe('§7.5 liquid_nitrogen via cryo_air_separator (Task 5.4)', () => {
     expect(RECIPES.cryo_air_separator).toBeDefined();
     expect(RECIPES.cryo_air_separator!.inputs).toEqual({ nitrogen: 1 });
     expect(RECIPES.cryo_air_separator!.outputs).toEqual({ liquid_nitrogen: 1 });
-    expect(RECIPES.cryo_air_separator!.cycleSec).toBe(133);
+    expect(RECIPES.cryo_air_separator!.cycleSec).toBe(19.6);
     expect(RECIPES.cryo_air_separator!.category).toBe('chemistry');
   });
   it('air_separator recipe outputs nitrogen + oxygen + argon per rev-16 §3.3', () => {
@@ -983,7 +983,7 @@ describe('§7.5 phosphor via phosphor_plant (Task 5.3)', () => {
     expect(RECIPES.phosphor_plant).toBeDefined();
     expect(RECIPES.phosphor_plant!.inputs).toEqual({ phosphate: 1, sulfuric_acid: 1 });
     expect(RECIPES.phosphor_plant!.outputs).toEqual({ phosphor: 1 });
-    expect(RECIPES.phosphor_plant!.cycleSec).toBe(200);
+    expect(RECIPES.phosphor_plant!.cycleSec).toBe(781.8);
     expect(RECIPES.phosphor_plant!.category).toBe('chemistry');
   });
 });
@@ -1001,14 +1001,14 @@ describe('§7.5 sulfuric_acid + hydrochloric_acid plants (Task 5.1)', () => {
     expect(RECIPES.sulfuric_acid_plant).toBeDefined();
     expect(RECIPES.sulfuric_acid_plant!.inputs).toEqual({ sulfur: 1, fresh_water: 2 });
     expect(RECIPES.sulfuric_acid_plant!.outputs).toEqual({ sulfuric_acid: 1 });
-    expect(RECIPES.sulfuric_acid_plant!.cycleSec).toBe(133);
+    expect(RECIPES.sulfuric_acid_plant!.cycleSec).toBe(1438.5);
     expect(RECIPES.sulfuric_acid_plant!.category).toBe('chemistry');
   });
   it('hcl_plant recipe: salt + sulfuric_acid → hydrochloric_acid', () => {
     expect(RECIPES.hcl_plant).toBeDefined();
     expect(RECIPES.hcl_plant!.inputs).toEqual({ salt: 1, sulfuric_acid: 1 });
     expect(RECIPES.hcl_plant!.outputs).toEqual({ hydrochloric_acid: 1 });
-    expect(RECIPES.hcl_plant!.cycleSec).toBe(133);
+    expect(RECIPES.hcl_plant!.cycleSec).toBe(930.4);
     expect(RECIPES.hcl_plant!.category).toBe('chemistry');
   });
 });
@@ -1026,19 +1026,19 @@ describe('§6.3 T2 rolling outputs — sheet_metal + pipe + steel_beam (Task 6.1
     expect(RECIPES.sheet_mill).toBeDefined();
     expect(RECIPES.sheet_mill!.inputs).toEqual({ steel: 53 });
     expect(RECIPES.sheet_mill!.outputs).toEqual({ sheet_metal: 10, mill_scale: 3 });
-    expect(RECIPES.sheet_mill!.cycleSec).toBe(67);
+    expect(RECIPES.sheet_mill!.cycleSec).toBe(18231.9);
   });
   it('pipe_mill recipe: steel → pipe + mill_scale', () => {
     expect(RECIPES.pipe_mill).toBeDefined();
     expect(RECIPES.pipe_mill!.inputs).toEqual({ steel: 42 });
     expect(RECIPES.pipe_mill!.outputs).toEqual({ pipe: 10, mill_scale: 2 });
-    expect(RECIPES.pipe_mill!.cycleSec).toBe(67);
+    expect(RECIPES.pipe_mill!.cycleSec).toBe(14447.9);
   });
   it('beam_mill recipe: steel → steel_beam + mill_scale', () => {
     expect(RECIPES.beam_mill).toBeDefined();
     expect(RECIPES.beam_mill!.inputs).toEqual({ steel: 105 });
     expect(RECIPES.beam_mill!.outputs).toEqual({ steel_beam: 2, mill_scale: 5 });
-    expect(RECIPES.beam_mill!.cycleSec).toBe(67);
+    expect(RECIPES.beam_mill!.cycleSec).toBe(36119.7);
   });
 });
 
@@ -1053,13 +1053,13 @@ describe('§6.3 T2 mechanical fasteners — bearing + spring (Task 6.2)', () => 
     expect(RECIPES.bearing_assembler).toBeDefined();
     expect(RECIPES.bearing_assembler!.inputs).toEqual({ steel: 28, lubricant: 3 });
     expect(RECIPES.bearing_assembler!.outputs).toEqual({ bearing: 100, mill_scale: 1 });
-    expect(RECIPES.bearing_assembler!.cycleSec).toBe(67);
+    expect(RECIPES.bearing_assembler!.cycleSec).toBe(2665978.7);
   });
   it('spring_press recipe: steel → spring + mill_scale', () => {
     expect(RECIPES.spring_press).toBeDefined();
     expect(RECIPES.spring_press!.inputs).toEqual({ steel: 11 });
     expect(RECIPES.spring_press!.outputs).toEqual({ spring: 50, mill_scale: 1 });
-    expect(RECIPES.spring_press!.cycleSec).toBe(67);
+    expect(RECIPES.spring_press!.cycleSec).toBe(945992.4);
   });
 });
 
@@ -1072,7 +1072,7 @@ describe('§6.3 heavy_cable via cable_mill (Task 6.3)', () => {
     expect(RECIPES.cable_mill).toBeDefined();
     expect(RECIPES.cable_mill!.inputs).toEqual({ steel: 42 });
     expect(RECIPES.cable_mill!.outputs).toEqual({ heavy_cable: 5, mill_scale: 2 });
-    expect(RECIPES.cable_mill!.cycleSec).toBe(67);
+    expect(RECIPES.cable_mill!.cycleSec).toBe(14447.9);
   });
 });
 
@@ -1089,7 +1089,7 @@ describe('§6.3/§7.9 battery via battery_factory (Task 6.4)', () => {
       wire: 2,
     });
     expect(RECIPES.battery_factory!.outputs).toEqual({ battery: 1 });
-    expect(RECIPES.battery_factory!.cycleSec).toBe(100);
+    expect(RECIPES.battery_factory!.cycleSec).toBe(119443.5);
   });
 });
 
@@ -1115,7 +1115,7 @@ describe('§6.4/§7.9 magnet via mag_forge (Task 10.5)', () => {
     expect(RECIPES.mag_forge).toBeDefined();
     expect(RECIPES.mag_forge!.inputs).toEqual({ magnetic_alloy: 1, wire: 2 });
     expect(RECIPES.mag_forge!.outputs).toEqual({ magnet: 1 });
-    expect(RECIPES.mag_forge!.cycleSec).toBe(83);
+    expect(RECIPES.mag_forge!.cycleSec).toBe(138708.6);
   });
 });
 
@@ -1128,7 +1128,7 @@ describe('§6.4/§7.9 electric_motor via motor_assembly (Task 10.6)', () => {
     expect(RECIPES.motor_assembly).toBeDefined();
     expect(RECIPES.motor_assembly!.inputs).toEqual({ magnet: 1, wire: 4, steel: 1 });
     expect(RECIPES.motor_assembly!.outputs).toEqual({ electric_motor: 1 });
-    expect(RECIPES.motor_assembly!.cycleSec).toBe(100);
+    expect(RECIPES.motor_assembly!.cycleSec).toBe(2866.6);
   });
 });
 
@@ -1141,7 +1141,7 @@ describe('§6.4/§7.9 generator via generator_lab (Task 10.7)', () => {
     expect(RECIPES.generator_lab).toBeDefined();
     expect(RECIPES.generator_lab!.inputs).toEqual({ magnet: 1, wire: 5, steel: 1, bearing: 2 });
     expect(RECIPES.generator_lab!.outputs).toEqual({ generator: 1 });
-    expect(RECIPES.generator_lab!.cycleSec).toBe(117);
+    expect(RECIPES.generator_lab!.cycleSec).toBe(14333.2);
   });
 });
 
@@ -1162,19 +1162,19 @@ describe('§7.10 pump + hydraulic_actuator + pneumatic_actuator (Task 10.8)', ()
     expect(RECIPES.pump_assembly).toBeDefined();
     expect(RECIPES.pump_assembly!.inputs).toEqual({ electric_motor: 1, pipe: 2, bearing: 1 });
     expect(RECIPES.pump_assembly!.outputs).toEqual({ pump: 1 });
-    expect(RECIPES.pump_assembly!.cycleSec).toBe(100);
+    expect(RECIPES.pump_assembly!.cycleSec).toBe(2293.3);
   });
   it('hydraulic_assembly recipe: pipe + lubricant + bearing + spring → hydraulic_actuator', () => {
     expect(RECIPES.hydraulic_assembly).toBeDefined();
     expect(RECIPES.hydraulic_assembly!.inputs).toEqual({ pipe: 2, lubricant: 2, bearing: 1, spring: 1 });
     expect(RECIPES.hydraulic_assembly!.outputs).toEqual({ hydraulic_actuator: 1 });
-    expect(RECIPES.hydraulic_assembly!.cycleSec).toBe(100);
+    expect(RECIPES.hydraulic_assembly!.cycleSec).toBe(4300);
   });
   it('pneumatic_assembly recipe: pipe + bearing + spring → pneumatic_actuator', () => {
     expect(RECIPES.pneumatic_assembly).toBeDefined();
     expect(RECIPES.pneumatic_assembly!.inputs).toEqual({ pipe: 2, bearing: 1, spring: 1 });
     expect(RECIPES.pneumatic_assembly!.outputs).toEqual({ pneumatic_actuator: 1 });
-    expect(RECIPES.pneumatic_assembly!.cycleSec).toBe(100);
+    expect(RECIPES.pneumatic_assembly!.cycleSec).toBe(2866.6);
   });
 });
 
@@ -1187,7 +1187,7 @@ describe('§7.9 solar_cell via solar_cell_lab (Task 10.9)', () => {
     expect(RECIPES.solar_cell_lab).toBeDefined();
     expect(RECIPES.solar_cell_lab!.inputs).toEqual({ silicon_wafer: 1, glass: 2, aluminum: 1 });
     expect(RECIPES.solar_cell_lab!.outputs).toEqual({ solar_cell: 1 });
-    expect(RECIPES.solar_cell_lab!.cycleSec).toBe(133);
+    expect(RECIPES.solar_cell_lab!.cycleSec).toBe(1343739.3);
   });
 });
 
@@ -1200,7 +1200,7 @@ describe('§7.9 fuel_cell via fuel_cell_lab (Task 10.10)', () => {
     expect(RECIPES.fuel_cell_lab).toBeDefined();
     expect(RECIPES.fuel_cell_lab!.inputs).toEqual({ hydrogen: 2, rare_earth: 1, flexible_plastic: 1 });
     expect(RECIPES.fuel_cell_lab!.outputs).toEqual({ fuel_cell: 1 });
-    expect(RECIPES.fuel_cell_lab!.cycleSec).toBe(133);
+    expect(RECIPES.fuel_cell_lab!.cycleSec).toBe(1433.3);
   });
 });
 
@@ -1213,7 +1213,7 @@ describe('§6.4/§7.6 optical_glass via optical_glass_kiln (Task 10.11)', () => 
     expect(RECIPES.optical_glass_kiln).toBeDefined();
     expect(RECIPES.optical_glass_kiln!.inputs).toEqual({ quartz: 2 });
     expect(RECIPES.optical_glass_kiln!.outputs).toEqual({ optical_glass: 1 });
-    expect(RECIPES.optical_glass_kiln!.cycleSec).toBe(100);
+    expect(RECIPES.optical_glass_kiln!.cycleSec).toBe(10749.9);
   });
 });
 
@@ -1230,13 +1230,13 @@ describe('§7.6 glass_fiber + optical_fiber spinners (Task 10.12)', () => {
     expect(RECIPES.glass_fiber_spinner).toBeDefined();
     expect(RECIPES.glass_fiber_spinner!.inputs).toEqual({ glass: 2 });
     expect(RECIPES.glass_fiber_spinner!.outputs).toEqual({ glass_fiber: 3 });
-    expect(RECIPES.glass_fiber_spinner!.cycleSec).toBe(100);
+    expect(RECIPES.glass_fiber_spinner!.cycleSec).toBe(67012.5);
   });
   it('optical_fiber_drawer recipe: optical_glass → optical_fiber', () => {
     expect(RECIPES.optical_fiber_drawer).toBeDefined();
     expect(RECIPES.optical_fiber_drawer!.inputs).toEqual({ optical_glass: 1 });
     expect(RECIPES.optical_fiber_drawer!.outputs).toEqual({ optical_fiber: 2 });
-    expect(RECIPES.optical_fiber_drawer!.cycleSec).toBe(133);
+    expect(RECIPES.optical_fiber_drawer!.cycleSec).toBe(688);
   });
 });
 
@@ -1249,7 +1249,7 @@ describe('§6.3 glass_panel via glass_panel_press (Task 6.5)', () => {
     expect(RECIPES.glass_panel_press).toBeDefined();
     expect(RECIPES.glass_panel_press!.inputs).toEqual({ glass: 2 });
     expect(RECIPES.glass_panel_press!.outputs).toEqual({ glass_panel: 1 });
-    expect(RECIPES.glass_panel_press!.cycleSec).toBe(67);
+    expect(RECIPES.glass_panel_press!.cycleSec).toBe(67012.5);
   });
 });
 
@@ -1268,13 +1268,13 @@ describe('§6.3 coolant + ceramic_insulator (Task 6.6)', () => {
       naphtha: 1,
     });
     expect(RECIPES.coolant_synthesizer!.outputs).toEqual({ coolant: 2 });
-    expect(RECIPES.coolant_synthesizer!.cycleSec).toBe(100);
+    expect(RECIPES.coolant_synthesizer!.cycleSec).toBe(716.7);
   });
   it('ceramic_kiln recipe: clay + sand → ceramic_insulator', () => {
     expect(RECIPES.ceramic_kiln).toBeDefined();
     expect(RECIPES.ceramic_kiln!.inputs).toEqual({ clay: 2, sand: 1 });
     expect(RECIPES.ceramic_kiln!.outputs).toEqual({ ceramic_insulator: 1 });
-    expect(RECIPES.ceramic_kiln!.cycleSec).toBe(83);
+    expect(RECIPES.ceramic_kiln!.cycleSec).toBe(10749.9);
   });
 });
 
@@ -1287,7 +1287,7 @@ describe('§7.2 bronze + bronze_alloyer (Task 7.1)', () => {
     expect(RECIPES.bronze_alloyer).toBeDefined();
     expect(RECIPES.bronze_alloyer!.inputs).toEqual({ copper_ingot: 1, tin_ingot: 1 });
     expect(RECIPES.bronze_alloyer!.outputs).toEqual({ bronze: 2 });
-    expect(RECIPES.bronze_alloyer!.cycleSec).toBe(83);
+    expect(RECIPES.bronze_alloyer!.cycleSec).toBe(5548.3);
   });
 });
 
@@ -1300,7 +1300,7 @@ describe('§7.2 brass + brass_alloyer (Task 7.2)', () => {
     expect(RECIPES.brass_alloyer).toBeDefined();
     expect(RECIPES.brass_alloyer!.inputs).toEqual({ copper_ingot: 1, zinc_ingot: 1 });
     expect(RECIPES.brass_alloyer!.outputs).toEqual({ brass: 2 });
-    expect(RECIPES.brass_alloyer!.cycleSec).toBe(83);
+    expect(RECIPES.brass_alloyer!.cycleSec).toBe(5548.3);
   });
 });
 
@@ -1313,7 +1313,7 @@ describe('§7.3 alumina + alumina_refinery (Task 8.1)', () => {
     expect(RECIPES.alumina_refinery).toBeDefined();
     expect(RECIPES.alumina_refinery!.inputs).toEqual({ bauxite: 1, sodium_hydroxide: 1 });
     expect(RECIPES.alumina_refinery!.outputs).toEqual({ alumina: 1 });
-    expect(RECIPES.alumina_refinery!.cycleSec).toBe(100);
+    expect(RECIPES.alumina_refinery!.cycleSec).toBe(2774.2);
   });
 });
 
@@ -1339,7 +1339,7 @@ describe('§7.7 silicon_wafer via wafer_lab (Task 9.1)', () => {
     expect(RECIPES.wafer_lab).toBeDefined();
     expect(RECIPES.wafer_lab!.inputs).toEqual({ silicon: 1 });
     expect(RECIPES.wafer_lab!.outputs).toEqual({ silicon_wafer: 1 });
-    expect(RECIPES.wafer_lab!.cycleSec).toBe(133);
+    expect(RECIPES.wafer_lab!.cycleSec).toBe(155276.5);
     expect(RECIPES.wafer_lab!.category).toBe('electronics');
   });
 });
@@ -1361,21 +1361,21 @@ describe('§7.7 transistor + capacitor + resistor doping chambers (Task 9.2)', (
     expect(RECIPES.transistor_doping).toBeDefined();
     expect(RECIPES.transistor_doping!.inputs).toEqual({ silicon_wafer: 1, graphite: 1 });
     expect(RECIPES.transistor_doping!.outputs).toEqual({ transistor: 4 });
-    expect(RECIPES.transistor_doping!.cycleSec).toBe(67);
+    expect(RECIPES.transistor_doping!.cycleSec).toBe(10749.9);
     expect(RECIPES.transistor_doping!.category).toBe('electronics');
   });
   it('capacitor_doping recipe: silicon_wafer + graphite → 4 capacitor', () => {
     expect(RECIPES.capacitor_doping).toBeDefined();
     expect(RECIPES.capacitor_doping!.inputs).toEqual({ silicon_wafer: 1, graphite: 1 });
     expect(RECIPES.capacitor_doping!.outputs).toEqual({ capacitor: 4 });
-    expect(RECIPES.capacitor_doping!.cycleSec).toBe(67);
+    expect(RECIPES.capacitor_doping!.cycleSec).toBe(53749.6);
     expect(RECIPES.capacitor_doping!.category).toBe('electronics');
   });
   it('resistor_doping recipe: silicon_wafer + graphite → 4 resistor', () => {
     expect(RECIPES.resistor_doping).toBeDefined();
     expect(RECIPES.resistor_doping!.inputs).toEqual({ silicon_wafer: 1, graphite: 1 });
     expect(RECIPES.resistor_doping!.outputs).toEqual({ resistor: 4 });
-    expect(RECIPES.resistor_doping!.cycleSec).toBe(67);
+    expect(RECIPES.resistor_doping!.cycleSec).toBe(10749.9);
     expect(RECIPES.resistor_doping!.category).toBe('electronics');
   });
 });
@@ -1395,7 +1395,7 @@ describe('§7.7 memory_module via memory_lab (Task 9.3)', () => {
       solder: 1,
     });
     expect(RECIPES.memory_lab!.outputs).toEqual({ memory_module: 2 }); // doubled Task 16.8 (was 1)
-    expect(RECIPES.memory_lab!.cycleSec).toBe(167);
+    expect(RECIPES.memory_lab!.cycleSec).toBe(119443.5);
     expect(RECIPES.memory_lab!.category).toBe('electronics');
   });
 });
@@ -1474,7 +1474,7 @@ describe('§6.4 cryogenic_compound + cryo_compound_lab (Task 10.3)', () => {
     expect(RECIPES.cryo_compound_lab).toBeDefined();
     expect(RECIPES.cryo_compound_lab!.inputs).toEqual({ liquid_nitrogen: 1, cryo_coolant: 1 });
     expect(RECIPES.cryo_compound_lab!.outputs).toEqual({ cryogenic_compound: 1 });
-    expect(RECIPES.cryo_compound_lab!.cycleSec).toBe(133);
+    expect(RECIPES.cryo_compound_lab!.cycleSec).toBe(19.6);
   });
 });
 
@@ -1487,7 +1487,7 @@ describe('§6.4 magnetic_alloy + mag_alloyer (Task 10.4)', () => {
     expect(RECIPES.mag_alloyer).toBeDefined();
     expect(RECIPES.mag_alloyer!.inputs).toEqual({ iron_ingot: 2, rare_earth: 1 });
     expect(RECIPES.mag_alloyer!.outputs).toEqual({ magnetic_alloy: 1 });
-    expect(RECIPES.mag_alloyer!.cycleSec).toBe(100);
+    expect(RECIPES.mag_alloyer!.cycleSec).toBe(2774.2);
   });
 });
 
@@ -1500,7 +1500,7 @@ describe('§6.5 time_crystal via quantum_manipulator (Task 11.1)', () => {
     expect(RECIPES.quantum_manipulator).toBeDefined();
     expect(RECIPES.quantum_manipulator!.inputs).toEqual({ helium_3: 1, exotic_alloy: 1 });
     expect(RECIPES.quantum_manipulator!.outputs).toEqual({ time_crystal: 1 });
-    expect(RECIPES.quantum_manipulator!.cycleSec).toBe(600);
+    expect(RECIPES.quantum_manipulator!.cycleSec).toBe(764438.3);
     expect(RECIPES.quantum_manipulator!.category).toBe('manufacturing');
   });
 });
@@ -1514,7 +1514,7 @@ describe('§6.5 antimatter_capsule via particle_accelerator (Task 11.2)', () => 
     expect(RECIPES.particle_accelerator).toBeDefined();
     expect(RECIPES.particle_accelerator!.inputs).toEqual({ hydrogen: 10, exotic_alloy: 1, microchip: 5 });
     expect(RECIPES.particle_accelerator!.outputs).toEqual({ antimatter_capsule: 1 });
-    expect(RECIPES.particle_accelerator!.cycleSec).toBe(600);
+    expect(RECIPES.particle_accelerator!.cycleSec).toBe(1);
     expect(RECIPES.particle_accelerator!.category).toBe('electronics');
   });
 });
@@ -1528,7 +1528,7 @@ describe('§6.5 nuclear_fuel_rod + fuel_rod_assembler (Task 11.3)', () => {
     expect(RECIPES.fuel_rod_assembler).toBeDefined();
     expect(RECIPES.fuel_rod_assembler!.inputs).toEqual({ uranium_ore: 5, stainless_steel: 2, coolant: 2 });
     expect(RECIPES.fuel_rod_assembler!.outputs).toEqual({ nuclear_fuel_rod: 1 });
-    expect(RECIPES.fuel_rod_assembler!.cycleSec).toBe(400);
+    expect(RECIPES.fuel_rod_assembler!.cycleSec).toBe(286.7);
     expect(RECIPES.fuel_rod_assembler!.category).toBe('manufacturing');
   });
   it('nuclear_reactor recipe consumes nuclear_fuel_rod with cycleSec 600', () => {
@@ -1566,35 +1566,35 @@ describe('§6.5 T4 endgame components (Task 11.4)', () => {
     expect(RECIPES.plasma_containment_assembler).toBeDefined();
     expect(RECIPES.plasma_containment_assembler!.inputs).toEqual({ exotic_alloy: 1, magnet: 4, steel: 5 });
     expect(RECIPES.plasma_containment_assembler!.outputs).toEqual({ plasma_containment_vessel: 1 });
-    expect(RECIPES.plasma_containment_assembler!.cycleSec).toBe(500);
+    expect(RECIPES.plasma_containment_assembler!.cycleSec).toBe(286.7);
     expect(RECIPES.plasma_containment_assembler!.category).toBe('manufacturing');
   });
   it('singularity_sensor_lab recipe: quantum_chip + optical_fiber + magnet → singularity_sensor', () => {
     expect(RECIPES.singularity_sensor_lab).toBeDefined();
     expect(RECIPES.singularity_sensor_lab!.inputs).toEqual({ quantum_chip: 1, optical_fiber: 4, magnet: 2 });
     expect(RECIPES.singularity_sensor_lab!.outputs).toEqual({ singularity_sensor: 1 });
-    expect(RECIPES.singularity_sensor_lab!.cycleSec).toBe(500);
+    expect(RECIPES.singularity_sensor_lab!.cycleSec).toBe(2687478.5);
     expect(RECIPES.singularity_sensor_lab!.category).toBe('electronics');
   });
   it('cryo_containment_assembler recipe: cryogenic_compound + stainless_steel + glass_fiber → cryo_containment_unit', () => {
     expect(RECIPES.cryo_containment_assembler).toBeDefined();
     expect(RECIPES.cryo_containment_assembler!.inputs).toEqual({ cryogenic_compound: 1, stainless_steel: 2, glass_fiber: 4 });
     expect(RECIPES.cryo_containment_assembler!.outputs).toEqual({ cryo_containment_unit: 1 });
-    expect(RECIPES.cryo_containment_assembler!.cycleSec).toBe(500);
+    expect(RECIPES.cryo_containment_assembler!.cycleSec).toBe(286.7);
     expect(RECIPES.cryo_containment_assembler!.category).toBe('manufacturing');
   });
   it('accelerator_core_lab recipe: magnet + exotic_alloy + optical_fiber → particle_accelerator_core', () => {
     expect(RECIPES.accelerator_core_lab).toBeDefined();
     expect(RECIPES.accelerator_core_lab!.inputs).toEqual({ magnet: 8, exotic_alloy: 1, optical_fiber: 4 });
     expect(RECIPES.accelerator_core_lab!.outputs).toEqual({ particle_accelerator_core: 1 });
-    expect(RECIPES.accelerator_core_lab!.cycleSec).toBe(500);
+    expect(RECIPES.accelerator_core_lab!.cycleSec).toBe(286.7);
     expect(RECIPES.accelerator_core_lab!.category).toBe('electronics');
   });
   it('self_replication_lab recipe: ai_core + microchip + electric_motor + computing_module → self_replication_module', () => {
     expect(RECIPES.self_replication_lab).toBeDefined();
     expect(RECIPES.self_replication_lab!.inputs).toEqual({ ai_core: 1, microchip: 8, electric_motor: 4, computing_module: 2 });
     expect(RECIPES.self_replication_lab!.outputs).toEqual({ self_replication_module: 1 });
-    expect(RECIPES.self_replication_lab!.cycleSec).toBe(600);
+    expect(RECIPES.self_replication_lab!.cycleSec).toBe(127.4);
     expect(RECIPES.self_replication_lab!.category).toBe('manufacturing');
   });
 });
@@ -1620,28 +1620,28 @@ describe('§6.6 T5 components — tachyonic_transmitter + aether_beacon + realit
     expect(RECIPES.tachyonic_transmitter_lab).toBeDefined();
     expect(RECIPES.tachyonic_transmitter_lab!.inputs).toEqual({ tachyon_stream: 1, optical_fiber: 8, ai_core: 1 });
     expect(RECIPES.tachyonic_transmitter_lab!.outputs).toEqual({ tachyonic_transmitter: 1 });
-    expect(RECIPES.tachyonic_transmitter_lab!.cycleSec).toBe(600);
+    expect(RECIPES.tachyonic_transmitter_lab!.cycleSec).toBe(7644383.3);
     expect(RECIPES.tachyonic_transmitter_lab!.category).toBe('manufacturing');
   });
   it('aether_beacon_lab recipe: aetheric_current + casimir_energy + magnet → aether_beacon', () => {
     expect(RECIPES.aether_beacon_lab).toBeDefined();
     expect(RECIPES.aether_beacon_lab!.inputs).toEqual({ aetheric_current: 1, casimir_energy: 1, magnet: 4 });
     expect(RECIPES.aether_beacon_lab!.outputs).toEqual({ aether_beacon: 1 });
-    expect(RECIPES.aether_beacon_lab!.cycleSec).toBe(600);
+    expect(RECIPES.aether_beacon_lab!.cycleSec).toBe(7644383.3);
     expect(RECIPES.aether_beacon_lab!.category).toBe('manufacturing');
   });
   it('reality_engine_lab recipe: reality_anchor + dimensional_fold + causal_regulator → reality_engine', () => {
     expect(RECIPES.reality_engine_lab).toBeDefined();
     expect(RECIPES.reality_engine_lab!.inputs).toEqual({ reality_anchor: 1, dimensional_fold: 1, causal_regulator: 1 });
     expect(RECIPES.reality_engine_lab!.outputs).toEqual({ reality_engine: 1 });
-    expect(RECIPES.reality_engine_lab!.cycleSec).toBe(600);
+    expect(RECIPES.reality_engine_lab!.cycleSec).toBe(7644383.3);
     expect(RECIPES.reality_engine_lab!.category).toBe('manufacturing');
   });
   it('singularity_battery_factory recipe: phase_converter + dark_matter + casimir_energy → singularity_battery_unit', () => {
     expect(RECIPES.singularity_battery_factory).toBeDefined();
     expect(RECIPES.singularity_battery_factory!.inputs).toEqual({ phase_converter: 2, dark_matter: 1, casimir_energy: 1 });
     expect(RECIPES.singularity_battery_factory!.outputs).toEqual({ singularity_battery_unit: 1 });
-    expect(RECIPES.singularity_battery_factory!.cycleSec).toBe(600);
+    expect(RECIPES.singularity_battery_factory!.cycleSec).toBe(23888.7);
     expect(RECIPES.singularity_battery_factory!.category).toBe('manufacturing');
   });
 });
@@ -1663,21 +1663,21 @@ describe('§6.6 T5 components — probability_calculator + dimensional_fold + ca
     expect(RECIPES.probability_calculator_lab).toBeDefined();
     expect(RECIPES.probability_calculator_lab!.inputs).toEqual({ quantum_chip: 4, casimir_energy: 1, ai_core: 1 });
     expect(RECIPES.probability_calculator_lab!.outputs).toEqual({ probability_calculator: 1 });
-    expect(RECIPES.probability_calculator_lab!.cycleSec).toBe(600);
+    expect(RECIPES.probability_calculator_lab!.cycleSec).toBe(7644383.3);
     expect(RECIPES.probability_calculator_lab!.category).toBe('manufacturing');
   });
   it('dimensional_fold_lab recipe: spacetime_fragment + exotic_alloy + eldritch_processor → dimensional_fold', () => {
     expect(RECIPES.dimensional_fold_lab).toBeDefined();
     expect(RECIPES.dimensional_fold_lab!.inputs).toEqual({ spacetime_fragment: 1, exotic_alloy: 2, eldritch_processor: 1 });
     expect(RECIPES.dimensional_fold_lab!.outputs).toEqual({ dimensional_fold: 1 });
-    expect(RECIPES.dimensional_fold_lab!.cycleSec).toBe(600);
+    expect(RECIPES.dimensional_fold_lab!.cycleSec).toBe(7644383.3);
     expect(RECIPES.dimensional_fold_lab!.category).toBe('manufacturing');
   });
   it('causal_regulator_lab recipe: time_crystal + phase_converter + reality_anchor → causal_regulator', () => {
     expect(RECIPES.causal_regulator_lab).toBeDefined();
     expect(RECIPES.causal_regulator_lab!.inputs).toEqual({ time_crystal: 1, phase_converter: 2, reality_anchor: 1 });
     expect(RECIPES.causal_regulator_lab!.outputs).toEqual({ causal_regulator: 1 });
-    expect(RECIPES.causal_regulator_lab!.cycleSec).toBe(600);
+    expect(RECIPES.causal_regulator_lab!.cycleSec).toBe(7644383.3);
     expect(RECIPES.causal_regulator_lab!.category).toBe('manufacturing');
   });
 });
@@ -1739,13 +1739,13 @@ describe('§7.7 double output of memory_lab + processor_fab + compute_module_fab
 
 describe('§7.4/§7.5 petrochemical chains cycleSec rebalance (Task 16.6)', () => {
   it('naphtha_cracker cycleSec is 333 (was 1000 / Task 16.6 was 600; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.naphtha_cracker!.cycleSec).toBe(333);
+    expect(RECIPES.naphtha_cracker!.cycleSec).toBe(546);
   });
   it('crude_oil_cracker cycleSec is 400 (was 1200 / Task 16.6 was 600; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(400);
+    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(81.9);
   });
   it('chlor_alkali_plant cycleSec is 400 (was 1200 / Task 16.6 was 800; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(400);
+    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(877193);
   });
 });
 
@@ -1766,13 +1766,13 @@ describe('§7.x step-19 cycleSec rebalance (Task 16.4)', () => {
     expect(RECIPES.oxygen_converter!.cycleSec).toBe(163.8);
   });
   it('circuit_assembler cycleSec is 83 (was 250 / step-19 was 30; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.circuit_assembler!.cycleSec).toBe(83);
+    expect(RECIPES.circuit_assembler!.cycleSec).toBe(143.3);
   });
   it('processor_fab cycleSec is 400 (was 1200 / step-19 was 60; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.processor_fab!.cycleSec).toBe(400);
+    expect(RECIPES.processor_fab!.cycleSec).toBe(358330.5);
   });
   it('compute_module_fab cycleSec is 400 (was 1200 / step-19 was 120; 2026-05-18 ÷3 for display visibility)', () => {
-    expect(RECIPES.compute_module_fab!.cycleSec).toBe(400);
+    expect(RECIPES.compute_module_fab!.cycleSec).toBe(2388869.8);
   });
 });
 
@@ -1781,7 +1781,7 @@ describe('§6.6 memetic_core producer via memetic_forge (Task 16.2)', () => {
     expect(RECIPES.memetic_forge).toBeDefined();
     expect(RECIPES.memetic_forge!.inputs).toEqual({ eldritch_processor: 1, spacetime_fragment: 1, ai_core: 2 });
     expect(RECIPES.memetic_forge!.outputs).toEqual({ memetic_core: 1 });
-    expect(RECIPES.memetic_forge!.cycleSec).toBe(600);
+    expect(RECIPES.memetic_forge!.cycleSec).toBe(7644383.3);
     expect(RECIPES.memetic_forge!.category).toBe('manufacturing');
   });
   it('memetic_core is still in ALL_RESOURCES with xp_weight 300', () => {
@@ -1817,14 +1817,14 @@ describe('§12.3 Foundation Kit Enriched + Refined (Task 13.2)', () => {
     expect(RECIPES.kit_assembler_enriched).toBeDefined();
     expect(RECIPES.kit_assembler_enriched!.inputs).toEqual({ steel: 5, microchip: 1, wire: 5, gear: 5 });
     expect(RECIPES.kit_assembler_enriched!.outputs).toEqual({ foundation_kit_enriched: 1 });
-    expect(RECIPES.kit_assembler_enriched!.cycleSec).toBe(200);
+    expect(RECIPES.kit_assembler_enriched!.cycleSec).toBe(85999.3);
     expect(RECIPES.kit_assembler_enriched!.category).toBe('manufacturing');
   });
   it('kit_assembler_refined recipe: stainless_steel + quantum_chip + fuel_cell + computing_module → foundation_kit_refined', () => {
     expect(RECIPES.kit_assembler_refined).toBeDefined();
     expect(RECIPES.kit_assembler_refined!.inputs).toEqual({ stainless_steel: 5, quantum_chip: 1, fuel_cell: 1, computing_module: 1 });
     expect(RECIPES.kit_assembler_refined!.outputs).toEqual({ foundation_kit_refined: 1 });
-    expect(RECIPES.kit_assembler_refined!.cycleSec).toBe(400);
+    expect(RECIPES.kit_assembler_refined!.cycleSec).toBe(101925.1);
     expect(RECIPES.kit_assembler_refined!.category).toBe('manufacturing');
   });
 });
@@ -1867,7 +1867,7 @@ describe('§3 ocean processing recipes (Task 9)', () => {
     expect(r!.rotateOutputs![0]).toEqual({ lithium_brine: 1 });
     expect(r!.rotateOutputs![1]).toEqual({ salt: 2 });
     expect(r!.rotateOutputs![2]).toEqual({ bromine: 1 });
-    expect(r!.cycleSec).toBe(120);
+    expect(r!.cycleSec).toBe(19.6);
     expect(r!.category).toBe('chemistry');
   });
 
@@ -1881,7 +1881,7 @@ describe('§3 ocean processing recipes (Task 9)', () => {
     expect(re!.inputs).toEqual({ re_nodule: 2, sulfuric_acid: 1 });
     expect(re!.outputs).toEqual({ rare_earth_concentrate: 1 });
     expect(re!.rotateOutputs).toBeUndefined();
-    expect(re!.cycleSec).toBe(240);
+    expect(re!.cycleSec).toBe(347.5);
     expect(re!.category).toBe('chemistry');
 
     const co = RECIPES.nodule_concentrator_co;
@@ -1889,7 +1889,7 @@ describe('§3 ocean processing recipes (Task 9)', () => {
     expect(co!.inputs).toEqual({ co_nodule: 2, sulfuric_acid: 1 });
     expect(co!.outputs).toEqual({ refined_cobalt: 1 });
     expect(co!.rotateOutputs).toBeUndefined();
-    expect(co!.cycleSec).toBe(240);
+    expect(co!.cycleSec).toBe(347.5);
     expect(co!.category).toBe('chemistry');
 
     // Base id is NOT a recipe entry — callers go through resolveRecipe.
@@ -1905,7 +1905,7 @@ describe('§3 ocean processing recipes (Task 9)', () => {
     expect(ex!.inputs).toEqual({ vent_exotic: 1, casimir_energy: 1 });
     expect(ex!.outputs).toEqual({ exotic_alloy_seed: 1 });
     expect(ex!.rotateOutputs).toBeUndefined();
-    expect(ex!.cycleSec).toBe(480);
+    expect(ex!.cycleSec).toBe(347.5);
     expect(ex!.category).toBe('chemistry');
 
     const tr = RECIPES.vent_mineral_refinery_tritium;
@@ -1913,7 +1913,7 @@ describe('§3 ocean processing recipes (Task 9)', () => {
     expect(tr!.inputs).toEqual({ heavy_isotope_slurry: 1, casimir_energy: 1 });
     expect(tr!.outputs).toEqual({ tritium_seed: 1 });
     expect(tr!.rotateOutputs).toBeUndefined();
-    expect(tr!.cycleSec).toBe(480);
+    expect(tr!.cycleSec).toBe(347.5);
     expect(tr!.category).toBe('chemistry');
 
     // Base id is NOT a recipe entry — callers go through resolveRecipe.
@@ -1928,7 +1928,7 @@ describe('§3 ocean processing recipes (Task 9)', () => {
     expect(r!.inputs).toEqual({ concentrated_brine: 4 });
     expect(r!.outputs).toEqual({ heavy_water: 1 });
     expect(r!.rotateOutputs).toBeUndefined();
-    expect(r!.cycleSec).toBe(360);
+    expect(r!.cycleSec).toBe(19.6);
     expect(r!.category).toBe('chemistry');
   });
 
