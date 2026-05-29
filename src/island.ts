@@ -291,10 +291,6 @@ export function regenerateTerrain(
 }
 
 export function defaultTerrainAt(x: number, y: number): TerrainKind {
-  // Stone outcrops — scattered.
-  const stoneTiles: ReadonlyArray<readonly [number, number]> = [
-    [-9, -2], [-8, 5], [3, 9], [7, -6], [10, 1], [-2, -10],
-  ];
   // §3.7 / §8.1 bootstrap seed: 2x2 stone cluster so a 2x2 Quarry can place.
   // South-west safe zone, clear of every existing home building.
   const stoneClusterTiles: ReadonlyArray<readonly [number, number]> = [
@@ -316,8 +312,9 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   ];
   // §3.7 / §8.1 bootstrap seed: tree tiles so a 1x1 Logger can place.
   // North-east safe zone, clear of every existing home building.
+  // rev-16 §12.8.1-B — fourth tile completes the 2×2 square.
   const treeTiles: ReadonlyArray<readonly [number, number]> = [
-    [6, -3], [7, -3], [6, -4],
+    [6, -3], [7, -3], [6, -4], [7, -4],
   ];
   // Small fresh-water cluster.
   const waterTiles: ReadonlyArray<readonly [number, number]> = [
@@ -342,15 +339,32 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   const limestoneTiles: ReadonlyArray<readonly [number, number]> = [
     [-9, 7], [-8, 7], [-9, 8], [-8, 8],
   ];
+  // §11.1 / §12.8.1 — copper_ore 2×2 cluster so a 2×2 Copper Mine can place.
+  // North-west quadrant, clear of every existing cluster.
+  const copperOreTiles: ReadonlyArray<readonly [number, number]> = [
+    [-7, -7], [-6, -7], [-7, -6], [-6, -6],
+  ];
+  // §02.1 — clay 2×2 cluster for brick / cement / ceramic chains.
+  // South side, clear of every existing cluster.
+  const clayTiles: ReadonlyArray<readonly [number, number]> = [
+    [5, 7], [6, 7], [5, 8], [6, 8],
+  ];
+  // §02.1 — sand 2×2 cluster on the east coast.
+  // defaultTerrainAt has no implicit beach band, so this is required.
+  const sandTiles: ReadonlyArray<readonly [number, number]> = [
+    [10, -1], [11, -1], [10, 0], [11, 0],
+  ];
 
   for (const t of waterTiles) if (t[0] === x && t[1] === y) return 'water';
   for (const t of coalTiles) if (t[0] === x && t[1] === y) return 'coal';
   for (const t of treeTiles) if (t[0] === x && t[1] === y) return 'tree';
   for (const t of oilWellTiles) if (t[0] === x && t[1] === y) return 'oil_well';
   for (const t of limestoneTiles) if (t[0] === x && t[1] === y) return 'limestone';
+  for (const t of copperOreTiles) if (t[0] === x && t[1] === y) return 'copper_vein';
+  for (const t of clayTiles) if (t[0] === x && t[1] === y) return 'clay_pit';
+  for (const t of sandTiles) if (t[0] === x && t[1] === y) return 'sand';
   for (const t of stoneClusterTiles) if (t[0] === x && t[1] === y) return 'stone';
   for (const t of oreTiles) if (t[0] === x && t[1] === y) return 'ore';
-  for (const t of stoneTiles) if (t[0] === x && t[1] === y) return 'stone';
   return 'grass';
 }
 
