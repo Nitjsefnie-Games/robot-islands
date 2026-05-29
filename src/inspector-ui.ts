@@ -34,7 +34,7 @@ import {
 import { gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, placementCostFor } from './placement.js';
-import { convertToServitor, hasOperationalBuilding, isOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import { convertToServitor, floorLevel, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { computeRates } from './economy.js';
 import {
@@ -1282,6 +1282,7 @@ export function mountInspectorUi(
 
     // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1).
     const recipe = resolveRecipe(BUILDING_DEFS[building.defId], building, spec.terrainAt);
+    const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
     if (!recipe) {
       recipeStatus.textContent = '— no recipe';
       recipeStatus.style.color = 'var(--ri-fg-4)';
@@ -1330,7 +1331,6 @@ export function mountInspectorUi(
       // Bonuses readout: surface the per-category skill multiplier so
       // players see why a Smelter is running 1.15× vs nominal. Mine /
       // Logger get their tier-specific yield bonus folded in too.
-      const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
       const catMul = skillMul.recipeRate[recipe.category] ?? 1;
       let mineLogBonus = 1;
       if (def.category === 'extraction') {
@@ -1350,13 +1350,17 @@ export function mountInspectorUi(
     }
 
     // Power section
-    const prod = def.power?.produces ?? 0;
-    const cons = def.power?.consumes ?? 0;
-    if (prod === 0 && cons === 0) {
+    const producesBase = def.power?.produces ?? 0;
+    const consumesBase = def.power?.consumes ?? 0;
+    if (producesBase === 0 && consumesBase === 0) {
       powerLine.textContent = '— no power';
       powerLine.style.color = 'var(--ri-fg-4)';
       powerSection.wrap.style.display = '';
     } else {
+      const { produced: prod, consumed: cons } = ratedBuildingPower(
+        producesBase, consumesBase, floorLevel(building),
+        skillMul.powerProduction, skillMul.powerConsumption,
+      );
       const parts: string[] = [];
       if (prod > 0) parts.push(`+${fmtPower(prod)} produced`);
       if (cons > 0) parts.push(`-${fmtPower(cons)} consumed`);

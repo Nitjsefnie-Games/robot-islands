@@ -3,6 +3,7 @@ import {
   hasOperationalBuilding,
   isOperationalBuilding,
   findOperationalBuilding,
+  ratedBuildingPower,
   type PlacedBuilding,
 } from './buildings.js';
 
@@ -94,6 +95,28 @@ describe('findOperationalBuilding', () => {
   it('skips disabled buildings', () => {
     const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabled: true })];
     expect(findOperationalBuilding(list, 'spaceport')).toBeUndefined();
+  });
+});
+
+describe('ratedBuildingPower', () => {
+  it('returns identity at L0 with mul 1', () => {
+    expect(ratedBuildingPower(5000, 0, 0, 1, 1)).toEqual({ produced: 5000, consumed: 0 });
+  });
+
+  it('scales produced and consumed by floor level alone', () => {
+    // floorEffectMul(3) = 1 + 3 = 4
+    // floorPowerDrawMul(3) = 1 + 0.5 * 3 = 2.5
+    expect(ratedBuildingPower(100, 40, 3, 1, 1)).toEqual({ produced: 400, consumed: 100 });
+  });
+
+  it('scales produced and consumed by skill multipliers alone', () => {
+    expect(ratedBuildingPower(100, 40, 0, 2, 2)).toEqual({ produced: 200, consumed: 20 });
+  });
+
+  it('combines floor and skill multipliers correctly', () => {
+    // produced: 100 * 4 * 2 = 800
+    // consumed: (40 * 2.5) / 2 = 50
+    expect(ratedBuildingPower(100, 40, 3, 2, 2)).toEqual({ produced: 800, consumed: 50 });
   });
 });
 
