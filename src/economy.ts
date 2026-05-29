@@ -37,7 +37,7 @@ import {
 import { hasOperationalBuilding, isOperationalBuilding, floorLevel, floorEffectMul, floorPowerDrawMul, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
-import { dayPhaseName, nextPhaseBoundaryMs, nextSolarBoundaryMs, solarMultiplier } from './daynight.js';
+import { nextPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
 import { sumIslandCo2, weather } from './weather.js';
 import { resolveHeatAssignments, MIN_HEAT_FACTOR, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
@@ -636,7 +636,7 @@ export function evaluateConditionalEffectCondition(
     }
     case 'during-night': {
       if (nowMs === undefined) return false;
-      return dayPhaseName(nowMs) === 'night';
+      return realPhaseName(nowMs, world?.playerLat ?? null, world?.playerLon ?? null) === 'night';
     }
     case 'networked-to-N-T3-islands': {
       if (!world) return false;
