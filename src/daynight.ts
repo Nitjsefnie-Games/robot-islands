@@ -128,6 +128,9 @@ export function realPhaseName(
   if (h < CIVIL_TWILIGHT_RAD) return 'night';
   // Twilight band: rising → dawn, falling → dusk. lat/lon are non-null here, so
   // the 60s-ahead sample is non-null too.
+  // Monotonicity assumed across this brief sample; at very high latitude the sun can
+  // reverse inside the twilight band, momentarily flipping the dawn/dusk label near
+  // the turning point — benign (never affects the night/day classification).
   const hNext = solarAltitude(nowMs + 60_000, lat, lon)!;
   return hNext > h ? 'dawn' : 'dusk';
 }
@@ -170,11 +173,17 @@ export function nextSunEvent(
 
 /**
  * Wall-clock time of the next real day-phase transition strictly after `nowMs`
- * at the player's location: the earliest of civil dawn (h=-6° rising), sunrise
- * (h=0 rising), sunset (h=0 falling), civil dusk (h=-6° falling), over the
- * location-days bracketing `nowMs`. The economy integrator clamps each segment
- * to this so the now-real during-night boolean stays constant within a segment
- * (§15.3 piecewise-constant-rate invariant).
+ * at the player's location: the earliest of civil dawn (sun rising through −6°),
+ * sunrise (rising through −0.833°, SunCalc's horizon-refraction offset), sunset
+ * (falling through −0.833°), civil dusk (falling through −6°), over the
+ * location-days bracketing `nowMs`. Note: realPhaseName flips day↔twilight at
+ * the geometric h=0, so these sunrise/sunset bounds approximate that day edge
+ * to within ~0.833° (a few minutes); the during-night (−6°) edge — the one the
+ * §15.3 night-boolean invariant actually needs — is captured exactly.
+ *
+ * The economy integrator clamps each segment to this so the now-real
+ * during-night boolean stays constant within a segment (§15.3
+ * piecewise-constant-rate invariant).
  *
  * Fallbacks (never NaN): null lat/lon → synthetic `nextPhaseBoundaryMs`; no
  * valid candidate (polar day/night — all events Invalid Date) → nowMs +
