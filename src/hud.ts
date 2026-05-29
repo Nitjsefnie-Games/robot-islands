@@ -8,7 +8,7 @@
 import { BIOME_DEFS, MODIFIER_DEFS } from './biomes.js';
 import { BUILDING_DEFS, type BuildingCategory, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
-import { dayPhase, dayPhaseName, solarMultiplier, type DayPhase } from './daynight.js';
+import { nextSunEvent, realPhaseName, solarMultiplier, type DayPhase } from './daynight.js';
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import { fmtPower } from './format.js';
 import { dispatchAction, type InputRegistry } from './input.js';
@@ -69,6 +69,15 @@ const PHASE_LABEL: Readonly<Record<DayPhase, string>> = {
   dusk: 'Dusk',
   night: 'Night',
 };
+
+/** Compact "7h12m" / "12m" / "<1m" countdown for the day-phase readout. */
+function formatCountdown(ms: number): string {
+  const totalMin = Math.max(0, Math.round(ms / 60_000));
+  if (totalMin < 1) return '<1m';
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h${m}m` : `${m}m`;
+}
 
 // ---------------------------------------------------------------------------
 // Pure helpers — exported for tests
@@ -379,12 +388,13 @@ export function mountIslandBar(
     }
     trigCaret.hidden = populated.length <= 1;
 
-    // Phase
+    // Phase — real sun at the player's location (§2.7).
     const nowMs = Date.now();
-    const phaseName = dayPhaseName(nowMs);
-    const phaseFrac = (dayPhase(nowMs) * 4) % 1;
+    const phaseName = realPhaseName(nowMs, world.playerLat, world.playerLon);
     const mul = solarMultiplier(nowMs, world.playerLat, world.playerLon);
-    phaseEl.textContent = `${PHASE_LABEL[phaseName]} ${Math.floor(phaseFrac * 100)}% · solar ${mul.toFixed(1)}×`;
+    const ev = nextSunEvent(nowMs, world.playerLat, world.playerLon);
+    const countdown = ev ? ` · ${ev.kind} in ${formatCountdown(ev.atMs - nowMs)}` : '';
+    phaseEl.textContent = `${PHASE_LABEL[phaseName]}${countdown} · solar ${mul.toFixed(1)}×`;
 
     // Saved
     if (saveAgeSec === null) {
