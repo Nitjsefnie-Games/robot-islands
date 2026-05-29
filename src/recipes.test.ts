@@ -1987,12 +1987,12 @@ describe('§3 ocean processor + Geothermal Generator building defs (Task 9)', ()
     expect(def.terrainReqs).toEqual(['shallows', 'deep']);
   });
 
-  it('geothermal_vent_generator: T6, 2x2, power, PRODUCES 2000W, hydrothermal_vent only', () => {
+  it('geothermal_vent_generator: T6, 2x2, power, PRODUCES 20000 kW (20 MW), hydrothermal_vent only', () => {
     const def = BUILDING_DEFS.geothermal_vent_generator;
     expect(def.tier).toBe(6);
     expect(def.footprint.tiles).toHaveLength(4);
     expect(def.category).toBe('power');
-    expect(def.power?.produces).toBe(2000);
+    expect(def.power?.produces).toBe(20000);
     expect(def.power?.consumes).toBeUndefined();
     expect(def.oceanPlacement).toBe(true);
     expect(def.terrainReqs).toEqual(['hydrothermal_vent']);

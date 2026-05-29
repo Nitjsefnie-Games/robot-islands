@@ -295,8 +295,8 @@ describe('BUILDING_DEFS catalog', () => {
     expect(list).toEqual(keys);
   });
 
-  it('coal_gen produces 50 units of power (rev-16 §10.3)', () => {
-    expect(BUILDING_DEFS.coal_gen.power?.produces).toBe(50);
+  it('coal_gen produces 5 MW (5000 kW) of power (energy SI rebalance)', () => {
+    expect(BUILDING_DEFS.coal_gen.power?.produces).toBe(5000);
   });
 
   it('every def declares positive integer footprint dimensions', () => {
@@ -633,11 +633,11 @@ describe('step-12 T4 catalog (§6.5 / §9.5)', () => {
     }
   });
 
-  it('Fusion Core: 4×4, +5000W producer, no biome restriction', () => {
+  it('Fusion Core: 4×4, +300 MW (300000 kW) producer, no biome restriction', () => {
     const def = BUILDING_DEFS.fusion_core;
     expect(shapeWidth(def.footprint)).toBe(4);
     expect(shapeHeight(def.footprint)).toBe(4);
-    expect(def.power?.produces).toBe(5000);
+    expect(def.power?.produces).toBe(300000);
     expect(def.requiredBiomes).toBeUndefined();
   });
 
@@ -916,11 +916,11 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
     }
   });
 
-  it('Casimir Tap: 2×2, +8000W producer, power category', () => {
+  it('Casimir Tap: 2×2, +1 GW (1000000 kW) producer, power category', () => {
     const def = BUILDING_DEFS.casimir_tap;
     expect(shapeWidth(def.footprint)).toBe(2);
     expect(shapeHeight(def.footprint)).toBe(2);
-    expect(def.power?.produces).toBe(8000);
+    expect(def.power?.produces).toBe(1000000);
     expect(def.category).toBe('power');
     expect(def.requiredBiomes).toBeUndefined();
   });
