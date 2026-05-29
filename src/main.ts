@@ -113,7 +113,7 @@ import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
-import { checkDismissals, markCompleted, xpBumpPercentForCompletion } from './tutorial.js';
+import { checkDismissals, currentStep, markCompleted, markShown, xpBumpPercentForCompletion } from './tutorial.js';
 import { refreshTutorialHint } from './tutorial-ui.js';
 
 /** Pan speed for keyboard input, in screen-pixels-per-frame. */
@@ -2061,6 +2061,12 @@ async function main(): Promise<void> {
 
     // Phase 7 §05 — tutorial polling. Runs once per frame; predicates are O(1)
     // reads off the world, so the cost is negligible.
+    // Stamp the first-show time for the current step BEFORE checking
+    // dismissals, so concept-step TTLs (which measure elapsed-since-shown)
+    // start counting the moment a step is surfaced. markShown is idempotent,
+    // so re-stamping every frame is a no-op after the first show.
+    const shownStep = currentStep(worldState);
+    if (shownStep) markShown(worldState, shownStep.id);
     // Capture completed-set size BEFORE dismissals mutate it so the 1-indexed
     // completionIndex for xpBumpPercentForCompletion stays consistent across
     // multiple same-tick dismissals.

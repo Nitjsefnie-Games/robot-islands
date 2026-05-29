@@ -8,6 +8,7 @@ import {
   currentStep,
   checkDismissals,
   markCompleted,
+  markShown,
   skipAll,
   restart,
 } from './tutorial.js';
@@ -248,14 +249,30 @@ describe('checkDismissals', () => {
     expect(checkDismissals(w)).toContain('03_power');
   });
 
-  it('reports a concept step as dismissable after its TTL elapses', () => {
+  it('auto-dismisses a sole-TTL concept step after its TTL elapses since first show', () => {
+    // 02_inventory is a sole-TTL concept step: its only dismissal path is the
+    // TTL. Drive the real show path — currentStep surfaces it, the poll stamps
+    // shownAt — then assert it becomes dismissable only after the TTL elapses.
     const w = makeTestWorld({ playerLat: 40 });
-    w.tutorialState = {
-      completed: new Set(),
-      current: null,
-      completedAt: { '02_inventory': 0 }, // long-elapsed → TTL satisfied
-    };
+    const step = currentStep(w);
+    expect(step?.id).toBe('02_inventory');
+
+    // First show stamps shownAt via the same helper the main poll calls.
+    markShown(w, step!.id);
+    expect(w.tutorialState?.shownAt?.['02_inventory']).toBeDefined();
+
+    // Freshly shown → TTL (8 s) not yet elapsed → not dismissable.
+    expect(checkDismissals(w)).not.toContain('02_inventory');
+
+    // Backdate the first-show time beyond the TTL → now dismissable.
+    w.tutorialState!.shownAt!['02_inventory'] = Date.now() - 8_000;
     expect(checkDismissals(w)).toContain('02_inventory');
+
+    // The main loop dismisses it via markCompleted (which is what grants the
+    // XP bump); after that the step is gone and the chain advances.
+    markCompleted(w, '02_inventory');
+    expect(checkDismissals(w)).not.toContain('02_inventory');
+    expect(currentStep(w)?.id).not.toBe('02_inventory');
   });
 });
 

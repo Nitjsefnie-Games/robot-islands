@@ -41,6 +41,11 @@ export interface TutorialState {
   completed: Set<ObjectiveId>;
   current: ObjectiveId | null;
   completedAt?: Record<ObjectiveId, number>;
+  /** Wall-clock ms when each step was first surfaced (by `currentStep` on
+   *  the tutorial poll). Drives the TTL soft-dismiss for concept steps.
+   *  Transient like `completedAt` — never serialized; a step shown before a
+   *  save simply re-stamps on its next show after load (TTL restarts). */
+  shownAt?: Record<ObjectiveId, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,13 +98,18 @@ function hasAdjacentSameType(w: WorldState): boolean {
   return false;
 }
 
-/** Soft-dismiss helper: true if `id` has been completed for at least
- *  `ttlMs` milliseconds.  Relies on `completedAt` timestamps written
- *  by `markCompleted`. */
-function stepCompleted(w: WorldState, id: ObjectiveId, ttlMs: number): boolean {
+/** Soft-dismiss helper: true if `id` has been *shown* for at least `ttlMs`
+ *  milliseconds. Relies on `shownAt` timestamps written by `markShown` on
+ *  the tutorial poll when the step is first surfaced.
+ *
+ *  This reads `shownAt`, not `completedAt`, on purpose: a concept step's TTL
+ *  must be reachable *before* completion. (Reading `completedAt` created a
+ *  cycle — `completedAt` is only written by `markCompleted`, which only runs
+ *  for ids `checkDismissals` already returns — so the TTL could never fire.) */
+function stepShownFor(w: WorldState, id: ObjectiveId, ttlMs: number): boolean {
   const ts = w.tutorialState;
   if (!ts) return false;
-  const when = ts.completedAt?.[id];
+  const when = ts.shownAt?.[id];
   if (when == null) return false;
   return Date.now() - when >= ttlMs;
 }
@@ -130,7 +140,7 @@ function maxIslandLevel(w: WorldState): number {
 // Trigger style follows the existing convention: a build step gates on the
 // nearest preceding *placed building* AND this target absent; dismiss = this
 // target present. Concept/level steps trigger on a real signal and dismiss via
-// `maxIslandLevel` / `invSeen` / `invAtLeast` or a `stepCompleted` TTL.
+// `maxIslandLevel` / `invSeen` / `invAtLeast` or a `stepShownFor` TTL.
 // ---------------------------------------------------------------------------
 
 export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
@@ -150,7 +160,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => w.playerLat != null,
     hint: 'You start with 1200 stone, 600 wood, 30 iron ore, 80 coal, 60 iron ingots, 25 bolts, 15 limestone, 4 saltwater cells, 5000 scrap, 1 foundation kit.',
     expectedAction: null,
-    dismissalCondition: (w) => stepCompleted(w, '02_inventory', 8_000),
+    dismissalCondition: (w) => stepShownFor(w, '02_inventory', 8_000),
     priority: 'recommended',
   },
   {
@@ -169,7 +179,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasBuilding(w, ['water_wheel', 'windmill_t0']),
     hint: "One source isn't enough — a Mine needs 25 kW, a Water Wheel makes 20 kW. Build several; output throttles (brownout) until supply catches up.",
     expectedAction: 'Place more Water Wheels / Windmills.',
-    dismissalCondition: (w) => stepCompleted(w, '04_power_scale', 30_000),
+    dismissalCondition: (w) => stepShownFor(w, '04_power_scale', 30_000),
     priority: 'recommended',
   },
   {
@@ -208,7 +218,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasBuilding(w, ['mine']),
     hint: 'Extractors only place where every footprint tile matches the resource — watch the green highlight.',
     expectedAction: null,
-    dismissalCondition: (w) => stepCompleted(w, '08_tile_gate', 12_000),
+    dismissalCondition: (w) => stepShownFor(w, '08_tile_gate', 12_000),
     priority: 'recommended',
   },
   {
@@ -247,7 +257,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasAdjacentSameType(w),
     hint: 'Cluster same-type buildings for a +10% output bonus.',
     expectedAction: null,
-    dismissalCondition: (w) => stepCompleted(w, '12_adjacency', 30_000),
+    dismissalCondition: (w) => stepShownFor(w, '12_adjacency', 30_000),
     priority: 'recommended',
   },
   {
@@ -256,7 +266,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasBuilding(w, ['workshop']),
     hint: 'Each resource has a cap — build Crates to raise it.',
     expectedAction: 'Place a Crate (80 wood / 30 stone).',
-    dismissalCondition: (w) => hasBuilding(w, ['crate', 'silo']) || stepCompleted(w, '13_storage', 20_000),
+    dismissalCondition: (w) => hasBuilding(w, ['crate', 'silo']) || stepShownFor(w, '13_storage', 20_000),
     priority: 'recommended',
     targetDefId: 'crate',
   },
@@ -266,7 +276,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasBuilding(w, ['workshop']),
     hint: "Buildings need upkeep — the orange wrench means it's due.",
     expectedAction: null,
-    dismissalCondition: (w) => stepCompleted(w, '14_maintenance', 15_000),
+    dismissalCondition: (w) => stepShownFor(w, '14_maintenance', 15_000),
     priority: 'recommended',
   },
   {
@@ -275,7 +285,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => w.totalCo2Kg >= 100 || hasBuilding(w, ['smelter']),
     hint: 'Your industry emits CO₂ (shown in the HUD). High totals worsen weather.',
     expectedAction: null,
-    dismissalCondition: (w) => stepCompleted(w, '15_co2', 15_000),
+    dismissalCondition: (w) => stepShownFor(w, '15_co2', 15_000),
     priority: 'recommended',
   },
 
@@ -435,7 +445,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasBuilding(w, ['dronepad']),
     hint: 'Open Drone Ops (J), pick a T1 drone, arm, click a target tile.',
     expectedAction: null,
-    dismissalCondition: (w) => w.drones.length > 0 || stepCompleted(w, '31_drone_launch', 30_000),
+    dismissalCondition: (w) => w.drones.length > 0 || stepShownFor(w, '31_drone_launch', 30_000),
     priority: 'recommended',
   },
   {
@@ -514,7 +524,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => settledCount(w) >= 2 && !hasBuilding(w, ['antenna_t1', 'antenna_t2', 'antenna_t3']),
     hint: 'Antennas extend signal range so drones can transmit.',
     expectedAction: 'Place an Antenna (20 stone / 20 wood / 10 iron ingot / 5 copper ingot).',
-    dismissalCondition: (w) => hasBuilding(w, ['antenna_t1', 'antenna_t2', 'antenna_t3']) || stepCompleted(w, '39_antenna', 20_000),
+    dismissalCondition: (w) => hasBuilding(w, ['antenna_t1', 'antenna_t2', 'antenna_t3']) || stepShownFor(w, '39_antenna', 20_000),
     priority: 'recommended',
     targetDefId: 'antenna_t1',
   },
@@ -615,7 +625,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasBuilding(w, ['steel_mill']) && !hasBuilding(w, ['slag_reprocessor']),
     hint: 'Smelting slag → gold / silver / rare earth. Rare earth feeds magnets.',
     expectedAction: 'Place a Slag Reprocessor (8000 concrete / 6000 stone / 2000 iron ingot / 300 gear / 400 copper ingot).',
-    dismissalCondition: (w) => hasBuilding(w, ['slag_reprocessor']) || stepCompleted(w, '49_slag', 20_000),
+    dismissalCondition: (w) => hasBuilding(w, ['slag_reprocessor']) || stepShownFor(w, '49_slag', 20_000),
     priority: 'optional',
     targetDefId: 'slag_reprocessor',
   },
@@ -725,7 +735,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasBuilding(w, ['cryo_lab']),
     hint: 'Some buildings are biome-locked: Pyroforge needs volcanic, the AI Core needs arctic. Settle accordingly.',
     expectedAction: null,
-    dismissalCondition: (w) => stepCompleted(w, '60_biome', 20_000),
+    dismissalCondition: (w) => stepShownFor(w, '60_biome', 20_000),
     priority: 'recommended',
   },
 
@@ -805,7 +815,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => hasBuilding(w, ['quantum_manipulator']),
     hint: 'Storms damage outdoor buildings; CO₂ worsens their frequency. Wastewater & scrubbers mitigate.',
     expectedAction: null,
-    dismissalCondition: (w) => stepCompleted(w, '68_weather', 20_000),
+    dismissalCondition: (w) => stepShownFor(w, '68_weather', 20_000),
     priority: 'recommended',
   },
 
@@ -844,7 +854,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     triggerCondition: (w) => invAtLeast(w, 'reality_anchor', 1),
     hint: 'Reality Anchors gate the Ascendant path (T6, Spaceport) — the endgame opens from here.',
     expectedAction: null,
-    dismissalCondition: (w) => stepCompleted(w, '72_beyond', 15_000),
+    dismissalCondition: (w) => stepShownFor(w, '72_beyond', 15_000),
     priority: 'optional',
   },
 ];
@@ -879,6 +889,19 @@ export function markCompleted(world: WorldState, id: ObjectiveId): void {
   world.tutorialState.completed.add(id);
   world.tutorialState.completedAt = world.tutorialState.completedAt ?? {};
   world.tutorialState.completedAt[id] = Date.now();
+}
+
+/** Stamp the first-show wall-clock time for `id` (idempotent: only the
+ *  first call for a given id records a timestamp). Called from the tutorial
+ *  poll for the current step so concept-step TTLs can start counting the
+ *  moment a step is surfaced. Lazily initialises `tutorialState`/`shownAt`
+ *  the same way `markCompleted` does. */
+export function markShown(world: WorldState, id: ObjectiveId): void {
+  world.tutorialState = world.tutorialState ?? { completed: new Set<ObjectiveId>(), current: null };
+  world.tutorialState.shownAt = world.tutorialState.shownAt ?? {};
+  if (world.tutorialState.shownAt[id] == null) {
+    world.tutorialState.shownAt[id] = Date.now();
+  }
 }
 
 export function skipAll(world: WorldState): void {
