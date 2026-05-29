@@ -190,6 +190,11 @@ export function floorLevel(b: { floorLevel?: number }): number {
 
 /** Floor-upgrade multiplier for throughput / power output / storage: ×(1+L). */
 export function floorEffectMul(level: number): number { return 1 + level; }
+
+/** A placed building's storage-capacity contribution, scaled by its floor level: ×(1+L). */
+export function floorScaledCapacity(b: { floorLevel?: number }, capacity: number): number {
+  return capacity * floorEffectMul(floorLevel(b));
+}
 /** Floor-upgrade multiplier for consumer power DRAW: ×(1+0.5L) (sub-linear vs output). */
 export function floorPowerDrawMul(level: number): number { return 1 + 0.5 * level; }
 
