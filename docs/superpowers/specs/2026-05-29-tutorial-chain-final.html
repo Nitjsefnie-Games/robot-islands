@@ -1,0 +1,469 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutorial chain — final ordered step list</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 1180px; }
+    header.page-head { margin-bottom: 36px; max-width: 900px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 38px;
+      line-height: 1.14; color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px;
+    }
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 40px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+    .decision {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 40px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 920px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    /* TOC */
+    nav.toc {
+      background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 18px 22px; margin-bottom: 48px; columns: 2; column-gap: 32px;
+    }
+    @media (max-width: 720px) { nav.toc { columns: 1; } }
+    nav.toc .toc-label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 10px;
+      column-span: all; display: block;
+    }
+    nav.toc a {
+      display: block; color: var(--gray-700); text-decoration: none;
+      font-size: 13.5px; padding: 4px 0; break-inside: avoid;
+    }
+    nav.toc a:hover { color: var(--clay); }
+    section { margin-bottom: 56px; scroll-margin-top: 20px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px; background: var(--oat);
+      color: var(--slate); padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 920px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 920px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.86em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    h3.tier {
+      font-family: var(--serif); font-weight: 500; font-size: 19px; color: var(--clay);
+      margin: 30px 0 12px; letter-spacing: -0.01em; scroll-margin-top: 20px;
+    }
+    .note {
+      background: var(--gray-150); border-left: 3px solid var(--olive); border-radius: 8px;
+      padding: 12px 16px; font-size: 13.5px; margin-bottom: 18px; max-width: 1100px;
+    }
+    .note strong { color: var(--slate); }
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 12.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--gray-300); vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--gray-500); background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; white-space: nowrap; }
+    .tbl td.did  { font-family: var(--mono); font-size: 11px; color: var(--clay); white-space: nowrap; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .tbl .num-col { font-family: var(--mono); color: var(--gray-500); white-space: nowrap; }
+    .pill {
+      display: inline-block; font-family: var(--mono); font-size: 10px;
+      padding: 1px 6px; border-radius: 5px; font-weight: 600;
+    }
+    .pill.crit { background: #4A2A1C; color: #F0B79C; }
+    .pill.rec  { background: var(--oat); color: var(--slate); }
+    .pill.opt  { background: #2D3A24; color: #B6CC96; }
+    .pill.ins  { background: #1C2E3A; color: #8FBFE0; }
+    /* discrepancy callout */
+    .callout {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--rust);
+      border-radius: var(--radius); padding: 20px 24px; margin-bottom: 24px;
+    }
+    .callout .c-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--rust); margin-bottom: 8px;
+    }
+    .callout .c-body { font-size: 14px; color: var(--gray-700); max-width: 920px; }
+    /* open questions */
+    .qlist { display: flex; flex-direction: column; gap: 12px; max-width: 1000px; }
+    .q {
+      background: var(--white); border: var(--border); border-radius: 10px; padding: 14px 18px;
+    }
+    .q.resolved { border-left: 4px solid var(--olive); }
+    .q.open     { border-left: 4px solid var(--clay); }
+    .q .q-head { font-weight: 600; color: var(--slate); font-size: 14.5px; margin-bottom: 4px; }
+    .q .q-body { font-size: 13.5px; color: var(--gray-700); }
+    .q .q-tag {
+      font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 1px 7px; border-radius: 5px; margin-right: 8px;
+    }
+    .q.resolved .q-tag { background: #232A1C; color: var(--olive); }
+    .q.open .q-tag     { background: #3A2A1C; color: var(--clay); }
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+    .footer a { color: var(--clay); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · Task 1.1</div>
+      <h1>Tutorial chain — final ordered step list</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        The tutorial consolidation collapses two competing systems onto one
+        ordered <code>TUTORIAL_STEPS</code> hint overlay. This spec is the
+        topologically-complete chain the Task&nbsp;1.2 subagent encodes: the
+        design draft's 53 milestone steps plus the inserted closure producers,
+        every cost/tile/recipe re-verified against the live
+        <code>BUILDING_DEFS</code> / <code>RECIPES</code> on branch
+        <code>tutorial-consolidation</code> — not the draft's numbers.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Total steps</div><div class="v accent">65</div></div>
+      <div class="cell"><div class="k">Inserted beyond draft</div><div class="v">+12</div></div>
+      <div class="cell"><div class="k">Discrepancies</div><div class="v ok">20 logged</div></div>
+      <div class="cell"><div class="k">Open questions</div><div class="v">4 resolved · 5 new</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">One ordered chain (T1→T5), every consumer preceded by a step introducing each prerequisite producer — for the 30-building closure backbone.</div>
+      <div class="d-body">The largest structural change vs the draft: Task&nbsp;0.4's concrete
+        correction (<code>cement + sand + stone + water → concrete</code>) drags the
+        heat-gated <code>limekiln</code> and <code>cement_mill</code> early, so the heat-budget
+        concept + a <code>coal_furnace</code> now precede concrete instead of arriving at the
+        steel tier. Verification surfaced two further ordering breaks the draft never had —
+        <code>cement_mill</code> needs sand and <code>concrete_plant</code> needs fresh_water (well
+        inserted). The scrap→steel bootstrap is taught explicitly to break the 30000-steel_beam
+        circularity.</div>
+      <div class="d-body">Deliberately <em>not</em> done: the single-producer feeder chains
+        (lubricant chemistry, battery saltwater, cryo coolant) are folded (build UI surfaces
+        missing inputs), so the chain is topologically complete for the closure
+        backbone but <strong>not</strong> for those folded feeders — that's OPEN&nbsp;#5.</div>
+    </div>
+
+    <nav class="toc">
+      <span class="toc-label">Contents</span>
+      <a href="#scope">Topological-completeness scope</a>
+      <a href="#chain">§A · The ordered chain (64 steps)</a>
+      <a href="#t1">— T1 · iron chain (1–15)</a>
+      <a href="#t1t2">— T1→T2 · concrete, drones, fuel (16–33)</a>
+      <a href="#t2t3">— T2→T3 · steel, electronics (34–52)</a>
+      <a href="#t3t4">— T3→T4 · endgame industry (53–60)</a>
+      <a href="#t4t5">— T4→T5 · transcendence (61–64)</a>
+      <a href="#disc">§B · Discrepancy list (human gate)</a>
+      <a href="#open">§C · Open questions (4 resolved + 5 new)</a>
+      <a href="#encode">§D · Encoding notes for Task 1.2</a>
+    </nav>
+
+    <section id="scope">
+      <div class="sec-head"><span class="num">00</span><h2>Topological-completeness scope</h2></div>
+      <p class="sec-intro">Read this before trusting the "complete" claim.</p>
+      <div class="note">
+        <strong>Complete for the 30-building closure backbone</strong> — every building in
+        that backbone is preceded by a step introducing each prerequisite producer, in
+        build order. <strong>NOT</strong> strictly complete for the single-producer feeder chains
+        the draft folded: lubricant chemistry (<code>naphtha_cracker</code> / <code>crude_oil_cracker</code>,
+        <code>chlor_alkali_plant</code>, <code>chemical_reactor</code> + <code>sulfur_mine</code>),
+        the battery saltwater feed (<code>coastal_pump</code>), and the cryo-coolant feed
+        (<code>cryo_lab</code>). These are folded, not authored as steps — the build UI surfaces
+        missing inputs. This is <strong>OPEN&nbsp;question&nbsp;#5</strong>: the human confirms
+        fold-vs-insert per group.
+      </div>
+    </section>
+
+    <section id="chain">
+      <div class="sec-head"><span class="num">A</span><h2>The ordered chain</h2></div>
+      <p class="sec-intro">Final encode order. <span class="num-col">draft#</span> maps to the
+        design doc's 53 (— = newly inserted). <code>targetDefId</code> is what the trigger/dismiss
+        keys on (— for concept/level/craft steps). Priority:
+        <span class="pill crit">CRIT</span> <span class="pill rec">REC</span>
+        <span class="pill opt">OPT</span> · <span class="pill ins">INSERTED</span> marks the 11 new steps.</p>
+
+      <h3 class="tier" id="t1">T1 — Orientation, power, the iron chain (Level 1)</h3>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>draft</th><th>id</th><th>mechanic</th><th>targetDefId</th><th>hint / expectedAction</th><th>pri</th><th>trigger → dismiss</th></tr></thead>
+        <tbody>
+          <tr><td class="num-col">1</td><td class="num-col">1</td><td class="slate">01_location</td><td>Location [C]</td><td>—</td><td>Click where you live — sunrise follows real time. <em>(open map picker)</em></td><td><span class="pill crit">C</span></td><td><code>playerLat==null</code> → <code>playerLat!=null</code></td></tr>
+          <tr><td class="num-col">2</td><td class="num-col">2</td><td class="slate">02_inventory</td><td>Your stockpile [C]</td><td>—</td><td>Start: 1200 stone, 600 wood, 30 iron ore, 80 coal, 60 iron ingot, 25 bolt, 15 limestone, 4 saltwater cell, <strong>5000 scrap</strong>, 1 foundation kit.</td><td><span class="pill rec">R</span></td><td>prior → <code>stepCompleted(8s)</code></td></tr>
+          <tr><td class="num-col">3</td><td class="num-col">3</td><td class="slate">03_power</td><td>Bootstrap power</td><td>water_wheel</td><td>Build power first. <em>Water Wheel (50 wood/30 stone/5 iron ingot) on water — or Windmill (80 wood/20 stone/3 iron ingot) on grass.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([water_wheel,windmill_t0])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">4</td><td class="num-col">4</td><td class="slate">04_power_scale</td><td>Scale your power [C]</td><td>—</td><td>A Mine needs 25 kW, a Water Wheel makes 20 kW. Output throttles (brownout) until supply catches up.</td><td><span class="pill rec">R</span></td><td><code>hasBuilding([water_wheel,…])</code> → <code>stepCompleted(30s)</code></td></tr>
+          <tr><td class="num-col">5</td><td class="num-col">5</td><td class="slate">05_quarry</td><td>Renewable stone</td><td>quarry</td><td>Stone underpins every build. <em>Quarry (120 stone/80 wood/30 iron ingot) on a stone 2×2.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([quarry])</code> → <code>hasBuilding([quarry])</code></td></tr>
+          <tr><td class="num-col">6</td><td class="num-col">6</td><td class="slate">06_logger</td><td>Renewable wood</td><td>logger</td><td>Logger needs no power. <em>Logger (30 stone/30 wood/10 iron ingot) on a tree tile.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([logger])</code> → <code>hasBuilding([logger])</code></td></tr>
+          <tr><td class="num-col">7</td><td class="num-col">7</td><td class="slate">07_mine</td><td>Extract ore &amp; coal</td><td>mine</td><td>Mines pull iron ore / coal. <em>Mine (200 stone/80 wood) on an ore or coal vein.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([mine])</code> → <code>hasBuilding([mine])</code></td></tr>
+          <tr><td class="num-col">8</td><td class="num-col">8</td><td class="slate">08_tile_gate</td><td>Tile-locked [C]</td><td>—</td><td>Extractors only place where every footprint tile matches — watch the green highlight.</td><td><span class="pill rec">R</span></td><td><code>hasBuilding([mine])</code> → <code>stepCompleted(12s)</code></td></tr>
+          <tr><td class="num-col">9</td><td class="num-col">9</td><td class="slate">09_clay</td><td>Clay for smelting</td><td>clay_pit_extractor</td><td>Clay lines the Smelter, feeds concrete &amp; cement. <em>Clay Pit Extractor (140 stone/80 wood) on clay_pit.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([clay_pit_extractor])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">10</td><td class="num-col">10</td><td class="slate">10_smelter</td><td>Smelt iron</td><td>smelter</td><td>10 iron ore + 3 coal → 6 iron ingot (+ slag + CO). <em>Smelter (400 stone/100 clay/20 wood).</em></td><td><span class="pill crit">C</span></td><td><code>invAtLeast(iron_ore,10)&amp;&amp;invAtLeast(coal,3)</code> → <code>hasBuilding([smelter])</code></td></tr>
+          <tr><td class="num-col">11</td><td class="num-col">11</td><td class="slate">11_workshop</td><td>Craft bolts</td><td>workshop</td><td>1 iron ore + 1 coal → 1 bolt. <em>Workshop (150 wood/100 stone/30 iron ingot).</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([workshop])</code> → <code>hasBuilding([workshop])</code></td></tr>
+          <tr><td class="num-col">12</td><td class="num-col">12</td><td class="slate">12_adjacency</td><td>Adjacency buffs [C]</td><td>—</td><td>Cluster same-type buildings for +10% output.</td><td><span class="pill rec">R</span></td><td><code>hasAdjacentSameType()</code> → <code>stepCompleted(30s)</code></td></tr>
+          <tr><td class="num-col">13</td><td class="num-col">13</td><td class="slate">13_storage</td><td>Storage caps [C]</td><td>crate</td><td>Each resource has a cap. <em>Crate (80 wood/30 stone).</em></td><td><span class="pill rec">R</span></td><td>prior → <code>hasBuilding([crate,silo])||stepCompleted(20s)</code></td></tr>
+          <tr><td class="num-col">14</td><td class="num-col">14</td><td class="slate">14_maintenance</td><td>Maintenance [C]</td><td>—</td><td>Buildings need upkeep — orange wrench = due.</td><td><span class="pill rec">R</span></td><td>prior → <code>stepCompleted(15s)</code></td></tr>
+          <tr><td class="num-col">15</td><td class="num-col">15</td><td class="slate">15_co2</td><td>CO₂ &amp; climate [C]</td><td>—</td><td>Industry emits CO₂ (HUD). High totals worsen weather.</td><td><span class="pill rec">R</span></td><td><code>totalCo2Kg>=100||prior</code> → <code>stepCompleted(15s)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="tier" id="t1t2">T1 → T2 — Concrete, drones, fuel, first expansion (Level 5 gate)</h3>
+      <div class="note"><strong>Reorder vs draft (heat cascade + raw-extractor front-loading).</strong>
+        Task&nbsp;0.4 corrected concrete to <code>cement+sand+stone+water</code>. Concrete's closure
+        pulls <code>limekiln</code> (quicklime) and <code>cement_mill</code> early, and <strong>both are
+        <code>requiresHeat:true</code></strong> — so heat-budget + a <code>coal_furnace</code> must
+        precede them. Verification then surfaced two more gaps (D18/D19): <code>cement_mill</code>
+        needs sand (so <code>sand_pit</code> precedes it) and <code>concrete_plant</code> needs
+        fresh_water (only producer is <code>well</code>, not in starter — <strong>well inserted</strong>).
+        Final raw-first order: heat → limestone → quicklime → sand → water → cement → concrete.</div>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>draft</th><th>id</th><th>mechanic</th><th>targetDefId</th><th>hint / expectedAction</th><th>pri</th><th>trigger → dismiss</th></tr></thead>
+        <tbody>
+          <tr><td class="num-col">16</td><td class="num-col">16</td><td class="slate">16_tier2</td><td>Reach Tier 2 [C]</td><td>—</td><td>Push the home island to level 5 to unlock Tier 2.</td><td><span class="pill crit">C</span></td><td>prior → <code>maxIslandLevel>=5</code></td></tr>
+          <tr><td class="num-col">17</td><td class="did">INS</td><td class="slate">17_heat_budget</td><td>Heat budget [C] <span class="pill ins">INS</span></td><td>coal_furnace</td><td>Heat-users (Limekiln, Cement Mill, Coke Oven, Ceramic Kiln) need adjacent heat; one source feeds limited consumers. <em>Coal Furnace (50 stone/20 iron ingot/30 wood).</em></td><td><span class="pill crit">C</span></td><td><code>maxIslandLevel>=5&amp;&amp;!hasBuilding([coal_furnace])</code> → <code>hasBuilding([coal_furnace,geothermal_vent,plasma_heater])</code></td></tr>
+          <tr><td class="num-col">18</td><td class="num-col">30</td><td class="slate">18_limestone</td><td>Limestone flux</td><td>limestone_quarry</td><td>Limestone feeds quicklime (cement &amp; steel). <em>Limestone Quarry (150 stone/80 wood/30 iron ingot) on limestone.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([limestone_quarry])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">19</td><td class="did">INS</td><td class="slate">19_quicklime</td><td>Quicklime <span class="pill ins">INS</span></td><td>limekiln</td><td>25 limestone → 14 quicklime. Needs adjacent heat. <em>Limekiln (200 stone/40 wood/30 iron ingot/50 clay) by a Coal Furnace.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([limekiln])</code> → <code>hasBuilding([limekiln])</code></td></tr>
+          <tr><td class="num-col">20</td><td class="num-col">19</td><td class="slate">20_sand</td><td>Sand</td><td>sand_pit</td><td>Sand → cement, glass, ceramics. <em>Sand Pit (120 stone/80 wood/20 iron ingot) on sand.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([sand_pit])</code> → <code>hasBuilding([sand_pit])</code></td></tr>
+          <tr><td class="num-col">21</td><td class="did">INS</td><td class="slate">21_water</td><td>Fresh water <span class="pill ins">INS</span></td><td>well</td><td>A Well draws fresh water for concrete, hydrogen, chemistry. <em>Well (20 stone/20 wood/5 iron ingot) on water.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([well])</code> → <code>hasBuilding([well])</code></td></tr>
+          <tr><td class="num-col">22</td><td class="did">INS</td><td class="slate">22_cement</td><td>Cement <span class="pill ins">INS</span></td><td>cement_mill</td><td>8 quicklime + 2 clay + 1 sand → 11 cement. Needs adjacent heat. <em>Cement Mill (200 stone/60 iron ingot/30 wood) by a Coal Furnace.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([cement_mill])</code> → <code>hasBuilding([cement_mill])</code></td></tr>
+          <tr><td class="num-col">23</td><td class="num-col">17</td><td class="slate">23_concrete</td><td>Bulk material: concrete</td><td>concrete_plant</td><td>1 cement + 2 sand + 3 stone + 0.5 water → 6 concrete. <em>Concrete Plant (150 stone/40 iron ingot/40 wood/20 clay).</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([concrete_plant])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">24</td><td class="num-col">18</td><td class="slate">24_copper</td><td>Copper</td><td>copper_smelter</td><td>Copper ore → copper ingot. <em>Copper Mine (150 stone/80 wood/30 iron ingot) on copper_vein, then Copper Smelter (200 stone/80 iron ingot/30 wood/40 clay).</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([copper_smelter])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">25</td><td class="num-col">19</td><td class="slate">25_glass</td><td>Glass</td><td>glassworks</td><td>Sand → glass. <em>Glassworks (200 stone/40 wood/30 iron ingot/20 clay).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([glassworks])</code> → <code>hasBuilding([glassworks])</code></td></tr>
+          <tr><td class="num-col">26</td><td class="num-col">20</td><td class="slate">26_gear</td><td>Gears</td><td>assembler</td><td>1 iron ingot + 2 bolt → 1 gear. <em>Assembler (7000 concrete/4000 stone/2000 iron ingot/500 glass/300 copper ingot).</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([assembler])</code> → <code>hasBuilding([assembler])</code></td></tr>
+          <tr><td class="num-col">27</td><td class="num-col">21</td><td class="slate">27_dronepad</td><td>Drone pad</td><td>dronepad</td><td>Scout the ocean. <em>Drone Pad (2000 concrete/1000 stone/500 iron ingot/100 gear).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([dronepad])</code> → <code>hasBuilding([dronepad])</code></td></tr>
+          <tr><td class="num-col">28</td><td class="num-col">22</td><td class="slate">28_biofuel</td><td>Drone fuel</td><td>biofuel_plant</td><td>2 wood → 1 biofuel. <em>Biofuel Plant (150 stone/60 wood/40 iron ingot/30 clay).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([biofuel_plant])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">29</td><td class="num-col">23</td><td class="slate">29_drone_launch</td><td>Launch a drone [C]</td><td>—</td><td>Open Drone Ops (J), pick a T1 drone, arm, click a target tile.</td><td><span class="pill rec">R</span></td><td><code>hasBuilding([dronepad])</code> → <code>drones.length>0||stepCompleted(30s)</code></td></tr>
+          <tr><td class="num-col">30</td><td class="num-col">24</td><td class="slate">30_oil</td><td>Crude oil</td><td>pump_jack</td><td>Crude oil feeds lubricant &amp; diesel. <em>Pump Jack (7000 concrete/4000 stone/2000 iron ingot/150 gear/200 copper ingot) on oil_well.</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([pump_jack])</code> → <code>hasBuilding([pump_jack])</code></td></tr>
+          <tr><td class="num-col">31</td><td class="num-col">25</td><td class="slate">31_lubricant</td><td>Maintenance materials</td><td>lubricant_refinery</td><td>5 heavy_oil + 5 chlorine + 1 calcium_sulfonate → 10 lubricant (cracker / chlor-alkali / chemical chains feed it; palette shows what's missing). <em>Lubricant Refinery (12000 concrete/7000 stone/4000 iron ingot/250 gear/3000 clay/350 copper ingot).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([lubricant_refinery])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">32</td><td class="num-col">26</td><td class="slate">32_settle</td><td>Settle a new island</td><td>shipyard</td><td>Load fuel + a Foundation Kit, send a ship. <em>Shipyard (400 stone/250 wood/100 iron ingot) on a coastal tile.</em></td><td><span class="pill crit">C</span></td><td>prior → <code>settledCount>=2</code></td></tr>
+          <tr><td class="num-col">33</td><td class="num-col">27</td><td class="slate">33_antenna</td><td>Stay connected [C]</td><td>antenna_t1</td><td>Antennas extend signal range. <em>Antenna (20 stone/20 wood/10 iron ingot/5 copper ingot).</em></td><td><span class="pill rec">R</span></td><td>prior → <code>hasBuilding([antenna_t1..3])||stepCompleted(20s)</code></td></tr>
+          <tr><td class="num-col">34</td><td class="num-col">28</td><td class="slate">34_kit_assembler</td><td>Sustain Foundation Kits</td><td>kit_assembler</td><td>5 iron ingot + 10 wood + 5 bolt → 1 kit. <em>Kit Assembler (150 stone/60 wood/40 iron ingot/200 bolt).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([kit_assembler])</code> → <code>hasBuilding([…])</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="tier" id="t2t3">T2 → T3 — Steel, electronics, advanced fuel (Level 15 gate)</h3>
+      <div class="note"><strong>Steel bootstrap (inserted).</strong> <code>blast_furnace</code> costs
+        <strong>30000 steel_beam</strong> and <code>steel_mill</code> <strong>25000 steel_beam</strong> —
+        a circular dependency the rev-17 starter <code>scrap:5000</code> breaks. Taught explicitly:
+        scrap → <code>steel_mill_scrap</code> (2 scrap → 1 steel) → <code>beam_mill</code> (105 steel → 2
+        steel_beam), then the player can afford the furnaces; after that pig-iron-fed
+        <code>steel_mill</code> self-sustains. <code>air_separator</code> (oxygen, step 40) + limekiln
+        (quicklime, taught in T2) precede <code>steel_mill</code> (step 42) — steel needs
+        <code>100 pig_iron + 7 quicklime + 9 oxygen</code>.</div>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>draft</th><th>id</th><th>mechanic</th><th>targetDefId</th><th>hint / expectedAction</th><th>pri</th><th>trigger → dismiss</th></tr></thead>
+        <tbody>
+          <tr><td class="num-col">35</td><td class="num-col">29</td><td class="slate">35_tier3</td><td>Reach Tier 3 [C]</td><td>—</td><td>Push an island to level 15 for steel &amp; electronics.</td><td><span class="pill crit">C</span></td><td>prior → <code>maxIslandLevel>=15</code></td></tr>
+          <tr><td class="num-col">36</td><td class="did">INS</td><td class="slate">36_scrap_steel</td><td>Bootstrap steel from scrap <span class="pill ins">INS</span></td><td>steel_mill_scrap</td><td>5000 starter scrap bootstraps steel: 2 scrap → 1 steel. <em>Scrap Steel Mill (20000 concrete/15000 stone/8000 iron ingot/500 gear/5000 clay/500 copper ingot).</em></td><td><span class="pill crit">C</span></td><td><code>maxIslandLevel>=15&amp;&amp;!hasBuilding([steel_mill_scrap])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">37</td><td class="did">INS</td><td class="slate">37_beams</td><td>Steel beams <span class="pill ins">INS</span></td><td>beam_mill</td><td>105 steel → 2 steel beams — bulk structural input. <em>Beam Mill (10000 concrete/6000 stone/3000 iron ingot/200 gear/2000 clay/200 copper ingot).</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([beam_mill])</code> → <code>hasBuilding([beam_mill])</code></td></tr>
+          <tr><td class="num-col">38</td><td class="did">INS</td><td class="slate">38_pipes</td><td>Pipes <span class="pill ins">INS</span></td><td>pipe_mill</td><td>42 steel → 10 pipes (Coke Oven, rigs). <em>Pipe Mill (10000 concrete/7000 stone/3500 iron ingot/250 gear/2500 clay/300 copper ingot).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([pipe_mill])</code> → <code>hasBuilding([pipe_mill])</code></td></tr>
+          <tr><td class="num-col">39</td><td class="num-col">31</td><td class="slate">39_coke</td><td>Coke</td><td>coke_oven</td><td>10 coal → 7 coke. Needs adjacent heat. <em>Coke Oven (15000 clay/500 stone/100 pipe) by a heat source.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([coke_oven])</code> → <code>hasBuilding([coke_oven])</code></td></tr>
+          <tr><td class="num-col">40</td><td class="did">INS</td><td class="slate">40_oxygen</td><td>Industrial gases <span class="pill ins">INS</span></td><td>air_separator</td><td>Air → nitrogen + oxygen + argon. Oxygen feeds steel; argon feeds the AI Core. <em>Air Separator (30 stone).</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([air_separator])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">41</td><td class="num-col">32</td><td class="slate">41_pig_iron</td><td>Pig iron</td><td>blast_furnace</td><td>35 iron ore + 18 coke + 10 limestone → 20 pig iron. Needs adjacent heat. <em>Blast Furnace (30000 steel beam/25000 clay/2000 stone) by a heat source.</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([blast_furnace])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">42</td><td class="num-col">34</td><td class="slate">42_steel</td><td>Steel</td><td>steel_mill</td><td>100 pig iron + 7 quicklime + 9 oxygen → 85 steel. <em>Steel Mill (25000 steel beam/8000 clay/2000 stone).</em></td><td><span class="pill crit">C</span></td><td><code>!hasBuilding([steel_mill])</code> → <code>hasBuilding([steel_mill])</code></td></tr>
+          <tr><td class="num-col">43</td><td class="did">INS</td><td class="slate">43_slag</td><td>Reclaim slag [C] <span class="pill ins">INS</span></td><td>slag_reprocessor</td><td>Slag → gold / silver / rare earth. Rare earth feeds magnets. <em>Slag Reprocessor (8000 concrete/6000 stone/2000 iron ingot/300 gear/400 copper ingot).</em></td><td><span class="pill opt">O</span></td><td><code>!hasBuilding([slag_reprocessor])</code> → <code>hasBuilding([…])||stepCompleted(20s)</code></td></tr>
+          <tr><td class="num-col">44</td><td class="num-col">35</td><td class="slate">44_wire</td><td>Wire</td><td>metal_rolling_mill</td><td>11 steel → 20 wire. <em>Metal Rolling Mill (12000 concrete/7000 stone/4000 iron ingot/250 gear/2500 clay/400 copper ingot).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([metal_rolling_mill])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">45</td><td class="did">INS</td><td class="slate">45_lead</td><td>Lead <span class="pill ins">INS</span></td><td>lead_smelter</td><td>Lead ore → lead ingot for Battery Bank plates. <em>Lead Mine (150 stone/80 wood/30 iron ingot) on lead_vein, then Lead Smelter (200 stone/80 iron ingot/30 wood/40 clay).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([lead_smelter])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">46</td><td class="num-col">36</td><td class="slate">46_battery</td><td>Battery storage</td><td>battery_bank</td><td>Cell Press → saltwater cell; Battery Bank stores surplus. (Saltwater ← Coastal Pump; see OPEN #5.) <em>Cell Press (10 copper ingot/2 iron ingot/5 saltwater/1 wood), then Battery Bank (20 saltwater cell/15 wire/5 steel beam/30 lead ingot).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([battery_bank])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">47</td><td class="num-col">37</td><td class="slate">47_silicon</td><td>Silicon</td><td>silicon_crusher</td><td>Quartz → silicon (build Quartz Mine on the <strong>2nd</strong> stone cluster). <em>Quartz Mine (150 stone/80 wood/30 iron ingot) on stone, then Silicon Crusher (350 steel beam/5000 concrete/100 gear/50 pipe/300 stone).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([silicon_crusher])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">48</td><td class="num-col">38</td><td class="slate">48_microchips</td><td>Microchips</td><td>lithography_lab</td><td>1 silicon + 1 wire → 1 microchip. <em>Lithography Lab (1500 steel beam/20000 concrete/500 glass/200 wire).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([lithography_lab])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">49</td><td class="did">INS</td><td class="slate">49_wafers</td><td>Silicon wafers <span class="pill ins">INS</span></td><td>wafer_lab</td><td>1 silicon → 1 wafer (Quantum Chip Fab input). <em>Wafer Lab (800 steel beam/12000 concrete/300 glass/100 microchip/150 wire).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([wafer_lab])</code> → <code>hasBuilding([wafer_lab])</code></td></tr>
+          <tr><td class="num-col">50</td><td class="did">INS</td><td class="slate">50_ceramics</td><td>Ceramic insulators <span class="pill ins">INS</span></td><td>ceramic_kiln</td><td>2 clay + 1 sand → 1 ceramic insulator. Needs adjacent heat. <em>Ceramic Kiln (5000 concrete/4000 stone/1200 iron ingot/80 gear/2000 clay) by a heat source.</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([ceramic_kiln])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">51</td><td class="did">INS</td><td class="slate">51_magnets</td><td>Magnets <span class="pill ins">INS</span></td><td>mag_forge</td><td>Rare earth → magnetic alloy → magnet (Particle Accelerator). <em>Mag Alloyer (500 steel beam/6000 concrete/200 ceramic insulator/100 pipe/50 microchip), then Mag Forge (600 steel beam/7000 concrete/250 ceramic insulator/100 pipe/60 microchip).</em></td><td><span class="pill opt">O</span></td><td><code>!hasBuilding([mag_forge])</code> → <code>hasBuilding([mag_forge])</code></td></tr>
+          <tr><td class="num-col">52</td><td class="num-col">40</td><td class="slate">52_hydrogen</td><td>Hydrogen</td><td>electrolyzer</td><td>9 fresh water → 1 hydrogen + 8 oxygen (your Well supplies water). <em>Electrolyzer (40 stone/20 wood/20 iron ingot/10 copper ingot) — the Well from step 21 feeds it.</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([electrolyzer])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">53</td><td class="num-col">41</td><td class="slate">53_biome</td><td>Biome dependencies [C]</td><td>—</td><td>Pyroforge needs volcanic, the AI Core needs arctic. Settle accordingly.</td><td><span class="pill rec">R</span></td><td>prior → <code>stepCompleted(20s)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="tier" id="t3t4">T3 → T4 — Endgame industry (Level 30 gate)</h3>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>draft</th><th>id</th><th>mechanic</th><th>targetDefId</th><th>hint / expectedAction</th><th>pri</th><th>trigger → dismiss</th></tr></thead>
+        <tbody>
+          <tr><td class="num-col">54</td><td class="num-col">42</td><td class="slate">54_tier4</td><td>Reach Tier 4 [C]</td><td>—</td><td>Level an island to 30 for Tier-4 uniques.</td><td><span class="pill crit">C</span></td><td>prior → <code>maxIslandLevel>=30</code></td></tr>
+          <tr><td class="num-col">55</td><td class="num-col">43</td><td class="slate">55_quantum_chip</td><td>Quantum chips</td><td>quantum_chip_fab</td><td>4 steel + 4 pig iron → 1 quantum chip. <em>Quantum Chip Fab (8000 steel beam/4000 glass/2000 microchip/1000 ceramic insulator/200 silicon wafer).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([quantum_chip_fab])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">56</td><td class="num-col">44</td><td class="slate">56_ai_core</td><td>AI Core (arctic)</td><td>cryogenic_compute_center</td><td>3 steel + 1 quantum chip + 1 argon → 1 AI Core. Needs an <strong>arctic</strong> colony. (Cryo coolant ← Cryo Lab; see OPEN #5.) <em>Cryogenic Compute Center (15000 steel beam/5000 ceramic insulator/1000 microchip/500 cryo coolant/200 wire).</em></td><td><span class="pill crit">C</span></td><td>prior → <code>invAtLeast(ai_core,1)</code></td></tr>
+          <tr><td class="num-col">57</td><td class="num-col">45</td><td class="slate">57_helium</td><td>Helium-3</td><td>drilling_rig</td><td>Drill helium-3 for alloys &amp; power. <em>Drilling Rig (1000 steel beam/12000 concrete/300 pipe/150 gear/100 microchip) on helium_vent.</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([drilling_rig])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">58</td><td class="num-col">46</td><td class="slate">58_exotic_alloy</td><td>Exotic alloy (volcanic)</td><td>pyroforge</td><td>5 steel + 1 helium-3 → 1 exotic alloy. Needs a <strong>volcanic</strong> colony + heat. <em>Pyroforge (10000 steel beam/3000 clay/500 microchip/200 ceramic insulator).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([pyroforge])</code> → <code>hasBuilding([pyroforge])</code></td></tr>
+          <tr><td class="num-col">59</td><td class="num-col">47</td><td class="slate">59_antimatter</td><td>Antimatter</td><td>particle_accelerator</td><td>10 hydrogen + 1 exotic alloy + 5 microchip → 1 antimatter capsule. <em>Particle Accelerator (25000 steel beam/3000 concrete/2000 magnet/1000 microchip/200 cryo coolant).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([particle_accelerator])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">60</td><td class="num-col">48</td><td class="slate">60_time_crystal</td><td>Time crystals</td><td>quantum_manipulator</td><td>1 helium-3 + 1 exotic alloy → 1 time crystal. <em>Quantum Manipulator (3000 steel beam/1000 ceramic insulator/500 cryo coolant/300 microchip/200 wire/100 glass).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([quantum_manipulator])</code> → <code>hasBuilding([…])</code></td></tr>
+          <tr><td class="num-col">61</td><td class="num-col">49</td><td class="slate">61_weather</td><td>Weather &amp; storms [C]</td><td>—</td><td>Storms damage outdoor buildings; CO₂ worsens frequency. Wastewater &amp; scrubbers mitigate.</td><td><span class="pill rec">R</span></td><td>prior → <code>stepCompleted(20s)</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="tier" id="t4t5">T4 → T5 — Transcendence (Level 50 + AI Core)</h3>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>draft</th><th>id</th><th>mechanic</th><th>targetDefId</th><th>hint / expectedAction</th><th>pri</th><th>trigger → dismiss</th></tr></thead>
+        <tbody>
+          <tr><td class="num-col">62</td><td class="num-col">50</td><td class="slate">62_tier5</td><td>Reach Tier 5 [C]</td><td>—</td><td>Level 50 + a crafted AI Core unlocks the Tier-5 capstone.</td><td><span class="pill crit">C</span></td><td>prior → <code>maxIslandLevel>=50&amp;&amp;invSeen(ai_core)</code></td></tr>
+          <tr><td class="num-col">63</td><td class="num-col">51</td><td class="slate">63_reality_forge</td><td>The Reality Forge</td><td>reality_forge</td><td>The Tier-5 capstone that forges Reality Anchors. <em>Reality Forge (15000 steel beam/5000 clay/800 microchip/500 ceramic insulator/300 exotic alloy).</em></td><td><span class="pill rec">R</span></td><td><code>!hasBuilding([reality_forge])</code> → <code>hasBuilding([reality_forge])</code></td></tr>
+          <tr><td class="num-col">64</td><td class="num-col">52</td><td class="slate">64_reality_anchor</td><td>Reality Anchor</td><td>—</td><td>4 AI Cores + 1 antimatter capsule + 1 time crystal + 1 exotic alloy → 1 Reality Anchor (a long craft).</td><td><span class="pill rec">R</span></td><td><code>hasBuilding([reality_forge])</code> → <code>invAtLeast(reality_anchor,1)</code></td></tr>
+          <tr><td class="num-col">65</td><td class="num-col">53</td><td class="slate">65_beyond</td><td>Beyond [C]</td><td>—</td><td>Reality Anchors gate the Ascendant path (T6, Spaceport) — the endgame opens from here.</td><td><span class="pill opt">O</span></td><td><code>invAtLeast(reality_anchor,1)</code> → <code>stepCompleted(15s)</code></td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong>Total: 65 steps</strong> — the draft's 53, <strong>+12 inserted</strong>
+        (9 producer steps + 3 concept/structural). Inserted: <code>17_heat_budget</code> (moved-up
+        concept), <code>19_quicklime</code>, <code>21_water</code> (well — concrete needs fresh_water,
+        only producer not in starter), <code>22_cement</code>, <code>36_scrap_steel</code>,
+        <code>37_beams</code>, <code>38_pipes</code>, <code>40_oxygen</code>, <code>43_slag</code>,
+        <code>49_wafers</code>, <code>50_ceramics</code>, <code>51_magnets</code>. <code>sand_pit</code>
+        and <code>limestone_quarry</code> were already draft steps — they moved earlier, not added.</div>
+    </section>
+
+    <section id="disc">
+      <div class="sec-head"><span class="num">B</span><h2>Discrepancy list — human gate</h2></div>
+      <div class="callout">
+        <div class="c-tag">Confirm before encoding</div>
+        <div class="c-body">Every place the design draft disagreed with the live code. <strong>Not
+          silently fixed to the draft</strong> — the table reflects code; these are decisions the
+          human must confirm. The most consequential: <strong>D3/D18/D19</strong> (concrete prereqs
+          are heat-gated AND need sand + fresh_water → the chain reorders, well inserted),
+          <strong>D4/D20</strong> (real lubricant recipe + saltwater/cryo feeds folded → OPEN&nbsp;#5),
+          <strong>D1</strong> (starter now has 5000 scrap), <strong>D8/D16</strong>
+          (data anomalies: 12h Reality Anchor, particle_accelerator cycleSec=1).</div>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Item</th><th>Draft said</th><th>Code says</th><th>Resolution</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">D1</td><td>Starter inventory</td><td>no scrap listed</td><td>stone 1200, wood 600, iron_ore 30, coal 80, iron_ingot 60, bolt 25, limestone 15, saltwater_cell 4, <strong>scrap 5000</strong>, foundation_kit 1 (no copper_ingot/clay/steel)</td><td>Step 2 hint adds 5000 scrap.</td></tr>
+          <tr><td class="slate">D2</td><td>Concrete recipe</td><td>{cement:1,sand:2,stone:3,fresh_water:0.5}→{concrete:6}</td><td>identical ✓</td><td>Matches; hint = "cement+sand+stone+water".</td></tr>
+          <tr><td class="slate">D3</td><td>Concrete prereqs heat-gated</td><td>not noted</td><td><code>cement_mill</code> &amp; <code>limekiln</code> are <strong>requiresHeat:true</strong></td><td><strong>Reordered</strong>: heat→limestone→limekiln→sand→well→cement→concrete (steps 17–23). Largest change.</td></tr>
+          <tr><td class="slate">D4</td><td>Lubricant recipe</td><td>"crude oil + chlorine → lubricant"</td><td>{heavy_oil:5,chlorine:5,calcium_sulfonate:1}→{lubricant:10}</td><td>Hint corrected; 3 feeders folded (OPEN #5).</td></tr>
+          <tr><td class="slate">D5</td><td>calcium_sulfonate producer</td><td>proposed sulfur+quicklime+heavy_oil</td><td><code>chemical_reactor</code>: {sulfur:1,quicklime:1,heavy_oil:1}→{calcium_sulfonate:3} ✓ (Task 0.2)</td><td>Confirmed; folded.</td></tr>
+          <tr><td class="slate">D6</td><td>scrap-steel recipe key</td><td>"steel_mill_scrap" bootstrap</td><td>BOTH <code>steel_mill_scrap</code> (placeable defId) AND <code>steel_mill_from_scrap</code> (runtime variant) exist, identical</td><td>Step 36 targets defId <code>steel_mill_scrap</code>. (OPEN #8)</td></tr>
+          <tr><td class="slate">D7</td><td>steel-building beam costs</td><td>BF 30000 / SM 25000 steel_beam</td><td>identical ✓</td><td>Confirms circularity → scrap bootstrap (36–37).</td></tr>
+          <tr><td class="slate">D8</td><td>Reality Anchor recipe</td><td>"…→1 Reality Anchor (8-hour craft)"</td><td>{ai_core:4,antimatter_capsule:1,time_crystal:1,exotic_alloy:1}→{reality_anchor:1}, <strong>cycleSec 42999.7 (~12h)</strong></td><td>Recipe matches; "8-hour" dropped → "a long craft".</td></tr>
+          <tr><td class="slate">D9</td><td>air_separator recipe</td><td>"Air → nitrogen+oxygen+argon"</td><td>{air:100}→{nitrogen:75.5,oxygen:23.2,argon:1.3}; air exogenous</td><td>Matches; moved before steel_mill.</td></tr>
+          <tr><td class="slate">D10</td><td>Tier framing of T1 buildings</td><td>concrete/copper/glass/biofuel/electrolyzer narrated T2/T3</td><td>all <strong>tier:1</strong> (also limekiln, cement_mill, lead_smelter, sand_pit, quartz_mine, clay_pit_extractor = T1)</td><td>Hints carry no tier gating for these.</td></tr>
+          <tr><td class="slate">D11</td><td>quartz_mine tile</td><td>"second stone cluster"</td><td><code>requiredTile:['stone']</code> ✓ (Task 0.3 2nd cluster)</td><td>Matches; hint names 2nd cluster.</td></tr>
+          <tr><td class="slate">D12</td><td>copper_mine tile</td><td>"copper-ore tile"</td><td><code>requiredTile:['copper_vein']</code> ✓</td><td>Matches.</td></tr>
+          <tr><td class="slate">D13</td><td>lead chain</td><td>not a step</td><td><code>lead_mine</code> (lead_vein) → lead_ingot; battery_bank needs 30 lead_ingot</td><td><strong>Inserted</strong> step 45 before Battery Bank.</td></tr>
+          <tr><td class="slate">D14</td><td>sulfur source</td><td>added sulfur_vein cluster</td><td><code>sulfur_mine</code> (sulfur_vein) ✓ (Task 0.3); feeds chemical_reactor</td><td>Confirmed; folded (OPEN #5).</td></tr>
+          <tr><td class="slate">D15</td><td>assembler cost</td><td>7000 concrete/4000 stone/2000 iron ingot/500 glass/300 copper ingot</td><td>identical ✓</td><td>Matches; glass+copper precede gears.</td></tr>
+          <tr><td class="slate">D16</td><td>particle_accelerator cycleSec</td><td>n/a</td><td><strong>cycleSec:1</strong> — likely data bug (neighbors are thousands–millions s)</td><td>Flagged to human (out of scope here).</td></tr>
+          <tr><td class="slate">D17</td><td>glassworks cycleSec</td><td>n/a</td><td>cycleSec 22337.5 — slow for T1 (informational)</td><td>Noted; not a chain error.</td></tr>
+          <tr><td class="slate">D18</td><td>concrete needs fresh_water — no early producer</td><td>not noted</td><td><code>concrete_plant</code> input <code>fresh_water:0.5</code>; only producer is <code>well</code>, <strong>not in starter</strong>; draft introduced well only at hydrogen step</td><td><strong>Inserted <code>21_water</code> (well)</strong> before concrete (23). Second ordering break the reorder surfaced.</td></tr>
+          <tr><td class="slate">D19</td><td>cement_mill needs sand — sand_pit was after it</td><td>—</td><td><code>cement_mill</code> input <code>sand:1</code>; only producer is <code>sand_pit</code></td><td><strong>Reordered</strong>: <code>sand_pit</code> (20) now precedes <code>cement_mill</code> (22).</td></tr>
+          <tr><td class="slate">D20</td><td>saltwater / cryo_coolant single-producer feeds</td><td>no producer step listed</td><td><code>saltwater</code> ← <code>coastal_pump</code> ONLY (cell_press needs it); <code>cryo_coolant</code> ← <code>cryo_lab</code> ONLY (AI Core, accelerator, manipulator)</td><td><strong>Folded</strong> (same policy as lubricant chemistry). Flagged OPEN #5; build UI surfaces missing input.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="open">
+      <div class="sec-head"><span class="num">C</span><h2>Open questions</h2></div>
+      <p class="sec-intro">The design doc's 4 questions, resolved here, plus 5 new ones surfaced during verification.</p>
+      <div class="qlist">
+        <div class="q resolved"><div class="q-head"><span class="q-tag">resolved</span>1 · Reorder / cut / reword / add?</div><div class="q-body">+12 steps (closure producers + steel bootstrap + heat concept + well); reordered T1→T2 for the concrete heat cascade + raw-extractor front-loading (D3/D18/D19); moved limestone/sand/well earlier. No draft step cut.</div></div>
+        <div class="q resolved"><div class="q-head"><span class="q-tag">resolved</span>2 · Hint text too long?</div><div class="q-body">Longest: step 2 (inventory), step 31 (lubricant). Both within budget but tightest; lubricant folds the 3-feeder note into one clause.</div></div>
+        <div class="q resolved"><div class="q-head"><span class="q-tag">resolved</span>3 · Restore folded <code>produce_*</code> waits?</div><div class="q-body">Kept folded. Production-wait is implicit (build step dismiss keys on <code>hasBuilding</code>; next step waits on array order). Exceptions: steps 56, 64 use <code>invAtLeast</code> on output (craft milestones).</div></div>
+        <div class="q resolved"><div class="q-head"><span class="q-tag">resolved</span>4 · Concept TTLs vs dismiss-on-signal?</div><div class="q-body">Both: signal-bearing concepts (12, 29) dismiss on signal OR TTL; pure-info (8, 14, 53, 61, 65) use a <code>stepCompleted</code> TTL only.</div></div>
+        <div class="q open"><div class="q-head"><span class="q-tag">new</span>5 · Lubricant / saltwater / cryo feeders folded, not inserted</div><div class="q-body">Chain is complete only for the 30-building closure, NOT for these single-producer feeders: lubricant chemistry (<code>naphtha_cracker</code>/<code>crude_oil_cracker</code>, <code>chlor_alkali_plant</code>, <code>chemical_reactor</code>+<code>sulfur_mine</code>); battery saltwater (<code>coastal_pump</code>, step 46); cryo coolant (<code>cryo_lab</code>, steps 56/59/60). <strong>Fold (build-UI surfaces inputs) or insert each group's producer?</strong></div></div>
+        <div class="q open"><div class="q-head"><span class="q-tag">new</span>6 · particle_accelerator cycleSec = 1</div><div class="q-body">Almost certainly a data bug (1 antimatter capsule per simulated second → trivially free). Fix in a recipes.ts pass; out of scope here. Confirm.</div></div>
+        <div class="q open"><div class="q-head"><span class="q-tag">new</span>7 · Reality Anchor duration</div><div class="q-body">Code ~12h, draft said 8h. Hint now says "a long craft." Concrete duration in the hint, given cycleSec volatility?</div></div>
+        <div class="q open"><div class="q-head"><span class="q-tag">new</span>8 · steel_mill_scrap vs steel_mill_from_scrap</div><div class="q-body">Both recipe keys exist, identical. Confirm the encoder targets the <strong>placeable</strong> <code>steel_mill_scrap</code> defId (the <code>_from_scrap</code> key is the runtime substitution variant <code>resolveRecipe</code> selects, not placeable).</div></div>
+        <div class="q open"><div class="q-head"><span class="q-tag">new</span>9 · Oxygen source for steel: air_separator vs electrolyzer</div><div class="q-body">Steel needs oxygen. Chain teaches T3 <code>air_separator</code> (step 40) per the task. T1 <code>electrolyzer</code> also outputs oxygen (9 fresh_water → 1 H₂ + 8 O₂). Confirm air_separator vs electrolyzer for steel O₂.</div></div>
+      </div>
+    </section>
+
+    <section id="encode">
+      <div class="sec-head"><span class="num">D</span><h2>Encoding notes for Task 1.2</h2></div>
+      <p class="body">Add <code>targetDefId?: BuildingDefId</code> to <code>TutorialStep</code>; null-target
+        steps (concept/level/craft) omit it. All triggers/dismissals use only the existing helpers
+        (<code>hasBuilding</code>, <code>invAtLeast</code>, <code>invSeen</code>, <code>settledCount</code>,
+        <code>maxIslandLevel</code>, <code>hasAdjacentSameType</code>, <code>hasAdjacentHeat</code>,
+        <code>stepCompleted</code>) — no new predicate primitives.</p>
+      <p class="body">"prior done" compiles to array-order (<code>currentStep</code> surfaces the first
+        un-completed step whose trigger holds) — no explicit guard — except where a
+        <code>maxIslandLevel</code> / <code>invSeen</code> / <code>invAtLeast</code> / <code>hasBuilding</code>
+        gate is shown.</p>
+      <p class="body"><strong>Guard test will pass:</strong> every <code>targetDefId</code> is a real key in
+        <code>BUILDING_DEFS</code>, and every <code>requiredTile</code> named in a hint matches the def's
+        <code>requiredTile</code> (verified: quarry/quartz_mine→stone, logger→tree, mine→ore/coal,
+        clay_pit_extractor→clay_pit, sand_pit→sand, limestone_quarry→limestone, copper_mine→copper_vein,
+        lead_mine→lead_vein, pump_jack→oil_well, drilling_rig→helium_vent, water_wheel/well→water,
+        windmill_t0→grass). <code>cryogenic_compute_center</code> (arctic) and <code>pyroforge</code>
+        (volcanic) carry <code>requiredBiomes</code>; the hint names the biome but dismiss keys on the
+        output/building, not the biome.</p>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands · Task 1.1 · 2026-05-29 · author-1-1 · verified against
+        <code>building-defs.ts</code> / <code>recipes.ts</code> on branch <code>tutorial-consolidation</code> ·
+        supersedes the draft chain in <code>2026-05-29-tutorial-consolidation-design.md</code>.</p>
+    </div>
+
+  </div>
+</body>
+</html>
