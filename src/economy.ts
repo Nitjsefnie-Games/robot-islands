@@ -1191,7 +1191,7 @@ export function computeRates(
     if (targetTier < 1 || targetTier > 4) continue;
     // Output-stalled chambers don't draw power (no production = no load).
     if (inv(state, state.genesisTarget) >= cap(state, state.genesisTarget, undefined, undefined, ctx?.baseMult)) continue;
-    powerConsumed += (GENESIS_POWER_KW[targetTier]! * 1000) / skillMul.powerConsumption;
+    powerConsumed += (GENESIS_POWER_KW[targetTier]! * 1000 * floorPowerDrawMul(floorLevel(b))) / skillMul.powerConsumption;
   }
 
   // §13.3 Battery buffer — cover deficit from stored energy. Local

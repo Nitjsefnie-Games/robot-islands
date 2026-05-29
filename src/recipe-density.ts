@@ -88,6 +88,8 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   reality_forge: 'fantasy_reality', casimir_tap: 'fantasy_casimir',
   particle_accelerator: 'fantasy_t4', quantum_manipulator: 'fantasy_t4',
   // power / special (no real analog; anchored to nearest real archetype or tier band)
+  // These densities exist only to satisfy the coverage test — shouldDeriveCycleSec
+  // EXCLUDES these recipes, so their cycleSec is hand-authored, NOT density-derived.
   cell_press: 'battery_cells',
   coal_gen: 'assembly', biomass_plant: 'assembly', nuclear_reactor: 'assembly',
   fusion_core: 'fantasy_t4',

@@ -737,6 +737,9 @@ export function applyUpgrade(
   b.floorLevel = newL;
   (b as { constructionRemainingMs?: number }).constructionRemainingMs = upgradeConstructionMs(def, newL);
   // Storage-cap delta: +base capacity (the ×1 increment).
+  // Intentional asymmetry: the +storage.capacity cap delta is granted
+  // IMMEDIATELY on upgrade (mirroring placeBuilding's immediate storage
+  // credit), while production/power scaling waits for the construction timer.
   const storage = def.storage;
   if (storage) {
     const delta = storage.capacity;

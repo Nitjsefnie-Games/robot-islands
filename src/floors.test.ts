@@ -113,6 +113,30 @@ describe('floor level scales economy', () => {
 
     expect(ratesL3.power.produced).toBeCloseTo(ratesL0.power.produced * 4, 9);
   });
+
+  it('genesis_chamber power.consumed is 2.5× at floorLevel 3 vs L0', () => {
+    const gcL0: PlacedBuilding = { id: 'b-gc-l0', defId: 'genesis_chamber', x: 0, y: 0 };
+    const gcL3: PlacedBuilding = { id: 'b-gc-l3', defId: 'genesis_chamber', x: 0, y: 0, floorLevel: 3 };
+
+    const stateL0 = makeState({
+      buildings: [gcL0],
+      genesisTarget: 'iron_ingot',
+      level: 50,
+      aiCoreCrafted: true,
+    });
+    const stateL3 = makeState({
+      buildings: [gcL3],
+      genesisTarget: 'iron_ingot',
+      level: 50,
+      aiCoreCrafted: true,
+    });
+
+    const ratesL0 = computeRates(stateL0);
+    const ratesL3 = computeRates(stateL3);
+
+    expect(ratesL0.power.consumed).toBeGreaterThan(0);
+    expect(ratesL3.power.consumed).toBeCloseTo(ratesL0.power.consumed * 2.5, 9);
+  });
 });
 
 describe('floorScaledCapacity helper', () => {
