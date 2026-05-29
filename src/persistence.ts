@@ -76,7 +76,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 16 as const;
+export const SCHEMA_VERSION = 17 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -84,7 +84,7 @@ export const SCHEMA_VERSION = 16 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -482,6 +482,41 @@ export function migrateV15toV16(s: SerializedSnapshotV15): SaveSnapshot {
   return { ...s, v: 16 as const } as unknown as SaveSnapshot;
 }
 
+/** v16 top-level snapshot shape. Structurally identical to v17 (SaveSnapshot)
+ *  except the v literal. The v16 → v17 migration is a skill-tree ladder reset:
+ *  the de-noding rebalance removed/renamed node ids, so persisted progression
+ *  keyed on them is invalid. */
+export type SerializedSnapshotV16 = Omit<SaveSnapshot, 'v'> & { readonly v: 16 };
+
+/** v16 → v17: skill-tree v2 ladder reset. The de-noding pass removed and
+ *  renamed many node ids, so every persisted field keyed on a node/edge/socket
+ *  id is now invalid: clear them and refund the player's skill points so they
+ *  re-spend against the new topology from scratch.
+ *
+ *  Preserved (UNLIKE the v13 → v14 reset, which also nuked level/xp): level,
+ *  xp, inventory, buildings — everything the player built stays. Only the
+ *  progression ladder is wound back.
+ *  Reset: unlockedNodes → [], unlockedEdges → [], socketBindings → []
+ *  (binding keys are node/socket ids, now invalid), unspentSkillPoints →
+ *  cumulativeSkillPointsForLevel(level) — the §9.1-correct full total a
+ *  level-L island has earned, so no SP is lost in the reset. */
+export function migrateV16toV17(s: SerializedSnapshotV16): SaveSnapshot {
+  return {
+    ...s,
+    v: 17 as const,
+    islandStates: s.islandStates.map((entry) => ({
+      id: entry.id,
+      state: {
+        ...entry.state,
+        unlockedNodes: [] as ReadonlyArray<NodeId>,
+        unlockedEdges: [] as ReadonlyArray<EdgeId>,
+        socketBindings: [] as ReadonlyArray<[string, CrystalId]>,
+        unspentSkillPoints: cumulativeSkillPointsForLevel(entry.state.level),
+      },
+    })),
+  } as unknown as SaveSnapshot;
+}
+
 export interface SaveSnapshot {
   readonly v: typeof SCHEMA_VERSION;
   /** `Date.now()` wall-clock ms at save time. Used to compute the offline
@@ -656,6 +691,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 15) {
     snapshot = migrateV15toV16(snapshot as unknown as SerializedSnapshotV15);
+  }
+  if ((snapshot as unknown as { v: number }).v === 16) {
+    snapshot = migrateV16toV17(snapshot as unknown as SerializedSnapshotV16);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {

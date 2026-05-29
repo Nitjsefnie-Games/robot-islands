@@ -33,6 +33,7 @@ import type { VictoryCondition } from './endgame.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { ObjectiveId } from './tutorial.js';
 import type { EdgeId } from './skilltree-graph.js';
+import { cumulativeSkillPointsForLevel } from './skilltree.js';
 
 import {
   SCHEMA_VERSION,
@@ -46,6 +47,7 @@ import {
   migrateV12toV13,
   migrateV13toV14,
   migrateV15toV16,
+  migrateV16toV17,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -54,6 +56,7 @@ import {
   type SerializedSnapshotV12,
   type SerializedSnapshotV13,
   type SerializedSnapshotV15,
+  type SerializedSnapshotV16,
   type SerializedIslandStateV11,
   type SerializedWorld,
 } from './persistence.js';
@@ -137,7 +140,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(16);
+    expect(snap.v).toBe(17);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1475,7 +1478,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(16);
+    expect(snap.v).toBe(17);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -1692,7 +1695,7 @@ describe('migrateV8toV9', () => {
 });
 
 describe('deserializeWorld v8 → v9 round-trip', () => {
-  it('migrates a v8 snapshot and yields v16 in-memory state with empty socketBindings', () => {
+  it('migrates a v8 snapshot and yields v17 in-memory state with empty socketBindings', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
@@ -1718,7 +1721,8 @@ describe('deserializeWorld v8 → v9 round-trip', () => {
     expect(home.xp).toBe(0);
     expect(home.socketBindings).toBeInstanceOf(Map);
     expect(home.socketBindings.size).toBe(0);
-    expect(home.unspentSkillPoints).toBe(0);
+    // v16 → v17 refunds SP to the cumulative total for the (now level-1) island.
+    expect(home.unspentSkillPoints).toBe(cumulativeSkillPointsForLevel(1));
   });
 
   it('round-trips v9 socketBindings through serialize → JSON → deserialize', () => {
@@ -1930,8 +1934,8 @@ describe('migrateV12toV13', () => {
   });
 });
 
-describe('deserializeWorld v7 → v16 migration chain', () => {
-  it('walks v7 through v8/v9/v10/v11/v12/v13/v14/v15/v16 and refunds SP via cumulativeSkillPointsForLevel', () => {
+describe('deserializeWorld v7 → v17 migration chain', () => {
+  it('walks v7 through v8/v9/v10/v11/v12/v13/v14/v15/v16/v17 and refunds SP via cumulativeSkillPointsForLevel', () => {
     const world = makeInitialWorld(0);
     const homeState = makeIslandState({ id: 'home', level: 5, xp: 1200 });
     const states = new Map<string, IslandState>([['home', homeState]]);
@@ -1958,13 +1962,15 @@ describe('deserializeWorld v7 → v16 migration chain', () => {
 
     const { islandStates: restored } = deserializeWorld(v7, 0, 0);
     const home = restored.get('home')!;
-    // v13 → v14 resets level + xp + skill-tree progression.
+    // v13 → v14 resets level + xp + skill-tree progression to level 1.
     expect(home.level).toBe(1);
     expect(home.xp).toBe(0);
     expect(home.unlockedNodes.size).toBe(0);
     expect(home.unlockedEdges.size).toBe(0);
     expect(home.socketBindings).toBeInstanceOf(Map);
     expect(home.socketBindings.size).toBe(0);
+    // v16 → v17 refunds SP to the cumulative total for the (now level-1) island.
+    expect(home.unspentSkillPoints).toBe(cumulativeSkillPointsForLevel(1));
   });
 });
 
@@ -1983,7 +1989,7 @@ describe('persistence v14 → v15', () => {
   });
 
   it.skipIf(!existsSync('/tmp/robot-islands-save.json'))(
-    'live /tmp/robot-islands-save.json migrates v14 → v16 with zero defaults',
+    'live /tmp/robot-islands-save.json migrates v14 → v17 with zero defaults',
     () => {
       const raw = readFileSync('/tmp/robot-islands-save.json', 'utf8');
       const result = deserializeWorld(JSON.parse(raw));
@@ -2027,6 +2033,76 @@ describe('migrateV15toV16', () => {
   });
 });
 
+describe('migrateV16toV17', () => {
+  it('clears node progression + refunds SP to cumulative total; KEEPS level/xp/buildings/inventory', () => {
+    const v16: SerializedSnapshotV16 = {
+      v: 16,
+      savedAt: 1000,
+      savedAtPerf: 0,
+      world: {
+        islands: [],
+        drones: [],
+        routes: [],
+        vehicles: [],
+        satellites: [],
+        repairDrones: [],
+        debrisFields: [],
+        commPackets: [],
+        totalCo2Kg: 0,
+        playerLat: null,
+        playerLon: null,
+      },
+      islandStates: [{
+        id: 'home',
+        state: {
+          id: 'home',
+          level: 5,
+          xp: 1234,
+          inventory: { iron_ore: 500, biofuel: 12 } as Record<string, number>,
+          storageCaps: {},
+          funnelPending: {},
+          starterInventoryGrace: {},
+          buildings: [{ id: 'mine-1', defId: 'mine', x: 2, y: 2 }],
+          unlockedNodes: ['mining.recipeRate.1', 'mining.recipeRate.2'],
+          unlockedEdges: ['mining.0-mining.1'],
+          socketBindings: [['mining.socket.0', 'crystal_alpha']],
+          unspentSkillPoints: 0,
+          declaredAt: null,
+          lastResetAt: null,
+          lastTick: 0,
+          aiCoreCrafted: false,
+          ascendantCoreCrafted: false,
+          timeLockBankedMin: 0,
+          accelerationQueue: [],
+          accelerationRemainingMin: 0,
+          bankingEnabled: false,
+          genesisTarget: null,
+          batteryStoredWs: 0,
+          co2Kg: 0,
+        } as unknown as import('./persistence.js').SerializedIslandState,
+      }],
+    } as unknown as SerializedSnapshotV16;
+
+    const v17 = migrateV16toV17(v16);
+    expect(v17.v).toBe(17);
+    const migrated = v17.islandStates[0]!.state;
+    // Node-progression fields all cleared (de-noding invalidated the ids).
+    expect(migrated.unlockedNodes).toEqual([]);
+    expect(migrated.unlockedEdges).toEqual([]);
+    expect(migrated.socketBindings).toEqual([]);
+    // SP refunded to the full cumulative earned total for the island's level.
+    expect(migrated.unspentSkillPoints).toBe(cumulativeSkillPointsForLevel(5));
+    // level / xp PRESERVED (unlike the v13 → v14 reset).
+    expect(migrated.level).toBe(5);
+    expect(migrated.xp).toBe(1234);
+    // buildings + inventory untouched.
+    expect(migrated.buildings.length).toBe(1);
+    expect(migrated.buildings[0]!.defId).toBe('mine');
+    expect((migrated.inventory as Record<string, number>).iron_ore).toBe(500);
+    expect((migrated.inventory as Record<string, number>).biofuel).toBe(12);
+  });
+});
+
 describe('persistence v15 → v16', () => {
   it('v15 fixture loads into v16 without error', () => {
     const v15 = JSON.parse(readFileSync('src/fixtures/v15-minimal.json', 'utf8'));
@@ -2034,7 +2110,7 @@ describe('persistence v15 → v16', () => {
     expect(result).not.toBeNull();
   });
 
-  it('v16 round-trips byte-identical through serialize → deserialize → serialize', () => {
+  it('v17 round-trips byte-identical through serialize → deserialize → serialize', () => {
     const world = makeInitialWorld(0);
     const islandStates = new Map<string, IslandState>();
     for (const spec of world.islands) {
