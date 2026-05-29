@@ -996,6 +996,7 @@ function startingInventory(): Record<ResourceId, number> {
   inv.limestone       = 15;
   inv.saltwater_cell  = 4;
   inv.foundation_kit  = 1;
+  inv.scrap           = 5000; // §rev-17 salvage cache — bootstraps the steel chain (scrap → steel_mill_scrap → steel → beam_mill → steel_beam)
   // steel intentionally 0 — player walks the iron→steel chain.
   return inv;
 }
