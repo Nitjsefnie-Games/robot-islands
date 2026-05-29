@@ -5,3 +5,6 @@ dist/
 *.tsbuildinfo
 .claude/scheduled_tasks.lock
 .worktrees/
+
+# session handoff docs — local only, never committed
+**/*handoff*
