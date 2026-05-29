@@ -28,7 +28,7 @@ A systemd unit `robot-islands-dev.service` runs `vite preview --host 0.0.0.0 --p
 ## Source of truth
 
 - `SPEC.md` (~1800 lines) is the locked specification — iterated under `hypothesize-prove-loop` before implementation. When adding or changing a mechanic, find the relevant § and align with it. The build order is §15.7.
-- `CONTRIBUTING.md` mandates **linear history**: rebase, never merge. `master` is the integration branch. Repo-local git config has `pull.rebase=true` and `merge.ff=only`.
+- `CONTRIBUTING.md` mandates **branch-based development** and **linear history**: do all work on a feature branch cut from `master`, never commit directly to `master`; integrate by rebasing and fast-forwarding. `master` is integration-only. Repo-local git config has `pull.rebase=true` and `merge.ff=only`.
 
 ## Architecture
 

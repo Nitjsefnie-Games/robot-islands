@@ -1,5 +1,20 @@
 # Contributing
 
+## Development happens on branches
+
+Do **not** commit directly to `master`. All work — features, fixes, docs, refactors — happens on a **feature branch** cut from `master`. `master` is integration-only: it advances solely by fast-forwarding a completed, rebased branch onto it.
+
+```
+git checkout master
+git pull                       # rebases (pull.rebase=true), so master stays linear
+git checkout -b feature-x      # branch per unit of work
+# ... commits on feature-x ...
+```
+
+Name branches by intent and kind, e.g. `feat/power-brownouts`, `fix/ocean-tint-bleed`, `docs/branch-based-development`, `refactor/economy-rates`. Integrate via the rebase-and-fast-forward flow below (or open a PR that does the same).
+
+This reverses the repo's earlier "commit straight onto `master`" habit. From now on `master` only ever receives already-reviewed, already-rebased branch tips.
+
 ## History convention: rebase, not merge
 
 This repository keeps a **linear history**. No merge commits in `master`. When integrating a feature branch, rebase it onto `master` and fast-forward.
