@@ -183,9 +183,10 @@ describe('MINING_FILLER_NODES', () => {
 
 describe('ALL_FILLER_NODES sanity', () => {
   it('has a node count in the expected range', () => {
-    // Lower bound updated for C6a rebalance: power_systems lost 13 (xpGain+batteryCapacity),
-    // transport lost 7 (droneFuel), network lost 12 (commRange+scanner) = 32 fewer fillers.
-    expect(ALL_FILLER_NODES.length).toBeGreaterThanOrEqual(250);
+    // Lower bound updated for C6b rebalance: orbital branch lost 29 filler nodes
+    // (launch lost 9 padSafety+satFuel; communication lost 10 satBuffer+scanner;
+    // discovery lost 5 scannerDwell; resilience lost 5 repairDrone).
+    expect(ALL_FILLER_NODES.length).toBeGreaterThanOrEqual(240);
     expect(ALL_FILLER_NODES.length).toBeLessThanOrEqual(600);
   });
 
