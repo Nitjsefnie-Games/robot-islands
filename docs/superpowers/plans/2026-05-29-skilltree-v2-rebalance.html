@@ -1,0 +1,244 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill-tree rebalance v2 — implementation plan</title>
+  <style>
+    :root{--ivory:#252420;--slate:#F5F3EC;--clay:#D97757;--oat:#3A352B;--olive:#8FA56E;
+      --warn:#E0B47F;--rust:#E08B7F;--gray-150:#2E2C27;--gray-300:#3A3833;--gray-500:#8F8D82;
+      --gray-700:#CFCCC2;--white:#252420;--serif:ui-serif,Georgia,serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:ui-monospace,Menlo,monospace;}
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:var(--sans);background:#1B1A17;color:var(--gray-700);line-height:1.55;
+      padding:56px 32px 120px;-webkit-font-smoothing:antialiased;}
+    .page{max-width:1080px;margin:0 auto;}
+    header.page-head{margin-bottom:40px;max-width:860px;}
+    .eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gray-500);margin-bottom:12px;font-family:var(--mono);}
+    h1{font-family:var(--serif);font-weight:500;font-size:34px;line-height:1.15;color:var(--slate);margin-bottom:18px;letter-spacing:-.01em;}
+    .prompt-box{background:var(--gray-150);border:1.5px solid var(--gray-300);border-radius:12px;padding:16px 20px;font-size:14px;}
+    .prompt-box .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-500);display:block;margin-bottom:6px;}
+    .gate{background:#2E211C;border:1.5px solid var(--rust);border-radius:12px;padding:16px 20px;margin:26px 0 0;font-size:14px;color:var(--gray-700);}
+    .gate b{color:var(--rust);}
+    .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:34px 0 56px;}
+    @media(max-width:900px){.summary{grid-template-columns:repeat(2,1fr);}}
+    .summary .cell{background:var(--white);border:1.5px solid var(--gray-300);border-radius:12px;padding:18px 20px;}
+    .summary .k{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-500);margin-bottom:6px;}
+    .summary .v{font-size:17px;color:var(--slate);font-weight:600;} .summary .v.accent{color:var(--clay);}
+    section{margin-bottom:60px;}
+    .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px;}
+    .sec-head .num{font-family:var(--mono);font-size:12px;background:var(--oat);color:var(--slate);padding:3px 9px;border-radius:8px;}
+    .sec-head h2{font-family:var(--serif);font-weight:500;font-size:25px;color:var(--slate);letter-spacing:-.01em;}
+    .sec-intro{font-size:14px;color:var(--gray-500);max-width:760px;margin-bottom:24px;}
+    code{font-family:var(--mono);font-size:.86em;background:var(--gray-150);border:1px solid var(--gray-300);border-radius:5px;padding:1px 5px;color:#C9B98A;}
+
+    .milestones{display:flex;flex-direction:column;}
+    .milestone{display:grid;grid-template-columns:96px 28px 1fr;gap:0 18px;}
+    .milestone .when{text-align:right;font-family:var(--mono);font-size:12px;color:var(--gray-500);padding-top:4px;}
+    .milestone .dot-col{display:flex;flex-direction:column;align-items:center;}
+    .milestone .dot{width:14px;height:14px;border-radius:50%;background:var(--white);border:3px solid var(--clay);margin-top:4px;flex-shrink:0;}
+    .milestone .dot.gate{border-color:var(--rust);background:#2E211C;}
+    .milestone .line{width:2px;flex:1;background:var(--gray-300);margin:4px 0;}
+    .milestone:last-child .line{display:none;}
+    .milestone .body{padding-bottom:30px;}
+    .milestone .body h3{font-family:var(--serif);font-weight:500;font-size:18px;color:var(--slate);margin-bottom:4px;}
+    .milestone .body p{font-size:13.5px;color:var(--gray-500);margin-bottom:9px;max-width:680px;}
+    .milestone .tags{display:flex;gap:8px;flex-wrap:wrap;}
+    .milestone .tag{font-family:var(--mono);font-size:11px;background:var(--gray-150);border:1px solid var(--gray-300);border-radius:6px;padding:3px 8px;color:var(--gray-700);}
+
+    .tbl{width:100%;border:1.5px solid var(--gray-300);border-radius:12px;border-collapse:separate;border-spacing:0;overflow:hidden;font-size:13px;}
+    .tbl th,.tbl td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--gray-300);vertical-align:top;}
+    .tbl th{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--gray-500);background:var(--gray-150);font-weight:600;}
+    .tbl tr:last-child td{border-bottom:none;} .tbl td.slate{color:var(--slate);font-weight:600;} .tbl tbody tr:hover{background:var(--gray-150);}
+    .tbl .branch td{background:var(--oat);color:var(--slate);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
+
+    .code{background:#121110;border-radius:12px;padding:18px 20px;overflow-x:auto;margin-top:10px;}
+    .code .fl{font-family:var(--mono);font-size:12px;color:var(--gray-500);margin-bottom:8px;}
+    .code pre{font-family:var(--mono);font-size:12.5px;line-height:1.6;color:#F5F3EC;white-space:pre;}
+    .code .kw{color:var(--clay);} .code .str{color:var(--olive);} .code .cm{color:var(--gray-500);} .code .fn{color:#C9B98A;}
+
+    .risks{border:1.5px solid var(--gray-300);border-radius:12px;overflow:hidden;background:var(--white);}
+    .risks .row{display:grid;grid-template-columns:1.4fr 90px 1.8fr;}
+    @media(max-width:780px){.risks .row{grid-template-columns:1fr;}}
+    .risks .row+.row{border-top:1.5px solid var(--gray-300);}
+    .risks .cell{padding:14px 18px;font-size:13.5px;} .risks .cell+.cell{border-left:1.5px solid var(--gray-300);}
+    @media(max-width:780px){.risks .cell+.cell{border-left:none;border-top:1px dashed var(--gray-300);}}
+    .risks .head{background:var(--gray-150);font-weight:600;color:var(--slate);font-size:12px;text-transform:uppercase;letter-spacing:.04em;}
+    .sev{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;}
+    .sev.high{background:#4A2A1C;color:#F0B79C;} .sev.med{background:var(--oat);color:var(--slate);}
+
+    .checklist{display:flex;flex-direction:column;gap:9px;max-width:780px;}
+    .check{display:flex;gap:12px;align-items:flex-start;background:var(--white);border:1.5px solid var(--gray-300);border-radius:10px;padding:11px 15px;}
+    .check .box{width:17px;height:17px;border-radius:5px;border:2px solid var(--gray-500);flex-shrink:0;margin-top:2px;}
+    .check .ck{font-size:13.5px;} .check .ck strong{color:var(--slate);}
+    .footer{color:var(--gray-500);font-size:13px;margin-top:56px;padding-top:20px;border-top:1px solid var(--gray-300);}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · robot-islands · skill-tree v2</div>
+      <h1>Skill-tree rebalance v2 — de-noding, consolidation &amp; the magical input lever</h1>
+      <div class="prompt-box">
+        <span class="label">Goal</span>
+        Cut every sub-path to ≤2 filler lever-families, consolidate cross-branch duplicate levers to one home,
+        and add a magical material-input-efficiency lever — keeping v1's cap framework intact. Executable plan
+        lives at <code>docs/superpowers/plans/2026-05-29-skilltree-v2-rebalance.md</code> (checkbox steps + full code).
+      </div>
+      <div class="gate">
+        <b>⛔ Prerequisite gate.</b> Sequenced <b>after</b> throughput-floors (spec §9). Before Task 1: confirm
+        floors is merged; re-read <code>economy.ts</code> (floors edits it — re-verify every line number); re-read
+        <code>persistence.ts:79</code> <code>SCHEMA_VERSION</code> (=16 today; target = current+1).
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">7 + gate</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">7</div></div>
+      <div class="cell"><div class="k">Approach</div><div class="v">TDD · per-task commit</div></div>
+      <div class="cell"><div class="k">Status</div><div class="v" style="color:var(--warn)">Gated on floors</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Task sequence</h2></div>
+      <p class="sec-intro">Each task is test-first and self-contained. The big one (Task&nbsp;4) is committed one branch at a time so review stays bounded.</p>
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">gate</div><div class="dot-col"><span class="dot gate"></span><span class="line"></span></div>
+          <div class="body"><h3>Prerequisite gate</h3><p>Floors merged · re-ground economy line numbers · pin schema version.</p></div>
+        </div>
+        <div class="milestone">
+          <div class="when">T1</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body"><h3>recipeInputMul effect + fold</h3><p>New <code>SkillEffect</code> variant, <code>SkillMultipliers.recipeInputMul</code> field, fold case in <code>effectiveSkillMultipliers</code> (mirrors <code>powerConsumptionMul</code>).</p><div class="tags"><span class="tag">skilltree.ts</span></div></div>
+        </div>
+        <div class="milestone">
+          <div class="when">T2</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body"><h3>Apply divisor in economy</h3><p>Divide per-cycle input demand by <code>skillMul.recipeInputMul</code> at both the <code>inputAvail</code> and consumption-debit sites. <b>Re-ground: floors moved these.</b></p><div class="tags"><span class="tag">economy.ts</span></div></div>
+        </div>
+        <div class="milestone">
+          <div class="when">T3</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body"><h3>Magnitude pools</h3><p>Add <code>'recipeInputMul': 1.5</code>; remove <code>'storageCapMul'</code>. Single source — <code>scripts/</code> re-exports it.</p><div class="tags"><span class="tag">skilltree-derive-magnitudes.ts</span></div></div>
+        </div>
+        <div class="milestone">
+          <div class="when">T4</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body"><h3>De-node + consolidate archetypes</h3><p>Rewrite all 20 <code>*_FILLER_ARCHETYPES</code> to ≤2 families (§02 map); add magic chains; consolidate storage; demote levers to notables. 5 commits.</p><div class="tags"><span class="tag">skilltree-archetypes.ts</span><span class="tag">skilltree-catalog.ts</span></div></div>
+        </div>
+        <div class="milestone">
+          <div class="when">T5</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body"><h3>Budget guard test</h3><p>≤2 filler lever-families + ≤23 nodes per sub-path (groups category variants as one family).</p><div class="tags"><span class="tag">skilltree-budget.test.ts</span></div></div>
+        </div>
+        <div class="milestone">
+          <div class="when">T6</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body"><h3>Persistence migration</h3><p>Schema bump + ladder reset: clear nodes, refund SP, <b>keep level/xp/buildings/inventory</b> (model on <code>migrateV13toV14</code>).</p><div class="tags"><span class="tag">persistence.ts</span></div></div>
+        </div>
+        <div class="milestone">
+          <div class="when">T7</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body"><h3>Combined-ceiling guard</h3><p>Assert input-eff ÷1.5 × rate ×√10 × floor ×(1+L) is the intended ceiling. Overshoot → spec decision, don't clamp.</p><div class="tags"><span class="tag">economy.test.ts</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Surviving archetypes per sub-path (Task 4 map)</h2></div>
+      <p class="sec-intro">≤2 distinct lever-families each. Storage's four category caps = one capacity family. <code>→</code> = rehomed; sparse = 1 family by design.</p>
+      <table class="tbl"><thead><tr><th>Sub-path</th><th>Family 1</th><th>Family 2</th><th>Dropped / rehomed</th></tr></thead><tbody>
+        <tr class="branch"><td colspan="4">Extraction</td></tr>
+        <tr><td class="slate">mining</td><td><code>recipeRateMul:extraction</code></td><td><code>mineYieldBonusMul</code></td><td>storageCap→storage · rareTrickle→notable</td></tr>
+        <tr><td class="slate">forestry</td><td><code>recipeRateMul:extraction</code></td><td><code>loggerYieldBonusMul</code></td><td>storageCap→storage · exoticTrickle→notable</td></tr>
+        <tr><td class="slate">drilling</td><td><code>recipeRateMul:extraction</code></td><td><code>drillYieldBonusMul</code></td><td>storageCap→storage · dup mineYield/rareTrickle drop</td></tr>
+        <tr><td class="slate">robotics</td><td><code>recipeRateMul:manufacturing</code></td><td><code>droneFuelEfficiencyMul</code></td><td>constructionTime/parallelBuild→notable · droneScan→discovery</td></tr>
+        <tr class="branch"><td colspan="4">Refinement</td></tr>
+        <tr><td class="slate">smelting</td><td><code>recipeRateMul:smelting</code></td><td><b><code>recipeInputMul</code> (magic)</b></td><td>powerCons→power_systems · maint→resilience</td></tr>
+        <tr><td class="slate">chemistry</td><td><code>recipeRateMul:chemistry</code></td><td><b><code>recipeInputMul</code> (magic)</b></td><td>storageCap→storage · powerCons→power_systems</td></tr>
+        <tr><td class="slate">electronics</td><td><code>recipeRateMul:electronics</code></td><td><b><code>recipeInputMul</code> (magic)</b></td><td>powerCons→power_systems · satBuffer→launch</td></tr>
+        <tr><td class="slate">power_systems</td><td><code>powerProductionMul</code></td><td><code>powerConsumptionMul</code></td><td>battery/xpGain→notable · <em>power home</em></td></tr>
+        <tr class="branch"><td colspan="4">Logistics</td></tr>
+        <tr><td class="slate">storage</td><td colspan="2"><code>storageCategoryCapMul:{dry_goods, liquid_gas, components, rare}</code> — one capacity family, generic removed</td><td>maint→resilience · manufacturing→robotics</td></tr>
+        <tr><td class="slate">transport</td><td><code>routeCapacityMul</code></td><td><code>airshipRangeMul</code></td><td>droneFuel→robotics</td></tr>
+        <tr><td class="slate">network</td><td><code>teleporterEfficiencyMul</code></td><td><em>sparse</em></td><td>commRange→communication · scanner→discovery</td></tr>
+        <tr class="branch"><td colspan="4">Orbital</td></tr>
+        <tr><td class="slate">launch</td><td><code>launchSuccessAdditive</code></td><td><code>satBufferCapMul</code></td><td>padExplosion/satFuel→notable</td></tr>
+        <tr><td class="slate">communication</td><td><code>commRangeMul</code></td><td><em>sparse</em></td><td>scanner→discovery · satBuffer→launch</td></tr>
+        <tr><td class="slate">discovery</td><td><code>scannerCoverageMul</code></td><td><code>droneScanRadiusMul</code></td><td>scannerDwell→notable</td></tr>
+        <tr><td class="slate">resilience</td><td><code>debrisProtectionMul</code></td><td><code>maintenanceThresholdMul</code></td><td>repairDrone→notable</td></tr>
+        <tr class="branch"><td colspan="4">Ocean</td></tr>
+        <tr><td class="slate">aquaculture</td><td><code>recipeRateMul:extraction</code></td><td><code>aquacultureYieldBonusMul</code></td><td>storageCap→storage · dup mineYield drop</td></tr>
+        <tr><td class="slate">hydroprocessing</td><td><code>recipeRateMul:chemistry</code></td><td><em>sparse</em></td><td>powerCons→power_systems · storageCap drop</td></tr>
+        <tr><td class="slate">submarine</td><td><code>routeCapacityMul</code></td><td><code>airshipRangeMul</code></td><td>powerProduction→power_systems</td></tr>
+        <tr><td class="slate">oceanography</td><td><code>scannerCoverageMul</code></td><td><code>t5ExtractorYieldBonusMul</code></td><td>commRange→orbital · droneScan→discovery</td></tr>
+        <tr><td class="slate">patronage</td><td><code>patronageYieldBonusMul</code></td><td><em>sparse</em></td><td>extraction-rate drop · commRange→orbital · rare→storage</td></tr>
+      </tbody></table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Key code</h2></div>
+      <p class="sec-intro">The new effect + fold (T1) and the storage consolidation array (T4) — the rest follows these shapes.</p>
+      <div class="code">
+        <div class="fl">src/skilltree.ts — union variant + fold (mirrors powerConsumptionMul)</div>
+<pre><span class="cm">// SkillEffect union (after batteryCapacityMul):</span>
+  | { <span class="kw">readonly</span> kind: <span class="str">'recipeInputMul'</span>; <span class="kw">readonly</span> reduce: <span class="kw">true</span> };
+<span class="cm">// SkillMultipliers: add `recipeInputMul: number` (≥1, capped ÷1.5)</span>
+<span class="cm">// blankMultipliers: recipeInputMul: 1</span>
+<span class="cm">// fold:</span>
+  <span class="kw">case</span> <span class="str">'recipeInputMul'</span>: recipeInputMul *= m; <span class="kw">break</span>;
+<span class="cm">// economy.ts: effective per-cycle input = needPerCycle / skillMul.recipeInputMul</span>
+<span class="cm">//             (apply at BOTH inputAvail demand AND consumption debit)</span></pre>
+      </div>
+      <div class="code">
+        <div class="fl">src/skilltree-archetypes.ts — STORAGE: one capacity family, 4 category chains, generic gone</div>
+<pre><span class="kw">export const</span> <span class="fn">STORAGE_FILLER_ARCHETYPES</span>: FillerArchetype[] = [
+  { idPrefix: <span class="str">'storage.capDry'</span>,  effectKind: <span class="str">'storageCategoryCapMul'</span>,
+    effectExtra: { category: <span class="str">'dry_goods'</span> },  subPath: <span class="str">'storage'</span>,
+    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 5 },
+  { idPrefix: <span class="str">'storage.capLiq'</span>,  <span class="cm">/* liquid_gas, count 5 */</span> },
+  { idPrefix: <span class="str">'storage.capComp'</span>, <span class="cm">/* components, count 4 */</span> },
+  { idPrefix: <span class="str">'storage.capRare'</span>, <span class="cm">/* rare,       count 4 */</span> },
+];
+<span class="cm">// magic chain (smelting/chemistry/electronics) uses elevated cost:</span>
+<span class="cm">//   baseCost: 3, costGrowth: 1.8, count: 4  — premium (spec Q4), gated T3+</span></pre>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Fragile points &amp; risks</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Handling</div></div>
+        <div class="row">
+          <div class="cell"><code>economy.ts</code> input-divisor sites moved by throughput-floors.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Re-read <code>computeRates</code>/<code>inputAvail</code> at execution; apply the divisor at both demand &amp; debit. Specified by behavior, not line.</div>
+        </div>
+        <div class="row">
+          <div class="cell">T3-gate mechanism for the magic chains not yet pinned (depth-tier vs <code>minSpent</code> prereq).</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Locate the exact gating path before writing T4.2; gate each <code>*.inputEff</code> chain to T3+. Do not guess.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Migration wipes progression if modeled too literally on v13→v14.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Keep level/xp; only clear nodes/edges/sockets and refund SP via the level→total-SP curve.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Stacked ceiling (÷1.5 × ×√10 × ×(1+L)) higher than intended.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">T7 guard surfaces it as a spec decision (cap interaction), not a silent clamp.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Final verification</h2></div>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck"><strong>npm test</strong> — full suite green.</div></div>
+        <div class="check"><div class="box"></div><div class="ck"><strong>npm run build</strong> — clean (strict, noUnused*).</div></div>
+        <div class="check"><div class="box"></div><div class="ck"><strong>mass-balance.test.ts</strong> — green, <strong>no new skips</strong> (proves recipeInputMul invisible to the static auditor).</div></div>
+        <div class="check"><div class="box"></div><div class="ck"><strong>skilltree-budget + magnitudes</strong> — ≤2 families/≤23 nodes; pool products still hit caps.</div></div>
+        <div class="check"><div class="box"></div><div class="ck"><strong>Manual smoke</strong> — unlock a <code>*.inputEff</code> node; refining input drawdown drops; T3-gated.</div></div>
+      </div>
+    </section>
+
+    <div class="footer"><p>Implementation plan · 2026-05-29 · executes after throughput-floors · spec: 2026-05-29-skilltree-v2-rebalance-spec · executable source: the .md alongside this file</p></div>
+  </div>
+</body>
+</html>
