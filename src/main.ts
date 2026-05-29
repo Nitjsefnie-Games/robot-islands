@@ -61,7 +61,7 @@ import { mountConstructionUi } from './construction-ui.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
 import { expandIsland, type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
-import { buildingAtTile, demolishBuilding, findOceanBuildingAt } from './placement.js';
+import { applyUpgrade, buildingAtTile, demolishBuilding, findOceanBuildingAt } from './placement.js';
 import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
 import { resolveShot } from './terrain-modifier.js';
 import { mountPlacementUi } from './placement-ui.js';
@@ -1295,6 +1295,12 @@ async function main(): Promise<void> {
       // Rebuild world layers so building-alerts-overlay re-paints the cue.
       rebuildWorldLayers();
       buildingAlertsOverlay.invalidate();
+      inspector.refresh();
+    },
+    onUpgradeFloor: (target: InspectorTarget) => {
+      const result = applyUpgrade(target.spec, target.state, target.building.id);
+      if (!result.ok) return;
+      rebuildWorldLayers();
       inspector.refresh();
     },
     // §3.4 Land Reclamation: mutate spec/state via the pure helper, then

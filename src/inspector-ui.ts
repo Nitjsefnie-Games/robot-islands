@@ -33,8 +33,9 @@ import {
 } from './building-defs.js';
 import { gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { affordabilityShortfall, placementCostFor } from './placement.js';
-import { convertToServitor, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { affordabilityShortfall, placementCostFor, upgradeCost } from './placement.js';
+import { upgradeConstructionMs } from './construction.js';
+import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { computeRates } from './economy.js';
 import {
@@ -190,6 +191,10 @@ export interface InspectorDeps {
    *  — drained routes are NOT restored on re-enable), and triggers a
    *  world-layer rebuild so the alerts-overlay re-paints the cue. */
   onToggleDisabled(target: InspectorTarget): void;
+  /** Floor-upgrade callback. main.ts owns the mutation (applyUpgrade),
+   *  rebuilds world layers, and refreshes the inspector so the new floor
+   *  count and effect are visible. */
+  onUpgradeFloor(target: InspectorTarget): void;
   /** §3.4 Land Reclamation: called when the player clicks one of the
    *  +1 major / +1 minor expand buttons. main.ts owns the actual
    *  `expandIsland` call (so the inspector stays DOM-pure) and is
@@ -843,6 +848,22 @@ export function mountInspectorUi(
   );
   heatSection.body.appendChild(heatLine);
 
+  // Floor-upgrade section
+  const floorSection = makeSection('Floors');
+  const floorLine = document.createElement('span');
+  styled(
+    floorLine,
+    [`color: ${'var(--ri-fg-3)'}`, 'font-size: 10.5px', 'letter-spacing: 0.02em'].join(';'),
+  );
+  floorSection.body.appendChild(floorLine);
+  const floorUpgradeBtn = makeExpandButton();
+  floorUpgradeBtn.addEventListener('click', () => {
+    if (!target) return;
+    deps.onUpgradeFloor(target);
+    paint();
+  });
+  floorSection.body.appendChild(floorUpgradeBtn);
+
   // §4.7 maintenance section — operating-time / threshold readout, plus the
   // tier's maintenance bill of materials. For an Eternal Servitor the
   // section displays the exemption stamp and the recipe is hidden.
@@ -1132,6 +1153,7 @@ export function mountInspectorUi(
   body.appendChild(gateSection.wrap);
   body.appendChild(storageSection.wrap);
   body.appendChild(heatSection.wrap);
+  body.appendChild(floorSection.wrap);
   body.appendChild(maintenanceSection.wrap);
   body.appendChild(universeEditorSection.wrap);
   body.appendChild(reclamationSection.wrap);
@@ -1398,7 +1420,7 @@ export function mountInspectorUi(
     // report their category and capacity; generic buildings additionally
     // expose the cargo-label dropdown for relabeling.
     if (def.storage) {
-      const cap = def.storage.capacity;
+      const cap = floorScaledCapacity(building, def.storage.capacity);
       if (def.storage.category === 'generic') {
         // Generic: show "+cap on <label>" plus the dropdown.
         renderCargoLabelUi(building, state, cap);
@@ -1450,6 +1472,50 @@ export function mountInspectorUi(
     } else {
       heatSection.wrap.style.display = 'none';
     }
+
+    // Floor-upgrade section paint
+    const fl = floorLevel(building);
+    const nextFl = fl + 1;
+    const maxed = fl === 9;
+    floorLine.textContent = `${fl + 1} / 10 floors · next: ×${floorEffectMul(nextFl)} throughput / capacity / power-out`;
+    const upgradeCostBasket = upgradeCost(def);
+    const upgradeShortfall = affordabilityShortfall(state.inventory, upgradeCostBasket);
+    const canAffordUpgrade = Object.keys(upgradeShortfall).length === 0;
+    const upgradeMs = upgradeConstructionMs(def, nextFl);
+    const upgradeCostParts: string[] = [];
+    for (const [r, n] of Object.entries(upgradeCostBasket) as Array<[ResourceId, number]>) {
+      if (n <= 0) continue;
+      const have = Math.floor(state.inventory[r] ?? 0);
+      upgradeCostParts.push(`${n} ${r.toUpperCase().replace(/_/g, ' ')} (${have})`);
+    }
+    const upgradeDurationStr = `${(upgradeMs / 1000).toFixed(1)}s`;
+    if (maxed) {
+      floorUpgradeBtn.textContent = `MAX (${fl + 1}/10)`;
+      floorUpgradeBtn.disabled = true;
+    } else if (!canAffordUpgrade) {
+      const needParts: string[] = [];
+      for (const [r, n] of Object.entries(upgradeShortfall) as Array<[ResourceId, number]>) {
+        if (n <= 0) continue;
+        needParts.push(`${n} ${r.toUpperCase().replace(/_/g, ' ')}`);
+      }
+      floorUpgradeBtn.textContent = `NEED ${needParts.join(', ')}`;
+      floorUpgradeBtn.disabled = true;
+    } else {
+      floorUpgradeBtn.textContent = `UPGRADE · ${upgradeCostParts.join(', ')} · ${upgradeDurationStr}`;
+      floorUpgradeBtn.disabled = false;
+    }
+    if (floorUpgradeBtn.disabled) {
+      floorUpgradeBtn.style.color = 'var(--ri-fg-4)';
+      floorUpgradeBtn.style.borderColor = 'var(--ri-fg-4)';
+      floorUpgradeBtn.style.cursor = 'not-allowed';
+      floorUpgradeBtn.style.opacity = '0.6';
+    } else {
+      floorUpgradeBtn.style.color = 'var(--ri-accent)';
+      floorUpgradeBtn.style.borderColor = 'var(--ri-accent-dim)';
+      floorUpgradeBtn.style.cursor = 'pointer';
+      floorUpgradeBtn.style.opacity = '1';
+    }
+    floorSection.wrap.style.display = '';
 
     // §4.7 maintenance section. Three display modes:
     //   - Eternal Servitor exempt → single bold line, recipe hidden.
