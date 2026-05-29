@@ -9,6 +9,7 @@ import {
   dayPhase,
   dayPhaseName,
   nextPhaseBoundaryMs,
+  nextRealPhaseBoundaryMs,
   nextSolarBoundaryMs,
   nextSunEvent,
   realPhaseName,
@@ -257,5 +258,29 @@ describe('nextSunEvent', () => {
 
   it('returns null when lat/lon is null', () => {
     expect(nextSunEvent(0, null, null)).toBeNull();
+  });
+});
+
+describe('nextRealPhaseBoundaryMs', () => {
+  it('is strictly greater than nowMs across a Brno day', () => {
+    const base = new Date('2026-05-29T00:00:00Z').getTime();
+    for (let h = 0; h < 24; h++) {
+      const t = base + h * 3_600_000;
+      expect(nextRealPhaseBoundaryMs(t, 49.20, 16.61)).toBeGreaterThan(t);
+    }
+  });
+
+  it('delegates to synthetic nextPhaseBoundaryMs when lat/lon is null', () => {
+    for (const t of [0, 1234, DAY_DURATION_MS * 3.7]) {
+      expect(nextRealPhaseBoundaryMs(t, null, null)).toBe(nextPhaseBoundaryMs(t));
+    }
+  });
+
+  it('returns a finite, bounded fallback at the pole (≤ now + QUADRANT_MS)', () => {
+    const t = new Date('2026-12-21T12:00:00Z').getTime();
+    const b = nextRealPhaseBoundaryMs(t, 84, 0);
+    expect(Number.isFinite(b)).toBe(true);
+    expect(b).toBeGreaterThan(t);
+    expect(b).toBeLessThanOrEqual(t + QUADRANT_MS);
   });
 });
