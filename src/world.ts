@@ -598,8 +598,8 @@ function makeHomeIslandSpec(): IslandSpec {
     biome: 'plains',
     cx: 0,
     cy: 0,
-    majorRadius: 14,
-    minorRadius: 14,
+    majorRadius: 16,
+    minorRadius: 16,
     populated: true,
     discovered: true,
     // §3.7 starter placeholder: empty buildings — the player must place

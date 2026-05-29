@@ -12,6 +12,7 @@ import {
   lighten,
   tileBrightnessJitter,
   tileHash01,
+  tileInscribedInEllipse,
 } from './island.js';
 
 describe('tileHash01', () => {
@@ -244,5 +245,48 @@ describe('defaultTerrainAt — bootstrap seeds', () => {
       }
     }
     expect(found).toBe(true);
+  });
+});
+
+describe('defaultTerrainAt — Task 0.3 additions (r16, 2nd stone cluster + sulfur_vein)', () => {
+  // Chosen coords — north band, all inscribed in r16, all clear of existing clusters.
+  // stoneClusterTiles2: (3,-11),(4,-11),(3,-10),(4,-10)
+  // sulfurTiles:        (-3,-11),(-2,-11),(-3,-10),(-2,-10)
+
+  it('all 8 new tiles are inscribed in the r16 home disk (cx=0,cy=0)', () => {
+    const newTiles: Array<[number, number]> = [
+      [3, -11], [4, -11], [3, -10], [4, -10],
+      [-3, -11], [-2, -11], [-3, -10], [-2, -10],
+    ];
+    for (const [x, y] of newTiles) {
+      expect(
+        tileInscribedInEllipse(x, y, 16, 16),
+        `tile (${x},${y}) must be inscribed in r16`,
+      ).toBe(true);
+    }
+  });
+
+  it('stoneClusterTiles2 returns stone at (3,-11),(4,-11),(3,-10),(4,-10)', () => {
+    const tiles: Array<[number, number]> = [
+      [3, -11], [4, -11], [3, -10], [4, -10],
+    ];
+    for (const [x, y] of tiles) {
+      expect(
+        defaultTerrainAt(x, y),
+        `expected stone at (${x},${y})`,
+      ).toBe('stone');
+    }
+  });
+
+  it('sulfurTiles returns sulfur_vein at (-3,-11),(-2,-11),(-3,-10),(-2,-10)', () => {
+    const tiles: Array<[number, number]> = [
+      [-3, -11], [-2, -11], [-3, -10], [-2, -10],
+    ];
+    for (const [x, y] of tiles) {
+      expect(
+        defaultTerrainAt(x, y),
+        `expected sulfur_vein at (${x},${y})`,
+      ).toBe('sulfur_vein');
+    }
   });
 });

@@ -290,21 +290,21 @@ describe('serialize → JSON → deserialize round-trip', () => {
 
   it('preserves a grown island radius (§3.4 Land Reclamation Hub mutation)', () => {
     // Simulate a §3.4 expansion: home Plains island grown via Land
-    // Reclamation Hub from initial (14,14) to (16,14) — i.e. two +1
+    // Reclamation Hub from initial (16,16) to (18,16) — i.e. two +1
     // major expansions. The serializer should preserve the mutated
     // values verbatim (majorRadius / minorRadius are JSON-safe number
     // fields that flow through the JSON spread).
     const world = makeInitialWorld(0);
     const homeSpec = world.islands.find((s) => s.id === 'home')!;
-    homeSpec.majorRadius = 16;
-    // minorRadius stays at 14 — verifies the spread doesn't accidentally
+    homeSpec.majorRadius = 18;
+    // minorRadius stays at 16 — verifies the spread doesn't accidentally
     // overwrite either field with a default.
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored } = deserializeWorld(json, 0, 0);
     const restoredHome = restored.islands.find((s) => s.id === 'home')!;
-    expect(restoredHome.majorRadius).toBe(16);
-    expect(restoredHome.minorRadius).toBe(14);
+    expect(restoredHome.majorRadius).toBe(18);
+    expect(restoredHome.minorRadius).toBe(16);
   });
 
   it('keeps IslandState.buildings === IslandSpec.buildings after restore', () => {
