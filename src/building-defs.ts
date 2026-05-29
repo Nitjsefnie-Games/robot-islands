@@ -1229,7 +1229,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // §8.8 T4 logistics: Power Substation (2x2). Inter-island power-cable
   // endpoint per §5.3 — required at both ends of a cable route to transmit
-  // W-capacity between islands. The cable W-capacity transmission mechanic
+  // kW-capacity between islands. The cable kW-capacity transmission mechanic
   // ships in a follow-up task (§5.3 wire-up); the def is needed now so
   // routes-ui can offer "cable" as a route-type option.
   power_substation: {
