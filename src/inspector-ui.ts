@@ -1477,7 +1477,11 @@ export function mountInspectorUi(
     const fl = floorLevel(building);
     const nextFl = fl + 1;
     const maxed = fl === 9;
-    floorLine.textContent = `${fl + 1} / 10 floors · next: ×${floorEffectMul(nextFl)} throughput / capacity / power-out`;
+    if (maxed) {
+      floorLine.textContent = `${fl + 1} / 10 floors (max)`;
+    } else {
+      floorLine.textContent = `${fl + 1} / 10 floors · next: ×${floorEffectMul(nextFl)} throughput / capacity / power-out`;
+    }
     const upgradeCostBasket = upgradeCost(def);
     const upgradeShortfall = affordabilityShortfall(state.inventory, upgradeCostBasket);
     const canAffordUpgrade = Object.keys(upgradeShortfall).length === 0;
