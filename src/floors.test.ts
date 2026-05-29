@@ -62,9 +62,16 @@ describe('floor level scales economy', () => {
   it('producer effectiveRate is 4× at floorLevel 3 vs L0', () => {
     const mineL0: PlacedBuilding = { id: 'b-mine-l0', defId: 'mine', x: 0, y: 0 };
     const mineL3: PlacedBuilding = { id: 'b-mine-l3', defId: 'mine', x: 0, y: 0, floorLevel: 3 };
+    const genL0: PlacedBuilding = { id: 'b-gen-l0', defId: 'coal_gen', x: 0, y: 0 };
+    const genL3: PlacedBuilding = { id: 'b-gen-l3', defId: 'coal_gen', x: 0, y: 0 };
 
-    const stateL0 = makeState({ buildings: [mineL0] });
-    const stateL3 = makeState({ buildings: [mineL3] });
+    const invL0 = blankInventory();
+    invL0.coal = 100;
+    const invL3 = blankInventory();
+    invL3.coal = 100;
+
+    const stateL0 = makeState({ buildings: [mineL0, genL0], inventory: invL0 });
+    const stateL3 = makeState({ buildings: [mineL3, genL3], inventory: invL3 });
 
     const ratesL0 = computeRates(stateL0);
     const ratesL3 = computeRates(stateL3);
@@ -72,6 +79,7 @@ describe('floor level scales economy', () => {
     const rateL0 = ratesL0.byBuilding[0]!.effectiveRate;
     const rateL3 = ratesL3.byBuilding[0]!.effectiveRate;
 
+    expect(rateL0).toBeGreaterThan(0);
     expect(rateL3).toBeCloseTo(rateL0 * 4, 9);
   });
 
