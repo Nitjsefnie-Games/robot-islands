@@ -1,7 +1,9 @@
 # Extraction / Speed (cycleSec) rebalance + Floor-upgrade system — design spec
 
 **Date:** 2026-05-29. **Status:** design locked (user-approved); → writing-plans (phased).
-**Companion data:** density research (in-session agent output; archetype densities below).
+**Companion data (canonical source):** `2026-05-29-throughput-density-table.md` — the full
+sourced areal-density table, building→archetype map, fantasy anchoring, and anomalies. The
+cycleSec generator reads that table; the densities below are a summary of it.
 **Relation to prior passes:** follows the SI mass-balance rework (recipes are kg-balanced)
 and the energy SI rebalance (power in kW). This pass grounds *time* (production rates).
 
@@ -47,8 +49,8 @@ output_kg_per_cycle   = Σ(output_units × RESOURCE_META.massPerUnitKg)   // tot
 
 ## Areal density table (real, 24/7 nameplate, production-unit footprint)
 
-From the density research (sources cited in the agent report; reproduce into a repo data
-file during implementation). kg·s⁻¹·m⁻²:
+Summary of the canonical companion `2026-05-29-throughput-density-table.md` (full sources,
+building→archetype map, fantasy anchoring, and anomalies are there). kg·s⁻¹·m⁻²:
 
 | archetype | density | example basis |
 |---|---|---|
