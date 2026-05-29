@@ -39,6 +39,7 @@ function effectLabel(kind: SkillEffect['kind'], extra?: Record<string, unknown>)
     case 'storageCategoryCapMul':      return `${cat}storage cap`;
     case 'powerProductionMul':         return 'power production';
     case 'powerConsumptionMul':        return 'power consumption';
+    case 'recipeInputMul':             return 'material-input efficiency';
     case 'routeCapacityMul':           return 'route capacity';
     case 'commRangeMul':               return 'comm range';
     case 'maintenanceThresholdMul':    return 'maintenance threshold';
@@ -200,14 +201,15 @@ export const SMELTING_FILLER_ARCHETYPES: FillerArchetype[] = [
     effectExtra: { category: 'smelting' }, subPath: 'smelting',
     growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
+  // Magic material-input-efficiency chain (§v2-rebalance). T3-gated via
+  // startDepth 3 (the first node sits at depth 3 → tierRequiredForDepth = 3);
+  // premium cost curve per spec Q4. All three refinement inputEff chains share
+  // ONE recipeInputMul pool (POOL_TARGETS['recipeInputMul']) — deriveMagnitudes
+  // groups by effect-key globally.
   {
-    idPrefix: 'smelting.powerConsumption', effectKind: 'powerConsumptionMul',
+    idPrefix: 'smelting.inputEff', effectKind: 'recipeInputMul',
     effectExtra: { reduce: true }, subPath: 'smelting',
-    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 7,
-  },
-  {
-    idPrefix: 'smelting.maintenance', effectKind: 'maintenanceThresholdMul',
-    subPath: 'smelting', growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 5,
+    growth: 1.10, baseCost: 3, costGrowth: 1.8, count: 4, startDepth: 3,
   },
 ];
 export const SMELTING_FILLER_NODES = SMELTING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -218,15 +220,11 @@ export const CHEMISTRY_FILLER_ARCHETYPES: FillerArchetype[] = [
     effectExtra: { category: 'chemistry' }, subPath: 'chemistry',
     growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
+  // Magic material-input-efficiency chain — see SMELTING_FILLER_ARCHETYPES.
   {
-    idPrefix: 'chemistry.storageCap', effectKind: 'storageCategoryCapMul',
-    effectExtra: { category: 'liquid_gas' }, subPath: 'chemistry',
-    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 7,
-  },
-  {
-    idPrefix: 'chemistry.powerConsumption', effectKind: 'powerConsumptionMul',
+    idPrefix: 'chemistry.inputEff', effectKind: 'recipeInputMul',
     effectExtra: { reduce: true }, subPath: 'chemistry',
-    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
+    growth: 1.10, baseCost: 3, costGrowth: 1.8, count: 4, startDepth: 3,
   },
 ];
 export const CHEMISTRY_FILLER_NODES = CHEMISTRY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
@@ -237,14 +235,11 @@ export const ELECTRONICS_FILLER_ARCHETYPES: FillerArchetype[] = [
     effectExtra: { category: 'electronics' }, subPath: 'electronics',
     growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 8,
   },
+  // Magic material-input-efficiency chain — see SMELTING_FILLER_ARCHETYPES.
   {
-    idPrefix: 'electronics.powerConsumption', effectKind: 'powerConsumptionMul',
+    idPrefix: 'electronics.inputEff', effectKind: 'recipeInputMul',
     effectExtra: { reduce: true }, subPath: 'electronics',
-    growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
-  },
-  {
-    idPrefix: 'electronics.satBuffer', effectKind: 'satBufferCapMul',
-    subPath: 'electronics', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
+    growth: 1.10, baseCost: 3, costGrowth: 1.8, count: 4, startDepth: 3,
   },
 ];
 export const ELECTRONICS_FILLER_NODES = ELECTRONICS_FILLER_ARCHETYPES.flatMap(generateFillerNodes);

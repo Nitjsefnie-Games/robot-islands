@@ -73,6 +73,35 @@ describe('deriveMagnitudes — product invariant', () => {
     const derived = deriveMagnitudes(raws, []);
     expect(derived[0]!.magnitude).toBe(0);
   });
+  it('startDepth-offset filler chain: product hits target (solver consumes absolute-depth exponents)', () => {
+    // Decoupled from FULL_CATALOG: a synthetic startDepth>1 chain. Ids .3 .4 .5 .6
+    // → fillerDepth 3..6 → emission exponents 2..5 (NOT 0..3). The solver must
+    // consume those same absolute-depth exponents or the product overshoots
+    // (the bug was 1.63 vs 1.5). Tight precision so a position-based regression
+    // bites immediately.
+    const raws: RawSkillNode[] = [];
+    for (let d = 3; d <= 6; d++) {
+      raws.push(node(`smelting.inputEff.${d}`, { kind: 'recipeInputMul', reduce: true }, { depth: d }));
+    }
+    const derived = deriveMagnitudes(raws, ['smelting.inputEff']);
+    const product = derived.reduce((acc, n) => acc * (1 + n.magnitude), 1);
+    expect(product).toBeCloseTo(POOL_TARGETS['recipeInputMul']!, 9);
+  });
+});
+
+describe('recipeInputMul shared pool (§v2-rebalance magic chain)', () => {
+  it('POOL_TARGETS recipeInputMul is 1.5', () => {
+    expect(POOL_TARGETS['recipeInputMul']).toBeCloseTo(1.5, 12);
+  });
+
+  it('product of (1+magnitude) over ALL recipeInputMul nodes in the real catalog ≈ 1.5 (shared pool, not per-chain)', async () => {
+    const { FULL_CATALOG } = await import('./skilltree-catalog.js');
+    const recipeInputNodes = FULL_CATALOG.filter((n) => effectKey(n.effect) === 'recipeInputMul');
+    // 3 sub-paths × 4 nodes each = 12 magic nodes.
+    expect(recipeInputNodes.length).toBe(12);
+    const product = recipeInputNodes.reduce((acc, n) => acc * (1 + n.magnitude), 1);
+    expect(product).toBeCloseTo(POOL_TARGETS['recipeInputMul']!, 9);
+  });
 });
 
 describe('effectKey', () => {

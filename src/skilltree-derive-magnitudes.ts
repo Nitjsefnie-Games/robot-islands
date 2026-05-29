@@ -27,6 +27,12 @@ export const POOL_TARGETS: Readonly<Record<string, number>> = {
   'recipeRateMul:electronics': 10,
   'recipeRateMul:manufacturing': 10,
   'powerConsumptionMul': Math.sqrt(10),
+  // Shared cap for all magic material-input-efficiency nodes across the three
+  // refinement sub-paths (smelting/chemistry/electronics inputEff chains).
+  // deriveMagnitudes groups by effect-key globally, so Π(1+m) over all
+  // recipeInputMul nodes hits this single target. Treated as an ordinary
+  // reduction pool (like powerConsumptionMul) — no special-casing.
+  'recipeInputMul': 1.5,
   'commRangeMul': 10,
   'scannerCoverageMul': 10,
   'storageCategoryCapMul:dry_goods': Math.sqrt(10),
@@ -83,19 +89,24 @@ export function inferTier(
   return 'notable';
 }
 
-/** Solve for filler baseMag such that the product across all chains
- *  ∏_{chain} ∏_{d=1}^{L_chain} (1 + b·g^{d-1}) equals `target`.
+/** Solve for filler baseMag such that the product over every filler node
+ *  ∏ (1 + b·g^{exponent}) equals `target`, where `exponents` is the exact
+ *  multiset of growth exponents the emission step will use — i.e.
+ *  `fillerDepth(id) - 1` for each node. Emission keys magnitude off the
+ *  node's absolute depth (the trailing id segment), so a chain that starts
+ *  at depth>1 (startDepth) yields exponents that do NOT begin at 0; the
+ *  solver must consume those same exponents or the product overshoots.
+ *  (Per-chain grouping is irrelevant to the product — b is shared, so the
+ *  product is a flat ∏ over the exponent multiset.)
  *  Bisection: monotonic, converges in ~80 iters to 1e-24. */
-function solveFillerBaseMag(target: number, chainLengths: number[], growth: number): number {
-  if (chainLengths.length === 0 || target <= 1) return 0;
+function solveFillerBaseMag(target: number, exponents: number[], growth: number): number {
+  if (exponents.length === 0 || target <= 1) return 0;
   let lo = 0, hi = 1;
   for (let i = 0; i < BISECTION_ITERATIONS; i++) {
     const mid = (lo + hi) / 2;
     let p = 1;
-    for (const len of chainLengths) {
-      for (let d = 0; d < len; d++) {
-        p *= 1 + mid * Math.pow(growth, d);
-      }
+    for (const e of exponents) {
+      p *= 1 + mid * Math.pow(growth, e);
     }
     if (p < target) lo = mid; else hi = mid;
   }
@@ -123,7 +134,10 @@ export function deriveMagnitudes(
   const buckets = new Map<string, Bucket>();
   const tiers = new Map<string, NodeTier>();  // node.id → tier
   const keys = new Map<string, string>();    // node.id → effect-key
-  const chainCounts = new Map<string, Map<string, number>>(); // effect-key → prefix → count
+  // effect-key → list of growth exponents the emission step will use, one per
+  // filler node (= fillerDepth(id) - 1). Captures startDepth offsets so the
+  // solver and emission agree on the product.
+  const fillerExponents = new Map<string, number[]>();
   for (const n of rawNodes) {
     const k = effectKey(n.effect);
     if (!(k in POOL_TARGETS)) continue;  // non-multiplier kinds — magnitude irrelevant
@@ -136,10 +150,8 @@ export function deriveMagnitudes(
     else if (t === 'notable') b.N++;
     else {
       b.F++;
-      if (!chainCounts.has(k)) chainCounts.set(k, new Map());
-      const prefixMap = chainCounts.get(k)!;
-      const prefix = n.id.slice(0, n.id.lastIndexOf('.'));
-      prefixMap.set(prefix, (prefixMap.get(prefix) ?? 0) + 1);
+      if (!fillerExponents.has(k)) fillerExponents.set(k, []);
+      fillerExponents.get(k)!.push((fillerDepth(n.id) ?? 1) - 1);
     }
   }
 
@@ -158,8 +170,8 @@ export function deriveMagnitudes(
     if (b.K > 0) mK.set(k, Math.pow(C, wK / b.K) - 1);
     if (b.N > 0) mN.set(k, Math.pow(C, wN / b.N) - 1);
     if (b.F > 0) {
-      const lengths = Array.from(chainCounts.get(k)!.values());
-      fillerBase.set(k, solveFillerBaseMag(Math.pow(C, wF), lengths, FILLER_GROWTH));
+      const exponents = fillerExponents.get(k)!;
+      fillerBase.set(k, solveFillerBaseMag(Math.pow(C, wF), exponents, FILLER_GROWTH));
     }
   }
 

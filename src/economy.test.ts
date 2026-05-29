@@ -672,6 +672,71 @@ describe('computeRates', () => {
 });
 
 // -----------------------------------------------------------------------
+// §9.3 magic recipeInputMul — observable through the REAL advanceIsland path
+// (Task 2 carryover: now that recipeInputMul nodes exist in DEFAULT_GRAPH, the
+// lever can be exercised end-to-end via unlockedNodes, not just by injecting
+// baseMult into computeRates).
+// -----------------------------------------------------------------------
+
+describe('advanceIsland — magic recipeInputMul reduces input drawdown (real skill-mult path)', () => {
+  // All 12 magic nodes across the three refinement inputEff chains. Their
+  // derived magnitudes carry in DEFAULT_GRAPH; effectiveSkillMultipliers folds
+  // them into `recipeInput` > 1. advanceIsland reads that internally (no
+  // baseMult injection), so this is the genuine end-to-end path.
+  const MAGIC_NODES = [
+    'smelting.inputEff.3', 'smelting.inputEff.4', 'smelting.inputEff.5', 'smelting.inputEff.6',
+    'chemistry.inputEff.3', 'chemistry.inputEff.4', 'chemistry.inputEff.5', 'chemistry.inputEff.6',
+    'electronics.inputEff.3', 'electronics.inputEff.4', 'electronics.inputEff.5', 'electronics.inputEff.6',
+  ];
+
+  it('recipeInput > 1 when the magic chain is unlocked', () => {
+    const state = makeState({ level: 15, unlockedNodes: new Set(MAGIC_NODES) });
+    expect(effectiveSkillMultipliers(state).recipeInput).toBeGreaterThan(1);
+  });
+
+  it('magic island consumes less input over the same window, outputs unchanged', () => {
+    // Workshop: iron_ore:1 + coal:1 -> bolt:1 per 4300s. Stock inputs heavily
+    // and keep the window short so NEITHER island starves and bolt never hits
+    // its cap → outputs are identical and only consumption diverges. (Constrained
+    // supply would let the magic island out-produce; the computeRates test at
+    // 'recipeInput divisor raises inputAvail' covers that regime separately.)
+    const mk = (over: Partial<IslandState>): IslandState =>
+      makeState({
+        buildings: [WORKSHOP],
+        inventory: { ...blankInventory(), iron_ore: 1000, coal: 1000 },
+        storageCaps: blankCaps(10_000),
+        level: 15,
+        ...over,
+      });
+    const baseline = mk({});
+    const magic = mk({ unlockedNodes: new Set(MAGIC_NODES) });
+
+    const div = effectiveSkillMultipliers(magic).recipeInput;
+    expect(div).toBeGreaterThan(1);
+
+    const WINDOW_MS = 100_000;
+    advanceIsland(baseline, WINDOW_MS, { defs: POWER_FREE });
+    advanceIsland(magic, WINDOW_MS, { defs: POWER_FREE });
+
+    // Outputs identical (the divisor never touches production).
+    expect(magic.inventory.bolt).toBeCloseTo(baseline.inventory.bolt ?? 0, 9);
+    expect((magic.inventory.bolt ?? 0)).toBeGreaterThan(0);
+
+    // Input consumed = start(1000) − remaining. Magic consumes 1/div as much.
+    const baseConsumedIron = 1000 - (baseline.inventory.iron_ore ?? 0);
+    const magicConsumedIron = 1000 - (magic.inventory.iron_ore ?? 0);
+    const baseConsumedCoal = 1000 - (baseline.inventory.coal ?? 0);
+    const magicConsumedCoal = 1000 - (magic.inventory.coal ?? 0);
+
+    expect(magicConsumedIron).toBeLessThan(baseConsumedIron);
+    expect(magicConsumedCoal).toBeLessThan(baseConsumedCoal);
+    // Drawdown scales as 1/div.
+    expect(magicConsumedIron).toBeCloseTo(baseConsumedIron / div, 9);
+    expect(magicConsumedCoal).toBeCloseTo(baseConsumedCoal / div, 9);
+  });
+});
+
+// -----------------------------------------------------------------------
 // §4.5 buff-adjacency — observable in production rates
 // -----------------------------------------------------------------------
 

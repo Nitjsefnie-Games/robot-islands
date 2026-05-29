@@ -789,6 +789,39 @@ describe('buyNode — depth→tier gate (§9.3, tierRequiredForDepth)', () => {
   });
 });
 
+describe('magic recipeInputMul chain — T3 gate + reachability (real DEFAULT_GRAPH)', () => {
+  const MAGIC_ROOT = 'smelting.inputEff.3';
+
+  it('the magic chain root exists in the real catalog at depth 3', () => {
+    const node = DEFAULT_GRAPH.nodes.find((n) => n.id === MAGIC_ROOT);
+    expect(node, `${MAGIC_ROOT} must exist in DEFAULT_GRAPH`).toBeDefined();
+    expect(node!.depth).toBe(3);
+    expect(node!.effect.kind).toBe('recipeInputMul');
+  });
+
+  it('is a prefix-root: no incoming edge in the real graph (buyable via root-fallback)', () => {
+    // Filler-chain edges only link consecutive depths within a prefix
+    // (.3→.4→.5→.6) and notable-anchoring never targets a filler node, so the
+    // chain's first node has zero incoming edges → isRootNode true.
+    const incoming = DEFAULT_GRAPH.edges.filter((e) => e.to === MAGIC_ROOT);
+    expect(incoming, `${MAGIC_ROOT} must be orphan-buyable, not dead content`).toHaveLength(0);
+  });
+
+  it('REFUSED to buy at level 14 (tier 2 < required tier 3)', () => {
+    const state = makeState({ level: 14, unspentSkillPoints: 50 });
+    expect(() => buyNode(DEFAULT_GRAPH, state, MAGIC_ROOT)).toThrow(/tier/i);
+    expect(state.unlockedNodes.has(MAGIC_ROOT)).toBe(false);
+    expect(state.unspentSkillPoints).toBe(50);
+  });
+
+  it('SUCCEEDS to buy at level 15 (tier 3) via root-fallback with no prereqs owned', () => {
+    const state = makeState({ level: 15, unspentSkillPoints: 50 });
+    // Empty unlockedNodes — only a true root can be bought with no path.
+    buyNode(DEFAULT_GRAPH, state, MAGIC_ROOT);
+    expect(state.unlockedNodes.has(MAGIC_ROOT)).toBe(true);
+  });
+});
+
 describe('costToUnlock — tier-locked nodes excluded at low tier (§9.3)', () => {
   function mkNode(id: string, depth: number): SkillNode {
     return {
