@@ -320,12 +320,14 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
     expect(state.inventory.limestone).toBe(15);
     expect(state.inventory.saltwater_cell).toBe(4);
     expect(state.inventory.foundation_kit).toBe(1);
+    // §rev-17 salvage cache — bootstraps the steel chain (scrap → steel_mill_scrap → steel → beam_mill → steel_beam).
+    expect(state.inventory.scrap).toBe(5000);
     // steel intentionally 0 — player walks the iron→steel chain.
     expect(state.inventory.steel).toBe(0);
     // Every NON-starter resource is 0.
     const starterResources = new Set<ResourceId>([
       'stone', 'wood', 'iron_ore', 'coal', 'iron_ingot', 'bolt',
-      'limestone', 'saltwater_cell', 'foundation_kit',
+      'limestone', 'saltwater_cell', 'foundation_kit', 'scrap',
     ]);
     for (const r of ALL_RESOURCES) {
       if (starterResources.has(r)) continue;
