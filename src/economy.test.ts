@@ -3178,7 +3178,8 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
 
     const state = makeState({
       buildings: [reactorA, reactorB],
-      inventory: { ...blankInventory(), salt: 100, fresh_water: 100 },
+      // Task 0.2: chemical_reactor now consumes sulfur + quicklime + heavy_oil.
+      inventory: { ...blankInventory(), sulfur: 100, quicklime: 100, heavy_oil: 100 },
       level: 5, // tier 2 unlocked
       lastTick: nowMs,
     });
@@ -3193,8 +3194,8 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
     const { byBuilding } = computeRates(state, { defs: noPower }, nowMs);
     const rateA = byBuilding.find((r) => r.building.id === 'b-cr-a')!.effectiveRate;
     const rateB = byBuilding.find((r) => r.building.id === 'b-cr-b')!.effectiveRate;
-    // Base rate = 1/1563.6. No other multipliers apply in this fixture.
-    expect(rateB).toBeCloseTo(0.0006395497569710924, 9);
+    // Base rate = 1/2345.4. No other multipliers apply in this fixture.
+    expect(rateB).toBeCloseTo(0.0004263665046473949, 9);
     expect(rateA).toBeCloseTo(rateB * 0.5, 9);
   });
 
@@ -3207,7 +3208,8 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
 
     const state = makeState({
       buildings: [reactorA, reactorB],
-      inventory: { ...blankInventory(), salt: 1000, fresh_water: 1000 },
+      // Task 0.2: chemical_reactor now consumes sulfur + quicklime + heavy_oil.
+      inventory: { ...blankInventory(), sulfur: 1000, quicklime: 1000, heavy_oil: 1000 },
       level: 5,
       lastTick: startMs,
     });
