@@ -44,7 +44,9 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
 
 describe('skilltree graph integration', () => {
   it('FULL_CATALOG includes filler + notables + keystones', () => {
-    expect(FULL_CATALOG.length).toBeGreaterThan(400);
+    // Lower bound updated for C6a rebalance: 32 filler nodes removed across
+    // power_systems / transport / network → catalog size reduced from ~413 to ~386.
+    expect(FULL_CATALOG.length).toBeGreaterThan(350);
     const notableCount = FULL_CATALOG.filter((n) => n.id.includes('.notable.')).length;
     const keystoneCount = FULL_CATALOG.filter((n) => n.id.includes('.keystone.')).length;
     expect(notableCount).toBeGreaterThanOrEqual(80);
