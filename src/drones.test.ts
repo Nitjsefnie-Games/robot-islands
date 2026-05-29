@@ -142,6 +142,8 @@ function makeTinyWorld(): WorldState & { islandStates: Map<string, IslandState> 
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
     seed: 'test-seed',
+    recentBuildAttempts: new Set(),
+    recentBuildAttemptTs: new Map(),
   };
   const islandStates = new Map<string, IslandState>([['home', homeState]]);
   (world as typeof world & { islandStates: typeof islandStates }).islandStates = islandStates;
@@ -335,6 +337,8 @@ describe('dispatchDrone', () => {
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
   }
 
@@ -491,6 +495,8 @@ describe('per-pad concurrency cap (§11 multi-pad selection)', () => {
       oceanCells: new Map(),
       depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
   }
 
@@ -593,6 +599,8 @@ describe('dronePadCentre — §11.1 UI / dispatch origin alignment', () => {
       oceanCells: new Map(),
       depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
     const spec = makeIslandSpec({ id: 'home', cx: 100, cy: 100, populated: true });
     world.islands.push(spec);
@@ -678,6 +686,8 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
   }
 
@@ -717,6 +727,8 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
   }
 
@@ -929,6 +941,8 @@ describe('dispatchDrone — §11.7 tier-matched fuel', () => {
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
   }
 
@@ -1073,6 +1087,8 @@ describe('drone weather destruction §2.6', () => {
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed,
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
     const home = makeIslandState();
     home.inventory.biofuel = 50;
@@ -1105,6 +1121,8 @@ describe('drone weather destruction §2.6', () => {
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed,
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
     const home = makeIslandState();
     home.inventory.biofuel = 50;
@@ -1141,6 +1159,8 @@ describe('T5 path-drawn drone', () => {
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
   }
 
@@ -1258,6 +1278,8 @@ describe('dark-mode telemetry', () => {
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
   }
 
@@ -1340,6 +1362,8 @@ describe('dark-mode telemetry', () => {
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed: 'destroy-0',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
     // Add home island with no antenna.
     w.islands.push({

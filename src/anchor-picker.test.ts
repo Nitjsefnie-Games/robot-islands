@@ -37,7 +37,7 @@ function makeSpec(over: Partial<IslandSpec>): IslandSpec {
  *  Casting through `unknown` keeps the test fixture free of unrelated
  *  optional fields without fighting `strict` mode. */
 function worldWith(islands: IslandSpec[]): WorldState {
-  return { islands } as unknown as WorldState;
+  return { islands, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() } as unknown as WorldState;
 }
 
 describe('candidateAnchors', () => {

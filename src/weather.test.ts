@@ -159,6 +159,8 @@ describe('isWeatherVisible', () => {
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
       seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
     };
   }
 

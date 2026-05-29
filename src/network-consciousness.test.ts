@@ -116,6 +116,8 @@ function makeWorld(opts: {
     playerLon: null,
     oceanCells: new Map(),
     depthRevealedCells: new Set(),
+    recentBuildAttempts: new Set(),
+    recentBuildAttemptTs: new Map(),
     islandStates,
   };
 }

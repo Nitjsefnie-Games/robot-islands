@@ -54,6 +54,8 @@ function makeWorld(islands: IslandSpec[]): WorldState {
     playerLon: null,
     oceanCells: new Map(),
     depthRevealedCells: new Set<string>(),
+    recentBuildAttempts: new Set(),
+    recentBuildAttemptTs: new Map(),
   } as WorldState;
 }
 

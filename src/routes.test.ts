@@ -86,7 +86,7 @@ const NOON = new Date('2026-03-20T12:00:00Z').getTime();
 function makeWorld(routes: Route[] = [], islands: IslandSpec[] = []): WorldState {
   return { islands, drones: [], routes, vehicles: [], revealedCells: new Set(), satellites: [], repairDrones: [],
     debrisFields: [], endgameState: { achieved: new Set(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [],
-    commPackets: [], totalCo2Kg: 0, playerLat: 0, playerLon: 0, seed: 'test-seed', oceanCells: new Map(), depthRevealedCells: new Set() };
+    commPackets: [], totalCo2Kg: 0, playerLat: 0, playerLon: 0, seed: 'test-seed', oceanCells: new Map(), depthRevealedCells: new Set(), recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
 }
 
 /** Thread `world` into every island's local-power ctx so solarMultiplier
