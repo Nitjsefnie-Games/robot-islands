@@ -177,6 +177,26 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     expect(state.inventory.iron_ore).toBeCloseTo(5, 9);
   });
 
+  it('advanceIsland integrates cleanly across a real civil-dusk boundary (Brno)', () => {
+    const state = makeState({
+      buildings: [MINE],
+      inventory: { ...blankInventory() },
+    });
+    const ctx = {
+      defs: POWER_FREE,
+      world: { playerLat: 49.20, playerLon: 16.61 } as unknown as WorldState,
+    };
+    const spanMs = 3 * 60 * 60 * 1000;                       // 3h perf-domain span
+    const wallEnd = new Date('2026-05-29T20:00:00Z').getTime(); // ends after dusk (19:28Z)
+    advanceIsland(state, spanMs, ctx, wallEnd);              // wall 17:00Z → 20:00Z
+    // Wiring guard: completes, advances lastTick, no NaN/Infinity from a bad
+    // boundary (a perf/wall domain or sign error would stall lastTick or poison
+    // the integral). MINE is power-free so iron_ore accrues a finite positive amount.
+    expect(state.lastTick).toBe(spanMs);
+    expect(Number.isFinite(state.inventory.iron_ore)).toBe(true);
+    expect(state.inventory.iron_ore).toBeGreaterThan(0);
+  });
+
   it('back-propagates input depletion: Workshop stops eating iron_ore when coal hits 0', () => {
     // Mine: +0.05 iron_ore/s. Workshop: -1/4300 iron_ore/s, -1/4300 coal/s, +1/4300 bolt/s.
     // Net iron_ore: +0.04977/s. Net coal: -1/4300/s. Coal starts at 50, hits 0 at t=215000s.
