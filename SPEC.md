@@ -268,19 +268,16 @@ Vehicles in flight while the player is offline are resolved at return-time using
 
 ### 2.7 Day-Night Cycle
 
-The world has a 24-real-hour day-night cycle. Time-of-day is global — the same phase applies everywhere; there is no longitude variation. Time-of-day is computed as `phase = (world\_tick % seconds\_per\_real\_day) / seconds\_per\_real\_day`, normalized to [0, 1):
+The world's day-night cycle tracks the **real sun at the player's chosen geographic coordinates** (`world.playerLat` / `world.playerLon`), computed via SunCalc. The phase label, the full-viewport tint, the during-night gameplay gate, and the economy integrator's segment boundaries all derive from the sun's true altitude `h` there. Phases are **not** equal-length and vary by season and latitude:
 
-* 0.00–0.25: Dawn
-* 0.25–0.50: Day
-* 0.50–0.75: Dusk
-* 0.75–1.00: Night
+* `h ≥ 0°` — Day
+* `−6° ≤ h < 0°`, rising — Dawn
+* `−6° ≤ h < 0°`, falling — Dusk
+* `h < −6°` (civil twilight) — Night
 
-**Solar buildings (Solar Panel, Sunspire, Solar cell production):**
+**Solar buildings (Solar Panel, Sunspire, Solar cell production):** output is `sin(h)` clamped to `[0, 1]` (0 below the horizon), i.e. real insolation — full at the sun's zenith, ramping smoothly through dawn and dusk, zero at night. This is the long-standing `solarMultiplier(t, lat, lon)` behaviour.
 
-* Day: 100% output
-* Dusk: 50% output (linear ramp from 100 → 0)
-* Night: 0% output
-* Dawn: 50% output (linear ramp from 0 → 100)
+When no location is set (fixtures / tests / pre-picker frames) the system falls back to a synthetic 24-hour quadrant clock (`dayPhase`/`dayPhaseName`, four equal 6-hour quadrants offset so `t = 0` lands in Day). **Weather phase-modulation (below) deliberately stays on this synthetic clock** — its severe-storm boost runs in a per-cell historical replay loop where real astronomy is prohibitively expensive, and the boost is imperceptible as real time-of-day. Polar latitudes: the altitude-based phase has no singularity (polar night is never Day; midnight sun is always Day); sunrise/sunset-dependent readouts (the HUD countdown) are simply omitted where no such event exists.
 
 A solar-dependent island must plan for night-time stockpile via Battery (T2) or Singularity Battery (T5) reserves; otherwise its economy stalls during the night phase.
 
