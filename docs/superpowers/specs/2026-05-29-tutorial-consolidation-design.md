@@ -27,11 +27,50 @@ overlay moved to the **left** corner.
 - ⚠ = correction from the stale legacy/Phase-7 text.
 - Per-step **XP bump** retained (`xpBumpPercentForCompletion`) — KEEP per locked decision.
 
-## Home-terrain dependency (locked decision #8)
+## Reachability prep (Phase 0 — must precede the chain rewrite)
 
-Add a **second 2×2 `stone` cluster** to the home island (`island.ts`
-`defaultTerrainAt`) so the Quarry (step 9) and the Quartz Mine (step 33) — both
-2×2 on `'stone'` — can coexist. Without it the chain is unbuildable on home.
+The step-verifier + dependency analysis proved the chain is unbuildable end-to-end
+without these game/terrain fixes. All locked. With them, the full milestone-target
+prerequisite closure (**30 buildings**, computed via `rotateOutputs`/exogenous-aware
+topo) is reachable with **no cycles**.
+
+1. **Seed `scrap` in the rev-9 starter** (`world.ts startingInventory`) — breaks the
+   `steel_beam` bootstrap circularity: seeded scrap → `steel_mill_scrap` → steel →
+   `beam_mill` → steel_beam → the steel chain self-sustains on pig iron. Amount tunable
+   (the *quantity* grind to 30 000-steel_beam BOMs is handled by the throughput+floors pass).
+2. **Add a mass-balanced `calcium_sulfonate` producer recipe** (auditor-enforced) — e.g.
+   `sulfur + quicklime + heavy_oil → calcium_sulfonate` at a chemistry building. Closes the
+   only remaining no-producer gap (it feeds `lubricant_refinery` → maintenance). (`air`,
+   `strange_matter`, `tachyon_stream` are non-gaps: exogenous atmosphere input / produced via
+   `rotateOutputs`.)
+3. **Home terrain (`island.ts` + `makeHomeIslandSpec`):**
+   - `majorRadius`/`minorRadius` **14 → 16** so the ~30 buildings + nodes fit. Only home is
+     hand-placed; neighbors are procedurally generated with overlap-detection against home, so
+     a larger home simply places procedural neighbors further out — no collision risk. (Just
+     confirm the procedural layout still seeds a sensible spread.)
+   - Add a **second 2×2 `stone` cluster** (Quarry #5 + Quartz Mine both need a `stone` 2×2).
+   - Add a **`sulfur_vein` cluster** (sulfur feeds `calcium_sulfonate` + `sulfuric_acid_plant`;
+     home had no sulfur — only the slow diesel byproduct otherwise).
+4. **Chain content corrections** (from the verifier): step-17 concrete recipe hint is
+   "cement + sand + stone + water → concrete" (NOT stone+clay); reword the `tier:1`-but-
+   narrated-as-T2/T3 buildings (concrete_plant, copper_mine/smelter, glassworks, biofuel_plant,
+   electrolyzer) if tier framing matters.
+
+## Full-supply-chain expansion (decision: every producer a step, in dependency order)
+
+The current 53 milestone steps become a topologically-complete chain by **inserting the
+missing prerequisite producers** the closure surfaced, in build order, before their
+consumers: `beam_mill` + the scrap/steel bootstrap, `pipe_mill`, `ceramic_kiln`,
+`lead_smelter`, `slag_reprocessor`, `mag_alloyer` → `mag_forge`, `wafer_lab`,
+`silicon_crusher` (already present), `limekiln`→quicklime, `cement_mill`, `air_separator`→
+oxygen *before* steel, the cryo chain. Closure backbone (30, build order):
+`smelter → workshop → glassworks → shipyard → biofuel_plant → kit_assembler → lead_smelter →
+copper_smelter → assembler → antenna_t1 → beam_mill → dronepad → lubricant_refinery →
+ceramic_kiln → pipe_mill → slag_reprocessor → metal_rolling_mill → cell_press →
+silicon_crusher → battery_bank → lithography_lab → mag_alloyer → wafer_lab → pyroforge →
+mag_forge → quantum_chip_fab → quantum_manipulator → particle_accelerator →
+cryogenic_compute_center → reality_forge`. The authored chain interleaves these with the
+orientation/power/settlement/concept steps, then is re-run through the step-verifier.
 
 ---
 
