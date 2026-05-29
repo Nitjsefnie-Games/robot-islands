@@ -37,7 +37,7 @@ import {
 import { hasOperationalBuilding, isOperationalBuilding, floorLevel, floorEffectMul, floorPowerDrawMul, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
-import { nextPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
+import { nextRealPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
 import { sumIslandCo2, weather } from './weather.js';
 import { resolveHeatAssignments, MIN_HEAT_FACTOR, type HeatAssignments } from './heat.js';
 import type { TerrainKind } from './island.js';
@@ -1783,7 +1783,9 @@ export function advanceIsland(
     // wall-clock boundary, then drop back to perf-domain by subtracting
     // `wallOffset` so the segment-end clamp at `Math.min(...)` below stays
     // in the same domain as `nowMs` / `nextEventMs` / etc.
-    const nextPhaseMs = nextPhaseBoundaryMs(t + wallOffset) - wallOffset;
+    const phaseLat = ctx?.world?.playerLat ?? null;
+    const phaseLon = ctx?.world?.playerLon ?? null;
+    const nextPhaseMs = nextRealPhaseBoundaryMs(t + wallOffset, phaseLat, phaseLon) - wallOffset;
     // §2.7 ramp sub-segment boundary: inside Dawn / Dusk, solarMultiplier
     // varies linearly. The §15.3 piecewise-constant-rate invariant requires
     // each segment to integrate a constant rate, so we sub-divide the ramp
