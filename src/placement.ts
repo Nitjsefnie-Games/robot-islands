@@ -116,7 +116,7 @@ export function upgradeCost(
   const base = placementCostFor(def);
   const cost: Partial<Record<ResourceId, number>> = {};
   for (const [r, n] of Object.entries(base) as Array<[ResourceId, number]>) {
-    if (n > 0) cost[r] = n * 0.8;
+    if (n > 0) cost[r] = Math.ceil(n * 0.8);
   }
   return cost;
 }

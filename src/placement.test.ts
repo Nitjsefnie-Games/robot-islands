@@ -1486,11 +1486,11 @@ describe('upgradeCost', () => {
     expect(upgradeCost(def)).toEqual({});
   });
 
-  it('preserves fractional values when ×0.8 is non-integer', () => {
+  it('rounds upgradeCost up to whole units', () => {
     // Real defs all have costs that are multiples of 5, so ×0.8 is integral.
-    // Use a synthetic def with a non-÷5 entry to genuinely exercise float path.
+    // Use a synthetic def with a non-÷5 entry to genuinely exercise the ceil.
     const def = { ...BUILDING_DEFS.mine, placementCost: { wood: 2 } };
-    expect(upgradeCost(def)).toEqual({ wood: 1.6 });
+    expect(upgradeCost(def)).toEqual({ wood: 2 }); // Math.ceil(2 * 0.8) = Math.ceil(1.6) = 2
   });
 });
 
