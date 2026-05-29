@@ -10,6 +10,7 @@ import {
   dayPhaseName,
   nextPhaseBoundaryMs,
   nextSolarBoundaryMs,
+  nextSunEvent,
   realPhaseName,
   solarMultiplier,
 } from './daynight.js';
@@ -229,5 +230,32 @@ describe('realPhaseName — real sun', () => {
   it("returns 'day' under the midnight sun", () => {
     const t = new Date('2026-06-21T12:00:00Z').getTime();
     expect(realPhaseName(t, 84, 0)).toBe('day');
+  });
+});
+
+describe('nextSunEvent', () => {
+  it('returns the next sunrise (with kind) when the sun is down at Brno', () => {
+    const t = new Date('2026-05-29T19:43:00Z').getTime();
+    const ev = nextSunEvent(t, 49.20, 16.61);
+    expect(ev).not.toBeNull();
+    expect(ev!.kind).toBe('sunrise');
+    expect(ev!.atMs).toBeGreaterThan(t);
+    expect((ev!.atMs - t) / 3_600_000).toBeCloseTo(7.2, 0); // ~7.2h to sunrise
+  });
+
+  it('returns the next sunset when the sun is up at Brno mid-morning', () => {
+    const t = new Date('2026-05-29T10:00:00Z').getTime();
+    const ev = nextSunEvent(t, 49.20, 16.61);
+    expect(ev).not.toBeNull();
+    expect(ev!.kind).toBe('sunset');
+  });
+
+  it('returns null at high latitude with no sunrise/sunset (polar)', () => {
+    const t = new Date('2026-12-21T12:00:00Z').getTime();
+    expect(nextSunEvent(t, 84, 0)).toBeNull();
+  });
+
+  it('returns null when lat/lon is null', () => {
+    expect(nextSunEvent(0, null, null)).toBeNull();
   });
 });
