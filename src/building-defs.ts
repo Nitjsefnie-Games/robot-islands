@@ -1597,7 +1597,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.rect2x3,
     fill: 0xc0c4cb,
     stroke: 0x50545a,
-    power: { consumes: 500 },
+    // energy SI rebalance: Hall-Héroult electrolysis ~10 MW
+    power: { consumes: 10000 },
     // BOM source: Alcoa Hall-Héroult cellhouse — carbon cathode + busbar frame.
     // 800 steel_beam frame + 10000 concrete pad + 200 pipe cooling + 150 gear pot-ram + 50 microchip control ≈ 51.1 t.
     placementCost: { steel_beam: 800, concrete: 10000, pipe: 200, gear: 150, microchip: 50 },
@@ -1745,14 +1746,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.rect2x3,
     fill: 0x4a8ae0,
     stroke: 0x1a3a78,
-    power: { consumes: 200 },
-    // §5.2: T3 arc furnaces still rely on adjacent heat per the spec's
-    // smelting-category convention. Gated like Blast Furnace / Pyroforge.
-    requiresHeat: true,
+    // energy SI rebalance: 10 MW electric-process; arc IS the heat (no requiresHeat)
+    power: { consumes: 10000 },
     // rev-16 §5.3: residual refractory hold-temp; main heat from electrodes.
     heatDemandKW: 80,
-    // §4.5 gating adjacency demonstration: hard heat_source gate.
-    gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Nucor EAF shell + transformer bay reference.
     // 1200 steel_beam shell + 15000 concrete pad + 500 ceramic_insulator + 200 gear + 200 pipe + 80 microchip ≈ 76.7 t.
     placementCost: { steel_beam: 1200, concrete: 15000, ceramic_insulator: 500, gear: 200, pipe: 200, microchip: 80 },

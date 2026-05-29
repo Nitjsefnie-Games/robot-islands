@@ -210,13 +210,12 @@ describe('resolveHeatAssignments — §5.2', () => {
     expect(res.hasHeat.get('pf')).toBe(false);
   });
 
-  it('Coke Oven and Electric Arc Furnace also require heat', () => {
-    // Two heat-required consumers, one coal source serves both.
+  it('Coke Oven requires heat; EAF is pure-electric and is NOT a heat consumer', () => {
+    // energy SI rebalance: EAF no longer has requiresHeat — it is pure-electric
+    // (arc IS the heat). The resolver ignores it entirely as a heat consumer.
     // Coke Oven 2×2 at (0,0)..(1,1). EAF 2×3 at (4,0)..(5,2). Coal furnace
-    // at (2,0): east of coke oven (border includes (2,0)), west of EAF
-    // (border includes (3,0)..(3,2)). Coal furnace at column 2 row 0 is in
-    // coke oven's east border (2,0) and NOT in EAF's west border (3,*).
-    // So coke oven adjacent, EAF not adjacent.
+    // at (2,0): east of coke oven (border includes (2,0)).
+    // Coke oven is adjacent to the coal furnace; EAF is not a consumer at all.
     const buildings: PlacedBuilding[] = [
       { id: 'co', defId: 'coke_oven', x: 0, y: 0 },
       { id: 'eaf', defId: 'electric_arc_furnace', x: 4, y: 0 },
@@ -224,7 +223,8 @@ describe('resolveHeatAssignments — §5.2', () => {
     ];
     const res = resolveHeatAssignments(buildings);
     expect(res.hasHeat.get('co')).toBe(true);
-    expect(res.hasHeat.get('eaf')).toBe(false);
+    // EAF is pure-electric: not tracked by the heat resolver at all.
+    expect(res.hasHeat.has('eaf')).toBe(false);
     expect(res.coalConsumersByFurnace.get('cf')).toBe(1);
   });
 
