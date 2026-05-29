@@ -5020,7 +5020,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xe05030, // geothermal magma
     stroke: 0x401008,
-    // §3 spec literal: ~2 kW passive producer; no consumes, no recipe.
+    // Passive producer (20 MW, energy SI rebalance); no consumes, no recipe.
     // Wired into §5.1 power balance via def.power.produces alone, like
     // solar_panel / nuclear_reactor — no per-tick fuel burn.
     power: { produces: 20000 },  // energy SI rebalance: 20 MW electrical (20000 kW)
