@@ -488,7 +488,7 @@ interface BuildingRate {
 
 /** Per-kind catalog lookup. Production callers pass `BUILDING_DEFS` (the
  *  default); tests pass a custom catalog when they need to vary per-kind
- *  power values (e.g., the partial-brownout fixture using a 80W Mine). */
+ *  power values (e.g., the partial-brownout fixture using an 80 kW Mine). */
 export type DefCatalog = Readonly<Record<BuildingDefId, BuildingDef>>;
 
 /**
