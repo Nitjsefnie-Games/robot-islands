@@ -795,6 +795,33 @@ describe('power (§5.1)', () => {
     expect(wsRate).toBeCloseTo(1 / 33, 9); // rebalanced step #19; full rate (no brownout)
   });
 
+  it('partial brownout: one Water Wheel (20) under-supplies Mine 25 + Workshop 60 → factor ≈ 0.235, rates derated', () => {
+    // Early-game renewable scarcity using REAL building defs: a single
+    // Water Wheel produces 20 kW, feeding a Mine (consumes 25) + Workshop
+    // (consumes 60) = 85 kW demand. factor = min(1, 20/85) ≈ 0.2353, and
+    // both consumers' production rates are derated by that factor.
+    // (Water Wheel has no fuel input — it produces 20 kW unconditionally.
+    //  requiredTile is a placement gate, not a runtime one, so the building
+    //  stands in the test state without a real terrain map — cf. the
+    //  high_wind Wind Turbine test below.)
+    const WATER_WHEEL: PlacedBuilding = { id: 'b-water-wheel', defId: 'water_wheel', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [WATER_WHEEL, MINE_PWR, WORKSHOP_PWR],
+      // iron_ore stocked so the Mine isn't output-stalled (which would zero
+      // its draw); coal stocked so the Workshop has its input.
+      inventory: { ...blankInventory(), coal: 50, iron_ore: 50 },
+    });
+    const { power, byBuilding } = computeRates(state);
+    const expectedFactor = 20 / 85;
+    expect(power.produced).toBeCloseTo(20, 0);
+    expect(power.consumed).toBe(85);
+    expect(power.factor).toBeCloseTo(expectedFactor, 4);
+    const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
+    const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
+    expect(mineRate).toBeCloseTo((1 / 17) * expectedFactor, 9); // mine full rate 1/17, derated
+    expect(wsRate).toBeCloseTo((1 / 33) * expectedFactor, 9); // workshop full rate 1/33, derated
+  });
+
   it('producer stalled (no fuel): Coal Gen drops out of P_produced when coal=0', () => {
     // Coal Gen has no coal AND no flow-through producer → inputAvail=0
     // → inactive → contributes 0 W. With ONLY Coal Gen as a power source
