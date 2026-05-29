@@ -522,6 +522,20 @@ describe('effectiveSkillMultipliers', () => {
     expect(m.powerProduction).toBe(1); // negative assertion: cross-contamination guard
     expect(m.storageCap).toBe(1); //                "
   });
+
+  it('recipeInputMul nodes fold multiplicatively into recipeInputMul (1.2 × 1.1 = 1.32)', () => {
+    const LG_RIM: SkillNode[] = [
+      { id: 'rim.1', subPath: 'chemistry', depth: 1, cost: 1, magnitude: 0.20,
+        effect: { kind: 'recipeInputMul', reduce: true }, description: '' },
+      { id: 'rim.2', subPath: 'chemistry', depth: 2, cost: 2, magnitude: 0.10,
+        effect: { kind: 'recipeInputMul', reduce: true }, description: '' },
+    ];
+    const s = makeState({ unlockedNodes: new Set(['rim.1', 'rim.2']) });
+    const mul = effectiveSkillMultipliers(s, { nodes: LG_RIM, edges: [], bridges: [], graftSockets: [] } as Graph);
+    expect(mul.recipeInput).toBeCloseTo(1.32, 5);
+    expect(mul.powerConsumption).toBe(1); // negative assertion: cross-contamination guard
+    expect(mul.storageCap).toBe(1); //                "
+  });
 });
 
 describe('§14.7 launchSuccessBonus', () => {

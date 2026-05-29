@@ -174,7 +174,13 @@ export type SkillEffect =
   // Power Systems deep mechanic — Electrochemistry T2 buffer scaling →
   //   batteryCapacityMul → economy.ts BATTERY_CAPACITY_WS sum is multiplied
   //   by the resolved SkillMultipliers.batteryCapacity at island level.
-  | { readonly kind: 'batteryCapacityMul' };
+  | { readonly kind: 'batteryCapacityMul' }
+  // Magic material-input-efficiency multiplier (§v2-rebalance) →
+  //   recipeInputMul → divides recipe INPUT quantities at runtime (outputs
+  //   unchanged); reduce:true means multiplier > 1 = "needs less input".
+  //   Runtime-only: never edits the static RECIPES table, so the
+  //   mass-balance auditor never sees it.
+  | { readonly kind: 'recipeInputMul'; readonly reduce: true };
 
 /** Closed union of conditions for `conditionalBonus`. Each must be evaluable
  *  in O(1) at tick start; new entries require both a case here and an evaluator
@@ -787,6 +793,9 @@ export interface SkillMultipliers {
   /** Reduction multiplier applied to building.power.consumes — values > 1
    *  reduce draw (divide consumes by this). */
   readonly powerConsumption: number;
+  /** Divisor on recipe input demand (≥1; 1 = no effect). Pool target ÷1.5
+   *  is enforced in deriveMagnitudes, not locally. */
+  readonly recipeInput: number;
   /** Per-island electrical buffer capacity multiplier. Composes with the
    *  per-def BATTERY_CAPACITY_WS table in economy.ts — total cap on this
    *  island = Σ(building cap) × batteryCapacity. Default 1. */
@@ -875,6 +884,7 @@ function blankMultipliers(): SkillMultipliers {
     storageCap: 1,
     powerProduction: 1,
     powerConsumption: 1,
+    recipeInput: 1,
     batteryCapacity: 1,
     routeCapacity: 1,
     commRange: 1,
@@ -925,6 +935,7 @@ export function effectiveSkillMultipliers(
   let storageCap = 1;
   let powerProduction = 1;
   let powerConsumption = 1;
+  let recipeInput = 1;
   let batteryCapacity = 1;
   let routeCapacity = 1;
   let commRange = 1;
@@ -981,6 +992,9 @@ export function effectiveSkillMultipliers(
         break;
       case 'powerConsumptionMul':
         powerConsumption *= m;
+        break;
+      case 'recipeInputMul':
+        recipeInput *= m;
         break;
       case 'routeCapacityMul':
         routeCapacity *= m;
@@ -1089,6 +1103,7 @@ export function effectiveSkillMultipliers(
     storageCap,
     powerProduction,
     powerConsumption,
+    recipeInput,
     batteryCapacity,
     routeCapacity,
     commRange,
