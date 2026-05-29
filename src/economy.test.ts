@@ -436,6 +436,71 @@ describe('computeRates', () => {
     expect(net.bolt).toBeCloseTo(0.00023255813953488373, 9);
   });
 
+  it('recipeInput divisor reduces consumption but not production (magic lever)', () => {
+    // Workshop: iron_ore:1 + coal:1 -> bolt:1 per 4300s cycle (0.000232.../s base).
+    // Stock both inputs so inputAvail = 1 in BOTH runs — the divisor must show up
+    // purely as reduced consumption, with identical production.
+    const baseline = makeState({
+      buildings: [WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 50, coal: 50 },
+    });
+    const magic = makeState({
+      buildings: [WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 50, coal: 50 },
+    });
+    const noMagic: SkillMultipliers = { ...effectiveSkillMultipliers(baseline), recipeInput: 1 };
+    const withMagic: SkillMultipliers = { ...effectiveSkillMultipliers(magic), recipeInput: 1.5 };
+    const base = computeRates(baseline, { defs: POWER_FREE, baseMult: noMagic });
+    const mag = computeRates(magic, { defs: POWER_FREE, baseMult: withMagic });
+    // Production identical (outputs untouched by the divisor).
+    expect(mag.production.bolt).toBeCloseTo(base.production.bolt ?? 0, 12);
+    // Consumption divided by 1.5 on every input.
+    expect(mag.consumption.iron_ore).toBeCloseTo((base.consumption.iron_ore ?? 0) / 1.5, 12);
+    expect(mag.consumption.coal).toBeCloseTo((base.consumption.coal ?? 0) / 1.5, 12);
+    // Sanity: baseline consumption equals the un-divided per-cycle demand.
+    expect(base.consumption.iron_ore).toBeCloseTo(1 / 4300, 12);
+  });
+
+  it('recipeInput divisor raises inputAvail under constrained supply (site-1 demand divisor)', () => {
+    // Covers the pass-2 demand-side divisor in the externalSupply path, which the stocked-input
+    // test above short-circuits past (stock>0 skips the demand branch). Here
+    // iron_ore stock = 0 forces inputAvail through the externalSupply path.
+    //
+    // Mine nominal iron_ore supply = 1/20 /s. Workshop nominal iron_ore demand
+    // = 1/4300 /s. A soft-gate throttles the Mine so its supply equals exactly
+    // HALF the Workshop's UN-DIVIDED demand:
+    //   mineGate = (0.5 × 1/4300) / (1/20)
+    //   supply   = 0.5 × (1/4300) /s
+    // With div = 1: inputAvail = supply/demand            = 0.5
+    // With div = 1.5: demand = (1/4300)/1.5, so
+    //   inputAvail = supply / (demand/1.5) = 0.5 × 1.5    = 0.75
+    // bolt production = inputAvail × baseRate (yield 1) → magic produces MORE.
+    const mineGate = (0.5 * (1 / 4300)) / (1 / 20);
+    const defs: DefCatalog = {
+      ...POWER_FREE,
+      mine: {
+        ...POWER_FREE.mine,
+        gates: [{ matchType: 'def_id', defId: 'workshop', hard: false, degradeMul: mineGate }],
+      },
+    };
+    const mk = (): IslandState =>
+      makeState({
+        buildings: [MINE, WORKSHOP],
+        inventory: { ...blankInventory(), iron_ore: 0, coal: 50 },
+      });
+    const baseline = mk();
+    const magic = mk();
+    const noMagic: SkillMultipliers = { ...effectiveSkillMultipliers(baseline), recipeInput: 1 };
+    const withMagic: SkillMultipliers = { ...effectiveSkillMultipliers(magic), recipeInput: 1.5 };
+    const base = computeRates(baseline, { defs, baseMult: noMagic });
+    const mag = computeRates(magic, { defs, baseMult: withMagic });
+    // Baseline: inputAvail 0.5 → bolt 0.5/4300. Magic: inputAvail 0.75 → bolt 0.75/4300.
+    expect(base.production.bolt).toBeCloseTo(0.5 / 4300, 12);
+    expect(mag.production.bolt).toBeCloseTo(0.75 / 4300, 12);
+    // Less starvation under the divisor → strictly higher throughput.
+    expect(mag.production.bolt ?? 0).toBeGreaterThan(base.production.bolt ?? 0);
+  });
+
   it('zeroes building rate when inputAvail = 0', () => {
     const state = makeState({
       buildings: [WORKSHOP],
