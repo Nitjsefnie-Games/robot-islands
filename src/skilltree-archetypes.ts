@@ -376,20 +376,10 @@ export const RESILIENCE_FILLER_NODES = RESILIENCE_FILLER_ARCHETYPES.flatMap(gene
 // ---------------------------------------------------------------------------
 
 export const PATRONAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
-  {
-    idPrefix: 'patronage.recipeRate', effectKind: 'recipeRateMul',
-    effectExtra: { category: 'extraction' }, subPath: 'patronage',
-    growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
-  },
-  {
-    idPrefix: 'patronage.storageCap', effectKind: 'storageCategoryCapMul',
-    effectExtra: { category: 'rare' }, subPath: 'patronage',
-    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 6,
-  },
-  {
-    idPrefix: 'patronage.commRange', effectKind: 'commRangeMul',
-    subPath: 'patronage', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
-  },
+  // C5: deliberately-sparse 1-chain sub-path (spec-approved). patronage.recipeRate
+  // (recipeRateMul:extraction — patronage is not an extractor), patronage.storageCap
+  // (storageCategoryCapMul:rare → storage), and patronage.commRange (commRangeMul →
+  // communication) were all removed; only the patronage-yield chain remains.
   {
     idPrefix: 'patronage.patronageYield', effectKind: 'patronageYieldBonusMul',
     subPath: 'patronage', growth: 1.10,
@@ -399,19 +389,13 @@ export const PATRONAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const PATRONAGE_FILLER_NODES = PATRONAGE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const AQUACULTURE_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C5: aquaculture.yieldBonus (mineYieldBonusMul — duplicate, mining already
+  // covers this) and aquaculture.storageCap (storageCategoryCapMul:dry_goods →
+  // storage sub-path) removed; 2 kept chains.
   {
     idPrefix: 'aquaculture.recipeRate', effectKind: 'recipeRateMul',
     effectExtra: { category: 'extraction' }, subPath: 'aquaculture',
     growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
-  },
-  {
-    idPrefix: 'aquaculture.yieldBonus', effectKind: 'mineYieldBonusMul',
-    subPath: 'aquaculture', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
-  },
-  {
-    idPrefix: 'aquaculture.storageCap', effectKind: 'storageCategoryCapMul',
-    effectExtra: { category: 'dry_goods' }, subPath: 'aquaculture',
-    growth: 1.10, baseCost: 1, costGrowth: 1.5, count: 6,
   },
   {
     idPrefix: 'aquaculture.aquaYield', effectKind: 'aquacultureYieldBonusMul',
@@ -434,13 +418,11 @@ export const HYDROPROCESSING_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const HYDROPROCESSING_FILLER_NODES = HYDROPROCESSING_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const SUBMARINE_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C5: submarine.powerProduction (powerProductionMul → power_systems sub-path)
+  // removed; 2 kept chains.
   {
     idPrefix: 'submarine.routeCapacity', effectKind: 'routeCapacityMul',
     subPath: 'submarine', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
-  },
-  {
-    idPrefix: 'submarine.powerProduction', effectKind: 'powerProductionMul',
-    subPath: 'submarine', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
   },
   {
     idPrefix: 'submarine.airshipRange', effectKind: 'airshipRangeMul',
@@ -450,17 +432,12 @@ export const SUBMARINE_FILLER_ARCHETYPES: FillerArchetype[] = [
 export const SUBMARINE_FILLER_NODES = SUBMARINE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
 export const OCEANOGRAPHY_FILLER_ARCHETYPES: FillerArchetype[] = [
+  // C5: oceanography.commRange (commRangeMul → communication sub-path) and
+  // oceanography.droneScan (droneScanRadiusMul → discovery sub-path) removed;
+  // 2 kept chains.
   {
     idPrefix: 'oceanography.scannerCoverage', effectKind: 'scannerCoverageMul',
     subPath: 'oceanography', growth: 1.10, baseCost: 1, costGrowth: 1.4, count: 7,
-  },
-  {
-    idPrefix: 'oceanography.commRange', effectKind: 'commRangeMul',
-    subPath: 'oceanography', growth: 1.10, baseCost: 2, costGrowth: 1.5, count: 5,
-  },
-  {
-    idPrefix: 'oceanography.droneScan', effectKind: 'droneScanRadiusMul',
-    subPath: 'oceanography', growth: 1.10, baseCost: 2, costGrowth: 1.6, count: 5,
   },
   {
     idPrefix: 'oceanography.t5ExtractorYield', effectKind: 't5ExtractorYieldBonusMul',
