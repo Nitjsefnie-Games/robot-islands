@@ -1301,6 +1301,7 @@ async function main(): Promise<void> {
       const result = applyUpgrade(target.spec, target.state, target.building.id);
       if (!result.ok) return;
       rebuildWorldLayers();
+      buildingAlertsOverlay.invalidate();
       inspector.refresh();
     },
     // §3.4 Land Reclamation: mutate spec/state via the pure helper, then
