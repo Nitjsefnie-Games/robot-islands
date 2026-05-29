@@ -22,6 +22,7 @@ import { RECIPES, type Recipe } from './recipes.js';
 import { tierForLevel, type Tier } from './skilltree.js';
 import type { IslandSpec } from './world.js';
 import { mountModal } from './ui-modal.js';
+import { fmtPower } from './format.js';
 
 export interface BuildingsUi {
   readonly el: HTMLDivElement;
@@ -336,14 +337,14 @@ export function mountBuildingsUi(
       const chip = document.createElement('span');
       chip.className = 'ri-chip';
       chip.dataset.tone = 'success';
-      chip.textContent = `+${def.power.produces}W`;
+      chip.textContent = `+${fmtPower(def.power.produces)}`;
       ref.metaEl.appendChild(chip);
     }
     if (def.power?.consumes) {
       const chip = document.createElement('span');
       chip.className = 'ri-chip';
       chip.dataset.tone = 'warn';
-      chip.textContent = `−${def.power.consumes}W`;
+      chip.textContent = `−${fmtPower(def.power.consumes)}`;
       ref.metaEl.appendChild(chip);
     }
     if (def.storage && def.storage.capacity > 0) {
