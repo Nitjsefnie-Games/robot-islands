@@ -193,6 +193,24 @@ export function floorEffectMul(level: number): number { return 1 + level; }
 /** Floor-upgrade multiplier for consumer power DRAW: ×(1+0.5L) (sub-linear vs output). */
 export function floorPowerDrawMul(level: number): number { return 1 + 0.5 * level; }
 
+/** Rated effective power (W) for a placed building's inspector readout: the nameplate scaled
+ *  by floor level and the player's skill power multipliers. Mirrors the economy's per-building
+ *  power scaling MINUS the time-varying factors (solar/wind/throughput) which a rated readout
+ *  doesn't show. `powerProductionMul` / `powerConsumptionMul` are skillMul.powerProduction /
+ *  skillMul.powerConsumption (consumption is a reduction multiplier ⇒ divide, matching economy). */
+export function ratedBuildingPower(
+  producesBase: number,
+  consumesBase: number,
+  level: number,
+  powerProductionMul: number,
+  powerConsumptionMul: number,
+): { produced: number; consumed: number } {
+  return {
+    produced: producesBase * floorEffectMul(level) * powerProductionMul,
+    consumed: (consumesBase * floorPowerDrawMul(level)) / powerConsumptionMul,
+  };
+}
+
 export type ConvertToServitorResult =
   | { readonly ok: true; readonly cost: Partial<Record<ResourceId, number>> }
   | { readonly ok: false; readonly reason: 'building-not-found' | 'already-servitor' | 'insufficient-materials' };
