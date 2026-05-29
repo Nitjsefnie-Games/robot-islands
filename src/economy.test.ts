@@ -2493,8 +2493,6 @@ describe('step-20 T6 gate composition (§14.1)', () => {
 });
 
 describe('day-night solar modulation (§2.7)', () => {
-  const HOUR = 60 * 60 * 1000;
-
   it('Solar at equator noon produces ~nameplate (50W × ~0.999)', () => {
     const state = makeState({ buildings: [SOLAR], lastTick: EQUINOX_NOON });
     const { power } = computeRates(state, { world: dayWorld() });
