@@ -111,16 +111,6 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   skill_forge: 'assembly',
 };
 
-export const FOOTPRINT_M2: Record<string, number> = {
-  'SHAPES.single': 1, 'SHAPES.square2': 4, 'SHAPES.rect2x3': 6, 'SHAPES.rect3x2': 6,
-  'SHAPES.square3': 9, 'SHAPES.square4': 16,
-};
-export function footprintM2(shape: string): number {
-  const m = FOOTPRINT_M2[shape];
-  if (m == null) throw new Error(`unknown footprint shape: ${shape}`);
-  return m;
-}
-
 /** Recipe id → building id. Most recipe ids equal a building id; tile/scrap
  *  variants resolve to their base building. */
 export function buildingForRecipe(recipeId: string): BuildingDefId {
