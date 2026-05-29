@@ -1,6 +1,7 @@
 // Canonical source for the cycleSec rebalance. See
 // docs/superpowers/specs/2026-05-29-throughput-density-table.md for provenance.
 import type { BuildingDefId } from './building-defs.js';
+import { RESOURCE_META } from './recipes.js';
 
 /** Global pace multiplier: fixes a 1-floor Mine to 20 s — 1/(8.6 × 4 × 20). */
 export const M = 1.4535e-3;
@@ -142,4 +143,23 @@ export function densityForRecipe(recipeId: string): number {
   const arch = BUILDING_ARCHETYPE[b];
   if (!arch) throw new Error(`no archetype for building ${b} (recipe ${recipeId})`);
   return ARCHETYPE_DENSITY[arch];
+}
+
+/** Total output mass (kg) of one recipe cycle, summed over all outputs.
+ *  Unknown resources default to 1 kg/unit (matches the generator's prior behavior). */
+export function outputKg(recipe: { outputs?: Partial<Record<string, number>> }): number {
+  let kg = 0;
+  for (const [r, n] of Object.entries(recipe.outputs ?? {})) {
+    kg += (n ?? 0) * (RESOURCE_META[r as keyof typeof RESOURCE_META]?.massPerUnitKg ?? 1);
+  }
+  return kg;
+}
+
+/** Whether a recipe's cycleSec should be physics-derived (density × footprint × M).
+ *  EXCLUDES power generators (cycleSec governs fuel burn / power cadence, not material
+ *  throughput) and any recipe with no material output mass (formula is undefined → would
+ *  floor to a bogus 1s). Spec companion table §10. Both the generator and the cycleSec
+ *  sanity test import THIS predicate so they can never diverge. */
+export function shouldDeriveCycleSec(recipe: { outputs?: Partial<Record<string, number>>; category?: string }): boolean {
+  return recipe.category !== 'power' && outputKg(recipe) > 0;
 }
