@@ -12,7 +12,7 @@
 // smoothly during normal play and is invisible during offline catchup
 // (which integrates entire phases at a time).
 
-import { DAY_DURATION_MS, dayPhase } from './daynight.js';
+import { CIVIL_TWILIGHT_RAD, DAY_DURATION_MS, dayPhase, solarAltitude } from './daynight.js';
 
 const TRANSITION_MS = 10 * 60 * 1000;
 
@@ -55,9 +55,41 @@ function blendTints(a: PhaseTint, b: PhaseTint, t: number): PhaseTint {
   return { color: `rgb(${r},${g},${bv})`, alpha };
 }
 
-/** Pure helper: compute the current tint to apply at `nowMs`. Exported for
- *  unit testing — the DOM-write side is mountDayNightTint below. */
-export function currentTint(nowMs: number): PhaseTint {
+/** ±2° altitude cross-fade half-window around the h=0 and h=-6° boundaries. */
+const TINT_FADE_RAD = (2 * Math.PI) / 180;
+
+/** Pure helper: the tint to apply at `nowMs`. With lat/lon it follows the real
+ *  sun (altitude-driven cross-fades at the h=0 and h=-6° boundaries); with null
+ *  lat/lon it falls back to the synthetic-quadrant tint. Exported for unit
+ *  testing — the DOM-write side is mountDayNightTint below. */
+export function currentTint(
+  nowMs: number,
+  lat: number | null = null,
+  lon: number | null = null,
+): PhaseTint {
+  const h = solarAltitude(nowMs, lat, lon);
+  if (h == null) return syntheticTint(nowMs);
+  // Twilight tint: rising → dawn, falling → dusk (lat/lon non-null here).
+  const hNext = solarAltitude(nowMs + 60_000, lat, lon)!;
+  const twilight = hNext > h ? PHASE_TINT.dawn : PHASE_TINT.dusk;
+  // Cross-fade near h = 0 (twilight ↔ day).
+  if (Math.abs(h) <= TINT_FADE_RAD) {
+    const t = Math.min(1, Math.max(0, (h + TINT_FADE_RAD) / (2 * TINT_FADE_RAD)));
+    return blendTints(twilight, PHASE_TINT.day, t);
+  }
+  // Cross-fade near h = -6° (night ↔ twilight).
+  if (Math.abs(h - CIVIL_TWILIGHT_RAD) <= TINT_FADE_RAD) {
+    const t = Math.min(1, Math.max(0, (h - (CIVIL_TWILIGHT_RAD - TINT_FADE_RAD)) / (2 * TINT_FADE_RAD)));
+    return blendTints(PHASE_TINT.night, twilight, t);
+  }
+  if (h >= 0) return PHASE_TINT.day;
+  if (h < CIVIL_TWILIGHT_RAD) return PHASE_TINT.night;
+  return twilight;
+}
+
+/** Synthetic-quadrant tint — the pre-real-sun behaviour, retained as the
+ *  null-location fallback. */
+function syntheticTint(nowMs: number): PhaseTint {
   const p = dayPhase(nowMs);
   const phaseWidth = TRANSITION_MS / DAY_DURATION_MS;
   // Find which boundary we're near.
@@ -66,10 +98,7 @@ export function currentTint(nowMs: number): PhaseTint {
     const wrapDist = Math.min(dist, 1 - dist);
     if (wrapDist <= phaseWidth / 2) {
       // Within the cross-fade window. Compute t in [0, 1] across the window.
-      // p in [boundary - half, boundary + half] → t in [0, 1].
       const start = b.phase - phaseWidth / 2;
-      // Normalise p relative to start, wrapping for the night→dawn case
-      // when start < 0.
       let pp = p - start;
       if (pp < 0) pp += 1;
       const t = Math.min(1, Math.max(0, pp / phaseWidth));
@@ -84,7 +113,7 @@ export function currentTint(nowMs: number): PhaseTint {
 }
 
 export interface DayNightTintHandle {
-  refresh(nowMs: number): void;
+  refresh(nowMs: number, lat?: number | null, lon?: number | null): void;
   /** Test/debug seam — exposes the tint DOM element for assertions. */
   readonly el: HTMLDivElement;
 }
@@ -106,8 +135,8 @@ export function mountDayNightTint(parentEl: HTMLElement): DayNightTintHandle {
   let last: PhaseTint | null = null;
   return {
     el,
-    refresh(nowMs: number): void {
-      const tint = currentTint(nowMs);
+    refresh(nowMs: number, lat: number | null = null, lon: number | null = null): void {
+      const tint = currentTint(nowMs, lat, lon);
       if (last && Math.abs(last.alpha - tint.alpha) < 0.005 && last.color === tint.color) {
         return;
       }

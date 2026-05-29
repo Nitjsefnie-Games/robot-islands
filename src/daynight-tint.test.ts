@@ -56,4 +56,14 @@ describe('currentTint', () => {
     expect(dayPhase(MID_DUSK)).toBeCloseTo(0.625, 5);
     expect(dayPhase(MID_NIGHT)).toBeCloseTo(0.875, 5);
   });
+
+  it('returns the night tint for a Brno night instant (real sun)', () => {
+    const t = new Date('2026-05-29T19:43:00Z').getTime();
+    const tint = currentTint(t, 49.20, 16.61);
+    expect(tint.alpha).toBeGreaterThan(0.2); // night alpha is 0.32
+  });
+
+  it('still returns the synthetic result for a one-arg call (fallback guard)', () => {
+    expect(currentTint(MID_DAY).alpha).toBe(0); // synthetic Day midpoint
+  });
 });

@@ -2076,7 +2076,7 @@ async function main(): Promise<void> {
     // §2.7 visual tint shares the same wall-clock anchor as the economy's
     // solar gate (Date.now), so the overlay agrees with the power balance
     // and the HUD phase label (which also reads Date.now in hud.ts).
-    dayNightTint.refresh(nowWall);
+    dayNightTint.refresh(nowWall, worldState.playerLat, worldState.playerLon);
     // Settings panel — cheap when hidden (early-returns in refresh()).
     settingsUi.refresh();
     // §4 inspector: refresh while open so the live rate / power / inventory
