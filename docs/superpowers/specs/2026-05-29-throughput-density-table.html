@@ -1,0 +1,153 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Throughput rebalance — real areal-density data</title>
+  <style>
+    :root{--ivory:#1B1A17;--slate:#F5F3EC;--clay:#D97757;--oat:#3A352B;--olive:#8FA56E;
+      --rust:#E08B7F;--warn:#E0B47F;--gray-150:#2E2C27;--gray-300:#3A3833;--gray-500:#8F8D82;
+      --gray-700:#CFCCC2;--white:#252420;--serif:ui-serif,Georgia,serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:ui-monospace,Menlo,monospace;
+      --radius:12px;--border:1.5px solid var(--gray-300);}
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:var(--sans);background:var(--ivory);color:var(--gray-700);line-height:1.55;padding:56px 32px 120px;-webkit-font-smoothing:antialiased;}
+    .page{max-width:1140px;margin:0 auto;}
+    header.page-head{margin-bottom:36px;max-width:900px;}
+    .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gray-500);margin-bottom:12px;}
+    h1{font-family:var(--serif);font-weight:500;font-size:34px;line-height:1.14;color:var(--slate);margin-bottom:18px;letter-spacing:-0.01em;}
+    .context-box{background:var(--gray-150);border:var(--border);border-radius:var(--radius);padding:16px 20px;font-size:14px;}
+    .context-box .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--gray-500);display:block;margin-bottom:6px;}
+    .context-box code{font-family:var(--mono);font-size:0.9em;color:#C9B98A;}
+    section{margin-bottom:44px;}
+    .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;}
+    .sec-head .num{font-family:var(--mono);font-size:12px;background:var(--oat);color:var(--slate);padding:3px 9px;border-radius:8px;}
+    .sec-head h2{font-family:var(--serif);font-weight:500;font-size:23px;color:var(--slate);letter-spacing:-0.01em;}
+    .sec-intro{font-size:14px;color:var(--gray-500);max-width:880px;margin-bottom:16px;}
+    code{font-family:var(--mono);font-size:0.86em;background:var(--gray-150);border:1px solid var(--gray-300);border-radius:5px;padding:1px 5px;color:#C9B98A;}
+    .tbl{width:100%;border:var(--border);border-radius:var(--radius);border-collapse:separate;border-spacing:0;overflow:hidden;font-size:12.5px;margin-bottom:10px;}
+    .tbl th,.tbl td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--gray-300);vertical-align:top;}
+    .tbl th{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);background:var(--gray-150);font-weight:600;}
+    .tbl tr:last-child td{border-bottom:none;}
+    .tbl td.slate{color:var(--slate);font-weight:600;} .tbl td.d{font-family:var(--mono);color:var(--clay);font-weight:600;text-align:right;white-space:nowrap;} .tbl td.num{font-family:var(--mono);text-align:right;color:var(--gray-700);white-space:nowrap;}
+    .tbl tbody tr:hover{background:var(--gray-150);}
+    .tbl tr.flag td.slate{color:var(--warn);}
+    .map{display:flex;flex-direction:column;gap:8px;}
+    .map .row{background:var(--white);border:var(--border);border-radius:10px;padding:11px 15px;font-size:13px;}
+    .map .row b{color:var(--slate);} .map .row .a{font-family:var(--mono);font-size:11px;color:var(--clay);}
+    ol.anom{font-size:13.5px;max-width:900px;margin:0 0 0 20px;} ol.anom li{margin-bottom:9px;} ol.anom li strong{color:var(--slate);}
+    .callout{background:var(--white);border:var(--border);border-left:4px solid var(--warn);border-radius:10px;padding:14px 18px;font-size:13.5px;margin:14px 0;max-width:900px;}
+    .footer{color:var(--gray-500);font-size:13px;margin-top:48px;padding-top:20px;border-top:1px solid var(--gray-300);}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-head">
+      <div class="eyebrow">Companion data · robot-islands · throughput rebalance</div>
+      <h1>Real-world areal-throughput densities</h1>
+      <div class="context-box">
+        <span class="label">Canonical data source</span>
+        Drives the cycleSec generator: <code>cycleSec = output_kg / (areal_density × footprint_m² × M)</code>,
+        <code>M = 1.4535×10⁻³</code>. All densities are <strong>24/7 nameplate</strong> (no human
+        capacity factor) over the <strong>production-unit footprint</strong> (the furnace / reactor /
+        machine, not the whole site). Unit: <strong>kg·s⁻¹·m⁻²</strong>. <code>massPerUnitKg ≈ 1</code>
+        for nearly all resources, so output units ≈ kg. Companion to the
+        <code>2026-05-29-throughput-floors-rebalance-design</code> spec.
+      </div>
+    </header>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Per-archetype density (sourced)</h2></div>
+      <p class="sec-intro">Spread ≈ 6 orders: water pumping (~42) and ore loading (8.6) at the top; aluminum (1.4×10⁻⁴) and wafer fab (6.4×10⁻⁵) at the floor. ⚠ = boundary judgment call (see §04).</p>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Archetype</th><th>Example real unit</th><th>kg/s (24/7)</th><th>footprint m²</th><th>density</th><th>sources</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td class="slate">Hard-rock mining / ore loading</td><td>Komatsu PC9000-12, 8000 t/h</td><td class="num">2222</td><td class="num">259</td><td class="d">8.6</td><td>ivtinternational</td></tr>
+          <tr><td class="num">2</td><td class="slate">Water / fluid pumping</td><td>centrifugal pump, 150 m³/h</td><td class="num">41.7</td><td class="num">~1</td><td class="d">~42</td><td>UNICEF/Berkeley · Pentair</td></tr>
+          <tr><td class="num">3</td><td class="slate">Logging / timber</td><td>feller-buncher, 60 m³/h</td><td class="num">11.7</td><td class="num">24</td><td class="d">0.49</td><td>USFS · Wikipedia</td></tr>
+          <tr><td class="num">4</td><td class="slate">Oil / gas wellhead</td><td>~1000 bbl/d ≈ 137 t/d</td><td class="num">1.59</td><td class="num">~4</td><td class="d">0.40</td><td>EIA · Wikipedia</td></tr>
+          <tr><td class="num">5</td><td class="slate">Surface quarrying</td><td>excavator × 0.5 bulk</td><td class="num">~1100</td><td class="num">259</td><td class="d">~4.3</td><td>ivtinternational</td></tr>
+          <tr><td class="num">6</td><td class="slate">Deep drilling (U / He / Hg)</td><td>drilling-rig class</td><td class="num">~0.5</td><td class="num">~9</td><td class="d">~0.05</td><td>EIA · est.</td></tr>
+          <tr><td class="num">7</td><td class="slate">Blast furnace (pig iron)</td><td>10000 t/d, 14 m hearth</td><td class="num">115.7</td><td class="num">154</td><td class="d">0.75</td><td>Wikipedia · ScienceDirect</td></tr>
+          <tr><td class="num">8</td><td class="slate">BOF steel</td><td>250 t / 40 min, 8 m vessel</td><td class="num">104</td><td class="num">50</td><td class="d">2.1</td><td>Wikipedia · SubsTech</td></tr>
+          <tr><td class="num">9</td><td class="slate">EAF steel</td><td>300 t / 60 min, 9 m shell</td><td class="num">83</td><td class="num">64</td><td class="d">1.3</td><td>IspatGuru · Britannica</td></tr>
+          <tr><td class="num">10</td><td class="slate">Non-ferrous smelter (Cu/Pb/Zn…)</td><td>flash furnace, 500 kt Cu/yr</td><td class="num">15.85</td><td class="num">257</td><td class="d">0.062</td><td>Metso · ResearchGate</td></tr>
+          <tr class="flag"><td class="num">11</td><td class="slate">Aluminum (Hall-Héroult) ⚠</td><td>1 t/d pot, 20×4 m cell</td><td class="num">0.0116</td><td class="num">80</td><td class="d">1.4×10⁻⁴</td><td>StudyGuides · ScienceDirect</td></tr>
+          <tr><td class="num">12</td><td class="slate">Cement kiln (clinker)</td><td>rotary 6×100 m, 10000 t/d</td><td class="num">115.7</td><td class="num">600</td><td class="d">0.19</td><td>Wikipedia</td></tr>
+          <tr><td class="num">13</td><td class="slate">Lime kiln</td><td>rotary 4×80 m, 1000 t/d</td><td class="num">11.6</td><td class="num">320</td><td class="d">0.036</td><td>AGICO · Wikipedia</td></tr>
+          <tr><td class="num">14</td><td class="slate">Brick / ceramic kiln</td><td>tunnel 120×3.6 m, 600 t/d</td><td class="num">6.9</td><td class="num">432</td><td class="d">0.016</td><td>brickplantmachine</td></tr>
+          <tr><td class="num">15</td><td class="slate">Coke / charcoal oven</td><td>by-product, ~30 t / 20 h</td><td class="num">0.42</td><td class="num">52</td><td class="d">0.008</td><td>IspatGuru · ScienceDirect</td></tr>
+          <tr><td class="num">16</td><td class="slate">Glass furnace</td><td>float 60×25 m, 1000 t/d</td><td class="num">11.6</td><td class="num">1500</td><td class="d">0.0077</td><td>HORN · ResearchGate</td></tr>
+          <tr><td class="num">17</td><td class="slate">Crude refining (atm. distillation)</td><td>CDU 200 kbbl/d, 12 m column</td><td class="num">315</td><td class="num">113</td><td class="d">2.8</td><td>McKinsey · Wikipedia</td></tr>
+          <tr><td class="num">18</td><td class="slate">Air separation / cryo</td><td>3000 t O₂/d, 3×3 m cold box</td><td class="num">34.7</td><td class="num">9</td><td class="d">3.9</td><td>ScienceDirect · Cheresources</td></tr>
+          <tr class="flag"><td class="num">19</td><td class="slate">Electrolysis (chlor-alkali/H₂) ⚠est</td><td>~40 kt Cl₂/yr, ~40 m² stack</td><td class="num">1.27</td><td class="num">~40</td><td class="d">~0.03</td><td>tk nucera (derived)</td></tr>
+          <tr><td class="num">20</td><td class="slate">Acids (sulfuric / HCl)</td><td>contact 547 t/d, 6 m converter</td><td class="num">6.33</td><td class="num">28</td><td class="d">0.22</td><td>manufacturingplantindia · Wikipedia</td></tr>
+          <tr><td class="num">21</td><td class="slate">Polymers / plastics / lubricant</td><td>gas-phase PE 300 kt/yr, 5 m vessel</td><td class="num">9.5</td><td class="num">20</td><td class="d">0.48</td><td>olivepipe · HAL</td></tr>
+          <tr><td class="num">22</td><td class="slate">Rolling / wire / pipe / sheet mill</td><td>hot strip mill 250 t/h</td><td class="num">69.4</td><td class="num">140 / 10</td><td class="d">~0.5 / ~7</td><td>IspatGuru · Britannica</td></tr>
+          <tr><td class="num">23</td><td class="slate">Machining (bolt/gear/component)</td><td>CNC gear hobber ~30 kg/h</td><td class="num">0.0083</td><td class="num">4</td><td class="d">~0.002</td><td>zhygear · Artizono</td></tr>
+          <tr><td class="num">24</td><td class="slate">Assembly line</td><td>auto final 60 veh/h × 1500 kg</td><td class="num">25</td><td class="num">2100 / 42</td><td class="d">0.012 / ~0.6</td><td>ASSEMBLY mag · MIT</td></tr>
+          <tr><td class="num">25</td><td class="slate">Battery cell production</td><td>10 GWh line, 1.5×100 m coater</td><td class="num">0.48</td><td class="num">150</td><td class="d">0.0032</td><td>PEM RWTH · coatingedge</td></tr>
+          <tr class="flag"><td class="num">26</td><td class="slate">Wafer fab / lithography</td><td>gigafab, scanner+track ~30 m²</td><td class="num">0.0019</td><td class="num">30</td><td class="d">6.4×10⁻⁵</td><td>construction-physics · Wikipedia</td></tr>
+          <tr><td class="num">27</td><td class="slate">PCB fabrication</td><td>conveyorized etch/plate line</td><td class="num">~0.02</td><td class="num">~30</td><td class="d">~7×10⁻⁴</td><td>fastturnpcbs · etchmachinery</td></tr>
+        </tbody>
+      </table>
+      <p class="sec-intro"><strong>Footprint basis:</strong> 1 tile = 1×1 m. Building shapes: single=1, 2×2=4, 2×3/3×2=6, 3×3=9, 4×4=16 m². Rolling-mill and assembly rows give two boundaries (train/line vs single stand/station) — use train (~0.5) and station (~0.6) per §04.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Building → archetype map</h2></div>
+      <p class="sec-intro">All ~80 buildings keyed to the archetype numbers above; this becomes the generator's per-building density lookup.</p>
+      <div class="map">
+        <div class="row"><span class="a">Extraction</span> &nbsp;<b>#1</b> metal mines / ore loaders · <b>#5</b> stone/clay/sand/limestone quarries · <b>#6</b> uranium/mercury/lithium/drilling rig · <b>#4</b> pump jack, gas extractor · <b>#2</b> well, coastal pump, seawater/open-water/nodule/trench/vent intake · <b>#3</b> logger, heavy logger</div>
+        <div class="row"><span class="a">Smelting</span> &nbsp;<b>#7</b> smelter, blast furnace · <b>#8</b> steel mill (+scrap), oxygen converter · <b>#9</b> electric arc furnace · <b>#10</b> Cu/Pb/Zn/Sn/Ni/Cr/W/Mn smelters, silicon crusher, slag reprocessor · <b>#11</b> aluminum smelter · <b>#15</b> coke oven</div>
+        <div class="row"><span class="a">Kilns</span> &nbsp;<b>#13</b> limekiln · <b>#12</b> lime slaker, cement mill, concrete plant, mortar mixer · <b>#14</b> brick/ceramic/optical-glass kiln · <b>#15</b> charcoal kiln · <b>#16</b> glassworks, glass panel press</div>
+        <div class="row"><span class="a">Chemistry</span> &nbsp;<b>#19</b> electrolyzer, chlor-alkali · <b>#20</b> sulfuric/HCl/phosphor/chemical reactor · <b>#18</b> air separator, cryo (lab/compressor/generator/compound) · <b>#17</b> naphtha/crude crackers, diesel/kerosene/lubricant refinery · <b>#21</b> plastic polymerizer, rubber/coolant synth, biofuel · <b>#10</b> alumina refinery · <b>#18/#20</b> brine/nodule/vent/heavy-water distillation</div>
+        <div class="row"><span class="a">Manufacturing</span> &nbsp;<b>#24</b> workshop, assemblers, alloyers, motor/pump/hydraulic/pneumatic assy, fuel-rod/containment assemblers, quantum manipulator · <b>#23</b> machining (gears/bolts) · <b>#22</b> sheet/pipe/beam/cable/rolling/carbon/stainless/tool-steel mills, galvanizing · <b>#21</b> plastic presses · <b>#25</b> battery factory · <b>#22/#16</b> glass-fiber/optical-fiber drawing</div>
+        <div class="row"><span class="a">Electronics</span> &nbsp;<b>#27</b> PCB etcher · <b>#26</b> lithography/wafer/quantum-chip/processor/compute-module fabs, doping chambers, memory/circuit/sensor labs, cryogenic compute center</div>
+        <div class="row"><span class="a">Excluded</span> &nbsp;power generators &amp; storage &amp; logistics &amp; special/discovery buildings have no mass-production recipe (power handled by the energy SI pass; storage capacity scales via the floor mechanic).</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Fantasy / endgame — no real basis (anchored, tier-scaled)</h2></div>
+      <p class="sec-intro">Anchored to the nearest real archetype, descending by tier (T4×1, T5×0.1, T6×0.01 of the wafer-fab floor 6.4×10⁻⁵), overridden upward where flavor is extraction/smelting. Estimates, not sourced.</p>
+      <table class="tbl">
+        <thead><tr><th>output / building</th><th>anchor</th><th>proposed density</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">quantum_chip (Quantum Chip Fab)</td><td>wafer #26</td><td class="d">~2×10⁻⁵</td></tr>
+          <tr><td class="slate">ai_core (Cryogenic Compute Center)</td><td>wafer + assy</td><td class="d">~6×10⁻⁶</td></tr>
+          <tr><td class="slate">exotic_alloy (Pyroforge)</td><td>non-ferrous #10</td><td class="d">~0.02</td></tr>
+          <tr><td class="slate">carbon_fiber (Carbon Forge)</td><td>polymer #21</td><td class="d">~0.05</td></tr>
+          <tr><td class="slate">reality_anchor (Reality Forge, T5)</td><td>assembly #24</td><td class="d">~1×10⁻³</td></tr>
+          <tr><td class="slate">casimir_energy (Casimir Tap, T5)</td><td>ASU #18</td><td class="d">~4×10⁻³</td></tr>
+          <tr><td class="slate">genesis_cell / ascendant_core (T6)</td><td>assembly #24</td><td class="d">~1×10⁻⁴</td></tr>
+          <tr><td class="slate">antimatter_propellant (T6)</td><td>ASU / cryo #18</td><td class="d">~4×10⁻⁴</td></tr>
+          <tr><td class="slate">satellite assemblies</td><td>assembly #24</td><td class="d">~4×10⁻³</td></tr>
+          <tr><td class="slate">time_crystal, exotic labs, zero-point/neutronium</td><td>wafer floor, by tier</td><td class="d">T4 1e-4 · T5 1e-5 · T6 1e-6</td></tr>
+          <tr><td class="slate">Skill Forge crystals</td><td>assembly #24</td><td class="d">×0.01 / tier step</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Anomalies &amp; judgment calls</h2></div>
+      <ol class="anom">
+        <li><strong>Aluminum (1.4×10⁻⁴) is correct, not a bug.</strong> Hall-Héroult is Faraday-rate-limited, so it sits in electronics territory; real smelters reach scale only by tiling hundreds of pots. Do not "fix" it up to the other smelters.</li>
+        <li><strong>Mine/quarry footprint = the working machine, not the pit.</strong> Bounded to the excavator/loader (259 m²), not the orebody/pit/tailings — the pit is the resource, not the production unit.</li>
+        <li><strong>Water pump (~42) is a real outlier</strong> (water dense, pump skid tiny) → in-game water/saltwater intake should be the fastest per-tile producer.</li>
+        <li><strong>Rolling mill — two boundaries:</strong> single stand ~7, full train ~0.5; use the train (~0.5) for a "mill" building.</li>
+        <li><strong>Assembly — line (0.012) vs station (~0.6):</strong> compact buildings map to the station basis; large multi-tile factories to line basis.</li>
+        <li><strong>Chlor-alkali (~0.03) is derived/flagged</strong> — sources give whole-plant (wrong boundary) or a single 2.85 m² element; reconstructed a ~40 m² stack. Order-of-magnitude only.</li>
+        <li><strong>Coke-oven footprint generous</strong> (per-oven incl. heating walls / ram access); chamber-only would raise density ~8×.</li>
+        <li><strong>Logger wood density</strong> standardized at green ~700 kg/m³ (range 700–1000).</li>
+        <li><strong>Multi-output recipes</strong> (blast furnace → iron+slag+co; cracker → cuts): density is total mass throughput; cycleSec from total output mass per cycle, split by recipe ratios.</li>
+        <li><strong>Power / storage / special</strong> buildings mostly have no mass-production recipe; excluded.</li>
+      </ol>
+      <div class="callout"><strong>Provenance:</strong> chain of custody is research → this committed table → cycleSec generator → 249 values. Every recipe's <code>cycleSec</code> traces to its archetype density × footprint × M. Re-tune a density or M → edit the source, regenerate.</div>
+    </section>
+
+    <div class="footer"><p>Throughput rebalance · real areal-density data · 2026-05-29 · canonical companion to 2026-05-29-throughput-floors-rebalance-design</p></div>
+  </div>
+</body>
+</html>
