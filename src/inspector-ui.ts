@@ -33,7 +33,7 @@ import {
 } from './building-defs.js';
 import { gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { affordabilityShortfall, placementCostFor, upgradeCost } from './placement.js';
+import { affordabilityShortfall, formatShortfall, placementCostFor, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
 import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
@@ -1462,12 +1462,7 @@ export function mountInspectorUi(
       floorUpgradeBtn.textContent = `MAX (${fl + 1}/10)`;
       floorUpgradeBtn.disabled = true;
     } else if (!canAffordUpgrade) {
-      const needParts: string[] = [];
-      for (const [r, n] of Object.entries(upgradeShortfall) as Array<[ResourceId, number]>) {
-        if (n <= 0) continue;
-        needParts.push(`${n} ${r.toUpperCase().replace(/_/g, ' ')}`);
-      }
-      floorUpgradeBtn.textContent = `NEED ${needParts.join(', ')}`;
+      floorUpgradeBtn.textContent = `NEED ${formatShortfall(upgradeShortfall)}`;
       floorUpgradeBtn.disabled = true;
     } else {
       floorUpgradeBtn.textContent = `UPGRADE · ${upgradeCostParts.join(', ')} · ${upgradeDurationStr}`;

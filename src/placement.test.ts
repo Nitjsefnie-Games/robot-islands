@@ -14,6 +14,7 @@ import {
   buildingAtTile,
   demolishBuilding,
   findOceanBuildingAt,
+  formatShortfall,
   placeBuilding,
   placementCostFor,
   upgradeCost,
@@ -1624,5 +1625,22 @@ describe('applyUpgrade', () => {
     // Deducted twice.
     expect(state.inventory.stone).toBe(1000 - 160 * 2);
     expect(state.inventory.wood).toBe(1000 - 64 * 2);
+  });
+});
+
+describe('formatShortfall', () => {
+  it('ceils fractional shortfalls — inventory trickles in fractions, players need whole units', () => {
+    // The bug: a raw `needed - have` like 7.23154… rendered verbatim on the
+    // floor-upgrade button. Round UP to the next whole unit.
+    expect(formatShortfall({ stone: 7.23154524625235124 })).toBe('8 STONE');
+  });
+
+  it('formats multiple resources, uppercased with underscores spaced', () => {
+    expect(formatShortfall({ stone: 2.1, pig_iron: 3 })).toBe('3 STONE, 3 PIG IRON');
+  });
+
+  it('skips non-positive entries and returns "" for an empty record', () => {
+    expect(formatShortfall({})).toBe('');
+    expect(formatShortfall({ stone: 0 })).toBe('');
   });
 });
