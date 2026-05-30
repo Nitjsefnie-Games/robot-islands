@@ -553,10 +553,18 @@ describe('hasPickableSkill', () => {
     expect(hasPickableSkill(state)).toBe(false);
   });
 
-  it('returns true when the island has enough points for the cheapest node', () => {
-    // Cheapest nodes in the live catalog cost 3 SP (depth-3 notables).
-    const state = makeState({ level: 1, unspentSkillPoints: 5 });
+  it('returns false when affordable nodes are all tier-locked (low level)', () => {
+    // The bug: at level 1 (tier 1) every node is below its required tier, so a
+    // pile of SP still buys nothing — the HUD must not advertise "skills
+    // available". canSpend (flat-cost only) still says ok; hasPickableSkill,
+    // which the HUD reads, must apply the depth→tier gate and report false.
+    const state = makeState({ level: 1, unspentSkillPoints: 999 });
     expect(NODE_CATALOG.some((n) => canSpend(state, n.id).ok)).toBe(true);
+    expect(hasPickableSkill(state)).toBe(false);
+  });
+
+  it('returns true when an affordable node is also tier-eligible', () => {
+    const state = makeState({ level: 50, unspentSkillPoints: 999 });
     expect(hasPickableSkill(state)).toBe(true);
   });
 
