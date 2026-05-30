@@ -720,8 +720,16 @@ export type UpgradeResult =
   | { readonly ok: true }
   | {
       readonly ok: false;
-      readonly reason: 'not-found' | 'max-floor' | 'insufficient-resources';
+      readonly reason:
+        | 'not-found'
+        | 'max-floor'
+        | 'already-building'
+        | 'queue-full'
+        | 'insufficient-resources';
       readonly missing?: Partial<Record<ResourceId, number>>;
+      /** Set on `queue-full` — current in-progress count and the slot cap. */
+      readonly inProgress?: number;
+      readonly slots?: number;
     };
 
 /** Apply one floor-upgrade to an existing building.
@@ -744,6 +752,14 @@ export function applyUpgrade(
   const def = BUILDING_DEFS[b.defId];
   const L = floorLevel(b);
   if (L === 9) return { ok: false, reason: 'max-floor' };
+  // An upgrade IS a construction job (§9.3): it can't stack on a building that
+  // is already building/upgrading, and it consumes a parallel-build slot just
+  // like a placement — mirror `placeBuilding`'s gate so upgrades can't bypass
+  // the concurrent-construction cap.
+  if ((b.constructionRemainingMs ?? 0) > 0) return { ok: false, reason: 'already-building' };
+  const slots = parallelBuildSlots(state);
+  const inProgress = inProgressBuildCount(state);
+  if (inProgress >= slots) return { ok: false, reason: 'queue-full', inProgress, slots };
   const cost = upgradeCost(def);
   const missing = affordabilityShortfall(state.inventory, cost);
   if (Object.keys(missing).length > 0) {
