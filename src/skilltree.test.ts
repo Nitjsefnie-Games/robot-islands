@@ -20,6 +20,7 @@ import {
   hasPickableSkill,
   launchSuccessBonus,
   NODE_CATALOG,
+  nodePurchaseStatus,
   skillPointsForLevelUp,
   spendPoint,
   t5Unlocked,
@@ -1213,5 +1214,58 @@ describe('effectiveGraph with crystal bindings', () => {
     const g = effectiveGraph(state);
     const socketNodes = g.nodes.filter((n) => n.id === 'gs.ext.mining-1');
     expect(socketNodes.length).toBe(1);
+  });
+});
+
+describe('nodePurchaseStatus — UI/buy parity (§9.3 depth→tier gate)', () => {
+  // R(1) is a root (no incoming edges) — the entry filler the renderer used to
+  // fall back to n.cost for, ignoring the tier gate. M(2) reachable from R.
+  function mkNode(id: string, depth: number): SkillNode {
+    return {
+      id: id as import('./skilltree.js').NodeId,
+      subPath: 'mining',
+      depth,
+      cost: 1,
+      magnitude: 0,
+      effect: { kind: 'recipeRateMul', category: 'extraction' },
+      description: id,
+    };
+  }
+  function mkGraph(): Graph {
+    return {
+      nodes: [mkNode('R', 1), mkNode('M', 2)],
+      edges: [
+        { id: 'e_RM' as EdgeId, from: 'R' as import('./skilltree-graph.js').NodeId, to: 'M' as import('./skilltree-graph.js').NodeId, cost: 1 },
+      ],
+      bridges: [], graftSockets: [],
+    } as Graph;
+  }
+
+  it('reports a depth-1 root entry node as tier-locked at level 2 (the bug: UI showed it purchasable)', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 2, unspentSkillPoints: 50 });
+    // buyNode confirms it is genuinely unbuyable here…
+    expect(() => buyNode(g, state, 'R')).toThrow(/tier/i);
+    // …so the UI predicate must agree, not say 'purchasable'.
+    expect(nodePurchaseStatus(g, state, 'R')).toBe('tier-locked');
+  });
+
+  it('reports the same entry node purchasable once the island reaches tier 2 (level 5)', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 5, unspentSkillPoints: 50 });
+    expect(nodePurchaseStatus(g, state, 'R')).toBe('purchasable');
+  });
+
+  it('reports owned nodes as owned', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 5, unspentSkillPoints: 50 });
+    state.unlockedNodes.add('R');
+    expect(nodePurchaseStatus(g, state, 'R')).toBe('owned');
+  });
+
+  it('reports insufficient-sp when tier-eligible and reachable but SP < cost', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 5, unspentSkillPoints: 0 });
+    expect(nodePurchaseStatus(g, state, 'R')).toBe('insufficient-sp');
   });
 });

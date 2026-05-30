@@ -1453,6 +1453,39 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
   state.auraAmpVersion++;
 }
 
+/** Whether `buyNode` would accept this target right now, as a status the UI can
+ *  render. Single source of truth so the graphview and the buy path can never
+ *  drift (the bug: the renderer's root-node `n.cost` fallback bypassed the
+ *  depth→tier gate, lighting up entry nodes the gate would reject). Mirrors
+ *  `buyNode`'s acceptance order: owned → depth→tier gate → reachability (with
+ *  the no-incoming-edge root direct-buy fallback) → SP sufficiency. */
+export type NodePurchaseStatus =
+  | 'owned'
+  | 'purchasable'
+  | 'tier-locked'
+  | 'unreachable'
+  | 'insufficient-sp';
+
+export function nodePurchaseStatus(
+  graph: Graph,
+  state: IslandState,
+  target: NodeId,
+): NodePurchaseStatus {
+  if (state.unlockedNodes.has(target)) return 'owned';
+  const node = graph.nodes.find((n) => n.id === target);
+  if (!node) return 'unreachable';
+  if (!depthTierEligible(state.level, node.depth)) return 'tier-locked';
+  const result = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, target);
+  let cost: number;
+  if (result === null) {
+    if (!isRootNode(graph, target)) return 'unreachable';
+    cost = node.cost;
+  } else {
+    cost = result.totalCost;
+  }
+  return state.unspentSkillPoints >= cost ? 'purchasable' : 'insufficient-sp';
+}
+
 /** Gate predicate for AND-prereq keystones. True when all required upstream
  *  nodes are owned, the target is not already owned, and the player has
  *  enough unspent SP for the flat keystone cost. */

@@ -13,6 +13,9 @@ import {
   bindCrystal,
   unbindCrystal,
   computeMiniTreeRefund,
+  nodePurchaseStatus,
+  tierForLevel,
+  tierRequiredForDepth,
   type BranchId,
   type SkillNode,
 } from './skilltree.js';
@@ -388,19 +391,25 @@ export function mountSkillGraphView(
   function showTooltip(node: typeof DEFAULT_GRAPH.nodes[number], cx: number, cy: number): void {
     const state = deps.getState();
     const graph = effectiveGraph(state);
-    const owned = state.unlockedNodes.has(node.id as unknown as GNodeId);
-    let reachable: number | null;
-    if (owned) reachable = 0;
-    else {
+    const status = nodePurchaseStatus(graph, state, node.id as unknown as GNodeId);
+    let costLine: string;
+    if (status === 'owned') {
+      costLine = '<span style="color:#8FA56E">OWNED</span>';
+    } else if (status === 'tier-locked') {
+      // Honest tier-lock reason — the renderer used to show these as a buyable
+      // SP cost even though the depth→tier gate forbids the purchase.
+      costLine =
+        `<span style="color:#E08B7F">Requires Tier ${tierRequiredForDepth(node.depth)}</span>` +
+        ` <span style="color:#9A968C">(island is Tier ${tierForLevel(state.level)})</span>`;
+    } else if (status === 'unreachable') {
+      costLine = '<span style="color:#E08B7F">UNREACHABLE</span>';
+    } else {
       const path = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, node.id as unknown as GNodeId);
-      if (path) reachable = path.totalCost;
-      else reachable = graph.edges.some((e) => e.to === (node.id as unknown as GNodeId)) ? null : node.cost;
+      const cost = path ? path.totalCost : node.cost;
+      costLine =
+        `<span style="color:#E0B47F">${cost} SP</span>` +
+        (status === 'insufficient-sp' ? ' (insufficient)' : '');
     }
-    const costLine = owned
-      ? '<span style="color:#8FA56E">OWNED</span>'
-      : reachable === null
-        ? '<span style="color:#E08B7F">UNREACHABLE</span>'
-        : `<span style="color:#E0B47F">${reachable} SP</span> ${reachable <= state.unspentSkillPoints ? '' : '(insufficient)'}`;
     const magStr = formatNodeMagnitude(node);
     tooltip.innerHTML =
       `<div style="color:#E9E6DC;font-weight:600;margin-bottom:4px">${escapeHtml(String(node.id))}</div>` +
@@ -533,15 +542,14 @@ export function mountSkillGraphView(
       const kind = classifyNode(String(n.id));
       if (!filterOn[kind]) continue;
 
-      const owned = state.unlockedNodes.has(n.id as unknown as GNodeId);
-      // Uniform: every node uses the Dijkstra cheapest-path cost. Root nodes
-      // (no incoming edges — depth-1 fillers) fall back to their flat node
-      // cost since costToUnlock returns null when no path exists.
-      const path = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, n.id as unknown as GNodeId);
-      const hasIncoming = graph.edges.some((e) => e.to === (n.id as unknown as GNodeId));
-      const reachableCost: number = path ? path.totalCost : (hasIncoming ? Infinity : n.cost);
-      const affordable = state.unspentSkillPoints >= reachableCost;
-      const purchasable = !owned && affordable && reachableCost !== Infinity;
+      // Single source of truth shared with the buy path (`nodePurchaseStatus`
+      // mirrors `buyNode` — incl. the depth→tier gate). Previously the render
+      // recomputed affordability with a root-node `n.cost` fallback that
+      // bypassed the tier gate, lighting up tier-locked entry nodes as
+      // purchasable even though `buyNode` would reject them.
+      const status = nodePurchaseStatus(graph, state, n.id as unknown as GNodeId);
+      const owned = status === 'owned';
+      const purchasable = status === 'purchasable';
 
       // State-driven palette: owned (green fill, full alpha), purchasable
       // (kind fill + clay accent stroke, full alpha, thicker), locked
@@ -572,7 +580,9 @@ export function mountSkillGraphView(
       }
 
       g.eventMode = 'static';
-      g.cursor = !owned ? 'pointer' : 'default';
+      // Only purchasable nodes get the clickable pointer; locked nodes keep the
+      // default cursor (they still bind hover so the tooltip can explain why).
+      g.cursor = purchasable ? 'pointer' : 'default';
       g.hitArea = new Circle(p.x, p.y, kind === 'filler' ? 8 : 12);
       if (!owned) {
         g.on('pointertap', () => handleNodeClick(n.id as unknown as GNodeId));
