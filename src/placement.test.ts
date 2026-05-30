@@ -1506,6 +1506,30 @@ describe('applyUpgrade', () => {
     if (!r.ok) expect(r.reason).toBe('not-found');
   });
 
+  it('rejects when the target building is itself already under construction', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, constructionRemainingMs: 5000 };
+    spec.buildings.push(b);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('already-building');
+    expect(b.floorLevel).toBeUndefined(); // no mutation
+  });
+
+  it('rejects with queue-full when the parallel-build cap is already taken', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // One OTHER building occupies the island's single (no-skill) build slot.
+    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(target);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('queue-full');
+    expect(target.floorLevel).toBeUndefined(); // no mutation, no cost spent
+  });
+
   it('rejects with insufficient-resources when inventory is short', () => {
     const spec = makeSpec();
     const state = makeState(spec);

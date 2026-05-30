@@ -33,7 +33,7 @@ import {
 } from './building-defs.js';
 import { gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { affordabilityShortfall, formatShortfall, placementCostFor, upgradeCost } from './placement.js';
+import { affordabilityShortfall, formatShortfall, inProgressBuildCount, parallelBuildSlots, placementCostFor, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
 import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
@@ -1462,8 +1462,20 @@ export function mountInspectorUi(
       upgradeCostParts.push(`${n} ${r.toUpperCase().replace(/_/g, ' ')} (${have})`);
     }
     const upgradeDurationStr = `${(upgradeMs / 1000).toFixed(1)}s`;
+    // An upgrade is a construction job: blocked while this building is itself
+    // building/upgrading, and gated by the island's parallel-build cap — mirror
+    // applyUpgrade's gates so the button can't offer a click it will reject.
+    const selfBuilding = (building.constructionRemainingMs ?? 0) > 0;
+    const slots = parallelBuildSlots(state);
+    const queueFull = !selfBuilding && inProgressBuildCount(state) >= slots;
     if (maxed) {
       floorUpgradeBtn.textContent = `MAX (${fl + 1}/10)`;
+      floorUpgradeBtn.disabled = true;
+    } else if (selfBuilding) {
+      floorUpgradeBtn.textContent = 'UPGRADING…';
+      floorUpgradeBtn.disabled = true;
+    } else if (queueFull) {
+      floorUpgradeBtn.textContent = `QUEUE FULL (${inProgressBuildCount(state)}/${slots})`;
       floorUpgradeBtn.disabled = true;
     } else if (!canAffordUpgrade) {
       floorUpgradeBtn.textContent = `NEED ${formatShortfall(upgradeShortfall)}`;
