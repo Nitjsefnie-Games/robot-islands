@@ -168,7 +168,7 @@ If multiple routes contend for the same resource at one source, the available am
 
 **Transit time.** Routes use a hybrid latency model:
 
-* T1 cargo, T2 drone cargo, T3 airship: resources have a real-time-of-flight equal to `distance / route\_speed` (route speeds per tier are placeholders in Appendix A). The §15.4 throughput formula gates dispatch (units only leave source if the destination has cap headroom at dispatch time). Units in flight then appear at destination on arrival.
+* T1 cargo, T2 drone cargo, T3 airship: resources have a real-time-of-flight equal to `distance / route\_speed` (route speeds per tier are tuning placeholders). The §15.4 throughput formula gates dispatch (units only leave source if the destination has cap headroom at dispatch time). Units in flight then appear at destination on arrival.
 * T4 teleporter and T5 spacetime anchor: zero latency. Resources move instantly per tick, exactly as the basic throughput formula describes. No in-flight buffer.
 
 In-flight inventory is tracked per-route in the architecture data model (§15.1). When a route is destroyed mid-flight, all in-flight units on that route are lost.
@@ -1273,7 +1273,7 @@ A craft of tier T can only burn tier-T fuel; it cannot fall back to a lower grad
 range\_in\_cells = fuel\_units \* tier\_efficiency
 ```
 
-Where `tier\_efficiency` is a per-tier per-vehicle base value (placeholder, Appendix A), further scaled at dispatch by the launching island's skilltree drone-fuel-efficiency multiplier (and the scan-corridor radius by a drone-scan-radius multiplier). Higher-tier vehicles have higher efficiency — they go farther per unit of their (more expensive) fuel. A T3 drone burns more T3 fuel per range unit than a T1 drone burns T1 fuel in absolute material count, but its T3 fuel grade is harder to produce, so the effective economic cost ratio between tiers is what tuning targets.
+Where `tier\_efficiency` is a per-tier per-vehicle base value (placeholder), further scaled at dispatch by the launching island's skilltree drone-fuel-efficiency multiplier (and the scan-corridor radius by a drone-scan-radius multiplier). Higher-tier vehicles have higher efficiency — they go farther per unit of their (more expensive) fuel. A T3 drone burns more T3 fuel per range unit than a T1 drone burns T1 fuel in absolute material count, but its T3 fuel grade is harder to produce, so the effective economic cost ratio between tiers is what tuning targets.
 
 **Dispatch capacity.** One craft in flight per launch building:
 
@@ -1554,7 +1554,7 @@ Launch success is rolled against the island's current launch success rate, compu
 success\_rate = clamp( base\[Spaceport tier] + sum(Orbital sub-path bonuses), 0.0, 0.99 )
 ```
 
-Each skill node bonus is a flat additive value on the probability scale (a `+5%` node adds 0.05). Base rates per Spaceport tier are placeholders in Appendix A — for example, Spaceport I starts around 0.30, Spaceport III around 0.70. Cumulative Orbital sub-path bonuses can push success near 0.99 but never reach 1.0 — there is always a residual ~1% chance of failure for dramatic tension. Success rate is always visible to the player; every launch is informed risk.
+Each skill node bonus is a flat additive value on the probability scale (a `+5%` node adds 0.05). Base rates per Spaceport tier are tuning placeholders — for example, Spaceport I starts around 0.30, Spaceport III around 0.70. Cumulative Orbital sub-path bonuses can push success near 0.99 but never reach 1.0 — there is always a residual ~1% chance of failure for dramatic tension. Success rate is always visible to the player; every launch is informed risk.
 
 **Failure modes (probabilistic split, placeholder ~30 / ~70):**
 
@@ -1565,7 +1565,7 @@ Both failure types preserve all other infrastructure on the island. The pad-expl
 
 ### 14.8 Debris
 
-**Field representation.** Each debris field is anchored to a single stratification cell and stores a discrete fragment count for that cell. Hit probability per tick on any satellite within the cell is `fragments × hit_constant × satellite_cross_section_factor` (placeholders in Appendix A). Fields do not spread to neighboring cells and do not decay over real time. A field is removed only when its fragment count is reduced to zero by Sweeper Sat cleanup.
+**Field representation.** Each debris field is anchored to a single stratification cell and stores a discrete fragment count for that cell. Hit probability per tick on any satellite within the cell is `fragments × hit_constant × satellite_cross_section_factor` (tuning placeholders). Fields do not spread to neighboring cells and do not decay over real time. A field is removed only when its fragment count is reduced to zero by Sweeper Sat cleanup.
 
 **Generation:**
 
@@ -1877,64 +1877,6 @@ Identical code path. When player returns, every island runs `advanceIsland(islan
 Steps 1 to 5 yield a playable single-island sandbox. That is the first milestone for validating the core loop.
 
 \---
-
-## Appendix A: Placeholders for Tuning
-
-The following numeric values are placeholders to be set during prototype play:
-
-* XP curve coefficient and exponent (polynomial 1-50: `25 \* n^2.2`; exponential past 50: × `1.2^(n - 50)` placeholder)
-* xp_weight per resource (tier scaling: placeholder T0 raw = 1, T1 = 3, T2 = 10, T3 = 30, T4 = 100, T5 = 300, T6 = 1000)
-* Funneling XP bonus percentage (placeholder 50%; applied to imported-and-consumed resources only, while destination is below Tier 3)
-* Skill tree node effect magnitudes (geometric to depth 5: depth 1 = +5%, doubles each step; mixed thereafter — geometric continuation OR unique unlocks per sub-path)
-* Skill tree node count per sub-path (v2 budget: ≤23 total nodes per sub-path, ≤2 filler lever-families)
-* Skill tree node cost scaling (placeholder `cost(depth) = round(1.5^(depth - 1))`)
-* Skill point grant per level-up (`points\_granted(level) = max(1, floor(1.031^level))`)
-* Recipe cycle times
-* Recipe input/output ratios
-* Building power consumption/production values
-* Storage cap values per building
-* Drone fuel cost per range unit
-* Inter-island route capacities by transport type
-* Stratification cell side length R
-* Maximum island size by biome
-* Land Reclamation cost curve
-* Network Consciousness buff values (production-rate-only multipliers, applied across all networked T3+ islands)
-* Modifier roll count distribution (placeholder: 50/30/15/5 for 0/1/2/3 modifiers)
-* Per-modifier rarity weights (placeholder table in §3.5)
-* Stratification cell first-island placement probability (placeholder 0.08; single island per cell, no fan-out)
-* Foundation Kit variant recipe ratios (Standard / Enriched / Refined)
-* T4/T5 recipe extreme costs
-* Time Lock banked-time cap per building (placeholder: 24 real-time-hour equivalent)
-* Time Lock banked-time spend conversion (placeholder: 1 unit banked = 1 minute of 3× acceleration)
-* Time Lock acceleration multiplier (placeholder: 3×)
-* Maintenance threshold per building tier (placeholder T1: 12h, T2: 16h, T3: 20h, T4-T5: 24h)
-* Maintenance degradation curve (placeholder: linear 100% → 50% over 4h after due)
-* Per-tier maintenance recipe ratios
-* Servitor Conversion Kit recipe ratios (per-tier scaling)
-* Base weather visibility radius (R\_weather)
-* Weather state per-tile destruction chance per state
-* Vehicle weather-vulnerability multipliers per tier
-* Weather forecast model parameters: low-frequency noise scale (placeholder ~5 cells); per-state dwell time (placeholder 1-4 hours typical, sub-hour for Severe/Catastrophic); biome modulation magnitudes; storm-front spatial extent (placeholder 3-6 cells)
-* Day-night cycle period (placeholder 24 real-time hours)
-* Solar output curve across day/dusk/night/dawn phases
-* Weather phase modulation (placeholder: +25% severe-storm rate during Night and Dawn)
-* T5 path drone fuel cost per waypoint and per cell
-* Settlement vehicle base mechanical failure rate per tier
-* Spaceport tier I/II/III base launch success rates
-* Pad-explosion vs orbit-explosion probability split on launch failure
-* Scanner / Sweeper / Relay Sat coverage radius and comm range per Spaceport tier
-* Scanner Sat dwell ramp parameters (initial p, asymptote, time constant)
-* Sweeper Sat fragment-clearance rate per real-time hour
-* Debris-lodge probability per satellite cross-section per tick
-* Lodge slowdown magnitude per hit
-* Lodge vs destruction probability ratio on debris hit
-* Debris fragments produced per destroyed satellite
-* Orbital Tracking Station detection radius
-* Satellite onboard maneuvering fuel reserve and consumption rate per distance
-* Repair Drone failure rate
-* Orbital sub-path skill node magnitudes
-* Orbital Insertion Package recipe ratios
-* Per-variant satellite recipe magnitudes (T4-T5 component counts)
 
 ## Appendix B: Deferred Features
 
