@@ -27,7 +27,8 @@ import {
   RESOURCE_STORAGE_CATEGORY,
   type StorageCategory,
 } from './storage-categories.js';
-import { DEFAULT_CARGO_LABEL } from './placement.js';
+import { DEFAULT_CARGO_LABEL, sortByFillDesc } from './placement.js';
+import { cap, inv, type IslandState } from './economy.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 
 /** §4.6 storage-category display labels. Duplicates `inspector-ui.ts:81-87`
@@ -52,6 +53,10 @@ export interface CargoLabelPickerHandle {
 
 export function mountCargoLabelPicker(
   parentEl: HTMLElement,
+  /** Supplies the island whose stock drives the fill-% sort, read fresh on
+   *  every `pick()`. Omit (or return undefined) to fall back to the plain
+   *  alphabetical order. */
+  getState?: () => IslandState | undefined,
 ): CargoLabelPickerHandle {
   // The currently-pending resolver. Set when `pick()` opens the modal,
   // cleared when the player picks / cancels / a fresh `pick()` supersedes.
@@ -124,6 +129,35 @@ export function mountCargoLabelPicker(
 
   const sectionHeaders = new Map<StorageCategory, HTMLDivElement>();
   const sectionGrids = new Map<StorageCategory, HTMLDivElement>();
+  // Per-button fill-% badge, and the resource membership of each category —
+  // recorded at build time, reused by `applyFillSort` to reorder + relabel.
+  const fillByResource = new Map<ResourceId, HTMLSpanElement>();
+  const categoryResources = new Map<StorageCategory, ResourceId[]>();
+
+  /** Current fill % (inventory ÷ cap × 100) for `r` on the active island, or 0
+   *  when no state is wired or the resource has no cap. */
+  function fillPctFor(r: ResourceId): number {
+    const s = getState?.();
+    if (!s) return 0;
+    const c = cap(s, r);
+    return c > 0 ? (inv(s, r) / c) * 100 : 0;
+  }
+
+  /** Reorder each category's buttons by fill % (descending) and refresh the
+   *  per-button fill badge. Called on every `pick()` so the order reflects the
+   *  island's stock at the moment the picker opens. */
+  function applyFillSort(): void {
+    for (const [cat, resources] of categoryResources) {
+      const grid = sectionGrids.get(cat);
+      if (!grid) continue;
+      for (const r of sortByFillDesc(resources, fillPctFor)) {
+        const btn = buttonByResource.get(r);
+        if (btn) grid.appendChild(btn); // appendChild moves the existing node
+        const badge = fillByResource.get(r);
+        if (badge) badge.textContent = `${Math.round(fillPctFor(r))}%`;
+      }
+    }
+  }
 
   const handle: ModalHandle = mountModal(parentEl, {
     title: 'LABEL STORAGE',
@@ -157,16 +191,18 @@ export function mountCargoLabelPicker(
       body.style.gap = '12px';
 
       // Group resources by storage category — same five buckets the
-      // specialized-storage buildings use (§4.6). Within each group, sort
-      // resources alphabetically so the player can scan deterministically.
+      // specialized-storage buildings use (§4.6). The initial alphabetical
+      // order is just the no-state fallback; `applyFillSort` reorders by fill %
+      // on every open once a state getter is wired.
       const byCategory = new Map<StorageCategory, ResourceId[]>();
       for (const cat of ALL_STORAGE_CATEGORIES) byCategory.set(cat, []);
       for (const r of ALL_RESOURCES) {
         const cat = RESOURCE_STORAGE_CATEGORY[r];
         byCategory.get(cat)!.push(r);
       }
-      for (const list of byCategory.values()) {
+      for (const [cat, list] of byCategory) {
         list.sort((a, b) => a.localeCompare(b));
+        categoryResources.set(cat, list);
       }
 
       for (const cat of ALL_STORAGE_CATEGORIES) {
@@ -191,11 +227,19 @@ export function mountCargoLabelPicker(
         for (const r of list) {
           const btn = document.createElement('button');
           btn.className = 'ri-chip';
-          btn.textContent = r.replace(/_/g, ' ');
           btn.title = r;
-          btn.style.justifyContent = 'flex-start';
+          btn.style.justifyContent = 'space-between';
           btn.style.textAlign = 'left';
           btn.dataset['active'] = r === selected ? 'true' : 'false';
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = r.replace(/_/g, ' ');
+          const fillSpan = document.createElement('span');
+          fillSpan.className = 'ri-muted';
+          fillSpan.style.fontSize = '10px';
+          fillSpan.style.marginLeft = '8px';
+          fillByResource.set(r, fillSpan);
+          btn.appendChild(nameSpan);
+          btn.appendChild(fillSpan);
           btn.addEventListener('click', () => {
             selected = r;
             repaintSelection();
@@ -258,6 +302,7 @@ export function mountCargoLabelPicker(
       }
       selected = DEFAULT_CARGO_LABEL;
       filterText = '';
+      applyFillSort(); // reorder by the island's current fill % before showing
       repaintSelection();
       applyFilter();
       handle.show();

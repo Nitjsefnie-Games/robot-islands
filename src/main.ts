@@ -1064,7 +1064,7 @@ async function main(): Promise<void> {
   // the `pickCargoLabel` dep below; only fires for generic-storage defs
   // (Crate today), bypassed entirely for specialized storage and non-
   // storage defs.
-  const cargoLabelPicker = mountCargoLabelPicker(document.body);
+  const cargoLabelPicker = mountCargoLabelPicker(document.body, () => activeState());
   // §03 terrain_modifier v5: target-biome picker — same modal-shell pattern.
   const terrainTargetPicker = mountTerrainModifierTargetPicker(document.body);
   // §4 ocean-layer (Task 10): anchor picker — same modal-shell pattern as

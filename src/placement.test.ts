@@ -17,6 +17,7 @@ import {
   formatShortfall,
   placeBuilding,
   placementCostFor,
+  sortByFillDesc,
   upgradeCost,
   validatePlacement,
 } from './placement.js';
@@ -1642,5 +1643,31 @@ describe('formatShortfall', () => {
   it('skips non-positive entries and returns "" for an empty record', () => {
     expect(formatShortfall({})).toBe('');
     expect(formatShortfall({ stone: 0 })).toBe('');
+  });
+});
+
+describe('sortByFillDesc', () => {
+  const fill = (m: Record<string, number>) => (r: ResourceId) => m[r] ?? 0;
+
+  it('orders resources by fill % descending (fullest first)', () => {
+    const out = sortByFillDesc(
+      ['wood', 'stone', 'clay'] as ResourceId[],
+      fill({ wood: 10, stone: 90, clay: 50 }),
+    );
+    expect(out).toEqual(['stone', 'clay', 'wood']);
+  });
+
+  it('breaks ties alphabetically so equal-fill rows are deterministic', () => {
+    const out = sortByFillDesc(
+      ['wood', 'clay', 'stone'] as ResourceId[],
+      fill({ wood: 0, clay: 0, stone: 0 }),
+    );
+    expect(out).toEqual(['clay', 'stone', 'wood']);
+  });
+
+  it('does not mutate the input array', () => {
+    const input = ['wood', 'stone'] as ResourceId[];
+    sortByFillDesc(input, fill({ wood: 1, stone: 2 }));
+    expect(input).toEqual(['wood', 'stone']);
   });
 });
