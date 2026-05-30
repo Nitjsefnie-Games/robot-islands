@@ -633,6 +633,21 @@ Byproducts must be handled. Untreated wastewater applies an efficiency penalty. 
 
 Recipes are defined as `inputs -> outputs` with a cycle time, executed by a specific building type.
 
+### 7.0 Recipe timing — real-world derivation
+
+Cycle times are **not hand-tuned per recipe**. Each recipe's `cycleSec` is generated from real-world 24/7 industrial throughput, area-normalized to our 1 m² = 1 tile buildings, and scaled by a single global pace constant:
+
+```
+cycleSec(base)      = output_kg_per_cycle / (areal_density × footprint_m² × M)
+output_kg_per_cycle = Σ(output_units × RESOURCE_META.massPerUnitKg)   // all outputs
+```
+
+- **`areal_density`** [kg·s⁻¹·m⁻²] — the real 24/7 nameplate throughput of the analogous industrial process divided by its real footprint (e.g. hard-rock mining 8.6, BOF steel 2.1, **logging/timber 0.49** from a 60 m³/h feller-buncher ÷ 24 m²). Full sourced table: see the design docs below.
+- **`footprint_m²`** — the building's tile count (single = 1, 2×2 = 4, 3×3 = 9, 4×4 = 16).
+- **`M` (global pace multiplier) = `1.4535×10⁻³`** — the one constant that sets world tempo, fixed by anchoring a 1-floor Mine to a 20 s cycle: `M = 1 / (8.6 × 4 × 20)`. Equivalently the sim runs at **≈ 1/688 of real-world throughput** (`1 / M ≈ 688`). There is no per-recipe time tuning; balance comes from this scale plus the floor (≤ ×10) and skill (≤ ×10) multipliers, NOT from compressing the ~6-order real density spread.
+
+The areal densities are real *harvesting/processing* rates (a logger strip-mines decades of standing timber, not the ~µg·s⁻¹·m⁻² a forest regrows), so the figures are industrial nameplate, not sustainable yield. `M` is a **generation-time** constant: the resulting `cycleSec` values are baked into `recipes.ts` per recipe; `RESOURCE_META.massPerUnitKg` is the live input that survives in code. Canonical derivation + per-building sources: `docs/superpowers/specs/2026-05-29-throughput-floors-rebalance-design.md` and its companion `…-throughput-density-table.md`.
+
 ### 7.1 Iron / Steel
 
 ```
