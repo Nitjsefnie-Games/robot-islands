@@ -44,6 +44,19 @@ export function upgradeConstructionMs(def: BuildingDef, level: number): number {
   return base * (level + 1);
 }
 
+/** Completed fraction [0,1] of a building's in-progress construction job —
+ *  fresh placement OR floor upgrade — for the progress arc. The job's total
+ *  duration is `upgradeConstructionMs(def, floorLevel)` (floor 0 ⇒ base ⇒ a
+ *  placement), so the arc must divide `remainingMs` by THAT, not the fixed
+ *  placement base. Dividing by base left an upgrade (a longer base×(L+1) job)
+ *  reading 0 until its remaining dropped below base — the corner badge sat
+ *  empty for the first stretch of the timer. */
+export function constructionProgress(remainingMs: number, def: BuildingDef, floorLevel: number): number {
+  const total = upgradeConstructionMs(def, floorLevel);
+  if (total <= 0) return 1;
+  return Math.max(0, Math.min(1, 1 - remainingMs / total));
+}
+
 /** True iff the building is operational (construction complete). Pure read,
  *  undefined-safe for legacy saves. */
 export function isOperational(b: PlacedBuilding): boolean {

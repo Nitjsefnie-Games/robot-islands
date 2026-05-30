@@ -21,7 +21,8 @@ import { Container, Graphics } from 'pixi.js';
 
 import { BUILDING_DEFS } from './building-defs.js';
 import type { IslandState } from './economy.js';
-import { BASE_CONSTRUCTION_MS_BY_TIER } from './construction.js';
+import { constructionProgress } from './construction.js';
+import { floorLevel } from './buildings.js';
 import { TILE_PX } from './island.js';
 import { maintenanceFactor } from './maintenance.js';
 import { SHOT_DURATION_MS } from './terrain-modifier.js';
@@ -89,10 +90,12 @@ export function mountBuildingAlertsOverlay(
           const rw = (maxTx - minTx + 1) * TILE_PX;
           const rh = (maxTy - minTy + 1) * TILE_PX;
           gfx.rect(rx, ry, rw, rh).fill({ color: CONSTRUCTION_CYAN, alpha: 0.28 });
-          // Progress arc: base = tier's full construction time; remaining
-          // shrinks full → 0 so the arc grows 0° → 360° as the build completes.
-          const base = BASE_CONSTRUCTION_MS_BY_TIER[def.tier];
-          const completed = Math.max(0, Math.min(1, 1 - remaining / base));
+          // Progress arc grows 0° → 360° as the job completes. Divides by the
+          // job's real duration (placement OR upgrade) via constructionProgress
+          // — floorLevel(b) is already the in-progress floor, so an upgrade's
+          // longer base×(L+1) timer fills from the start instead of sitting
+          // empty until `remaining` drops below the placement base.
+          const completed = constructionProgress(remaining, def, floorLevel(b));
           const tlPx = (spec.cx + minTx) * TILE_PX - TILE_PX / 2;
           const tlPy = (spec.cy + minTy) * TILE_PX - TILE_PX / 2;
           const radius = 5;
