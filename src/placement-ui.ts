@@ -32,6 +32,7 @@ import { TILE_PX } from './island.js';
 import type { TerrainKind } from './island.js';
 import {
   affordabilityShortfall,
+  formatShortfall,
   placeBuilding,
   placementCostFor,
   validatePlacement,
@@ -195,13 +196,9 @@ const OCEAN_REASON_LABEL: Readonly<Record<OceanPlacementReason, string>> = {
 function formatMissing(
   missing: Partial<Record<ResourceId, number>>,
 ): string {
-  const parts: string[] = [];
-  for (const [r, n] of Object.entries(missing) as Array<[ResourceId, number]>) {
-    if (n <= 0) continue;
-    parts.push(`${n} ${r.toUpperCase().replace(/_/g, ' ')}`);
-  }
-  if (parts.length === 0) return REASON_LABEL['insufficient-resources'];
-  return `NEED ${parts.join(', ')}`;
+  const body = formatShortfall(missing);
+  if (body === '') return REASON_LABEL['insufficient-resources'];
+  return `NEED ${body}`;
 }
 
 // Stable id derived from anchor coordinates (not a session counter, which

@@ -136,6 +136,21 @@ export function affordabilityShortfall(
   return missing;
 }
 
+/** Format a shortfall record (from `affordabilityShortfall`) as a display body
+ *  like "8 STONE, 3 PIG IRON" — amounts ceiled. Inventory accrues in fractional
+ *  trickles so `needed - have` is fractional; the player needs whole units, and
+ *  a raw "7.2315… STONE" on an upgrade/place button reads as a bug. Returns ""
+ *  for a record with no positive entries (callers add their own "NEED " prefix
+ *  / empty-state fallback). */
+export function formatShortfall(missing: Partial<Record<ResourceId, number>>): string {
+  const parts: string[] = [];
+  for (const [r, n] of Object.entries(missing) as Array<[ResourceId, number]>) {
+    if (n <= 0) continue;
+    parts.push(`${Math.ceil(n)} ${r.toUpperCase().replace(/_/g, ' ')}`);
+  }
+  return parts.join(', ');
+}
+
 /**
  * Validate a placement candidate. Pure: reads `spec.majorRadius/minorRadius/
  * biome/artificial/buildings` and `state.level/aiCoreCrafted`; does not
