@@ -1268,17 +1268,20 @@ export function nodeById(id: NodeId): SkillNode | undefined {
 }
 
 /**
- * True if `state` has at least one skill-tree node it can buy right now.
- * Composition: NODE_CATALOG.some(canSpend.ok) with early exit. Used by
- * the HUD island-bar to surface a global "claim available" cue without
- * the player opening the skill-tree modal.
+ * True if `state` has at least one skill-tree node it can buy right now. Used
+ * by the HUD island-bar to surface a global "claim available" cue without the
+ * player opening the skill-tree modal.
  *
- * The graph engine uses `costToUnlock` / `buyNode` for real purchases;
- * this predicate is a backward-compat stub that checks points + ownership.
+ * Applies the §9.3 depth→tier gate alongside `canSpend` (points + ownership):
+ * `canSpend` is flat-cost only, so without the gate this lit up at low level
+ * for nodes `buyNode` would reject — the HUD then advertised skills the player
+ * could not take. The cheap `depthTierEligible` check (no Dijkstra) keeps the
+ * per-island HUD loop light. The graph engine still uses `costToUnlock` /
+ * `buyNode` for real purchases.
  */
 export function hasPickableSkill(state: IslandState): boolean {
   for (const node of NODE_CATALOG) {
-    if (canSpend(state, node.id).ok) return true;
+    if (depthTierEligible(state.level, node.depth) && canSpend(state, node.id).ok) return true;
   }
   return false;
 }
