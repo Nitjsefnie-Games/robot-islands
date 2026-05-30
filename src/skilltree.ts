@@ -1267,6 +1267,24 @@ export function nodeById(id: NodeId): SkillNode | undefined {
   return DEFAULT_CATALOG.byId.get(id);
 }
 
+/** Format a node's effect magnitude for the skill-tree tooltip. `(1 + magnitude)`
+ *  is the per-node factor; for `reduce` effects (`powerConsumptionMul`,
+ *  `recipeInputMul`) that factor is applied as a DIVISOR (lower = better), so
+ *  the player-facing per-node effect is the sub-1 multiplier `1/(1+m)`. Showing
+ *  the raw `×1.089` on a power-consumption node read as an 8.9% increase when it
+ *  actually lowers draw to ×0.918 — this surfaces the reduction correctly. */
+export function formatNodeMagnitude(node: SkillNode): string {
+  if (!('magnitude' in node) || node.magnitude == null || node.magnitude === 0) return '';
+  const kind = node.effect.kind;
+  if (kind === 'parallelBuildCapAdd') return `+${node.magnitude.toFixed(3)}`;
+  if (kind === 'launchSuccessAdditive') return `+${(node.magnitude * 100).toFixed(1)} pp`;
+  // Multiplier-style. (1+m) is the per-node factor; reduce effects divide, so
+  // show the effective sub-1 multiplier.
+  const factor = 1 + node.magnitude;
+  const reduce = 'reduce' in node.effect && node.effect.reduce === true;
+  return `×${(reduce ? 1 / factor : factor).toFixed(4)}`;
+}
+
 /**
  * True if `state` has at least one skill-tree node it can buy right now. Used
  * by the HUD island-bar to surface a global "claim available" cue without the
