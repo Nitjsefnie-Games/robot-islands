@@ -31,6 +31,7 @@ import {
   advanceIsland,
   cap,
   computeRates,
+  fledglingRecipeMul,
   findNextCapEvent,
   setGenesisTarget,
   spendTimeLock,
@@ -124,7 +125,10 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     inventory: blankInventory(),
     storageCaps: blankCaps(100),
     xp: 0,
-    level: 1,
+    // Default to the §9 fledgling-boost-neutral level (≥10 ⇒ ×1.0) so rate
+    // assertions read the raw recipe math; tests about low-level/level-up
+    // behavior pass an explicit lower `level`.
+    level: 10,
     unspentSkillPoints: 0,
     unlockedNodes: new Set(),
     unlockedEdges: new Set(),
@@ -325,7 +329,7 @@ describe('tutorial production flags (lubricantProduced / boltProduced)', () => {
     // Lubricant Refinery is tier 2 — the §9.7 runtime tier gate zeroes its
     // rate below a T2 island, so the island must be level 5+ (T2).
     const state = makeState({
-      level: 5,
+      level: 10,
       buildings: [LUBRICANT_REFINERY],
       inventory: { ...blankInventory(), heavy_oil: 50, chlorine: 50, calcium_sulfonate: 50 },
     });
@@ -394,6 +398,7 @@ describe('Level up', () => {
     // Use fast hack: start xp just under threshold and advance 50s with the Mine.
     // Mine gain: 0.02 × 50 = 1 XP → push over threshold.
     const state = makeState({
+      level: 1, // level-up-from-1 test; default is the boost-neutral level 10
       buildings: [MINE],
       inventory: blankInventory(),
       xp: threshold - 0.5,
@@ -410,6 +415,7 @@ describe('Level up', () => {
     // unwind them all without re-running advanceIsland.
     const need = xpForLevel(2) + xpForLevel(3) + xpForLevel(4);
     const state = makeState({
+      level: 1, // level-up-from-1 cascade; default is the boost-neutral level 10
       buildings: [],
       inventory: blankInventory(),
       xp: need,
@@ -1495,7 +1501,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
         coke: 1000,
       },
       storageCaps: blankCaps(10_000),
-      level: 5,
+      level: 10,
     });
     // Without geothermalActive, BF stalls (no adjacent heat source).
     const cold = computeRates(state, { defs: noPowerBf });
@@ -1526,7 +1532,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
         coke: 1000,
       },
       storageCaps: blankCaps(10_000),
-      level: 5,
+      level: 10,
     });
     // Without geothermalActive, the BF stalls — no production over 60s.
     advanceIsland(state, 60_000, { defs: noPowerBf });
@@ -1541,7 +1547,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
         coke: 1000,
       },
       storageCaps: blankCaps(10_000),
-      level: 5,
+      level: 10,
     });
     advanceIsland(state2, 60_000, { defs: noPowerBf, geothermalActive: true });
     expect(state2.inventory.pig_iron ?? 0).toBeGreaterThan(0);
@@ -1860,7 +1866,7 @@ describe('NC buff integration', () => {
     const t1 = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
-      level: 1, // T1
+      level: 10, // T1
     });
     const t3 = makeState({
       buildings: [MINE],
@@ -1972,7 +1978,7 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
       },
       storageCaps: blankCaps(10_000),
       // Blast Furnace is T2 — bypass the §9.7 tier-band runtime gate.
-      level: 5,
+      level: 10,
     });
     // 10 BF cycles = 4800s. Expected pig_iron = 10; iron_ingot/coke down by 10
     // each. Coal furnace burns (1 consumer × 1 coalPerCycle / 30s) × 4800s
@@ -1996,7 +2002,7 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
       storageCaps: blankCaps(10_000),
       // Level 5 so the §9.7 tier-band runtime gate passes; the heat gate
       // is the one that's expected to zero the BF here.
-      level: 5,
+      level: 10,
     });
     advanceIsland(state, 10_000_000, { defs: powerFreeBfCfCatalog() });
     // No pig_iron produced; inputs untouched.
@@ -2033,7 +2039,7 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
         coal: 100, // intentionally low — verifies no coal is consumed
       },
       storageCaps: blankCaps(10_000),
-      level: 5, // T2 for Blast Furnace — bypass §9.7 tier-band runtime gate
+      level: 10, // T2 for Blast Furnace — bypass §9.7 tier-band runtime gate
     });
     advanceIsland(state, 4_800_000, { defs: cat });
     expect(state.inventory.pig_iron).toBeCloseTo(30, 6);
@@ -2055,7 +2061,7 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
         coal: 1000,
       },
       storageCaps: blankCaps(10_000),
-      level: 5, // T2 for Blast Furnace — bypass §9.7 tier-band runtime gate
+      level: 10, // T2 for Blast Furnace — bypass §9.7 tier-band runtime gate
     });
     // 4800s integration. Each BF runs 10 cycles → 20 pig_iron total, 20
     // iron_ingot + 20 coke consumed. Coal furnace burns 2 × 1 / 30 × 4800
@@ -2090,7 +2096,7 @@ describe('§9.7 — tier-band runtime gate', () => {
         coal: 1000,
       },
       storageCaps: blankCaps(10_000),
-      level: 1, // L1 ⇒ post-reset slate; the BF is T2-gated and stalled.
+      level: 10, // L1 ⇒ post-reset slate; the BF is T2-gated and stalled.
     });
     // Sanity: at L5+ the BF runs (covered in the §5.2 tests above). At L1
     // it must not.
@@ -2314,7 +2320,7 @@ describe('step-2.5 — placement is recognised by the live economy', () => {
       // stone + clay + wood for the §14 placement cost (Smelter: 400 stone, 100 clay, 20 wood).
       inventory: { ...blankInventory(), iron_ore: 100, coal: 100, stone: 500, clay: 200, wood: 100 },
       storageCaps: blankCaps(10000),
-      level: 5, // T1 unlocked; Smelter is T1
+      level: 10, // T1 unlocked; Smelter is T1
     });
     // Before placement: no recipes running.
     const before = computeRates(state, { defs: POWER_FREE });
@@ -3251,7 +3257,7 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
       buildings: [reactorA, reactorB],
       // Task 0.2: chemical_reactor now consumes sulfur + quicklime + heavy_oil.
       inventory: { ...blankInventory(), sulfur: 100, quicklime: 100, heavy_oil: 100 },
-      level: 5, // tier 2 unlocked
+      level: 10, // tier 2 unlocked
       lastTick: nowMs,
     });
 
@@ -3281,7 +3287,7 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
       buildings: [reactorA, reactorB],
       // Task 0.2: chemical_reactor now consumes sulfur + quicklime + heavy_oil.
       inventory: { ...blankInventory(), sulfur: 1000, quicklime: 1000, heavy_oil: 1000 },
-      level: 5,
+      level: 10,
       lastTick: startMs,
     });
 
@@ -3336,7 +3342,7 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
         scrap: 0,
       },
       storageCaps: blankCaps(10_000),
-      level: 5, // T2 building — bypass §9.7 tier-band runtime gate
+      level: 10, // T2 building — bypass §9.7 tier-band runtime gate
     });
     advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
     expect(state.inventory.pig_iron).toBeCloseTo(70, 6);
@@ -3362,7 +3368,7 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
         scrap: 100,
       },
       storageCaps: blankCaps(10_000),
-      level: 5,
+      level: 10,
     });
     advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
     expect(state.inventory.scrap).toBeCloseTo(0, 6);
@@ -3389,7 +3395,7 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
         scrap: 100,
       },
       storageCaps: blankCaps(10_000),
-      level: 5,
+      level: 10,
     });
     advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
     expect(state.inventory.pig_iron).toBeCloseTo(0, 6);
@@ -3410,7 +3416,7 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
         scrap: 0,
       },
       storageCaps: blankCaps(10_000),
-      level: 5,
+      level: 10,
     });
     advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
     expect(state.inventory.steel).toBe(0);
@@ -4238,7 +4244,7 @@ describe('heat throttle end-to-end via computeRates', () => {
 
   it('computeRates: plasma_heater + 4 coke_ovens throttles output to ~76.7%', () => {
     const state = makeState({
-      level: 5,
+      level: 10,
       buildings: [
         PLASMA_HEATER,
         { id: 'co-1', defId: 'coke_oven', x: 2, y: 0 },
@@ -4262,7 +4268,7 @@ describe('heat throttle end-to-end via computeRates', () => {
 
   it('computeRates: plasma_heater + 1 coke_oven runs at full nominal rate', () => {
     const state = makeState({
-      level: 5,
+      level: 10,
       buildings: [
         PLASMA_HEATER,
         { id: 'co-1', defId: 'coke_oven', x: 2, y: 0 },
@@ -4365,5 +4371,33 @@ describe('CO₂ sinks (Phase 5)', () => {
     state.co2Kg = 0;
     advanceIsland(state, 60_000);
     expect(state.co2Kg).toBeCloseTo(12.6, 1); // 72.6 − 60
+  });
+});
+
+describe('fledglingRecipeMul (§9 fledgling island boost)', () => {
+  it('is +150% (×2.5) at level 1', () => {
+    expect(fledglingRecipeMul(1)).toBeCloseTo(2.5, 10);
+  });
+
+  it('ramps linearly to +0% (×1.0) at level 10', () => {
+    expect(fledglingRecipeMul(10)).toBeCloseTo(1.0, 10);
+  });
+
+  it('is the linear midpoint at level 5 (×1.833…)', () => {
+    expect(fledglingRecipeMul(5)).toBeCloseTo(1 + 1.5 * (5 / 9), 10);
+  });
+
+  it('stays at ×1.0 above level 10 (self-clamping, never negative boost)', () => {
+    expect(fledglingRecipeMul(11)).toBeCloseTo(1.0, 10);
+    expect(fledglingRecipeMul(50)).toBeCloseTo(1.0, 10);
+  });
+
+  it('computeRates applies it: a Mine produces 2.5× at level 1 vs neutral level 10', () => {
+    const lo = makeState({ level: 1, buildings: [MINE] });
+    const hi = makeState({ level: 10, buildings: [MINE] });
+    const rLo = computeRates(lo, { defs: POWER_FREE }).byBuilding[0]?.effectiveRate ?? 0;
+    const rHi = computeRates(hi, { defs: POWER_FREE }).byBuilding[0]?.effectiveRate ?? 0;
+    expect(rHi).toBeGreaterThan(0);
+    expect(rLo / rHi).toBeCloseTo(2.5, 6);
   });
 });

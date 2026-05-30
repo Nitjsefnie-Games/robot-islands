@@ -693,6 +693,20 @@ export interface PowerBalance {
 }
 
 /**
+ * §9 Fledgling Island Boost — a level-scaled multiplier on every production
+ * recipe's throughput so a freshly-settled island isn't an hours-long slog. It
+ * starts at +150% (×2.5) at level 1 and ramps linearly to +0% (×1.0) at level
+ * 10, then stays neutral forever. `max(0, …)` self-clamps above level 10 (the
+ * boost never goes negative), so no separate guard is needed. Pure function of
+ * level; no persisted state. XP accrues on the boosted production (§9.1), so
+ * the early levels pass quickly and the island exits the boost window on its
+ * own. Applied alongside the other multipliers in `computeRates`' rate product.
+ */
+export function fledglingRecipeMul(level: number): number {
+  return 1 + 1.5 * Math.max(0, (10 - level) / 9);
+}
+
+/**
  * Compute per-building production rates given the current state.
  * Pure function — does not mutate state.
  *
@@ -1046,7 +1060,7 @@ export function computeRates(
     const cryoMul = Object.keys(recipe.outputs).some((r) => r.includes('cryo'))
       ? modifierMul.cryoRecipeRateMul
       : 1;
-    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul * heatFactor * floorEffectMul(floorLevel(b));
+    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul * heatFactor * floorEffectMul(floorLevel(b)) * fledglingRecipeMul(state.level);
     tentative.push({ building: b, recipe, baseRate, buffStack, effectiveMul: gateResult.effectiveMul * heatFactor });
     const pass1Outputs = resolveRotatingOutput(recipe, t);
     for (const [r, yld] of Object.entries(pass1Outputs)) {
@@ -1074,7 +1088,7 @@ export function computeRates(
     // demand calculation matches actual consumption under the gate.
     // Without this, a halved consumer over-claims inputs and starves
     // siblings.
-    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul * te.effectiveMul * floorEffectMul(floorLevel(te.building));
+    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul * te.effectiveMul * floorEffectMul(floorLevel(te.building)) * fledglingRecipeMul(state.level);
     const externalSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
     for (const r of Object.keys(tentSupply) as ResourceId[]) {
       externalSupply[r] = tentSupply[r] ?? 0;
