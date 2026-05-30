@@ -24,17 +24,12 @@ import { BIOME_DEFS, rollModifiers } from './biomes.js';
 import { makeSeededRng } from './rng.js';
 import { attachTerrainAt, type Biome, type IslandSpec } from './world.js';
 
-// Ocean-layer §2: re-export so callers wiring "the procedural world
-// pipeline" find both island placement (`generateWorld`) and ocean
-// terrain seeding (`generateOceanTerrain`) at one import path. The
-// actual call site lives in `makeInitialWorld` (world.ts) — that's
-// where the `WorldState` is assembled — but discoverability for
-// future maintainers belongs next to the rest of the world-gen API.
+// Ocean-layer §2: re-exported so the procedural world pipeline (island
+// placement + ocean terrain seeding) is discoverable at one import path.
+// Actual call site is `makeInitialWorld` (world.ts), where `WorldState` is assembled.
 export { generateOceanTerrain } from './ocean-gen.js';
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 export interface GenOptions {
   /** Seed for the RNG. The same string always produces the same world. */
@@ -88,8 +83,6 @@ export function generateCellIslands(
 ): IslandSpec[] {
   if (cellX === 0 && cellY === 0) return [];
 
-  // Per-cell rng — output depends only on (seed, cellX, cellY), not on
-  // generation order of other cells.
   const rng = makeSeededRng(`${seed}_cell_${cellX}_${cellY}`);
 
   const placeRoll = rng();
@@ -172,9 +165,7 @@ export function generateWorld(opts: GenOptions): IslandSpec[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Internal helpers
-// ---------------------------------------------------------------------------
 
 /** Biome weight table per the task brief (placeholder per SPEC §15.7 step 6).
  *  Sum is 100, so we treat each row as a percentage. */

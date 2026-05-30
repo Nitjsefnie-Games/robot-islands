@@ -2,11 +2,6 @@
 // IslandState map across browser sessions, restore on startup. One save
 // slot per origin (the page's IndexedDB). No backend.
 //
-// Versioned snapshot. The v field is the schema version anchor for future
-// migrations — bumping it (v: 2 later) silently invalidates v1 saves
-// (`loadWorld` returns null on unknown v, the caller falls back to a fresh
-// world). Migrations from prior versions are out of scope for step 14.
-//
 // Three concerns the serializer addresses that JSON.stringify alone can't:
 //
 //   1. `IslandSpec.terrainAt` is a closure (`(x, y) => terrainAtForBiome(...)`),
@@ -80,7 +75,7 @@ export const SCHEMA_VERSION = 17 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
- *  SCHEMA_VERSION; current chain: v7 → v8 → v9 → v10 → v11 → v12 → v13 → v14.
+ *  SCHEMA_VERSION.
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
@@ -173,9 +168,6 @@ export interface SerializedWorld {
   readonly playerLon: number | null;
 }
 
-/** Top-level snapshot. The `v` field is the schema-version anchor: this
- *  step ships v1, future revisions bump it and the loader returns null
- *  on a v mismatch (caller falls back to a fresh world). */
 // ---------------------------------------------------------------------------
 // Historical snapshot shapes (for migrations)
 // ---------------------------------------------------------------------------
@@ -664,7 +656,7 @@ export function deserializeWorld(
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  // Walk v7 → v8 → v9 → v10 → v11 → v12 → v13 → v14 → v15 → v16 migration chain.
+  // Walk the v7 → … → SCHEMA_VERSION migration chain, one step per version.
   if ((snapshot as unknown as { v: number }).v === 7) {
     snapshot = migrateV7toV8(snapshot as unknown as SerializedSnapshotV7) as unknown as SaveSnapshot;
   }

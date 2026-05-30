@@ -1,51 +1,34 @@
 // Ocean-layer §4 — anchor picker for ocean-placed buildings.
 //
-// Ocean platforms (the future Task 8 building catalog) are placed on an
-// ocean cell but logically belong to a player-chosen "anchor" island —
-// the colony that gets the output and (per §5.3) supplies the power. This
-// module owns two responsibilities:
+// Ocean platforms are placed on an ocean cell but logically belong to a
+// player-chosen "anchor" island — the colony that gets the output and (per
+// §5.3) supplies the power. Two responsibilities:
 //
-//   1. **`candidateAnchors`** (pure): list every populated island within
+//   1. `candidateAnchors` (pure): list every populated island within
 //      `ANCHOR_MAX_RANGE_CELLS` of the prospective placement cell, ordered
 //      nearest-first. This is the data the picker UI renders.
-//   2. **`mountAnchorPicker`** (DOM): a modal mirroring the
+//   2. `mountAnchorPicker` (DOM): a modal mirroring the
 //      `cargo-label-picker.ts` shell — same pending-resolver pattern,
 //      Escape / scrim / close-X resolve `null`, Enter commits the
 //      currently-highlighted candidate.
 //
-// REVISED per commit a92efa2: anchor selection does NOT walk a cable
-// component. The cable model is now route-based (`submarine_cable`
-// RouteType, Task 4), so anchor selection is simply "any populated island
-// in range." The previous `cablePoolComponentAt` helper is gone.
+// Anchor selection is "any populated island in range" — the cable model is
+// route-based (`submarine_cable` RouteType), not a walked component.
 //
-// **Integration status**: this file is *scaffolding* — `placement.ts` /
-// `placement-ui.ts` are NOT wired today because no building def carries
-// `oceanPlacement: true` yet (that flag arrives with the ocean catalog in
-// Task 8). When Task 8 lands the catalog, the wiring is one call into
-// `candidateAnchors` after the placement cell is committed plus a
-// `mountAnchorPicker(...).pick(candidates)` await — both already exported
-// from here.
+// Scaffolding: not wired today because no building def carries
+// `oceanPlacement: true` yet (that flag arrives with the ocean catalog).
 
 import { CELL_SIZE_TILES } from './constants.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 import type { WorldState } from './world.js';
 
-// ---------------------------------------------------------------------------
-// Pure helper
-// ---------------------------------------------------------------------------
-
 /** Maximum distance (in cells) from the placement cell to consider an
- *  island as an anchor candidate. Appendix-A placeholder per the spec;
- *  tuning the player loop. Inclusive bound — exactly `==` this value is
- *  still in range. */
+ *  island as an anchor candidate (Appendix-A placeholder). Inclusive
+ *  bound — exactly `==` this value is still in range. */
 export const ANCHOR_MAX_RANGE_CELLS = 50;
 
 /** One row in the picker list — the island's id, display name, and its
- *  great-circle distance to the placement cell expressed in cells. The
- *  spec's Appendix-A draft also lists `inventoryHeadroom` (headroom on
- *  the platform's main output cap) but the brief defers that to a follow-
- *  up so the API stays minimal; add it here when Task 8's economy wiring
- *  needs it. */
+ *  distance to the placement cell expressed in cells. */
 export interface AnchorCandidate {
   readonly islandId: string;
   readonly islandName: string;
@@ -57,7 +40,7 @@ export interface AnchorCandidate {
  *
  *  Pure: reads only `world.islands`. Returns a fresh array sorted
  *  nearest-first; ties keep input order via `Array.prototype.sort`'s
- *  stability guarantee (modern V8).
+ *  stability guarantee.
  *
  *  Island centres (`IslandSpec.cx/cy`) are in **tile** units; the
  *  placement cell is in **cell** units. We convert the placement to
@@ -86,10 +69,6 @@ export function candidateAnchors(
   out.sort((a, b) => a.distanceCells - b.distanceCells);
   return out;
 }
-
-// ---------------------------------------------------------------------------
-// Modal picker (DOM)
-// ---------------------------------------------------------------------------
 
 /** Public handle returned by `mountAnchorPicker`. Single-method surface
  *  so consumers don't accidentally drive show/hide directly — the picker

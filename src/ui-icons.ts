@@ -1,15 +1,6 @@
-// Inline SVG icon registry. Lucide-derived line icons, hand-trimmed to the
-// dozen the game actually needs. Committed to the repo — no runtime fetch,
-// no external dep.
-//
-// Use:
-//
-//     import { icon } from './ui-icons.js';
-//     btn.appendChild(icon('building', 18));
-//
-// Sizing: defaults to 16; pass an explicit size for action-strip buttons.
-// Stroke is `currentColor`, so wrap an icon in any text-colour container
-// and it follows along.
+// Inline SVG icon registry. Lucide-derived line icons, committed to the repo —
+// no runtime fetch, no external dep. Stroke is `currentColor`, so an icon
+// inherits the colour of any text container it's wrapped in.
 
 export type IconId =
   | 'building'      // Buildings catalog

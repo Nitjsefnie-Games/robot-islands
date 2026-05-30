@@ -1,9 +1,7 @@
 import { currentStep, markCompleted } from './tutorial.js';
 import type { WorldState } from './world.js';
 
-// ---------------------------------------------------------------------------
-// Phase 7 — bottom-left hint overlay (spec §06)
-// ---------------------------------------------------------------------------
+// Bottom-left hint overlay (spec §06).
 
 let hintEl: HTMLElement | null = null;
 let renderedStepId: string | null = null;

@@ -43,8 +43,7 @@ describe('generateWorld', () => {
   it('different seeds produce different worlds', () => {
     const a = generateWorld({ ...BASE_OPTS, seed: 'seed-A' });
     const b = generateWorld({ ...BASE_OPTS, seed: 'seed-B' });
-    // The two worlds should differ in at least one position OR biome.
-    // Length alone could match by coincidence; centre coordinates almost
+    // Length alone could match by coincidence; centre coords almost
     // certainly won't all match across two seeds.
     let differs = false;
     const minLen = Math.min(a.length, b.length);
@@ -246,12 +245,9 @@ describe('generateWorld', () => {
 
 describe('makeInitialWorld + procedural integration', () => {
   it('keeps the home island present and at world origin', () => {
-    // §3.7 cleanup: pre-cleanup this test asserted every hand-placed demo
-    // island (forest-ne, desert-far, hidden-w/s, coast-unknown) was
-    // present. The production new-game world now seeds only home —
-    // demo neighbours are retained for tests as
-    // DEMO_ISLANDS_TEST_FIXTURE but are NOT auto-seeded into
-    // makeInitialWorld. We assert only on home here.
+    // §3.7: the new-game world seeds only home — demo neighbours are
+    // retained as DEMO_ISLANDS_TEST_FIXTURE but NOT auto-seeded into
+    // makeInitialWorld, so we assert only on home here.
     const w = makeInitialWorld(0);
     const home = w.islands.find((s) => s.id === 'home');
     expect(home, 'home island missing from initial world').toBeDefined();

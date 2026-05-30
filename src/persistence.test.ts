@@ -822,11 +822,6 @@ describe('drone and route timestamp remapping', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Type wiring sanity — make sure the test fixtures actually exercise the
-// non-trivial paths (Set, Map, closure rehydration) on a real demo world.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // §11.7 tier-matched fuelResource — round-trip + legacy backfill
 // ---------------------------------------------------------------------------
 
@@ -1133,7 +1128,6 @@ describe('IslandState Time Lock state round-trip', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // PlacedBuilding flags round-trip
 // ---------------------------------------------------------------------------
@@ -1468,7 +1462,7 @@ describe('oceanCells round-trip', () => {
 
 describe('persistence — tileOverrides round-trip (schema 7)', () => {
   it('survives serializeWorld → deserializeWorld unchanged', () => {
-    const world = makeInitialWorld(0); // existing test fixture
+    const world = makeInitialWorld(0);
     const homeSpec = world.islands.find((s) => s.id === 'home');
     expect(homeSpec).toBeDefined();
     (homeSpec as IslandSpec).tileOverrides = {

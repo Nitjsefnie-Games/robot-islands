@@ -22,8 +22,6 @@ import SunCalc from 'suncalc';
 // in the Day quadrant (multiplier 1.0). The Unix epoch is not a meaningful
 // in-game time; the offset is purely a calibration that lets pre-existing
 // power-balance tests continue to expect full solar output at t=0.
-//
-// No PixiJS, no DOM. Pure deterministic functions.
 
 /** 24 real hours expressed in milliseconds. */
 export const DAY_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -220,7 +218,6 @@ export function nextPhaseBoundaryMs(nowMs: number): number {
   // `floor(p * 4) + 1` gives the next quadrant index 1..4 → boundary at idx/4.
   const nextBoundaryPhase = (Math.floor(p * 4) + 1) / 4;
   const phaseDelta = nextBoundaryPhase - p;
-  // Convert phase units back to milliseconds. Add to `nowMs`.
   return nowMs + phaseDelta * DAY_DURATION_MS;
 }
 

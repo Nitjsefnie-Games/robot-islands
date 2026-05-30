@@ -131,8 +131,7 @@ describe('generateFillerNodes', () => {
 });
 
 describe('MINING_FILLER_NODES', () => {
-  // v2 rebalance (C4): storageCap (dry_goods) rehomed to storage sub-path;
-  // rareTrickle demoted to notable. Mining fillers are now 2 families: 8 recipeRate + 5 yieldBonus = 13.
+  // Mining fillers are 2 families: 8 recipeRate + 5 yieldBonus = 13.
   it('produces 13 nodes from 2 archetypes', () => {
     expect(MINING_FILLER_NODES).toHaveLength(13);
   });
@@ -183,9 +182,6 @@ describe('MINING_FILLER_NODES', () => {
 
 describe('ALL_FILLER_NODES sanity', () => {
   it('has a node count in the expected range', () => {
-    // Lower bound updated for C6b rebalance: orbital branch lost 29 filler nodes
-    // (launch lost 9 padSafety+satFuel; communication lost 10 satBuffer+scanner;
-    // discovery lost 5 scannerDwell; resilience lost 5 repairDrone).
     expect(ALL_FILLER_NODES.length).toBeGreaterThanOrEqual(240);
     expect(ALL_FILLER_NODES.length).toBeLessThanOrEqual(600);
   });

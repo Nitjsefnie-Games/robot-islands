@@ -1,33 +1,17 @@
-// Three-tier ocean colour rendering with soft tier boundaries.
+// Three-tier ocean colour rendering with soft tier boundaries (§11).
+// The "discovered ocean" tier is driven by the per-cell `revealedCells`
+// set rather than per-island halos. Rendering layout:
 //
-// §11 telemetry redesign: the medium-blue "discovered ocean" tier is now
-// driven by the per-cell `revealedCells` set rather than per-island halos.
-// Rendering layout:
-//
-//   1. one big rect filling the world bounds in UNKNOWN_BLUE (alpha 1) —
-//      the floor of the entire scene.
-//   2. one DISCOVERED_BLUE square sprite per cell in `revealedCells`
-//      (16×16 tiles, sprite-cloned from a single shared texture). This
-//      replaces the per-island radial-gradient aura — the cell-by-cell
-//      squares ARE the new "you've been here" tier.
-//   3. vision sources (ellipse + circle gradient sprites) — unchanged.
-//      Caller-side responsibility (`main.ts`): add the islands layer on
-//      top of the ocean container.
+//   1. UNKNOWN_BLUE rect filling the world bounds — floor of the scene.
+//   2. one DISCOVERED_BLUE 16-tile square sprite per revealed cell.
+//   3. vision sources (cell-snapped VISION_BLUE squares).
 //   4. (Outside this module: the islands draw on top of the ocean.)
-//   5. Fog overlay: a post-island layer paints UNKNOWN_BLUE squares on
-//      cells NOT in `revealedCells` whose AABB overlaps any rendered
-//      island's footprint bbox. This masks the unrevealed portion of each
-//      island so partial-reveal looks correct (the island's pixels under
-//      an unrevealed cell get covered by the fog square).
+//   5. Fog overlay: post-island UNKNOWN_BLUE squares on cells NOT in
+//      `revealedCells` whose AABB overlaps a rendered island's footprint,
+//      masking the unrevealed portion of each partially-revealed island.
 //
-// Per-island legacy aura (24-tile soft circle around discovered islands)
-// is REMOVED — the cell-by-cell DISCOVERED_BLUE squares now carry that
-// indicator at finer granularity.
-//
-// The earlier fog attempt used Canvas2D radial gradients combined with
-// `blendMode: 'erase'` against an opaque sheet — the erase blend was the
-// failing piece. Here we layer straight semi-transparent sprites over a
-// solid background, which Just Works.
+// Straight semi-transparent sprites over a solid background — NOT Canvas2D
+// radial gradients with `blendMode: 'erase'`, whose erase blend failed.
 
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 
@@ -47,13 +31,12 @@ import {
   type IslandSpec,
 } from './world.js';
 
-/** Cell-size in world pixels. CELL_SIZE_TILES from discovery.ts × TILE_PX. */
+/** Cell-size in world pixels (CELL_SIZE_TILES × TILE_PX). */
 const CELL_PX = CELL_SIZE_TILES * TILE_PX;
 
-/** Build (lazily) a 1×1 white texture used as a sprite-clone base for the
- *  16-tile cell squares. The actual colour is set via `sprite.tint` so a
- *  single texture backs both the DISCOVERED_BLUE reveals AND the
- *  UNKNOWN_BLUE fog squares. */
+/** Lazily-built 1×1 white texture, sprite-clone base for the cell squares.
+ *  Colour is set via `sprite.tint` so one texture backs both the
+ *  DISCOVERED_BLUE reveals and the UNKNOWN_BLUE fog squares. */
 let cellSquareTexture: Texture | null = null;
 function getCellSquareTexture(): Texture {
   if (cellSquareTexture !== null) return cellSquareTexture;
@@ -68,9 +51,8 @@ function getCellSquareTexture(): Texture {
   return cellSquareTexture;
 }
 
-/** Make a 16-tile-square cell-sized sprite tinted to `colorHex` and
- *  positioned with its top-left at the cell's top-left world pixel. The
- *  cell coord `(cx, cy)` covers world tiles `[cx*16, (cx+1)*16)`. */
+/** Cell-sized sprite tinted `colorHex`, top-left at the cell's top-left
+ *  world pixel. Cell `(cx, cy)` covers world tiles `[cx*16, (cx+1)*16)`. */
 function makeCellSquare(cx: number, cy: number, colorHex: number): Sprite {
   const s = new Sprite(getCellSquareTexture());
   s.width = CELL_PX;
@@ -81,7 +63,7 @@ function makeCellSquare(cx: number, cy: number, colorHex: number): Sprite {
 }
 
 /** Parse a `"cx,cy"` cell key. Mirrors `discovery.ts → parseCellKey` but
- *  avoids the import cycle (`ocean.ts` is the renderer, kept lightweight). */
+ *  avoids the import cycle. */
 function parseKey(key: string): { cx: number; cy: number } {
   const i = key.indexOf(',');
   return { cx: Number(key.slice(0, i)), cy: Number(key.slice(i + 1)) };
@@ -90,18 +72,13 @@ function parseKey(key: string): { cx: number; cy: number } {
 /**
  * Build the bottom-of-the-stack ocean container.
  *
- * @param revealedCells  Set of cell keys (`"cellX,cellY"`) the player has
- *                       revealed. Each gets a DISCOVERED_BLUE 16-tile square
- *                       sprite painted over the unknown floor.
+ * @param revealedCells  Cell keys (`"cellX,cellY"`) the player has revealed;
+ *                       each gets a DISCOVERED_BLUE 16-tile square over the floor.
  * @param visionSources  Vision sources from `lighthouse.ts → computeVisionSources`.
- *                       Painted on top of the cell tier as gradient ellipses
- *                       / circles.
  * @param halfSizeTiles  Half-extent of the unknown rectangle, in tiles.
- * @returns A `Container` to add as the first (bottom) child of your world
- *          container so islands render on top. The matching fog overlay (the
- *          UNKNOWN_BLUE squares that mask unrevealed portions of rendered
- *          islands) is `renderOceanFogOverlay`, intended to be added AFTER
- *          the islands layer.
+ * @returns A `Container` to add as the first (bottom) child of the world
+ *          container so islands render on top. The matching post-island fog
+ *          mask is `renderOceanFogOverlay`, added AFTER the islands layer.
  */
 export function renderOcean(
   revealedCells: ReadonlySet<string>,
@@ -111,8 +88,7 @@ export function renderOcean(
   const layer = new Container();
   layer.label = 'ocean';
 
-  // Tier C — unknown ocean. Solid rect across the world bounds. Floor of
-  // the entire scene; everything else paints over it.
+  // Tier C — unknown ocean. Solid rect; floor of the scene, everything paints over it.
   const halfPx = halfSizeTiles * TILE_PX;
   const bg = new Graphics();
   bg.rect(-halfPx, -halfPx, halfPx * 2, halfPx * 2).fill({
@@ -122,9 +98,8 @@ export function renderOcean(
   layer.addChild(bg);
 
   // Tier B — per-cell discovery squares. One DISCOVERED_BLUE 16-tile sprite
-  // per revealed cell. Replaces the old per-discovered-island aura — the
-  // per-cell granularity is what makes "I scanned here and found nothing"
-  // a visible piece of information.
+  // per revealed cell; the per-cell granularity is what makes "I scanned
+  // here and found nothing" a visible piece of information.
   for (const k of revealedCells) {
     const { cx, cy } = parseKey(k);
     layer.addChild(makeCellSquare(cx, cy, DISCOVERED_BLUE));
@@ -132,10 +107,8 @@ export function renderOcean(
 
   // Tier A — vision. Snaps to the stratification cell grid: any cell whose
   // AABB intersects a vision source paints a full VISION_BLUE square. The
-  // previous smooth gradient sprites were nicer visually but produced a
-  // sub-cell visibility that conflicted with the discovery / weather layers
-  // which both reason about whole cells — the cell-grid snap unifies "is
-  // this cell visible" across every overlay (per user request).
+  // cell-grid snap unifies "is this cell visible" across the discovery /
+  // weather overlays, which both reason about whole cells.
   const visibleCells = visibleCellsFromVision(visionSources);
   for (const k of visibleCells) {
     const { cx, cy } = parseKey(k);
@@ -159,13 +132,10 @@ export function renderOcean(
  *      vision — populated-island baseline padded ellipse + Lighthouse
  *      circles).
  *
- * Condition (3) is the fix for the "drone discovery flips a neighbour's
- * footprint into the fog set, masking home's vision halo" bug. Without
- * it, an unrevealed cell of a freshly-discovered neighbour that overlaps
- * home's vision halo composes to a solid dark grey square — fog paints
- * UNKNOWN_BLUE on top of the ocean's VISION_BLUE, then the weather
- * overlay layers light_fog rgba(224,232,240,0.18) on top of fog. Vision
- * has to win on cells where both apply.
+ * Condition (3) fixes the "drone discovery flips a neighbour's footprint
+ * into the fog set, masking home's vision halo" bug: without it, fog paints
+ * UNKNOWN_BLUE over the ocean's VISION_BLUE on cells where both apply.
+ * Vision has to win there.
  */
 export function computeFogCells(
   islands: ReadonlyArray<IslandSpec>,
@@ -173,9 +143,8 @@ export function computeFogCells(
   visionSources: ReadonlyArray<VisionSource>,
 ): Set<string> {
   const visibleCells = visibleCellsFromVision(visionSources);
-  // Deduplicate cells across overlapping island footprints — two islands
-  // sharing a cell would otherwise emit two fog sprites at the same world
-  // position. Sprite-cloning is cheap but dedup saves drawcalls.
+  // Set dedups cells shared across overlapping island footprints, saving
+  // duplicate fog sprites (drawcalls) at the same world position.
   const fogCells = new Set<string>();
   for (const isl of islands) {
     if (!isl.discovered) continue;
@@ -189,30 +158,15 @@ export function computeFogCells(
 }
 
 /**
- * Build the fog-overlay layer (the post-island unknown-blue mask).
+ * Build the fog-overlay layer (the post-island unknown-blue mask): one
+ * UNKNOWN_BLUE 16-tile sprite per cell in `computeFogCells`. Add the
+ * returned container ABOVE the islands layer so the squares mask the
+ * unrevealed portion of each partially-revealed island. Cells outside any
+ * island footprint are left alone — already UNKNOWN_BLUE from the base rect.
  *
- * For each rendered island, enumerate its constituent cells via
- * `islandCells(spec)` (which walks the primary ellipse PLUS every
- * `extraEllipses` entry per §3.6); for every cell in that set that is
- * neither in `revealedCells` nor currently illuminated by any vision
- * source, paint an UNKNOWN_BLUE 16-tile sprite. Add the returned
- * container ABOVE the islands layer so the squares mask the unrevealed
- * portion of each partially-revealed island.
- *
- * Cells that aren't part of any island footprint are left alone — they
- * were already UNKNOWN_BLUE from the base rect, and a redundant overlay
- * there would just be drawcalls for no visual change.
- *
- * @param islands         Islands to consider. Undiscovered islands are
- *                        skipped (they don't render in the first place,
- *                        so fogging them would be wasted work).
+ * @param islands         Islands to consider; undiscovered ones are skipped.
  * @param revealedCells   Same Set used by `renderOcean`.
  * @param visionSources   Same vision sources passed to `renderOcean`.
- *                        Cells currently inside any vision source are
- *                        excluded from the fog set — otherwise a
- *                        discovered neighbour's unrevealed cells that
- *                        overlap a populated island's vision halo would
- *                        paint UNKNOWN_BLUE over the cyan VISION_BLUE.
  * @returns A `Container` carrying one Sprite per fogged cell.
  */
 export function renderOceanFogOverlay(
@@ -230,30 +184,23 @@ export function renderOceanFogOverlay(
   return layer;
 }
 
-// ---------------------------------------------------------------------------
-// §6 Feature glyph render pass
-// ---------------------------------------------------------------------------
+// §6 Feature glyph render pass.
 //
 // Renders one ∿ / ⋮ / ▭ glyph per rare-feature cluster (vent / nodule /
 // trench) whose anchor cell satisfies `shouldRenderFeatureGlyph` — both the
 // surface reveal AND the depth scout flags are set. Sits between the fog
-// overlay and the weather overlay in the world container so storms visually
-// occlude glyphs (per §6: "a storm visually hides what's underneath").
+// overlay and the weather overlay so storms visually occlude glyphs (§6:
+// "a storm visually hides what's underneath").
 //
 // Pixel-size invariance: glyph sprites are sized in world pixels and the
-// outer container counter-scales to `1 / cam.zoom` each frame, keeping the
-// rendered glyphs the same pixel size regardless of camera zoom. (See main.ts
-// ticker — `featureGlyphs.setZoom(cam.zoom)`.)
-//
-// Pre-baked textures: one Texture per (terrain × tint × pixel size) combo,
-// memoised in a module-level cache so dozens of clusters share three
-// textures total.
+// outer container counter-scales to `1 / cam.zoom` each frame (see main.ts
+// ticker — `featureGlyphs.setZoom(cam.zoom)`).
 
 /** §6 glyph dictionary — pale-cyan, fixed pixel size, scale-invariant. */
 const GLYPH_CHARS: Readonly<Record<OceanTerrain, string | null>> = {
-  hydrothermal_vent: '∿', // ∿
-  nodule_field: '⋮', // ⋮
-  trench: '▭', // ▭
+  hydrothermal_vent: '∿',
+  nodule_field: '⋮',
+  trench: '▭',
   shallows: null,
   deep: null,
 };
@@ -274,7 +221,6 @@ function getGlyphTexture(char: string, pxSize: number): Texture {
   const cached = glyphTextureCache.get(key);
   if (cached !== undefined) return cached;
   const canvas = document.createElement('canvas');
-  // Square canvas; sprite scales naturally without distortion.
   canvas.width = pxSize;
   canvas.height = pxSize;
   const ctx = canvas.getContext('2d');
@@ -309,19 +255,15 @@ export interface FeatureGlyphsHandle {
 /** Mount the §6 feature-glyph layer. Returns a handle whose `layer` should
  *  be added to the world container between fog (slot 2) and weather.
  *
- *  Pixel-size invariance is achieved by setting `sprite.width =
- *  sprite.height = GLYPH_PX / zoom` each frame. The container itself
- *  inherits world-scale (= cam.zoom), and the resulting on-screen size is
- *  `zoom * (GLYPH_PX / zoom) = GLYPH_PX` regardless of zoom. Positions are
- *  in world-pixel coords (cell centre) — those scale naturally with the
- *  world. This is simpler than fighting two nested scales and matches the
- *  pattern used by other inspector-active overlays. */
+ *  Pixel-size invariance: set `sprite.width = sprite.height = GLYPH_PX / zoom`
+ *  each frame. The container inherits world-scale (= cam.zoom), so on-screen
+ *  size is `zoom * (GLYPH_PX / zoom) = GLYPH_PX` regardless of zoom. Positions
+ *  are world-pixel coords (cell centre) and scale naturally with the world. */
 export function mountFeatureGlyphs(): FeatureGlyphsHandle {
   const layer = new Container();
   layer.label = 'ocean-feature-glyphs';
-  // Currently-applied counter-scale. Stored so `refresh` can size newly-
-  // minted sprites with the latest zoom without waiting for the next
-  // `setZoom` call.
+  // Currently-applied counter-scale, so `refresh` can size newly-minted
+  // sprites without waiting for the next `setZoom` call.
   let currentZoom = 1;
 
   function applyCounterScaleTo(sprite: Sprite): void {

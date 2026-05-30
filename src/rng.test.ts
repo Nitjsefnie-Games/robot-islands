@@ -16,8 +16,7 @@ describe('mulberry32', () => {
   it('produces a different sequence for a different seed', () => {
     const a = mulberry32(1);
     const b = mulberry32(2);
-    // Any single comparison could collide, but across 50 draws the two
-    // sequences must diverge somewhere.
+    // A single draw could collide; across 50 draws the streams must diverge.
     let differed = false;
     for (let i = 0; i < 50; i++) {
       if (a() !== b()) {

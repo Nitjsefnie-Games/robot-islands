@@ -1,17 +1,14 @@
 // Camera: pure state + world↔screen transform.
 //
-// The camera defines a viewport into world space. World space is measured in
-// pixels (already factored by TILE_PX at the caller); the camera stores a
-// translation (tx, ty) and a uniform zoom factor. The mapping is:
+// World space is in pixels (already factored by TILE_PX at the caller); the
+// camera stores a translation (tx, ty) and a uniform zoom factor. The mapping:
 //
 //   screen = world * zoom + (tx, ty)
 //   world  = (screen - (tx, ty)) / zoom
 //
-// This module is intentionally Pixi-free: it just holds state and exposes pure
-// functions. The renderer reads {tx, ty, zoom} once per frame and applies it
-// to the world container via `position.set` and `scale.set`. Keeping camera
-// state separate from the PixiJS scene graph means we can unit-test transforms
-// without spinning up a renderer.
+// Intentionally Pixi-free: the renderer reads {tx, ty, zoom} once per frame and
+// applies it to the world container. Keeping camera state out of the PixiJS
+// scene graph lets us unit-test transforms without a renderer.
 
 export interface Vec2 {
   readonly x: number;

@@ -54,7 +54,6 @@ export type ExpandResult =
  * Pure.
  */
 export function landReclamationCost(currentRadius: number): LandReclamationCost {
-  // §3.4 placeholder — tune in Appendix A / §15.5.
   return { stone: 5 * currentRadius * currentRadius };
 }
 

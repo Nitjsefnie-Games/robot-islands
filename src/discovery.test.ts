@@ -15,10 +15,6 @@ import {
 } from './discovery.js';
 import type { IslandSpec } from './world.js';
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
 function makeIslandSpec(over: Partial<IslandSpec>): IslandSpec {
   return {
     id: 'spec',
@@ -35,10 +31,6 @@ function makeIslandSpec(over: Partial<IslandSpec>): IslandSpec {
     ...over,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Cell key encoding
-// ---------------------------------------------------------------------------
 
 describe('cellKey / parseCellKey', () => {
   it('round-trips positive coordinates', () => {
@@ -63,10 +55,6 @@ describe('cellKey / parseCellKey', () => {
     expect(() => parseCellKey('nope')).toThrow();
   });
 });
-
-// ---------------------------------------------------------------------------
-// tileToCell
-// ---------------------------------------------------------------------------
 
 describe('tileToCell', () => {
   it('maps tile (0, 0) to cell (0, 0)', () => {
@@ -99,10 +87,6 @@ describe('tileToCell', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// cellCenterTile
-// ---------------------------------------------------------------------------
-
 describe('cellCenterTile', () => {
   it('cell (0, 0) center is at tile (8, 8)', () => {
     expect(cellCenterTile(0, 0)).toEqual({ x: 8, y: 8 });
@@ -116,10 +100,6 @@ describe('cellCenterTile', () => {
     expect(cellCenterTile(-1, -1)).toEqual({ x: -8, y: -8 });
   });
 });
-
-// ---------------------------------------------------------------------------
-// corridorCells
-// ---------------------------------------------------------------------------
 
 describe('corridorCells', () => {
   it('a horizontal corridor along y=8 from x=0 to x=48 covers cells (0,0), (1,0), (2,0)', () => {
@@ -170,10 +150,6 @@ describe('corridorCells', () => {
     expect(a).toEqual(b);
   });
 });
-
-// ---------------------------------------------------------------------------
-// islandCells
-// ---------------------------------------------------------------------------
 
 describe('islandCells', () => {
   it('home Plains (cx=0, cy=0, r=14) covers cells (-1,-1), (-1,0), (0,-1), (0,0)', () => {
@@ -371,10 +347,7 @@ describe('islandCells', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // revealOceanCells — pinned for Task 7 (Scanner Sat ocean extension) reuse.
-// ---------------------------------------------------------------------------
-
 describe('revealOceanCells', () => {
   function makeSets() {
     return {
@@ -437,10 +410,6 @@ describe('revealOceanCells', () => {
     expect(state.depthRevealedCells).toEqual(depthAfterFirst);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Constant sanity
-// ---------------------------------------------------------------------------
 
 describe('CELL_SIZE_TILES', () => {
   it('matches the §2.1 stratification placeholder', () => {

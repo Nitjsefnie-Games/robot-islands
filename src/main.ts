@@ -1,22 +1,12 @@
-// Robot Islands — step 2 bootstrap.
-//
-// Camera + multi-island map + vision states + config-driven input. The world
-// container's position/scale is now driven by the camera state every frame;
-// no more "recenter on resize" call.
-//
-// Vision model: each island is classified into one of three render states
-// (visible / discovered / unknown) and rendered accordingly:
-//   - visible    → full color/alpha
-//   - discovered → dimmed + cool tint (player knows it exists, no current info)
-//   - unknown    → not rendered (dark page background shows through)
+// Robot Islands — step 2 bootstrap. Camera + multi-island map + vision states
+// + config-driven input. The world container's position/scale is driven by the
+// camera state every frame.
 //
 // Vision boundary: rendered as a three-tier ocean colour field (see
 // `ocean.ts`). The colour step between tiers IS the boundary indicator —
 // no outline ring. The ocean layer sits below islands so islands always
-// render on top of it. Per-island alpha/tint dimming on 'discovered'
-// islands stays as a complementary indicator: ocean colour shows the
-// world's vision state at that point, island dimming shows that island's
-// known state.
+// render on top of it. Discovered islands stay full-opacity (no alpha/tint
+// dimming); the ocean colour tier is the sole indicator of vision state.
 
 import './ui.css';
 
@@ -153,12 +143,9 @@ async function main(): Promise<void> {
   // drone fleet. `discovered` flags flip when drones return; `drones` mutates
   // on dispatch and tick. Renderer reads from here.
   //
-  // Step 14 (§15.6 persistence): try loadWorld() first. If a saved snapshot
-  // exists and is the current schema version, restore both worldState and
-  // islandStates from it; otherwise fall back to the existing demo-seed
-  // path (makeInitialWorld + per-spec makeInitialIslandState + the
-  // forest-ne T5/level-50 demo bumps). Either way, both bindings end up
-  // populated before the renderer hooks up.
+  // §15.6 persistence: try loadWorld() first; on a valid current-version
+  // snapshot restore both worldState and islandStates, else fall back to the
+  // demo-seed path (makeInitialWorld + per-spec makeInitialIslandState).
   const restored = await loadWorld();
   const worldState: WorldState = restored ? restored.world : makeInitialWorld(performance.now());
   // Load UI prefs (camera + active-island + open-panel) in parallel with
@@ -920,11 +907,8 @@ async function main(): Promise<void> {
   // Economy state — multi-island
   // -----------------------------------------------------------------------
   //
-  // Step 7 promoted the single home state to a Map keyed by island id, so
-  // routes can dispatch between any two populated islands. Multi-island HUD
-  // is live — `hud.ts` paints every populated island. `forest-ne` is
-  // hardcoded populated for the step-7 demo (see `world.ts`); settlement
-  // vehicles per §12 shipped in step 12.
+  // Per-island state is a Map keyed by island id so routes can dispatch
+  // between any two populated islands; `hud.ts` paints every populated one.
   const islandStates: Map<string, IslandState> = restored
     ? restored.islandStates
     : new Map<string, IslandState>();
@@ -936,12 +920,9 @@ async function main(): Promise<void> {
   if (!restored) {
     const homeState = makeInitialIslandState(homeSpec, performance.now());
     islandStates.set('home', homeState);
-    // §3.7 starter contract: home starts with EMPTY inventory. The pre-
-    // §3.7-cleanup path overrode `foundation_kit = 3` / `biofuel = 100`
-    // here on every fresh game — that's now removed so the production
-    // start matches §3.7 ("no starter resources, no Foundation Kit").
-    // New colonies arriving via settlement vehicles likewise START EMPTY
-    // (no kit/biofuel seed).
+    // §3.7 starter contract: home starts with EMPTY inventory — no starter
+    // resources, no Foundation Kit. New colonies arriving via settlement
+    // vehicles likewise START EMPTY (no kit/biofuel seed).
     for (const spec of worldState.islands) {
       if (spec.id === 'home') continue;
       if (!spec.populated) continue;
@@ -1539,12 +1520,11 @@ async function main(): Promise<void> {
     dronesUi.toggle();
   });
 
-  // Routes (freight-grid) side dock + world-space route renderer.
-  // §perf-2026-05-28 Phase 2: route geometry now lives in WORLD space
-  // (not screen space) so the cache survives camera pan/zoom — the Pixi
-  // stage transform on `world` handles the camera mapping. Three new
-  // containers parented under `world` between the buildings + drones
-  // layers (see z-order in spec §08).
+  // Routes (freight-grid) side dock + world-space route renderer. Route
+  // geometry lives in WORLD space (not screen space) so the cache survives
+  // camera pan/zoom — the Pixi stage transform on `world` handles the camera
+  // mapping. Three containers parented under `world` between the buildings +
+  // drones layers (see z-order in spec §08).
   const routeRenderer = new RouteRenderer((islandId) => {
     const spec = islandSpecsById.get(islandId);
     if (!spec) return null;

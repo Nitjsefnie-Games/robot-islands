@@ -7,9 +7,9 @@
 //
 // The split lands per SPEC §15.1: many instances share one def, the def
 // table drives the Building Catalog UI, and the placement runtime stays
-// minimal. Rotation lives here too — wired into the type as
-// `rotation: 0|1|2|3` wired since step 2.5; every demo instance still
-// ships rotation: 0 until the placement UI rotation widget lands.
+// minimal. Rotation is wired into the type as `rotation: 0|1|2|3`; every
+// demo instance still ships rotation: 0 until the placement UI rotation
+// widget lands.
 
 import { Container, Graphics, Text } from 'pixi.js';
 
@@ -237,13 +237,12 @@ export function convertToServitor(
   buildingId: string,
   defs: Readonly<Record<BuildingDefId, BuildingDef>>,
 ): ConvertToServitorResult {
-  // 1. Find target.
   const building = state.buildings.find((b) => b.id === buildingId);
   if (!building) return { ok: false, reason: 'building-not-found' };
   if (building.eternalServitor === true) return { ok: false, reason: 'already-servitor' };
 
-  // 2. Compose Conversion Kit cost: maintenance recipe for the building's
-  //    tier + 1 Eldritch Processor + 1 Phase Converter.
+  // Conversion Kit cost: maintenance recipe for the building's tier +
+  // 1 Eldritch Processor + 1 Phase Converter.
   const def = defs[building.defId];
   const maintBill = MAINTENANCE_RECIPES[def.tier];
   const cost: Partial<Record<ResourceId, number>> = {};
@@ -253,14 +252,13 @@ export function convertToServitor(
   cost.eldritch_processor = (cost.eldritch_processor ?? 0) + 1;
   cost.phase_converter = (cost.phase_converter ?? 0) + 1;
 
-  // 3. Verify inventory.
   for (const [r, need] of Object.entries(cost)) {
     if ((state.inventory[r as ResourceId] ?? 0) < (need ?? 0)) {
       return { ok: false, reason: 'insufficient-materials' };
     }
   }
 
-  // 4. Deduct + flip flag.
+  // Deduct + flip flag.
   for (const [r, need] of Object.entries(cost)) {
     state.inventory[r as ResourceId] =
       (state.inventory[r as ResourceId] ?? 0) - (need ?? 0);
@@ -269,14 +267,6 @@ export function convertToServitor(
 
   return { ok: true, cost };
 }
-
-// §3.7 cleanup: the pre-built home layout (Solar/Workshop/Mines/Dronepad/
-// Smelter/Silo/Antenna/Shipyard/Kit Assembler) used to live here as a
-// `HOME_ISLAND_BUILDINGS` export, baked into the production new-game world
-// by `makeInitialWorld`. Per §3.7 the home now starts with EMPTY buildings;
-// the bootstrap shortcut has been removed. The constant is gone — every
-// production buildings array starts as `[]` and grows through the
-// placement UI.
 
 /**
  * Visual polish constants. The "weathered industrial schematic" direction

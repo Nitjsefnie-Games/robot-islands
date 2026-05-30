@@ -1,20 +1,13 @@
 // §3.6 Island Joining — pure logic for merging two overlapping islands.
-//
 // No PixiJS, no DOM. The economy ticker in main.ts calls `findNextMerge` once
-// per tick after `advanceIsland` runs; if a pair is reported, `performMerge`
-// mutates the world (absorber gains an extra constituent ellipse + the
-// absorbed island's buildings + inventory + skill points), the absorbed
-// island is removed from the world, and routes/drones/vehicles redirect.
+// per tick after `advanceIsland`; a reported pair is passed to `performMerge`.
 //
 // At most ONE merge runs per tick (§3.6 multi-overlap ordering). Remaining
 // overlap pairs re-evaluate on the next tick, by which time the merged
 // identity has new ellipses and may overlap further targets.
 //
-// `chooseMergeAbsorber` is the pure tiebreak ladder (tile count → level →
-// id). `performMerge` is mutating; the caller owns calling it at most once
-// per tick. `findNextMerge` walks all pairs and returns the "largest combined
-// tile count, lower-id-first on tile-count tie" pair, or null when no pairs
-// overlap.
+// `chooseMergeAbsorber` is pure (tiebreak ladder); `performMerge` is mutating,
+// and the caller owns the at-most-once-per-tick contract.
 
 import type { IslandState } from './economy.js';
 import { nodeById } from './skilltree.js';
@@ -127,7 +120,7 @@ export function performMerge(
   const offsetX = absorbed.cx - absorber.cx;
   const offsetY = absorbed.cy - absorber.cy;
 
-  // 1. Append absorbed's PRIMARY ellipse as a new extra on absorber.
+  // 1. Append absorbed's primary ellipse as a new extra on absorber.
   if (!absorber.extraEllipses) {
     absorber.extraEllipses = [];
   }
@@ -164,9 +157,8 @@ export function performMerge(
   }
 
   // 3. Transfer inventory; absorber's cap clamps the result, dropping
-  //    overflow. If either state is missing (discovered-only absorbed,
-  //    say — though §3.6 implies both islands must be populated for a
-  //    merge to make sense), skip.
+  //    overflow. Skip if either state is missing (§3.6 implies both islands
+  //    are populated for a merge to make sense).
   if (absorberState && absorbedState) {
     const caps = absorberState.storageCaps;
     for (const r of Object.keys(absorbedState.inventory) as ResourceId[]) {
@@ -184,21 +176,18 @@ export function performMerge(
     absorberState.unspentSkillPoints += islandRefundedPoints(absorbedState);
   }
 
-  // 5. Routes: deduplicate A↔B routes (deleted), redirect third-party
-  //    routes to/from B → A.
+  // 5. Routes: A↔B routes become intra-island (deleted); third-party
+  //    routes to/from B redirect to A.
   const newRoutes = [];
   for (const r of world.routes) {
-    // Intra-island after merge → delete.
     if (
       (r.from === absorber.id && r.to === absorbed.id) ||
       (r.from === absorbed.id && r.to === absorber.id)
     ) {
       continue;
     }
-    // Endpoint redirect. Note: a route from absorbed to a third party gets
-    // `from` rewritten; a route into absorbed from a third party gets `to`
-    // rewritten. The Route shape declares `from`/`to` readonly so we
-    // construct a fresh route record per affected entry.
+    // Endpoint redirect. `from`/`to` are readonly on Route, so build a fresh
+    // record per affected entry.
     if (r.from === absorbed.id) {
       newRoutes.push({ ...r, from: absorber.id });
     } else if (r.to === absorbed.id) {
@@ -257,7 +246,6 @@ export function findNextMerge(
   states: Map<string, IslandState>,
 ): { absorber: IslandSpec; absorbed: IslandSpec } | null {
   const populated = world.islands.filter((s) => s.populated);
-  // Gather overlapping pairs with their combined tile count.
   interface Candidate {
     readonly a: IslandSpec;
     readonly b: IslandSpec;

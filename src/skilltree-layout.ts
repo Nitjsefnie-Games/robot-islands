@@ -33,7 +33,7 @@ const SOCKET_OFFSET = 140; // graft socket distance past the sub-anchor
 const K_REPULSION = 6500;
 const K_SPRING = 0.12;
 const ITERATIONS = 220;
-const ANCHOR_K = 0.085;    // stronger pull than v1 so sub-paths stay tight in their wedge
+const ANCHOR_K = 0.085;    // strong pull so sub-paths stay tight in their wedge
 
 function mulberry32(seed: number): () => number {
   let t = seed >>> 0;
@@ -78,7 +78,6 @@ export function computeSkillGraphLayout(graph: Graph): SkillGraphLayout {
   // own sub-anchor; only intra-sub-path edges feed attraction.
   const nodes = new Map<NodeId, { x: number; y: number }>();
 
-  // Group nodes by sub-path once.
   const nodesBySubPath = new Map<SubPathId, typeof graph.nodes[number][]>();
   for (const n of graph.nodes) {
     const arr = nodesBySubPath.get(n.subPath) ?? [];
@@ -148,7 +147,7 @@ export function computeSkillGraphLayout(graph: Graph): SkillGraphLayout {
         disp.get(e.to)!.y += fy;
       }
 
-      // Sub-anchor pull. Stronger than v1 so the cluster stays inside its wedge.
+      // Sub-anchor pull keeps the cluster inside its wedge.
       for (const [id, p] of pos) {
         disp.get(id)!.x += (anchor.x - p.x) * ANCHOR_K;
         disp.get(id)!.y += (anchor.y - p.y) * ANCHOR_K;

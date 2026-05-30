@@ -1,38 +1,16 @@
 // Settings panel — DOM overlay for keybinding rebind + save management.
-// Toggled via KeyS (default binding) and dismissed via Escape via the
-// shared `dismiss-modal` action wired in main.ts.
+// Toggled via KeyS (default binding) and dismissed via the shared
+// `dismiss-modal` action wired in main.ts.
 //
-// Visual idiom matches skilltree-ui / buildings-ui / inventory-ui: dark
-// monospace panel, ACCENT cyan header `SETTINGS / RUN-01`, scrim behind.
+// Persistence deferral: rebound keys are NOT saved across reloads.
+// `installDefaultBindings` re-runs on every boot, so a custom layout resets.
+// Persisting the rebind map (snapshot `reg.bindings` alongside the world) is
+// intentionally STILL-DEFERRED to keep this step's surface small.
 //
-// Two sections:
-//
-//   1. KEYBINDINGS — one row per *action* registered in `installDefaultBindings`.
-//      Each row shows: action name (left), the current bound code(s) joined
-//      by ` · ` (center), and a `Rebind` button (right). Clicking Rebind
-//      enters capture mode for that row — the next keydown anywhere captures
-//      `e.code` and rebinds. Escape during capture cancels (and is suppressed
-//      from the global dismiss-modal handler so it doesn't close the panel).
-//
-//      Conflict resolution: if the captured code is currently bound to a
-//      DIFFERENT action, prompt via `window.confirm()` "Override X?". If yes,
-//      `unbind` the prior mapping, then `bind` the new one.
-//
-//   2. SAVE — last-saved age (driven by `getLastSavedAt`), Reset Bindings
-//      button, Clear Save (with confirm + reload), Export Save (clipboard
-//      copy of the full snapshot JSON), Import Save (file input → validate
-//      → reload).
-//
-// Persistence deferral: rebound keys are NOT saved across reloads in this
-// step. `installDefaultBindings` re-runs on every boot, so a custom layout
-// resets. Persisting the rebind map is straightforward (snapshot the
-// `reg.bindings` Map alongside the world snapshot) but is intentionally
-// STILL-DEFERRED to keep this step's surface small.
-//
-// `e.code` exception: per AGENTS.md "No hardcoded `e.code === 'KeyW'`
-// checks anywhere outside `input.ts`" — the capture handler READS `e.code`
-// to record what the user pressed, it does not DISPATCH on it. That's the
-// allowed exception called out in the task brief.
+// `e.code` exception: per AGENTS.md "No hardcoded `e.code === 'KeyW'` checks
+// anywhere outside `input.ts`" — the capture handler READS `e.code` to record
+// what the user pressed, it does not DISPATCH on it. That's the allowed
+// exception called out in the task brief.
 
 import {
   bind,
@@ -57,9 +35,7 @@ import type { WorldState } from './world.js';
 import { skipAll, restart } from './tutorial.js';
 import { refreshTutorialHint } from './tutorial-ui.js';
 
-// ---------------------------------------------------------------------------
 // Pure helpers — exported for tests
-// ---------------------------------------------------------------------------
 
 /** Result of `applyCapturedKey` describing what the rebind actually did. */
 export interface ApplyCapturedKeyResult {
@@ -143,10 +119,6 @@ export function actionRows(
   out.sort((a, b) => a.action.localeCompare(b.action));
   return out;
 }
-
-// ---------------------------------------------------------------------------
-// Mount
-// ---------------------------------------------------------------------------
 
 export interface SettingsUi {
   readonly el: HTMLDivElement;
@@ -606,8 +578,7 @@ export function mountSettingsUi(
       const result = applyCapturedKey(deps.reg, e.code, action, window.confirm);
       cancelCapture();
       rebuildKbTable();
-      // Could surface `result.displacedAction` in the UI; window.confirm
-      // already informed the user. Logging keeps the dev-console path useful.
+      // window.confirm already informed the user; log keeps the dev-console useful.
       if (!result.applied) {
         console.info(
           `[settings-ui] rebind cancelled (would have displaced ${result.displacedAction ?? 'nothing'})`,

@@ -14,13 +14,7 @@
 //   §4.4 adjacency — metadata flagged on each PlacedBuilding; the heat-source
 //        side (§5.2) and reactor toxicity are wired. §4.5 Wastewater
 //        Treatment and Exhaust Scrubber soft-gates are live. The Cooling
-//        Tower → Crystal Lab unlock remains STILL-DEFERRED.
-//
-// Other deferrals documented at the call sites:
-//   - Terrain-tile requirements per §4.3 / §8.1 are implemented.
-//     `validatePlacement` checks `def.requiredTile` against `spec.terrainAt`.
-//   - Placement-time material cost is wired alongside the §15 cost-curve.
-//   - Demolition is wired (refund per §4.6).
+//        Tower → Crystal Lab unlock remains deferred.
 //
 // No PixiJS, no DOM, no IslandState construction-time helpers — this module
 // is pure: takes a spec + state + def id + anchor + rotation, returns a
@@ -728,7 +722,6 @@ export function applyUpgrade(
   if (Object.keys(missing).length > 0) {
     return { ok: false, reason: 'insufficient-resources', missing };
   }
-  // Deduct cost.
   for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
     if (n <= 0) continue;
     state.inventory[r] = (state.inventory[r] ?? 0) - n;

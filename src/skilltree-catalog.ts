@@ -3,9 +3,7 @@ import type { KeystonePrereq, BridgeEdge, GraftSocket } from './skilltree-graph.
 import { ALL_FILLER_NODES, ALL_ARCHETYPE_PREFIXES } from './skilltree-archetypes.js';
 import { deriveMagnitudes, type RawSkillNode } from './skilltree-derive-magnitudes.js';
 
-// ---------------------------------------------------------------------------
 // Extraction branch
-// ---------------------------------------------------------------------------
 
 export const MINING_NOTABLES: RawSkillNode[] = [
   {
@@ -155,9 +153,7 @@ export const ROBOTICS_NOTABLES: RawSkillNode[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Refinement branch
-// ---------------------------------------------------------------------------
 
 export const SMELTING_NOTABLES: RawSkillNode[] = [
   {
@@ -320,9 +316,7 @@ export const POWER_SYSTEMS_NOTABLES: RawSkillNode[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Logistics branch
-// ---------------------------------------------------------------------------
 
 export const STORAGE_NOTABLES: RawSkillNode[] = [
   {
@@ -472,9 +466,7 @@ export const PATRONAGE_NOTABLES: RawSkillNode[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Ocean branch
-// ---------------------------------------------------------------------------
 
 export const AQUACULTURE_NOTABLES: RawSkillNode[] = [
   {
@@ -624,9 +616,7 @@ export const OCEANOGRAPHY_NOTABLES: RawSkillNode[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Orbital branch
-// ---------------------------------------------------------------------------
 
 export const LAUNCH_NOTABLES: RawSkillNode[] = [
   {
@@ -776,9 +766,7 @@ export const RESILIENCE_NOTABLES: RawSkillNode[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Keystones — AND-prereq nodes (~30 total)
-// ---------------------------------------------------------------------------
 
 /** §9.4 role-absorption keystones */
 export const ROLE_ABSORPTION_KEYSTONES: RawSkillNode[] = [
@@ -988,9 +976,7 @@ export const KEYSTONE_PREREQS: KeystonePrereq[] = [
   ksp('network.keystone.meshMastery', ['network.notable.relayAmplifier', 'network.notable.scannerUplink'], 8),
 ];
 
-// ---------------------------------------------------------------------------
 // Threshold-bridges — OR-style alt-entry edges between sub-paths
-// ---------------------------------------------------------------------------
 
 function be(
   id: string,
@@ -1116,9 +1102,7 @@ export const BRIDGE_CATALOG: BridgeEdge[] = [
   ]),
 ];
 
-// ---------------------------------------------------------------------------
 // Graft sockets — reserved attachment positions on the outer rim of each branch
-// ---------------------------------------------------------------------------
 
 export const GRAFT_SOCKET_CATALOG: GraftSocket[] = [
   // Extraction (~8)
@@ -1176,9 +1160,7 @@ export const GRAFT_SOCKET_CATALOG: GraftSocket[] = [
   { id: 'gs.ocean.oceanography-2', branchId: 'ocean', subPathId: 'oceanography', attachmentDepth: 9 },
 ];
 
-// ---------------------------------------------------------------------------
 // Combined catalog
-// ---------------------------------------------------------------------------
 
 export const NOTABLES: RawSkillNode[] = [
   ...MINING_NOTABLES,

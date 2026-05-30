@@ -72,9 +72,8 @@ describe('zoomAt pivots around the cursor', () => {
   });
 
   it('preserves pivot invariant when the camera is already panned', () => {
-    // The advisor flagged this as a frequently-missed test case: zoom-pivot
-    // works at pan=0 but breaks if you forget to refresh the world point
-    // after the pan.
+    // Zoom-pivot works at pan=0 but breaks if the world point isn't
+    // refreshed after the pan.
     const cam = makeCamera(-217, 333, 1.3);
     const pivot = { x: 512, y: 384 };
     const wBefore = screenToWorld(pivot, cam);

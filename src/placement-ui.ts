@@ -72,10 +72,6 @@ export type PickAnchor = (candidates: AnchorCandidate[]) => Promise<string | nul
 const OK_COLOR = VISION_BLUE;
 const WARN_COLOR = 0xf5a742;
 
-// ---------------------------------------------------------------------------
-// Public surface
-// ---------------------------------------------------------------------------
-
 export interface PlacementUiHandle {
   /** World-space layer for the footprint outline. Add to the world container
    *  at a Z above islands. */
@@ -166,9 +162,6 @@ export interface PlacementUiDeps {
   pickTerrainTarget?: PickTerrainTarget;
 }
 
-// ---------------------------------------------------------------------------
-// Reason → human-readable label
-// ---------------------------------------------------------------------------
 const REASON_LABEL: Readonly<Record<PlacementReason, string>> = {
   'out-of-bounds': 'OUT OF BOUNDS',
   overlap: 'OVERLAP',
@@ -211,32 +204,14 @@ function formatMissing(
   return `NEED ${parts.join(', ')}`;
 }
 
-// ---------------------------------------------------------------------------
-// Stable id generator — anchored on placement coordinates
-// ---------------------------------------------------------------------------
-//
-// Earlier this module used a session-local counter (`placedCounter`) that
-// reset to 0 on every reload. Persistence had no `_seedPlacedIdCounter`
-// equivalent of routes.ts's id-counter seeding, so saved buildings minted
-// with ids like `placed-1`, `placed-2`, … would collide with NEW placements
-// after reload (which started counting at 1 again).
-//
-// The collision was user-visible: clicking a building would open the right
-// inspector (the click handler matched the hit by anchor coords) but the
-// selection outline drew on a DIFFERENT building, because
-// `selectedSpec.buildings.find(b => b.id === selectedId)` returned the
-// FIRST array match for the colliding id — a different building.
-//
-// Fix: derive the id from anchor coordinates. `validatePlacement` rejects
-// overlap, so two buildings can never share an (x, y) anchor. The id is
+// Stable id derived from anchor coordinates (not a session counter, which
+// reset on reload and collided with saved ids). `validatePlacement` rejects
+// overlap, so two buildings can never share an (x, y) anchor — the id is
 // therefore unique by construction across reloads, with no counter to seed.
 function placedIdFor(x: number, y: number): string {
   return `placed-${x},${y}`;
 }
 
-// ---------------------------------------------------------------------------
-// mount
-// ---------------------------------------------------------------------------
 export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
   let active = false;
   let activeDefId: BuildingDefId | null = null;
@@ -265,18 +240,14 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
    *  the current counter and bails if they differ. */
   let beginEpoch = 0;
 
-  // -------------------------------------------------------------------------
-  // World-space outline layer (scales with zoom)
-  // -------------------------------------------------------------------------
+  // World-space outline layer (scales with zoom).
   const previewLayer = new Container();
   previewLayer.label = 'placement-preview';
   previewLayer.visible = false;
   const outlineGfx = new Graphics();
   previewLayer.addChild(outlineGfx);
 
-  // -------------------------------------------------------------------------
-  // Screen-space status label (fixed pixel size)
-  // -------------------------------------------------------------------------
+  // Screen-space status label (fixed pixel size).
   const statusLayer = new Container();
   statusLayer.label = 'placement-status';
   statusLayer.visible = false;
@@ -293,9 +264,6 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
   });
   statusLayer.addChild(labelText);
 
-  // -------------------------------------------------------------------------
-  // Paint helpers
-  // -------------------------------------------------------------------------
   function paintOutlineAndLabel(): void {
     if (!active || activeDefId === null || !cursorSeen) {
       previewLayer.visible = false;
@@ -516,9 +484,6 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     statusLayer.visible = true;
   }
 
-  // -------------------------------------------------------------------------
-  // API
-  // -------------------------------------------------------------------------
   function begin(defId: BuildingDefId): void {
     const def = BUILDING_DEFS[defId];
     const isGeneric = def.storage?.category === 'generic';

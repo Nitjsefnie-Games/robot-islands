@@ -5,9 +5,6 @@
 // corners of that square lie strictly inside the ellipse
 //   (x²/major²) + (y²/minor²) < 1
 // This produces a slightly puffy boundary at the tile-grid scale.
-//
-// For step 1 we render a circular Plains island (major = minor = 14) centered at
-// world origin, with a hardcoded deterministic terrain assignment.
 
 import { Container, Graphics } from 'pixi.js';
 import type { Biome } from './world.js';
@@ -18,44 +15,36 @@ export type TerrainKind =
   | 'ore'
   | 'coal'
   | 'water'
-  // Step 8 biome palette additions.
+  // Biome palette additions.
   | 'tree'
   | 'sand'
   | 'ice'
   | 'magma_vent'
-  // Step 4A — new terrain kinds for extractors
+  // Extractor terrain kinds.
   | 'oil_well'
   | 'gas_seep'
   | 'helium_vent'
   // §6.1 T0 mineral raw: limestone (used by Limekiln in §7.5 chemistry chain).
   | 'limestone'
-  // §6.1 T0 mineral raw: clay (Task 1.3)
+  // §6.1 T0 mineral raws:
   | 'clay_pit'
-  // §6.1 T0 mineral raw: sulfur (Task 1.4)
   | 'sulfur_vein'
-  // §6.1 T0 mineral raw: phosphate (Task 1.5)
   | 'phosphate_deposit'
-  // §6.1 T0 mineral raw: graphite (Task 1.6)
   | 'graphite_vein'
-  // §6.1 T0 mineral raws: copper/tin/lead (Task 1.7)
   | 'copper_vein'
   | 'tin_vein'
   | 'lead_vein'
-  // §6.1 T0 mineral raw: bauxite (Task 1.8)
   | 'bauxite_vein'
-  // Phase 3 — T2-T3 steel alloy chain terrain kinds
+  // T2-T3 steel alloy chain terrain kinds.
   | 'manganese_vein'
   | 'zinc_vein'
   | 'chromium_vein'
   | 'nickel_vein'
   | 'tungsten_vein'
-  // Phase 10 — T3 mineral terrain kinds (Task 10.1)
+  // §6.4 T3 mineral terrain kinds.
   | 'mercury_pit'
-  // Phase 10 — T3 mineral terrain kinds (Task 10.2)
   | 'diamond_vein'
-  // Phase 10b — T3 mineral terrain kinds (Task 10.4.5)
   | 'lithium_vein'
-  // Phase 16.1 — §6.4 T3 mineral terrain: uranium (Task 16.1)
   | 'uranium_vein';
 
 export interface Tile {
@@ -74,12 +63,10 @@ const TERRAIN_COLOR: Readonly<Record<TerrainKind, number>> = {
   ore: 0x5a4a3a,
   coal: 0x1a1a1a,
   water: 0x3b6fa3,
-  // Step 8 biome palette colors.
   tree: 0x2d5a2d,        // dark green — distinguishable from grass
   sand: 0xc4a062,        // tan
   ice: 0xc8e6f0,         // pale blue
   magma_vent: 0xd04020,  // orange-red
-  // Step 4A — new terrain colors
   oil_well: 0x1a0f05,     // near-black crude
   gas_seep: 0x8a9a4a,     // sulfur-green
   helium_vent: 0xc0c8e0,  // pale helium-grey
@@ -92,19 +79,14 @@ const TERRAIN_COLOR: Readonly<Record<TerrainKind, number>> = {
   tin_vein: 0xc0c4cb,          // pale tin-grey
   lead_vein: 0x4a4a52,         // dark lead-grey
   bauxite_vein: 0xd07845,      // bauxite ochre
-  // Phase 3 — T2-T3 steel alloy chain terrain colors
   manganese_vein: 0x7e4d6f,    // muted manganese purple
   zinc_vein: 0x8c93a0,          // pale zinc blue-grey
   chromium_vein: 0x5c6068,      // dark chromium grey
   nickel_vein: 0xa0a098,        // pale nickel grey-green
   tungsten_vein: 0x4a5060,      // dark tungsten blue-grey
-  // Phase 10 — T3 mineral terrain colors (Task 10.1)
   mercury_pit: 0xc0c0c8,        // mercury-silver
-  // Phase 10 — T3 mineral terrain colors (Task 10.2)
   diamond_vein: 0xd0e8f5,       // pale ice-blue
-  // Phase 10b — T3 mineral terrain colors (Task 10.4.5)
   lithium_vein: 0xe04060,       // lithium magenta
-  // Phase 16.1 — §6.4 T3 mineral terrain: uranium (Task 16.1)
   uranium_vein: 0x80c060,       // yellow-green glow
 };
 
@@ -270,13 +252,6 @@ export function computeIslandTiles(
 }
 
 /**
- * Hardcoded deterministic terrain assignment for the step-1 home island.
- * Defaults to grass, with a small set of named tile coordinates promoted to
- * stone / ore / coal / water clusters. The exact positions don't have to mean
- * anything — they just need to look varied and live on tiles that exist within
- * a radius-14 disk inscribed grid.
- */
-/**
  * Mutate an island spec's biome and terrain function. The caller supplies the
  * new `terrainAt` closure so this module avoids a runtime import cycle with
  * `biomes.ts` (which already depends on `island.ts`).
@@ -301,12 +276,8 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
     [-7, 2], [-6, 2], [-7, 3], [-6, 3], [-5, 2], [-5, 3],
   ];
   // Coal vein. 2×2 cluster so a 2×2 Mine footprint anchored at (8, 5)
-  // satisfies the §4.3 requirement that EVERY footprint tile be ore/coal.
-  // The cluster was moved/squared up from the original 3-tile L-shape at
-  // (5,6)/(6,6)/(5,7) when the §4.3 terrain-tile requirement landed — the
-  // old footprint would have included a grass corner and failed the gate.
-  // Old location also overlapped the home Shipyard at (4,6)..(6,8); the
-  // new (8,5)..(9,6) site sits clear of every existing home building.
+  // satisfies the §4.3 requirement that EVERY footprint tile be ore/coal,
+  // sited clear of every existing home building.
   const coalTiles: ReadonlyArray<readonly [number, number]> = [
     [8, 5], [9, 5], [8, 6], [9, 6],
   ];
@@ -322,13 +293,8 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   ];
   // §7.4 / §11.5 fuel chain bootstrap: 2×2 oil_well cluster so a Pump Jack
   // (2×2, requiredTile: ['oil_well']) can place — §4.3 demands EVERY
-  // footprint tile satisfy requiredTile (placement.ts:189-191), not just
-  // one. A single seeded tile fails the gate with three grass corners.
-  // South sector, clear of every home building: Mine cluster ends at
-  // (-5, 3); Crate at (3, 4); Shipyard at (4..6, 6..8); coal cluster
-  // (8..9, 5..6); water cluster (-1..0, -5..-4); tree cluster (6..7, -3..-4);
-  // stone cluster (-11..-10, 4..5). (-4..-3, 8..9) sits south of every
-  // cluster and inside the radius-14 inscribed disk.
+  // footprint tile satisfy requiredTile, not just one. South sector,
+  // clear of every home building and inside the radius-14 inscribed disk.
   const oilWellTiles: ReadonlyArray<readonly [number, number]> = [
     [-4, 8], [-3, 8], [-4, 9], [-3, 9],
   ];
@@ -382,10 +348,8 @@ export function defaultTerrainAt(x: number, y: number): TerrainKind {
   return 'grass';
 }
 
-// ---------------------------------------------------------------------------
 // Pure color helpers — used by tile-jitter + glyph-tinting + building palette
 // desaturation. No PixiJS or DOM. Hex inputs/outputs in PIXI's 0xRRGGBB form.
-// ---------------------------------------------------------------------------
 
 /** Extract (r, g, b) channels from a 0xRRGGBB integer. */
 function rgbOf(hex: number): { r: number; g: number; b: number } {
@@ -406,19 +370,16 @@ function packRgb(r: number, g: number, b: number): number {
 
 /**
  * Deterministic FNV-1a-style hash of (x, y) → uniform [0, 1). Pure function.
- * Same input always returns same output across runs.
  *
  * Used for per-tile brightness jitter so terrain reads as organic rather
- * than as a perfectly uniform Excel-grid. Cheaper than the per-island
- * `tileHash01` in biomes.ts because there's no islandId — every island
- * uses the SAME jitter pattern, which gives a consistent texture across
- * the world without leaking gameplay info through the visuals.
+ * than as a perfectly uniform Excel-grid. No islandId (unlike biomes.ts) —
+ * every island uses the SAME jitter pattern, giving a consistent texture
+ * across the world without leaking gameplay info through the visuals.
  */
 export function tileHash01(x: number, y: number): number {
   let h = 2166136261 >>> 0;
-  // Mix x and y bytes into the hash. Use bit-shifted bytes so negative
-  // tiles (the home island spans negative coords) still produce
-  // well-distributed outputs.
+  // Bit-shifted bytes so negative tiles (the home island spans negative
+  // coords) still produce well-distributed outputs.
   const xx = x | 0;
   const yy = y | 0;
   const bytes = [xx & 0xff, (xx >>> 8) & 0xff, (xx >>> 16) & 0xff, (xx >>> 24) & 0xff,
@@ -431,36 +392,33 @@ export function tileHash01(x: number, y: number): number {
 }
 
 /**
- * Compute a tile's brightness-jittered fill colour. Pure function: same
- * (x, y, baseColor) always returns the same tinted hex.
+ * Compute a tile's brightness-jittered fill colour. Pure function.
  *
  * The jitter is ±5% lightness, applied by linearly blending the base
- * colour toward white (for positive jitter) or black (for negative).
- * Stays in RGB space — no HSL conversion needed for a small lightness
- * shift, and the result is visually indistinguishable for these small
- * deltas.
+ * colour toward white (positive jitter) or black (negative). Stays in RGB
+ * space — no HSL conversion needed for so small a lightness shift, and the
+ * result is visually indistinguishable for these small deltas.
  *
  * Used in `renderIslandTiles` to break up the per-terrain flat fills
  * so the tile grid doesn't read as Excel cells.
  */
 export function tileBrightnessJitter(x: number, y: number, baseColor: number): number {
-  const h = tileHash01(x, y); // [0, 1)
+  const h = tileHash01(x, y);
   // Map [0, 1) → ±0.05. Negative half darkens, positive half lightens.
   const jitter = -0.05 + h * 0.10;
   const { r, g, b } = rgbOf(baseColor);
   if (jitter >= 0) {
     // Blend toward white by jitter weight.
-    const a = jitter; // [0, 0.05]
+    const a = jitter;
     return packRgb(r + (255 - r) * a, g + (255 - g) * a, b + (255 - b) * a);
   }
   // Blend toward black.
-  const a = -jitter; // [0, 0.05]
+  const a = -jitter;
   return packRgb(r * (1 - a), g * (1 - a), b * (1 - a));
 }
 
 /**
- * Desaturate a colour by `amount` (0..1). Pure function: same input always
- * returns the same output.
+ * Desaturate a colour by `amount` (0..1). Pure function.
  *
  * Reduces chroma without changing perceived lightness much — uses the
  * Rec. 601 luma coefficients to compute a grayscale target and
@@ -510,9 +468,6 @@ export function lighten(hex: number, amount: number): number {
  * Visual polish:
  *   - Per-tile brightness jitter via `tileBrightnessJitter` breaks up the
  *     flat per-terrain fills (±5% deterministic noise).
- *   - The 1px black grid stroke that previously sat on top of every tile
- *     is dropped — with AA on and the jitter texture, the grid reads as
- *     debug-overlay noise rather than as terrain detail.
  *   - An island silhouette outline is drawn along the boundary tiles
  *     (each tile gets a 2px dark stroke on every side whose neighbour
  *     tile is NOT in the island set), so the island reads as a body

@@ -1,17 +1,14 @@
 // Per-island skill tree per SPEC §9.3. Pure logic — no PixiJS, no DOM.
 //
-// Directed graph model: five branches × 4 sub-paths each. Each sub-path is a
-// chain of filler nodes (depth-graded, templated) plus hand-curated notables
-// and keystones. Total ~600-800 nodes across the graph.
+// Directed graph: five branches × sub-paths each. A sub-path is a chain of
+// depth-graded filler nodes plus hand-curated notables and keystones. Skill
+// points (granted on level-up, §9.1) unlock nodes whose effects compose
+// multiplicatively into the multipliers `computeRates` (economy.ts) consumes.
 //
-// Players spend skill points (granted on level-up, §9.1) to unlock nodes,
-// which compose multiplicatively into rate, cap, and power multipliers
-// consumed by `computeRates` in `economy.ts`.
-//
-// Purchasing uses `costToUnlock` (Dijkstra over the graph from owned nodes)
-// and `buyNode` (charges the cheapest-path SP cost, auto-owns intermediates).
-// AND-prereq keystones gate via `canBuyKeystone` / `buyKeystone`. Threshold-
-// bridges activate when branch-spent thresholds are met.
+// Purchasing: `costToUnlock` (Dijkstra from owned nodes) + `buyNode`
+// (charges cheapest-path SP, auto-owns intermediates). AND-prereq keystones
+// gate via `canBuyKeystone` / `buyKeystone`; threshold-bridges activate when
+// branch-spent thresholds are met.
 
 import type { BuildingDefId } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';
@@ -89,8 +86,6 @@ export type SkillEffect =
   | { readonly kind: 'biomeBypass'; readonly buildings: ReadonlyArray<BuildingDefId> }
   | { readonly kind: 'structural'; readonly description: string; readonly data: StructuralEffectData }
   | { readonly kind: 'launchSuccessAdditive' }
-  // Wired in the skill-tree-finishing pass — replaces the placeholder /
-  // structural slots once the underlying mechanics shipped:
   //   - routeCapacityMul     → routes.ts dispatched-batch capacity per island
   //   - commRangeMul         → orbital.ts ground-station + sat comm range
   //   - maintenanceThresholdMul → maintenance.ts threshold extension factor
@@ -101,8 +96,6 @@ export type SkillEffect =
   | { readonly kind: 'maintenanceThresholdMul' }
   | { readonly kind: 'scannerCoverageMul' }
   | { readonly kind: 'debrisProtectionMul' }
-  // Phase-A shallow wires — added when the prior "skill tree finished"
-  // claim missed every spec theme past the headline % bonus per sub-path:
   //   - droneFuelEfficiencyMul → drones.ts dispatch fuel debit
   //   - airshipRangeMul        → routes.ts airship route range/capacity
   //   - padExplosionReduceMul  → orbital.ts launch failure pad-explosion split
@@ -119,15 +112,13 @@ export type SkillEffect =
   | { readonly kind: 'satFuelReserveMul' }
   | { readonly kind: 'repairDroneReliabilityMul' }
   | { readonly kind: 'storageCategoryCapMul'; readonly category: StorageCategory }
-  // Phase-B deep mechanics (new game systems built so Robotics's spec
-  // themes can land for real):
   //   - constructionTimeMul   → construction.ts (divides placement-time)
   //   - parallelBuildCapAdd   → adds to concurrent under-construction slots
   | { readonly kind: 'constructionTimeMul' }
   | { readonly kind: 'parallelBuildCapAdd' }
-  // Network sub-path primary mechanic — divides the per-tile biofuel cost
-  // of teleporter route dispatch (a new cost added so "Network reach" has
-  // something to scale; previously teleporters were free + instant).
+  // Network primary mechanic — divides per-tile biofuel cost of teleporter
+  // route dispatch (cost added so "Network reach" scales something; teleporters
+  // were previously free + instant).
   | { readonly kind: 'teleporterEfficiencyMul' }
   // Extraction-family secondary themes — per-building yield bonuses.
   //   - mineYieldBonusMul       → per-Mine recipe rate bonus (vein depth)
@@ -154,7 +145,6 @@ export type SkillEffect =
   // scan radius of dispatched drones for the origin island so the same fuel
   // covers more of the unknown map per round-trip.
   | { readonly kind: 'droneScanRadiusMul' }
-  // Phase-C — graph-redesign additions (2026-05-23):
   //   conditionalBonus  → multiplier active only when condition is true
   //   crossIslandShared → resource pool / stat shared across networked T3+ islands
   //   tierBypass        → operate a specific building one tier below requirement
@@ -395,9 +385,7 @@ export function cumulativeSkillPointsForLevel(level: number): number {
   return total;
 }
 
-// ---------------------------------------------------------------------------
 // Validation + spending (backward-compat stubs)
-// ---------------------------------------------------------------------------
 
 export type CanSpendReason =
   | 'unknown-node'
@@ -448,9 +436,7 @@ function graphById(graph: Graph): Map<string, SkillNode> {
   return byId;
 }
 
-// ---------------------------------------------------------------------------
 // Standard edges — filler chains + keystone AND-prereqs
-// ---------------------------------------------------------------------------
 
 function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
   const edges: Edge[] = [];
@@ -786,9 +772,7 @@ export function spendPoint(
   state.auraAmpVersion++;
 }
 
-// ---------------------------------------------------------------------------
 // Effect aggregation
-// ---------------------------------------------------------------------------
 
 export interface SkillMultipliers {
   /** Per-category recipe rate multiplier. All categories present, default 1. */

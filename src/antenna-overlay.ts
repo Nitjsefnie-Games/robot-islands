@@ -1,12 +1,11 @@
-// §11 Antenna signal-range overlay — faint cyan ring per Antenna in the
-// world, sized by `ANTENNA_SIGNAL_RADII[defId]`. Drones outside this radius
-// silently drop scanned cells (per drones.ts:617); without an on-map
-// indication players couldn't tell which corners of the map had coverage.
+// §11 Antenna signal-range overlay — faint cyan ring per Antenna, sized by
+// `ANTENNA_SIGNAL_RADII[defId]`. Drones outside this radius silently drop
+// scanned cells (per drones.ts:617); without an on-map indication players
+// couldn't tell which corners of the map had coverage.
 //
-// Pure PixiJS Graphics. Cheap to rebuild — antennas are a small set even
-// in a populated late-game world. Rebuilds on `refresh()`; main.ts calls
-// that whenever the world layers rebuild (post-discovery, post-placement)
-// so the overlay tracks live Antenna placements.
+// Pure PixiJS Graphics, cheap to rebuild. Rebuilds on `refresh()`; main.ts
+// calls that whenever the world layers rebuild (post-discovery,
+// post-placement) so the overlay tracks live Antenna placements.
 
 import { Container, Graphics } from 'pixi.js';
 

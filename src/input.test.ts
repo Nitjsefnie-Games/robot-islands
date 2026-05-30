@@ -50,8 +50,7 @@ describe('InputRegistry', () => {
     expect(aCalls).toBe(1);
     expect(bCalls).toBe(0);
 
-    // Reroute KeyZ → bbb. The advisor flagged this scenario specifically as
-    // the spec-required smoke test for the rebinding registry.
+    // Reroute KeyZ → bbb.
     bind(reg, 'KeyZ', 'bbb');
     dispatchKey(reg, 'KeyZ');
     expect(aCalls).toBe(1);
@@ -84,9 +83,8 @@ describe('InputRegistry', () => {
   });
 
   it('dispatchAction triggers the same path as a key', () => {
-    // UI buttons reuse the actions table directly. This test enforces that
-    // a button click and a key press hit the same handler reference, not
-    // just an equivalent one.
+    // UI buttons reuse the actions table directly: a button click and a key
+    // press must hit the same handler reference, not just an equivalent one.
     const reg = makeRegistry();
     let calls = 0;
     const handler = (): void => {

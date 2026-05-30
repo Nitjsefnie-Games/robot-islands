@@ -1,15 +1,9 @@
 // Vision-source primitive — the shared leaf module for vision queries.
 //
-// Pure layer: no PixiJS, no DOM, no module-level side effects. Imports
-// nothing from `world.ts` / `lighthouse.ts` / `ocean.ts` so it sits below
-// them in the dependency graph. Both `lighthouse.ts` (which builds source
-// arrays via `computeVisionSources`) and `world.ts` (which classifies
-// islands via `islandRenderState`) consume this module's `pointInVision`
-// directly, eliminating the byte-for-byte duplicate that used to live
-// inline in `world.ts` as `pointInVisionTest`.
-//
-// The single `./constants.js` import is to a no-dependency leaf module so
-// this file remains effectively at the bottom of the dep graph.
+// Pure layer: no PixiJS, no DOM, no module-level side effects. Imports only
+// `./constants.js` (itself a no-dependency leaf) and nothing from
+// `world.ts` / `lighthouse.ts` / `ocean.ts`, so it sits at the bottom of the
+// dependency graph below the modules that consume it.
 //
 // `lighthouse.ts` re-exports both names so existing call sites
 // (`import { pointInVision, type VisionSource } from './lighthouse.js'`)

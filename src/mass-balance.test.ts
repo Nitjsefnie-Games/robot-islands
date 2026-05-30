@@ -8,8 +8,8 @@ describe('mass-balance auditor — every recipe in RECIPES', () => {
   for (const [recipeId, recipe] of Object.entries(RECIPES)) {
     if (!recipe) continue;
 
-    // Pre-compute delta so we can skip legacy recipes that are out of scope
-    // for the Phase 2 binding gate without registering a failing assertion.
+    // Pre-compute delta so out-of-scope legacy recipes can be skipped without
+    // registering a failing assertion.
     const sumMass = (m: Record<string, number | undefined>) =>
       Object.entries(m).reduce(
         (acc, [r, n]) =>

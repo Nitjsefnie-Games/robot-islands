@@ -1,6 +1,5 @@
-// Pure helpers for the drone-launch UI. No DOM, no Pixi — testable
-// in isolation. Used by drones-ui.ts for both numeric-tier reachability
-// gating and T5 path-mode range gating + fuel computation.
+// Pure helpers for the drone-launch UI (no DOM, no Pixi): numeric-tier
+// reachability gating and T5 path-mode range gating + fuel computation.
 
 import { DRONE_T5_EFFICIENCY, MAX_FUEL_PER_DRONE } from './drones.js';
 

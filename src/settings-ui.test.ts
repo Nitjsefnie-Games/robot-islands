@@ -45,7 +45,7 @@ describe('applyCapturedKey', () => {
     });
     expect(result.applied).toBe(true);
     expect(result.displacedAction).toBeNull();
-    expect(confirmCalls).toBe(0); // no conflict, no prompt
+    expect(confirmCalls).toBe(0);
     expect(reg.bindings.get('KeyW')).toBe('pan-up');
   });
 
@@ -73,7 +73,6 @@ describe('applyCapturedKey', () => {
     const result = applyCapturedKey(reg, 'KeyG', 'pan-up', () => false);
     expect(result.applied).toBe(false);
     expect(result.displacedAction).toBe('toggle-grid');
-    // The prior binding is preserved.
     expect(reg.bindings.get('KeyG')).toBe('toggle-grid');
   });
 });
@@ -82,17 +81,14 @@ describe('resetBindingsToDefaults', () => {
   it('restores the default key set even after mutations', () => {
     const reg = makeRegistry();
     installDefaultBindings(reg);
-    // Snapshot the defaults so we can compare after a round trip.
     const beforeKeyG = reg.bindings.get('KeyG');
     const beforeKeyS = reg.bindings.get('KeyS');
     expect(beforeKeyG).toBe('toggle-grid');
     expect(beforeKeyS).toBe('toggle-settings');
-    // Mutate: drop a binding, swap another.
     reg.bindings.delete('KeyG');
     reg.bindings.set('KeyS', 'pan-up');
     expect(reg.bindings.get('KeyG')).toBeUndefined();
     expect(reg.bindings.get('KeyS')).toBe('pan-up');
-    // Reset.
     resetBindingsToDefaults(reg);
     expect(reg.bindings.get('KeyG')).toBe('toggle-grid');
     expect(reg.bindings.get('KeyS')).toBe('toggle-settings');
@@ -101,7 +97,6 @@ describe('resetBindingsToDefaults', () => {
   it('clears any bindings not present in defaults', () => {
     const reg = makeRegistry();
     installDefaultBindings(reg);
-    // Add a custom binding.
     reg.bindings.set('F12', 'made-up-action');
     expect(reg.bindings.get('F12')).toBe('made-up-action');
     resetBindingsToDefaults(reg);
@@ -119,7 +114,6 @@ describe('actionRows', () => {
     bind(reg, 'KeyG', 'toggle-grid');
     const rows = actionRows(reg);
     expect(rows.length).toBe(2);
-    // Alphabetical by action name.
     expect(rows[0]!.action).toBe('pan-up');
     expect(rows[0]!.codes).toEqual(['ArrowUp', 'KeyW']);
     expect(rows[1]!.action).toBe('toggle-grid');

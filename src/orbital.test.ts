@@ -138,10 +138,6 @@ function stockRepairResources(state: IslandState): void {
   state.inventory.antimatter_propellant = 1;
 }
 
-// ---------------------------------------------------------------------------
-// Prerequisites
-// ---------------------------------------------------------------------------
-
 describe('satellite launch prerequisites', () => {
   it('rejects when island does not exist', () => {
     const world = makeWorld();
@@ -183,10 +179,6 @@ describe('satellite launch prerequisites', () => {
     expect(result.reason).toBe('insufficient-resources');
   });
 });
-
-// ---------------------------------------------------------------------------
-// Success roll
-// ---------------------------------------------------------------------------
 
 describe('satellite launch success roll', () => {
   it('succeeds at T1 spaceport with a low roll (nowMs=0 → rng≈0.23)', () => {
@@ -240,10 +232,7 @@ describe('satellite launch success roll', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §14.5/14.6/14.7 target validation
-// ---------------------------------------------------------------------------
-
 describe('satellite launch target validation', () => {
   it('rejects target-at-source (target tile equals Spaceport footprint centre)', () => {
     const world = makeWorld();
@@ -311,10 +300,6 @@ describe('satellite launch target validation', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Failure modes
-// ---------------------------------------------------------------------------
-
 describe('satellite launch failure modes', () => {
   it('pad explosion reverts the spaceport to tier I (§14.7 — was destroyed pre-fix)', () => {
     const world = makeWorld();
@@ -354,10 +339,6 @@ describe('satellite launch failure modes', () => {
     expect(state.buildings.some((b) => b.defId === 'spaceport')).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Satellite stats per variant
-// ---------------------------------------------------------------------------
 
 describe('satellite stats per variant', () => {
   it('scanner has coverageRadius 400 and commRange 200', () => {
@@ -403,10 +384,6 @@ describe('satellite stats per variant', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Resource consumption on success
-// ---------------------------------------------------------------------------
-
 describe('satellite launch resource consumption', () => {
   it('deducts payload, insertion package, and propellant on success', () => {
     const world = makeWorld();
@@ -421,10 +398,6 @@ describe('satellite launch resource consumption', () => {
     expect(state.inventory.antimatter_propellant).toBe(0);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Spaceport upgrade
-// ---------------------------------------------------------------------------
 
 function stockUpgradeResourcesTier1(state: IslandState): void {
   state.inventory.phase_converter = 5;
@@ -511,10 +484,6 @@ describe('spaceport upgrade', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §14.2 debrisDetectionRangeForIsland
-// ---------------------------------------------------------------------------
-
 describe('§14.2 debrisDetectionRangeForIsland', () => {
   it('returns 0 for an island with no orbital_tracking_station', () => {
     const world = makeWorld();
@@ -570,10 +539,6 @@ describe('§14.2 upgradeSpaceport spec-literal costs (memetic_core, not stand-in
     expect(state.inventory.memetic_core).toBe(0);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Comm graph BFS
-// ---------------------------------------------------------------------------
 
 function makeMinimalIsland(over: Partial<IslandSpec> & { id: string; cx: number; cy: number }): IslandSpec {
   return {
@@ -757,10 +722,7 @@ describe('connectedSatellites BFS', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Store-and-forward buffering
-// ---------------------------------------------------------------------------
-
 describe('satellite buffer', () => {
   it('appends entries to the buffer', () => {
     const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0 });
@@ -794,10 +756,6 @@ describe('satellite buffer', () => {
     expect(sat.buffer).toHaveLength(0);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Repair Drone dispatch
-// ---------------------------------------------------------------------------
 
 describe('repair drone dispatch', () => {
   it('rejects when target satellite does not exist', () => {
@@ -915,10 +873,6 @@ describe('repair drone dispatch', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Repair Drone arrival
-// ---------------------------------------------------------------------------
-
 describe('repair drone arrival', () => {
   it('clears lodges on arrival', () => {
     const world = makeWorld({ seed: 'test-seed' });
@@ -986,10 +940,7 @@ describe('repair drone arrival', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §14.8 Debris fields
-// ---------------------------------------------------------------------------
-
 describe('addDebrisFragments', () => {
   it('creates a new field when none exists for the cell', () => {
     const world = makeBfsWorld({
@@ -1163,10 +1114,6 @@ describe('launchSatellite orbit-explosion debris', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §14.6 Satellite movement (fuel-spend)
-// ---------------------------------------------------------------------------
-
 describe('§14.6 requestSatMove + tickSatMovement', () => {
   function makeSatMoveWorld(): WorldState {
     return makeBfsWorld({
@@ -1337,10 +1284,6 @@ describe('§14.6 requestSatMove + tickSatMovement', () => {
     expect(sat.movingTo).toBeUndefined();
   });
 });
-
-// ---------------------------------------------------------------------------
-// §14.5 Scanner Sat dwell-ramp discovery
-// ---------------------------------------------------------------------------
 
 describe('§14.5 scanner dwell-ramp discovery', () => {
   it('scannerDiscoveryProbability(0) returns SCANNER_INITIAL_P_PER_TICK', () => {
@@ -1599,10 +1542,6 @@ describe('§14.7 launchSatellite uses launchSuccessBonus', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §14.4 Comm packet propagation
-// ---------------------------------------------------------------------------
-
 describe('§14.4 comm packet propagation', () => {
   it('buildCommGraph connects two Spaceports within range', () => {
     const islandA = makeMinimalIsland({ id: 'home', cx: 0, cy: 0, populated: true, buildings: [{ id: 'sp1', defId: 'spaceport', x: 0, y: 0 }] });
@@ -1692,51 +1631,11 @@ describe('§14.4 comm packet propagation', () => {
   });
 
   it('tickCommPackets advances a packet one hop per tick along a 3-node chain (sat → sat → spaceport), delivering on the third tick', () => {
-    // Chain: satA (x=100) -> satB (x=250) -> home spaceport (x=0)
-    // home has T1 spaceport (range 200). satA at dist 100 from home (in range).
-    // satB at dist 250 from home (out of range of home's 200).
-    // satA has range 200, satB has range 200.
-    // satA <-> home: dist 100 <= max(200, 200) = 200 ✓
-    // satB <-> home: dist 250 <= max(200, 200) = 200 ✗
-    // satA <-> satB: dist 150 <= max(200, 200) = 200 ✓
-    // So the chain is satA - satB - home? Wait, satA is in range of home directly.
-    // That makes it a 2-hop path, not 3. Let me adjust.
-    // Make home T1 (range 200). Place satA at x=150, satB at x=300.
-    // satA <-> home: 150 <= 200 ✓
-    // satB <-> home: 300 <= 200 ✗
-    // satA <-> satB: 150 <= 200 ✓
-    // This gives satA directly connected to home, which is a 1-hop delivery.
-    // I need satA NOT directly connected to home.
-    // Let's use home T1 (200), satA at x=250 with commRange 100, satB at x=350 with commRange 100.
-    // Wait, the connection rule is max(range_A, range_B).
-    // home (200) <-> satA (100): dist=250 <= max(200,100)=200? No, 250 > 200. Not connected.
-    // satA (100) <-> satB (100): dist=100 <= max(100,100)=100 ✓
-    // satB (100) <-> home (200): dist=350 <= max(100,200)=200? No, 350 > 200. Not connected.
-    // Hmm, then satB isn't connected to home either. We need satB in range of home.
-    // Let's try: home at x=0 with T1 spaceport (range 200). satA at x=250 with commRange 200. satB at x=400 with commRange 200.
-    // home <-> satA: 250 <= max(200,200)=200? No.
-    // Let's use T2 for home (range 300).
-    // home <-> satA: 250 <= max(300,200)=300 ✓
-    // satA <-> satB: 150 <= max(200,200)=200 ✓
-    // home <-> satB: 400 <= max(300,200)=300? No.
-    // This works! satA is directly connected to home, but for the 3-node chain test we want satA -> satB -> home.
-    // The packet starts at satA. On tick 1, nextHop should be satB (not home) because... wait.
-    // nextHopToNearestSpaceport picks the neighbor with the shortest BFS path to a spaceport.
-    // satA's neighbors: home (distance 0) and satB (distance 1 via home? No, satB -> home is not direct).
-    // Wait, in this setup satB is connected to satA but NOT to home. So from satB, path to home is satB -> satA -> home (dist 2).
-    // From satA, path to home is direct (dist 1). So nextHop from satA would be home, not satB.
-    // That's not a 3-node chain.
-    // I need: satA connected to satB, satB connected to home, but satA NOT connected to home.
-    // home T1 (200) at x=0. satB at x=150 with commRange 100. satA at x=300 with commRange 100.
-    // home <-> satB: 150 <= max(200,100)=200 ✓
-    // satB <-> satA: 150 <= max(100,100)=100? No.
-    // Need satB range bigger. satB commRange = 200.
-    // home <-> satB: 150 <= max(200,200)=200 ✓
-    // satB <-> satA: 150 <= max(200,100)=200 ✓
-    // home <-> satA: 300 <= max(200,100)=200? No.
-    // This works! Graph: satA -- satB -- home.
-    // From satA: neighbors = {satB}. BFS from satB to home: satB -> home (dist 1). So nextHop = satB.
-    // From satB: neighbors = {home, satA}. BFS from home to targets: 0 (direct). BFS from satA to home: satA -> satB -> home (dist 2). So nextHop = home.
+    // Topology: satA -- satB -- home (satA NOT directly in range of home).
+    // home T1 (range 200) at x=0; satB at x=150 commRange 200; satA at x=300 commRange 100.
+    //   home <-> satB: 150 <= max(200,200) ✓; satB <-> satA: 150 <= max(200,100) ✓;
+    //   home <-> satA: 300 <= max(200,100) ✗.
+    // From satA, nextHop = satB; from satB, nextHop = home — a true 3-node chain.
     const island = makeMinimalIsland({ id: 'home', cx: 0, cy: 0, populated: true, buildings: [{ id: 'sp1', defId: 'spaceport', x: 0, y: 0 }] });
     const state = makeIslandState({ id: 'home' });
     addSpaceport(state, 1);
@@ -1829,10 +1728,6 @@ describe('§14.4 comm packet propagation', () => {
 });
 
 
-// ---------------------------------------------------------------------------
-// §14.8 Sweeper passive cleanup
-// ---------------------------------------------------------------------------
-
 describe('§14.8 tickSweeperCleanup', () => {
   it('returns 0 when no debris fields exist', () => {
     const world = makeBfsWorld({
@@ -1917,10 +1812,6 @@ describe('§14.8 tickSweeperCleanup', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §14.12 Repair Drone proportional fuel
-// ---------------------------------------------------------------------------
-
 describe('§14.12 dispatchRepairDrone proportional fuel', () => {
   function makeRepairWorld(opts: { satX?: number; satY?: number; propellant: number }): { world: WorldState; state: IslandState } {
     const world = makeWorld();
@@ -1960,10 +1851,7 @@ describe('§14.12 dispatchRepairDrone proportional fuel', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §14.3 Mirror Sat — Lorentzian boost falloff (additive to §2.7 solar)
-// ---------------------------------------------------------------------------
-
 describe('§14.3 Mirror Sat — mirrorBoost Lorentzian falloff', () => {
   // Per-sat fields are locked per the design brief: peakBoost = 0.7, rHalf = 200.
   // The contribution at any point is:
@@ -2142,9 +2030,7 @@ describe('§14.3 Mirror Sat — launch + stats', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §5 (ocean-layer design) — Scanner Sat ocean-cell discovery
-// ---------------------------------------------------------------------------
 //
 // Task 7: extends `tickScannerDiscovery` to also write `revealedCells` and
 // `depthRevealedCells` for every cell in the sat's coverage disk, mirroring

@@ -1,9 +1,8 @@
 // Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0
 //
-// Module-scope pool of dashed-stroke textures, one per RouteType.
-// Held for the session lifetime; never destroyed. With the current
-// route-type catalogue the pool is 3-5 textures, < 1 MB total GPU
-// memory (small dash patterns at low resolution).
+// Module-scope pool of dashed-stroke textures, one per RouteType. Held
+// for the session lifetime; never destroyed (3-5 small textures, < 1 MB
+// total GPU memory).
 
 import { Texture } from 'pixi.js';
 import type { RouteType } from './routes.js';
@@ -17,9 +16,8 @@ const TILE_SIZE = 12;
 const DASH_WIDTH = 8;
 
 /** Per-routeType color used by both the dash texture build and the
- *  Phase 2 Graphics-stroke fallback. Mirrors the constants currently
- *  in routes-ui.ts so visual output stays identical across the
- *  migration. */
+ *  Graphics-stroke fallback. Mirrors the constants in routes-ui.ts so
+ *  visual output stays identical. */
 export function colorForRouteType(t: RouteType): number {
   if (t === 'submarine_cable') return 0x4a6680;  // SUBMARINE_CABLE_TINT
   if (t === 'cable') return 0x9caab8;            // LAND_CABLE_TINT
@@ -62,8 +60,7 @@ export function getDashedStrokeTexture(routeType: RouteType): Texture {
   return tex;
 }
 
-/** Test-only — reset the texture pool. Phase 4 perf-test calls this between
- *  cases to ensure each test gets a fresh build. */
+/** Test-only — reset the texture pool so each case gets a fresh build. */
 export function _resetDashTextureCache(): void {
   _cache.clear();
 }

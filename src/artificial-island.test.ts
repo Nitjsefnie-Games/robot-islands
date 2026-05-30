@@ -24,10 +24,8 @@ import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { aggregateStorageCaps, type IslandSpec } from './world.js';
 
-// ---------------------------------------------------------------------------
 // Helpers — local copies of the patterns in economy.test.ts so this file is
 // self-contained.
-// ---------------------------------------------------------------------------
 
 function blankInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -104,10 +102,6 @@ const PC_BUILDING: PlacedBuilding = {
   y: -4,
 };
 
-// ---------------------------------------------------------------------------
-// computeConstructionCost
-// ---------------------------------------------------------------------------
-
 describe('computeConstructionCost', () => {
   it('returns sensible numbers for a 4×4 Plains island', () => {
     // tileCount ≈ π × 4 × 4 ≈ 50.27
@@ -177,10 +171,6 @@ describe('computeConstructionCost', () => {
     expect(ratio).toBeLessThan(2.05);
   });
 });
-
-// ---------------------------------------------------------------------------
-// validateConstruction — each failure path
-// ---------------------------------------------------------------------------
 
 describe('validateConstruction', () => {
   const okReq: ConstructionRequirements = {
@@ -275,10 +265,6 @@ describe('validateConstruction', () => {
     expect(r.ok).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// constructIsland — material drain + new spec/state shape
-// ---------------------------------------------------------------------------
 
 describe('constructIsland', () => {
   it('deducts materials from the founder inventory', () => {
@@ -382,14 +368,6 @@ describe('constructIsland', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// maxRadiusForFounderLevel
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Step-12: §9.5 biome-locked-unique gate — Pyroforge on artificial Volcanic
-// ---------------------------------------------------------------------------
-
 describe('§9.5 — biome-locked uniques rejected on artificial islands (step 12)', () => {
   it('constructing an artificial Volcanic island then placing a Pyroforge fails canPlaceOnIsland', () => {
     // Setup: T3+ founder with Platform Constructor + plenty of materials,
@@ -485,10 +463,6 @@ describe('maxRadiusForFounderLevel', () => {
     expect(maxRadiusForFounderLevel(100)).toBe(16);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §2.5 artificial-island modifier roll
-// ---------------------------------------------------------------------------
 
 describe('§2.5 artificial-island modifier roll', () => {
   it('is deterministic given (worldSeed, biome, islandId, nowMs)', () => {

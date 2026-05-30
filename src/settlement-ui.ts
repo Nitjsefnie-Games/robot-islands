@@ -1,21 +1,8 @@
 // Settlement Ops side dock — §12 vehicle dispatch UI.
 //
-// Aesthetic — mirrors drones-ui (DRONE OPS / DSP-01) and routes-ui
-// (FREIGHT GRID / LCS-01) with the same console-chrome vocabulary. The
-// settlement panel is a sibling station: `SETTLE OPS / SCV-01`. Same
-// monospace + cyan accent palette so all three side docks read as
-// different stations on one console.
-//
-// Structure (bottom-up, mirroring drones-ui):
-//   - Palette + DOM helpers reused from drones-ui / routes-ui
-//   - Header stamp `SETTLE OPS / SCV-01`
-//   - Stat block (TIER / DIST / FUEL / ETA) — FUEL is auto-computed
-//   - Origin/Target selectors + kind toggle (ship / heli)
-//   - Foundation-kit count slider (fuel needs no slider — auto-sized)
-//   - Arm-settle button (toggles canvas reticle)
-//   - Active vehicles ledger (in-flight ship/heli with countdown)
-//   - Renderable Container for in-flight vehicle dots
-//   - Renderable Container for the arm-settle reticle (screen space)
+// Sibling station to drones-ui (DRONE OPS / DSP-01) and routes-ui (FREIGHT
+// GRID / LCS-01): same monospace + cyan console-chrome vocabulary, stamped
+// `SETTLE OPS / SCV-01`.
 //
 // Dispatch flow:
 //   1. Player selects origin (must have Shipyard/Helipad), target
@@ -426,9 +413,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
 
   // ---- Fuel — auto-computed, no slider ------------------------------------
   // Fuel load is the exact one-way trip cost (see `computeFuel` / refresh),
-  // surfaced read-only in the FUEL stat above. This mirrors the drone UI,
-  // which likewise derives fuel from the chosen destination rather than
-  // asking the player to pick an amount.
+  // surfaced read-only in the FUEL stat above.
 
   // ---- Kit count slider ---------------------------------------------------
   const kitWrap = document.createElement('div');

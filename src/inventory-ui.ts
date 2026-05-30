@@ -1,10 +1,6 @@
 // Inventory modal — full per-resource readout, toggled via KeyI.
-//
-// Phase 4b.4: migrated to the shared ri-modal shell (mountModal from
-// ui-modal.ts). Body is now a .ri-table with six columns: Resource | Stock |
-// Cap | Fill | Net/s | Time to ⤓/⤒. Filter chips, search input, and sort
-// buttons live in the modal filter/footer strips. Inline styles replaced with
-// .ri-* classes where possible.
+// Uses the shared ri-modal shell (mountModal from ui-modal.ts); body is a
+// .ri-table: Resource | Stock | Cap | Fill | Net/s | Time to ⤓/⤒.
 
 import type { IslandState } from './economy.js';
 import { cap, inv } from './economy.js';
@@ -13,16 +9,11 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { IslandSpec } from './world.js';
 import { mountModal } from './ui-modal.js';
 
-// ---------------------------------------------------------------------------
-// Pure helpers — exported for tests / docs
-// ---------------------------------------------------------------------------
-
 /**
- * Resource filter categories surfaced in the panel. These are PRIMARILY for
- * UI grouping — they aren't strictly the §6.x catalog tiers (Raw=T0,
- * Refined=T1, …). For resources that belong in multiple buckets (e.g.,
- * biofuel is both a Refined T1 product AND a Fuel), the brief mandates
- * Fuel/Liquid take precedence over Raw/Refined for filter purposes.
+ * Resource filter categories for UI grouping — NOT strictly the §6.x catalog
+ * tiers (Raw=T0, Refined=T1, …). For resources spanning multiple buckets (e.g.
+ * biofuel is both Refined T1 and a Fuel), Fuel/Liquid takes precedence over
+ * Raw/Refined.
  */
 export type ResourceCategory =
   | 'raw'
@@ -34,10 +25,8 @@ export type ResourceCategory =
   | 'misc';
 
 /**
- * Primary filter category per resource. Categorisation is best-effort —
- * a future spec pass may carve cleaner lines, but the buckets here match
- * the brief verbatim. Fuels and Liquids take precedence over Raw/Refined
- * (a single resource lands in exactly one bucket here).
+ * Primary filter category per resource — each lands in exactly one bucket.
+ * Fuels and Liquids take precedence over Raw/Refined.
  */
 export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> = {
   // T0 raws (§6.1 / §6.2)
@@ -48,7 +37,7 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   sand: 'raw',
   salt: 'raw',
   quartz: 'raw',
-  // §6.1 T0 mineral raw: limestone (Task 1.2)
+  // §6.1 T0 mineral raw
   limestone: 'raw',
   clay: 'raw',
   sulfur: 'raw',
@@ -58,7 +47,7 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   tin_ore: 'raw',
   lead_ore: 'raw',
   bauxite: 'raw',
-  // Phase 2 — T1 refined chains (§6.2 / §7.5)
+  // T1 refined chains (§6.2 / §7.5)
   quicklime: 'refined',
   slaked_lime: 'refined',
   brick: 'refined',
@@ -71,13 +60,13 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   tin_ingot: 'refined',
   lead_ingot: 'refined',
   solder: 'refined',
-  // Phase 7 — Bronze + Brass (§7.2)
+  // Bronze + Brass (§7.2)
   bronze: 'refined',
   brass: 'refined',
-  // Phase 8 — Aluminum chain (§7.3)
+  // Aluminum chain (§7.3)
   alumina: 'refined',
   aluminum: 'refined',
-  // Phase 3 — T2-T3 steel alloy chains
+  // T2-T3 steel alloy chains
   manganese_ore: 'raw',
   manganese_ingot: 'refined',
   carbon_steel: 'components',
@@ -141,7 +130,7 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   lubricant: 'liquid',
   nitrogen: 'liquid',
   cryo_coolant: 'liquid',
-  // Phase 4 — T2 petrochemical byproducts (§7.4)
+  // T2 petrochemical byproducts (§7.4)
   heavy_oil: 'liquid',
   tar: 'liquid',
   asphalt: 'liquid',
@@ -149,27 +138,24 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   rigid_plastic: 'components',
   flexible_plastic: 'components',
   synthetic_rubber: 'components',
-  // Phase 6 — T2 mechanical components (§6.3 / §7.1)
+  // T2 mechanical components (§6.3 / §7.1)
   sheet_metal: 'components',
   pipe: 'components',
   steel_beam: 'components',
-  // Phase 6 — T2 mechanical fasteners (§6.3)
+  // T2 mechanical fasteners (§6.3)
   bearing: 'components',
   spring: 'components',
-  // Phase 6 — T2 mechanical components (§6.3)
   heavy_cable: 'components',
-  // Phase 6 — T3 battery (§6.3 / §7.9)
+  // T3 battery (§6.3 / §7.9)
   battery: 'components',
-  // Phase 6 — T2 glass_panel (§6.3)
   glass_panel: 'components',
-  // Phase 6 — T2 coolant + ceramic_insulator (§6.3)
   coolant: 'liquid',
   ceramic_insulator: 'components',
-  // Phase 5 — T2 chemistry chain (§7.5)
+  // T2 chemistry chain (§7.5)
   sulfuric_acid: 'liquid',
   hydrochloric_acid: 'liquid',
   sodium_hydroxide: 'liquid',
-  // Phase 5 — T3 chemistry chain (§7.5)
+  // T3 chemistry chain (§7.5)
   phosphor: 'rare',
   liquid_nitrogen: 'liquid',
   // T3 refined intermediate
@@ -194,14 +180,13 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   quantum_foam: 'rare',
   spacetime_fragment: 'rare',
   higgs_flux: 'rare',
-  // Phase 12 — T5 transcendent raws (Task 12.1)
+  // T5 transcendent raws
   zero_point_flux: 'rare',
   neutronium: 'rare',
-  // Phase 12 — T5 components (Task 12.2)
+  // T5 components
   probability_calculator: 'rare',
   dimensional_fold: 'rare',
   causal_regulator: 'rare',
-  // Phase 12 — T5 components (Task 12.3)
   tachyonic_transmitter: 'rare',
   aether_beacon: 'rare',
   reality_engine: 'rare',
@@ -221,53 +206,39 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   slag: 'misc',
   // §13.4 T5 endgame artifact
   genesis_cell: 'rare',
-  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  // T3 minerals + alloy
   mercury: 'liquid',
-  // Phase 10 — T3 minerals + alloy (Task 10.2)
   diamond_ore: 'rare',
-  // Phase 10 — T3 minerals + alloy (Task 10.3)
   cryogenic_compound: 'liquid',
-  // Phase 10 — T3 minerals + alloy (Task 10.4)
   magnetic_alloy: 'refined',
-  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
   lithium: 'rare',
-  // Phase 10b — T3 power components (Task 10.5)
+  // T3 power components
   magnet: 'components',
-  // Phase 10b — T3 power components (Task 10.6)
   electric_motor: 'components',
-  // Phase 10b — T3 power components (Task 10.7)
   generator: 'components',
-  // Phase 10c — T3 mechanical assemblies (Task 10.8)
+  // T3 mechanical assemblies
   pump: 'components',
   hydraulic_actuator: 'components',
   pneumatic_actuator: 'components',
-  // Phase 10c — T3 power components (Task 10.9)
   solar_cell: 'components',
-  // Phase 10c — T3 power components (Task 10.10)
   fuel_cell: 'components',
-  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  // T3 glass/ceramics + fiber spinners
   optical_glass: 'components',
-  // Phase 10c — T3 fiber spinners (Task 10.12)
   glass_fiber: 'components',
   optical_fiber: 'components',
-  // Phase 11 — T4 endgame (Task 11.1)
+  // T4 endgame
   time_crystal: 'rare',
-  // Phase 11 — T4 endgame (Task 11.2)
   antimatter_capsule: 'rare',
-  // Phase 11 — T4 endgame (Task 11.3)
   nuclear_fuel_rod: 'rare',
-  // Phase 11 — T4 endgame (Task 11.4)
   plasma_containment_vessel: 'rare',
   singularity_sensor: 'rare',
   cryo_containment_unit: 'rare',
   particle_accelerator_core: 'rare',
   self_replication_module: 'rare',
-  // Ocean-layer §3 — Task 8 extractor outputs. Filter-chip categorisation
-  // mirrors storage-categories with the inventory-ui's "fuel/liquid take
-  // precedence" rule applied — the brines + methane_hydrate land in
-  // 'liquid' (matching their storage liquid_gas category); the nodules +
-  // vent_sulfide land in 'raw' (ore-family naturals); the rare isotope
-  // concentrates + vent_exotic land in 'rare'.
+  // Ocean-layer §3 extractor outputs. Categorisation mirrors storage
+  // categories with "fuel/liquid takes precedence": brines + methane_hydrate
+  // → 'liquid' (storage liquid_gas); nodules + vent_sulfide → 'raw'
+  // (ore-family naturals); isotope concentrates + vent_exotic → 'rare'.
   dilute_brine: 'liquid',
   concentrated_brine: 'liquid',
   he3_dilute: 'rare',
@@ -278,12 +249,10 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   heavy_isotope_slurry: 'rare',
   vent_sulfide: 'raw',
   vent_exotic: 'rare',
-  // Ocean-layer §3 — Task 9 processor outputs.
-  //   lithium_brine / bromine / heavy_water → 'liquid' (matches storage
-  //     liquid_gas category).
-  //   rare_earth_concentrate / refined_cobalt → 'raw' (processed mineral
-  //     powders sit in the ore-family chip).
-  //   exotic_alloy_seed / tritium_seed → 'rare' (T5 exotic finals).
+  // Ocean-layer §3 processor outputs: lithium_brine / bromine / heavy_water
+  // → 'liquid' (storage liquid_gas); rare_earth_concentrate / refined_cobalt
+  // → 'raw' (mineral powders, ore-family chip); exotic_alloy_seed /
+  // tritium_seed → 'rare' (T5 exotic finals).
   lithium_brine: 'liquid',
   bromine: 'liquid',
   rare_earth_concentrate: 'raw',
@@ -291,9 +260,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   exotic_alloy_seed: 'rare',
   tritium_seed: 'rare',
   heavy_water: 'liquid',
-  // §04: T1 Mining Skill Crystal — rare crafted item.
+  // All crystal families are rare crafted items (§04).
   mining_crystal_t1: 'rare',
-  // Task 6: all crystal families are rare crafted items.
   mining_crystal_t2: 'rare',
   mining_crystal_t3: 'rare',
   forestry_crystal_t1: 'rare',
@@ -353,7 +321,7 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   oceanography_crystal_t1: 'rare',
   oceanography_crystal_t2: 'rare',
   oceanography_crystal_t3: 'rare',
-  // Phase 2 — SI-units rework new resources (§08)
+  // SI-units rework resources (§08)
   co: 'liquid',
   co2: 'liquid',
   refinery_gas: 'liquid',
@@ -416,10 +384,6 @@ export function inventoryRowVisible(
   if (!showEmpty && have <= 0) return false;
   return true;
 }
-
-// ---------------------------------------------------------------------------
-// Mount
-// ---------------------------------------------------------------------------
 
 const toDisplayName = (id: string): string =>
   id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -490,13 +454,12 @@ export function mountInventoryUi(
         return chip;
       }
 
-      // Render the 7 chips named in the redesign brief (skip 'misc' in UI).
+      // 'misc' has no UI chip.
       for (const c of RESOURCE_FILTER_ORDER) {
         if (c === 'misc') continue;
         filters.appendChild(makeChip(c));
       }
 
-      // "show empty" toggle
       const showEmptyChip = document.createElement('button');
       showEmptyChip.className = 'ri-chip';
       showEmptyChip.textContent = 'Show Empty';
@@ -510,7 +473,6 @@ export function mountInventoryUi(
       filterChipRefs.set('showEmpty' as ResourceFilter, showEmptyChip);
       filters.appendChild(showEmptyChip);
 
-      // Search input
       const searchInput = document.createElement('input');
       searchInput.className = 'ri-search';
       searchInput.placeholder = 'Filter…';
@@ -696,32 +658,27 @@ export function mountInventoryUi(
     for (const row of rows) {
       const tr = document.createElement('tr');
 
-      // Resource
       const nameTd = document.createElement('td');
       nameTd.className = 'ri-table__name';
       nameTd.textContent = toDisplayName(row.r);
       tr.appendChild(nameTd);
 
-      // Stock
       const stockTd = document.createElement('td');
       stockTd.className = 'ri-table__num';
       stockTd.textContent = row.have.toFixed(0);
       tr.appendChild(stockTd);
 
-      // Cap
       const capTd = document.createElement('td');
       capTd.className = 'ri-table__num';
       capTd.textContent = row.capVal.toFixed(0);
       tr.appendChild(capTd);
 
-      // Fill
       const fillTd = document.createElement('td');
       const pct = row.capVal > 0 ? (row.have / row.capVal) * 100 : 0;
       const tone = pct < 10 ? 'danger' : pct < 30 ? 'warn' : undefined;
       fillTd.appendChild(makeMeter(pct, tone));
       tr.appendChild(fillTd);
 
-      // Net /s
       const netTd = document.createElement('td');
       netTd.className = 'ri-table__num';
       if (row.rate > 0 && row.have >= row.capVal) {
@@ -740,7 +697,6 @@ export function mountInventoryUi(
       }
       tr.appendChild(netTd);
 
-      // Time to ⤓/⤒
       const timeTd = document.createElement('td');
       timeTd.className = 'ri-table__num';
       if (row.rate < 0 && row.have > 0) {

@@ -80,10 +80,8 @@ export const SHADOW = {
   glow:  '0 0 0 1px rgba(125,211,232,0.45), 0 0 12px rgba(125,211,232,0.25)',
 } as const;
 
-// ---------------------------------------------------------------------------
 // Z-index layering. No file may write a raw z-index in inline style; pick
 // one of these.
-// ---------------------------------------------------------------------------
 export const Z = {
   map: 0,
   panel: 20,

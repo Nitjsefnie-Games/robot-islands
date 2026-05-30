@@ -1,24 +1,18 @@
-// Multi-island world data + render coordination.
-//
-// Step-1 had a single home island rendered at world origin. Step-2 generalises:
-// the world is a flat list of placed islands, each with its own centre in
-// world-tile coordinates, its biome ellipse parameters, and any buildings
-// sitting on it.
+// Multi-island world data + render coordination. The world is a flat list of
+// placed islands, each with its own centre in world-tile coordinates, biome
+// ellipse parameters, and buildings.
 //
 // Per SPEC §2.1 the world is partitioned into stratification cells of side R
-// (the discovery guarantee radius). We use R=16 tiles as a placeholder cell
-// size — enough to space the demo islands out and exercise the cell-grid
-// overlay, but small enough that the home island's vision radius of 5 cells =
-// 80 tiles spans a few neighbours.
+// (the discovery guarantee radius).
 //
 // Vision model (three states):
 //   - 'visible'    — populated, OR discovered AND inside some populated
-//                    island's vision radius. Rendered at full color/alpha.
-//   - 'discovered' — discovered but outside all vision radii. Rendered dimmed
-//                    (alpha + cool tint) to read as "known, but no current
-//                    info".
-//   - 'unknown'    — not discovered. Not rendered at all; the dark page
-//                    background shows through.
+//                    island's vision radius.
+//   - 'discovered' — discovered but outside all vision radii. The ocean tier,
+//                    not island dimming, signals "known but no current info"
+//                    (see renderIsland).
+//   - 'unknown'    — not discovered. Not rendered; the dark page background
+//                    shows through.
 
 import { Container } from 'pixi.js';
 
@@ -52,37 +46,22 @@ export { CELL_SIZE_TILES };
 /** Padding (in tiles) extending past each island's ellipse edge to form the
  *  baseline vision area. A populated island's baseline vision footprint is an
  *  axis-aligned ellipse with semi-axes `(majorRadius + VISION_PADDING_TILES,
- *  minorRadius + VISION_PADDING_TILES)` centered on the island. Replaces the
- *  earlier fixed-radius circle (80 from center) which over-reached for big
- *  circular biomes.
+ *  minorRadius + VISION_PADDING_TILES)` centered on the island.
  *
- *  Lighthouse-vision redesign (§15.x): padding dropped from 50 → 10 — the
- *  baseline now reads as "you can see the immediate waters off your own
- *  coast" rather than auto-granting 50 tiles of free intel on every settle.
- *  Distant scouting now requires Lighthouse infrastructure
+ *  Lighthouse-vision redesign (§15.x): small (10) so the baseline reads as
+ *  "the immediate waters off your own coast" rather than free intel on every
+ *  settle. Distant scouting requires Lighthouse infrastructure
  *  (`lighthouse.ts → computeVisionSources`). */
 export const VISION_PADDING_TILES = 10;
 
-// ---------------------------------------------------------------------------
-// Ocean-tier palette
-// ---------------------------------------------------------------------------
-//
-// Three discrete blues form the world's vision-state field. The colour step
-// itself indicates the boundary between tiers — there is no outline ring.
-//
-//   VISION_BLUE     — luminous cyan-leaning shallow. Reads as "lit water,
-//                     full information." Saturated and cool.
-//   DISCOVERED_BLUE — desaturated steel mid-blue. Reads as "we surveyed
-//                     this once; the lights are off now." Drops both
-//                     lightness and chroma vs vision so the perceptual
-//                     gap is two-axis, not just lightness.
-//   UNKNOWN_BLUE    — the page background exactly. Unknown ocean fuses
-//                     visually with the page void; "unknown" reads as
-//                     absence rather than as a competing dark colour.
+// Ocean-tier palette: three discrete blues form the world's vision-state
+// field. The colour step itself is the tier boundary — there is no outline
+// ring. DISCOVERED_BLUE drops both lightness and chroma vs VISION_BLUE so the
+// perceptual gap is two-axis; UNKNOWN_BLUE equals the page void so unknown
+// ocean fuses with the background and reads as absence.
 
 // Derive from the shared design token so DOM panels and the in-canvas
-// vision colours stay in lockstep. Adjusting a hue means editing
-// `ui-tokens.ts` once; both worlds pick it up.
+// vision colours stay in lockstep — edit `ui-tokens.ts` once, both pick it up.
 import { COLOR } from './ui-tokens.js';
 const hexToNumber = (s: string): number => parseInt(s.replace('#', ''), 16);
 
@@ -137,58 +116,44 @@ export interface IslandSpec {
   majorRadius: number;
   minorRadius: number;
   /** Whether the island is populated (origin of vision). Implies discovered.
-   *  Mutable in step 12: settlement-vehicle arrivals flip this from false →
-   *  true on the target island. See `tickVehicles` in `settlement.ts`. */
+   *  Mutable: settlement-vehicle arrivals flip false → true (`tickVehicles`
+   *  in `settlement.ts`). */
   populated: boolean;
   /** Whether the player knows this island exists at all. Populated → discovered
    *  by definition (the classification function short-circuits on populated).
-   *  Mutable in step 6: drone returns flip this from false→true on revealed
-   *  islands. The rest of the spec stays readonly — only this flag changes. */
+   *  Mutable: drone returns flip false → true on revealed islands. */
   discovered: boolean;
-  /** Buildings placed on this island, in island-local tile coords. Mutable so
-   *  step-2.5 placement can push onto the same array shared with
-   *  `IslandState.buildings` (the state field is a live reference, not a
-   *  copy — see `makeInitialIslandState`). The dual-array footgun is
-   *  intentionally avoided: one array, two consumers, mutation flows to
+  /** Buildings placed on this island, in island-local tile coords. Mutable and
+   *  shared by reference with `IslandState.buildings` (not a copy — see
+   *  `makeInitialIslandState`): one array, two consumers, mutation flows to
    *  both. */
   buildings: PlacedBuilding[];
   /** Terrain function in island-local coords. Defaults to grass everywhere. */
   readonly terrainAt?: (x: number, y: number) => TerrainKind;
-  /** §03 design-spec terrain_modifier: sparse per-tile overrides written by
-   *  the modifier's shot. Key format `${x},${y}` in island-local tile
-   *  coords (mirrors the discovery-cell key shape). Stores only the
-   *  CURRENT kind — no `originalType`, no history (v5 lock
-   *  `no_revert_mechanic`). `attachTerrainAt`'s closure consults this
-   *  BEFORE falling through to `terrainAtForBiome`; precedence is
-   *  overrides-then-biome. Mutable — the modifier's shot inserts a
-   *  key per converted tile; `last_placed_wins` per the v5 picker means
-   *  later writes silently overwrite earlier ones. Optional for forward-
-   *  compat: legacy saves (schema 6) load with the field undefined and
-   *  the closure behaves identically to today. */
+  /** §03 terrain_modifier: sparse per-tile overrides written by the modifier's
+   *  shot. Key format `${x},${y}` in island-local tile coords. Stores only the
+   *  CURRENT kind — no history (v5 lock `no_revert_mechanic`).
+   *  `attachTerrainAt`'s closure consults this BEFORE `terrainAtForBiome`
+   *  (overrides-then-biome precedence). Mutable; `last_placed_wins` means later
+   *  writes overwrite earlier. Optional for forward-compat: legacy saves
+   *  (schema 6) load with it undefined and behave identically. */
   tileOverrides?: Record<string, TerrainKind>;
-  /** Active modifiers on this island per §3.5. Step 8 hard-codes the demo
-   *  set on `DEMO_ISLANDS`; future steps roll from `rollModifiers` at
-   *  generation. Empty array means no modifiers active. Mutable: the §13.3
-   *  Universe Editor reassigns this to the re-rolled set after a biome change
-   *  (see `changeBiome` in `universe-editor.ts`). */
+  /** Active modifiers on this island per §3.5. Empty array means none. Mutable:
+   *  the §13.3 Universe Editor reassigns this to the re-rolled set after a
+   *  biome change (see `changeBiome` in `universe-editor.ts`). */
   modifiers: ReadonlyArray<ModifierId>;
   /** §2.5: islands built via Platform Constructor are flagged so future
    *  systems can deny natural-only content (rare-biome modifiers per §3.5,
-   *  biome-locked uniques per §9.5). For step 11 the flag is metadata only —
-   *  no current consumer; reserved for step 12. Undefined ≡ false (natural). */
+   *  biome-locked uniques per §9.5). Undefined ≡ false (natural). */
   readonly artificial?: boolean;
   /** §3.6 island-joining: appended constituents accumulated when this island
-   *  has absorbed others. Each entry is a secondary ellipse rendered/queried
-   *  in addition to `majorRadius`/`minorRadius` (the primary at offset 0,0).
-   *  Single-ellipse islands have `undefined` or `[]` — every existing code
-   *  path treats those identically. Per §3.6 a tile is part of the island
-   *  iff it is inscribed inside ANY constituent (primary or extra). Merges
-   *  are permanent; the array only grows. The per-extra `rotation` field is
-   *  carried for forward-compat with rendering of rotated ellipses; merge
-   *  propagation of rotation is not wired, so absorbed primaries currently
-   *  enter the extras list with rotation 0 (see `island-merge.ts`). The
-   *  primary ellipse's own rotation lives on `IslandSpec.rotation` below
-   *  and IS set by world-gen for Coast islands per §3.4. */
+   *  has absorbed others. Each entry is a secondary ellipse queried in addition
+   *  to `majorRadius`/`minorRadius` (the primary at offset 0,0). Single-ellipse
+   *  islands have `undefined` or `[]` — treated identically everywhere. Per
+   *  §3.6 a tile belongs to the island iff inscribed inside ANY constituent.
+   *  Merges are permanent; the array only grows. Per-extra `rotation` is
+   *  forward-compat only — merge propagation isn't wired, so absorbed primaries
+   *  enter with rotation 0 (see `island-merge.ts`). */
   extraEllipses?: Array<{
     readonly major: number;
     readonly minor: number;
@@ -196,19 +161,12 @@ export interface IslandSpec {
     readonly offsetX: number;
     readonly offsetY: number;
   }>;
-  /** §3.4 primary-ellipse rotation in degrees, in `[0, 360)`. For all
-   *  biomes EXCEPT Coast this is 0 (or absent — readers must default via
-   *  `?? 0`). Coast islands roll a rotation from `{0, 22.5, 45, …, 337.5}`
-   *  (16 evenly-spaced 22.5° multiples) deterministically from the world
-   *  seed at generation time. Once set, rotation is immutable per §3.4
-   *  ("Rotation cannot be changed after generation"); Land Reclamation
-   *  expansions mutate radii but never this field.
-   *
-   *  Currently this field is metadata only — no consumer rotates the
-   *  ellipse when rendering, computing tile inscription, or testing
-   *  overlap. Persisting it now unblocks future render-layer work without
-   *  another schema bump. Optional so legacy saves (pre-rotation) hydrate
-   *  cleanly: a missing field reads as 0 at every consumer. */
+  /** §3.4 primary-ellipse rotation in degrees, in `[0, 360)`. For all biomes
+   *  EXCEPT Coast this is 0 (or absent — readers must default via `?? 0`).
+   *  Coast islands roll a 22.5° multiple deterministically from the world seed
+   *  at generation. Immutable per §3.4 once set. Metadata only — no geometry
+   *  consumer rotates the ellipse yet. Optional so legacy saves hydrate cleanly
+   *  (missing reads as 0). */
   rotation?: number;
 }
 
@@ -250,10 +208,8 @@ export function islandConstituents(spec: IslandSpec): ConstituentEllipse[] {
  * extra-ellipse tiles and reintroduce the boundary-fragment defect there.
  *
  * Centralises the readonly-widening cast that would otherwise be duplicated
- * at every spec-construction site (procedural world-gen, persistence
- * rehydration, artificial-island construction, demo fixtures). Any future
- * refactor of the closure contract — predicate signature, what's captured,
- * how the cast is expressed — touches one place.
+ * at every spec-construction site (world-gen, persistence rehydration,
+ * artificial-island construction, demo fixtures).
  *
  * WARNING for future maintainers: do NOT switch the body to
  * `{ ...spec, terrainAt: ... }` or otherwise rebind `spec` to a snapshot
@@ -300,9 +256,7 @@ export function distSqTiles(ax: number, ay: number, bx: number, by: number): num
   return dx * dx + dy * dy;
 }
 
-// ---------------------------------------------------------------------------
 // §3 player-mutable display name
-// ---------------------------------------------------------------------------
 
 /** Maximum length of a player-supplied island name. Anything longer is
  *  rejected by `renameIsland`. Chosen to fit comfortably in the HUD title
@@ -579,10 +533,10 @@ export function renderIsland(spec: IslandSpec, state: IslandRenderState = 'visib
 
 /**
  * §3.7 — Fresh new-game home spec factory. Returns a populated home island
- * with EMPTY buildings and the canonical Plains/r=14/Stable starting layout:
+ * with EMPTY buildings and the canonical Plains/r=16/Stable starting layout:
  *
  *   - biome: 'plains'
- *   - majorRadius/minorRadius: 14
+ *   - majorRadius/minorRadius: 16
  *   - populated: true, discovered: true
  *   - buildings: [] (no pre-placed buildings per §3.7)
  *   - modifiers: ['stable'] (no other modifiers per §3.7)
@@ -602,17 +556,13 @@ function makeHomeIslandSpec(): IslandSpec {
     minorRadius: 16,
     populated: true,
     discovered: true,
-    // §3.7 starter placeholder: empty buildings — the player must place
-    // their first Solar Panel, Mine, etc. via the placement UI. The
-    // previous demo seeded a dozen buildings (Solar/Workshop/Mines/
-    // Dronepad/Smelter/Silo/Antenna/etc.) as a bootstrap shortcut; that
-    // bypassed the §3.7 "no pre-placed buildings" contract.
+    // §3.7: empty buildings — the player places their first via the UI.
     buildings: [],
     // Home preserves its hand-placed terrain map exactly — terrainAtForBiome
     // delegates to defaultTerrainAtHome for islandId === 'home' (so the
     // ore/coal/water tiles the player will Mine on still exist). The
-    // `inscribed` predicate is unused on this branch — pass a permissive
-    // `() => true` to satisfy the signature.
+    // `inscribed` predicate is unused on this branch — `() => true` satisfies
+    // the signature.
     terrainAt: (x, y) => terrainAtForBiome('plains', 'home', x, y, () => true),
     // §3.7: Stable trait by default, no other modifiers.
     modifiers: ['stable'],
@@ -620,16 +570,10 @@ function makeHomeIslandSpec(): IslandSpec {
 }
 
 /**
- * Hand-placed demo islands — RETAINED FOR TESTS ONLY. Pre-§3.7-cleanup,
- * this array was the production seed for `makeInitialWorld` and shipped
- * a heavily pre-built home plus five hand-placed neighbours (forest-ne,
- * desert-far, coast-unknown, hidden-w, hidden-s). That bypassed §3.7's
- * "one populated home island, empty buildings, empty inventory" contract.
- *
- * It now serves exclusively as a test fixture for code that needs a
- * known multi-island world layout (e.g. `world.test.ts` "matches the
- * demo layout", `world-gen.test.ts` overlap-avoidance checks). The
- * production `makeInitialWorld` no longer reads it.
+ * Hand-placed demo islands — TEST FIXTURE ONLY (production `makeInitialWorld`
+ * no longer reads it). Provides a known multi-island layout for tests that
+ * need one (e.g. `world.test.ts` "matches the demo layout",
+ * `world-gen.test.ts` overlap-avoidance). State classifications:
  *
  *   - home plains (0, 0) populated                            → 'visible'  (state a)
  *   - forest-ne (40, -10) discovered, dist≈41 < 80 (vision)   → 'visible'  (state a, via vision)
@@ -729,10 +673,9 @@ export const DEMO_ISLANDS_TEST_FIXTURE: ReadonlyArray<IslandSpec> = [
 ];
 
 /**
- * Top-level world container introduced in step 6. Wraps the spec array (now
- * with mutable `discovered` flags) and the in-flight drone fleet. Built once
- * at startup via `makeInitialWorld`; mutations happen in-place when drones
- * dispatch and return.
+ * Top-level world container: the spec array (with mutable `discovered` flags),
+ * the in-flight drone fleet, and other world-scoped fleets/state. Built once
+ * via `makeInitialWorld`; mutations happen in-place.
  *
  * `IslandState` (in `economy.ts`) is per-island runtime; `WorldState` lives
  * alongside it. Drones live on `WorldState`, not on any single island state.
@@ -951,33 +894,19 @@ export function ensureCellGenerated(world: WorldState, cellX: number, cellY: num
   return newSpecs;
 }
 
-// ---------------------------------------------------------------------------
-// Initial economy state
-// ---------------------------------------------------------------------------
+// Initial economy state.
 //
 // `IslandSpec` describes the static layout (terrain, ellipse, building
 // placements); `IslandState` carries the mutable per-island runtime
-// (inventory, level, XP, lastTick). We keep them separated so the spec
-// can remain `readonly` and `DEMO_ISLANDS` can stay a frozen literal.
-//
-// For step 3 we only build state for the home island — the other demo
-// islands are unpopulated and have no buildings, so their economies are
-// trivially "nothing happens". When colonization lands in a later step,
-// `makeInitialIslandState` will be applied to each newly-populated spec.
+// (inventory, level, XP, lastTick). They're kept separate so the spec can
+// remain `readonly`.
 
 /**
- * Starting inventory — §3.7 starter placeholder, tuned for first-build
- * bootstrap.
- *
- * Per SPEC §3.7 the literal reading is "Empty inventory: no starter
- * resources, no Foundation Kit." That contract held pre-§14 when placement
- * was free — the player just placed a Solar Panel + Mine + Workshop and
- * production filled inventory before they ever needed materials. §14 added
- * placement costs (stone + wood for every T1 building) which makes the
- * Rev-9 starter inventory per rev-16 §12.9.3 + Phase 7 design spec §03.
- * 9 line items, sized so the player can reach 1x battery_bank in
- * <= 45 minutes via the canonical tutorial chain. Replaces the
- * pre-rev-9 4-resource starter (stone 60 / wood 40 / steel 30 / kit 1).
+ * Starting inventory — rev-9 starter per rev-16 §12.9.3 + Phase 7 design spec
+ * §03. §14 added placement costs (stone + wood for every T1 building), so the
+ * literal §3.7 "empty inventory" no longer bootstraps; these line items are
+ * sized so the player can reach 1x battery_bank in <= 45 minutes via the
+ * canonical tutorial chain.
  *
  * Reachability is gated by src/reachability.test.ts — DO NOT lower any
  * value without re-checking that the 45-min invariant holds.
@@ -985,8 +914,6 @@ export function ensureCellGenerated(world: WorldState, cellX: number, cellY: num
 function startingInventory(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
   for (const r of ALL_RESOURCES) inv[r] = 0;
-  // rev-16 §12.9.3 — rev-9 starter. Sized to reach 1x battery_bank
-  // in <= 45 min via the cell_press chain.
   inv.stone           = 1200;
   inv.wood            = 600;
   inv.iron_ore        = 30;

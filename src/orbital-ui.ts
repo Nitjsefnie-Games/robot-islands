@@ -1,20 +1,6 @@
 // §14 T6 Orbital launch modal + canvas reticle target picker.
 //
-// The orbital tick (movement, scanner discovery, debris, comms, repair) was
-// fully wired into main.ts but the player had no surface to actually launch
-// a satellite — `launchSatellite()` was reachable only from test code. This
-// module is that surface.
-//
-// Body per populated island with a Spaceport:
-//   - Header: island name + Spaceport tier + Ascendant-Core gate indicator
-//   - Inventory readout for the five launch consumables
-//   - Three "Arm Launch …" buttons (scanner / relay / sweeper), disabled when
-//     materials or gate aren't satisfied. Arming a launch HIDES the modal and
-//     turns on a canvas reticle the player clicks to pick a target tile.
-// Footer:
-//   - Active-satellite roster (variant / owner / fuel / locked-vs-free)
-//
-// Mirror the §11 drone launch flow (see `drones-ui.ts` `mountDronesUi`):
+// Mirrors the §11 drone launch flow (see `drones-ui.ts` `mountDronesUi`):
 // arm-launch → click target on canvas → `launchSatellite` called with the
 // chosen target coords → toast + reopen-modal on commit; right-click /
 // Escape to cancel. Reticle colour: cyan = reachable, amber = out of range
@@ -247,13 +233,8 @@ export function mountOrbitalUi(
     rangeRingGfx.moveTo(cx, cy - cross).lineTo(cx, cy + cross)
       .stroke({ width: 1, color: VISION_BLUE, alpha: 0.5 });
   }
-  // Attach the range-ring as a child of the reticle layer's PARENT so we
-  // only need one external handle (`reticleLayer`). Simpler than exporting
-  // two layers; main.ts adds reticleLayer to the screen stack, and we keep
-  // the range ring under its own container that main.ts adds to world.
-  // → Actually keep them separate: range ring lives in world space, reticle
-  // in screen space. Exporting only reticleLayer is fine because the brief
-  // says "simple SVG overlay is fine" — we wire the range ring inline.
+  // Range ring lives in world space, reticle in screen space — they stay
+  // separate layers so the ring's radius reads correctly in tiles at any zoom.
 
   // ----- setLaunchMode (canonical entry point) ----------------------------
   function setLaunchMode(on: boolean, target?: { islandId: string; variant: SatelliteVariant }): void {
@@ -610,11 +591,8 @@ export function mountOrbitalUi(
     },
   });
 
-  // Range ring lives in world space so distances read in tiles. We attach it
-  // to the reticle layer via a sibling export — main.ts adds reticleLayer to
-  // the screen stack; we hand the range ring back through a second property
-  // on the handle. (Keeping the type narrow: cast via Object.assign below
-  // so `OrbitalUiHandle` stays implementation-agnostic.)
+  // main.ts adds reticleLayer to the screen stack; the range ring is handed
+  // back through a second property so `OrbitalUiHandle` stays narrow.
   const handle: OrbitalUiHandle & { rangeRingLayer: Container } = {
     show(): void {
       modal.show();

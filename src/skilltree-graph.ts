@@ -1,7 +1,7 @@
 // Pure graph types for the per-island skill graph. No PixiJS, no DOM.
-// Engine: `costToUnlock` finds the cheapest unowned-edge path from the
-// player's frontier to a target node; `buyNode` applies that path.
-// AND-prereq keystones gate on full upstream ownership instead.
+// Engine: `costToUnlock` finds the cheapest unowned-edge path from the player's
+// frontier to a target node, `buyNode` applies it; AND-prereq keystones instead
+// gate on full upstream ownership.
 
 import type { BranchId, SubPathId, SkillNode, SkillEffect } from './skilltree.js';
 

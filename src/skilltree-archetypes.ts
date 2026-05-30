@@ -3,8 +3,8 @@
 // Each sub-path is a depth-graded chain of nodes. Rather than hand-writing
 // ~25 nodes per sub-path, an archetype template captures the ramp pattern
 // (growth factor, cost curve) and `generateFillerNodes` produces the
-// `RawSkillNode[]` array. baseMag is no longer authored here —
-// deriveMagnitudes() solves it at module load.
+// `RawSkillNode[]` array. Magnitudes are not authored here —
+// deriveMagnitudes() solves them at module load.
 
 import type { SkillEffect, NodeId, SubPathId } from './skilltree.js';
 import type { RawSkillNode } from './skilltree-derive-magnitudes.js';
@@ -15,9 +15,7 @@ export interface FillerArchetype {
   readonly effectExtra?: Record<string, unknown>;
   readonly subPath: SubPathId;
   /** Per-depth growth factor for the chain. Default 1.10 = each deeper
-   *  filler is 10% stronger than the previous. baseMag is no longer
-   *  authored here — deriveMagnitudes() solves it at module load so the
-   *  chain's product hits the filler-tier share of the pool cap. */
+   *  filler is 10% stronger than the previous. */
   readonly growth: number;
   readonly baseCost: number;
   readonly costGrowth: number;
@@ -95,9 +93,7 @@ export function generateFillerNodes(arch: FillerArchetype): RawSkillNode[] {
   return nodes;
 }
 
-// ---------------------------------------------------------------------------
 // Extraction branch
-// ---------------------------------------------------------------------------
 
 export const MINING_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
@@ -160,9 +156,7 @@ export const ROBOTICS_FILLER_ARCHETYPES: FillerArchetype[] = [
 ];
 export const ROBOTICS_FILLER_NODES = ROBOTICS_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
-// ---------------------------------------------------------------------------
 // Refinement branch
-// ---------------------------------------------------------------------------
 
 export const SMELTING_FILLER_ARCHETYPES: FillerArchetype[] = [
   {
@@ -229,9 +223,7 @@ export const POWER_SYSTEMS_FILLER_ARCHETYPES: FillerArchetype[] = [
 ];
 export const POWER_SYSTEMS_FILLER_NODES = POWER_SYSTEMS_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
-// ---------------------------------------------------------------------------
 // Logistics branch
-// ---------------------------------------------------------------------------
 
 export const STORAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
   // C3a: storage is now ONE capacity lever-family, category-sliced into 4
@@ -286,9 +278,7 @@ export const NETWORK_FILLER_ARCHETYPES: FillerArchetype[] = [
 ];
 export const NETWORK_FILLER_NODES = NETWORK_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
-// ---------------------------------------------------------------------------
 // Orbital branch
-// ---------------------------------------------------------------------------
 
 export const LAUNCH_FILLER_ARCHETYPES: FillerArchetype[] = [
   // C6b: padSafety (padExplosionReduceMul) demoted — launch.notable.blastDeflector
@@ -345,9 +335,7 @@ export const RESILIENCE_FILLER_ARCHETYPES: FillerArchetype[] = [
 ];
 export const RESILIENCE_FILLER_NODES = RESILIENCE_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
-// ---------------------------------------------------------------------------
-// Ocean branch (new — spec-locked 5×4=20 sub-paths)
-// ---------------------------------------------------------------------------
+// Ocean branch (spec-locked 5×4=20 sub-paths)
 
 export const PATRONAGE_FILLER_ARCHETYPES: FillerArchetype[] = [
   // C5: deliberately-sparse 1-chain sub-path (spec-approved). patronage.recipeRate
@@ -421,9 +409,7 @@ export const OCEANOGRAPHY_FILLER_ARCHETYPES: FillerArchetype[] = [
 ];
 export const OCEANOGRAPHY_FILLER_NODES = OCEANOGRAPHY_FILLER_ARCHETYPES.flatMap(generateFillerNodes);
 
-// ---------------------------------------------------------------------------
 // Aggregate
-// ---------------------------------------------------------------------------
 
 export const ALL_FILLER_NODES: RawSkillNode[] = [
   ...MINING_FILLER_NODES,

@@ -278,11 +278,8 @@ describe('resolveHeatAssignments — §5.2', () => {
   it('N:1 share — three consumers all on one Geothermal Vent → free for all', () => {
     // Geothermal Vent 2×2 at (0,0)..(1,1). Three coke ovens placed around it
     // on the N, E, and S sides — none overlapping each other.
-    //   - Coke Oven N at (0,-2)..(1,-1): south border includes (0,0),(1,0).
-    //     Actually south border is row -1+1 = 0 → (0,0) and (1,0) are vent
-    //     tiles. Adjacent. (Wait — south border of (0,-2)..(1,-1) is row 0
-    //     for columns 0,1, which IS inside the vent footprint, so border
-    //     tiles (0,0) and (1,0) are in vent. Adjacent.)
+    //   - Coke Oven N at (0,-2)..(1,-1): south border is row 0 for columns 0,1
+    //     → (0,0) and (1,0) are vent tiles. Adjacent.
     //   - Coke Oven E at (2,0)..(3,1): west border is column 1 for rows 0,1
     //     → (1,0) and (1,1) are vent tiles. Adjacent.
     //   - Coke Oven S at (0,2)..(1,3): north border is row 1 for columns 0,1

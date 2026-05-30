@@ -30,10 +30,6 @@ function makeIslandSpec(over: Partial<IslandSpec>): IslandSpec {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Radius table
-// ---------------------------------------------------------------------------
-
 describe('ANTENNA_SIGNAL_RADII', () => {
   it('matches the documented placeholder values', () => {
     expect(ANTENNA_SIGNAL_RADII.antenna_t1).toBe(80);
@@ -44,10 +40,6 @@ describe('ANTENNA_SIGNAL_RADII', () => {
     expect(ANTENNA_SIGNAL_RADII.antenna_t6).toBe(700);
   });
 });
-
-// ---------------------------------------------------------------------------
-// computeSignalRanges
-// ---------------------------------------------------------------------------
 
 describe('computeSignalRanges', () => {
   it('emits one SignalRange per Antenna building on a populated island', () => {
@@ -123,10 +115,6 @@ describe('computeSignalRanges', () => {
     expect(ranges[0]!.cy).toBeCloseTo(1);
   });
 });
-
-// ---------------------------------------------------------------------------
-// pointInSignalRange
-// ---------------------------------------------------------------------------
 
 describe('pointInSignalRange', () => {
   it('returns false against an empty range list', () => {

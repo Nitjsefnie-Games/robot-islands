@@ -1,9 +1,5 @@
-// Resources, recipes, and xp_weight table.
-//
-// Per SPEC §6 (Resource Catalog) and §7 (Recipe Chains). Step 9 expands the
-// catalog from the step-3 Mine+Workshop chain to the partial §7.1 Iron/Steel
-// pipeline plus a forestry/biomass loop. Step 12 extends into the T4
-// endgame chain (§6.5) — five new resources fed by the new T4 buildings:
+// Resources, recipes, and xp_weight table. Per SPEC §6 (Resource Catalog)
+// and §7 (Recipe Chains). Catalog spans T0 raws through the T6 Orbital tier:
 //
 //   T0/T1 raws:   wood, iron_ore, coal, biofuel
 //   T1 refined:   iron_ingot, coke, pig_iron, bolt
@@ -11,22 +7,9 @@
 //   T2 component: gear
 //   T4 raw/fuel:  helium_3, cryogenic_hydrogen
 //   T4 component: quantum_chip, exotic_alloy, ai_core
-//
-// Step-13 (T5 Transcendent, §6.6) adds a partial T5 catalog — just enough
-// to drive the Reality Forge chain + T5 fuel:
-//
 //   T5 raw:       casimir_energy   (per §8.10 Casimir Tap "free vacuum energy")
 //   T5 fuel:      plasma_charge    (T5 propellant per §6.6 / §11.7)
 //   T5 component: reality_anchor, eldritch_processor, phase_converter
-//
-// Full §6.6 T5 raw catalog (Dark matter, Zero-point flux, Tachyon stream,
-// Neutronium, Strange matter, Higgs flux, Quantum foam, Aetheric current,
-// Spacetime fragment) shipped in step 18 — only the resources the
-// Reality Forge / Casimir Tap demo recipes consume ship in step 13.
-//
-// Step-20 (T6 Orbital, §14) adds the T5→T6 transition artifact + the
-// resources the spaceport / satellite-assembly defs touch in placeholder form:
-//
 //   T5→T6 artifact: ascendant_core      (§13.4 / §14.1 — flips the §14.1 gate)
 //   T6 fuel:        antimatter_propellant (§11.7 / §14.10)
 //   T6 payload:     scanner_sat, relay_sat, orbital_insertion_package (§14.3 / §14.10)
@@ -232,15 +215,8 @@ export type ResourceId =
   | 'aether_beacon'
   | 'reality_engine'
   | 'singularity_battery_unit'
-  // Step-20 (T6 Orbital, §14). Partial catalog: the resources the §14.2
-  // Spaceport + §14.10 satellite-assembly defs touch. §14.10 placeholder
-  // recipes additionally reference Aluminum, Magnet, Optical Fiber,
-  // Spacetime fragment, Memetic Core, Repair Pack, Phase Converter — those
-  // beyond Phase Converter are now in the catalog (step 18/19). Most live
-  // launch mechanics shipped (tickSatMovement, tickCommPackets, tickDebris,
-  // tickScannerDiscovery, tickRepairDrones, launchSatellite); §14 Spaceport
-  // tier I→II→III upgrade and §14.7 pad-explosion-tier-reset are the
-  // remaining STILL-DEFERRED bits.
+  // T6 Orbital (§14). Resources the §14.2 Spaceport + §14.10
+  // satellite-assembly defs touch.
   //
   //   ascendant_core           — T5/T6 transition artifact per §13.4 /
   //                              §14.1. Crafted at `ascendant_assembly`
@@ -1861,9 +1837,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     exogenousFlowKg: 0,
   },
 
-  // ---------------------------------------------------------------------------
   // T4 endgame chain (§6.5 / §7.11 / §8.2 / §9.5)
-  // ---------------------------------------------------------------------------
   // Dependency arrow: particle_accelerator → quantum_chip
   //                   → cryogenic_compute_center (ARCTIC) → ai_core
   //                   pyroforge (VOLCANIC) → exotic_alloy (uses helium_3 fuel)
@@ -2360,9 +2334,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'electronics',
   },
 
-  // ---------------------------------------------------------------------------
   // T5 Transcendent chain (§6.6 / §7.12 / §8.10)
-  // ---------------------------------------------------------------------------
   //   casimir_tap     → 1 casimir_energy / 1800s (no inputs; §8.10 "free vacuum energy";
   //                     2026-05-18 ÷3 for display visibility → now 600s)
   //   reality_forge   → 1 reality_anchor / 24h cycle from §7.12 spec literal
@@ -2449,9 +2421,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // ---------------------------------------------------------------------------
   // Step-18 recipe graph closure (§7.1-§7.12)
-  // ---------------------------------------------------------------------------
   // The next block of recipes closes the resource graph: every resource
   // referenced as a recipe INPUT must have at least one producer. Cycle
   // times are placeholders chosen for "demonstrably tickable, not
@@ -3045,9 +3015,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     // forest-ne but with no replenishment.
   },
 
-  // ---------------------------------------------------------------------------
   // T5 raw extractors (§8.10 / step-18 closure) — rebalanced for idle-game scale, step #19 (×8)
-  // ---------------------------------------------------------------------------
   // §8.10 spec describes deterministic per-cycle output rotation across
   // multiple raws ("deterministic given world seed + cycle index"). The
   // step-18 simplification: each extractor outputs a single raw per
@@ -3098,9 +3066,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // ---------------------------------------------------------------------------
   // T5→T6 transition + T6 Orbital (§13.4 / §14.10 / step 20)
-  // ---------------------------------------------------------------------------
   // §14.2-14.8 / §14.12 launch + debris + lodge + repair mechanics are
   // live (`orbital.ts`); these recipes produce real consumable payloads
   // and fuel. §14.10 spec recipe inputs that aren't yet in the catalog
@@ -3232,12 +3198,10 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // ---------------------------------------------------------------------------
   // T3 microchip intermediate chain (§7.7) — pcb, circuit_board, processor,
   // computing_module. pcb_etcher is the first step; its output feeds
-  // circuit_assembler, then processor_fab, then compute_module_fab.
-  // Produces the T3 electronics intermediates that feed T4+ assembly recipes.
-  // ---------------------------------------------------------------------------
+  // circuit_assembler, then processor_fab, then compute_module_fab. These
+  // T3 electronics intermediates feed T4+ assembly recipes.
   pcb_etcher: {
     cycleSec: 49142.5, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { wire: 1, glass: 1 },
@@ -3471,9 +3435,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: {},
     category: 'manufacturing',
   },
-  // ---------------------------------------------------------------------------
   // Ocean-layer §3 — Task 8 extractor recipes (5 buildings, 12 outputs).
-  // ---------------------------------------------------------------------------
   //
   // Each ocean extractor cycles through its outputs deterministically via
   // `rotateOutputs` (§8.10) — one output per cycle, picked by world-tick
@@ -3544,9 +3506,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     ],
     category: 'extraction',
   },
-  // ---------------------------------------------------------------------------
   // Ocean-layer §3 — Task 9 processor recipes (4 chemistry processors).
-  // ---------------------------------------------------------------------------
   //
   // One recipe per building, keyed by building id (mirrors Task 8). The
   // multi-output processors use `rotateOutputs` to cycle through their
@@ -3817,8 +3777,4 @@ export function nextRotateOutputBoundaryMs(recipe: Recipe, tMs: number): number 
   const nextCycleIndex = Math.floor(tMs / cycleMs) + 1;
   return nextCycleIndex * cycleMs;
 }
-
-/** Local copy of the rotation union from placement.ts. Kept here to avoid
- *  importing placement.ts (which already imports recipes.ts); the value is
- *  PlacedBuilding.rotation, which placement.ts also constrains to 0|1|2|3. */
 

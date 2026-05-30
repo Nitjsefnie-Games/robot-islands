@@ -4,13 +4,9 @@
 // matching category. Generic storage (Crate, Warehouse) labels a single
 // resource at placement time and bumps only that resource's cap.
 //
-// This module is the canonical resource→category mapping. Pure data — no
-// PixiJS, no DOM. Imported by `building-defs.ts` (StorageCategory union),
-// `world.ts` (aggregateStorageCaps), and `placement.ts` (place/demolish).
-//
-// Assignments follow §6 (T0 raws → dry_goods, T1+ refined by chemistry,
-// T4-T5 components → rare). When in doubt, the brief says default to
-// dry_goods.
+// Canonical resource→category mapping. Pure data — no PixiJS, no DOM.
+// Imported by building-defs.ts, world.ts (aggregateStorageCaps), and
+// placement.ts. Assignments follow §6; default to dry_goods when in doubt.
 
 import type { ResourceId } from './recipes.js';
 
@@ -39,32 +35,17 @@ export const ALL_STORAGE_CATEGORIES: ReadonlyArray<StorageCategory> = [
 
 /**
  * Canonical mapping. Every ResourceId MUST appear here exactly once;
- * `storage-categories.test.ts` enforces this. The bucketing rules per §6:
+ * `storage-categories.test.ts` enforces this. Bucketing rules per §6:
  *
- *   dry_goods  — T0 raw extractables (ore, wood, coal, stone, sand, quartz, …)
- *                plus T1 dry refined (lumber, glass, iron_ingot, pig_iron,
- *                coke, foundation_kit). Scrap (§6.7) is a T1 dry good.
- *   liquid_gas — all fluids and gases: water (fresh + salt), crude oil,
- *                natural gas, hydrogen, biofuel, naphtha, chlorine,
- *                lubricant, diesel, aviation kerosene, nitrogen,
- *                cryogenic_hydrogen, plasma_charge (T5 fuel/propellant).
- *   temp_sensitive — cryo_coolant (per §4.6 "cryo-coolant" example),
- *                cryogenic_compound and liquid_nitrogen (shipped via Phase 10
- *                / Phase 5 chemistry chains). Cold Storage carries all three.
- *   components — T2-T3 manufactured parts: bolt, gear, wire, sheet_metal
- *                (shipped in Task 6.1), microchip, quantum_chip. Silicon is a T3
- *                semiconductor intermediate but lives in components since
- *                it's a manufactured solid, not a raw.
- *   rare       — helium_3 (T3 raw, per §4.6 "all T4-T6 components" and
- *                "Helium-3" example), exotic_alloy (T4), ai_core (T4 per
- *                brief), and every T5 resource (casimir_energy,
- *                reality_anchor, plasma_charge — wait: plasma_charge is a
- *                T5 fuel per §6.6, so it's liquid_gas; eldritch_processor,
- *                phase_converter, aetheric_current, tachyon_stream,
- *                dark_matter, strange_matter).
- *
- * Per the task brief: quantum_chip → components (T4 but a manufactured
- * chip), ai_core → rare. plasma_charge → liquid_gas as a T5 propellant.
+ *   dry_goods  — T0 raw extractables plus T1 dry refined. Scrap (§6.7) is a
+ *                T1 dry good.
+ *   liquid_gas — all fluids and gases, including plasma_charge (T5 fuel).
+ *   temp_sensitive — cryo_coolant (§4.6 example), cryogenic_compound,
+ *                liquid_nitrogen. Cold Storage carries all three.
+ *   components — T2-T3 manufactured parts; silicon lives here as a
+ *                manufactured solid, not a raw.
+ *   rare       — helium_3 (§4.6 names it), exotic_alloy, ai_core, and every
+ *                T5 resource except plasma_charge (a T5 fuel → liquid_gas).
  */
 export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCategory>> = {
   // T0 raws — dry_goods.
@@ -247,13 +228,10 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   aether_beacon: 'rare',
   reality_engine: 'rare',
   singularity_battery_unit: 'rare',
-  // Step-20 (T6 Orbital). All five route to `rare` — the Vault is the
-  // canonical T5/T6 catch-all. `antimatter_propellant` is a fuel/gas in
-  // nature (§11.7) and an arguable `liquid_gas` candidate, but routing it
-  // to `rare` keeps T6 launch fuel gated behind a Vault rather than a
-  // mid-tier Tank, matching its T6 weight (1000) and §14.10 "real
-  // production commitment" narrative. Reassignable if a T6 fuel-storage
-  // building lands later.
+  // Step-20 (T6 Orbital) — all route to `rare`, the Vault being the T5/T6
+  // catch-all. antimatter_propellant is a fuel/gas (§11.7) and an arguable
+  // liquid_gas candidate, but `rare` keeps T6 launch fuel gated behind a
+  // Vault not a mid-tier Tank, matching its weight (1000) and §14.10.
   ascendant_core: 'rare',
   antimatter_propellant: 'rare',
   scanner_sat: 'rare',
@@ -306,19 +284,14 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   cryo_containment_unit: 'rare',
   particle_accelerator_core: 'rare',
   self_replication_module: 'rare',
-  // Ocean-layer §3 — Task 8 extractor outputs.
-  //   Brines are aqueous solutions → liquid_gas (mirrors saltwater /
-  //     fresh_water / sulfuric_acid). methane_hydrate is a frozen gas/water
-  //     compound but stored as a solid clathrate → liquid_gas keeps it with
-  //     the other hydrocarbon stocks (crude_oil / natural_gas).
-  //   Nodules are solid mineral concretions → dry_goods (mirrors ores).
-  //     re_nodule / co_nodule contain rare-earth / cobalt content that gates
-  //     T4 processors, but the raw nodule itself sits with the rest of the
+  // Ocean-layer §3 — Task 8 extractor outputs. WHY these buckets:
+  //   Brines are aqueous → liquid_gas; methane_hydrate is a solid clathrate
+  //     but kept with the hydrocarbon stocks (crude_oil / natural_gas).
+  //   Nodules are solid concretions → dry_goods; the raw nodule sits with the
   //     ore family until concentrated by §3 Task-9 processors.
-  //   Vent products are mineral / exotic ores → dry_goods for vent_sulfide,
-  //     rare for vent_exotic (T4 exotic feeder for the alloy chain).
-  //   he3_dilute / heavy_isotope_slurry are valuable isotope concentrates →
-  //     rare (mirrors helium_3 / uranium_ore handling — Vault-gated).
+  //   Vent products → dry_goods (vent_sulfide) / rare (vent_exotic, T4 feeder).
+  //   he3_dilute / heavy_isotope_slurry are isotope concentrates → rare
+  //     (Vault-gated, mirroring helium_3 / uranium_ore).
   dilute_brine: 'liquid_gas',
   concentrated_brine: 'liquid_gas',
   he3_dilute: 'rare',
@@ -329,17 +302,13 @@ export const RESOURCE_STORAGE_CATEGORY: Readonly<Record<ResourceId, StorageCateg
   heavy_isotope_slurry: 'rare',
   vent_sulfide: 'dry_goods',
   vent_exotic: 'rare',
-  // Ocean-layer §3 — Task 9 processor outputs.
-  //   lithium_brine / bromine / heavy_water are aqueous-or-solution
-  //     intermediates → liquid_gas (lithium_brine mirrors lithium-chemistry
-  //     handling; bromine is a halogen stored as liquid under pressure;
-  //     heavy_water is D2O, an aqueous isotope variant).
-  //   salt is reused — already categorised as dry_goods at the
-  //     evaporator-output entry above (not re-declared here).
-  //   rare_earth_concentrate / refined_cobalt are processed mineral powders
-  //     → dry_goods (mirror rare_earth + ingot-family handling).
-  //   exotic_alloy_seed / tritium_seed are T5 exotics → rare (mirror
-  //     reality_anchor / antimatter_capsule).
+  // Ocean-layer §3 — Task 9 processor outputs. WHY these buckets:
+  //   lithium_brine / bromine / heavy_water → liquid_gas (aqueous/solution
+  //     intermediates; bromine stored as liquid under pressure; heavy_water
+  //     is D2O).
+  //   salt is reused — already dry_goods at the evaporator-output entry above.
+  //   rare_earth_concentrate / refined_cobalt → dry_goods (processed powders).
+  //   exotic_alloy_seed / tritium_seed are T5 exotics → rare.
   lithium_brine: 'liquid_gas',
   bromine: 'liquid_gas',
   rare_earth_concentrate: 'dry_goods',

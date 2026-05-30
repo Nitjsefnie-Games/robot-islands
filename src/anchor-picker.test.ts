@@ -1,11 +1,8 @@
 // Anchor-picker pure-logic tests — `candidateAnchors` filters and orders
 // populated islands by distance (in cells) to a prospective ocean placement.
 //
-// Per the §4 revision (commit a92efa2), anchor selection does NOT walk a
-// cable component; it lists every populated island within
-// `ANCHOR_MAX_RANGE_CELLS` of the placement cell. The UI modal layered on
-// top of this function is exercised by hand / future placement tests; this
-// file pins the pure helper only.
+// Per §4: anchor selection does NOT walk a cable component; it lists every
+// populated island within `ANCHOR_MAX_RANGE_CELLS` of the placement cell.
 
 import { describe, expect, it } from 'vitest';
 

@@ -1,8 +1,6 @@
-// Pure-helper tests for the visual-polish color and jitter functions in
-// `island.ts`. Rendering itself isn't tested (it produces PixiJS Graphics
-// objects; visual delta is verified by browsing) — these tests cover the
-// pure math used by the renderer so a regression in determinism or
-// boundary behaviour fails fast.
+// Pure-helper tests for the color/jitter math in `island.ts`. Rendering
+// itself isn't tested (PixiJS Graphics; verified by browsing) — these cover
+// the pure math so a determinism or boundary regression fails fast.
 
 import { describe, expect, it } from 'vitest';
 

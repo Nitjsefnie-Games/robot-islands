@@ -48,7 +48,6 @@ export function mountModal(
   modal.classList.add('ri-modal');
   scrim.appendChild(modal);
 
-  // Header
   const header = document.createElement('div');
   header.classList.add('ri-modal__header');
   const title = document.createElement('span');
@@ -76,13 +75,11 @@ export function mountModal(
     modal.appendChild(filters);
   }
 
-  // Body
   const body = document.createElement('div');
   body.classList.add('ri-modal__body');
   cfg.buildBody(body);
   modal.appendChild(body);
 
-  // Footer
   if (cfg.buildFooter) {
     const footer = document.createElement('div');
     footer.classList.add('ri-modal__footer');

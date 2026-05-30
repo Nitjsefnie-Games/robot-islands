@@ -90,7 +90,6 @@ export function currentTint(
 function syntheticTint(nowMs: number): PhaseTint {
   const p = dayPhase(nowMs);
   const phaseWidth = TRANSITION_MS / DAY_DURATION_MS;
-  // Find which boundary we're near.
   for (const b of PHASE_BOUNDARIES) {
     const dist = Math.abs(p - b.phase);
     const wrapDist = Math.min(dist, 1 - dist);

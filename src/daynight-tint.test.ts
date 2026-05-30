@@ -38,8 +38,7 @@ describe('currentTint', () => {
   });
 
   it('crossfades alpha across the dusk→night boundary', () => {
-    // Boundary is at phase 0.75. Walk a few ms across it; alpha should be
-    // monotonically non-decreasing as we approach Night's higher alpha.
+    // Boundary at phase 0.75; alpha should rise monotonically toward Night's higher alpha.
     const boundaryMs = -(DAY_DURATION_MS * 0.375) + DAY_DURATION_MS * 0.75;
     const before = currentTint(boundaryMs - 2 * 60 * 1000);
     const at = currentTint(boundaryMs);

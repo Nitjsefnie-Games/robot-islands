@@ -1,9 +1,8 @@
 // §13.4 Endgame goals — achievement ledger only.
 //
-// SPEC §13.4 is explicit: no win screen, no banner, no popup, no
-// acknowledgement fires when artifacts complete. EndgameState therefore
-// shrinks to the live achievement ledger (`achieved` + `firstAchievedMs`)
-// that callers can inspect, with no detection helper of its own.
+// SPEC §13.4 is explicit: no win screen/banner/popup fires on artifact
+// completion, so EndgameState is just the live achievement ledger callers
+// inspect, with no detection helper of its own.
 //
 // Pure layer — no PixiJS, no DOM. Leaf consumer of world/economy types.
 

@@ -28,9 +28,7 @@ import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { islandInscribedAny } from './island.js';
 
-// ---------------------------------------------------------------------------
 // Test fixtures
-// ---------------------------------------------------------------------------
 
 function emptyInv(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -143,9 +141,6 @@ beforeEach(() => {
   _resetRouteIdCounter();
 });
 
-// ---------------------------------------------------------------------------
-// Tuning sanity
-// ---------------------------------------------------------------------------
 
 describe('vehicle tuning', () => {
   it('ship tuning is T1, slow, fuel-efficient', () => {
@@ -174,9 +169,6 @@ describe('vehicle tuning', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Per-tier vehicle stats
-// ---------------------------------------------------------------------------
 
 describe('per-tier vehicle stats', () => {
   it('T3 ship is faster than T1 ship', () => {
@@ -229,9 +221,7 @@ describe('per-tier vehicle stats', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §12.4 starter building inscription — small biomes
-// ---------------------------------------------------------------------------
 
 describe('§12.4 starter building inscription', () => {
   function makeArrivalSetup(targetRadius: number): {
@@ -349,9 +339,6 @@ describe('§12.4 starter building inscription', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// hasLaunchBuildingFor
-// ---------------------------------------------------------------------------
 
 describe('hasLaunchBuildingFor', () => {
   it('returns true for a ship when origin has a Shipyard', () => {
@@ -382,9 +369,6 @@ describe('hasLaunchBuildingFor', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// dispatchVehicle — validation paths
-// ---------------------------------------------------------------------------
 
 describe('dispatchVehicle', () => {
   function setup(): {
@@ -589,9 +573,6 @@ describe('dispatchVehicle', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// tickVehicles — arrival semantics
-// ---------------------------------------------------------------------------
 
 describe('tickVehicles', () => {
   function setup(): {
@@ -731,9 +712,7 @@ describe('tickVehicles', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §11.7 tier-matched fuel grades — dispatchVehicle
-// ---------------------------------------------------------------------------
 
 describe('dispatchVehicle — §11.7 tier-matched fuel', () => {
   function tieredSetup(level: number): {
@@ -943,9 +922,7 @@ describe('§12.4 foundation kit decomposition', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §12.4 Foundation Kit starter-inventory grace cap
-// ---------------------------------------------------------------------------
 
 describe('§12.4 Foundation Kit starter-inventory grace cap', () => {
   it('arriving colony holds kit raw contents above zero normal cap', () => {
@@ -1042,9 +1019,7 @@ describe('§12.4 Foundation Kit starter-inventory grace cap', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §2.6 vehicle weather destruction
-// ---------------------------------------------------------------------------
 
 describe('vehicle weather destruction §2.6', () => {
   function findClearSeed(): string {
@@ -1142,9 +1117,7 @@ describe('vehicle weather destruction §2.6', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §9.6 / §12.7 Auto-Patronage
-// ---------------------------------------------------------------------------
 
 function makeT3Island(id: string, cx: number, cy: number, opts: { hasPatronHub?: boolean } = {}): IslandSpec {
   return makeIslandSpec({

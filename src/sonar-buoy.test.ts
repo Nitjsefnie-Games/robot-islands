@@ -13,10 +13,6 @@ import type { PlacedBuilding } from './buildings.js';
 import type { IslandSpec, WorldState } from './world.js';
 import { tickSonarBuoys, SONAR_BUOY_DEF_ID, SONAR_BUOY_RADIUS_TILES } from './sonar-buoy.js';
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
 function makeIslandSpec(over: Partial<IslandSpec>): IslandSpec {
   return {
     id: 'spec',
@@ -69,10 +65,6 @@ function powerSource(id: string, x = 0, y = 0): PlacedBuilding {
 function sonarBuoy(id: string, x: number, y: number): PlacedBuilding {
   return { id, defId: SONAR_BUOY_DEF_ID, x, y };
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe('Sonar Buoy', () => {
   it('powered buoy writes both revealedCells and depthRevealedCells within radius', () => {

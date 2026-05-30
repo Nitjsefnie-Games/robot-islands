@@ -1,7 +1,6 @@
 // src/tutorial.ts — 72-step tutorial state machine + predicate helpers.
 //
 // Per rev-16 §11.2 + spec §05. Pure module — no DOM imports.
-// Phase 7 commit 3 (new TUTORIAL_STEPS array + lifecycle functions).
 
 import { BUILDING_DEFS } from './building-defs.js';
 import type { BuildingDefId } from './building-defs.js';
@@ -34,8 +33,8 @@ export interface TutorialStep {
 /** Runtime tutorial state.
  *
  *  `completed` is a Set at runtime (matches the shape seeded by
- *  `makeInitialWorld` and deserialized by persistence.ts).  The
- *  new Phase-7 helpers add `completedAt` for TTL-based soft-dismiss.
+ *  `makeInitialWorld` and deserialized by persistence.ts). `completedAt`
+ *  drives TTL-based soft-dismiss.
  */
 export interface TutorialState {
   completed: Set<ObjectiveId>;
@@ -133,7 +132,7 @@ function maxIslandLevel(w: WorldState): number {
 // ---------------------------------------------------------------------------
 // 72-step TUTORIAL_STEPS — the final ordered tutorial chain.
 //
-// Source: docs/superpowers/specs/2026-05-29-tutorial-chain-final.md (Task 1.1).
+// Source: docs/superpowers/specs/2026-05-29-tutorial-chain-final.md.
 // Build steps carry `targetDefId` (the building defId the step asks the player
 // to place); concept `[C]` / level-gate / craft-milestone steps omit it.
 //
@@ -860,7 +859,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
 ];
 
 // ---------------------------------------------------------------------------
-// New lifecycle functions (Phase 7)
+// Lifecycle functions
 // ---------------------------------------------------------------------------
 
 export function currentStep(world: WorldState): TutorialStep | null {

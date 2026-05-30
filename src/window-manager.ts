@@ -6,10 +6,6 @@
 //
 // Chrome panels (action-strip, island-bar) are skipped via CHROME_PANEL_IDS.
 // Modals don't go through mountPanel at all so they're naturally out.
-//
-// This file lands in two passes:
-//   Task 1 — types, pure helpers, blob I/O. Impure body stubbed.
-//   Task 4 — makePanelDraggable / resetUiLayout bodies.
 
 import { setPanelFree, panelRecordIds, restoreAllToZones } from './ui-zones.js';
 import { Z } from './ui-tokens.js';
@@ -220,7 +216,7 @@ export function makePanelDraggable(
   const minWidth = opts?.minWidth ?? 200;
   const minHeight = opts?.minHeight ?? 120;
 
-  // 1) Append the .ri-resize grip (CSS-styled in Task 3).
+  // 1) Append the .ri-resize grip.
   let grip = panel.querySelector<HTMLDivElement>(':scope > .ri-resize');
   if (!grip) {
     grip = document.createElement('div');

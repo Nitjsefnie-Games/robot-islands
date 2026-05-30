@@ -1,15 +1,5 @@
 // Tier Reset (§9.7) — pure logic tests.
 //
-// Coverage matrix per the task brief:
-//   - canTierReset returns each rejection reason correctly (tier-too-low,
-//     cooldown-active, insufficient-resources) and ok=true when all gates pass.
-//   - Cooldown blocks for 24h after last reset; allows after.
-//   - Skill point refund — preserve unspent + sum spent into unspent, then
-//     clear unlockedNodes / unlockedEdges.
-//   - Inventory preserved minus cost; storageCaps preserved; buildings
-//     preserved (operating timestamps untouched).
-//   - level → 1, xp → 0.
-//
 // Construction-state preservation is enforced by NOT touching `buildings`,
 // `storageCaps`, `aiCoreCrafted`, or `ascendantCoreCrafted` in
 // `executeTierReset`. The economy-side runtime gate (T2+ buildings stall
@@ -112,7 +102,6 @@ describe('canTierReset — rejection reasons', () => {
 
   it('rejects with "insufficient-resources" when inventory is short', () => {
     const state = makeState({ level: 15 });
-    // No funding — inventory stays at zero.
     const r = canTierReset(state, 0);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe('insufficient-resources');
@@ -181,7 +170,6 @@ describe('executeTierReset — clears progression', () => {
     // Spend 3 + 3 = 6 points on two notables.
     spendPoint(state, 'mining.notable.efficientDrills');
     spendPoint(state, 'smelting.notable.refractoryLining');
-    // Spent total = 6; verify the unspent+refund sums and post-reset slate are clear.
     const unspentBeforeReset = state.unspentSkillPoints; // 13 - 6 = 7
     const refundExpected = 6;
     executeTierReset(state, 1_000);
@@ -191,15 +179,13 @@ describe('executeTierReset — clears progression', () => {
   });
 
   it('refunds the exact brief example: 10 unspent + 5 spent → 15 unspent', () => {
-    // The brief calls out this exact integer pair. The skill catalog's costs
-    // are 1 + 2 = 3 per depth-1+depth-2 pair, so we can't hit "5 spent"
-    // organically; seed the spent flag directly to enforce the integer total.
+    // Depth-1+depth-2 pairs cost 1 + 2 = 3, so use a single cost-5 notable
+    // (heliumSeep) to hit the brief's "5 spent" example exactly.
     const state = makeState({
       level: 15,
-      unspentSkillPoints: 17, // need 5 for purchases + 12 leftover for symmetry
+      unspentSkillPoints: 17,
     });
     fund(state);
-    // Use a cost-5 notable to match the brief's "5 spent" example.
     spendPoint(state, 'mining.notable.heliumSeep'); // 5 → total spent = 5
     expect(state.unspentSkillPoints).toBe(12);
     executeTierReset(state, 1_000);
@@ -224,10 +210,9 @@ describe('executeTierReset — clears progression', () => {
     executeTierReset(state, 10_000);
     expect(state.lastResetAt).toBe(10_000);
     // Reset drops level → 1 (T1), so a second check would fire 'tier-too-low'
-    // before reaching the cooldown gate. Bump the level back into T3 for
-    // this assertion so the cooldown is the active gate. The cooldown gate
-    // also fires regardless of tier on a real island that re-climbs to T3
-    // within 24h — that's the spec scenario this test isolates.
+    // before reaching the cooldown gate. Bump back into T3 so the cooldown is
+    // the active gate — the real-island scenario being isolated is re-climbing
+    // to T3 within 24h.
     state.level = 15;
     fund(state);
     const r = canTierReset(state, 10_000 + 1);

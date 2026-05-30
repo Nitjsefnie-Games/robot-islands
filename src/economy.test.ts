@@ -671,13 +671,9 @@ describe('computeRates', () => {
   });
 });
 
-// -----------------------------------------------------------------------
-// §9.3 magic recipeInputMul — observable through the REAL advanceIsland path
-// (Task 2 carryover: now that recipeInputMul nodes exist in DEFAULT_GRAPH, the
-// lever can be exercised end-to-end via unlockedNodes, not just by injecting
-// baseMult into computeRates).
-// -----------------------------------------------------------------------
-
+// §9.3 magic recipeInputMul — observable through the REAL advanceIsland path.
+// recipeInputMul nodes exist in DEFAULT_GRAPH, so the lever can be exercised
+// end-to-end via unlockedNodes, not just by injecting baseMult into computeRates.
 describe('advanceIsland — magic recipeInputMul reduces input drawdown (real skill-mult path)', () => {
   // All 12 magic nodes across the three refinement inputEff chains. Their
   // derived magnitudes carry in DEFAULT_GRAPH; effectiveSkillMultipliers folds
@@ -735,10 +731,6 @@ describe('advanceIsland — magic recipeInputMul reduces input drawdown (real sk
     expect(magicConsumedCoal).toBeCloseTo(baseConsumedCoal / div, 9);
   });
 });
-
-// -----------------------------------------------------------------------
-// §4.5 buff-adjacency — observable in production rates
-// -----------------------------------------------------------------------
 
 describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
   it('two adjacent mines each gain the same_def +10% buff (1 match, cap 2)', () => {
@@ -1602,10 +1594,6 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
   });
 });
 
-// -----------------------------------------------------------------------
-// Step 9 — new chain + storage aggregation
-// -----------------------------------------------------------------------
-
 describe('step-9 chain — Smelter T1 + storage aggregation', () => {
   it.skip('Smelter on home produces iron_ingot at 1/80s with iron_ore + coal stocked', () => {
     // TODO: Phase 10 recalibration — smelter recipe rewritten in Phase 2 commit 3.
@@ -1731,9 +1719,7 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
   });
 });
 
-// -----------------------------------------------------------------------
-// Phase 4 invariant fixtures — storage rescale (§9.4)
-// -----------------------------------------------------------------------
+// Phase 4 invariant fixtures — storage rescale (§9.4).
 function fakeSiloAt(x: number, y: number): PlacedBuilding {
   return { id: `silo-${x}-${y}`, defId: 'silo', x, y };
 }
@@ -1786,9 +1772,6 @@ describe('storage rescale (rev-16 §13.3)', () => {
   });
 });
 
-// -----------------------------------------------------------------------
-// Phase 4 invariant fixtures — sub-calibrated baseCap (§9.5)
-// -----------------------------------------------------------------------
 describe('sub-calibrated baseCap (rev-16 §13.4)', () => {
   it('helium_3 = 1 (1 g) on fresh island; vault adds 5000 (5 kg)', () => {
     const base = aggregateStorageCaps([]);
@@ -1805,15 +1788,6 @@ describe('sub-calibrated baseCap (rev-16 §13.4)', () => {
     expect(base.ai_core).toBe(0);
   });
 });
-
-// -----------------------------------------------------------------------
-// Step 10 — specialization roles + Network Consciousness
-// -----------------------------------------------------------------------
-
-
-// -----------------------------------------------------------------------
-// Step 12 — T4 endgame production integration (§6.5 / §9.5)
-// -----------------------------------------------------------------------
 
 describe('step-12 — T4 endgame production integration (§6.5)', () => {
   it('Pyroforge on a synthetic volcanic spec produces exotic_alloy at 1/3600s base rate', () => {
@@ -1879,10 +1853,6 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
   });
 });
 
-// -----------------------------------------------------------------------
-// NC buff integration
-// -----------------------------------------------------------------------
-
 describe('NC buff integration', () => {
   it('NC buff +5% applies to T3+ island production but NOT to T1 island', () => {
     // Mine 1/50s = 0.02/s. Over 100s: T1 = 2.0 units, T3 = 2.0 × 1.05 = 2.1. (rebalanced step #19)
@@ -1903,10 +1873,6 @@ describe('NC buff integration', () => {
     expect(t3.inventory.iron_ore).toBeCloseTo(5.25, 9);
   });
 });
-
-// -----------------------------------------------------------------------
-// §13 core-craft auto-flip
-// -----------------------------------------------------------------------
 
 describe('§13 core-craft auto-flip', () => {
   it('flips aiCoreCrafted on first ai_core production', () => {
@@ -1971,10 +1937,6 @@ describe('§13 core-craft auto-flip', () => {
     expect(state.inventory.ascendant_core ?? 0).toBeGreaterThan(0);
   });
 });
-
-// -----------------------------------------------------------------------
-// §5.2 Heat adjacency — economy integration
-// -----------------------------------------------------------------------
 
 describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
   // Blast Furnace consumes iron_ingot + coke and produces pig_iron on a
@@ -2106,10 +2068,6 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
   });
 });
 
-// -----------------------------------------------------------------------
-// §9.7 Tier Reset — runtime tier-band gate integration
-// -----------------------------------------------------------------------
-
 describe('§9.7 — tier-band runtime gate', () => {
   it('a T2 building on a post-reset L1 island has effectiveRate=0 and produces no power', () => {
     // Place a T2 Blast Furnace + supporting Coal Furnace + Mine + plenty of
@@ -2220,10 +2178,6 @@ describe('§9.7 — tier-band runtime gate', () => {
   });
 });
 
-// -----------------------------------------------------------------------
-// Step 11 — artificial-island construction integration
-// -----------------------------------------------------------------------
-
 describe('step-11 — artificial-island construction integration (§2.5)', () => {
   it('founder Plains/T3 with sufficient materials constructs a Plains 4×4 artificial island', async () => {
     // Local import keeps the artificial-island module out of the file-level
@@ -2273,14 +2227,6 @@ describe('step-11 — artificial-island construction integration (§2.5)', () =>
     expect(result.newState.id).toBe('art-plains-1');
   });
 });
-
-// -----------------------------------------------------------------------
-// Step 2.5 — placement integration
-// -----------------------------------------------------------------------
-
-// -----------------------------------------------------------------------
-// §8.1 tile-dependent Mine recipes
-// -----------------------------------------------------------------------
 
 describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
   it('Mine on a coal-tile spec produces coal at 1/50s (not iron_ore)', () => {
@@ -2402,9 +2348,6 @@ describe('step-2.5 — placement is recognised by the live economy', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §4.7 maintenance integration — operating-time accrual + auto-maintain
-// ---------------------------------------------------------------------------
 describe('§4.7 maintenance — integration with advanceIsland', () => {
   const HOUR_MS = 60 * 60 * 1000;
   const T1_THRESHOLD = 12 * HOUR_MS;
@@ -2916,10 +2859,6 @@ describe('extractor tile gating §8.1', () => {
   });
 });
 
-// -----------------------------------------------------------------------
-// §13.3 Time Lock — banking + acceleration
-// -----------------------------------------------------------------------
-
 describe('Genesis Chamber', () => {
   it('produces T1 resource at 1 per 5min', () => {
     const state = makeState({
@@ -3206,10 +3145,6 @@ describe('Singularity Battery', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §8.10 T5 extractor multi-output rotation
-// ---------------------------------------------------------------------------
-
 describe('resolveRotatingOutput', () => {
   it('alternates between 2 options deterministically', () => {
     const recipe = {
@@ -3304,10 +3239,6 @@ describe('computeRates with T5 extractor rotation', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §4.5 Chemical Reactor toxicity event integration
-// ---------------------------------------------------------------------------
-
 describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
   it('halves the effective rate of a toxicity-active reactor versus a clear one', () => {
     const reactorA: PlacedBuilding = { id: 'b-cr-a', defId: 'chemical_reactor', x: 0, y: 0 };
@@ -3372,10 +3303,6 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
     expect(anyTriggered).toBe(true);
   });
 });
-
-// -----------------------------------------------------------------------
-// §6.7 Steel Mill scrap substitution — economy integration
-// -----------------------------------------------------------------------
 
 describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
   // Steel Mill base recipe: 1 pig_iron / 600s → 1 steel + 1 slag. The §6.7
@@ -3491,10 +3418,7 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §4 ocean-layer — anchor crediting + paused reasons (Task 10)
-// ---------------------------------------------------------------------------
-//
+// §4 ocean-layer — anchor crediting + paused reasons (Task 10).
 // Per the §4 design doc (`docs/superpowers/specs/2026-05-18-ocean-layer-design.md`):
 // "The platform is logically a building on `anchorIslandId`'s `buildings[]`
 // array, indexed by an island ID that isn't the platform's geographic
@@ -3756,9 +3680,6 @@ describe('§4 ocean anchor crediting + paused reasons (Task 10)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// findNextCapEvent precision-residue handling
-// ---------------------------------------------------------------------------
 // Regression: `findNextCapEvent` used to return `tMs` when an inventory held
 // a sub-precision residue (e.g. `pig_iron = 2.6e-21` after a consumer drained
 // it through float-subtraction precision loss). The math:

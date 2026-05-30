@@ -62,8 +62,7 @@ export function mountBuildingAlertsOverlay(
       for (const b of state.buildings) {
         const def = BUILDING_DEFS[b.defId];
         const tiles = footprintTiles(def.footprint, b.x, b.y, (b.rotation ?? 0) as Rotation);
-        // Footprint extents (shared by both badge corners + the construction
-        // tint).
+        // Footprint extents — shared by both badge corners + the construction tint.
         let minTx = Infinity;
         let maxTx = -Infinity;
         let minTy = Infinity;
@@ -75,13 +74,11 @@ export function mountBuildingAlertsOverlay(
           if (t.y > maxTy) maxTy = t.y;
         }
 
-        // §9.3 construction visual. While constructionRemainingMs > 0 draw a
-        // translucent cyan tint over the building's footprint plus a small
-        // progress arc in the top-left corner so the player sees "this is
-        // still building" vs "this is broken / inactive". Computed first so
-        // the maintenance dot paints on top of it (a building can't be both
-        // under construction AND maintenance-degraded since the maintenance
-        // counter doesn't start accruing until construction completes).
+        // §9.3 construction visual: translucent cyan footprint tint + top-left
+        // progress arc while constructionRemainingMs > 0. Computed first so the
+        // maintenance dot paints on top (a building can't be both under
+        // construction AND maintenance-degraded — the maintenance counter
+        // doesn't start accruing until construction completes).
         const remaining = b.constructionRemainingMs ?? 0;
         if (remaining > 0) {
           // Footprint rect in world pixels (TILE_PX origin at tile centre, so
@@ -92,9 +89,8 @@ export function mountBuildingAlertsOverlay(
           const rw = (maxTx - minTx + 1) * TILE_PX;
           const rh = (maxTy - minTy + 1) * TILE_PX;
           gfx.rect(rx, ry, rw, rh).fill({ color: CONSTRUCTION_CYAN, alpha: 0.28 });
-          // Progress arc in the top-left corner. Base = tier's full
-          // construction time; remaining shrinks from full → 0 so the arc
-          // grows from 0° → 360° as the build completes.
+          // Progress arc: base = tier's full construction time; remaining
+          // shrinks full → 0 so the arc grows 0° → 360° as the build completes.
           const base = BASE_CONSTRUCTION_MS_BY_TIER[def.tier];
           const completed = Math.max(0, Math.min(1, 1 - remaining / base));
           const tlPx = (spec.cx + minTx) * TILE_PX - TILE_PX / 2;
@@ -140,13 +136,11 @@ export function mountBuildingAlertsOverlay(
           }
         }
 
-        // §NEW disabled cue (p_visual_cue=low_alpha). 0.40-alpha fill +
-        // dashed red outline over the footprint. Painted after the
-        // construction tint (so a disabled-but-under-construction
-        // building, which UI flow forbids but a hand-edited save could
-        // produce, would show both) and before the maintenance dot (so
-        // the dot — which still reflects the frozen factor — surfaces
-        // on top).
+        // §NEW disabled cue (p_visual_cue=low_alpha): 0.40-alpha fill + dashed
+        // red outline. Painted after the construction tint (a hand-edited save
+        // could make a building both disabled AND under construction — show
+        // both) and before the maintenance dot (the dot, still reflecting the
+        // frozen factor, surfaces on top).
         if (b.disabled === true) {
           const half = TILE_PX / 2;
           const rx = (spec.cx + minTx) * TILE_PX - half;

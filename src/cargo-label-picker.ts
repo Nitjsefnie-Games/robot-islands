@@ -30,10 +30,6 @@ import {
 import { DEFAULT_CARGO_LABEL } from './placement.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 
-// ---------------------------------------------------------------------------
-// Display labels
-// ---------------------------------------------------------------------------
-
 /** §4.6 storage-category display labels. Duplicates `inspector-ui.ts:81-87`
  *  intentionally — both modals surface category headers in the same prose so
  *  the player learns one taxonomy. If a future patch consolidates, lift this
@@ -46,10 +42,6 @@ const STORAGE_CATEGORY_LABEL: Readonly<Record<StorageCategory, string>> = {
   rare: 'Rare / Valuable',
 };
 
-// ---------------------------------------------------------------------------
-// Public surface
-// ---------------------------------------------------------------------------
-
 export interface CargoLabelPickerHandle {
   /** Open the picker. Resolves with the player's pick, or `null` if cancelled
    *  (Escape, scrim-click, close button). Only one picker session may be
@@ -57,10 +49,6 @@ export interface CargoLabelPickerHandle {
    *  pending resolves the previous one as `null` (treat as a re-arm). */
   pick(): Promise<ResourceId | null>;
 }
-
-// ---------------------------------------------------------------------------
-// Mount
-// ---------------------------------------------------------------------------
 
 export function mountCargoLabelPicker(
   parentEl: HTMLElement,

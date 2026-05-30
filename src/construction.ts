@@ -17,8 +17,7 @@ import type { Tier } from './skilltree.js';
 
 /** Base construction times in ms, per tier. Placeholders — tune in Appendix A.
  *  Scale with tier so a T6 spaceport is a much bigger commitment than a T1
- *  Mine, but small enough that T1 builders don't notice the wait in normal
- *  play (30s on T1 is "the time it takes to read the inspector"). */
+ *  Mine, but small enough T1 builders don't notice the wait in normal play. */
 export const BASE_CONSTRUCTION_MS_BY_TIER: Readonly<Record<Tier, number>> = {
   1: 30 * 1000,
   2: 2 * 60 * 1000,

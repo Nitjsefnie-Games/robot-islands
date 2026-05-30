@@ -87,7 +87,7 @@ export interface Drone {
 export const DRONE_TIER_EFFICIENCY: Record<DroneTier, number> = {
   1: 3, 2: 6, 3: 9, 4: 12, 5: 15, 6: 18,
 };
-export const DRONE_SPEED_TILES_PER_SEC = 0.5; // rebalanced for idle-game scale, step #19 (was 2)
+export const DRONE_SPEED_TILES_PER_SEC = 0.5; // idle-game scale
 // §11.5 per-tier scan corridor half-width in tiles. T4 is the omni-pulse
 // (uses T4_PULSE_RADIUS_TILES below, not a corridor) — slot is 0 / unused.
 // Doubles T1 → T3 per spec ("2W" ratio); T6 = 16 (design-spec locked).

@@ -1,5 +1,4 @@
-// Canonical source for the cycleSec rebalance. See
-// docs/superpowers/specs/2026-05-29-throughput-density-table.md for provenance.
+// Provenance: docs/superpowers/specs/2026-05-29-throughput-density-table.md
 import type { BuildingDefId } from './building-defs.js';
 import { RESOURCE_META } from './recipes.js';
 
@@ -22,7 +21,7 @@ export const ARCHETYPE_DENSITY = {
 } as const;
 export type Archetype = keyof typeof ARCHETYPE_DENSITY;
 
-/** Each recipe-bearing building → its archetype. (From the companion building→archetype map.) */
+/** Each recipe-bearing building → its archetype. */
 export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   // extraction
   mine: 'hard_rock_mining', deep_mine: 'hard_rock_mining',

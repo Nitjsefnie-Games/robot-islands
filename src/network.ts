@@ -1,4 +1,4 @@
-// Cross-island shared resource pools (Task 13).
+// Cross-island shared resource pools.
 
 import type { ResourceId } from './recipes.js';
 import type { Graph } from './skilltree-graph.js';

@@ -1,15 +1,4 @@
-// Tests for `computeBuffStack` per SPEC §4.4 / §4.5.
-//
-// Pure-layer tests — no DOM, no PixiJS. Verifies that:
-//   - A building with no adjacencyBuffs returns the identity multiplier (1.0).
-//   - Per-entry stacking is additive within the cap
-//     (N matches → multiplier 1 + N × percentPerMatch/100, capped at maxMatches).
-//   - Multiple AdjacencyBuff entries compose multiplicatively.
-//   - matchKind 'same_def' / 'same_category' / 'def_id' all match on the
-//     expected predicate.
-//   - Multi-tile neighbors that border the focal footprint on multiple tiles
-//     count exactly once (de-duplication by building id).
-//   - 4-neighbor adjacency excludes diagonals and self-footprint.
+// Pure-layer tests for `computeBuffStack` per SPEC §4.4 / §4.5 — no DOM, no PixiJS.
 
 import { describe, expect, it } from 'vitest';
 
@@ -49,7 +38,6 @@ function withGates(
 
 describe('computeBuffStack — §4.4 / §4.5', () => {
   it('returns 1.0 for a building whose def has no adjacencyBuffs', () => {
-    // The default `dock` def has no adjacencyBuffs.
     const focal: PlacedBuilding = { id: 'd', defId: 'dock', x: 0, y: 0 };
     const others: PlacedBuilding[] = [
       { id: 'm', defId: 'mine', x: 2, y: 0 },
@@ -121,12 +109,9 @@ describe('computeBuffStack — §4.4 / §4.5', () => {
     const mineA: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
     // Logger is 1x1; place at (2,0) — east of mine's footprint.
     const logger: PlacedBuilding = { id: 'l', defId: 'logger', x: 2, y: 0 };
-    // Workshop (manufacturing) at (2,-2) doesn't match the category.
-    // Actually let's make sure a non-extraction neighbor doesn't count by
-    // putting the workshop at (0,-2) — north of the mine.
+    // Workshop (manufacturing) north of the mine — not an extraction category match.
     const workshop: PlacedBuilding = { id: 'w', defId: 'workshop', x: 0, y: -2 };
     const buildings = [mineA, logger, workshop];
-    // Logger counts (same category), workshop does not.
     expect(computeBuffStack(mineA, buildings, defs)).toBeCloseTo(1.2, 9);
   });
 
@@ -195,10 +180,7 @@ describe('computeBuffStack — §4.4 / §4.5', () => {
   });
 
   it('default defs parameter falls back to BUILDING_DEFS', () => {
-    // Smoke test: calling without a defs argument should not throw and
-    // should return 1.0 for a def with no placeholder buff (or the
-    // configured placeholder multiplier if the def has one). We use
-    // 'dock' which is not in the placeholder list.
+    // Smoke test: 'dock' has no placeholder buff, so the no-defs call returns 1.0.
     const focal: PlacedBuilding = { id: 'd', defId: 'dock', x: 0, y: 0 };
     expect(computeBuffStack(focal, [focal])).toBe(1);
   });

@@ -4,21 +4,11 @@
 // state and draws; the main ticker calls `tickVehicles` once per frame to
 // advance arrivals. Tests target this module directly.
 //
-// Scope notes:
-//   - Per-tier variants live in SHIP_STATS / HELICOPTER_STATS — speed,
-//     tilesPerFuel, maxKits, failureRate, and weatherMultiplier all scale
-//     with the launching island's tier (§12.6).
-//   - §2.6 weather destruction implemented. Mechanical-failure rolls are
-//     implemented (§12.5). Every dispatched vehicle still arrives
-//     deterministically unless a roll fails at the expected-arrival tick.
-//   - Auto-routing at the 10-island NC milestone (§9.6 Auto-Patronage,
-//     §12.7) is IMPLEMENTED and gated by Patron Hub presence.
-//   - Coastal-tile placement check on Shipyard implemented via
-//     `coastal: true` on the shipyard def (§4.3 / §8.8).
-//   - Foundation Kit decomposition fires on arrival per §12.4 spec
-//     ("decomposes into its raw constituent resources the moment it
-//     arrives at the colony"). Held under the §12.3 grace cap until
-//     normal storage takes over.
+// Per-tier stats (speed, tilesPerFuel, maxKits, failureRate, weatherMultiplier)
+// live in SHIP_STATS / HELICOPTER_STATS and scale with the launching island's
+// tier (§12.6). Auto-Patronage routing (§9.6 / §12.7) is gated by Patron Hub
+// presence. Foundation Kit decomposition fires on arrival (§12.4), held under
+// the §12.3 grace cap until normal storage takes over.
 //
 // Fuel grade matches the launching island's tier per §11.7 — resolved at
 // dispatch via `fuelForTier(tierForLevel(originState.level))` and stored on

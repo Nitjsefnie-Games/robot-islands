@@ -133,9 +133,8 @@ export function executeTierReset(state: IslandState, nowMs: number): void {
   state.inventory.steel = (state.inventory.steel ?? 0) - cost.steel;
   state.inventory.gear = (state.inventory.gear ?? 0) - cost.gear;
 
-  // Refund every spent point. A missing catalog entry (e.g., a save that
-  // referenced a since-removed node) costs 0 to be safe — defensive
-  // programming, not an expected path.
+  // Refund every spent point. A missing catalog entry (e.g. a save that
+  // referenced a since-removed node) refunds 0 — defensive, not an expected path.
   let refund = 0;
   for (const nodeId of state.unlockedNodes) {
     const node = nodeById(nodeId);

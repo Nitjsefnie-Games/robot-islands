@@ -122,10 +122,6 @@ function makeWorld(opts: {
   };
 }
 
-// ---------------------------------------------------------------------------
-// networkedIslandIds
-// ---------------------------------------------------------------------------
-
 describe('networkedIslandIds', () => {
   it('home island is always networked', () => {
     const world = makeWorld({
@@ -197,10 +193,6 @@ describe('networkedIslandIds', () => {
     expect(networkedIslandIds(world)).toEqual(new Set(['home', 'b']));
   });
 });
-
-// ---------------------------------------------------------------------------
-// computeNcState — threshold tests
-// ---------------------------------------------------------------------------
 
 describe('computeNcState — Network Consciousness thresholds per §9.6', () => {
   it('empty world → milestone 0 / buff 1.0 / count 0', () => {
