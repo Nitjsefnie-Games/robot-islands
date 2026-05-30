@@ -151,6 +151,18 @@ export function formatShortfall(missing: Partial<Record<ResourceId, number>>): s
   return parts.join(', ');
 }
 
+/** Order resources by fill % (descending; alphabetical tiebreak for stable,
+ *  deterministic rows). Pure — returns a NEW array, never mutates the input.
+ *  `fillPct(r)` supplies each resource's current inventory-vs-cap percentage;
+ *  the crate cargo-label picker uses it so the resources an island is closest
+ *  to overflowing on surface first instead of an alphabetical wall. */
+export function sortByFillDesc(
+  resources: readonly ResourceId[],
+  fillPct: (r: ResourceId) => number,
+): ResourceId[] {
+  return [...resources].sort((a, b) => fillPct(b) - fillPct(a) || a.localeCompare(b));
+}
+
 /**
  * Validate a placement candidate. Pure: reads `spec.majorRadius/minorRadius/
  * biome/artificial/buildings` and `state.level/aiCoreCrafted`; does not
