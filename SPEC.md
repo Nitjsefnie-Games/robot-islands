@@ -1087,6 +1087,22 @@ A depth→tier gate caps individual nodes by the island's level-derived tier (`t
 > the legacy modal now contains only the stats strip, tier-reset
 > section, and an "Open Skill Graph" button.
 
+### 9.4 Fledgling Island Boost
+
+A freshly-settled island runs every production recipe faster so the early game isn't an hours-long wait. The boost is a level-scaled multiplier applied to each recipe's throughput in `computeRates` (alongside skill, floor, and modifier multipliers):
+
+```
+fledglingRecipeMul(level) = 1 + 1.5 × max(0, (10 − level) / 9)
+```
+
+It starts at **+150% (×2.5) at level 1** and ramps linearly to **+0% (×1.0) at level 10**, then stays neutral for all higher levels (`max(0, …)` self-clamps — the boost is never negative). It scales the whole recipe (outputs and input consumption together), so production chains speed up uniformly without unbalancing their ratios.
+
+The boost is a pure function of the island's level — no persisted state. XP accrues on the boosted production (§9.1), so the early levels pass quickly and the island leaves the boost window on its own; the mechanic is self-limiting. The inspector recipe panel surfaces the active multiplier in its bonuses line (e.g. `fledgling ×2.50`) while it is in effect.
+
+| Level | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10+ |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ×mult | 2.50 | 2.33 | 2.17 | 2.00 | 1.83 | 1.67 | 1.50 | 1.33 | 1.17 | 1.00 |
+
 ### 9.5 Biome-Locked Uniques (T4)
 
 At Tier 4, biome-specific unique buildings unlock per island. These buildings are bottlenecks: each one is the only place in the world where its key resource can be produced. Endgame players must therefore colonize at least one island of every relevant biome to access the full T4 supply chain. Artificial islands cannot host biome-locked uniques (see §2.5).
