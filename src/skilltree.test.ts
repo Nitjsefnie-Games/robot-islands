@@ -17,6 +17,7 @@ import {
   cumulativeSkillPointsForLevel,
   effectiveGraph,
   effectiveSkillMultipliers,
+  formatNodeMagnitude,
   hasPickableSkill,
   launchSuccessBonus,
   NODE_CATALOG,
@@ -1222,6 +1223,38 @@ describe('effectiveGraph with crystal bindings', () => {
     const g = effectiveGraph(state);
     const socketNodes = g.nodes.filter((n) => n.id === 'gs.ext.mining-1');
     expect(socketNodes.length).toBe(1);
+  });
+});
+
+describe('formatNodeMagnitude', () => {
+  function mk(effect: SkillNode['effect'], magnitude: number): SkillNode {
+    return {
+      id: 'x' as import('./skilltree.js').NodeId,
+      subPath: 'mining', depth: 1, cost: 1, magnitude, effect, description: 'x',
+    };
+  }
+
+  it('shows a reduction effect as the effective sub-1 multiplier (the bug: ×1.089 read as an increase)', () => {
+    // powerConsumptionMul is applied as a divisor — a +0.089 node lowers draw
+    // to ×(1/1.089) ≈ 0.918, NOT ×1.089.
+    expect(formatNodeMagnitude(mk({ kind: 'powerConsumptionMul', reduce: true }, 0.089))).toBe('×0.9183');
+  });
+
+  it('shows recipeInputMul (also reduce) as a sub-1 multiplier', () => {
+    expect(formatNodeMagnitude(mk({ kind: 'recipeInputMul', reduce: true }, 0.5))).toBe('×0.6667');
+  });
+
+  it('shows a normal increase effect as ×(1+m)', () => {
+    expect(formatNodeMagnitude(mk({ kind: 'recipeRateMul', category: 'extraction' }, 0.05))).toBe('×1.0500');
+  });
+
+  it('keeps the additive formats (parallelBuildCapAdd, launchSuccessAdditive)', () => {
+    expect(formatNodeMagnitude(mk({ kind: 'parallelBuildCapAdd' }, 2))).toBe('+2.000');
+    expect(formatNodeMagnitude(mk({ kind: 'launchSuccessAdditive' }, 0.03))).toBe('+3.0 pp');
+  });
+
+  it('returns "" for a zero/absent magnitude', () => {
+    expect(formatNodeMagnitude(mk({ kind: 'powerProductionMul' }, 0))).toBe('');
   });
 });
 

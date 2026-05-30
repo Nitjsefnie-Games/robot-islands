@@ -13,11 +13,11 @@ import {
   bindCrystal,
   unbindCrystal,
   computeMiniTreeRefund,
+  formatNodeMagnitude,
   nodePurchaseStatus,
   tierForLevel,
   tierRequiredForDepth,
   type BranchId,
-  type SkillNode,
 } from './skilltree.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
@@ -367,14 +367,6 @@ export function mountSkillGraphView(
     refresh();
   }
 
-  function formatNodeMagnitude(node: SkillNode): string {
-    if (!('magnitude' in node) || node.magnitude == null || node.magnitude === 0) return '';
-    const kind = node.effect.kind;
-    if (kind === 'parallelBuildCapAdd') return `+${node.magnitude.toFixed(3)}`;
-    if (kind === 'launchSuccessAdditive') return `+${(node.magnitude * 100).toFixed(1)} pp`;
-    // Default: multiplier-style. (1+m) is the per-node factor.
-    return `×${(1 + node.magnitude).toFixed(4)}`;
-  }
 
   function escapeHtml(s: string): string {
     return s.replace(/[&<>"']/g, (c) => ({
