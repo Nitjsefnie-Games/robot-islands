@@ -1,4 +1,4 @@
-// §4.4 / §4.5 buff-adjacency resolution.
+// §4.4 / §4.5 buff- and gating-adjacency resolution.
 //
 // SPEC §4.4: "Adjacency is computed using 4-neighbors. For a multi-tile
 // building, the adjacent set is the union of tiles bordering any cell of the
@@ -7,21 +7,10 @@
 // SPEC §4.5 (buff form): "building gains a multiplier per matching neighbor,
 // capped at N. Format: `+X% statKey per adjacent matchType, max N matches`."
 //
-// `computeBuffStack` returns the multiplicative buff multiplier to apply to
-// a building's recipe rate. It walks the focal building's 4-neighbor border,
-// collects the set of distinct neighbor building ids that touch the border,
-// and for each AdjacencyBuff entry on the focal building's def counts the
-// number of neighbors satisfying the entry's `matchKind` predicate (capped
-// at `maxMatches`). Multiple entries compose multiplicatively; within a
-// single entry, N matches contribute additively as `1 + N × percentPerMatch/100`.
-//
 // Pure module — no PixiJS, no DOM. The 4-neighbor footprint walk mirrors
 // `heat.ts`'s pattern (footprintKeySet → borderTiles); we keep the helpers
 // local rather than exporting them from heat.ts so the two resolvers can
 // evolve independently. Both compute the same set per §4.4.
-//
-// Both buff adjacency (`computeBuffStack`) and gating adjacency (`checkGates`)
-// are implemented in this module per SPEC §4.5.
 
 import {
   BUILDING_DEFS,
@@ -117,15 +106,11 @@ function neighborMatches(
  * applies `1 + min(count, maxMatches) × percentPerMatch/100` to the
  * running product.
  *
- * Returns 1.0 when:
- *   - the focal def has no `adjacencyBuffs`,
- *   - or no neighbors match any entry.
- *
- * Pure function: no input is mutated. The `defs` parameter defaults to the
- * canonical `BUILDING_DEFS` catalog; tests pass overrides to wire
- * placeholder buffs without touching the production catalog. The economy
- * threads its `RatesContext.defs` catalog through so a power-free /
- * heavy-mine test catalog continues to work.
+ * Returns 1.0 when the focal def has no `adjacencyBuffs` or no neighbors
+ * match any entry. Pure function: no input is mutated. The `defs` parameter
+ * defaults to the canonical `BUILDING_DEFS`; tests pass overrides to wire
+ * placeholder buffs without touching the production catalog, and the economy
+ * threads its `RatesContext.defs` catalog through.
  */
 export function computeBuffStack(
   b: PlacedBuilding,

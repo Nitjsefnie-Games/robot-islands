@@ -1,21 +1,12 @@
 // Freight-grid side dock + in-world route line visuals.
 //
-// Aesthetic — see frontend-design notes (logistics control station; sibling
-// of DRONE OPS / DSP-01): the panel is the same console chrome with a
-// different sub-identity stamp `▰ FREIGHT GRID / LCS-01`. Where DRONE OPS
-// is amber-dominant (arming/dispatching), FREIGHT GRID is cyan-dominant
-// (scheduled flow). Active routes use a thin cyan rule for "continuous"
-// (contrast with the drone ledger's amber countdown rule).
+// Aesthetic: sibling of DRONE OPS (sub-identity `▰ FREIGHT GRID / LCS-01`).
+// Where DRONE OPS is amber-dominant (arming/dispatching), FREIGHT GRID is
+// cyan-dominant (scheduled flow); active routes use a thin cyan rule for
+// "continuous" vs. the drone ledger's amber countdown rule.
 //
-// Structure (bottom-up):
-//   - Palette + DOM helpers reused from drones-ui
-//   - Header stamp `FREIGHT GRID / LCS-01`
-//   - Stat block (ROUTES / CAP TOTAL / IN-FLIGHT / FUNNEL)
-//   - Create-route form: source / via-building / dest / cargo (collapsible)
-//   - Active routes ledger (cargo, capacity, in-flight count, ETA)
-//   - In-world route lines + chevron glyphs are owned by RouteRenderer
-//     (world-space, parented under the `world` Container; see
-//     src/routes-renderer.ts and main.ts wiring).
+// In-world route lines + chevron glyphs are owned by RouteRenderer
+// (world-space, under the `world` Container; see routes-renderer.ts).
 
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
@@ -38,17 +29,11 @@ function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
 }
 
-// ---------------------------------------------------------------------------
-// §6 cable-tint discriminator
-// ---------------------------------------------------------------------------
-// Power-link routes (no cargo) get distinct tints from cargo routes so the
-// player can see at a glance which routes are power-only — and within the
-// power-link family, the §4 ocean-layer `submarine_cable` variant is
-// darker than the land `cable` so undersea power links read at a glance.
+// §6 cable-tint discriminator: power-link routes (no cargo) get distinct
+// tints from cargo routes so power-only routes read at a glance; within the
+// power-link family, the §4 ocean-layer `submarine_cable` variant is darker
+// than the land `cable` so undersea links are distinguishable.
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 export interface RouteUiHandle {
   refresh(nowMs: number): void;
   show(): void;
@@ -471,9 +456,8 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     else if (islands.length >= 2) toSel.value = islands[1]!.id;
 
     cargoSel.replaceChildren();
-    // "any" — priority list defaults to [] per §2.4. The player adds
-    // entries via the ledger's editor (`renderPriorityEditor` below);
-    // drag-to-reorder once populated.
+    // "any" — priority list defaults to [] per §2.4; the player adds entries
+    // via the ledger's cargo editor (drag-to-reorder once populated).
     const oAny = document.createElement('option');
     oAny.value = '__any__';
     oAny.textContent = 'any (priority)';
@@ -912,7 +896,6 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const addSel = document.createElement('select');
     addSel.style.cssText = 'flex:1 1 auto;background:var(--ri-panel-solid);'
       + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;padding:2px 4px;';
-    // Build the option list. 'all' first; then remaining real resources.
     if (!haveAll) {
       const o = document.createElement('option');
       o.value = 'all';
@@ -921,7 +904,6 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     }
     const remaining = ALL_RESOURCES.filter((r) => !have.has(r));
     if (remaining.length === 0 && haveAll) {
-      // nothing left to add — keep the dropdown disabled in this case
       const o = document.createElement('option');
       o.textContent = '(all resources added)';
       addSel.appendChild(o);
@@ -990,7 +972,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     }
     capStat.valueEl.textContent = `${totalCap.toFixed(2)} u`;
     flightStat.valueEl.textContent = `${totalFlight}`;
-    // Funnel: sum funnelPending across all island states (in XP-units).
+    // Funnel: sum funnelPending across all island states (XP-units).
     let totalFunnel = 0;
     for (const s of deps.islandStates.values()) {
       for (const r of ALL_RESOURCES) totalFunnel += s.funnelPending[r] ?? 0;

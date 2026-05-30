@@ -110,7 +110,6 @@ export function mountSatelliteOverlay(world: WorldState): SatelliteOverlayHandle
       // Outer outline for contrast on dark ocean.
       gfx.circle(px, py, 3 * TILE_PX).fill({ color: 0x000000, alpha: 0.6 });
       gfx.circle(px, py, 2 * TILE_PX).fill({ color });
-      // Repair-pending markers — small red ring.
       if (sat.pendingRepairDroneId !== null) {
         gfx.circle(px, py, 4 * TILE_PX).stroke({
           color: 0xff5040,

@@ -4,16 +4,14 @@
 //   - `actions`: name → handler. Defined by the renderer / world; the input
 //     system never invents an action, only dispatches.
 //   - `bindings`: KeyboardEvent.code → action name. Pure data — swappable at
-//     runtime. (UI for rebinding is not yet built, but the architecture
-//     supports it: replacing bindings reroutes inputs without touching action
-//     code.)
+//     runtime, so rebinding reroutes inputs without touching action code.
 //
-// `KeyboardEvent.code` is layout-independent ("KeyW" on QWERTY, AZERTY, Dvorak,
-// etc.) so bindings remain stable across keyboard layouts.
+// `KeyboardEvent.code` is layout-independent ("KeyW" on QWERTY, AZERTY, Dvorak)
+// so bindings stay stable across keyboard layouts.
 //
-// UI buttons reuse this same dispatcher: a "Toggle Grid" <button> simply calls
-// `dispatchAction('toggle-grid', registry)` on click. Two inputs → one action
-// → one handler. No drift between keyboard and mouse paths.
+// UI buttons reuse this same dispatcher (a "Toggle Grid" <button> calls
+// `dispatchAction('toggle-grid', registry)`): two inputs → one action → one
+// handler, no drift between keyboard and mouse paths.
 
 export type ActionName = string;
 export type ActionHandler = () => void;

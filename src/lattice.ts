@@ -11,9 +11,9 @@ import { tierForLevel } from './skilltree.js';
 import type { WorldState } from './world.js';
 
 /** §13.3 Network Consciousness threshold for Omniscient Lattice activation.
- *  Re-exported from `constants.ts` (the canonical source of truth); the
- *  same numeric value drives the milestone-4 row of `MILESTONE_TABLE` in
- *  `network-consciousness.ts` so the two cannot drift. */
+ *  Re-exported from the canonical `constants.ts`; the same value drives the
+ *  milestone-4 row of `MILESTONE_TABLE` in `network-consciousness.ts` so the
+ *  two cannot drift. */
 export { LATTICE_ACTIVATION_THRESHOLD };
 
 /** §13.3 A T5-mastered island has reached level 50 AND crafted an AI core. */
@@ -142,7 +142,6 @@ export function latticeStorageCaps(
  * islands in `world.latticeNodeIslands`. Returns `undefined` when the Lattice
  * is inactive so callers can use `?? state.inventory` without branching.
  *
- * The sum is recomputed each call — cheap for the typical ~20-island Lattice.
  */
 export function latticeInventory(
   world: WorldState,

@@ -91,9 +91,7 @@ describe('computeVisionSources', () => {
     });
     const sources = computeVisionSources([home]);
     expect(sources.length).toBe(2);
-    // First emission is the baseline ellipse.
     expect(sources[0]?.kind).toBe('ellipse');
-    // Second is the Lighthouse circle.
     const circle = sources[1];
     expect(circle?.kind).toBe('circle');
     if (circle?.kind === 'circle') {

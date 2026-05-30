@@ -5,19 +5,6 @@
 // The pure shape makes the loop independently testable and the offline-catchup
 // path (§15.5) trivially correct — the same loop handles 1 frame and 24 hours.
 //
-// The algorithm at a glance:
-//
-//   while (t < now) {
-//     // 1. Compute per-building rates given current inventory state
-//     //    Each building's effective rate = base × inputAvail × outputAvail
-//     //    inputAvail is continuous [0,1] (bottleneck ratio)
-//     //    outputAvail is binary 0|1 (cap headroom)
-//     // 2. Find the next moment something changes (inventory hits 0 or cap)
-//     // 3. Integrate over [t, nextEvent] with constant rates
-//     // 4. Accrue XP proportional to PRODUCTION (gross outputs), not net flow
-//     // 5. Advance t to nextEvent, loop
-//   }
-//
 // Why event-driven: a naive `dt × rate` step over the whole interval would
 // overshoot caps (e.g., produce 101 iron_ore when cap is 100) and consume
 // inputs after they've gone to zero. Splitting at events keeps each segment
@@ -117,10 +104,9 @@ export function batteryCapacityWs(state: IslandState, mul: SkillMultipliers): nu
  *     cell; not expected in initial scope). Mirrors §4's "Terrain access
  *     lost (hypothetical future event removing a vent)" edge case.
  *
- * `'anchor-disconnected'` (in the original spec draft) was dropped in the
- * a92efa2 revision: `submarine_cable` is a `RouteType` rather than a
- * tile-placed component, so there's no cable-graph to break. Anchoring is
- * a declarative field, not a graph relationship.
+ * There is no `'anchor-disconnected'` reason: `submarine_cable` is a
+ * `RouteType` rather than a tile-placed component, so there's no cable-graph
+ * to break. Anchoring is a declarative field, not a graph relationship.
  */
 export type PausedReason = 'anchor-depopulated' | 'terrain-lost';
 
@@ -1583,9 +1569,9 @@ const FUNNELING_BONUS_PERCENT_FOR_DRAIN = 0.5;
  */
 export function xpForLevel(n: number): number {
   if (n <= 1) return 0;
-  // Rebalanced for idle-game scale, step #19: coefficient ÷4 (100 → 25) so
-  // L1→L5 ≈ 1760 XP (~25 min at 1.2 XP/sec). Both segments use 25 to keep
-  // the polynomial/exponential boundary continuous at n=50.
+  // Coefficient 25 (idle-game scale): L1→L5 ≈ 1760 XP (~25 min at 1.2 XP/sec).
+  // Both segments use 25 to keep the polynomial/exponential boundary
+  // continuous at n=50.
   if (n <= 50) return 25 * Math.pow(n, 2.2);
   const at50 = 25 * Math.pow(50, 2.2);
   return at50 * Math.pow(1.2, n - 50);

@@ -87,8 +87,7 @@ describe('enumerateBuildings', () => {
       { id: 'b4', defId: 'smelter', x: 6, y: 0 },
     ];
     const rows = enumerateBuildings(buildings);
-    // Mine is extraction (label: Extract); Workshop is manufacturing;
-    // Smelter is smelting (label: Refine).
+    // defId → category → label: mine→extraction→Extract, smelter→smelting→Refine.
     expect(rowString(rows, 'Extract')).toBe('Mine ×2');
     expect(rowString(rows, 'Refine')).toBe('Smelter ×1');
     expect(rowString(rows, 'Manufacturing')).toBe('Workshop ×1');
@@ -96,7 +95,6 @@ describe('enumerateBuildings', () => {
 
   it('suppresses categories with no buildings entirely', () => {
     const rows = enumerateBuildings([{ id: 'b', defId: 'mine', x: 0, y: 0 }]);
-    // Only one category surfaces (Extract); the rest are absent.
     expect(rows.map((r) => r.label)).toEqual(['Extract']);
   });
 

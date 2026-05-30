@@ -59,7 +59,6 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'quantum_manipulator',
   'quantum_chip_fab',
   'fuel_rod_assembler',
-  // Phase 11 — T4 endgame (Task 11.4)
   'plasma_containment_assembler',
   'singularity_sensor_lab',
   'cryo_containment_assembler',
@@ -222,39 +221,30 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'transistor_doping',
   'capacitor_doping',
   'resistor_doping',
-  // Phase 10 — T3 minerals + alloy (Task 10.1)
+  // T3 minerals + alloy
   'mercury_well',
-  // Phase 10 — T3 minerals + alloy (Task 10.2)
   'diamond_quarry',
-  // Phase 10 — T3 minerals + alloy (Task 10.3)
   'cryo_compound_lab',
-  // Phase 10 — T3 minerals + alloy (Task 10.4)
   'mag_alloyer',
-  // Phase 10b — T3 minerals + alloy (Task 10.4.5)
   'lithium_extractor',
-  // Phase 10b — T3 power components (Task 10.5)
+  // T3 power components
   'mag_forge',
-  // Phase 10b — T3 power components (Task 10.6)
   'motor_assembly',
-  // Phase 10b — T3 power components (Task 10.7)
   'generator_lab',
-  // Phase 10c — T3 mechanical assemblies (Task 10.8)
+  // T3 mechanical assemblies
   'pump_assembly',
   'hydraulic_assembly',
   'pneumatic_assembly',
-  // Phase 10c — T3 power components (Task 10.9)
   'solar_cell_lab',
-  // Phase 10c — T3 power components (Task 10.10)
   'fuel_cell_lab',
-  // Phase 10c — T3 glass/ceramics (Task 10.11)
+  // T3 glass/ceramics + fiber spinners
   'optical_glass_kiln',
-  // Phase 10c — T3 fiber spinners (Task 10.12)
   'glass_fiber_spinner',
   'optical_fiber_drawer',
-  // Task 13.2 — Foundation Kit variants
+  // Foundation Kit variants
   'kit_assembler_enriched',
   'kit_assembler_refined',
-  // §X.Y T2-T4 battery defs (Task 1)
+  // T2-T4 battery defs
   'battery_bank',
   'capacitor_bank',
   'flywheel_array',
@@ -950,8 +940,7 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
   it('Singularity Battery: 2×2, power category with no resource storage, zero standby draw', () => {
     // §8.4 "effectively infinite electrical power storage (not a resource
     // storage building)" — the §4.6 categorized-storage cleanup removed the
-    // earlier 10000-cap placeholder. Power-buffer mechanic per §13.3 still
-    // STILL-DEFERRED to step 14+.
+    // earlier 10000-cap placeholder. Power-buffer mechanic per §13.3 deferred.
     const def = BUILDING_DEFS.singularity_battery;
     expect(shapeWidth(def.footprint)).toBe(2);
     expect(shapeHeight(def.footprint)).toBe(2);
@@ -1440,7 +1429,7 @@ describe('§7.1 carbon_steel_mill (T2 carbon steel producer)', () => {
     const def = BUILDING_DEFS.carbon_steel_mill;
     expect(def).toBeDefined();
     expect(def.tier).toBe(2);
-    expect(def.footprint.tiles.length).toBe(9); // 3x3
+    expect(def.footprint.tiles.length).toBe(9);
     expect(def.category).toBe('manufacturing');
   });
   it('produces carbon_steel from steel + manganese_ingot', () => {
@@ -1485,7 +1474,7 @@ describe('§7.1 galvanizing_bath (T2 galvanized steel producer)', () => {
     const def = BUILDING_DEFS.galvanizing_bath;
     expect(def).toBeDefined();
     expect(def.tier).toBe(2);
-    expect(def.footprint.tiles.length).toBe(9); // 3x3
+    expect(def.footprint.tiles.length).toBe(9);
     expect(def.category).toBe('manufacturing');
   });
   it('produces galvanized_steel from steel + zinc_ingot', () => {
@@ -1560,7 +1549,7 @@ describe('§7.1 stainless_steel_mill (T3 stainless steel producer)', () => {
     const def = BUILDING_DEFS.stainless_steel_mill;
     expect(def).toBeDefined();
     expect(def.tier).toBe(3);
-    expect(def.footprint.tiles.length).toBe(9); // 3x3
+    expect(def.footprint.tiles.length).toBe(9);
     expect(def.category).toBe('manufacturing');
     expect(def.requiresHeat).toBe(true);
     expect(def.gates).toEqual([{ matchType: 'heat_source', hard: true }]);
@@ -1607,7 +1596,7 @@ describe('§7.1 tool_steel_mill (T3 tool steel producer)', () => {
     const def = BUILDING_DEFS.tool_steel_mill;
     expect(def).toBeDefined();
     expect(def.tier).toBe(3);
-    expect(def.footprint.tiles.length).toBe(9); // 3x3
+    expect(def.footprint.tiles.length).toBe(9);
     expect(def.category).toBe('manufacturing');
     expect(def.requiresHeat).toBe(true);
     expect(def.gates).toEqual([{ matchType: 'heat_source', hard: true }]);
@@ -1624,7 +1613,7 @@ describe('§7.4 rigid_plastic_press (T2 rigid plastic producer)', () => {
     const def = BUILDING_DEFS.rigid_plastic_press;
     expect(def).toBeDefined();
     expect(def.tier).toBe(2);
-    expect(def.footprint.tiles.length).toBe(4); // 2x2
+    expect(def.footprint.tiles.length).toBe(4);
     expect(def.category).toBe('manufacturing');
   });
   it('has power consumption 100W', () => {
@@ -1637,7 +1626,7 @@ describe('§7.4 flexible_plastic_press (T2 flexible plastic producer)', () => {
     const def = BUILDING_DEFS.flexible_plastic_press;
     expect(def).toBeDefined();
     expect(def.tier).toBe(2);
-    expect(def.footprint.tiles.length).toBe(4); // 2x2
+    expect(def.footprint.tiles.length).toBe(4);
     expect(def.category).toBe('manufacturing');
   });
   it('has power consumption 100W', () => {
@@ -1650,7 +1639,7 @@ describe('§7.4 rubber_synthesizer (T2 synthetic rubber producer)', () => {
     const def = BUILDING_DEFS.rubber_synthesizer;
     expect(def).toBeDefined();
     expect(def.tier).toBe(2);
-    expect(def.footprint.tiles.length).toBe(4); // 2x2
+    expect(def.footprint.tiles.length).toBe(4);
     expect(def.category).toBe('manufacturing');
   });
   it('has power consumption 100W', () => {
@@ -1663,7 +1652,7 @@ describe('§7.4 plastic_polymerizer_a (T2 plastic precursor producer)', () => {
     const def = BUILDING_DEFS.plastic_polymerizer_a;
     expect(def).toBeDefined();
     expect(def.tier).toBe(2);
-    expect(def.footprint.tiles.length).toBe(4); // 2x2
+    expect(def.footprint.tiles.length).toBe(4);
     expect(def.category).toBe('chemistry');
   });
   it('has power consumption 120W', () => {
@@ -1676,7 +1665,7 @@ describe('§7.4 crude_oil_cracker (T2 heavy-fraction cracker)', () => {
     const def = BUILDING_DEFS.crude_oil_cracker;
     expect(def).toBeDefined();
     expect(def.tier).toBe(2);
-    expect(def.footprint.tiles.length).toBe(9); // 3x3
+    expect(def.footprint.tiles.length).toBe(9);
     expect(def.category).toBe('chemistry');
   });
   it('has power consumption 250W', () => {
@@ -1781,7 +1770,7 @@ describe('§7.5 cryo_air_separator (Task 5.4)', () => {
     const def = BUILDING_DEFS.cryo_air_separator;
     expect(def).toBeDefined();
     expect(def.tier).toBe(3);
-    expect(def.footprint.tiles.length).toBe(9); // 3x3
+    expect(def.footprint.tiles.length).toBe(9);
     expect(def.category).toBe('chemistry');
   });
   it('has power consumption 400W', () => {
@@ -1966,13 +1955,13 @@ describe('§8.1 T2 extraction buildings', () => {
     it('heavy_logger is T2, 2x2, requires tree (dense_forest STILL-DEFERRED)', () => {
       const def = BUILDING_DEFS.heavy_logger;
       expect(def.tier).toBe(2);
-      expect(def.footprint.tiles.length).toBe(4); // 2x2
+      expect(def.footprint.tiles.length).toBe(4);
       expect(def.requiredTile?.length).toBeGreaterThan(0);
     });
     it('deep_mine is T2, 2x3, requires ore vein', () => {
       const def = BUILDING_DEFS.deep_mine;
       expect(def.tier).toBe(2);
-      expect(def.footprint.tiles.length).toBe(6); // 2x3
+      expect(def.footprint.tiles.length).toBe(6);
       expect(def.requiredTile).toContain('ore');
     });
   });
@@ -2122,7 +2111,7 @@ describe('§8.1 T2 extraction buildings', () => {
       const def = BUILDING_DEFS.wafer_lab;
       expect(def).toBeDefined();
       expect(def.tier).toBe(3);
-      expect(def.footprint.tiles.length).toBe(9); // 3x3
+      expect(def.footprint.tiles.length).toBe(9);
       expect(def.category).toBe('electronics');
       expect(def.power?.consumes).toBe(250);
     });
@@ -2133,7 +2122,7 @@ describe('§8.1 T2 extraction buildings', () => {
       const def = BUILDING_DEFS.transistor_doping;
       expect(def).toBeDefined();
       expect(def.tier).toBe(3);
-      expect(def.footprint.tiles.length).toBe(4); // 2x2
+      expect(def.footprint.tiles.length).toBe(4);
       expect(def.category).toBe('electronics');
       expect(def.power?.consumes).toBe(150);
     });
@@ -2141,7 +2130,7 @@ describe('§8.1 T2 extraction buildings', () => {
       const def = BUILDING_DEFS.capacitor_doping;
       expect(def).toBeDefined();
       expect(def.tier).toBe(3);
-      expect(def.footprint.tiles.length).toBe(4); // 2x2
+      expect(def.footprint.tiles.length).toBe(4);
       expect(def.category).toBe('electronics');
       expect(def.power?.consumes).toBe(150);
     });
@@ -2149,7 +2138,7 @@ describe('§8.1 T2 extraction buildings', () => {
       const def = BUILDING_DEFS.resistor_doping;
       expect(def).toBeDefined();
       expect(def.tier).toBe(3);
-      expect(def.footprint.tiles.length).toBe(4); // 2x2
+      expect(def.footprint.tiles.length).toBe(4);
       expect(def.category).toBe('electronics');
       expect(def.power?.consumes).toBe(150);
     });
@@ -2160,7 +2149,7 @@ describe('§8.1 T2 extraction buildings', () => {
       const def = BUILDING_DEFS.memory_lab;
       expect(def).toBeDefined();
       expect(def.tier).toBe(3);
-      expect(def.footprint.tiles.length).toBe(9); // 3x3
+      expect(def.footprint.tiles.length).toBe(9);
       expect(def.category).toBe('electronics');
       expect(def.power?.consumes).toBe(250);
     });
@@ -2403,9 +2392,6 @@ describe('§6.7 steel_mill_scrap (Task 13.3)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Phase 4 invariant fixtures — mass-positive placement check (§9.3)
-// ---------------------------------------------------------------------------
 describe('mass-positive placement check (§9.3)', () => {
   it('every BUILDING_DEFS entry has Σ (units × kg/unit) > 1 kg', () => {
     for (const [id, def] of Object.entries(BUILDING_DEFS)) {
@@ -2418,9 +2404,6 @@ describe('mass-positive placement check (§9.3)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Phase 4 invariant fixtures — BOM citation snapshot (§9.2)
-// ---------------------------------------------------------------------------
 describe('BOM citation snapshot (§9.2)', () => {
   it('every placementCost has a preceding BOM source: or analog: comment', () => {
     const source = readFileSync('src/building-defs.ts', 'utf8');

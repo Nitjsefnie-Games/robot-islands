@@ -59,10 +59,8 @@ export const MAINTENANCE_RECIPES: Readonly<Record<Tier, Partial<Record<ResourceI
   // T2 maintenance matches §4.7 spec literal.
   2: { lubricant: 3, bearing: 5 },
   // T3: spec literal is `5 Lubricant + 1 Electric motor + 1 Capacitor`.
-  // Both motor + capacitor are now in the catalog (Tasks 10.6 / 9.2). The
-  // earlier microchip + quantum_chip stand-in caused a chicken-and-egg —
-  // T3 buildings hit threshold at 20h but quantum_chip required T4 access
-  // (level 30+). Resolved by switching to the spec literal here.
+  // Avoid quantum_chip/microchip stand-ins here: they require T4 access
+  // (level 30+) yet T3 hits threshold at 20h — a chicken-and-egg deadlock.
   3: { lubricant: 5, electric_motor: 1, capacitor: 1 },
   4: { lubricant: 10, exotic_alloy: 1, microchip: 1 },
   5: { lubricant: 15, phase_converter: 1, eldritch_processor: 1 },
@@ -93,7 +91,6 @@ export function maintenanceFactor(
   if (operating < threshold) return 1.0;
   const overshoot = operating - threshold;
   if (overshoot >= MAINTENANCE_DEGRADE_DURATION_MS) return 0.5;
-  // Linear ramp 1.0 → 0.5 over 4h.
   return 1.0 - 0.5 * (overshoot / MAINTENANCE_DEGRADE_DURATION_MS);
 }
 

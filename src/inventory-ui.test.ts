@@ -1,9 +1,7 @@
-// Pure-helper tests for the inventory modal panel.
-//
-// The panel itself is DOM and JSDOM isn't configured in this repo (per
-// AGENTS.md "tests target the pure layer only"). The interesting logic is
-// the resource categorisation table — verified to be complete and to honour
-// the Fuel/Liquid precedence rule from the brief.
+// Pure-helper tests for the inventory modal panel. The panel is DOM and JSDOM
+// isn't configured here (AGENTS.md "tests target the pure layer only"), so we
+// test the resource categorisation table: complete, and honouring the
+// Fuel/Liquid precedence rule from the brief.
 
 import { describe, expect, it } from 'vitest';
 

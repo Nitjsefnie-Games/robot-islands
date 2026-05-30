@@ -3,16 +3,11 @@
 // Per SPEC §2.1 the cell grid is invisible to the player. This module renders
 // it on demand for development: faint gray lines on every cell boundary
 // across a generous slice of the world. The grid lives in world space so it
-// pans/zooms with the camera; it's added to the world container above the
-// vision-ring overlay when toggled on.
+// pans/zooms with the camera; main.ts adds it above the vision-ring overlay
+// so its lines stay visible whenever toggled on.
 //
-// Step 2: keep it dead simple. Draw a fixed grid spanning a hardcoded world
-// box. (For larger worlds we'd compute visible bounds per frame from the
-// camera, but for the step-2 demo the hardcoded box covers the area the user
-// can realistically explore.)
-//
-// Layering: in main.ts the grid is added above the vision-ring overlay so its
-// lines stay visible whenever toggled on.
+// The grid spans a hardcoded world box (no per-frame visible-bounds computation)
+// — adequate for the area the user can realistically explore.
 
 import { Container, Graphics } from 'pixi.js';
 

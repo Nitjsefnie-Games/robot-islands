@@ -85,8 +85,7 @@ describe('rollToxicityForHour', () => {
   it('produces independent results for different hour ticks', () => {
     const a = rollToxicityForHour('seed-a', 'r1', 1);
     const b = rollToxicityForHour('seed-a', 'r1', 2);
-    // With 5% probability, independence is probabilistic; we just assert
-    // the function doesn't crash and returns booleans.
+    // Independence is probabilistic at 5%; just assert booleans, no crash.
     expect(typeof a).toBe('boolean');
     expect(typeof b).toBe('boolean');
   });

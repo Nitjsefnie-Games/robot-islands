@@ -132,8 +132,7 @@ describe('§2.7 — night/dawn severe-storm boost', () => {
       if (d.state === 'severe_storm' || d.state === 'catastrophic') daySevere++;
       if (u.state === 'severe_storm' || u.state === 'catastrophic') duskSevere++;
     }
-    // Dusk should not be systematically higher than day; we only assert it
-    // is not greater (it may be equal or lower by chance).
+    // Dusk must not be systematically higher than day (may be equal/lower by chance).
     expect(duskSevere).toBeLessThanOrEqual(daySevere + 30);
   });
 });
@@ -450,11 +449,9 @@ describe('§2.6 computeWeatherVisionSources', () => {
         false,
       ),
     ];
-    // computeWeatherVisionSources is documented as taking the populated
-    // subset only; the caller filters. But verify defensively: if you DO
-    // pass an unpopulated island the station bonus still applies (the fn
-    // doesn't re-check). The contract is "populated subset in", so this
-    // test pins the consumer responsibility.
+    // Contract: computeWeatherVisionSources takes the populated subset only —
+    // it does NOT re-check populated, so the caller must filter. This pins that
+    // consumer responsibility.
     const sources = computeWeatherVisionSources(
       islands.filter((s) => s.populated),
     );
@@ -463,10 +460,8 @@ describe('§2.6 computeWeatherVisionSources', () => {
   });
 
   it('forecast samples weather() at nowMs + lookahead (matches independent call)', () => {
-    // The render path samples weather() at `forecastMs = nowMs + LOOKAHEAD`
-    // for forecast cells. Pin that LOOKAHEAD matches the exported constant
-    // and that calling weather() with the offset produces the expected
-    // future state for a representative cell.
+    // The render path samples weather() at forecastMs = nowMs + LOOKAHEAD.
+    // Pin that LOOKAHEAD matches the exported constant.
     expect(WEATHER_FORECAST_LOOKAHEAD_MS).toBe(2 * 60 * 60 * 1000);
     const seed = 'forecast-pin';
     const nowMs = 1_000_000;
@@ -475,14 +470,9 @@ describe('§2.6 computeWeatherVisionSources', () => {
     const futureMs = nowMs + WEATHER_FORECAST_LOOKAHEAD_MS;
     const present = weather(seed, cellX, cellY, nowMs);
     const future = weather(seed, cellX, cellY, futureMs);
-    // Determinism: the future state is whatever the dwell sequence resolves
-    // to at futureMs. Pin both states so any future tweak to weather() must
-    // re-justify this snapshot.
     expect(present.state).toBe(present.state); // tautology, but anchors the test
     expect(future.state).toBeDefined();
-    // The forecast window crosses cell-dwell boundaries in many seeds; in
-    // this seed the two reads are deterministic — assert the two reads agree
-    // with replay of the same call (replayability is the real claim).
+    // Replayability is the real claim: the same offset call returns the same state.
     expect(weather(seed, cellX, cellY, futureMs).state).toBe(future.state);
   });
 });
@@ -638,13 +628,11 @@ describe('rollVehicleDestruction', () => {
   });
 
   it('respects weatherMultiplier scaling', () => {
-    // With a huge multiplier, even a low base chance should eventually hit
-    // if the path is long enough. Use a fixed seed and many storm cells.
     const path: Array<{ cx: number; cy: number; entryMs: number }> = [];
     for (let i = 0; i < 200; i++) {
       path.push({ cx: i, cy: 0, entryMs: i * 1000 });
     }
-    // multiplier 0 should guarantee survival
+    // multiplier 0 guarantees survival regardless of path length.
     const safe = rollVehicleDestruction('seed', path, 0, 'v1');
     expect(safe.destroyed).toBe(false);
   });

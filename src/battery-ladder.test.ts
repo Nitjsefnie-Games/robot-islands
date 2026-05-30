@@ -1,9 +1,7 @@
-// Integration smoke tests for the §8.5 battery ladder.
-//
-// Covers two paths the unit tests in economy.test.ts / skilltree.test.ts
-// don't exercise together:
-//   1. End-to-end charge path: power surplus from a generator flows
-//      into batteryStoredWs, capped at the building's per-def capacity.
+// Integration smoke tests for the §8.5 battery ladder — two paths the
+// economy.test.ts / skilltree.test.ts unit tests don't exercise together:
+//   1. End-to-end charge: generator surplus flows into batteryStoredWs,
+//      capped at the building's per-def capacity.
 //   2. batteryCapacityWs sums capacity across mixed battery types and
 //      scales with the skill-tree batteryCapacity multiplier.
 

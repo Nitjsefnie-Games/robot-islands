@@ -1,5 +1,5 @@
-// Pure data layer for the §15 recipe-graph modal. Builds a flat array of
-// recipe table rows from the static RECIPES + BUILDING_DEFS tables.
+// Pure data layer for the §15 recipe-graph modal: flat recipe table rows
+// from the static RECIPES + BUILDING_DEFS tables.
 // No DOM. No PixiJS. No module-level cache.
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';

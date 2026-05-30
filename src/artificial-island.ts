@@ -1,30 +1,23 @@
-// Pure logic for §2.5 artificial-island construction.
+// Pure logic for §2.5 artificial-island construction: data types + functions
+// that compute cost / validate inputs / mint the new spec+state. No PixiJS,
+// DOM, or input.ts. The UI layer (`construction-ui.ts`) collects inputs and
+// surfaces validation; this module owns the math.
 //
-// Mirrors the catalog/pure-function style of `biomes.ts`: a small set of
-// data types + functions that compute cost / validate inputs / mint the
-// new spec+state. No PixiJS, no DOM, no input.ts dependency. The UI layer
-// (`construction-ui.ts`) is responsible for collecting the inputs and
-// surfacing the validation result; this module owns the math.
+// Per §2.5: a T3+ island with a Platform Constructor constructs a new island
+// instantly, paying out of its own inventory. Settlement-vehicle delivery
+// (§2.3) is the separate natural-colonisation path — construction "skips the
+// ship".
 //
-// Per §2.5: a T3+ island with a Platform Constructor can construct a new
-// island instantly. Cost scales with biome and target ellipse size; the
-// founder pays out of its own inventory. Settlement-vehicle delivery
-// (§2.3) is the natural-colonisation path and is intentionally a separate
-// concern — artificial construction "skips the ship".
-//
-// Forward-compat notes:
-//   - The `artificial: true` flag on the returned `IslandSpec` is set so
-//     future systems (§3.5 modifier rolls excluding rare-natural-only,
-//     §9.5 biome-locked-unique placement gate) can identify constructed
-//     islands. Step 11 has no current consumer; reserved for step 12.
-//   - Position validity (overlap with existing islands) is the UI's job —
-//     this module accepts `position` as-given because the pure layer
-//     doesn't know about the world's island list. The UI's pre-validation
-//     plus `validateConstruction`'s material/tier checks together keep the
-//     pure layer cleanly testable.
-//   - T3 caps at major=8, minor=8 (§2.5). T4 = 12×12 and T5 = 16×16 are
-//     live (see `MAX_RADIUS_BY_TIER`); the cap lookup keys on the founder
-//     state's tier at validate time.
+// Notes:
+//   - The `artificial: true` flag lets future systems (§3.5 modifier rolls
+//     excluding rare-natural-only, §9.5 biome-locked-unique placement gate)
+//     identify constructed islands.
+//   - Position validity (overlap, off-map) is the UI's job — the pure layer
+//     accepts `position` as-given because it doesn't know the world's island
+//     list. UI pre-validation + `validateConstruction`'s material/tier checks
+//     together keep the pure layer cleanly testable.
+//   - Radii cap on founder tier at validate time (§2.5): T3 = 8, T4 = 12,
+//     T5 = 16 (see `MAX_RADIUS_BY_TIER`).
 
 import type { Biome, IslandSpec } from './world.js';
 import { BIOME_DEFS, rollModifiersArtificial } from './biomes.js';
@@ -34,24 +27,11 @@ import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { canPlaceOnIsland, type BuildingDef } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';
 
-// ---------------------------------------------------------------------------
-// Cost formula (§2.5 placeholder — "scales with size and biome")
-// ---------------------------------------------------------------------------
-//
-// Per spec, costs scale with target tile count and biome. Step-11 placeholders:
-//   tileCount   = π × majorRadius × minorRadius  (ellipse area, approximate)
-//   steel       = ceil(tileCount × 5)
-//   iron_ingot  = ceil(tileCount × 3)
-//   wood        = ceil(tileCount × 10)
-//
-// Volcanic and Arctic are flagged "harder" biomes per §3.4 (volcanic max
-// natural radius is 14, arctic 14 — the smallest natural caps) so we apply a
-// 50% surcharge on every material. The other four biomes use the base rate.
-//
-// Numbers are placeholders that produce meaningful inventory drains at the
-// 4×4 minimum (50 tiles × multipliers ≈ 250 steel / 150 iron / 500 wood)
-// without blocking the demo entirely. The cost-curve will be retuned once
-// the wider economy progresses (settlement vehicles, T3 chains, etc.).
+// Cost formula (§2.5 — "scales with size and biome"). tileCount ≈ ellipse
+// area (π × major × minor); per-material cost = ceil(tileCount × multiplier ×
+// surcharge). Volcanic and Arctic carry a 50% surcharge per §3.4 (smallest
+// natural radius caps → "harder" biomes). Multipliers are placeholders tuned
+// to drain inventory meaningfully at the 4×4 minimum without blocking the demo.
 
 const STEEL_PER_TILE = 5;
 const IRON_INGOT_PER_TILE = 3;
@@ -66,10 +46,6 @@ const MAX_RADIUS_BY_TIER: Readonly<Record<3 | 4 | 5, number>> = {
   4: 12,
   5: 16,
 };
-
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
 
 export interface ConstructionRequirements {
   readonly biome: Biome;
@@ -99,10 +75,6 @@ export interface ConstructResult {
   readonly newSpec: IslandSpec;
   readonly newState: IslandState;
 }
-
-// ---------------------------------------------------------------------------
-// Pure functions
-// ---------------------------------------------------------------------------
 
 /**
  * Compute the per-resource cost of constructing an artificial island of the
@@ -148,11 +120,9 @@ export function validateConstruction(
   const tier = tierForLevel(founderState.level);
   if (tier < 3) return { ok: false, reason: 'tier-too-low' };
 
-  // Platform Constructor presence.
   const hasPc = hasOperationalBuilding(founderSpec.buildings, 'platform_constructor');
   if (!hasPc) return { ok: false, reason: 'no-platform-constructor' };
 
-  // Biome sanity check.
   if (!(req.biome in BIOME_DEFS)) return { ok: false, reason: 'invalid-biome' };
 
   // Radii cap per §2.5: T3 = 8, T4 = 12, T5 = 16. Tiers below 3 fall back
@@ -168,7 +138,6 @@ export function validateConstruction(
     return { ok: false, reason: 'radius-too-large' };
   }
 
-  // Material inventory check.
   const cost = computeConstructionCost(req);
   const inv = founderState.inventory;
   if ((inv.steel ?? 0) < cost.steel) return { ok: false, reason: 'insufficient-materials' };
@@ -257,9 +226,7 @@ export function maxRadiusForFounderLevel(level: number): number {
   return MAX_RADIUS_BY_TIER[tier as 3 | 4 | 5] ?? MAX_RADIUS_BY_TIER[3];
 }
 
-// ---------------------------------------------------------------------------
-// Step-12: biome-locked-unique placement gate (§9.5)
-// ---------------------------------------------------------------------------
+// Step-12: biome-locked-unique placement gate (§9.5).
 //
 // `canPlaceOnIsland` is the canonical pure check (in `building-defs.ts`).
 // `validateBuildingPlacement` adds a reason-code layer for UI surfacing —

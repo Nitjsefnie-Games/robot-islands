@@ -27,9 +27,7 @@
 // variable per cell and the spec doesn't pin a fixed cycle length.
 //
 // Lighthouses do NOT extend weather visibility — only the ocean ellipse
-// (always present) and weather stations do. The earlier `computeVisionSources`
-// piggyback that *did* leak Lighthouse range into the weather overlay has
-// been replaced with the targeted source set above.
+// (always present) and weather stations do.
 //
 // Performance: visibleCellsFromVision is bounded by the source AABBs; the
 // throttled rebuild (WEATHER_OVERLAY_REBUILD_MS = 5s) keeps Graphics churn

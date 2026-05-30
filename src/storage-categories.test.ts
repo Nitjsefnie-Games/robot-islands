@@ -1,6 +1,5 @@
-// Tests for the §4.6 resource → storage-category mapping. The mapping is
-// pure data, but the catalog has ~50 resources and the test ensures every
-// one is bucketed and the category names are well-formed.
+// Tests for the §4.6 resource → storage-category mapping: every resource in
+// the ~50-entry catalog is bucketed and category names are well-formed.
 
 import { describe, expect, it } from 'vitest';
 

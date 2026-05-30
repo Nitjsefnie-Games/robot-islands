@@ -16,10 +16,6 @@ import { computeFogCells } from './ocean.js';
 import { type VisionSource } from './vision-source.js';
 import { type IslandSpec } from './world.js';
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
 function makeIslandSpec(over: Partial<IslandSpec>): IslandSpec {
   return {
     id: 'spec',
@@ -36,10 +32,6 @@ function makeIslandSpec(over: Partial<IslandSpec>): IslandSpec {
     ...over,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe('computeFogCells', () => {
   it('returns empty when there are no discovered islands', () => {

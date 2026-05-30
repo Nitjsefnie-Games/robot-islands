@@ -18,10 +18,6 @@ import { FULL_CATALOG } from './skilltree-catalog.js';
 import { BRANCH_SUBPATHS, type SubPathId, type SkillEffect } from './skilltree.js';
 import { ALL_FILLER_NODES } from './skilltree-archetypes.js';
 
-// ---------------------------------------------------------------------------
-// Helper: lever-family collapse
-// ---------------------------------------------------------------------------
-
 /**
  * Collapses the effect of a filler node into a "lever family" string per
  * the v2-rebalance budget spec:
@@ -38,15 +34,7 @@ function leverFamily(effect: SkillEffect): string {
   return effect.kind;
 }
 
-// ---------------------------------------------------------------------------
-// Enumerate all sub-paths from BRANCH_SUBPATHS
-// ---------------------------------------------------------------------------
-
 const ALL_SUBPATHS: SubPathId[] = Object.values(BRANCH_SUBPATHS).flat();
-
-// ---------------------------------------------------------------------------
-// Pre-compute per-sub-path stats for logging and assertions
-// ---------------------------------------------------------------------------
 
 interface SubPathStats {
   subPath: SubPathId;
@@ -69,10 +57,6 @@ const SUBPATH_STATS: SubPathStats[] = ALL_SUBPATHS.map((sp) => {
   };
 });
 
-// ---------------------------------------------------------------------------
-// Main test suite
-// ---------------------------------------------------------------------------
-
 describe('skilltree v2 node-budget guard (§10)', () => {
   beforeAll(() => {
     // Surface all 20 sub-path stats in the vitest run so they can be eyeballed.
@@ -88,19 +72,13 @@ describe('skilltree v2 node-budget guard (§10)', () => {
     );
   });
 
-  // -------------------------------------------------------------------------
   // Anti-vacuity guard 1: filler filter selects the full catalog filler set
-  // -------------------------------------------------------------------------
-
   it('filler regex selects exactly ALL_FILLER_NODES.length nodes across all sub-paths', () => {
     const totalFillerSelected = SUBPATH_STATS.reduce((s, st) => s + st.fillerNodes, 0);
     expect(totalFillerSelected).toBe(ALL_FILLER_NODES.length); // 246
   });
 
-  // -------------------------------------------------------------------------
   // Anti-vacuity guard 2: a known 2-family sub-path (mining) resolves correctly
-  // -------------------------------------------------------------------------
-
   it('mining resolves to exactly 2 filler families with > 10 filler nodes', () => {
     const miningStats = SUBPATH_STATS.find((s) => s.subPath === 'mining');
     expect(miningStats).toBeDefined();
@@ -108,10 +86,7 @@ describe('skilltree v2 node-budget guard (§10)', () => {
     expect(miningStats!.fillerNodes).toBeGreaterThan(10);
   });
 
-  // -------------------------------------------------------------------------
   // Per-sub-path budget assertions
-  // -------------------------------------------------------------------------
-
   for (const stats of SUBPATH_STATS) {
     const { subPath, totalNodes, fillerFamilies } = stats;
 

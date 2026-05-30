@@ -1,18 +1,10 @@
-// terrain_modifier (v5 spec) — pure helpers.
+// terrain_modifier (v5 spec) — pure helpers. SINGLE source of truth for:
+// the cost formula (§04), rare-vs-natural target classification, the 16-tile
+// brush geometry (4 footprint + 12 ring), SHOT_DURATION_MS, and the
+// applyTileOverride primitive (mutates spec.tileOverrides).
 //
-// This module is the SINGLE source of truth for:
-//   - the cost formula (spec §04 duplication-glitch framing)
-//   - the rare-vs-natural target classification
-//   - the 16-tile brush geometry (4 footprint + 12 ring)
-//   - the SHOT_DURATION_MS animation budget
-//   - the applyTileOverride primitive (mutates spec.tileOverrides)
-//
-// Tasks 3 (placement-ui brush preview), 4 (shot tick + resolution),
-// and 5 (target-biome picker) all import from here. Keep this file
-// pure — no rendering, no IslandState mutation. The shot-resolution
-// helper consumes a spec + the tile to set; everything else (removing
-// the building, invalidation pass, rebuildWorldLayers) is Task 4's
-// orchestration in main.ts.
+// Keep this file pure — no rendering, no IslandState mutation beyond the
+// documented shot-resolution primitive.
 
 import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -22,12 +14,10 @@ import type { ResourceId } from './recipes.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { IslandSpec } from './world.js';
 
-// ---------------------------------------------------------------------------
 // Constants — Appendix-A placeholders per spec §04. Tunable post-first-play.
-// ---------------------------------------------------------------------------
 
-/** Animation duration of the shot in ms. Reused by Task 4's tick (decrements
- *  in advanceIsland) and the building-arc render (progress fraction). */
+/** Animation duration of the shot in ms. Reused by the tick (decrements in
+ *  advanceIsland) and the building-arc render (progress fraction). */
 export const SHOT_DURATION_MS = 4000;
 
 /** Multiplier `K` in the rare-target cost formula. K = 1.5 means a manufactured
@@ -58,10 +48,6 @@ export const NATURAL_TARGET_INPUT_PER_TILE: Readonly<
   water:       { fresh_water: 500 },              // well output
   magma_vent:  { stone: 300, coal: 50 },          // no extractor; coal heat-source proxy
 };
-
-// ---------------------------------------------------------------------------
-// Target classification
-// ---------------------------------------------------------------------------
 
 /** "Natural" targets — the biome-default kinds. Cost = NATURAL_PER_TILE_BASKET × 16. */
 export const NATURAL_TARGET_TERRAINS: ReadonlySet<TerrainKind> = new Set<TerrainKind>([
@@ -104,19 +90,11 @@ export const RARE_TARGET_TERRAINS: ReadonlySet<TerrainKind> = new Set<TerrainKin
   'uranium_vein',
 ]);
 
-// ---------------------------------------------------------------------------
-// Rare-target → input resource mapping
-// ---------------------------------------------------------------------------
-
 /** For each rare-vein terrain, the ResourceId the player must pay to manufacture
- *  one such tile. The rule per v4 lock (`rare_target_costs_rare_resource`):
- *  "targets in the rare-vein set cost a heavy stack of the corresponding
- *  resource". The mapping is "the ResourceId the building-defs.ts extractor
- *  bound to this tile via `requiredTile` actually produces in recipes.ts".
- *  Verified 2026-05-23 against building-defs.ts and recipes.ts — one row per
- *  TerrainKind in RARE_TARGET_TERRAINS, cross-checked extractor defId →
- *  recipe outputs (single-output extractors only; every rare extractor in
- *  the current catalog has exactly one output). */
+ *  one such tile (v4 lock `rare_target_costs_rare_resource`). The mapping is the
+ *  ResourceId the building-defs.ts extractor bound to this tile via `requiredTile`
+ *  produces in recipes.ts — one row per kind in RARE_TARGET_TERRAINS, single-output
+ *  extractors only. */
 export const RARE_TARGET_INPUT: Readonly<Record<string, ResourceId>> = {
   ore: 'iron_ore',          // mine / deep_mine → iron_ore
   coal: 'coal',             // mine (mine_on_coal recipe) → coal
@@ -142,10 +120,6 @@ export const RARE_TARGET_INPUT: Readonly<Record<string, ResourceId>> = {
   lithium_vein: 'lithium',         // lithium_extractor → lithium
   uranium_vein: 'uranium_ore',     // uranium_mine → uranium_ore
 };
-
-// ---------------------------------------------------------------------------
-// Cost helpers
-// ---------------------------------------------------------------------------
 
 /** Per-cycle extraction rate of the natural extractor on a natural tile of
  *  `target`. Placeholder = 1 unit/cycle for every rare kind; a follow-up tuning
@@ -187,10 +161,6 @@ export function conversionCostForTarget(
   return {};
 }
 
-// ---------------------------------------------------------------------------
-// Brush geometry
-// ---------------------------------------------------------------------------
-
 /** The 16-tile brush footprint per the v3 user lock
  *  (`scope_is_16_tiles_footprint_plus_ring`). The terrain_modifier's footprint
  *  is SHAPES.square2 anchored at (anchorX, anchorY), covering tiles
@@ -209,10 +179,6 @@ export function brushTilesAt(anchorX: number, anchorY: number): Array<{ x: numbe
   return tiles; // 16 tiles, guaranteed by the loop bounds.
 }
 
-// ---------------------------------------------------------------------------
-// Override write — mutates spec in place
-// ---------------------------------------------------------------------------
-
 /** Write a single tile override onto `spec.tileOverrides`. Creates the record
  *  lazily if absent. Key format `${x},${y}` in island-local coords, matching
  *  the format the attachTerrainAt closure (Task 1) reads. last-write-wins:
@@ -230,9 +196,7 @@ export function applyTileOverride(
   spec.tileOverrides[`${x},${y}`] = kind;
 }
 
-// ---------------------------------------------------------------------------
-// Shot resolution — Task 4's pure mutation primitive
-// ---------------------------------------------------------------------------
+// Shot resolution — pure mutation primitive.
 
 /** Resolve a terrain_modifier shot: write tile overrides for every brush
  *  tile inside the ellipse, remove the modifier from state.buildings, and

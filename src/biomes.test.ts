@@ -1,13 +1,4 @@
 // Pure-logic tests for the biome + modifier system per SPEC §3.2 / §3.5.
-//
-// Tests cover:
-//   - BIOME_DEFS / MODIFIER_DEFS catalog completeness
-//   - rollModifiers determinism with a seeded LCG
-//   - Stable mutual exclusivity (both branches: first-Stable collapse, and
-//     Stable-banned-from-subsequent-draws when first is non-Stable)
-//   - Biome restriction (frozen_core only on Arctic)
-//   - effectiveModifierMultipliers fold (active + placeholder + composition)
-//   - terrainAtForBiome determinism + biome differentiation + home identity
 
 import { describe, expect, it } from 'vitest';
 
@@ -129,8 +120,6 @@ describe('rollModifiers (§3.5)', () => {
   });
 
   it('returns ["stable"] when first draw lands on Stable, regardless of count', () => {
-    // Force count=3 (rng=0.96 → cumulative bucket 3), then force Stable on first draw.
-    // Stable-mutual-exclusivity must collapse the result to ['stable'].
     let i = 0;
     const seq = [0.96 /* count=3 */, /* first draw via cumulative weighted: trick by giving small r */ 0.0001];
     const rng = (): number => {
@@ -138,15 +127,8 @@ describe('rollModifiers (§3.5)', () => {
       i += 1;
       return v;
     };
-    // The first weighted-sample call uses rng() * total. With r close to 0,
-    // the first non-zero-weight modifier in the iteration order is picked.
-    // Since high_wind is first in ALL_MODIFIERS, that would be picked — not
-    // stable. Instead we use a synthetic test: monkey-patch by repeating
-    // rolls until stable is selected with a known seed.
-    //
-    // Easier path: pick a seed where we KNOW the first draw is Stable, then
-    // assert collapse. The deterministic LCG seed-search approach: try
-    // seeds 0..99 and find one where rollModifiers on plains returns ['stable'].
+    // Seed-search for a known-Stable first draw, then assert collapse to
+    // ['stable'] (Stable-mutual-exclusivity).
     void rng;
     let found = false;
     for (let seed = 1; seed < 200; seed++) {
@@ -350,7 +332,6 @@ describe('terrainAtForBiome', () => {
           counts.set(t, (counts.get(t) ?? 0) + 1);
         }
       }
-      // Find the most common.
       let topKind = '';
       let topCount = -1;
       for (const [k, v] of counts) {

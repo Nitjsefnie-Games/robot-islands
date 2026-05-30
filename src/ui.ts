@@ -2,10 +2,8 @@
 // keyboard action registry. Mounts in the TR zone via the floating-panel
 // manager so it can never overlap the HUD or the top-center island bar.
 //
-// Each `UiButtonSpec` carries an icon id (from `ui-icons.ts`), an action
-// name (dispatched through `dispatchAction`, same path as keyboard input),
-// a tooltip label, and a one-letter `kbd` hint that `ui.css` renders as a
-// floating badge in the top-right of the button.
+// Each `UiButtonSpec` dispatches its action through `dispatchAction` — the
+// same path as keyboard input, so mouse and keyboard can't drift.
 
 import { dispatchAction, type InputRegistry } from './input.js';
 import { mountPanel, Zone } from './ui-zones.js';

@@ -286,11 +286,7 @@ describe('computeLatticeActive', () => {
       }
       world.islandStates.set(`mix-${i}`, s);
     }
-    // Even indices < 22 have both T5 and node = 11 islands (0,2,4,6,8,10,12,14,16,18,20)
-    // Wait, 0,2,4,...,20 is 11 islands. That exceeds threshold 20? No, 11 < 20.
-    // Let's adjust: we need 20. Indices 0..39 even = 20 islands.
-    // But we only have 25 islands. Even indices 0,2,4,...,24 = 13 islands, but only
-    // indices < 22 are T5, so even indices 0,2,4,...,20 = 11 islands.
+    // Only even indices < 22 have both T5 mastery and a node: 11 islands < threshold 20.
     expect(computeLatticeActive(world)).toBe(false);
   });
 });

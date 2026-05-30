@@ -938,7 +938,7 @@ describe('computeAuraAmplifiers — cache', () => {
     expect(cachedMap).not.toBeNull();
     // Second call — no mutation, no bump → cache hit.
     effectiveSkillMultipliers(s);
-    expect(s.auraAmpCache).toBe(cachedMap); // reference equality
+    expect(s.auraAmpCache).toBe(cachedMap);
   });
 
   it('returns deep-equal effectiveSkillMultipliers on repeat calls', () => {
@@ -1111,7 +1111,6 @@ describe('bindCrystal / unbindCrystal', () => {
     (inv as Record<string, number>).mining_crystal_t1 = 1;
     const state = makeState({ inventory: inv, unspentSkillPoints: 0 });
     state.socketBindings.set('gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
-    // Simulate owning two mini-tree nodes and one edge
     state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.core');
     state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.left1');
     state.unlockedEdges.add('gs.ext.mining-1.mining_crystal_t1.edge.socket.core.0' as EdgeId);

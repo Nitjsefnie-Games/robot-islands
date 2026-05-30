@@ -1,10 +1,5 @@
-// §3.4 Land Reclamation Hub — pure unit tests.
-//
-// Tests cover the four `canExpandIsland` outcomes (ok / no-hub / axis-at-max /
-// insufficient-resources), the `expandIsland` mutation (single-axis increment
-// + inventory deduction with the sibling axis untouched), and the cost curve.
-// All three §3.4 placeholder biome caps are exercised at-cap to verify
-// `BIOME_MAX_RADII` table lookups.
+// §3.4 Land Reclamation Hub — pure unit tests for canExpandIsland outcomes,
+// the expandIsland mutation, the cost curve, and BIOME_MAX_RADII caps.
 
 import { describe, expect, it } from 'vitest';
 
@@ -18,9 +13,7 @@ import {
 } from './land-reclamation.js';
 import type { Biome, IslandSpec } from './world.js';
 
-// ---------------------------------------------------------------------------
 // Fixtures
-// ---------------------------------------------------------------------------
 
 function emptyInv(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -97,10 +90,6 @@ function hubBuilding(): PlacedBuilding {
   return { id: 'hub-1', defId: 'land_reclamation_hub', x: 0, y: 0 };
 }
 
-// ---------------------------------------------------------------------------
-// landReclamationCost — superlinear in current radius
-// ---------------------------------------------------------------------------
-
 describe('landReclamationCost (§3.4 placeholder)', () => {
   it('returns positive stone cost', () => {
     expect(landReclamationCost(14).stone).toBeGreaterThan(0);
@@ -118,10 +107,6 @@ describe('landReclamationCost (§3.4 placeholder)', () => {
     expect(landReclamationCost(27).stone).toBe(5 * 27 * 27);
   });
 });
-
-// ---------------------------------------------------------------------------
-// canExpandIsland — rejection reasons + ok
-// ---------------------------------------------------------------------------
 
 describe('canExpandIsland', () => {
   it('rejects with no-hub when the island has no Land Reclamation Hub', () => {
@@ -180,10 +165,6 @@ describe('canExpandIsland', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// expandIsland — mutation semantics
-// ---------------------------------------------------------------------------
-
 describe('expandIsland', () => {
   it('increments the chosen axis by 1 and leaves the other untouched', () => {
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
@@ -219,10 +200,7 @@ describe('expandIsland', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Biome-cap gates — Plains (28,28), Coast (28,14), Volcanic (14,14)
-// ---------------------------------------------------------------------------
-
 describe('§3.4 BIOME_MAX_RADII gates', () => {
   it('Plains: expand to (28,28) then both axes reject further expansion', () => {
     const spec = makeSpec({

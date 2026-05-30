@@ -64,10 +64,8 @@ describe('skilltree graph integration', () => {
 
   it('depth-2 filler is buyable via buyNode after depth-1 is owned (auto-owns intermediates)', () => {
     const state = makeState({ level: 5 });
-    // First buy the root depth-1 node
     buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.1');
     expect(state.unlockedNodes.has('mining.recipeRate.1')).toBe(true);
-    // Then depth-2 is reachable and auto-owns depth-1 (already owned)
     buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.2');
     expect(state.unlockedNodes.has('mining.recipeRate.2')).toBe(true);
   });
@@ -99,12 +97,10 @@ describe('skilltree graph integration', () => {
   it('AND-prereq keystone canBuyKeystone returns false until all prereqs owned', () => {
     const ks = KEYSTONE_PREREQS[0]!;
     const state = makeState({ unspentSkillPoints: ks.cost + 10 });
-    // None owned → false
     expect(canBuyKeystone(ks, state)).toBe(false);
-    // Own first prereq only → false
+    // Own first prereq only → still false (AND-prereq, not OR)
     state.unlockedNodes.add(ks.requires[0] as string);
     expect(canBuyKeystone(ks, state)).toBe(false);
-    // Own all prereqs → true
     for (const req of ks.requires) {
       state.unlockedNodes.add(req as string);
     }
@@ -130,7 +126,7 @@ describe('skilltree graph integration', () => {
     state.unlockedNodes.add('mining.recipeRate.1');
     const result = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, 'mining.recipeRate.3');
     expect(result).not.toBeNull();
-    // Path should go through depth-2 and depth-3
+    // Path goes through depth-2 and depth-3
     expect(result!.path.length).toBe(2);
     expect(result!.totalCost).toBeGreaterThan(0);
   });

@@ -1,25 +1,9 @@
 // Drone-ops side dock + canvas reticle + in-flight visuals.
 //
-// Aesthetic — see frontend-design notes (mission-control flight-ops console):
-// a narrow vertical sidebar that reads as a console plate alongside the HUD
-// and skill-tree panels. The skill tree is centered-modal/dense; this dock
-// is anchored, narrow, ledger-paper density. Same monospace + cyan accent
-// palette so the two panels feel like different stations on the same console
-// rather than two different apps.
-//
-// Structure of this module (roughly bottom-up):
-//   - Palette + small DOM helpers reused from skill-tree-ui
-//   - Stamp-style header with `DRONE OPS / DSP-01`
-//   - Stat block (BIOFUEL / RANGE / ETA / TIER) with tabular numerics
-//   - Fuel slider with stenciled rail
-//   - Launch / Arm-launch button (toggles canvas reticle mode)
-//   - Active flights ledger (per-drone row with animated thin amber rule)
-//   - Renderable `Container` for in-flight drone dots (cyan 4×4 px in world
-//     space + breadcrumb trail)
-//   - Renderable `Container` for the launch reticle (follows cursor while in
-//     launch mode)
-//
-// All DOM is plain elements with inline styles; no framework.
+// Aesthetic — narrow anchored sidebar reading as a console plate alongside the
+// HUD and skill-tree panels; same monospace + cyan accent palette so the two
+// feel like stations on one console. All DOM is plain inline-styled elements,
+// no framework.
 
 import { Container, Graphics } from 'pixi.js';
 
@@ -55,14 +39,9 @@ import { tileToWorldPx, VISION_BLUE, type IslandSpec, type WorldState } from './
 /** Resolve the Drone Pad's footprint centre on the launching island.
  *  §11.1: drone launches originate from the Drone Pad's footprint centre,
  *  NOT the island geometric centre. Returns null when no Drone Pad is
- *  placed (callers — the range ring, reticle reachability colouring,
- *  attemptLaunch — fall back to the island centre, identical to the
- *  pre-fix behaviour).
- *
- *  Mirrors the `spaceportSpawn` idiom in `orbital-ui.ts`. When multiple
- *  Drone Pads exist on one island the first in placement order is used —
- *  same deterministic policy `dispatchDrone` applies for its internal
- *  fallback spawn lookup. */
+ *  placed (callers fall back to the island centre). When multiple Drone
+ *  Pads exist on one island the first in placement order is used — same
+ *  deterministic policy `dispatchDrone` applies for its fallback spawn. */
 export function selectedPadCentre(
   spec: IslandSpec,
   state: IslandState,
@@ -91,9 +70,6 @@ function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
 }
 
-// ---------------------------------------------------------------------------
-// Public API surface
-// ---------------------------------------------------------------------------
 export interface DroneUiHandle {
   /** Refresh the panel + the reticle/dot layers. Called every frame from
    *  the main ticker while drones may be in flight (cheap when launch mode
@@ -173,9 +149,6 @@ export interface DroneUiDeps {
   onLaunchModeChanged?(armed: boolean): void;
 }
 
-// ---------------------------------------------------------------------------
-// Mount
-// ---------------------------------------------------------------------------
 export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUiHandle {
   let visible = false;
   let launchMode = false;
@@ -197,9 +170,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // pure math (totalPathTiles, wouldExceedRange, fuelForPath).
   let waypointBuffer: Array<{ x: number; y: number }> = [];
 
-  // -------------------------------------------------------------------------
   // Side dock panel
-  // -------------------------------------------------------------------------
   const panel = document.createElement('div');
   panel.id = 'drones-panel';
   panel.classList.add('ri-panel');
@@ -283,7 +254,6 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   header.appendChild(headLeft);
   header.appendChild(closeBtn);
 
-  // Body
   const body = document.createElement('div');
   styled(
     body,
@@ -297,9 +267,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     ].join(';'),
   );
 
-  // -------------------------------------------------------------------------
   // Stat block — BIOFUEL / RANGE / ETA / TIER
-  // -------------------------------------------------------------------------
   const statBlock = document.createElement('div');
   styled(
     statBlock,
@@ -425,15 +393,12 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
 
   body.appendChild(statBlock);
 
-  // Fuel slider removed — fuel auto-computed at click time as the exact
-  // amount needed for the round-trip (round up to integer units, cap at
-  // MAX_FUEL_PER_DRONE). The OUTBND + FLIGHT readouts show the
-  // max-affordable range based on the lesser of MAX_FUEL_PER_DRONE and
-  // current fuel-resource inventory.
+  // No fuel slider — fuel is auto-computed at click time as the exact amount
+  // needed for the round-trip (round up to integer units, cap at
+  // MAX_FUEL_PER_DRONE). The OUTBND + FLIGHT readouts show the max-affordable
+  // range = min(MAX_FUEL_PER_DRONE, current fuel-resource inventory).
 
-  // -------------------------------------------------------------------------
   // Arm-launch button — toggles canvas reticle mode
-  // -------------------------------------------------------------------------
   const armBtn = document.createElement('button');
   styled(
     armBtn,
@@ -458,9 +423,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   });
   body.appendChild(armBtn);
 
-  // -------------------------------------------------------------------------
   // Fire Pulse button — T4 Launch Tower omnidirectional pulse (§11.5)
-  // -------------------------------------------------------------------------
   const pulseBtn = document.createElement('button');
   styled(
     pulseBtn,
@@ -514,9 +477,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     deps.onLaunchModeChanged?.(on);
   }
 
-  // -------------------------------------------------------------------------
   // Active flights ledger
-  // -------------------------------------------------------------------------
   const ledgerWrap = document.createElement('div');
   styled(ledgerWrap, 'display: flex; flex-direction: column; gap: 4px');
 
@@ -567,9 +528,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   ledgerWrap.appendChild(ledgerList);
   body.appendChild(ledgerWrap);
 
-  // -------------------------------------------------------------------------
   // Footer hint strip
-  // -------------------------------------------------------------------------
   const footer = document.createElement('div');
   styled(
     footer,
@@ -597,9 +556,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   });
   panelHandle.setVisible(false);
 
-  // -------------------------------------------------------------------------
   // Pixi layer: in-flight drone dots + breadcrumb trail
-  // -------------------------------------------------------------------------
   const droneLayer = new Container();
   droneLayer.label = 'drones';
 
@@ -618,9 +575,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     return t;
   }
 
-  // -------------------------------------------------------------------------
-  // Pixi layer: range ring (WORLD space, inside world container)
-  // -------------------------------------------------------------------------
+  // Pixi layer: range ring (WORLD space, inside world container).
   // Drawn around the active origin when launch mode is armed. Radius =
   // max-affordable outbound = (min(MAX_FUEL, on-hand) × efficiency) / 2
   // tiles. Clicking inside the ring auto-computes the exact fuel cost
@@ -631,9 +586,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   const rangeRingGfx = new Graphics();
   rangeRingLayer.addChild(rangeRingGfx);
 
-  // -------------------------------------------------------------------------
   // Pixi layer: selected-pad highlight (WORLD space)
-  // -------------------------------------------------------------------------
   const selectedPadHighlightLayer = new Container();
   selectedPadHighlightLayer.label = 'selected-pad-highlight';
   selectedPadHighlightLayer.visible = false;
@@ -690,11 +643,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       .stroke({ width: 1, color: VISION_BLUE, alpha: 0.5 });
   }
 
-  // -------------------------------------------------------------------------
-  // Pixi layer: launch reticle (screen space, NOT inside world container)
-  // -------------------------------------------------------------------------
-  // The reticle is drawn at fixed screen-pixel size irrespective of zoom.
-  // It lives outside the camera's transform so 1px lines stay 1px.
+  // Pixi layer: launch reticle (screen space, NOT inside world container).
+  // Drawn at fixed screen-pixel size irrespective of zoom — it lives outside
+  // the camera's transform so 1px lines stay 1px.
   const reticleLayer = new Container();
   reticleLayer.label = 'launch-reticle';
   reticleLayer.visible = false;
@@ -731,7 +682,6 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   ensurePainted(RETICLE_OK);
   reticleLayer.addChild(reticleGfx);
 
-  // -------------------------------------------------------------------------
   // Pixi layer: launch-preview line/polyline. World-space (panned/zoomed
   // with camera), unlike the screen-space reticle. Color rule:
   //   green when distance ≤ maxLaunchRange (numeric)
@@ -780,7 +730,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       return;
     }
 
-    // Numeric tier: single line origin → cursor (from Task 2).
+    // Numeric tier: single line origin → cursor.
     if (!cursorTile) return;
     const dxTiles = cursorTile.x - ox;
     const dyTiles = cursorTile.y - oy;
@@ -859,9 +809,6 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     cursorTile = null;
   }
 
-  // -------------------------------------------------------------------------
-  // Drone dot rendering
-  // -------------------------------------------------------------------------
   function renderDroneDot(d: Drone, nowMs: number): Container {
     const c = new Container();
     c.label = `drone:${d.id}`;
@@ -937,9 +884,6 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Active flights ledger renderer
-  // -------------------------------------------------------------------------
   function repaintLedger(nowMs: number): void {
     ledgerList.replaceChildren();
     const active = deps.world.drones.filter(
@@ -1029,11 +973,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     return row;
   }
 
-  // -------------------------------------------------------------------------
-  // refresh()
-  // -------------------------------------------------------------------------
   function refresh(nowMs: number): void {
-    // Stat block always tracks the current slider.
     const origin = deps.getOrigin();
     const originSpec = deps.getOriginSpec();
 

@@ -1,11 +1,9 @@
 // §4.5 Chemical Reactor toxicity event. Pure module — no PixiJS, no DOM.
 //
-// Triggered on any chemical_reactor that has at least one adjacent
-// chemical_reactor neighbor. Per spec: 5% per real-time hour per such
-// reactor. Triggered reactor's throughput drops to 50% for 1 real-time
-// hour, then auto-resolves. Rolls are deterministic — seeded from
-// `${worldSeed}_toxicity_${reactorId}_${hourTick}` — so offline catchup
-// produces identical outcomes regardless of segment granularity.
+// Any chemical_reactor adjacent to another rolls 5%/real-time-hour; on a hit,
+// throughput drops to 50% for 1 hour then auto-resolves. Rolls are seeded from
+// `${worldSeed}_toxicity_${reactorId}_${hourTick}` so offline catchup produces
+// identical outcomes regardless of segment granularity.
 
 import { collectNeighbors } from './adjacency.js';
 import { makeSeededRng } from './rng.js';

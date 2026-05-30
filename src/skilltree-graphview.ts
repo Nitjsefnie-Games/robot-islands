@@ -1,7 +1,6 @@
-// src/skilltree-graphview.ts
 // Render-layer: full-page PixiJS overlay for the skill graph. Mounts its
 // own Application instance (separate from the world canvas) on a fixed
-// DOM overlay. Tasks 3-7 fill in the scene-graph content.
+// DOM overlay.
 
 import { Application, Container, Graphics, Text, TextStyle, Circle } from 'pixi.js';
 import {
@@ -311,7 +310,7 @@ export function mountSkillGraphView(
     canvasWrap.appendChild(a.canvas);
     const w = new Container();
     w.label = 'skillgraph-world';
-    // Center world container in viewport initially — Tasks 3+ render into it.
+    // Center world container in viewport initially.
     w.position.set(canvasWrap.clientWidth / 2, canvasWrap.clientHeight / 2);
     a.stage.addChild(w);
 
@@ -451,7 +450,7 @@ export function mountSkillGraphView(
       // so the player sees exactly which nodes the click would unlock.
       const rings = new Graphics();
       for (const id of pathNodeIds) {
-        if (state.unlockedNodes.has(id as unknown as GNodeId)) continue; // already owned, skip
+        if (state.unlockedNodes.has(id as unknown as GNodeId)) continue;
         const p = getPos(id);
         if (!p) continue;
         rings.circle(p.x, p.y, 14).stroke({ color: 0xD97757, width: 1.5, alpha: 0.9 });

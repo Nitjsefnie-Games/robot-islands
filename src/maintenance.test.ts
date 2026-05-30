@@ -237,9 +237,7 @@ describe('nextMaintenanceBoundaryMs', () => {
 });
 
 
-// ---------------------------------------------------------------------------
 // §13.3 Servitor Conversion Kit helpers
-// ---------------------------------------------------------------------------
 
 function makeStateWithBuilding(overrides: Partial<PlacedBuilding> = {}): IslandState {
   const building: PlacedBuilding = {

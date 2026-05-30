@@ -1,23 +1,13 @@
 // §2 Ocean-layer data primitives.
 //
-// Per the ocean-layer design doc §2: the world maintains a sparse map of
-// ocean cells keyed `"cellX,cellY"`. Cells NOT in the map are implicit
-// `deep` — the default ocean tier — so empty seas cost zero memory.
+// Per §2: the world maintains a sparse map of ocean cells keyed
+// `"cellX,cellY"`. Cells NOT in the map are implicit `deep` — the default
+// ocean tier — so empty seas cost zero memory.
 //
-// This module is pure (no PixiJS, no DOM) and holds the type + the two
-// lookup helpers everything else (placement, render glyphs, sonar
-// reveal) builds on:
-//
-//   - `terrainAt(world, x, y)`    — point lookup with implicit 'deep'
-//                                   fallback for unmapped cells.
-//   - `footprintMatches(world, ax, ay, w, h, allowed)` — predicate used
-//                                   by building placement to confirm an
-//                                   AABB lies entirely on the required
-//                                   terrain(s). Accepts an OR list so
-//                                   buildings that need "shallows OR deep"
-//                                   (e.g. ocean-floor anchored) can
-//                                   share one helper with the strict
-//                                   single-terrain extractors.
+// Pure (no PixiJS, no DOM): holds the terrain type + the lookup helpers that
+// placement, render glyphs, and sonar reveal build on. `footprintMatches`
+// accepts an OR list so buildings needing "shallows OR deep" share one helper
+// with strict single-terrain extractors.
 
 export type OceanTerrain =
   | 'shallows'
@@ -64,10 +54,6 @@ export function footprintMatches(
   }
   return true;
 }
-
-// ---------------------------------------------------------------------------
-// §6 Feature glyph render rule + cluster anchor
-// ---------------------------------------------------------------------------
 
 /** §6 rare-feature terrains: the three terrain kinds that get a feature
  *  glyph rendered on the map once revealed. Bulk terrains (shallows / deep)

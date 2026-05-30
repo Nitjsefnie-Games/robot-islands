@@ -56,11 +56,8 @@ const MILESTONE_TABLE: ReadonlyArray<MilestoneRow> = [
 ];
 
 /**
- * BFS over the route graph starting from the (first) populated island
- * treated as home. Returns the set of island ids that are reachable.
- *
- * The graph is treated as undirected for connectivity: a route A→B
- * connects both ends.
+ * BFS over the route graph from the `home` island. Returns the set of
+ * reachable island ids. Edges are undirected: a route A→B connects both ends.
  */
 export function networkedIslandIds(world: WorldState): Set<string> {
   const home = world.islands.find(i => i.id === 'home' && i.populated);
@@ -96,10 +93,9 @@ export function networkedIslandIds(world: WorldState): Set<string> {
 }
 
 /**
- * Aggregate world state into the network-consciousness summary.
- *
- * Pure: no mutation, no DOM, no rendering. Computes the route-graph-reachable
- * set from home, then counts populated islands in that set whose level is T3+.
+ * Aggregate world state into the network-consciousness summary. Pure: computes
+ * the route-graph-reachable set from home, then counts populated islands in
+ * that set whose level is T3+.
  */
 export function computeNcState(world: WorldState): NetworkConsciousnessState {
   const islandStates = world.islandStates;

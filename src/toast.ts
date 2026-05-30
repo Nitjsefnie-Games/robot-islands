@@ -1,10 +1,8 @@
 // Lightweight toast surface — top-center transient banners with a colour
 // hint for success / failure / info. Used by the §14 launch flow so a
-// satellite launch result reads at a glance from anywhere on the page
-// instead of needing the player to keep the orbital modal open.
-//
-// One DOM container, stacked toasts. Each toast is its own element that
-// auto-removes after a fade-out at a configurable lifetime (default 4s).
+// launch result reads at a glance without keeping the orbital modal open.
+// One DOM container, stacked toasts; each auto-removes after a fade-out at
+// a configurable lifetime (default 4s).
 
 export type ToastKind = 'success' | 'failure' | 'info';
 

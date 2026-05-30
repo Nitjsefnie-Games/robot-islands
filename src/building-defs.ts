@@ -6,33 +6,10 @@
 // The split lets the same def back many instances without each instance
 // repeating fill/stroke/footprint.
 //
-// Step-9 catalog: T1 + T2 + T3 buildings sufficient to demonstrate the
-// Iron/Steel chain (§7.1) end-to-end.
-// Step-12 catalog: adds 5 T4 endgame defs (§6.5/§9.5) — Fusion Core,
-// Pyroforge (Volcanic-unique), Cryogenic Compute Center (Arctic-unique),
-// Particle Accelerator, Launch Tower. Pyroforge + Cryogenic Compute Center
-// carry `requiredBiomes` per §15.1; the `canPlaceOnIsland` helper at the
-// bottom of this file is the canonical gate.
-// Step-13 catalog: adds 7 T5 Transcendent defs (§13.2 / §8.4 / §8.5 / §8.9) —
-// Casimir Tap, Reality Forge, Singularity Battery, Time Lock, Genesis Chamber,
-// Universe Editor, Lattice Node. §13.3 mechanics are live: time banking
-// (`spendTimeLock` in economy.ts), free creation (`genesis_chamber` in
-// economy.ts:542-598 / 792-804), biome reassignment (`editIslandBiome` in
-// world.ts), network unity (`latticeActive`), and Probability Engine drone
-// scan bias. The T5 access gate (§13.1) — level ≥ 50 AND `aiCoreCrafted`
-// flag — is enforced in `buildingUnlocked` below, not by the tier-only
-// `tierForLevel`. The Casimir Tap power figure is a placeholder; full §8.10
-// T5 raw extractors (Aetheric Conduit, Spacetime Resonator, Eldritch Sieve)
-// and their multi-hour cycle times shipped in step 18 for Aetheric Conduit /
-// Spacetime Resonator / Eldritch Sieve; Casimir Tap cycle remains placeholder
-// (1800s).
-//
-// §13.2 deliberate substitution: spec §13.2 lists Probability Engine in the
-// T5 building set; step 13 shipped Time Lock instead because Time Lock has
-// richer §13.3 behavioural detail (banking + spending semantics) which made
-// its placeholder more meaningful as documentation. Probability Engine
-// (drone rare-encounter scan bias) shipped subsequently and is wired through
-// `drones.ts` for scan bias.
+// The T5 access gate (§13.1) — level ≥ 50 AND `aiCoreCrafted` — is enforced
+// in `buildingUnlocked` below, NOT by the tier-only `tierForLevel`.
+// `requiredBiomes` (§15.1 / §9.5) is enforced by `canPlaceOnIsland` at the
+// bottom of this file — the canonical biome gate.
 //
 // Heat-source adjacency (§5.2) IS implemented. The economy passes consumer
 // recipes through `resolveHeatAssignments` (heat.ts) before rate computation:
@@ -40,8 +17,6 @@
 // rate forced to 0 and contributes 0 to P_consumed. Coal-burning sources
 // (Coal Furnace) burn `coalPerCycle × consumersServed` coal per cycle; free
 // sources (Geothermal Vent / Plasma Heater / Fusion Core) cost no fuel.
-// T4 omnidirectional pulse mechanic (§11.5) for the Launch Tower is live
-// via `firePulse` (3-cell-radius single-disk reveal).
 //
 // No PixiJS imports, no DOM — `building-defs.ts` is pure data + the tier
 // gate + biome gate. `buildings.ts` consumes BUILDING_DEFS for rendering;
@@ -631,9 +606,7 @@ export interface BuildingDef {
 
 /** Read-only catalog. Keys = BuildingDefId; every defId MUST have an entry. */
 export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
-  // -------------------------------------------------------------------------
   // T1 (levels 1-5)
-  // -------------------------------------------------------------------------
   // §8.1: Mine output branches on the underlying tile — every footprint cell
   // must be on an ore vein OR a coal vein, and the recipe variant produced is
   // selected by tile type via `resolveRecipe` in recipes.ts:
@@ -650,7 +623,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x9a9a9a,
     stroke: 0x222222,
-    power: { consumes: 25 }, // 2026-05-23 coal loop rebalance — also applies to mine_on_ore via shared def.
+    power: { consumes: 25 }, // also applies to mine_on_ore via shared def.
     requiredTile: ['ore', 'coal'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small open-pit head-frame analog: 200 kg foundation stone + 80 kg wood
@@ -1243,12 +1216,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 60 },  // operating overhead; the cable transmission itself doesn't count here
     // BOM source: ABB MV power substation (transformer + switchgear).
     // 32.31 t embodied.
-    placementCost: { steel_beam: 600, concrete: 800, copper_ingot: 400, microchip: 100, wire: 200, ceramic_insulator: 200, heavy_cable: 100 },  // heavy_cable not yet in ResourceId catalog; substituted with wire
+    placementCost: { steel_beam: 600, concrete: 800, copper_ingot: 400, microchip: 100, wire: 200, ceramic_insulator: 200, heavy_cable: 100 },
     glyph: '⚡',
   },
-  // -------------------------------------------------------------------------
   // T2 (levels 5-15)
-  // -------------------------------------------------------------------------
   coke_oven: {
     id: 'coke_oven',
     displayName: 'Coke Oven',
@@ -1715,9 +1686,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel_beam: 500, ceramic_insulator: 100, gear: 50, glass: 30, pipe: 20 },
     glyph: '❄',
   },
-  // -------------------------------------------------------------------------
   // T3 (levels 15-30)
-  // -------------------------------------------------------------------------
   // §5.2 / §8.6: Plasma Heater — T3 free heat source (power-driven, no fuel).
   // Costs 200W to operate but serves any number of adjacent consumers at no
   // additional cost. Bridges the gap between T1 Coal Furnace (cheap, fuel-
@@ -1875,9 +1844,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     co2CaptureKgPerCycle: 20,
     co2CaptureAdjacency: ['coal_gen', 'biomass_plant', 'cement_mill', 'limekiln'],
   },
-  // -------------------------------------------------------------------------
   // T4 (levels 30-50) — endgame chain per §6.5 / §8.5 / §9.5
-  // -------------------------------------------------------------------------
   // §8.5: Fusion Core — universal T4 power source, Helium-3 fuel, massive
   // output (300000 kW = 300 MW). Not biome-locked. Per §5.2 / §8.5 also acts as a free
   // Heat Source — the `heatSource` flag below makes adjacent heat consumers
@@ -2198,9 +2165,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel_beam: 300, microchip: 200, ai_core: 20, reality_anchor: 10, wire: 100, ceramic_insulator: 50, glass: 50 },
     glyph: '◈',
   },
-  // -------------------------------------------------------------------------
-  // T5 (levels 50+, AI Core required) — Transcendent per §13 / step 13
-  // -------------------------------------------------------------------------
+  // T5 (levels 50+, AI Core required) — Transcendent per §13
   // §8.5 / §8.10: Casimir Tap — T5 power source AND raw extractor for
   // Casimir energy / Zero-point flux. Step-13 simplification: declared as a
   // power producer (1000000 kW = 1 GW; §8.5 says "free vacuum energy") with
@@ -2526,17 +2491,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     },
     glyph: '✺',
   },
-  // -------------------------------------------------------------------------
-  // T6 (Ascendant Core + Spaceport, §14) — Orbital per step 20
-  // -------------------------------------------------------------------------
-  //
-  // The §14.2-14.8 / §14.12 live mechanics — Spaceport tier I/II/III
-  // upgrade lifecycle, satellite launches as a concurrent slot, scheduled
-  // launches with success rolls, orbital debris fields, Kessler-cascade
-  // chains, comm-graph data delivery, lodge events, Repair Drone
-  // operations, dwell-ramp discovery — and the §14.9 four Orbital skill
-  // sub-paths (Launch / Communication / Discovery / Resilience) are all
-  // wired through `orbital.ts`.
+  // T6 (Ascendant Core + Spaceport, §14) — Orbital. The §14.2-14.8 / §14.12
+  // mechanics and §14.9 Orbital skill sub-paths are wired through `orbital.ts`.
   //
   // The §14.1 access gate (level 50 + AI core + Ascendant Core crafted +
   // Spaceport placed) is composed in `buildingUnlocked` below. Spaceport
@@ -2737,13 +2693,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel_beam: 800, concrete: 4000, microchip: 400, glass: 400, wire: 400, exotic_alloy: 20 },
     glyph: '◇',
   },
-  // -------------------------------------------------------------------------
-  // Step-18 recipe-graph closure (§7.1-§7.12)
-  // -------------------------------------------------------------------------
-  // One defId per recipe. Step-18 prioritises COVERAGE (every recipe input
-  // has a producer) over balance — cycle times, power draws, and footprints
-  // are placeholders pending the rebalance pass. §8.1 tile-gating is now
-  // live for all extractors.
+  // Step-18 recipe-graph closure (§7.1-§7.12). One defId per recipe.
+  // Prioritises COVERAGE (every recipe input has a producer) over balance —
+  // cycle times, power draws, and footprints are placeholders pending the
+  // rebalance pass. §8.1 tile-gating is live for all extractors.
 
   // T1 extraction (§8.1 raws).
   quarry: {
@@ -3135,9 +3088,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '⚙',
   },
 
-  // ---------------------------------------------------------------------------
   // Phase 3 — T2-T3 steel alloy chains (§6.1 / §6.4 / §7.1)
-  // ---------------------------------------------------------------------------
   // Task 3.1: Carbon steel — manganese_ore + manganese_ingot + carbon_steel
   manganese_mine: {
     id: 'manganese_mine',
@@ -4557,23 +4508,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel_beam: 12000, glass: 6000, microchip: 3000, ceramic_insulator: 1500, silicon_wafer: 400 },
     glyph: '⌬',
   },
-  // -------------------------------------------------------------------------
   // Lighthouse vision (§15.x). Six tiers extending the baseline 10-tile
   // padding ellipse. Vision radius (in tiles) lives in lighthouse.ts →
-  // LIGHTHOUSE_VISION_RADII; the economy doesn't read it. Recipes / build
-  // costs are STILL-DEFERRED — placement is free pre-§14, and once §14 costs land
-  // the table below moves into `def.placementCost`:
-  //
-  //   T1: 20 stone + 5 wood                    // Lighthouse placeholder — tune in Appendix A
-  //   T2: 50 stone + 10 steel + 2 glass_panel  // Lighthouse placeholder — tune in Appendix A
-  //   T3: 100 steel + 20 microchip             // Lighthouse placeholder — tune in Appendix A
-  //   T4: 200 steel + 50 microchip + 10 fiber_optic   // Lighthouse placeholder — tune in Appendix A
-  //   T5: 500 reality_anchor + T5 components   // Lighthouse placeholder — tune in Appendix A
-  //   T6: 1000 antimatter-tier components,     // Lighthouse placeholder — tune in Appendix A
-  //       ascendant-gated.
-  //
-  // No recipes (passive vision beacons). T1 is zero-power; T2-T6 consume
-  // increasing power so each tier carries an upkeep.
+  // LIGHTHOUSE_VISION_RADII; the economy doesn't read it. No recipes
+  // (passive vision beacons). T1 is zero-power; T2-T6 consume increasing
+  // power so each tier carries an upkeep.
   lighthouse_t1: {
     id: 'lighthouse_t1',
     displayName: 'Lighthouse T1',
@@ -4659,19 +4598,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel_beam: 2400, concrete: 1300, glass: 280, microchip: 500, ai_core: 10, reality_anchor: 2 },
     glyph: '⛯',
   },
-  // -------------------------------------------------------------------------
   // §11 telemetry — Antenna family. Six tiers extending the drone-scan
   // relay range. Signal radius (in tiles) lives in `antenna.ts →
-  // ANTENNA_SIGNAL_RADII`; the economy doesn't read it. Build costs are
-  // STILL-DEFERRED to Appendix A.
-  //
-  //   T1: 1×1, radius 80,  zero-power (basic signal beacon)
-  //   T2: 1×1, radius 140, 5 W
-  //   T3: 1×1, radius 220, 25 W
-  //   T4: 2×2, radius 320, 60 W (comm tower)
-  //   T5: 2×2, radius 480, 150 W (exotic signal)
-  //   T6: 2×2, radius 700, 400 W (doubles as satellite dish; signal radius adds to ground-station comm range in `groundStationCommRange`)
-  //
+  // ANTENNA_SIGNAL_RADII`; the economy doesn't read it. T1 is zero-power;
+  // T2-T6 consume increasing power. T6 doubles as the satellite dish — its
+  // signal radius adds to ground-station comm range in `groundStationCommRange`.
   // Antenna placeholder — tune in Appendix A.
   antenna_t1: {
     id: 'antenna_t1',
@@ -4776,10 +4707,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel_beam: 1600, concrete: 4000, microchip: 600, glass: 500, wire: 600, ceramic_insulator: 400, exotic_alloy: 50, ai_core: 15, reality_anchor: 5 },
     glyph: '⟁',
   },
-  // ---------------------------------------------------------------------------
-  // Ocean-layer §5 — Sonar Buoy (T2 active depth-discovery building)
-  // ---------------------------------------------------------------------------
-  //
+  // Ocean-layer §5 — Sonar Buoy (T2 active depth-discovery building).
   // 1×1 ocean-placed building. While the anchor island is powered, marks
   // every cell within `SONAR_BUOY_RADIUS_TILES` of the buoy in BOTH
   // `revealedCells` and `depthRevealedCells`. The reveal tick lives in
@@ -4791,8 +4719,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   //
   // `wire` is the codebase's name for what the spec/plan calls "copper wire";
   // there is no separate `copper_wire` ResourceId.
-  //
-  // Sonar Buoy placeholder — tune in Appendix A.
   sonar_buoy: {
     id: 'sonar_buoy',
     displayName: 'Sonar Buoy',
@@ -4809,23 +4735,16 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     terrainReqs: ['shallows', 'deep', 'trench', 'hydrothermal_vent', 'nodule_field'],
     glyph: '◌',
   },
-  // ---------------------------------------------------------------------------
-  // Ocean-layer §3 — Task 8 extractor catalog (5 buildings)
-  // ---------------------------------------------------------------------------
-  //
+  // Ocean-layer §3 — Task 8 extractor catalog (5 buildings).
   // Each is 2×2 (cell-units; see ocean-cell.ts footprintMatches — for ocean
   // buildings the footprint dimensions index `oceanCells` directly, not the
   // tile grid). Terrain rule per the §3 design-doc catalog table.
   //
-  // `wire` is the codebase's name for copper wire (no separate `copper_wire`
-  // ResourceId); placement-cost baskets use that. Power consumption + costs
-  // are Appendix-A placeholders — tune in balance follow-ups.
-  //
-  // Anchor picker UI wiring (placement-ui.ts → mountAnchorPicker) is deferred
-  // to a follow-up. Until that lands, these defs validate ocean placement at
-  // the data layer (validateOceanPlacement in placement.ts) but the regular
-  // `validatePlacement` / `placeBuilding` path still routes them onto whatever
-  // land tile the user clicks — same forward-compat posture as `sonar_buoy`.
+  // These defs validate ocean placement at the data layer
+  // (validateOceanPlacement in placement.ts), but the anchor-picker UI is
+  // deferred — until it lands the regular `validatePlacement` / `placeBuilding`
+  // path still routes them onto whatever land tile the user clicks (same
+  // forward-compat posture as `sonar_buoy`).
   seawater_intake_rig: {
     id: 'seawater_intake_rig',
     displayName: 'Seawater Intake Rig',
@@ -4908,20 +4827,13 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     terrainReqs: ['hydrothermal_vent'],
     glyph: '✦',
   },
-  // ---------------------------------------------------------------------------
   // Ocean-layer §3 — Task 9 processor catalog (4 chemistry processors + 1
   // passive power source). 3×3 footprints for processors (matches reality
   // _forge / antimatter_refinery T5 chemistry precedent); 2×2 for the
   // Geothermal Vent Generator (mid-density power source on a rare terrain).
-  //
-  // Categories: 'chemistry' for the processors (the BuildingCategory enum
-  // has no 'processing' — these belong with chlor_alkali_plant /
-  // sulfuric_acid_plant); 'power' for the generator.
-  //
-  // No recipe wires through `placementCost` here — costs are §14
-  // placeholders; Geothermal Vent Generator's cost mirrors a T6
-  // power-source basket (exotic_alloy + ai_core + plasma_containment).
-  // ---------------------------------------------------------------------------
+  // Processors are 'chemistry' (the BuildingCategory enum has no 'processing'
+  // — they belong with chlor_alkali_plant / sulfuric_acid_plant); the
+  // generator is 'power'.
   brine_distillation_rig: {
     id: 'brine_distillation_rig',
     displayName: 'Brine Distillation Rig',
@@ -5033,9 +4945,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     terrainReqs: ['hydrothermal_vent'],
     glyph: '★',
   },
-  // ---------------------------------------------------------------------------
   // T3 microchip intermediate chain (§7.7)
-  // ---------------------------------------------------------------------------
   pcb_etcher: {
     id: 'pcb_etcher',
     displayName: 'PCB Etcher',
@@ -5094,9 +5004,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     placementCost: { steel_beam: 1500, concrete: 1000, microchip: 300, quantum_chip: 50, exotic_alloy: 50, wire: 200, glass: 100, ceramic_insulator: 100 },
     glyph: '◈',
   },
-  // -------------------------------------------------------------------------
   // §2.6 weather stations
-  // -------------------------------------------------------------------------
   weather_station_t2: {
     id: 'weather_station_t2',
     displayName: 'Weather Station',

@@ -1,10 +1,9 @@
 // Floating-panel zone manager.
 //
-// Problem the redesign brief targets:
-//   In the previous UI every panel hand-picks `position: fixed` + a corner.
-//   Several panels claim top-right, several claim bottom-right, and the
-//   multi-island bar at `top: 0` covers them all. The result: panels stack
-//   on top of each other and the player can't read what's underneath.
+// Why: previously every panel hand-picked `position: fixed` + a corner, so
+// panels claiming the same corner stacked on top of each other (and the
+// top:0 multi-island bar covered them all). This module gives each panel
+// exactly one non-overlapping zone instead.
 //
 // Contract this module enforces:
 //   - Every floating panel registers in exactly ONE zone.
@@ -264,29 +263,26 @@ export function setPanelFree(id: string, free: boolean): void {
 
 /** Clear every panel's `free` flag and wipe the inline left/top/width/
  *  height/z-index/transform that the window-manager may have set; then
- *  request a re-stack. Called by resetUiLayout(). The transform clear
- *  is defensive — TC chrome panels use translateX(-50%) and we never
- *  set it free, but if a future change starts setting non-chrome panels
- *  with transforms we want this to be the canonical reset. */
+ *  request a re-stack. Called by resetUiLayout(). The transform clear is
+ *  defensive (TC uses translateX(-50%), re-set by layoutZone) so this stays
+ *  the canonical reset even if non-chrome panels gain transforms later. */
 export function restoreAllToZones(): void {
   for (const rec of records.values()) {
     rec.free = false;
     const s = rec.el.style;
     // Leave dataset.riActiveMutation alone; pointer handlers clear it.
     s.left = s.top = s.width = s.height = s.zIndex = '';
-    // Preserve TC's translateX(-50%) — that's set by layoutZone itself
-    // on the next pass, so blanking it here is safe. Other zones don't
-    // use transform.
+    // Blanking transform is safe: layoutZone re-sets TC's translateX(-50%)
+    // next pass, and other zones don't use transform.
     s.transform = '';
     rec.el.classList.remove('ri-free');
   }
   scheduleLayout();
 }
 
-/** Internal accessor for window-manager: needs the live record map to
- *  enumerate all panels for cross-panel z-rank rewriting. Returning a
- *  read-only view keeps the contract one-way: callers can read, the
- *  zone manager owns mutation. */
+/** Internal accessor for window-manager's cross-panel z-rank rewriting.
+ *  Read-only view keeps the contract one-way: callers read, the zone
+ *  manager owns mutation. */
 export function panelRecordIds(): readonly string[] {
   return Array.from(records.keys());
 }

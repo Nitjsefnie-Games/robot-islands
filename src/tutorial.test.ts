@@ -17,10 +17,6 @@ import { makeInitialWorld } from './world.js';
 import type { IslandSpec, WorldState } from './world.js';
 import { BUILDING_DEFS } from './building-defs.js';
 
-// ---------------------------------------------------------------------------
-// Helpers (Phase 7 commit 6)
-// ---------------------------------------------------------------------------
-
 function makeTestWorld(over: Partial<WorldState> = {}): WorldState {
   const { spec, state } = makeTestIsland('home');
   return {
@@ -96,10 +92,6 @@ function makeTestIsland(id: string): { spec: IslandSpec; state: IslandState } {
   return { spec, state };
 }
 
-// ---------------------------------------------------------------------------
-// 1. Integrity
-// ---------------------------------------------------------------------------
-
 describe('TUTORIAL_STEPS — integrity', () => {
   it('has exactly 72 entries with unique ids', () => {
     expect(TUTORIAL_STEPS.length).toBe(72);
@@ -107,10 +99,6 @@ describe('TUTORIAL_STEPS — integrity', () => {
     expect(ids.size).toBe(72);
   });
 });
-
-// ---------------------------------------------------------------------------
-// 2. Guard — targetDefId resolves, requiredTile is named, no dead lambdas
-// ---------------------------------------------------------------------------
 
 describe('TUTORIAL_STEPS — guard', () => {
   it('every targetDefId resolves to a real BUILDING_DEFS entry', () => {
@@ -144,10 +132,6 @@ describe('TUTORIAL_STEPS — guard', () => {
     }
   });
 });
-
-// ---------------------------------------------------------------------------
-// 3. Ordering
-// ---------------------------------------------------------------------------
 
 describe('TUTORIAL_STEPS — ordering', () => {
   it('currentStep returns step 1 on a fresh world', () => {
@@ -237,10 +221,6 @@ describe('TUTORIAL_STEPS — ordering', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// 3b. Dismissal lifecycle (checkDismissals)
-// ---------------------------------------------------------------------------
-
 describe('checkDismissals', () => {
   it('reports a build step as dismissable once its target is placed', () => {
     const w = makeTestWorld({ playerLat: 40 });
@@ -276,10 +256,6 @@ describe('checkDismissals', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// 4. skipAll + restart
-// ---------------------------------------------------------------------------
-
 describe('skipAll + restart', () => {
   it('skipAll fills completed with all 72 ids', () => {
     const w = makeTestWorld();
@@ -310,10 +286,6 @@ describe('skipAll + restart', () => {
     expect(currentStep(w)?.id).toBe('01_location');
   });
 });
-
-// ---------------------------------------------------------------------------
-// 5. Persistence
-// ---------------------------------------------------------------------------
 
 describe('persistence — tutorialState', () => {
   it('pre-Phase-7 save (tutorialState undefined) loads with empty completed', () => {

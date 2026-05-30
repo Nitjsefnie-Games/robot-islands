@@ -1,8 +1,7 @@
 // §03 terrain_modifier (v5 spec) — placement-time target-biome picker. Opened
 // BEFORE the placement-ui arms the brush; the resolved TerrainKind threads
-// into PlacedBuilding.terrainTarget on commit. Mirrors cargo-label-picker.ts
-// (placement-time generic-storage label picker): same modal chrome, same
-// promise-supersede pattern, same Escape/scrim cancel semantics.
+// into PlacedBuilding.terrainTarget on commit. Mirrors cargo-label-picker.ts:
+// same modal chrome, promise-supersede pattern, and Escape/scrim cancel.
 
 import {
   conversionCostForTarget,

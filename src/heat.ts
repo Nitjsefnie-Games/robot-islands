@@ -18,8 +18,7 @@
 //            lowest-id coal source; increment its served count.
 //         c) Else → hasHeat=false. Consumer cannot operate this tick.
 //
-// Pure module — no PixiJS, no DOM. Imports `footprintTiles` from shape-mask.ts
-// and BUILDING_DEFS from building-defs.ts.
+// Pure module — no PixiJS, no DOM.
 //
 // Catalog asymmetry note: this resolver reads `requiresHeat` / `heatSource`
 // from the canonical `BUILDING_DEFS` table, NOT from the per-call `defs`

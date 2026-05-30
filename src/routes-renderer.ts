@@ -67,9 +67,8 @@ export class RouteRenderer {
   ): void {
     const key = routesCacheKey(routes);
 
-    // Slow-path trigger: any of (geometry key, draft preview, visibility)
-    // changed. The dashed-line static layer is rebuilt on geometry change
-    // only; draft + visibility never invalidate the static cache.
+    // Static layer rebuilds on geometry-key change only; draft + visibility
+    // never invalidate the static cache (they live in the per-frame overlay).
     if (key !== this.lastFullKey) {
       this.diffRebuild(routes);
       this.lastFullKey = key;
@@ -187,8 +186,8 @@ export class RouteRenderer {
       .lineTo(entry.toX, entry.toY)
       .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
 
-    // The static layer is the per-segment dashed fallback — kept hidden.
-    // See `BUILD_STATIC_FALLBACK` above for the flip-on instructions.
+    // Static layer is the dashed fallback — kept hidden; see
+    // `BUILD_STATIC_FALLBACK` above for flip-on instructions.
     entry.staticGraphics.visible = false;
   }
 

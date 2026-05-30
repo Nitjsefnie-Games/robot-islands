@@ -225,7 +225,6 @@ export function launchSatellite(
     return { ok: false, reason: 'no-ascendant-core' };
   }
 
-  // Verify consumables.
   const payload = PAYLOAD_RESOURCE[variant];
   const needed: Partial<Record<ResourceId, number>> = {
     [payload]: 1,
@@ -270,7 +269,6 @@ export function launchSatellite(
     return { ok: false, reason: 'target-out-of-range' };
   }
 
-  // Roll launch success.
   const spaceportTier = spaceport.tier ?? 1;
   const baseSuccess =
     spaceportTier === 1 ? 0.30 : spaceportTier === 2 ? 0.50 : 0.70;
@@ -304,7 +302,6 @@ export function launchSatellite(
     return { ok: false, reason: 'launch-failure' };
   }
 
-  // Deduct consumables.
   for (const [res, qty] of Object.entries(needed)) {
     state.inventory[res as ResourceId] -= qty ?? 0;
   }
@@ -451,14 +448,12 @@ export function nextHopToNearestSpaceport(
   // with the lowest distance (ties → lowest id).
   let bestNeighbor: string | null = null;
   let bestDist = Infinity;
-  // Sort neighbors deterministically.
   const sortedNeighbors = [...neighbors].sort();
   for (const nb of sortedNeighbors) {
     if (targets.has(nb)) {
       // direct delivery hop is distance 0 — wins immediately
       return nb;
     }
-    // BFS from nb to any target.
     const visited = new Set<string>([startId, nb]);
     const queue: Array<{ id: string; d: number }> = [{ id: nb, d: 0 }];
     let dist = Infinity;
@@ -519,7 +514,6 @@ export function connectedSatellites(world: WorldState): Satellite[] {
   const connected = new Set<string>();
   const queue: string[] = [];
 
-  // Seed with all Spaceports on populated islands
   for (const spec of world.islands) {
     if (!spec.populated) continue;
     const state = world.islandStates?.get(spec.id);
@@ -657,7 +651,6 @@ export function tickRepairDrones(world: WorldState, nowMs: number): void {
     const failureChance = 0.05 / reliabilityMul;
     const rng = makeSeededRng(`${world.seed}_repair_${drone.id}`);
     if (rng() < failureChance) {
-      // Lost in transit
       sat.pendingRepairDroneId = null;
       continue;
     }
@@ -758,7 +751,6 @@ export function tickSatMovement(world: WorldState, nowMs: number): void {
       survivors.push(sat);
       continue;
     }
-    // Success: update position, re-lock, clear movingTo.
     sat.x = sat.movingTo.x;
     sat.y = sat.movingTo.y;
     sat.locked = true;
@@ -862,7 +854,6 @@ export function tickDebris(world: WorldState, nowMs: number): void {
     }
   }
   world.satellites = survivors;
-  // Cleanup: drop fields with zero fragments.
   world.debrisFields = world.debrisFields.filter((f) => f.fragments > 0);
 }
 
@@ -970,7 +961,6 @@ export function tickScannerDiscovery(
     for (const key of Object.keys(sat.dwellByCellKey)) {
       if (!covered.has(key)) delete sat.dwellByCellKey[key];
     }
-    // Bump dwell.
     for (const key of covered) {
       sat.dwellByCellKey[key] = (sat.dwellByCellKey[key] ?? 0) + tickDeltaMs;
     }
@@ -1031,11 +1021,9 @@ export function upgradeSpaceport(
     ? { phase_converter: 5, memetic_core: 2, cryogenic_hydrogen: 50 }
     : { reality_anchor: 10, memetic_core: 5, antimatter_propellant: 100 };
 
-  // Check inventory
   for (const [r, amt] of Object.entries(costs)) {
     if (inv(state, r as ResourceId) < amt) return { ok: false, reason: 'insufficient-resources' };
   }
-  // Consume
   for (const [r, amt] of Object.entries(costs)) {
     state.inventory[r as ResourceId] = inv(state, r as ResourceId) - amt;
   }

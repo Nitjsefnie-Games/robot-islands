@@ -44,7 +44,6 @@ export function mountGraphUi(
   }
   const categories = [...byCategory.keys()].sort();
 
-  // Container
   const container = document.createElement('div');
   container.style.display = 'flex';
   container.style.flexDirection = 'column';
@@ -54,7 +53,6 @@ export function mountGraphUi(
   container.style.overflow = 'auto';
   container.style.padding = '4px';
 
-  // Search input
   const search = document.createElement('input');
   search.type = 'search';
   search.placeholder = 'Search by building, resource, category…';

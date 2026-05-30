@@ -1,27 +1,14 @@
 // §13.3 Universe Editor — reassigns an island's biome and regenerates its
 // terrain + modifiers. Pure layer (no PixiJS, no DOM); the UI lives in
-// inspector-ui.ts and calls `editIslandBiome` when the player commits the
-// biome pick.
+// inspector-ui.ts and calls `editIslandBiome` when the player commits the pick.
 //
-// Spec literal (§13.3, "Reality editing — Universe Editor"):
-//   - Player picks a target biome from the §3.2 standard list.
-//   - Biome is reassigned; terrain re-rolls under the new biome's rules
-//     from the world seed. (`attachTerrainAt` rebinds the closure via
-//     `spec.biome`, so mutating biome on the spec implicitly re-rolls
-//     terrain — the closure reads `spec.biome` dynamically.)
-//   - Existing buildings remain placed but may become invalid (a Mine on
-//     what used to be an ore vein halts if the new tile isn't ore). We
-//     set `b.invalid = true` on any building whose footprint no longer
-//     matches its `requiredTile`.
-//   - Modifiers are wiped + re-rolled per the new biome's distribution,
-//     excluding rare/natural-only modifiers (`rerollModifiers` handles
-//     this — natural-only entries are filtered out post-roll).
-//   - Each use consumes substantial T5 components (placeholder cost
-//     below; tune via Appendix A once T5 throughput is balanced).
-//
-// Each invocation is a heavy commitment — the building is reusable but
-// invocations cost real materials, and Aetheric Anomaly / Frozen Core
-// modifiers are lost without compensation (per §13.3 "real cost").
+// Per §13.3, target biome comes from the §3.2 standard list. Terrain re-rolls
+// under the new biome from the world seed via the closure rebind below.
+// Existing buildings remain placed but may become invalid (a Mine off its ore
+// vein halts) — marked `b.invalid = true`. Modifiers are wiped and re-rolled,
+// excluding natural-only entries (`rerollModifiers` filters them). Each use is
+// a heavy commitment: it costs real T5 materials and Aetheric Anomaly / Frozen
+// Core modifiers are lost without compensation (§13.3 "real cost").
 
 import { BUILDING_DEFS } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';

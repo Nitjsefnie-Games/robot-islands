@@ -8,8 +8,7 @@
 //
 // Cell coordinates are signed integers. A cell `(cx, cy)` covers tile range
 // `[cx * 16, (cx + 1) * 16)` on both axes. `Math.floor` (NOT `| 0`) is used
-// for the tile→cell mapping so negative coordinates land on the correct cell
-// — `(-1, -1)` floors to `(-1, -1)`, not `(0, 0)`.
+// for the tile→cell mapping so negative coordinates land on the correct cell.
 
 import { CELL_SIZE_TILES } from './constants.js';
 import { tileInscribedInOffsetEllipse } from './island.js';

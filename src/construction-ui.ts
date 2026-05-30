@@ -1,18 +1,7 @@
 // Artificial-island Construction modal — DOM overlay per SPEC §2.5.
 //
-// Phase 4b.5: migrated to the shared ri-modal shell (mountModal from
-// ui-modal.ts). The body is a small form: founder picker → biome picker →
-// size sliders → position inputs → live cost readout. The "Construct" CTA
-// lives in the modal footer; inline style.cssText replaced with .ri-* classes
-// and CSS custom properties.
-//
-// Aesthetic guards:
-//   - Founder rows / biome chips: lock state if eligibility fails. Locked
-//     entries render at FG_MUTED, never illegibly grey-on-grey.
-//   - Cost readout: each material shows current ÷ required; over-budget
-//     materials switch to WARN amber, on-budget stays FG.
-//   - "Construct" CTA: disabled style (FG_MUTED border, no hover lift) when
-//     validation fails; tooltip surfaces the failure reason.
+// Form body: founder picker → biome picker → size sliders → position inputs →
+// live cost readout; "Construct" CTA in the modal footer (shared ri-modal shell).
 //
 // Wire-up notes:
 //   - Toggle via KeyC (`'toggle-construction'`, see input.ts).
@@ -110,8 +99,7 @@ let constructionCounter = 0;
  *  this directly. */
 export function nextArtificialId(): string {
   constructionCounter += 1;
-  // `art-1`, `art-2`, ... — short enough for log readability, distinct from
-  // the existing demo ids (home, forest-ne, desert-far, …).
+  // `art-N` ids stay distinct from the demo ids (home, forest-ne, desert-far, …).
   return `art-${constructionCounter}`;
 }
 
@@ -314,9 +302,6 @@ export function mountConstructionUi(
     constructBtn.blur();
   });
 
-  // -------------------------------------------------------------------------
-  // Mount modal
-  // -------------------------------------------------------------------------
   const handle = mountModal(parentEl, {
     title: 'CONSTRUCT',
     subtitle: 'platform constructor',
@@ -475,10 +460,6 @@ export function mountConstructionUi(
     },
   });
 
-  // -------------------------------------------------------------------------
-  // Refresh — recompute eligibility, cost, validation; repaint UI
-  // -------------------------------------------------------------------------
-
   /** Collect every island state that satisfies "populated + T3+ + has
    *  platform_constructor". Pure read of `options.world` / `options.islandStates`. */
   function eligibleFounders(): Array<{ spec: IslandSpec; state: IslandState }> {
@@ -529,13 +510,11 @@ export function mountConstructionUi(
       if (target) founderSelect.value = target;
     }
 
-    // Repaint biome chips.
     for (const [b, chip] of biomeChips) {
       const active = b === selectedBiome;
       chip.dataset.active = active ? 'true' : 'false';
     }
 
-    // Update cost readout.
     const req: ConstructionRequirements = {
       biome: selectedBiome,
       majorRadius,
@@ -549,7 +528,6 @@ export function mountConstructionUi(
     paintCostRow(ironValue, cost.iron_ingot, founder?.state.inventory.iron_ingot ?? 0);
     paintCostRow(woodValue, cost.wood, founder?.state.inventory.wood ?? 0);
 
-    // Validate.
     let reason: ValidationReason | 'overlap' | null = null;
     if (!founder) {
       reason = 'tier-too-low'; // no eligible founder ≈ tier-too-low UX-wise

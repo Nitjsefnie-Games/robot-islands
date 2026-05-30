@@ -4,28 +4,6 @@
 // pattern in `skilltree.ts` — a catalog of definitions plus a fold function
 // that aggregates the active set into a multiplier bundle consumed by
 // `computeRates` in `economy.ts`.
-//
-// Step 8 wires modifier effects through to the economy:
-//   - mineral_rich      → +25% on extraction-tagged recipes
-//   - fertile           → +50% on extraction-tagged recipes (forestry per §3.5;
-//                         we don't yet differentiate forestry from other extraction
-//                         so they share the wire — documented as a simplification)
-//   - cursed_storms     → -10% on ALL recipe rates (global multiplier)
-//   - stable            → no-op (1.0); tracked so future event systems know to
-//                         skip negative rolls on this island
-//   - high_wind         → outputVariance = true (±20% variance wired),
-//                         windPowerMul = 1.5 (wind producers +50% wired)
-//   - geothermal_active → free heat to all requiresHeat buildings (heat.ts)
-//   - aetheric_anomaly  → T5 raw extraction +50% rate (economy.ts)
-//   - frozen_core       → cryo recipes 2× rate (economy.ts)
-//
-// All eight modifiers are now active; none remain structural placeholders.
-//
-// Modifier RANDOM GENERATION (`rollModifiers`) is exported for future-step use
-// (artificial islands / new colonies / persisted seed worlds). Step 8 does
-// NOT call it — `world.ts` `DEMO_ISLANDS` carries hand-assigned modifier lists.
-// The function is fully implemented and tested so the API exists when step 11
-// arrives.
 
 import type { Biome } from './world.js';
 import { defaultTerrainAt, type TerrainKind } from './island.js';
@@ -377,7 +355,7 @@ export function effectiveModifierMultipliers(
 }
 
 // ---------------------------------------------------------------------------
-// Modifier random generation (shipped in step 11 — exported for step 11+)
+// Modifier random generation
 // ---------------------------------------------------------------------------
 
 /** §3.5: 50% → 0 modifiers, 30% → 1, 15% → 2, 5% → 3. */
@@ -507,18 +485,6 @@ function tileHash01(islandId: string, x: number, y: number): number {
   return ((h >>> 0) % 1_000_003) / 1_000_003;
 }
 
-/**
- * Compute the terrain at island-local (x, y) for a given biome. Pure function.
- *
- * Special case: if `islandId === 'home'` we delegate to the hand-placed
- * `defaultTerrainAt` from `island.ts` to preserve the existing visual layout
- * exactly (Mine sits on a specific ore-cluster the user already saw). Other
- * islands get biome-typed default + scattered rares from the catalog.
- *
- * The caller is `world.ts`, which composes this with each demo island's id
- * + biome. The function does NOT take an IslandSpec to keep the dependency
- * arrow `world.ts → biomes.ts` (not the other way).
- */
 /**
  * Reroll modifiers for a biome change via Reality Forge. Excludes natural-only
  * modifiers (aetheric_anomaly, frozen_core) per §13.3.

@@ -481,9 +481,7 @@ export function rollVehicleDestruction(
   return { destroyed: false, atCellIndex: null };
 }
 
-// ---------------------------------------------------------------------------
 // Route rasterization + weather modulation §2.6
-// ---------------------------------------------------------------------------
 
 /** DDA line rasterization for route cells. Shares core DDA logic with
  *  `rasterizePath`; keep the two in sync if the stepping algorithm changes. */

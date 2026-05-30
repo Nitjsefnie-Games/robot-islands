@@ -258,8 +258,8 @@ export function mountIslandBar(
   let popOpen = false;
   const optMap = new Map<string, HTMLButtonElement>();
 
-  // Island selector — one dropdown rather than a chip per island. A chip
-  // row scales badly: 6+ islands overflow the topbar.
+  // Island selector — one dropdown rather than a chip per island, which scales
+  // badly: 6+ islands overflow the topbar.
   const selectWrap = document.createElement('div');
   selectWrap.classList.add('ri-island-select');
 
@@ -396,7 +396,6 @@ export function mountIslandBar(
     const countdown = ev ? ` · ${ev.kind} in ${formatCountdown(ev.atMs - nowMs)}` : '';
     phaseEl.textContent = `${PHASE_LABEL[phaseName]}${countdown} · solar ${mul.toFixed(1)}×`;
 
-    // Saved
     if (saveAgeSec === null) {
       savedEl.innerHTML = 'Saved <span class="ri-mono ri-muted">—</span>';
     } else if (saveAgeSec < 2) {
@@ -492,7 +491,6 @@ export function mountHud(
   parentEl.appendChild(panel);
   mountPanel(panel, { id: 'hud-economy', zone: Zone.BR, order: 0, minWidth: 260, maxWidth: 360 });
 
-  // Head
   const head = document.createElement('div');
   head.classList.add('ri-panel__head');
   const titleEl = document.createElement('span');
@@ -503,7 +501,6 @@ export function mountHud(
   head.appendChild(subEl);
   panel.appendChild(head);
 
-  // Body
   const body = document.createElement('div');
   body.classList.add('ri-panel__body');
   panel.appendChild(body);
@@ -519,13 +516,11 @@ export function mountHud(
     _activeIslandId: string,
     _islandPower: Map<string, PowerBalance>,
   ): void {
-    // Update head
     titleEl.textContent = spec.name;
     const tier = tierForLevel(state.level);
     const biomeName = BIOME_DEFS[spec.biome].displayName;
     subEl.textContent = `T${tier} · ${biomeName}`;
 
-    // Rebuild body
     while (body.firstChild) body.removeChild(body.firstChild);
 
     // ---- XP block ---------------------------------------------------------

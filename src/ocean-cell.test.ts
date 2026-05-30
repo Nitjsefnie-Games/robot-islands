@@ -49,10 +49,6 @@ describe('footprintMatches', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §6 shouldRenderFeatureGlyph
-// ---------------------------------------------------------------------------
-
 describe('§6 shouldRenderFeatureGlyph', () => {
   it('returns true when revealed + depth-revealed + terrain is rare', () => {
     const w = mkWorld([[3, 4, 'hydrothermal_vent']]);
@@ -102,10 +98,6 @@ describe('§6 shouldRenderFeatureGlyph', () => {
     }
   });
 });
-
-// ---------------------------------------------------------------------------
-// §6 clusterAnchorOf
-// ---------------------------------------------------------------------------
 
 describe('§6 clusterAnchorOf', () => {
   it('returns the top-left (min Y then min X) cell of a 3×3 nodule cluster', () => {

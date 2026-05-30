@@ -138,7 +138,7 @@ export function routesCacheKey(routes: ReadonlyArray<Route>): string {
 
 /** T1 cargo travel speed in tiles per second. Rebalanced for idle-game scale,
  *  step #19: 4 → 1 t/s so a 50-tile route takes 50s instead of 12s. */
-export const T1_CARGO_SPEED_TILES_PER_SEC = 1; // rebalanced for idle-game scale, step #19 (was 4)
+export const T1_CARGO_SPEED_TILES_PER_SEC = 1;
 
 /** §9.3 Network sub-path: per-tile biofuel cost of teleporter route dispatch.
  *  Added so the Network sub-path's "teleporter" theme has something concrete
@@ -238,10 +238,6 @@ export function _resetRouteIdCounter(): void {
 export function _seedRouteIdCounter(value: number): void {
   if (value > routeIdCounter) routeIdCounter = value;
 }
-
-// ---------------------------------------------------------------------------
-// Pure helpers
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // §5.3 Cable network: binary-gated unified power pool.

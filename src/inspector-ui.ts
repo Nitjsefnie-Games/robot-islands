@@ -105,9 +105,6 @@ function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
 }
 
-// ---------------------------------------------------------------------------
-// Demolition-credit formula (mirrors `demolishBuilding` in placement.ts)
-// ---------------------------------------------------------------------------
 /** Preview the §6.7 scrap credit for a building def. Mirrors the
  *  `floor(sum(placementCost) * 0.3)` computation `demolishBuilding` applies. */
 function previewScrapForBuilding(defId: BuildingDefId): number {
@@ -145,10 +142,6 @@ function formatRefund(refund: Partial<Record<ResourceId, number>>): string {
   }
   return parts.join(', ');
 }
-
-// ---------------------------------------------------------------------------
-// Public surface
-// ---------------------------------------------------------------------------
 
 export interface InspectorTarget {
   readonly spec: IslandSpec;
@@ -217,9 +210,6 @@ export interface InspectorDeps {
   onIslandBiomeReassigned?(islandId: string): void;
 }
 
-// ---------------------------------------------------------------------------
-// Rate row helper — renders one resource line with sign and rate
-// ---------------------------------------------------------------------------
 interface RateLine {
   readonly resource: ResourceId;
   readonly direction: 'in' | 'out';
@@ -273,19 +263,14 @@ function formatHM(ms: number): string {
   return `${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
-// ---------------------------------------------------------------------------
-// Mount
-// ---------------------------------------------------------------------------
 export function mountInspectorUi(
   parentEl: HTMLElement,
   deps: InspectorDeps,
 ): InspectorUi {
   let target: InspectorTarget | null = null;
 
-  // -------------------------------------------------------------------------
   // Panel shell — mounted via zone manager on the left edge so it doesn't
   // fight the side docks for the right edge.
-  // -------------------------------------------------------------------------
   const panel = document.createElement('div');
   panel.id = 'inspector-panel';
   panel.classList.add('ri-panel');
@@ -306,9 +291,7 @@ export function mountInspectorUi(
     ].join(';'),
   );
 
-  // -------------------------------------------------------------------------
   // Header — `BUILDING / INSPECT` stamp + close (×)
-  // -------------------------------------------------------------------------
   const header = document.createElement('div');
   styled(
     header,
@@ -371,11 +354,8 @@ export function mountInspectorUi(
   header.appendChild(headLeft);
   header.appendChild(closeBtn);
 
-  // -------------------------------------------------------------------------
-  // Body — building name + tier + category + footprint + recipe + power +
-  // storage + biome / tile constraints. Layout is a vertical stack of small
-  // sections separated by hairline rules.
-  // -------------------------------------------------------------------------
+  // Body — vertical stack of small sections (name/tier/category/footprint/
+  // recipe/power/storage/constraints) separated by hairline rules.
   const body = document.createElement('div');
   styled(
     body,
@@ -389,15 +369,12 @@ export function mountInspectorUi(
     ].join(';'),
   );
 
-  // -------------------------------------------------------------------------
-  // Island-name rename row — text input bound to `target.spec.name`. Sits
-  // ABOVE the building title so it's clear the field renames the island,
-  // not the building. Pure callback dispatch — the actual mutation lives in
-  // `renameIsland` (pure helper in `world.ts`); on success we notify main.ts
-  // via `deps.onRenameIsland(target, name)` so the HUD title repaints. On
-  // failure (empty / >32 chars / control char), the input value reverts to
-  // the current spec name in `paint()`.
-  // -------------------------------------------------------------------------
+  // Island-name rename row — sits ABOVE the building title so it's clear the
+  // field renames the island, not the building. Pure callback dispatch: the
+  // mutation lives in `renameIsland` (pure helper in `world.ts`); on success
+  // we notify main.ts via `deps.onRenameIsland` so the HUD title repaints. On
+  // failure (empty / >32 chars / control char), the input reverts to the
+  // current spec name in `paint()`.
   const nameRow = document.createElement('div');
   styled(
     nameRow,
@@ -735,16 +712,11 @@ export function mountInspectorUi(
   })();
   storageSection.body.appendChild(cargoLabelControls.wrap);
 
-  // -------------------------------------------------------------------------
   // Cargo-label relabel logic. The dropdown's change event proposes a new
   // label; the relabel succeeds when current-label inventory is empty,
   // otherwise the force-clear button must be pressed first to destroy
   // contents (§4.6: "or accepts a force-clear that destroys current
-  // contents"). After a successful relabel:
-  //   - subtract the building's capacity from oldLabel's cap
-  //   - add to newLabel's cap
-  //   - update b.cargoLabel
-  // -------------------------------------------------------------------------
+  // contents").
   /** Latest proposed-but-not-yet-applied label (when blocked on non-empty
    *  inventory). Cleared on every paint() so a stale selection doesn't
    *  bleed across building switches. */
@@ -1171,10 +1143,8 @@ export function mountInspectorUi(
   });
   panelHandle.setVisible(false);
 
-  // -------------------------------------------------------------------------
   // Recipe-line management — variable count, so we lazy-track existing rows
   // and recycle them by index rather than create/destroy on every refresh.
-  // -------------------------------------------------------------------------
   const recipeLineEls: HTMLDivElement[] = [];
   function ensureRecipeLineCount(n: number): void {
     while (recipeLineEls.length < n) {
@@ -1208,11 +1178,9 @@ export function mountInspectorUi(
     }
   }
 
-  // -------------------------------------------------------------------------
   // §3.4 Reclamation paint helper — renders the two expand buttons + caption
   // for the currently-targeted Land Reclamation Hub. Encapsulates the per-
   // axis gate / cost / labelling so `paint()` stays readable.
-  // -------------------------------------------------------------------------
   function reclamationButtonText(axis: Axis, current: number, gate: ExpandResult): string {
     const label = axis === 'major' ? '+1 MAJOR' : '+1 MINOR';
     if (gate.ok) {
@@ -1255,9 +1223,6 @@ export function mountInspectorUi(
     setExpandButtonState(expandMinorBtn, minorGate);
   }
 
-  // -------------------------------------------------------------------------
-  // Paint
-  // -------------------------------------------------------------------------
   function paint(): void {
     if (!target) return;
     const { spec, state, building } = target;
@@ -1732,9 +1697,6 @@ export function mountInspectorUi(
     demolishBtn.textContent = `▼ DEMOLISH · +${credit} SCRAP`;
   }
 
-  // -------------------------------------------------------------------------
-  // API
-  // -------------------------------------------------------------------------
   function open(t: InspectorTarget): void {
     target = t;
     // Reset any staged relabel from a previous inspection — pendingRelabel

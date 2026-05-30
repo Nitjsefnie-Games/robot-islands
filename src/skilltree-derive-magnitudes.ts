@@ -174,7 +174,6 @@ export function deriveMagnitudes(
     }
   }
 
-  // Emit each node with derived magnitude.
   return rawNodes.map((n): SkillNode => {
     const k = keys.get(n.id);
     if (k === undefined) {

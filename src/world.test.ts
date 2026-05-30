@@ -48,8 +48,8 @@ function sourcesFor(specs: ReadonlyArray<IslandSpec>): VisionSource[] {
 
 describe('islandRenderState', () => {
   // Plains-like source (14, 14) at origin. Padding 10 → baseline ellipse
-  // (24, 24). Lighthouse-vision redesign: this is now small enough that
-  // forest-ne (40, -10) classifies as `discovered` without a Lighthouse.
+  // (24, 24). Small enough that forest-ne (40, -10) classifies as
+  // `discovered` without a Lighthouse.
   const sourceSpec = makeSpec({
     id: 'src',
     cx: 0,
@@ -168,10 +168,8 @@ describe('islandRenderState', () => {
 
   it('exposes VISION_PADDING_TILES at the canonical value', () => {
     // Locked-in Lighthouse-vision constant: 10 tiles past the island's own
-    // ellipse edge for the baseline halo. Distant scouting requires
-    // Lighthouse infrastructure. Test asserts the value so a future
-    // refactor that re-tunes it has to update this test consciously rather
-    // than letting a silent drift land.
+    // ellipse edge for the baseline halo (distant scouting requires a
+    // Lighthouse). Pinned so a re-tune must update this test consciously.
     expect(VISION_PADDING_TILES).toBe(10);
   });
 
@@ -228,14 +226,10 @@ describe('islandRenderState', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // §3.7 fresh-game contract — the production new-game world is one populated
 // home island (plains, r=14, Stable, empty buildings) plus N procedural
-// undiscovered neighbours. The pre-cleanup heavy-seeded demo layout
-// (forest-ne, desert-far, hidden-w/s, coast-unknown, pre-built buildings)
-// is now retained only as DEMO_ISLANDS_TEST_FIXTURE for tests like the
-// "matches the demo layout" case above.
-// ---------------------------------------------------------------------------
+// undiscovered neighbours. The heavy-seeded demo layout is retained only as
+// DEMO_ISLANDS_TEST_FIXTURE for the "matches the demo layout" case above.
 
 describe('makeInitialWorld — §3.7 fresh-game contract', () => {
   it('produces exactly one populated island (home) at world origin', () => {
@@ -295,17 +289,11 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
   });
 
   it("home's initial IslandState carries a §14 starter bootstrap kit (not empty — see startingInventory)", () => {
-    // §3.7 originally specified "Empty inventory: no starter resources, no
-    // Foundation Kit." That all-zero rule held pre-§14 when placement was
-    // free — the player just placed Solar + Mine + Workshop and production
-    // filled inventory before any material gate kicked in. §14 added
-    // placement costs (every T1 building needs stone + wood), which makes
-    // the all-zero starter unplayable: with no Mine, no extraction, the
-    // player can't bootstrap. The starter bundle below INTENTIONALLY
-    // contradicts §3.7's literal "empty" rule (see `startingInventory` in
-    // world.ts for the justification).
-    //
-    // Pins the rev-9 starter contract per rev-16 §12.9.3 + spec §03.
+    // §3.7's literal "empty inventory" rule predates §14 placement costs:
+    // every T1 building needs stone + wood, so an all-zero starter can't
+    // bootstrap (no Mine → no extraction). The starter bundle below
+    // INTENTIONALLY contradicts §3.7 — see `startingInventory` in world.ts.
+    // Pins the rev-9 starter contract per rev-16 §12.9.3 + spec §03:
     // 9 line items sized to reach 1x battery_bank in <= 45 min.
     const w = makeInitialWorld(0);
     const home = w.islands.find((s) => s.id === 'home')!;
@@ -433,10 +421,8 @@ describe('findPopulatedIslandAt', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // renameIsland — pure validation + mutation for the player-mutable display
 // name. The internal `id` must never change; only `name` is touched.
-// ---------------------------------------------------------------------------
 
 describe('renameIsland', () => {
   it('accepts a normal 1-32 char name and mutates spec.name', () => {
@@ -503,11 +489,9 @@ describe('renameIsland', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // validateIslandName — pure predicate underlying `renameIsland` and the
-// construction-ui name field. Tested independently so both call sites are
-// guaranteed to share the same accept/reject behaviour.
-// ---------------------------------------------------------------------------
+// construction-ui name field. Tested independently so both call sites
+// share the same accept/reject behaviour.
 
 describe('validateIslandName', () => {
   it('accepts a normal name and returns the trimmed string', () => {

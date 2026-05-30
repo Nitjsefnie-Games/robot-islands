@@ -1,21 +1,16 @@
 // Recipe graph structural tests — step-18 "no orphan inputs" invariant.
 //
-// The recipe catalog forms a DAG: outputs become inputs to other recipes,
-// recipes with empty inputs are extraction roots, recipes with empty
-// outputs are consumption sinks (power burns, demolition-target). The
-// economy loop in `economy.ts` doesn't know about the graph shape — it
-// just iterates buildings — so structural correctness has to be enforced
-// at the catalog level.
+// The recipe catalog is a DAG: outputs feed other recipes' inputs, empty
+// inputs are extraction roots, empty outputs are consumption sinks. The
+// economy loop just iterates buildings and doesn't know the graph shape,
+// so structural correctness must be enforced at the catalog level.
 //
-// "No orphan inputs": every resource referenced as a recipe INPUT must
-// appear as an OUTPUT in at least one recipe. Without this invariant,
-// a chain like `Workshop needs iron_ore but no Mine in the catalog` would
-// stall every game forever and the failure would only surface as "the UI
-// shows 0 production" — frustrating to diagnose.
+// "No orphan inputs": every resource used as a recipe INPUT must appear as
+// an OUTPUT somewhere. Otherwise a chain like "Workshop needs iron_ore but
+// no Mine exists" stalls the game forever, surfacing only as "UI shows 0
+// production" — frustrating to diagnose.
 //
-// T0 raws (extraction-root resources whose recipes have empty inputs) are
-// naturally accepted by this test: their producer-recipe's output set
-// includes them, so `producerOf` contains them.
+// T0 raws pass naturally: their producer recipe emits them as outputs.
 
 import { describe, expect, it } from 'vitest';
 
@@ -63,9 +58,8 @@ describe('Catalog additions (§6.4 T3 raws + §6.6 T5 memetic_core)', () => {
 });
 
 describe('recipe graph completeness (step 18)', () => {
-  // Build the set of all resources that appear as a recipe output. T0
-  // raws (Mine, Logger, Well, Pump Jack, etc.) emit themselves as
-  // outputs with empty inputs, so they land in this set naturally.
+  // All resources that appear as a recipe output. T0 raws emit themselves,
+  // so they land in this set naturally.
   function buildProducerSet(): Set<ResourceId> {
     const producers = new Set<ResourceId>();
     for (const recipe of Object.values(RECIPES)) {
@@ -84,20 +78,15 @@ describe('recipe graph completeness (step 18)', () => {
 
   it('every recipe input has at least one producer recipe', () => {
     const producers = buildProducerSet();
-    // Scrap is produced by building demolition (§6.7), not by a recipe
-    // cycle, so it is exempt from the orphan-input check.
+    // scrap comes from building demolition (§6.7), not a recipe — exempt.
     producers.add('scrap');
-    // uranium_ore is a terrain-seeded T3 raw (§6.4) with no extractor
-    // building yet; it is exempt until an extractor is added.
+    // uranium_ore: terrain-seeded T3 raw (§6.4), no extractor building yet.
     producers.add('uranium_ore');
-    // memetic_core is a T5 component with no producer recipe yet;
-    // exempt until a lab is added.
+    // memetic_core: T5 component with no producer recipe yet.
     producers.add('memetic_core');
-    // air is an exogenous-flow resource (atmosphere intake, §3.3);
-    // no producer recipe exists by design.
+    // air: exogenous-flow resource (atmosphere intake, §3.3), no producer by design.
     producers.add('air');
-    // calcium_sulfonate is a Phase 2 expansion-hook resource
-    // (lubricant additive); producer recipe lands in Phase 10.
+    // calcium_sulfonate: Phase 2 expansion-hook (lubricant additive); producer lands Phase 10.
     producers.add('calcium_sulfonate');
     const violations: { recipeId: string; missing: ResourceId }[] = [];
     for (const [recipeId, recipe] of Object.entries(RECIPES)) {
@@ -108,8 +97,7 @@ describe('recipe graph completeness (step 18)', () => {
         }
       }
     }
-    // Print a structured list on failure so the diagnostic shows which
-    // recipe is the orphan-consumer and which input lacks a source.
+    // Structured failure list: which recipe is the orphan-consumer and which input lacks a source.
     expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
   });
 
@@ -199,11 +187,9 @@ describe('produced resources have terminal classification (rev-16 §3.5.4)', () 
 });
 
 describe('step-18 producer coverage (§7 chain closures)', () => {
-  // Sentinel resources that were sinks-without-sources before step 18.
-  // Each one MUST now appear as an output of at least one recipe. If a
-  // future refactor accidentally drops a producer (say, removes the
-  // Biofuel Plant), this test pinpoints it instead of a vague chain-
-  // stall in the integration tests.
+  // Sentinel resources that were sinks-without-sources before step 18; each
+  // MUST now have a producer. If a refactor drops one (e.g. removes the
+  // Biofuel Plant), this pinpoints it instead of a vague chain-stall later.
   const sentinelProducedResources: ReadonlyArray<ResourceId> = [
     'stone',
     'sand',
@@ -258,10 +244,6 @@ describe('step-18 producer coverage (§7 chain closures)', () => {
     }
   });
 });
-
-// ---------------------------------------------------------------------------
-// §11.7 fuel-by-tier mapping
-// ---------------------------------------------------------------------------
 
 describe('fuelForTier (§11.7)', () => {
   it('maps each tier to its canonical fuel grade', () => {
@@ -361,12 +343,12 @@ describe('microchip chain', () => {
   });
 
   it('processor_fab outputs processor: 2 and inputs circuit_board: 2', () => {
-    expect(RECIPES.processor_fab!.outputs.processor).toBe(2); // doubled Task 16.8 (was 1)
+    expect(RECIPES.processor_fab!.outputs.processor).toBe(2);
     expect(RECIPES.processor_fab!.inputs.circuit_board).toBe(2);
   });
 
   it('compute_module_fab outputs computing_module: 2', () => {
-    expect(RECIPES.compute_module_fab!.outputs.computing_module).toBe(2); // doubled Task 16.8 (was 1)
+    expect(RECIPES.compute_module_fab!.outputs.computing_module).toBe(2);
   });
 
   it('XP_WEIGHT.circuit_board is 30', () => {
@@ -401,7 +383,7 @@ describe('T6 orbital recipes (§14.10)', () => {
     expect(r.inputs).toEqual({
       exotic_alloy: 6,
       ai_core: 1,
-      optical_fiber: 200, // §14.10 spec literal
+      optical_fiber: 200,
       orbital_insertion_package: 1,
     });
     expect(r.cycleSec).toBe(9555479.1);
@@ -472,7 +454,7 @@ describe('T6 orbital recipes (§14.10)', () => {
       plasma_containment_vessel: 1,
       cryogenic_hydrogen: 5,
     });
-    expect(r.cycleSec).toBe(1); // 10 min per §7.12 (was 30 min; 2026-05-18 ÷3 for display visibility)
+    expect(r.cycleSec).toBe(1);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -485,7 +467,7 @@ describe('T6 orbital recipes (§14.10)', () => {
       time_crystal: 1,
       exotic_alloy: 1,
     });
-    expect(r.cycleSec).toBe(42999.7); // 8h per §7.12 (was 24h; 2026-05-18 ÷3 for display visibility)
+    expect(r.cycleSec).toBe(42999.7);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -886,7 +868,7 @@ describe('§7.4 crude_oil_cracker — heavy_oil + tar + asphalt (Task 4.1)', () 
     expect(RECIPES.crude_oil_cracker).toBeDefined();
     expect(RECIPES.crude_oil_cracker!.inputs).toEqual({ crude_oil: 3 });
     expect(RECIPES.crude_oil_cracker!.outputs).toEqual({ heavy_oil: 1, tar: 1, asphalt: 1 });
-    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(81.9); // rebalanced Task 16.6 (was 600; later 1200; 2026-05-18 ÷3 → 400)
+    expect(RECIPES.crude_oil_cracker!.cycleSec).toBe(81.9);
     expect(RECIPES.crude_oil_cracker!.category).toBe('chemistry');
   });
 });
@@ -951,7 +933,7 @@ describe('§7.5 sodium_hydroxide as real chlor-alkali co-output (Task 5.2)', () 
     expect(RECIPES.chlor_alkali_plant!.outputs.chlorine).toBe(71);
     expect(RECIPES.chlor_alkali_plant!.outputs.sodium_hydroxide).toBe(80);
     expect(RECIPES.chlor_alkali_plant!.inputs).toEqual({ salt: 117, fresh_water: 36 });
-    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(877193); // rebalanced Task 16.6 (was 800; later 1200; 2026-05-18 ÷3 → 400)
+    expect(RECIPES.chlor_alkali_plant!.cycleSec).toBe(877193);
   });
 });
 
@@ -1395,7 +1377,7 @@ describe('§7.7 memory_module via memory_lab (Task 9.3)', () => {
       resistor: 4,
       solder: 1,
     });
-    expect(RECIPES.memory_lab!.outputs).toEqual({ memory_module: 2 }); // doubled Task 16.8 (was 1)
+    expect(RECIPES.memory_lab!.outputs).toEqual({ memory_module: 2 });
     expect(RECIPES.memory_lab!.cycleSec).toBe(119443.5);
     expect(RECIPES.memory_lab!.category).toBe('electronics');
   });
@@ -1830,13 +1812,11 @@ describe('§12.3 Foundation Kit Enriched + Refined (Task 13.2)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Ocean-layer §3 — Task 9 processor catalog (4 chemistry processors + 1 power
-// source). Mirrors Task 8's "one recipe per building, rotateOutputs for the
-// multi-output cases" pattern — recipe keys are the building ids, no synthetic
-// RecipeId entries. Geothermal Vent Generator is a passive power source like
-// Solar / Nuclear Reactor: NO recipe entry; def.power.produces only.
-// ---------------------------------------------------------------------------
+// source). One recipe per building keyed by building id, rotateOutputs for the
+// multi-output cases, no synthetic RecipeId entries. Geothermal Vent Generator
+// is a passive power source (like Solar / Nuclear Reactor): NO recipe entry;
+// def.power.produces only.
 describe('§3 ocean processing recipes (Task 9)', () => {
   it('lithium_brine, bromine, rare_earth_concentrate, refined_cobalt, exotic_alloy_seed, tritium_seed, heavy_water are in ALL_RESOURCES with the right XP_WEIGHT', () => {
     // T3 intermediates from Brine Distillation Rig.
@@ -1934,12 +1914,11 @@ describe('§3 ocean processing recipes (Task 9)', () => {
   });
 
   it('brine_distillation_rig rotates outputs deterministically across cycles', () => {
-    // brine_distillation_rig is the only remaining multi-output recipe in
-    // the Task 9 catalog (nodule_concentrator / vent_mineral_refinery were
-    // split into per-output RecipeId variants). All three rotation outputs
-    // (lithium_brine, salt, bromine) share the same dilute_brine feedstock,
-    // so rotateOutputs is the right shape here — observe all three appear
-    // in three consecutive cycle slots.
+    // brine_distillation_rig is the only remaining multi-output recipe in the
+    // Task 9 catalog (nodule_concentrator / vent_mineral_refinery were split
+    // into per-output variants). Its three outputs share the dilute_brine
+    // feedstock, so rotateOutputs is the right shape — observe all three across
+    // three consecutive cycle slots.
     const r = RECIPES.brine_distillation_rig!;
     const cycleMs = r.cycleSec * 1000;
     const out0 = resolveRotatingOutput(r, 0);
@@ -2011,10 +1990,6 @@ describe('§3 ocean processor + Geothermal Generator building defs (Task 9)', ()
   });
 });
 
-// ---------------------------------------------------------------------------
-// availableRecipes
-// ---------------------------------------------------------------------------
-
 describe('availableRecipes', () => {
   it('returns empty array for building with no base recipe and no unlocks', () => {
     const state = { unlockedNodes: new Set<string>() } as IslandState;
@@ -2074,9 +2049,7 @@ describe('availableRecipes', () => {
     };
     const state = { unlockedNodes: new Set<string>(['test.2']) } as IslandState;
     availableRecipes('steel_mill', state, graph);
-    // steel_mill HAS a base recipe, so this test is actually for a building that
-    // does have a base. Let's test a building that genuinely has no base recipe.
-    // Looking at the catalog, 'solar' has no recipe.
+    // steel_mill has a base recipe, so test 'solar' instead, which has none.
     const solarRecipes = availableRecipes('solar', state, graph);
     expect(solarRecipes).toEqual([]);
   });

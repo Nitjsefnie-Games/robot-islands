@@ -136,15 +136,14 @@ describe('§6 tileInfoForHover', () => {
     ];
     const revealed = ['5,5', '6,5', '5,6', '6,6'];
     // Wide-vision populated island so the hovered ocean cell is in the
-    // map's visible-cell set (otherwise the new visibility gate returns
-    // fog-tier info regardless of reveal state).
+    // map's visible-cell set (else the visibility gate returns fog-tier
+    // info regardless of reveal state).
     const world = makeWorld({
       oceanCells: cells,
       revealed,
       depthRevealed: revealed,
       islands: [makeWideVisionHome()],
     });
-    // Hover the top-left tile of cell (5,5).
     const tileX = 5 * CELL_SIZE_TILES;
     const tileY = 5 * CELL_SIZE_TILES;
     const info = tileInfoForHover(world, tileX, tileY, NOW) as OceanRareInfo;
@@ -202,11 +201,10 @@ describe('§6 tileInfoForHover', () => {
   });
 
   it('returns "Open ocean" when a cell is not surface-revealed but is currently in vision', () => {
-    // Cell is in current vision (so the visibility gate passes) but the
-    // player has not put it in `revealedCells` (which is the persistent
-    // "this cell has been scanned at the surface tier" flag). The branch
-    // we exercise is the legacy surface-reveal one — still labelled
-    // "Open ocean" per the spec.
+    // Cell is in current vision (visibility gate passes) but not in
+    // `revealedCells` (the persistent "scanned at surface tier" flag).
+    // Exercises the legacy surface-reveal branch — labelled "Open ocean"
+    // per the spec.
     const world = makeWorld({
       oceanCells: [[5, 5, 'hydrothermal_vent']],
       revealed: [],

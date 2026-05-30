@@ -144,7 +144,6 @@ describe('nextPhaseBoundaryMs', () => {
   it('phase quadrant flips across the boundary', () => {
     // Test at nowMs=0 (Day) → boundary should land at start of Dusk.
     const b = nextPhaseBoundaryMs(0);
-    // A tiny step past the boundary lands in Dusk.
     expect(dayPhaseName(b + 1)).toBe('dusk');
   });
 });

@@ -197,9 +197,7 @@ describe('terrain-modifier — resolveShot', () => {
   });
 
   it('marks a Mine invalid when the override breaks requiredTile', () => {
-    // Pre-build an island where tile (5, 5) is `ore` and a Mine sits on it.
-    // After resolveShot converts the brush around (5, 5) to grass, the Mine
-    // should be invalidated.
+    // Mine on natural `ore` at (5,5); resolveShot converts the brush to grass, invalidating it.
     const spec = attachTerrainAt({
       id: 'tt', name: 'tt', cx: 0, cy: 0, majorRadius: 30, minorRadius: 30,
       biome: 'plains', populated: true, discovered: true,

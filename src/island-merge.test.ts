@@ -1,12 +1,4 @@
 // §3.6 Island Joining — pure unit tests.
-//
-// Covers the four pillars of the merge contract:
-//   - `chooseMergeAbsorber` tiebreak ladder (tile count → level → id).
-//   - `islandsOverlap` geometric trigger over primary + extra constituents.
-//   - `performMerge` side effects: building offset, inventory transfer with
-//     overflow loss, skill-point refund, route/drone/vehicle redirect, world
-//     mutation (absorbed removed from islands list + state map).
-//   - `findNextMerge` multi-pair ordering by combined tile count.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -40,9 +32,7 @@ import {
   type WorldState,
 } from './world.js';
 
-// ---------------------------------------------------------------------------
 // Fixtures
-// ---------------------------------------------------------------------------
 
 function emptyInv(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -124,10 +114,6 @@ beforeEach(() => {
   _resetVehicleIdCounter();
 });
 
-// ---------------------------------------------------------------------------
-// islandsOverlap — geometric trigger
-// ---------------------------------------------------------------------------
-
 describe('islandsOverlap', () => {
   it('returns false for two well-separated single-ellipse islands', () => {
     const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 10, minorRadius: 10 });
@@ -158,10 +144,6 @@ describe('islandsOverlap', () => {
     expect(islandsOverlap(a, b)).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// chooseMergeAbsorber — tiebreak ladder
-// ---------------------------------------------------------------------------
 
 describe('chooseMergeAbsorber', () => {
   it('picks the larger tile-count island', () => {
@@ -202,10 +184,6 @@ describe('chooseMergeAbsorber', () => {
     });
   });
 });
-
-// ---------------------------------------------------------------------------
-// performMerge — full side-effect contract
-// ---------------------------------------------------------------------------
 
 describe('performMerge', () => {
   it('appends absorbed primary ellipse as extra on absorber with correct offset', () => {
@@ -418,10 +396,6 @@ describe('performMerge', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// findNextMerge — multi-pair ordering
-// ---------------------------------------------------------------------------
-
 describe('findNextMerge', () => {
   it('returns null when no islands overlap', () => {
     const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 5, minorRadius: 5 });
@@ -484,10 +458,6 @@ describe('findNextMerge', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Click hit-test post-merge (findPopulatedIslandAt)
-// ---------------------------------------------------------------------------
-
 describe('findPopulatedIslandAt post-merge', () => {
   it("returns the merged identity when clicking inside an absorbed constituent's footprint", () => {
     const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 5, minorRadius: 5 });
@@ -504,10 +474,6 @@ describe('findPopulatedIslandAt post-merge', () => {
     expect(hit?.id).toBe('a');
   });
 });
-
-// ---------------------------------------------------------------------------
-// Multi-merge sequence — accumulating extras across ticks
-// ---------------------------------------------------------------------------
 
 describe('multi-merge sequence (A absorbs B, then C)', () => {
   it('after two merges, A carries two extras and overlaps the next neighbor', () => {
@@ -543,10 +509,6 @@ describe('multi-merge sequence (A absorbs B, then C)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Absorbed-with-extras propagation
-// ---------------------------------------------------------------------------
-
 describe('performMerge with absorbed island carrying its own extras', () => {
   it("re-bases each of absorbed's extras into absorber's local frame", () => {
     // Set up: absorbed (B) already carries a single extra ellipse, as if it
@@ -580,10 +542,6 @@ describe('performMerge with absorbed island carrying its own extras', () => {
     ]);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Tile-count sanity
-// ---------------------------------------------------------------------------
 
 describe('islandTileCount', () => {
   it('counts tiles for a single-ellipse island matching the prior behavior', () => {

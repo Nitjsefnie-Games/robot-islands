@@ -26,10 +26,6 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { computeSignalRanges } from './antenna.js';
 
-// ---------------------------------------------------------------------------
-// Test fixtures
-// ---------------------------------------------------------------------------
-
 function emptyInv(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
   for (const r of ALL_RESOURCES) inv[r] = 0;
@@ -104,10 +100,6 @@ beforeEach(() => {
   _resetDroneIdCounter();
 });
 
-// ---------------------------------------------------------------------------
-// firePulse test fixture
-// ---------------------------------------------------------------------------
-
 function makeTinyWorld(): WorldState & { islandStates: Map<string, IslandState> } {
   const homeSpec: IslandSpec = {
     id: 'home',
@@ -150,10 +142,6 @@ function makeTinyWorld(): WorldState & { islandStates: Map<string, IslandState> 
   return world as typeof world & { islandStates: typeof islandStates };
 }
 
-// ---------------------------------------------------------------------------
-// pointToSegmentDistSq
-// ---------------------------------------------------------------------------
-
 describe('pointToSegmentDistSq', () => {
   it('returns 0 for a point on the midpoint of the segment', () => {
     expect(pointToSegmentDistSq(5, 0, 0, 0, 10, 0)).toBe(0);
@@ -184,10 +172,6 @@ describe('pointToSegmentDistSq', () => {
     expect(pointToSegmentDistSq(3, 4, 3, 4, 3, 4)).toBe(0);
   });
 });
-
-// ---------------------------------------------------------------------------
-// scanBuffer flush
-// ---------------------------------------------------------------------------
 
 describe('scanBuffer flush', () => {
   function makeWorldWithSingleAntenna(): WorldState {
@@ -272,10 +256,6 @@ describe('scanBuffer flush', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// no-antenna integration
-// ---------------------------------------------------------------------------
-
 describe('no-antenna integration', () => {
   function makeMinimalWorldNoAntennas(): WorldState {
     return makeTinyWorld();
@@ -311,10 +291,6 @@ describe('no-antenna integration', () => {
     expect(d.status === 'returned').toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// dispatchDrone
-// ---------------------------------------------------------------------------
 
 describe('dispatchDrone', () => {
   function freshWorld(): WorldState {
@@ -642,10 +618,6 @@ describe('dronePadCentre — §11.1 UI / dispatch origin alignment', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// tickDrones
-// ---------------------------------------------------------------------------
-
 describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => {
   /** Build a world with a populated home island carrying a T1 antenna at
    *  origin so drone scans transmit. Without an antenna in range, cells are
@@ -916,10 +888,6 @@ describe('drone constants', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §11.7 tier-matched fuel grades
-// ---------------------------------------------------------------------------
-
 describe('dispatchDrone — §11.7 tier-matched fuel', () => {
   function freshWorld(): WorldState {
     return {
@@ -1032,10 +1000,6 @@ describe('dispatchDrone — §11.7 tier-matched fuel', () => {
     expect(r.drone.tier).toBe(4);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §2.6 drone weather destruction
-// ---------------------------------------------------------------------------
 
 describe('drone weather destruction §2.6', () => {
   function findClearSeed(): string {
@@ -1444,10 +1408,6 @@ describe('probabilityBiasForIsland', () => {
     ).toBe(0.60);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §11.5 T4 omnidirectional pulse
-// ---------------------------------------------------------------------------
 
 describe('firePulse (§11.5 T4 omnidirectional pulse)', () => {
   it('rejects when origin has no launch_tower', () => {

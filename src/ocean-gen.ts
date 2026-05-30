@@ -33,9 +33,7 @@ import type { OceanCellSpec, OceanTerrain } from './ocean-cell.js';
 import { makeSeededRng } from './rng.js';
 import type { IslandSpec } from './world.js';
 
-// ---------------------------------------------------------------------------
 // Tuning constants — all spec §2 / Task-2 brief defaults.
-// ---------------------------------------------------------------------------
 
 /** R for shallows: any cell within R cells of an island edge is shallows. */
 const SHALLOWS_RADIUS_CELLS = 2;
@@ -71,10 +69,6 @@ const VENT_MAX_PER_ISLAND = 3;
  *  field forces re-roll). */
 const VENT_PLACE_ATTEMPTS = 10;
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /**
  * Generate ocean terrain for a world's island layout. Returns a sparse
  * map keyed `"cellX,cellY"` — cells not in the map are implicit `deep`
@@ -98,10 +92,6 @@ export function generateOceanTerrain(
   return cells;
 }
 
-// ---------------------------------------------------------------------------
-// Cell key helpers
-// ---------------------------------------------------------------------------
-
 const keyOf = (x: number, y: number): string => `${x},${y}`;
 
 const setTerrain = (
@@ -113,9 +103,7 @@ const setTerrain = (
   cells.set(keyOf(x, y), { terrain });
 };
 
-// ---------------------------------------------------------------------------
 // Geometry — cell ↔ island-edge distance
-// ---------------------------------------------------------------------------
 
 /** Distance (in cells) from cell centre `(cx, cy)` to the nearest point
  *  on an island's ellipse edge. Returns 0 if the cell centre is inside
@@ -185,9 +173,7 @@ function islandsBoundingCellRect(
   return { x0, x1, y0, y1 };
 }
 
-// ---------------------------------------------------------------------------
 // Pass 1: shallows
-// ---------------------------------------------------------------------------
 
 /** Any cell within `SHALLOWS_RADIUS_CELLS` of an island edge becomes
  *  shallows. We scan a bounding rect derived from island footprints
@@ -209,9 +195,7 @@ function seedShallows(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Pass 2: trenches
-// ---------------------------------------------------------------------------
 
 /** Pick a random integer in `[lo, hi]` (inclusive) from a uniform PRNG. */
 const rollInt = (rng: () => number, lo: number, hi: number): number =>
@@ -338,9 +322,7 @@ function seedTrenches(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Pass 3: nodule fields
-// ---------------------------------------------------------------------------
 
 /** Nodule fields: 2-5 per world, each a 3×3 cluster in deep zones (cell
  *  > R=8 cells from any island edge). Reject (re-roll position) if any
@@ -415,9 +397,7 @@ function seedNoduleFields(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Pass 4: hydrothermal vents
-// ---------------------------------------------------------------------------
 
 /** Vent cluster shape — width × height, chosen from a weighted table.
  *  Per the Task-2 brief: 2×2 (60%) / 3×2 (30%) / 2×3 (10%). */

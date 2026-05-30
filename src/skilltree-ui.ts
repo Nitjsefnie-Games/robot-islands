@@ -44,7 +44,7 @@ export function mountSkillTreeUi(
 
   let refresh: () => void = () => undefined;
 
-  // Mutable refs for elements that need updating after mount.
+  // Refs for elements updated after mount.
   const levelVal = document.createElement('span');
   levelVal.classList.add('ri-mono');
   const xpVal = document.createElement('span');
@@ -65,7 +65,7 @@ export function mountSkillTreeUi(
       body.style.flexDirection = 'column';
       body.style.gap = '14px';
 
-      // ---- Stats strip ------------------------------------------------------
+      // Stats strip
       const statsStrip = document.createElement('div');
       statsStrip.style.display = 'flex';
       statsStrip.style.justifyContent = 'center';
@@ -103,7 +103,7 @@ export function mountSkillTreeUi(
       statsStrip.appendChild(statBlock('UNSPENT', pointsVal));
       body.appendChild(statsStrip);
 
-      // ---- Tier reset section -----------------------------------------------
+      // Tier reset section
       const tierSection = document.createElement('div');
       tierSection.style.display = 'flex';
       tierSection.style.flexDirection = 'column';
@@ -112,7 +112,6 @@ export function mountSkillTreeUi(
       tierSection.style.borderTop = '1px solid var(--ri-rule)';
       tierSection.style.borderBottom = '1px solid var(--ri-border-strong)';
 
-      // Tier-reset row
       const tierResetRow = document.createElement('div');
       tierResetRow.style.display = 'flex';
       tierResetRow.style.alignItems = 'center';
@@ -191,7 +190,7 @@ export function mountSkillTreeUi(
 
       body.appendChild(tierSection);
 
-      // ---- Open Skill Graph button ------------------------------------------
+      // Open Skill Graph button
       const openBtn = document.createElement('button');
       openBtn.className = 'ri-btn';
       openBtn.textContent = '\u2726 OPEN SKILL GRAPH';
@@ -218,9 +217,7 @@ export function mountSkillTreeUi(
     },
   });
 
-  // ---------------------------------------------------------------------------
   // State-driven repaint helpers
-  // ---------------------------------------------------------------------------
 
   function refreshTierReset(): void {
     const state = getState();

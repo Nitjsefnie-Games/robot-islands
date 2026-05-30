@@ -125,17 +125,14 @@ describe('§4.6 placement-ui cancel-from-picker', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §4 ocean-layer (Task 10 review) — placement-UI ocean branch integration
-// ---------------------------------------------------------------------------
+// §4 ocean-layer placement-UI ocean branch integration.
 //
-// The +200 LOC ocean branch in `placement-ui.ts:attemptCommit` was previously
-// exercised only by manual smoke. These tests pin the contract: ocean defs
-// route through `validateOceanPlacement` + the anchor-picker, the picker
-// resolves the anchor island, `placeBuilding` is called with that
-// anchorIslandId, and validator rejections surface via `oceanReason`
-// (parallel field — `OceanPlacementReason` is intentionally disjoint from
-// `PlacementReason`, per the type comment in placement.ts).
+// These tests pin the contract: ocean defs route through
+// `validateOceanPlacement` + the anchor-picker, the picker resolves the anchor
+// island, `placeBuilding` is called with that anchorIslandId, and validator
+// rejections surface via `oceanReason` (parallel field — `OceanPlacementReason`
+// is intentionally disjoint from `PlacementReason`, per the type comment in
+// placement.ts).
 //
 // Same node-Pixi caveat as the cargo-label tests above: avoid
 // `setCursorScreenPos` (triggers CanvasTextMetrics). Use the default cursor

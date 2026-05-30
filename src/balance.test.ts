@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ALL_RESOURCES, RECIPES, XP_WEIGHT, type ResourceId } from './recipes.js';
 import { BUILDING_DEFS } from './building-defs.js';
 
-// --- 1. Monotonic XP curve ---
-
-// Mirror the formula in economy.ts:1056 — duplicated here as the
-// sanity-check oracle. If economy.ts changes, this test will surface it.
+// Mirrors the formula in economy.ts:1056 — duplicated here as a
+// sanity-check oracle, so a drift in economy.ts surfaces here.
 function xpForLevel(n: number): number {
   if (n <= 50) return 25 * Math.pow(n, 2.2);
   const at50 = 25 * Math.pow(50, 2.2);
@@ -28,8 +26,6 @@ describe('Balance — XP curve monotonicity (§9.1)', () => {
   });
 });
 
-// --- 2. Tier breakpoints reachable ---
-
 describe('Balance — tier-breakpoint XP costs', () => {
   it('cumulative XP for L1→L5 (T2) is plausibly reachable in early game', () => {
     let total = 0;
@@ -44,8 +40,6 @@ describe('Balance — tier-breakpoint XP costs', () => {
     expect(total).toBeLessThan(3e6); // sanity bound — actual cumulative ~2.2M
   });
 });
-
-// --- 3. Catalog completeness: no phantom inputs ---
 
 describe('Balance — recipe input/output catalog completeness', () => {
   it('every recipe input is in ALL_RESOURCES', () => {
@@ -70,8 +64,6 @@ describe('Balance — recipe input/output catalog completeness', () => {
   });
 });
 
-// --- 4. No phantom producers/consumers ---
-
 describe('Balance — every consumed resource has at least one producer', () => {
   /** §6.7 byproducts and starter materials are exempted; they may be
    *  terminal (slag, scrap) or seeded by terrain/start-state (wood, iron_ore,
@@ -86,23 +78,18 @@ describe('Balance — every consumed resource has at least one producer', () => 
     'manganese_ore', 'zinc_ore', 'chromium_ore', 'nickel_ore', 'tungsten_ore',
     'crude_oil', 'natural_gas', 'fresh_water', 'saltwater', 'hydrogen',
     // §6.4 T3 raw minerals (slag-reprocessed via §6.7, terrain-deferred).
-    // uranium_ore removed: now has a real terrain extractor (uranium_mine, Task 16.1).
     'gold_ore', 'silver_ore', 'rare_earth',
-    // Phase 10 — T3 raw minerals (Task 10.1)
     'mercury',
-    // Phase 10 — T3 raw minerals (Task 10.2)
     'diamond_ore',
-    // Phase 10b — T3 raw minerals (Task 10.4.5)
     'lithium',
     // §6.6 T5 raws (extractor cycle in §8.10)
     'aetheric_current', 'tachyon_stream', 'dark_matter', 'strange_matter',
     'quantum_foam', 'spacetime_fragment', 'higgs_flux', 'helium_3',
     'casimir_energy',
-    // Phase 12 — T5 transcendent raws (Task 12.1)
+    // T5 transcendent raws
     'zero_point_flux', 'neutronium',
     // T6 fuel — produced via separate refinery def (§7.12); accept terminal
     // for this structural test.
-    // memetic_core removed: now has a producer via memetic_forge (Task 16.2).
     'antimatter_propellant',
     // §13.4 endgame artifact — no producer yet by design
     'genesis_cell',
@@ -113,12 +100,10 @@ describe('Balance — every consumed resource has at least one producer', () => 
     // T1 composite (§12.3) — Foundation Kit assembly recipe handled
     // outside the per-building RECIPES map (placement-time consumable).
     'foundation_kit',
-    // Phase 2 §3.4 — calcium_sulfonate is an expansion-hook resource
-    // (lubricant additive); producer recipe lands in Phase 10.
+    // §3.4 — calcium_sulfonate is an expansion-hook resource
+    // (lubricant additive); producer recipe not yet present.
     'calcium_sulfonate',
-    // T2 components built outside the basic recipes map — computing-module chain
-    // shipped in step 9 (pcb_etcher → circuit_assembler → processor_fab →
-    // compute_module_fab).
+    // T2 components built outside the basic recipes map (computing-module chain).
     'pcb', 'circuit_board', 'processor', 'computing_module',
     // T4 endgame — separate fabrication chain (§7.11)
     'cryogenic_hydrogen', 'quantum_chip', 'exotic_alloy', 'ai_core',
@@ -136,11 +121,9 @@ describe('Balance — every consumed resource has at least one producer', () => 
       for (const r of Object.keys(recipe.outputs)) produced.add(r as ResourceId);
       // §8.10 rotateOutputs: rotated variants are real producers — the
       // per-cycle output picker (`pickRotatedOutput` in recipes.ts) emits
-      // one slot per cycle. Without this branch, the §3 Task-8 ocean
-      // extractors look like they don't produce re_nodule / co_nodule /
-      // vent_exotic / heavy_isotope_slurry (those land in rotateOutputs,
-      // not in the static `outputs` field) — causing false orphan flags
-      // the moment a Task-9 processor consumes them.
+      // one slot per cycle. Those resources land in rotateOutputs, not the
+      // static `outputs` field; without this branch they'd flag as false
+      // orphans the moment a processor consumes them.
       for (const rot of recipe.rotateOutputs ?? []) {
         for (const r of Object.keys(rot)) produced.add(r as ResourceId);
       }
@@ -159,8 +142,6 @@ describe('Balance — every consumed resource has at least one producer', () => 
   });
 });
 
-// --- 5. No zero-rate buildings ---
-
 describe('Balance — no building has both zero inputs and zero outputs', () => {
   it('every recipe has at least one input or one output (no fully-empty)', () => {
     for (const [defId, recipe] of Object.entries(RECIPES)) {
@@ -176,8 +157,6 @@ describe('Balance — no building has both zero inputs and zero outputs', () => 
     }
   });
 });
-
-// --- 6. XP weights respect tier ordering (no T1 weight > T2 weight, etc.) ---
 
 describe('Balance — XP weights respect §9.1 tier ordering', () => {
   it('T0 raw weights are ≤ T1 refined weights', () => {

@@ -42,10 +42,6 @@ import { visibleCellsFromVision } from './vision-source.js';
 import { findPopulatedIslandAt, type WorldState } from './world.js';
 import { biomeForCell, sumIslandCo2, weather, type WeatherState, WEATHER_FORECAST_LOOKAHEAD_MS } from './weather.js';
 
-// ---------------------------------------------------------------------------
-// Display strings
-// ---------------------------------------------------------------------------
-
 /** Player-facing label per ocean terrain id. The bulk terrains (shallows,
  *  deep) also surface; rare terrains read the same here and add cluster
  *  info downstream. */
@@ -66,10 +62,6 @@ const WEATHER_STATE_LABEL: Readonly<Record<WeatherState, string>> = {
   severe_storm: 'Severe storm',
   catastrophic: 'Catastrophic',
 };
-
-// ---------------------------------------------------------------------------
-// Consumers index — absorbed from the old terrain-tooltip module.
-// ---------------------------------------------------------------------------
 
 /** Public-facing consumer summary surfaced on a land hover so the tooltip
  *  body can render `Mine (1×1), Drill (2×2)` etc. */
@@ -103,10 +95,6 @@ const CONSUMERS_BY_TERRAIN: Map<TerrainKind, ConsumerSummary[]> = (() => {
   }
   return out;
 })();
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 /** Weather summary surfaced on every hover info. `state` is the current
  *  cycle label (e.g. "Clear", "Storm"); `forecastText` is null when no
@@ -164,10 +152,6 @@ export type HoverInfo =
   | OceanUndepthedInfo
   | OceanUnrevealedInfo
   | LandInfo;
-
-// ---------------------------------------------------------------------------
-// Cell-key parsing + cluster bbox
-// ---------------------------------------------------------------------------
 
 function parseCellKey(cellKey: string): { x: number; y: number } | null {
   const idx = cellKey.indexOf(',');
@@ -257,10 +241,6 @@ function rareClusterOccupancy(
   return { used: ids.size, capacity, width, height };
 }
 
-// ---------------------------------------------------------------------------
-// Weather summary
-// ---------------------------------------------------------------------------
-
 /** Format a millisecond duration as "~Nh" / "~NNm" / "~Ns". Used in the
  *  forecast line. Negative or zero falls through as "now". */
 function formatDuration(ms: number): string {
@@ -300,10 +280,6 @@ function weatherInfoForCell(
   return { state: stateLabel, forecastText };
 }
 
-// ---------------------------------------------------------------------------
-// Land helpers
-// ---------------------------------------------------------------------------
-
 /** Terrains that read as "background" — not worth a consumers line even if
  *  some building consumes them (e.g. grass is the default for Plains, not
  *  a meaningful spawn). Keeps the tooltip from listing consumers for every
@@ -323,10 +299,6 @@ function consumersForTerrain(terrain: string): ReadonlyArray<ConsumerSummary> {
   if (BACKGROUND_TERRAINS.has(terrain as TerrainKind)) return [];
   return CONSUMERS_BY_TERRAIN.get(terrain as TerrainKind) ?? [];
 }
-
-// ---------------------------------------------------------------------------
-// Pure helper — `tileInfoForHover`
-// ---------------------------------------------------------------------------
 
 /** Structural slice of `WorldState` that `tileInfoForHover` reads. Kept
  *  narrow so the helper is trivial to fixture in unit tests. */
@@ -446,10 +418,6 @@ export function tileInfoForHover(
     weather: weatherInfo,
   };
 }
-
-// ---------------------------------------------------------------------------
-// DOM renderer
-// ---------------------------------------------------------------------------
 
 export interface HoverTooltipHandle {
   /** Show / update the tooltip at the cursor position with the cell info
@@ -598,10 +566,8 @@ export function mountHoverTooltip(parentEl: HTMLElement): HoverTooltipHandle {
       cachedSecond = second;
       cachedInfo = info;
     }
-    // Re-render only on tile-change OR content-change. The tile key is
-    // a cheap identity; weather state moves slowly. We rebuild HTML when
-    // the tile key changes or every call (HTML diff is cheap); position
-    // is updated on every call regardless.
+    // Re-render only on tile-change OR content-change; position updates
+    // every call regardless.
     if (tileKey !== lastKey) {
       lastKey = tileKey;
       lastHtml = renderInfoHtml(info);

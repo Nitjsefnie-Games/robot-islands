@@ -17,8 +17,7 @@ import { shapeHeight, shapeWidth } from './shape-mask.js';
 import type { IslandSpec } from './world.js';
 
 /** Antenna defId → signal radius in tiles. Single source of truth.
- *
- *  Antenna placeholder — tune in Appendix A. */
+ *  Placeholder values — tune in Appendix A. */
 export const ANTENNA_SIGNAL_RADII: Readonly<Record<string, number>> = {
   antenna_t1: 80,
   antenna_t2: 140,

@@ -1,16 +1,6 @@
-// Pure-layer tests for §4 placement math.
-//
-// Three concerns covered:
-//   1. footprintTiles / rotatedDims — the rotation transform produces the
-//      right tile sets for 1×1, 2×2, and 2×3 rectangles at all four
-//      rotations.
-//   2. validatePlacement — each rejection reason fires in the right
-//      situation, and the success path passes.
-//   3. placeBuilding — appends a stable-id instance, bumps storage caps for
-//      storage defs.
-//
-// Integration with the live economy lives in `economy.test.ts` (placement
-// of a Smelter then verifying it produces iron_ingot via computeRates).
+// Pure-layer tests for §4 placement math: footprintTiles/rotatedDims rotation
+// transform, validatePlacement rejection reasons, placeBuilding instance
+// append + storage-cap bumps. Live-economy integration lives in economy.test.ts.
 
 import { describe, expect, it } from 'vitest';
 
@@ -309,18 +299,11 @@ describe('validatePlacement', () => {
   });
 
   it('rotation respects ellipse bounds', () => {
-    // A 1×3 (vertical strip) at (0, -1) sits at (0,-1),(0,0),(0,1). All
-    // inside r=5. Rotated by 1, it becomes 3×1 at (0,-1) covering
-    // (0,-1),(1,-1),(2,-1) which is still inside r=5 (corner check:
-    // (3, 0) is on the circle, fails strict-inside ⇒ rejected). The exact
-    // boundary verifies the rotation transform feeds tileInscribedInEllipse
-    // the rotated coords, not the original.
+    // Verifies the rotation transform feeds tileInscribedInEllipse the rotated
+    // coords, not the original — exercised at the exact ellipse boundary.
     const spec = makeSpec({ majorRadius: 5, minorRadius: 5 });
     const state = makeState(spec);
-    // Use a real def with 1×3 footprint — electric_arc_furnace is 2×3, close
-    // enough but we want a non-square. Pick crate (1×1) won't work; the
-    // catalog has no 1×3, so emulate by checking a 2×3 (electric_arc_furnace).
-    // electric_arc_furnace is T3 — bump level.
+    // electric_arc_furnace (2×3, non-square) is T3 — bump level past the gate.
     state.level = 15;
     // 2×3 at (-1,-2) under rotation 0: covers x=[-1..0], y=[-2..0]. All
     // corners must be inside r=5. The far corner is (1, 1) — still inside.
@@ -595,12 +578,10 @@ describe('placeBuilding', () => {
   });
 
   it('battery_bank placement cost is saltwater_cell-based, not battery-based (§15.6)', () => {
-    // §15.6 saltwater-cell bootstrap — battery_bank.placementCost was rerouted
-    // from { battery:4, wire:3, steel_beam:1 } to { saltwater_cell:20, wire:15,
-    // steel_beam:5, lead_ingot:30 }. With zero inventory the shortfall must report the new
-    // shape verbatim — the rust would be undetected if a future revert
-    // accidentally restored the battery-token cost. battery_bank is T2, so
-    // bump the state level to clear the tier gate.
+    // §15.6 saltwater-cell bootstrap — battery_bank.placementCost is
+    // { saltwater_cell:20, wire:15, steel_beam:5, lead_ingot:30 }, NOT the old
+    // battery-token cost. Zeroing inventory pins the new shortfall shape so a
+    // revert to the battery cost is caught. battery_bank is T2 — bump level.
     const spec = makeSpec();
     const state = makeState(spec, 11);
     state.inventory.saltwater_cell = 0;
@@ -1296,12 +1277,8 @@ describe('placement — terrain_modifier brush', () => {
     const state = makeState(spec, 5); // terrain_modifier is T2
     state.inventory.steel = 100; state.inventory.gear = 100;
     const v = validatePlacement(spec, state, 'terrain_modifier', 0, 0, 0);
-    // Tile-out-of-bounds reasons may apply from the standard footprint check,
-    // but if the 2×2 footprint itself fits the ellipse, the brush should not
-    // itself fail validation just because the RING exceeds — out-of-ellipse
-    // ring tiles are skipped at shot time, not rejected at placement.
-    // Adjust the assertion to whichever your test fixture produces; the
-    // invariant is: this is NOT an 'overlap' failure.
+    // Out-of-ellipse ring tiles are skipped at shot time, not rejected at
+    // placement: a ring spilling off the edge is NOT an 'overlap' failure.
     if (!v.ok) expect(v.reason).not.toBe('overlap');
   });
 });

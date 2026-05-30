@@ -68,15 +68,11 @@ describe('generateOceanTerrain', () => {
     expect(shallowsHits).toBeGreaterThan(0);
   });
 
-  // Trench-shape sweep. Single-seed checks are easy to game with cherry-
-  // picking (an earlier iteration of this test passed against a seed that
-  // skirted the multi-trench overlap case); a 50-seed loop catches the
-  // regression where two trenches placed edge-adjacent merge into a
-  // non-rectangular 4-connected blob. With the prior-trench buffer
-  // rejection in `seedTrenches`, every component for every seed must be
-  // a clean 2×N or 3×N rectangle with N ∈ [4, 8]. Empirical: pre-buffer
-  // sweep of probe-0..199 yielded 12-18 non-rect components; post-buffer
-  // it's 0.
+  // Trench-shape sweep. A single-seed check is gameable by cherry-picking a
+  // seed that skirts the multi-trench overlap case; the 50-seed loop catches
+  // the regression where two edge-adjacent trenches merge into a non-rectangular
+  // 4-connected blob. With the prior-trench buffer rejection in `seedTrenches`,
+  // every component for every seed must be a clean 2×N or 3×N rectangle, N ∈ [4, 8].
   it('seeds trenches as 2×N or 3×N rectangles in deep zones (50-seed sweep)', () => {
     const keyOf = (x: number, y: number) => `${x},${y}`;
     let totalComponents = 0;
@@ -236,14 +232,11 @@ describe('generateOceanTerrain', () => {
   });
 
   // Pin the 1-cell 4-neighbour buffer between nodule clusters
-  // (`seedNoduleFields` — keeps two 3×3 fields from blob-merging into
-  // a single 6-cell-tall amorphous mass). For any two cluster anchors
-  // in the same world, every cell of one cluster must be at Chebyshev
-  // distance ≥ 2 from every cell of the other — i.e. no two clusters
-  // share an 8-neighbour. Sweep seeds until we find one that rolls ≥ 2
-  // clusters; if none seen in a reasonable budget we skip (the loop is
-  // self-guarded — small chance of vacuous pass, but the empirical
-  // base rate is high enough that 20 seeds essentially always hit).
+  // (`seedNoduleFields` — keeps two 3×3 fields from blob-merging into a single
+  // amorphous mass): every cell of one cluster must be at Chebyshev distance ≥ 2
+  // from every cell of another, i.e. no two clusters share an 8-neighbour. Sweep
+  // 20 seeds for one that rolls ≥ 2 clusters; observedMultiCluster guards against
+  // a vacuous pass.
   it('keeps nodule clusters separated by a 1-cell buffer', () => {
     const keyOf = (x: number, y: number) => `${x},${y}`;
     let observedMultiCluster = false;

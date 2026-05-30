@@ -1,10 +1,5 @@
 // Building Catalog modal — DOM overlay listing every BuildingDef in
-// BUILDING_DEFS as a card grid.
-//
-// Phase 4b.3: migrated to the shared ri-modal shell (mountModal from
-// ui-modal.ts). Datasheet rows replaced with .bgrid of .bcard tiles.
-// Filter chips rendered in the modal filter strip; inline styles replaced
-// with .ri-* classes where possible.
+// BUILDING_DEFS as a card grid, mounted on the shared ri-modal shell.
 
 import {
   ALL_BUILDING_DEF_IDS,
@@ -140,14 +135,9 @@ export function mountBuildingsUi(
 
       filters.appendChild(makeChip('all', 'All'));
       const presentCategories = new Set<BuildingCategory>();
-      // §4 ocean-layer (Task 10): ocean defs are now reachable from the
-      // build catalog. Task 8's defensive filter (skip oceanPlacement defs)
-      // is dropped — placement-ui's `attemptCommit` routes ocean defs
-      // through `validateOceanPlacement` + the anchor picker, so clicking
-      // a "Seawater Intake Rig" card no longer dead-ends. The land
-      // validator (`validatePlacement`) still carries the `def-is-ocean`
-      // defense-in-depth reject in case anything else (test fixture,
-      // future drag-drop API) routes an ocean def through it.
+      // §4 ocean-layer: ocean defs are reachable from the catalog; clicking
+      // one routes through placement-ui's `attemptCommit` ocean branch
+      // (`validateOceanPlacement` + anchor picker), not the land path.
       for (const id of ALL_BUILDING_DEF_IDS) {
         presentCategories.add(BUILDING_DEFS[id].category);
       }
@@ -163,14 +153,9 @@ export function mountBuildingsUi(
 
       for (const defId of ALL_BUILDING_DEF_IDS) {
         const def = BUILDING_DEFS[defId];
-        // §4 ocean-layer (Task 10): ocean defs are now first-class catalog
-        // cards. Clicking one routes through placement-ui's
-        // `attemptCommit` ocean branch — `validateOceanPlacement` + anchor
-        // picker — instead of the land path. Task 8's "filter out ocean
-        // defs" pair (here + in `validatePlacement`) has been retired; the
-        // land-validator's `def-is-ocean` reject remains as a
-        // defense-in-depth guard for any non-UI caller that still tries
-        // the land path.
+        // §4 ocean-layer: ocean defs are first-class catalog cards; the
+        // land validator's `def-is-ocean` reject remains as defense-in-depth
+        // for any non-UI caller that still routes an ocean def the land path.
         const card = document.createElement('div');
         card.className = 'bcard';
         card.dataset.defid = defId;

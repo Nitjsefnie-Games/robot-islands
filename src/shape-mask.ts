@@ -53,9 +53,6 @@ export type Rotation = 0 | 1 | 2 | 3;
  * just with the original "width axis" now running vertically. This matches
  * the §4.2 spec where rotation does not move the placement origin, only
  * reshapes the footprint extent.
- *
- * Implementation: enumerate the original footprint mask, rotate each
- * (dx, dy) into the bounding box coordinate system, emit (anchor + rotated).
  */
 export function footprintTiles(
   mask: ShapeMask,
