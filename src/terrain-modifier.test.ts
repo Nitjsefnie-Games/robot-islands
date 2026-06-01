@@ -4,9 +4,8 @@ import {
   applyTileOverride,
   brushTilesAt,
   conversionCostForTarget,
-  K_RARE_MULT,
   NATURAL_TARGET_TERRAINS,
-  PAYBACK_HORIZON_CYCLES,
+  RARE_TARGET_EXTRACTOR_RECIPE,
   RARE_TARGET_INPUT,
   RARE_TARGET_TERRAINS,
   resolveShot,
@@ -87,10 +86,9 @@ describe('terrain-modifier — conversionCostForTarget', () => {
     }
   });
 
-  it('rare targets cost K × 1 × horizon × 16 of the input resource', () => {
+  it('rare targets cost 30 days of base extraction of the input resource', () => {
     const c = conversionCostForTarget('uranium_vein');
-    const expected = Math.ceil(K_RARE_MULT * 1 * PAYBACK_HORIZON_CYCLES * 16);
-    expect(c.uranium_ore).toBe(expected);
+    expect(c.uranium_ore).toBe(754); // ceil(1/3440 * 2592000)
   });
 
   it('different rare targets bill different resources', () => {
@@ -146,6 +144,35 @@ describe('terrain-modifier — applyTileOverride', () => {
     const spec = makeSpec();
     applyTileOverride(spec, 3, 3, 'diamond_vein');
     expect(spec.terrainAt?.(3, 3)).toBe('diamond_vein');
+  });
+});
+
+describe('rare-target cost = 30 days of base extraction', () => {
+  it('copper_vein → 30d of copper_mine (cycleSec 20) = 129,600 copper_ore', () => {
+    expect(conversionCostForTarget('copper_vein')).toEqual({ copper_ore: 129600 });
+  });
+  it('uranium_vein → 30d of uranium_mine (cycleSec 3440) = 754 uranium_ore', () => {
+    expect(conversionCostForTarget('uranium_vein')).toEqual({ uranium_ore: 754 });
+  });
+  it('helium_vent → 30d of drilling_rig (cycleSec 1.5) = 1,728,000 helium_3', () => {
+    expect(conversionCostForTarget('helium_vent')).toEqual({ helium_3: 1728000 });
+  });
+  it('diamond_vein → 30d of diamond_quarry (cycleSec 40) = 64,800 diamond_ore', () => {
+    expect(conversionCostForTarget('diamond_vein')).toEqual({ diamond_ore: 64800 });
+  });
+  it('oil_well → 30d of pump_jack (cycleSec 430) = 6,028 crude_oil', () => {
+    expect(conversionCostForTarget('oil_well')).toEqual({ crude_oil: 6028 });
+  });
+  it('every rare target has an extractor-recipe mapping', () => {
+    for (const t of RARE_TARGET_TERRAINS) {
+      expect(RARE_TARGET_EXTRACTOR_RECIPE[t as string]).toBeTypeOf('string');
+    }
+  });
+});
+
+describe('natural-target costs unchanged', () => {
+  it('grass stays 16× its per-tile basket', () => {
+    expect(conversionCostForTarget('grass')).toEqual({ stone: 3200, gear: 1600 });
   });
 });
 
