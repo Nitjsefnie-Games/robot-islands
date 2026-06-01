@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { checkGates, computeBuffStack } from './adjacency.js';
+import { categoryAdjacencyMul, checkGates, computeBuffStack } from './adjacency.js';
 import {
   BUILDING_DEFS,
   type AdjacencyBuff,
@@ -319,6 +319,49 @@ describe('checkGates — §4.5 gating adjacency', () => {
   });
 });
 
+
+describe('categoryAdjacencyMul — §4.5 universal category adjacency', () => {
+  const place = (id: string, defId: string, x: number, y: number) =>
+    ({ id, defId: defId as never, x, y }) as never;
+
+  it('isolated building → 1.0', () => {
+    const a = place('a', 'mine', 0, 0);
+    expect(categoryAdjacencyMul(a, [a])).toBe(1);
+  });
+
+  it('1 same-category neighbour → 1 + 1 × 0.10 = 1.10', () => {
+    const a = place('a', 'mine', 0, 0);
+    const b = place('b', 'mine', 2, 0);
+    expect(categoryAdjacencyMul(a, [a, b])).toBeCloseTo(1.1, 9);
+    expect(categoryAdjacencyMul(b, [a, b])).toBeCloseTo(1.1, 9);
+  });
+
+  it('uncapped: 4 same-category neighbours → 1 + 4 × 0.10 = 1.40', () => {
+    const mid = place('mid', 'mine', 0, 0);
+    const n = place('n', 'mine', 0, -2);
+    const s = place('s', 'mine', 0, 2);
+    const e = place('e', 'mine', 2, 0);
+    const w = place('w', 'mine', -2, 0);
+    expect(categoryAdjacencyMul(mid, [mid, n, s, e, w])).toBeCloseTo(1.4, 9);
+  });
+
+  it('different category does not count (mine vs workshop)', () => {
+    const mine = place('mine', 'mine', 0, 0);
+    const shop = place('shop', 'workshop', 2, 0);
+    expect(categoryAdjacencyMul(mine, [mine, shop])).toBe(1);
+  });
+
+  it('diagonal neighbour does NOT count (4-neighbour rule)', () => {
+    const a = place('a', 'mine', 0, 0);
+    const d = place('d', 'mine', 2, 2);
+    expect(categoryAdjacencyMul(a, [a, d])).toBe(1);
+  });
+
+  it('self is never counted', () => {
+    const a = place('a', 'mine', 0, 0);
+    expect(categoryAdjacencyMul(a, [a, a])).toBe(1);
+  });
+});
 
 describe('exoticAdjacency — pairBoost', () => {
   it('applies pairBoost when focal and neighbor match the pair', () => {
