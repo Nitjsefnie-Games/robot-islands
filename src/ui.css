@@ -286,6 +286,23 @@ body.ri-dragging * {
 }
 .ri-warnbtn:hover { background: rgba(245, 167, 66, 0.10); border-color: var(--ri-warn); }
 
+.ri-accentbtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent;
+  color: var(--ri-accent);
+  border: 1px solid var(--ri-accent-dim);
+  border-radius: 2px;
+  padding: 5px 10px;
+  font-family: var(--ri-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+.ri-accentbtn:hover { background: rgba(125, 211, 232, 0.10); border-color: var(--ri-accent); }
+.ri-accentbtn:disabled { cursor: default; opacity: 0.5; }
+
 /* Compact delete button used in route cards. */
 .ri-delbtn {
   width: 20px; height: 20px;
