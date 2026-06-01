@@ -36,7 +36,7 @@ import {
   placeBuilding,
   placementCostFor,
   relocateBuilding,
-  totalInvestedCost,
+  relocateFee,
   validatePlacement,
   validateOceanPlacement,
   type OceanPlacementReason,
@@ -382,13 +382,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // §14 cost row — always rendered, summarising the basket regardless of
     // current cursor state. Computed from inventory vs def cost; per-entry
     // sufficiency is the input for the cost-row colour decision.
-    const cost = relocating
-      ? Object.fromEntries(
-          (Object.entries(totalInvestedCost(relocating, def)) as Array<[ResourceId, number]>)
-            .map(([r, n]) => [r, Math.floor(n / 2)] as const)
-            .filter(([, half]) => half > 0),
-        ) as Partial<Record<ResourceId, number>>
-      : placementCostFor(def);
+    const cost = relocating ? relocateFee(relocating, def) : placementCostFor(def);
     const shortfall = affordabilityShortfall(targetState.inventory, cost);
     const costEntries: Array<[ResourceId, number]> = Object.entries(
       cost,
@@ -508,6 +502,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     cursorSeen = false;
     activeCargoLabel = undefined;
     activeTerrainTarget = undefined;
+    relocating = null;
     // terrain_modifier v5: target-biome picker BEFORE arming the brush.
     // While the picker is open `active` stays false so canvas mousedown /
     // commit handlers no-op. On resolve:

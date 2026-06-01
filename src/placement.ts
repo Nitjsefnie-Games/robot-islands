@@ -143,6 +143,21 @@ export function totalInvestedCost(
   return out;
 }
 
+/** Pure: the relocate fee = floor(0.5 × totalInvestedCost) per resource (drops
+ *  zero/negative entries). Shared by `relocateBuilding` (what it charges) and
+ *  the placement-ui relocate ghost (what it previews) so the two never drift. */
+export function relocateFee(
+  b: { readonly floorLevel?: number },
+  def: BuildingDef,
+): Partial<Record<ResourceId, number>> {
+  const fee: Partial<Record<ResourceId, number>> = {};
+  for (const [r, n] of Object.entries(totalInvestedCost(b, def)) as Array<[ResourceId, number]>) {
+    const half = Math.floor(n / 2);
+    if (half > 0) fee[r] = half;
+  }
+  return fee;
+}
+
 /** Pure: compute the shortfall per resource for a placement cost against the
  *  player's current inventory. Returns the empty record when the player can
  *  afford the placement (every cost entry covered).
@@ -851,11 +866,7 @@ export function relocateBuilding(
   if (!v.ok) {
     return { ok: false, reason: v.reason ?? 'overlap', missing: v.missing };
   }
-  const fee: Partial<Record<ResourceId, number>> = {};
-  for (const [r, n] of Object.entries(totalInvestedCost(b, def)) as Array<[ResourceId, number]>) {
-    const half = Math.floor(n / 2);
-    if (half > 0) fee[r] = half;
-  }
+  const fee = relocateFee(b, def);
   const missing = affordabilityShortfall(state.inventory, fee);
   if (Object.keys(missing).length > 0) {
     return { ok: false, reason: 'insufficient-resources', missing };
