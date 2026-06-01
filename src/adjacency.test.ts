@@ -49,6 +49,30 @@ describe('computeBuffStack — category × exotic', () => {
     expect(computeBuffStack(a, [a, b], BUILDING_DEFS, undefined, rules))
       .toBeCloseTo(1.1, 9);
   });
+
+  it('multiple exotic rules stack multiplicatively (category term isolated at 1.0)', () => {
+    // Focal mine has NO same-category (mine) neighbour → category mul = 1.0.
+    // A smelter and a workshop border it; two exotic rules fire → 1.25 × 1.10.
+    const a = place('a', 'mine', 0, 0);
+    const sm = place('sm', 'smelter', 0, 2);  // borders a's bottom edge
+    const ws = place('ws', 'workshop', 2, 0); // borders a's right edge
+    const rules = [
+      { pair: ['mine', 'smelter'] as const, recipeRateBonus: 0.25 },
+      { pair: ['mine', 'workshop'] as const, recipeRateBonus: 0.10 },
+    ];
+    expect(computeBuffStack(a, [a, sm, ws], BUILDING_DEFS, undefined, rules))
+      .toBeCloseTo(1.25 * 1.10, 9);
+  });
+
+  it('pure exotic in isolation: category mul 1.0 × single exotic = 1.25', () => {
+    // Focal mine with only a smelter neighbour → no same-category neighbour
+    // (category mul 1.0), exotic mine→smelter fires → 1.25 exactly.
+    const a = place('a', 'mine', 0, 0);
+    const sm = place('sm', 'smelter', 0, 2);
+    const rules = [{ pair: ['mine', 'smelter'] as const, recipeRateBonus: 0.25 }];
+    expect(computeBuffStack(a, [a, sm], BUILDING_DEFS, undefined, rules))
+      .toBeCloseTo(1.25, 9);
+  });
 });
 
 describe('checkGates — §4.5 gating adjacency', () => {
