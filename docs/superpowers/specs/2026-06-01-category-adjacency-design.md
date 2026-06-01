@@ -83,6 +83,7 @@ advertising a phantom bonus is undesirable.
 | Recipe rate | `economy.ts:1063` | `buffStack` already multiplies `baseRate`; `buffStack` becomes `categoryMul × exoticPairs`. Inputs + outputs scale together. |
 | Generator output | `economy.ts:1195` | **New:** multiply `powerProduced` by the power building's `categoryMul`. Clustering generators boosts generation. |
 | Power consumption | `economy.ts:1199` | **Unchanged** — `powerConsumed` already excludes `buffStack`. A buffed consumer runs faster but draws the same wattage. |
+| Inspector display | `inspector-ui.ts` | **New:** surface the live category-adjacency multiplier in the building inspector. Recipe buildings: fold it into the existing `BONUSES` annotation (e.g. `adjacency ×1.30`). Generators: annotate the `Power` section's produced wattage with the same factor. Computed via `categoryAdjacencyMul(building, state.buildings.filter(isOperationalBuilding), BUILDING_DEFS)`. |
 
 ## What stays / what is removed
 
@@ -121,6 +122,9 @@ focal building has no same-category physical neighbors and no exotic rules apply
 - `economy.ts` — apply `categoryMul` to `powerProduced` in the pass-3 power loop.
 - `building-defs.ts` — add `CATEGORY_ADJACENCY_RATE`; strip the three
   `adjacencyBuffs` entries and the `AdjacencyBuff` type + def field.
+- `inspector-ui.ts` — display the live category-adjacency multiplier in the
+  building inspector (fold into the `BONUSES` line for recipe buildings; annotate
+  the `Power` section for generators), via `categoryAdjacencyMul`.
 - `tutorial.ts:257` — fix hint to same-**category**, flat-per-neighbor, uncapped
   wording. (Trigger `hasAdjacentSameType` still fires: two mines are both
   `extraction` and adjacent.)
@@ -135,6 +139,8 @@ focal building has no same-category physical neighbors and no exotic rules apply
 - `economy` — new test: clustered generators produce more power; clustered
   consumer runs faster but draws unchanged wattage.
 - `tutorial.test.ts` — existing `12_adjacency` trigger still passes.
+- `inspector-ui` (or a pure helper test) — the adjacency multiplier is computed
+  and rendered: a building with 2 same-category neighbours shows `adjacency ×1.20`.
 
 ## Non-goals / notes
 
