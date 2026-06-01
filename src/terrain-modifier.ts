@@ -10,7 +10,7 @@ import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import type { TerrainKind } from './island.js';
-import type { ResourceId } from './recipes.js';
+import { RECIPES, type RecipeId, type ResourceId } from './recipes.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { IslandSpec } from './world.js';
 
@@ -20,18 +20,11 @@ import type { IslandSpec } from './world.js';
  *  advanceIsland) and the building-arc render (progress fraction). */
 export const SHOT_DURATION_MS = 4000;
 
-/** Multiplier `K` in the rare-target cost formula. K = 1.5 means a manufactured
- *  vein never net-produces its input at break-even for at least 90 cycles. */
-export const K_RARE_MULT = 1.5;
-
-/** Payback horizon in production cycles for the rare-target cost. Cycle =
- *  one production tick of the natural extractor on a natural tile of the
- *  target kind. 90 cycles ≈ 30-60 min of real play depending on the recipe's
- *  cycleSec. */
-export const PAYBACK_HORIZON_CYCLES = 90;
-
 /** Number of tiles in one terrain_modifier brush shot. */
 const BRUSH_TILES = 16;
+
+/** 30-day horizon in seconds (30 × 24 × 3600). `cycleSec` is real seconds. */
+const THIRTY_DAYS_SEC = 2_592_000;
 
 /** Per-natural-target input cost (per tile). Per-shot cost = entries × 16 tiles.
  *  Heavy magnitudes by design — modifier is a strategic placement-cost unlock,
@@ -121,19 +114,60 @@ export const RARE_TARGET_INPUT: Readonly<Record<string, ResourceId>> = {
   uranium_vein: 'uranium_ore',     // uranium_mine → uranium_ore
 };
 
-/** Per-cycle extraction rate of the natural extractor on a natural tile of
- *  `target`. Placeholder = 1 unit/cycle for every rare kind; a follow-up tuning
- *  pass can wire this against the actual recipe table. The cost formula is
- *  `cost = K × rate × horizon`, so a placeholder of 1 yields a flat
- *  `1.5 × 1 × 90 = 135` units of the corresponding input resource. */
-function naturalExtractionRate(_target: TerrainKind): number {
-  return 1;
+/** For each rare target, the base extractor recipe (a `RECIPES` key) whose
+ *  per-cycle output of `RARE_TARGET_INPUT[target]` defines the base extraction
+ *  rate. Verified against recipes.ts: every entry exists, outputs qty 1 of the
+ *  mapped resource, and carries `exogenousFlow: 'terrain'`. */
+export const RARE_TARGET_EXTRACTOR_RECIPE: Readonly<Record<string, RecipeId>> = {
+  ore: 'mine_on_ore',
+  coal: 'mine_on_coal',
+  oil_well: 'pump_jack',
+  gas_seep: 'gas_extractor',
+  helium_vent: 'drilling_rig',
+  limestone: 'limestone_quarry',
+  clay_pit: 'clay_pit_extractor',
+  sulfur_vein: 'sulfur_mine',
+  phosphate_deposit: 'phosphate_mine',
+  graphite_vein: 'graphite_mine',
+  copper_vein: 'copper_mine',
+  tin_vein: 'tin_mine',
+  lead_vein: 'lead_mine',
+  bauxite_vein: 'bauxite_mine',
+  manganese_vein: 'manganese_mine',
+  zinc_vein: 'zinc_mine',
+  chromium_vein: 'chromium_mine',
+  nickel_vein: 'nickel_mine',
+  tungsten_vein: 'tungsten_mine',
+  mercury_pit: 'mercury_well',
+  diamond_vein: 'diamond_quarry',
+  lithium_vein: 'lithium_extractor',
+  uranium_vein: 'uranium_mine',
+};
+
+/** Base extraction rate (units/sec) for a rare target: the extractor recipe's
+ *  per-cycle output of the mapped resource ÷ cycleSec. 0 if missing. */
+export function baseRatePerSec(target: TerrainKind): number {
+  const recipeId = RARE_TARGET_EXTRACTOR_RECIPE[target as string];
+  const resource = RARE_TARGET_INPUT[target as string];
+  if (recipeId === undefined || resource === undefined) return 0;
+  const recipe = RECIPES[recipeId];
+  if (recipe === undefined) return 0;
+  const outQty = recipe.outputs[resource] ?? 0;
+  return outQty / recipe.cycleSec;
+}
+
+/** Per-shot cost of mapping a tile to a rare resource = 30 days of that
+ *  resource's base extraction, charged once for the 16-tile shot. */
+export function rareShotCost(target: TerrainKind): Partial<Record<ResourceId, number>> {
+  const resource = RARE_TARGET_INPUT[target as string];
+  if (resource === undefined) return {};
+  const units = Math.ceil(baseRatePerSec(target) * THIRTY_DAYS_SEC);
+  return units > 0 ? { [resource]: units } : {};
 }
 
 /** Total cost (basket) for a single shot at `target`. The shot covers 16
- *  brush tiles; the cost is "16 × per-tile" for natural targets and "K × rate
- *  × horizon × 16" of the corresponding rare resource for rare targets per
- *  p2_brush_target_mismatch = full_brush_charge. */
+ *  brush tiles; the cost is "16 × per-tile" for natural targets and 30 days of
+ *  the corresponding rare resource's base extraction for rare targets. */
 export function conversionCostForTarget(
   target: TerrainKind,
 ): Partial<Record<ResourceId, number>> {
@@ -147,15 +181,7 @@ export function conversionCostForTarget(
     return out;
   }
   if (RARE_TARGET_TERRAINS.has(target)) {
-    const input = RARE_TARGET_INPUT[target];
-    if (input === undefined) {
-      // Defense-in-depth: a TerrainKind in RARE_TARGET_TERRAINS without an
-      // RARE_TARGET_INPUT row is a classification bug. The test in
-      // terrain-modifier.test.ts asserts every rare kind has a mapping.
-      return {};
-    }
-    const perTile = K_RARE_MULT * naturalExtractionRate(target) * PAYBACK_HORIZON_CYCLES;
-    return { [input]: Math.ceil(perTile * BRUSH_TILES) };
+    return rareShotCost(target);
   }
   // Unclassified kind — return an empty basket. The coverage test catches this.
   return {};
