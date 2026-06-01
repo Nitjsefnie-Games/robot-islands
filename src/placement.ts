@@ -128,6 +128,8 @@ export function totalInvestedCost(
   const L = floorLevel(b);
   const out: Partial<Record<ResourceId, number>> = {};
   for (const [r, n] of Object.entries(base) as Array<[ResourceId, number]>) {
+    // up[r] is absent when base[r] <= 0 (upgradeCost skips non-positive
+    // entries), so `?? 0` keeps a zero-cost base resource at 0 here.
     out[r] = n + L * (up[r] ?? 0);
   }
   return out;
