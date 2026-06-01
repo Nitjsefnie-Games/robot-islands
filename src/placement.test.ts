@@ -18,6 +18,7 @@ import {
   placeBuilding,
   placementCostFor,
   sortByFillDesc,
+  totalInvestedCost,
   upgradeCost,
   validatePlacement,
 } from './placement.js';
@@ -947,6 +948,27 @@ function nearbyPopulatedIsland(): IslandSpec {
     cy: 0,
   });
 }
+
+describe('totalInvestedCost', () => {
+  const mineDef = BUILDING_DEFS.mine; // placementCost { stone: 200, wood: 80 }
+
+  it('floor 0 → base placement cost', () => {
+    const b = { id: 'm', defId: 'mine', x: 0, y: 0 } as never;
+    expect(totalInvestedCost(b, mineDef)).toEqual({ stone: 200, wood: 80 });
+  });
+
+  it('floor 3 → base + 3 × ceil(0.8 × base) per resource', () => {
+    // per-floor upgrade = ceil(0.8×200)=160 stone, ceil(0.8×80)=64 wood.
+    // floor 3: stone 200+3×160=680; wood 80+3×64=272.
+    const b = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 3 } as never;
+    expect(totalInvestedCost(b, mineDef)).toEqual({ stone: 680, wood: 272 });
+  });
+
+  it('undefined floorLevel is treated as 0', () => {
+    const b = { id: 'm', defId: 'mine', x: 0, y: 0 } as never;
+    expect(totalInvestedCost(b, mineDef)).toEqual({ stone: 200, wood: 80 });
+  });
+});
 
 describe('§3 ocean building footprint validation', () => {
   it('rejects Vent Tap placement when footprint extends beyond a vent cluster', () => {

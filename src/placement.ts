@@ -115,6 +115,24 @@ export function upgradeCost(
   return cost;
 }
 
+/** Pure: a building's TOTAL invested resources = base placementCost plus the
+ *  per-floor upgrade cost (`ceil(0.8 × base)`) times its floor level. Shared
+ *  by relocate (half this is the move fee) and demolish (refund/scrap are
+ *  fractions of this). Floor 0 ⇒ just the base cost. */
+export function totalInvestedCost(
+  b: { readonly floorLevel?: number },
+  def: BuildingDef,
+): Partial<Record<ResourceId, number>> {
+  const base = placementCostFor(def);
+  const up = upgradeCost(def);
+  const L = floorLevel(b);
+  const out: Partial<Record<ResourceId, number>> = {};
+  for (const [r, n] of Object.entries(base) as Array<[ResourceId, number]>) {
+    out[r] = n + L * (up[r] ?? 0);
+  }
+  return out;
+}
+
 /** Pure: compute the shortfall per resource for a placement cost against the
  *  player's current inventory. Returns the empty record when the player can
  *  afford the placement (every cost entry covered).
