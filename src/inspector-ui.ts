@@ -1202,16 +1202,17 @@ export function mountInspectorUi(
   // §3.4 Reclamation paint helper — renders the two expand buttons + caption
   // for the currently-targeted Land Reclamation Hub. Encapsulates the per-
   // axis gate / cost / labelling so `paint()` stays readable.
-  function reclamationButtonText(axis: Axis, current: number, gate: ExpandResult): string {
+  function reclamationButtonText(spec: IslandSpec, axis: Axis, gate: ExpandResult): string {
     const label = axis === 'major' ? '+1 MAJOR' : '+1 MINOR';
+    const current = axis === 'major' ? spec.majorRadius : spec.minorRadius;
     if (gate.ok) {
-      const cost = landReclamationCost(current);
-      return `${label} · ${cost.stone} STONE (r ${current} → ${current + 1})`;
+      const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis);
+      return `${label} · ${formatShortfall(cost)} (r ${current} → ${current + 1})`;
     }
     if (gate.reason === 'axis-at-max') return `${label} · AT CAP`;
     if (gate.reason === 'insufficient-resources') {
-      const cost = landReclamationCost(current);
-      return `${label} · NEED ${cost.stone} STONE`;
+      const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis);
+      return `${label} · NEED ${formatShortfall(cost)}`;
     }
     // no-hub shouldn't reach here (section is only shown for the Hub
     // itself, so `hasLandReclamationHub` is always true), but treat
@@ -1238,8 +1239,8 @@ export function mountInspectorUi(
       `${spec.biome} · ${spec.majorRadius}/${caps.major} maj · ${spec.minorRadius}/${caps.minor} min`;
     const majorGate = canExpandIsland(spec, state, 'major');
     const minorGate = canExpandIsland(spec, state, 'minor');
-    expandMajorBtn.textContent = reclamationButtonText('major', spec.majorRadius, majorGate);
-    expandMinorBtn.textContent = reclamationButtonText('minor', spec.minorRadius, minorGate);
+    expandMajorBtn.textContent = reclamationButtonText(spec, 'major', majorGate);
+    expandMinorBtn.textContent = reclamationButtonText(spec, 'minor', minorGate);
     setExpandButtonState(expandMajorBtn, majorGate);
     setExpandButtonState(expandMinorBtn, minorGate);
   }

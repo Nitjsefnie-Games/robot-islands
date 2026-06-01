@@ -5,12 +5,10 @@
 // the gate predicates and the mutation primitive. Multiple Hubs do not
 // stack — `canExpandIsland` only checks for "at least one Hub present".
 //
-// Cost curve (§3.4 PLACEHOLDER): `cost(r).stone = 5 × r²` where r is the
-// CURRENT radius along the chosen axis. Superlinear so the marginal cost
-// rises faster than the marginal benefit (a +1 on a small island reveals
-// more relative area than +1 on a near-cap island). Both the formula and
-// the resource choice (stone-only) are placeholders pending Appendix A
-// tuning — see SPEC §3.4 line 306 and §15.5 (placeholder list).
+// Cost curve (§3.4): cost = inscribed-tile delta × LAND_TILE_COST where the
+// delta is the number of new fully-inscribed tiles gained by a +1 expansion
+// on the chosen axis. The shared per-land-tile basket lives in
+// `building-defs.ts` (`LAND_TILE_COST`).
 //
 // Rotation cannot change post-generation per §3.4 — there is no
 // `rotateIsland` here, intentionally.
@@ -22,22 +20,17 @@
 
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
+import { tileInscribedInEllipse } from './island.js';
+import { LAND_TILE_COST } from './building-defs.js';
+import type { ResourceId } from './recipes.js';
 import { BIOME_MAX_RADII, type IslandSpec } from './world.js';
 
 /** Which ellipse semi-axis to grow on an expansion. */
 export type Axis = 'major' | 'minor';
 
-/**
- * §3.4 placeholder cost row for a single +1 expansion. Resource basket is
- * currently stone-only; future tuning (per the §15.5 placeholder list)
- * may introduce additional inputs (concrete, machinery, etc.). New keys
- * SHOULD remain optional so a partial-cost preview at the inspector
- * doesn't break when the basket grows.
- */
-export interface LandReclamationCost {
-  /** §3.4 placeholder: 5 × r² stone for one +1 expansion. */
-  readonly stone: number;
-}
+/** §3.4 cost of one +1 expansion: a resource basket keyed by ResourceId.
+ *  Partial so future basket growth doesn't break partial-cost previews. */
+export type LandReclamationCost = Partial<Record<ResourceId, number>>;
 
 /** `canExpandIsland` result. `ok: true` means `expandIsland` will succeed. */
 export type ExpandResult =
@@ -47,14 +40,37 @@ export type ExpandResult =
       readonly reason: 'no-hub' | 'axis-at-max' | 'insufficient-resources';
     };
 
-/**
- * §3.4 placeholder cost curve: `cost(r) = 5 × r²` stone for one +1 expansion.
- * Superlinear in current radius so a near-cap expansion costs ~4× a fresh-
- * island expansion (5 × 27² = 3645 vs 5 × 14² = 980 for Plains-tuning).
- * Pure.
- */
-export function landReclamationCost(currentRadius: number): LandReclamationCost {
-  return { stone: 5 * currentRadius * currentRadius };
+/** Count of fully-inscribed tiles in an axis-aligned ellipse of the given
+ *  radii (same rule as computeIslandTiles). Pure. */
+export function inscribedTileCount(major: number, minor: number): number {
+  let n = 0;
+  const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
+  const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
+  for (let y = yMin; y <= yMax; y++) {
+    for (let x = xMin; x <= xMax; x++) {
+      if (tileInscribedInEllipse(x, y, major, minor)) n++;
+    }
+  }
+  return n;
+}
+
+/** §3.4 cost of one +1 expansion on `axis`: the exact inscribed-tile delta
+ *  (land gained) × the shared per-land-tile basket. */
+export function landReclamationCost(
+  major: number,
+  minor: number,
+  axis: Axis,
+): LandReclamationCost {
+  const before = inscribedTileCount(major, minor);
+  const after = axis === 'major'
+    ? inscribedTileCount(major + 1, minor)
+    : inscribedTileCount(major, minor + 1);
+  const delta = Math.max(0, after - before);
+  const out: LandReclamationCost = {};
+  for (const [r, n] of Object.entries(LAND_TILE_COST) as Array<[ResourceId, number]>) {
+    out[r] = delta * n;
+  }
+  return out;
 }
 
 /**
@@ -97,9 +113,11 @@ export function canExpandIsland(
   if (current >= max) {
     return { ok: false, reason: 'axis-at-max' };
   }
-  const cost = landReclamationCost(current);
-  if (inv(state, 'stone') < cost.stone) {
-    return { ok: false, reason: 'insufficient-resources' };
+  const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis);
+  for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+    if (inv(state, r as ResourceId) < n) {
+      return { ok: false, reason: 'insufficient-resources' };
+    }
   }
   return { ok: true };
 }
@@ -127,12 +145,10 @@ export function expandIsland(
   // Pre-expansion radius drives the cost (matches the cost-preview text
   // in the inspector). The post-mutation radius is `current + 1` per
   // §3.4 ("adds 1 to either the major or the minor radius").
-  const current = axis === 'major' ? spec.majorRadius : spec.minorRadius;
-  const cost = landReclamationCost(current);
-  state.inventory.stone = inv(state, 'stone') - cost.stone;
-  if (axis === 'major') {
-    spec.majorRadius = current + 1;
-  } else {
-    spec.minorRadius = current + 1;
+  const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis);
+  for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+    state.inventory[r] = (state.inventory[r] ?? 0) - n;
   }
+  if (axis === 'major') spec.majorRadius = spec.majorRadius + 1;
+  else spec.minorRadius = spec.minorRadius + 1;
 }
