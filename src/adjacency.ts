@@ -14,6 +14,7 @@
 
 import {
   BUILDING_DEFS,
+  CATEGORY_ADJACENCY_RATE,
   type AdjacencyBuff,
   type BuildingDef,
   type BuildingDefId,
@@ -93,6 +94,37 @@ function neighborMatches(
     case 'def_id':
       return entry.matchDefId !== undefined && neighbor.defId === entry.matchDefId;
   }
+}
+
+/**
+ * §4.5 universal category-adjacency multiplier. Counts the focal building's
+ * distinct same-category physical 4-neighbours (de-duped by id; a multi-tile
+ * neighbour touching several border tiles counts once) and returns
+ * `1 + count × CATEGORY_ADJACENCY_RATE[category]`. Linear and uncapped.
+ * Physical neighbours only — the §13.3 cross-island lattice does NOT feed
+ * this term. Returns 1.0 when the focal category's rate is 0 or no
+ * same-category neighbour touches the border.
+ */
+export function categoryAdjacencyMul(
+  b: PlacedBuilding,
+  buildings: ReadonlyArray<PlacedBuilding>,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
+): number {
+  const focalCat = defs[b.defId].category;
+  const rate = CATEGORY_ADJACENCY_RATE[focalCat] ?? 0;
+  if (rate === 0) return 1;
+  const fp = footprintKeySet(b, defs);
+  const border = borderTiles(fp);
+  let count = 0;
+  const seen = new Set<string>();
+  for (const other of buildings) {
+    if (other.id === b.id) continue;
+    if (seen.has(other.id)) continue;
+    if (!touchesBorder(other, border, defs)) continue;
+    seen.add(other.id);
+    if (defs[other.defId].category === focalCat) count++;
+  }
+  return 1 + count * rate;
 }
 
 /**
