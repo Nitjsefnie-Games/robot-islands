@@ -426,6 +426,28 @@ export interface AdjacencyBuff {
   readonly maxMatches: number;
 }
 
+/**
+ * §4.5 universal category-adjacency rate. Each building gains
+ * `1 + n × CATEGORY_ADJACENCY_RATE[category]` to its recipe rate (and, for
+ * generators, its power output), where `n` is the count of distinct
+ * same-category physical 4-neighbours. Linear, uncapped. Seeded uniform at
+ * 0.10 — tune per category here. Categories whose buildings neither run a
+ * recipe nor generate power (storage / logistics / cooling) are no-ops.
+ */
+export const CATEGORY_ADJACENCY_RATE: Record<BuildingCategory, number> = {
+  extraction: 0.1,
+  smelting: 0.1,
+  chemistry: 0.1,
+  manufacturing: 0.1,
+  electronics: 0.1,
+  power: 0.1,
+  storage: 0.1,
+  logistics: 0.1,
+  cooling: 0.1,
+  production: 0.1,
+  special: 0.1,
+};
+
 /** §4.5 gating adjacency match type. Hard gates zero output entirely;
  *  soft gates degrade by `degradeMul`. */
 export type GateMatchType = 'same_def' | 'same_category' | 'def_id' | 'heat_source';

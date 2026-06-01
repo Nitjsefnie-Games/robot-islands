@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import {
   ALL_BUILDING_DEF_IDS,
   BUILDING_DEFS,
+  CATEGORY_ADJACENCY_RATE,
   buildingUnlocked,
   canPlaceOnIsland,
   unlockedDefs,
@@ -2419,5 +2420,24 @@ describe('BOM citation snapshot (§9.2)', () => {
       }
     }
     expect(missing, 'every placementCost has a BOM citation').toEqual([]);
+  });
+});
+
+describe('CATEGORY_ADJACENCY_RATE', () => {
+  const ALL_CATEGORIES = [
+    'extraction', 'smelting', 'chemistry', 'manufacturing', 'electronics',
+    'power', 'storage', 'logistics', 'cooling', 'production', 'special',
+  ] as const;
+
+  it('defines a rate for every BuildingCategory, seeded at 0.10', () => {
+    for (const cat of ALL_CATEGORIES) {
+      expect(CATEGORY_ADJACENCY_RATE[cat]).toBe(0.1);
+    }
+  });
+
+  it('covers every category actually used by a building def', () => {
+    for (const def of Object.values(BUILDING_DEFS)) {
+      expect(CATEGORY_ADJACENCY_RATE[def.category]).toBeTypeOf('number');
+    }
   });
 });
