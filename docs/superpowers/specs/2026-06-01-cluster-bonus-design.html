@@ -1,0 +1,612 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Cluster bonus</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 1080px; }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ---------- summary strip ---------- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 760px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 740px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 760px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre.formula {
+      font-family: var(--mono);
+      font-size: 14px;
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      color: #C9B98A;
+      max-width: 760px;
+      margin: 4px 0 20px;
+      overflow-x: auto;
+    }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.accent { color: var(--clay); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* ---------- comparison ("X vs Y") cards ---------- */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* ---------- grid diagrams ---------- */
+    .diagrams {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-bottom: 8px;
+    }
+    @media (max-width: 820px) { .diagrams { grid-template-columns: 1fr; } }
+    .diagram {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .diagram .dgrid {
+      font-family: var(--mono);
+      font-size: 19px;
+      line-height: 1.5;
+      letter-spacing: 0.28em;
+      color: var(--slate);
+      white-space: pre;
+      margin-bottom: 10px;
+    }
+    .diagram .dgrid .empty { color: var(--gray-300); }
+    .diagram .dlabel { font-size: 13px; color: var(--gray-500); }
+    .diagram .dlabel strong { color: var(--clay); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- checklist ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- risk table ---------- */
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    /* ---------- deferred / out-of-scope cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands-cluster · §4.5</div>
+      <h1>Cluster bonus — rework of the category-adjacency buff</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Today the §4.5 buff multiplies a building's recipe rate by
+        <code>1 + n × 0.10</code>, where <code>n</code> is that building's count of
+        distinct same-category 4-neighbours — a <strong>positional</strong> reward
+        that small islands struggle to earn. This spec replaces it with a
+        <strong>cluster bonus</strong>: every building in a connected same-category
+        cluster gets the same <code>1 + (k − 1) × 0.10</code>, scaled by the whole
+        cluster's size <code>k</code>. Branch <code>feat/cluster-bonus</code>,
+        approved in brainstorming, pending implementation plan.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Files touched</div><div class="v accent">4 + SPEC</div></div>
+      <div class="cell"><div class="k">"No gaps" rule</div><div class="v">R1 — connectivity</div></div>
+      <div class="cell"><div class="k">Rate</div><div class="v">0.10 (unchanged)</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Bonus follows the whole connected same-category cluster, uniformly, holes ignored.</div>
+      <div class="d-body">A cluster is a maximal set of same-category buildings
+        joined by 4-adjacency (the existing <code>touchesBorder</code> test).
+        Every member gets the identical multiplier <code>1 + (k − 1) × 0.10</code>.
+        This intentionally and substantially shifts layout strategy — the point is
+        to let an undeveloped island consolidate a few same-category buildings into
+        one block and reach the full multiplier instead of being capped by short
+        rows and edge positions.</div>
+      <div class="d-body"><strong>"No gaps" = connectivity only (R1).</strong> An
+        enclosed empty tile does <em>not</em> break a cluster; a ring of 8 around a
+        hole is one valid 8-cluster. The function is renamed
+        <code>categoryAdjacencyMul → clusterBonusMul</code>; the
+        <code>CATEGORY_ADJACENCY_RATE</code> constant keeps its name and 0.10 value.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Problem</h2></div>
+      <p class="sec-intro">Why the positional formula penalises the islands that most need help.</p>
+      <p class="body">The count in <code>1 + n × 0.10</code> is local to each
+        building's own footprint border, so the bonus is <strong>positional</strong>:
+        an interior building beats an edge building, which beats a corner. With only
+        a handful of same-category buildings, you can rarely give any one of them
+        more than one or two neighbours, so the multiplier stays near ×1.1 even when
+        every building you own is part of one tight block. The reward for "I packed
+        my whole economy into one cluster" is diluted by the geometry of which
+        building happens to sit where.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Before vs. after</h2></div>
+      <p class="sec-intro">The mechanic stops being positional and becomes a uniform per-cluster property.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Before — per-neighbour count</div>
+          <div class="col-body"><ul>
+            <li><code>1 + n × 0.10</code>, n = focal building's own same-category 4-neighbours.</li>
+            <li>Positional: centre of a block beats its edges and corners.</li>
+            <li>Small islands cap out near ×1.1 — short rows can't earn neighbours.</li>
+            <li>Resolver: <code>categoryAdjacencyMul</code>.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After — per-cluster size</div>
+          <div class="col-body"><ul>
+            <li><code>1 + (k − 1) × 0.10</code>, k = size of the whole same-category cluster.</li>
+            <li>Uniform: every member of a cluster gets the identical multiplier.</li>
+            <li>One consolidated block earns the full multiplier regardless of shape.</li>
+            <li>Resolver renamed: <code>clusterBonusMul</code> (+ batch <code>clusterBonusMuls</code>).</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Cluster definition &amp; formula</h2></div>
+      <p class="sec-intro">A cluster is a maximal same-category, 4-connected component. Connectivity is the only requirement.</p>
+      <pre class="formula">mul = 1 + (k − 1) × CATEGORY_ADJACENCY_RATE[category]      // rate = 0.10
+k    = size of the focal building's same-category 4-connected cluster
+k = 1 (isolated) → ×1.0     ·     rate-0 category → ×1.0 (short-circuit kept)</pre>
+      <p class="body">Two buildings link iff one's footprint border tile overlaps
+        the other's footprint (the §4.4 4-neighbor test). <strong>Diagonal-only
+        contact does not link.</strong> A multi-tile building is one node, counted
+        once. <strong>Connectivity is within a single category</strong> — a
+        different-category building between two same-category buildings does not
+        bridge them. Enclosed empty tiles are irrelevant (R1).</p>
+      <div class="diagrams">
+        <div class="diagram">
+          <div class="dgrid">M M M
+M<span class="empty"> ·</span> M
+M M M</div>
+          <div class="dlabel">Ring of 8 around a hole → one cluster, k=8 →
+            <strong>all ×1.7</strong>. The hole is ignored (R1).</div>
+        </div>
+        <div class="diagram">
+          <div class="dgrid">M E M</div>
+          <div class="dlabel">Electronics (different category) does not bridge the
+            mines → two mine-clusters of k=1 → <strong>all ×1.0</strong>, no buff.</div>
+        </div>
+        <div class="diagram">
+          <div class="dgrid">M<span class="empty"> ·</span>
+<span class="empty">· </span>M</div>
+          <div class="dlabel">Diagonal-only, not 4-adjacent → two k=1 clusters →
+            <strong>both ×1.0</strong>.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Behaviour delta</h2></div>
+      <p class="sec-intro">Same-category layouts and the multiplier each member receives, today vs. after.</p>
+      <table class="tbl">
+        <thead><tr><th>Layout (same category)</th><th>Today</th><th>After</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Isolated building</td><td>×1.0</td><td class="accent">×1.0</td><td>Unchanged</td></tr>
+          <tr><td class="slate">Pair <code>M M</code></td><td>×1.1 each</td><td class="accent">×1.1 each</td><td>Unchanged</td></tr>
+          <tr><td class="slate">Line of 3 <code>M M M</code></td><td>centre ×1.2, ends ×1.1</td><td class="accent">all ×1.2</td><td>Flips to uniform</td></tr>
+          <tr><td class="slate">Cross of 5</td><td>centre ×1.4, arms ×1.1</td><td class="accent">all ×1.4</td><td>Flips to uniform</td></tr>
+          <tr><td class="slate">Ring of 8 around a hole</td><td>×1.2 each</td><td class="accent">all ×1.7</td><td>Hole ignored (R1)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">All call sites keep the <code>(b, buildings, defs) → number</code> shape; the rewrite is internal plus a rename.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/adjacency.ts</div>
+          <div class="what"><span class="lead">Rename + rebuild.</span>
+            <code>categoryAdjacencyMul → clusterBonusMul</code>; body finds the
+            focal building's same-category 4-connected component (BFS over the
+            border-touch graph) and applies the size formula. Add batch
+            <code>clusterBonusMuls(buildings, defs): Map&lt;id, number&gt;</code> —
+            one component-labelling pass over the whole set.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts:~978, ~1198</div>
+          <div class="what"><span class="lead">Compute once, look up.</span>
+            <code>computeRates</code> builds the batch map once per call; the
+            recipe-rate buff (via <code>computeBuffStack</code>) and the
+            generator-power scale read the focal building's multiplier from it,
+            avoiding per-building re-BFS in the per-tick / offline-catchup hot path.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/inspector-ui.ts:~1294, ~1362, ~1386</div>
+          <div class="what"><span class="lead">Relabel.</span> Single-building
+            <code>clusterBonusMul</code> call; displayed
+            <code>adjacency ×X.XX</code> → <code>cluster ×X.XX</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md §4.5</div>
+          <div class="what"><span class="lead">Rewrite the buff paragraph.</span>
+            <code>1 + n × …</code> (distinct 4-neighbours) → <code>1 + (k − 1) × …</code>
+            (same-category 4-connected cluster size); state R1; update the cited
+            resolver name to <code>clusterBonusMul</code>. §4.4 and §5.1 stay valid.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/adjacency.test.ts</div>
+          <div class="what"><span class="lead">TDD the new semantics.</span>
+            Cross-of-5 / line-of-3 assertions flip to uniform; add
+            <code>M E M</code>, diagonal, disjoint clusters, ring-with-hole,
+            multi-tile single-count, rate-0 short-circuit, and batch-vs-single
+            agreement.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Verification</h2></div>
+      <p class="sec-intro">Concrete, runnable checks the implementer confirms.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npx vitest run src/adjacency.test.ts</strong> — all cluster cases green, including the flipped uniform assertions.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm test</strong> — full suite green; economy / inspector tests still pass after the rename.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm run build</strong> — clean under strict / noUnusedLocals (no orphaned <code>categoryAdjacencyMul</code> import).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>In-app inspector</strong> shows <code>cluster ×X.XX</code> and a cross of 5 same-category buildings reads ×1.4 on every member.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Per-building re-BFS makes the per-tick / offline-catchup path O(N²)+.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Batch <code>clusterBonusMuls</code> computes all components once per <code>computeRates</code> call; same asymptotic as today's single-call cost.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Rename leaves a stale import / SPEC reference behind.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell"><code>noUnusedLocals</code> + the build step catch dangling imports; SPEC §4.5 edit is in the change inventory.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Players surprised that the buff curve changed.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Intentional — accepted as a net-positive strategy shift for undeveloped islands. Pair (×1.1) and isolated (×1.0) are unchanged, so the floor feels familiar.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Considered and deliberately deferred.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Solid-fill / hole-penalty rule (R2)</div>
+          <div class="dd">Rejected in brainstorming in favour of R1 — connectivity only. Enclosed holes never affect the bonus.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Gating adjacency &amp; exotic-pair skill bonus</div>
+          <div class="dd"><code>checkGates</code> (heat, cooling) and <code>computeBuffStack</code>'s exotic-pair term keep direct-neighbour semantics — untouched.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Cross-island lattice clusters</div>
+          <div class="dd">Clusters remain per-island physical components, exactly as the category term is today.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Rate tuning</div>
+          <div class="dd">Rate stays 0.10; <code>CATEGORY_ADJACENCY_RATE</code>'s shape and values are unchanged. Re-balancing is a separate concern.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands-cluster · 2026-06-01 · branch <code>feat/cluster-bonus</code> · reworks <code>2026-06-01-category-adjacency-design</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
