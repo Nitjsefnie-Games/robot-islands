@@ -558,7 +558,7 @@ power\_factor = P\_consumed == 0 ? 1 : min(1, P\_produced / P\_consumed)
 
 `power\_factor` multiplies the production rate of every consumer on the island. This produces smooth brownout: under-supplied islands see proportional output reduction, never hard cutoffs or building damage.
 
-**`active` definition.** A building is `active` iff `inputAvail > 0` (per §15.3) AND all gates pass: terrain/tile requirement, adjacency requirement (heat, cooling, etc. per §5.2), and direct fuel-consumption stockpile if applicable. Solar-class buildings additionally require the current day-cycle phase (§2.7) to provide non-zero solar output. Otherwise inactive: contributes zero to `P\_produced` and `P\_consumed`. A generator's `P\_produced` is additionally scaled by its §4.5 category-adjacency multiplier (clustered generators boost each other); `P\_consumed` is not.
+**`active` definition.** A building is `active` iff `inputAvail > 0` (per §15.3) AND all gates pass: terrain/tile requirement, adjacency requirement (heat, cooling, etc. per §5.2), and direct fuel-consumption stockpile if applicable. Solar-class buildings additionally require the current day-cycle phase (§2.7) to provide non-zero solar output. Otherwise inactive: contributes zero to `P\_produced` and `P\_consumed`. A generator's `P\_produced` is additionally scaled by its §4.5 cluster-bonus multiplier (clustered generators boost each other); `P\_consumed` is not.
 
 ### 5.2 Heat (Adjacency-Based)
 
