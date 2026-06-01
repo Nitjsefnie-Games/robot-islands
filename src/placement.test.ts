@@ -952,8 +952,8 @@ function nearbyPopulatedIsland(): IslandSpec {
 describe('totalInvestedCost', () => {
   const mineDef = BUILDING_DEFS.mine; // placementCost { stone: 200, wood: 80 }
 
-  it('floor 0 → base placement cost', () => {
-    const b = { id: 'm', defId: 'mine', x: 0, y: 0 } as never;
+  it('floor 0 (explicit) → base placement cost', () => {
+    const b = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 0 } as never;
     expect(totalInvestedCost(b, mineDef)).toEqual({ stone: 200, wood: 80 });
   });
 
