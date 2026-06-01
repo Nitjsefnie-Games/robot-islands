@@ -2230,7 +2230,7 @@ describe('step-11 — artificial-island construction integration (§2.5)', () =>
     };
     const founderState = makeState({
       buildings: [PC],
-      inventory: { ...blankInventory(), steel: 1000, iron_ingot: 1000, wood: 2000 },
+      inventory: { ...blankInventory(), steel_beam: 1000, concrete: 2000 },
       storageCaps: blankCaps(10000),
       level: 15,
     });
@@ -2245,9 +2245,8 @@ describe('step-11 — artificial-island construction integration (§2.5)', () =>
       0,
     );
     // Founder inventory deducted by exactly the cost.
-    expect(founderState.inventory.steel).toBe(1000 - cost.steel);
-    expect(founderState.inventory.iron_ingot).toBe(1000 - cost.iron_ingot);
-    expect(founderState.inventory.wood).toBe(2000 - cost.wood);
+    expect(founderState.inventory.steel_beam).toBe(1000 - (cost.steel_beam ?? 0));
+    expect(founderState.inventory.concrete).toBe(2000 - (cost.concrete ?? 0));
     // New island spec/state correctly initialised.
     expect(result.newSpec.artificial).toBe(true);
     expect(result.newSpec.populated).toBe(true);
