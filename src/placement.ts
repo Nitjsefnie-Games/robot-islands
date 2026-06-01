@@ -881,7 +881,7 @@ export function demolishBuilding(
   }
   const b = spec.buildings[idx]!;
   const def = BUILDING_DEFS[b.defId];
-  const cost = placementCostFor(def);
+  const cost = totalInvestedCost(b, def);
   const costSum = Object.values(cost).reduce((sum, n) => sum + n, 0);
   const scrapReturned = Math.floor(costSum * 0.3);
   // Splice out the building. `spec.buildings` and `state.buildings` are the
