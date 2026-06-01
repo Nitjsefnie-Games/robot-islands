@@ -33,7 +33,7 @@ import {
 } from './building-defs.js';
 import { categoryAdjacencyMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { affordabilityShortfall, formatShortfall, inProgressBuildCount, parallelBuildSlots, placementCostFor, upgradeCost } from './placement.js';
+import { affordabilityShortfall, formatShortfall, inProgressBuildCount, parallelBuildSlots, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
 import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
@@ -105,11 +105,11 @@ function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
 }
 
-/** Preview the §6.7 scrap credit for a building def. Mirrors the
- *  `floor(sum(placementCost) * 0.3)` computation `demolishBuilding` applies. */
-function previewScrapForBuilding(defId: BuildingDefId): number {
-  const def = BUILDING_DEFS[defId];
-  const cost = placementCostFor(def);
+/** Preview the §6.7 scrap credit for a building. Mirrors the
+ *  `floor(sum(totalInvestedCost) * 0.3)` computation `demolishBuilding` applies. */
+function previewScrapForBuilding(b: PlacedBuilding): number {
+  const def = BUILDING_DEFS[b.defId];
+  const cost = totalInvestedCost(b, def);
   const costSum = Object.values(cost).reduce((sum, n) => sum + n, 0);
   return Math.floor(costSum * 0.3);
 }
@@ -121,7 +121,7 @@ function previewScrapForBuilding(defId: BuildingDefId): number {
  *  storage headroom). Empty record when the def has no placementCost. */
 function previewRefundForBuilding(b: PlacedBuilding): Partial<Record<ResourceId, number>> {
   const def = BUILDING_DEFS[b.defId];
-  const cost = def.placementCost ?? {};
+  const cost = totalInvestedCost(b, def);
   const out: Partial<Record<ResourceId, number>> = {};
   for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
     if (n <= 0) continue;
@@ -1081,7 +1081,7 @@ export function mountInspectorUi(
   demolishBtn.classList.add('ri-warnbtn');
   demolishBtn.addEventListener('click', () => {
     if (!target) return;
-    const credit = previewScrapForBuilding(target.building.defId);
+    const credit = previewScrapForBuilding(target.building);
     const refund = previewRefundForBuilding(target.building);
     const refundStr = formatRefund(refund);
     const def = BUILDING_DEFS[target.building.defId];
@@ -1715,7 +1715,7 @@ export function mountInspectorUi(
 
     // Demolish button — credit preview baked into the label so the player
     // doesn't have to click before learning the cost.
-    const credit = previewScrapForBuilding(building.defId);
+    const credit = previewScrapForBuilding(building);
     demolishBtn.textContent = `▼ DEMOLISH · +${credit} SCRAP`;
   }
 
