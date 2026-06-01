@@ -185,7 +185,7 @@ In-flight inventory is tracked per-route in the architecture data model (§15.1)
 
 ### 2.5 Artificial Islands
 
-A T3+ island with a Platform Constructor building can construct an artificial island. Construction consumes large amounts of materials, scales with target size and biome.
+A T3+ island with a Platform Constructor building can construct an artificial island. Construction consumes large amounts of materials, scales with target size and biome. The material cost is `tileCount × LAND_TILE_COST × biome surcharge`, where `tileCount ≈ π × major × minor` (the ellipse area), `LAND_TILE_COST` is the shared per-land-tile structural basket (`building-defs.ts`), and Volcanic/Arctic carry a ×1.5 surcharge.
 
 Artificial islands:
 
@@ -367,7 +367,7 @@ Maximum natural size, via Land Reclamation Hub at T2+ (placeholders):
 |Desert|24|24|
 |Arctic|14|14|
 
-Each Land Reclamation expansion adds 1 to either the major or the minor radius (player-chosen) at material cost that scales superlinearly with current radius. Rotation cannot be changed after generation.
+Each Land Reclamation expansion adds 1 to either the major or the minor radius (player-chosen) at a material cost equal to the number of new inscribed tiles gained × the shared per-land-tile structural basket (`LAND_TILE_COST`, `building-defs.ts`). Rotation cannot be changed after generation.
 
 ### 3.5 Modifiers
 
@@ -966,6 +966,8 @@ The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who 
 |Lattice Node|2x2|T5|Network unity (one per island, requires N to activate)|
 |Universe Editor|3x3|T5|Rewrites local biome and tile mix|
 |Time Lock|3x3|T5|Banks offline-time stockpile per island; spends to accelerate any chosen island's tick rate (see §13.3)|
+
+**Terrain Modifier action cost.** A terrain_modifier fires a single 16-tile shot to a player-chosen target, charged UPFRONT at placement (on top of the building's placement cost). Mapping a tile to a rare resource costs 30 days of that resource's base extraction (`ceil(baseRate_per_sec × 2,592,000)`, one basket for the whole shot); clearing to a natural target costs its per-tile basket × 16.
 
 ### 8.10 T5 Raw Extraction (T5 only)
 
