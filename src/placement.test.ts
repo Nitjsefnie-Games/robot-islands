@@ -33,6 +33,7 @@ import type { IslandSpec } from './world.js';
 import type { IslandState } from './economy.js';
 import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
+import { DEFAULT_GRAPH } from './skilltree.js';
 import { upgradeConstructionMs, BASE_CONSTRUCTION_MS_BY_TIER } from './construction.js';
 
 // ---------------------------------------------------------------------------
@@ -316,6 +317,38 @@ describe('validatePlacement', () => {
     // check is x²/25 + y²/25 < 1 evaluated at the corner; (-3)²/25 = 0.36
     // and the other corner (-3, 1) → 0.36 + 0.04 = 0.40 < 1 ⇒ inscribed.
     expect(validatePlacement(spec, state, 'electric_arc_furnace', -3, 0, 1).ok).toBe(true);
+  });
+
+  describe('validatePlacement — ignoreBuildingId + skipCostGate', () => {
+    it('ignoreBuildingId excludes that building from the overlap check', () => {
+      const existing = { id: 'e1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+      const spec = makeSpec({ buildings: [existing] });
+      const state = makeState(spec);
+      // Same tiles as the existing mine → overlap without the ignore.
+      expect(validatePlacement(spec, state, 'mine', 0, 0, 0).reason).toBe('overlap');
+      // Excluding the existing building's own footprint → geometry passes.
+      expect(validatePlacement(spec, state, 'mine', 0, 0, 0, DEFAULT_GRAPH, 'e1').ok).toBe(true);
+    });
+
+    it('ignoreBuildingId still rejects overlap with a DIFFERENT building', () => {
+      const a = { id: 'a', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+      const b = { id: 'b', defId: 'mine', x: 4, y: 0 } as PlacedBuilding;
+      const spec = makeSpec({ buildings: [a, b] });
+      const state = makeState(spec);
+      // Ignoring 'a', but placing onto 'b' at (4,0) still overlaps b.
+      expect(validatePlacement(spec, state, 'mine', 4, 0, 0, DEFAULT_GRAPH, 'a').reason).toBe('overlap');
+    });
+
+    it('skipCostGate bypasses the affordability gate', () => {
+      const spec = makeSpec();
+      const state = makeState(spec);
+      state.inventory.stone = 0;
+      state.inventory.wood = 0;
+      // mine costs stone+wood → without skip, insufficient-resources.
+      expect(validatePlacement(spec, state, 'mine', 0, 0, 0).reason).toBe('insufficient-resources');
+      // skipCostGate true (8th arg) → geometry-only validation passes.
+      expect(validatePlacement(spec, state, 'mine', 0, 0, 0, DEFAULT_GRAPH, undefined, true).ok).toBe(true);
+    });
   });
 });
 
