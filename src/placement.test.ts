@@ -33,6 +33,7 @@ import { makeInitialIslandState, attachTerrainAt } from './world.js';
 import type { IslandSpec } from './world.js';
 import type { IslandState } from './economy.js';
 import type { TerrainKind } from './island.js';
+import { conversionCostForTarget } from './terrain-modifier.js';
 import type { Graph } from './skilltree-graph.js';
 import { DEFAULT_GRAPH } from './skilltree.js';
 import { upgradeConstructionMs, BASE_CONSTRUCTION_MS_BY_TIER } from './construction.js';
@@ -1858,5 +1859,29 @@ describe('sortByFillDesc', () => {
     const input = ['wood', 'stone'] as ResourceId[];
     sortByFillDesc(input, fill({ wood: 1, stone: 2 }));
     expect(input).toEqual(['wood', 'stone']);
+  });
+});
+
+
+describe('terrain_modifier placement charges the conversion cost upfront', () => {
+  it('deducts placementCost + conversionCostForTarget(target)', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.microchip = 1000;       // placementCost needs 10
+    state.inventory.copper_ore = 200000;    // cover the 129,600 copper conversion
+    const beforeCopper = state.inventory.copper_ore;
+    const r = placeBuilding(spec, state, 'terrain_modifier', 0, 0, 0, () => 'tm', undefined, undefined, undefined, 'copper_vein');
+    expect(r.ok).toBe(true);
+    expect(state.inventory.copper_ore).toBe(beforeCopper - (conversionCostForTarget('copper_vein').copper_ore ?? 0));
+  });
+
+  it('rejects placement when the conversion cost is unaffordable (no building added)', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.microchip = 1000;
+    state.inventory.copper_ore = 0;         // can't afford the 129,600 conversion
+    const r = placeBuilding(spec, state, 'terrain_modifier', 0, 0, 0, () => 'tm', undefined, undefined, undefined, 'copper_vein');
+    expect(r.ok).toBe(false);
+    expect(spec.buildings).toHaveLength(0);
   });
 });

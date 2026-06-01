@@ -43,7 +43,7 @@ import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import { candidateAnchors } from './anchor-picker.js';
 import { isOceanTile, type IslandSpec, type WorldState } from './world.js';
 import { CELL_SIZE_TILES } from './constants.js';
-import { brushTilesAt } from './terrain-modifier.js';
+import { brushTilesAt, conversionCostForTarget } from './terrain-modifier.js';
 
 /** Fallback cargo label for a freshly-placed generic-storage building (Crate,
  *  Warehouse) when the caller of `placeBuilding` does NOT supply an explicit
@@ -504,7 +504,15 @@ export function placeBuilding(
   // re-check is cheap (small basket, integer compares) and prevents a
   // race that would otherwise let the player place at -N stone.
   const cost = placementCostFor(def);
-  const missing = affordabilityShortfall(state.inventory, cost);
+  // §8.9: a terrain_modifier pays its conversion cost UPFRONT at placement,
+  // on top of placementCost (mirrors Land Reclamation's immediate deduct).
+  const fullCost: Partial<Record<ResourceId, number>> = { ...cost };
+  if (def.terrainModifier === true && terrainTargetOverride !== undefined) {
+    for (const [r, n] of Object.entries(conversionCostForTarget(terrainTargetOverride)) as Array<[ResourceId, number]>) {
+      fullCost[r] = (fullCost[r] ?? 0) + n;
+    }
+  }
+  const missing = affordabilityShortfall(state.inventory, fullCost);
   if (Object.keys(missing).length > 0) {
     return { ok: false, reason: 'insufficient-resources', missing };
   }
@@ -521,7 +529,7 @@ export function placeBuilding(
   // path can't leave inventory paid + no building. (No fallible operations
   // sit between this and the push — but writing it this way makes the
   // invariant explicit and survives later refactors.)
-  for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+  for (const [r, n] of Object.entries(fullCost) as Array<[ResourceId, number]>) {
     if (n <= 0) continue;
     state.inventory[r] = (state.inventory[r] ?? 0) - n;
   }
@@ -553,7 +561,7 @@ export function placeBuilding(
   // future-proofs the path so it's a true error return rather than silent
   // inventory loss if the underlying invariant ever shifts.)
   if (spec.buildings.some((existing) => existing.id === id)) {
-    for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+    for (const [r, n] of Object.entries(fullCost) as Array<[ResourceId, number]>) {
       if (n <= 0) continue;
       state.inventory[r] = (state.inventory[r] ?? 0) + n;
     }
