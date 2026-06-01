@@ -9,8 +9,10 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   canExpandIsland,
   expandIsland,
+  inscribedTileCount,
   landReclamationCost,
 } from './land-reclamation.js';
+import { LAND_TILE_COST } from './building-defs.js';
 import type { Biome, IslandSpec } from './world.js';
 
 // Fixtures
@@ -90,21 +92,26 @@ function hubBuilding(): PlacedBuilding {
   return { id: 'hub-1', defId: 'land_reclamation_hub', x: 0, y: 0 };
 }
 
-describe('landReclamationCost (§3.4 placeholder)', () => {
-  it('returns positive stone cost', () => {
-    expect(landReclamationCost(14).stone).toBeGreaterThan(0);
+describe('landReclamationCost — tile-delta × LAND_TILE_COST', () => {
+  it('major-axis +1 bills (tileDelta) × LAND_TILE_COST', () => {
+    const major = 14, minor = 14;
+    const delta = inscribedTileCount(major + 1, minor) - inscribedTileCount(major, minor);
+    expect(delta).toBeGreaterThan(0);
+    expect(landReclamationCost(major, minor, 'major')).toEqual({
+      steel_beam: delta * (LAND_TILE_COST.steel_beam ?? 0),
+      concrete: delta * (LAND_TILE_COST.concrete ?? 0),
+    });
   });
-
-  it('scales superlinearly with current radius (r=27 ≫ r=14)', () => {
-    const small = landReclamationCost(14).stone;
-    const big = landReclamationCost(27).stone;
-    // 5 × 27² / (5 × 14²)  =  729 / 196  ≈  3.72  — well above linear (~1.93).
-    expect(big / small).toBeGreaterThan(2);
+  it('minor-axis +1 uses the minor delta', () => {
+    const major = 14, minor = 7;
+    const delta = inscribedTileCount(major, minor + 1) - inscribedTileCount(major, minor);
+    expect(landReclamationCost(major, minor, 'minor')).toEqual({
+      steel_beam: delta * 1,
+      concrete: delta * 10,
+    });
   });
-
-  it('matches the 5 × r² formula at r=14 and r=27', () => {
-    expect(landReclamationCost(14).stone).toBe(5 * 14 * 14);
-    expect(landReclamationCost(27).stone).toBe(5 * 27 * 27);
+  it('inscribedTileCount grows with radius', () => {
+    expect(inscribedTileCount(15, 14)).toBeGreaterThan(inscribedTileCount(14, 14));
   });
 });
 
@@ -119,7 +126,7 @@ describe('canExpandIsland', () => {
   it('rejects with axis-at-max when the chosen axis is at the biome cap', () => {
     // Plains caps both axes at 28.
     const spec = makeSpec({ majorRadius: 28, minorRadius: 14, buildings: [hubBuilding()] });
-    const state = makeState({ stone: 100_000 });
+    const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
     expect(canExpandIsland(spec, state, 'major')).toEqual({
       ok: false,
       reason: 'axis-at-max',
@@ -129,16 +136,15 @@ describe('canExpandIsland', () => {
   });
 
   it('rejects with insufficient-resources when inventory is below cost', () => {
-    // Plains: r=14, cost = 5 × 14² = 980 stone.
     const spec = makeSpec({ buildings: [hubBuilding()] });
-    const state = makeState({ stone: 100 });
+    const state = makeState({ steel_beam: 0, concrete: 0 });
     const result = canExpandIsland(spec, state, 'major');
     expect(result).toEqual({ ok: false, reason: 'insufficient-resources' });
   });
 
   it('returns ok when hub is placed, axis is below cap, and resources suffice', () => {
     const spec = makeSpec({ buildings: [hubBuilding()] });
-    const state = makeState({ stone: 100_000 });
+    const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
     expect(canExpandIsland(spec, state, 'major')).toEqual({ ok: true });
     expect(canExpandIsland(spec, state, 'minor')).toEqual({ ok: true });
   });
@@ -168,7 +174,7 @@ describe('canExpandIsland', () => {
 describe('expandIsland', () => {
   it('increments the chosen axis by 1 and leaves the other untouched', () => {
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
-    const state = makeState({ stone: 100_000 });
+    const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
     expandIsland(spec, state, 'major');
     expect(spec.majorRadius).toBe(15);
     expect(spec.minorRadius).toBe(14);
@@ -176,7 +182,7 @@ describe('expandIsland', () => {
 
   it('increments minor when minor is chosen', () => {
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
-    const state = makeState({ stone: 100_000 });
+    const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
     expandIsland(spec, state, 'minor');
     expect(spec.majorRadius).toBe(14);
     expect(spec.minorRadius).toBe(15);
@@ -184,19 +190,21 @@ describe('expandIsland', () => {
 
   it('deducts the cost from inventory', () => {
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
-    const state = makeState({ stone: 5_000 });
-    const expectedCost = landReclamationCost(14).stone; // current-radius cost
+    const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
+    const expectedCost = landReclamationCost(14, 14, 'major');
     expandIsland(spec, state, 'major');
-    expect(state.inventory.stone).toBe(5_000 - expectedCost);
+    expect(state.inventory.steel_beam).toBe(1_000_000 - (expectedCost.steel_beam ?? 0));
+    expect(state.inventory.concrete).toBe(10_000_000 - (expectedCost.concrete ?? 0));
   });
 
   it('uses the PRE-expansion radius for cost calculation', () => {
-    // Growing 14→15 should cost cost(14), not cost(15).
+    // Growing 14→15 should cost cost(14,14,'major'), not cost(15,14,'major').
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
-    const state = makeState({ stone: 5_000 });
-    const costAt14 = landReclamationCost(14).stone;
+    const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
+    const costAt14 = landReclamationCost(14, 14, 'major');
     expandIsland(spec, state, 'major');
-    expect(state.inventory.stone).toBe(5_000 - costAt14);
+    expect(state.inventory.steel_beam).toBe(1_000_000 - (costAt14.steel_beam ?? 0));
+    expect(state.inventory.concrete).toBe(10_000_000 - (costAt14.concrete ?? 0));
   });
 });
 
@@ -209,7 +217,7 @@ describe('§3.4 BIOME_MAX_RADII gates', () => {
       minorRadius: 27,
       buildings: [hubBuilding()],
     });
-    const state = makeState({ stone: 10_000_000 });
+    const state = makeState({ steel_beam: 10_000_000, concrete: 100_000_000 });
     expandIsland(spec, state, 'major');
     expandIsland(spec, state, 'minor');
     expect(spec.majorRadius).toBe(28);
@@ -231,7 +239,7 @@ describe('§3.4 BIOME_MAX_RADII gates', () => {
       minorRadius: 13,
       buildings: [hubBuilding()],
     });
-    const state = makeState({ stone: 10_000_000 });
+    const state = makeState({ steel_beam: 10_000_000, concrete: 100_000_000 });
     expandIsland(spec, state, 'minor');
     expect(spec.minorRadius).toBe(14);
     expect(canExpandIsland(spec, state, 'minor')).toEqual({
@@ -249,7 +257,7 @@ describe('§3.4 BIOME_MAX_RADII gates', () => {
       minorRadius: 13,
       buildings: [hubBuilding()],
     });
-    const state = makeState({ stone: 10_000_000 });
+    const state = makeState({ steel_beam: 10_000_000, concrete: 100_000_000 });
     expandIsland(spec, state, 'major');
     expandIsland(spec, state, 'minor');
     expect(spec.majorRadius).toBe(14);
