@@ -24,8 +24,9 @@ import { BIOME_DEFS, rollModifiersArtificial } from './biomes.js';
 import { tierForLevel } from './skilltree.js';
 import type { IslandState } from './economy.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
-import { canPlaceOnIsland, type BuildingDef } from './building-defs.js';
+import { canPlaceOnIsland, LAND_TILE_COST, type BuildingDef } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';
+import type { ResourceId } from './recipes.js';
 
 // Cost formula (§2.5 — "scales with size and biome"). tileCount ≈ ellipse
 // area (π × major × minor); per-material cost = ceil(tileCount × multiplier ×
@@ -33,9 +34,7 @@ import { hasOperationalBuilding } from './buildings.js';
 // natural radius caps → "harder" biomes). Multipliers are placeholders tuned
 // to drain inventory meaningfully at the 4×4 minimum without blocking the demo.
 
-const STEEL_PER_TILE = 5;
-const IRON_INGOT_PER_TILE = 3;
-const WOOD_PER_TILE = 10;
+
 
 /** Biomes that carry a +50% materials surcharge per §2.5 "scales with biome". */
 const HARD_BIOMES: ReadonlyArray<Biome> = ['volcanic', 'arctic'];
@@ -53,11 +52,7 @@ export interface ConstructionRequirements {
   readonly minorRadius: number;
 }
 
-export interface ConstructionCost {
-  readonly steel: number;
-  readonly iron_ingot: number;
-  readonly wood: number;
-}
+export type ConstructionCost = Partial<Record<ResourceId, number>>;
 
 export type ValidationReason =
   | 'tier-too-low'
@@ -87,11 +82,11 @@ export interface ConstructResult {
 export function computeConstructionCost(req: ConstructionRequirements): ConstructionCost {
   const tileCount = Math.PI * req.majorRadius * req.minorRadius;
   const surcharge = HARD_BIOMES.includes(req.biome) ? 1.5 : 1.0;
-  return {
-    steel: Math.ceil(tileCount * STEEL_PER_TILE * surcharge),
-    iron_ingot: Math.ceil(tileCount * IRON_INGOT_PER_TILE * surcharge),
-    wood: Math.ceil(tileCount * WOOD_PER_TILE * surcharge),
-  };
+  const out: ConstructionCost = {};
+  for (const [r, n] of Object.entries(LAND_TILE_COST) as Array<[ResourceId, number]>) {
+    out[r] = Math.ceil(tileCount * n * surcharge);
+  }
+  return out;
 }
 
 /**
@@ -140,9 +135,9 @@ export function validateConstruction(
 
   const cost = computeConstructionCost(req);
   const inv = founderState.inventory;
-  if ((inv.steel ?? 0) < cost.steel) return { ok: false, reason: 'insufficient-materials' };
-  if ((inv.iron_ingot ?? 0) < cost.iron_ingot) return { ok: false, reason: 'insufficient-materials' };
-  if ((inv.wood ?? 0) < cost.wood) return { ok: false, reason: 'insufficient-materials' };
+  for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+    if ((inv[r] ?? 0) < n) return { ok: false, reason: 'insufficient-materials' };
+}
 
   return { ok: true };
 }
@@ -187,9 +182,9 @@ export function constructIsland(
   // Deduct materials. Validation has already confirmed sufficient balance,
   // so subtraction is safe without re-checking.
   const cost = computeConstructionCost(req);
-  founderState.inventory.steel = (founderState.inventory.steel ?? 0) - cost.steel;
-  founderState.inventory.iron_ingot = (founderState.inventory.iron_ingot ?? 0) - cost.iron_ingot;
-  founderState.inventory.wood = (founderState.inventory.wood ?? 0) - cost.wood;
+  for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+    founderState.inventory[r] = (founderState.inventory[r] ?? 0) - n;
+  }
 
   // Mint the new spec via the shared `attachTerrainAt` helper — its closure
   // captures the spec by reference so any future §3.6 merge that mutates
