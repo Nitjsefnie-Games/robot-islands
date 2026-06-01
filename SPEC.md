@@ -473,7 +473,7 @@ Adjacency is computed using 4-neighbors. For a multi-tile building, the adjacent
 
 Two categories:
 
-**Buff adjacency (capped stacking):** building gains a multiplier per matching neighbor, capped at N. Format: `+X% statKey per adjacent matchType, max N matches`.
+**Buff adjacency (universal per-category):** every building gains a flat, linear, uncapped multiplier from its distinct same-category 4-neighbours: `rate = 1 + n × CATEGORY_ADJACENCY_RATE[category]`, where `n` counts distinct same-category buildings touching the footprint border (§4.4) and a multi-tile neighbour counts once. The multiplier applies to the building's recipe rate and, for generators, to power output (NOT power consumption). The per-category rate lives in `CATEGORY_ADJACENCY_RATE` (`building-defs.ts`), seeded uniform at 0.10. Cross-island lattice neighbours (§13.3) do not feed this term. Skill-tree `exoticAdjacency` pair-boosts (§9.1) stack multiplicatively on top. Resolution: `categoryAdjacencyMul` / `computeBuffStack` in `adjacency.ts`.
 
 **Gating adjacency:** building cannot operate, or operates in a degraded mode, unless an adjacent requirement is met. Examples:
 
@@ -558,7 +558,7 @@ power\_factor = P\_consumed == 0 ? 1 : min(1, P\_produced / P\_consumed)
 
 `power\_factor` multiplies the production rate of every consumer on the island. This produces smooth brownout: under-supplied islands see proportional output reduction, never hard cutoffs or building damage.
 
-**`active` definition.** A building is `active` iff `inputAvail > 0` (per §15.3) AND all gates pass: terrain/tile requirement, adjacency requirement (heat, cooling, etc. per §5.2), and direct fuel-consumption stockpile if applicable. Solar-class buildings additionally require the current day-cycle phase (§2.7) to provide non-zero solar output. Otherwise inactive: contributes zero to `P\_produced` and `P\_consumed`.
+**`active` definition.** A building is `active` iff `inputAvail > 0` (per §15.3) AND all gates pass: terrain/tile requirement, adjacency requirement (heat, cooling, etc. per §5.2), and direct fuel-consumption stockpile if applicable. Solar-class buildings additionally require the current day-cycle phase (§2.7) to provide non-zero solar output. Otherwise inactive: contributes zero to `P\_produced` and `P\_consumed`. A generator's `P\_produced` is additionally scaled by its §4.5 category-adjacency multiplier (clustered generators boost each other); `P\_consumed` is not.
 
 ### 5.2 Heat (Adjacency-Based)
 
