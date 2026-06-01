@@ -420,6 +420,17 @@ export const CATEGORY_ADJACENCY_RATE: Readonly<Record<BuildingCategory, number>>
   special: 0.1,
 };
 
+/**
+ * §2.5 / §3.4 cost to construct ONE land tile, shared by Land Reclamation
+ * (+1 radius bills `tileDelta × LAND_TILE_COST`) and Platform Constructor
+ * (a new island bills `tileCount × LAND_TILE_COST × surcharge`). Placeholder
+ * magnitude — tunable.
+ */
+export const LAND_TILE_COST: Readonly<Partial<Record<ResourceId, number>>> = {
+  steel_beam: 1,
+  concrete: 10,
+};
+
 /** §4.5 gating adjacency match type. Hard gates zero output entirely;
  *  soft gates degrade by `degradeMul`. */
 export type GateMatchType = 'same_def' | 'same_category' | 'def_id' | 'heat_source';
