@@ -219,6 +219,8 @@ export function validatePlacement(
   anchorY: number,
   rotation: Rotation,
   graph: Graph = DEFAULT_GRAPH,
+  ignoreBuildingId?: string,
+  skipCostGate?: boolean,
 ): PlacementValidation {
   const def = BUILDING_DEFS[defId];
   // Defense-in-depth routing guard: an ocean def must NEVER be validated
@@ -261,6 +263,7 @@ export function validatePlacement(
   // forward-compatible to many-building islands.
   const covered = new Set<string>();
   for (const existing of spec.buildings) {
+    if (existing.id === ignoreBuildingId) continue;
     const existingDef = BUILDING_DEFS[existing.defId];
     const existingRot = (existing.rotation ?? 0) as Rotation;
     const eTiles = footprintTiles(
@@ -323,6 +326,7 @@ export function validatePlacement(
     // the O(brush × existing) lookup to drop to O(brush + existing).
     const occupied = new Set<string>();
     for (const b of state.buildings) {
+      if (b.id === ignoreBuildingId) continue;
       const bdef = BUILDING_DEFS[b.defId];
       const btiles = footprintTiles(
         bdef.footprint, b.x, b.y, (b.rotation ?? 0) as Rotation,
@@ -342,10 +346,12 @@ export function validatePlacement(
   // §14 placement-cost gate. Computed LAST so the geometry/biome/tier
   // reasons take priority — if the cursor is out of bounds, "out of bounds"
   // is more actionable to surface than "you also can't afford this".
-  const cost = placementCostFor(def);
-  const missing = affordabilityShortfall(state.inventory, cost);
-  if (Object.keys(missing).length > 0) {
-    return { ok: false, reason: 'insufficient-resources', missing };
+  if (!skipCostGate) {
+    const cost = placementCostFor(def);
+    const missing = affordabilityShortfall(state.inventory, cost);
+    if (Object.keys(missing).length > 0) {
+      return { ok: false, reason: 'insufficient-resources', missing };
+    }
   }
   return { ok: true };
 }
