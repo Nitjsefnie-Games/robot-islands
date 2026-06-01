@@ -4,8 +4,8 @@
 // building, the adjacent set is the union of tiles bordering any cell of the
 // footprint, minus the footprint itself."
 //
-// SPEC §4.5 (buff form): "building gains a multiplier per matching neighbor,
-// capped at N. Format: `+X% statKey per adjacent matchType, max N matches`."
+// SPEC §4.5 (buff form): "every building gains a uniform multiplier from the
+// size of its same-category 4-connected cluster: `1 + (k − 1) × rate`."
 //
 // Pure module — no PixiJS, no DOM. The 4-neighbor footprint walk mirrors
 // `heat.ts`'s pattern (footprintKeySet → borderTiles); we keep the helpers
@@ -78,42 +78,90 @@ export function touchesBorder(
 }
 
 /**
- * §4.5 universal category-adjacency multiplier. Counts the focal building's
- * distinct same-category physical 4-neighbours (de-duped by id; a multi-tile
- * neighbour touching several border tiles counts once) and returns
- * `1 + count × CATEGORY_ADJACENCY_RATE[category]`. Linear and uncapped.
- * Physical neighbours only — the §13.3 cross-island lattice does NOT feed
- * this term. Returns 1.0 when the focal category's rate is 0 or no
- * same-category neighbour touches the border.
+ * §4.5 per-building cluster-bonus multiplier. A building's *cluster* is the
+ * maximal set of same-category buildings connected through 4-neighbour links
+ * (the §4.4 border test). Every member of a cluster of size `k` receives the
+ * same `1 + (k − 1) × CATEGORY_ADJACENCY_RATE[category]`. Connectivity only:
+ * enclosed empty tiles do not break a cluster, and a different-category
+ * building between two same-category buildings does not bridge them. Physical
+ * same-island buildings only — the §13.3 cross-island lattice does NOT feed
+ * this term. Returns 1.0 for an isolated building or a rate-0 category.
+ *
+ * Implemented via the batch labeller so single- and whole-island callers agree.
  */
-export function categoryAdjacencyMul(
+export function clusterBonusMul(
   b: PlacedBuilding,
   buildings: ReadonlyArray<PlacedBuilding>,
   defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
 ): number {
-  const focalCat = defs[b.defId].category;
-  const rate = CATEGORY_ADJACENCY_RATE[focalCat] ?? 0;
-  if (rate === 0) return 1;
-  const fp = footprintKeySet(b, defs);
-  const border = borderTiles(fp);
-  let count = 0;
-  const seen = new Set<string>();
-  for (const other of buildings) {
-    if (other.id === b.id) continue;
-    if (seen.has(other.id)) continue;
-    if (!touchesBorder(other, border, defs)) continue;
-    seen.add(other.id);
-    if (defs[other.defId].category === focalCat) count++;
+  return clusterBonusMuls(buildings, defs).get(b.id) ?? 1;
+}
+
+/**
+ * Batch form: every building's cluster-bonus multiplier in one pass. Groups
+ * by category, unions same-category 4-adjacent buildings (union-find), then
+ * maps each building to `1 + (size − 1) × rate`. O(N²) over the building set —
+ * the per-tick hot path (`economy.computeRates`) calls this ONCE per tick and
+ * reads per-building values from the returned map, rather than re-deriving a
+ * component per building.
+ */
+export function clusterBonusMuls(
+  buildings: ReadonlyArray<PlacedBuilding>,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
+): Map<string, number> {
+  const n = buildings.length;
+  const borders = buildings.map((b) => borderTiles(footprintKeySet(b, defs)));
+
+  // Union-find over building indices.
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i: number): number => {
+    let r = i;
+    while (parent[r]! !== r) r = parent[r]!;
+    let cur = i;
+    while (parent[cur]! !== r) {
+      const next = parent[cur]!;
+      parent[cur] = r;
+      cur = next;
+    }
+    return r;
+  };
+  const union = (a: number, b: number): void => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  };
+
+  for (let i = 0; i < n; i++) {
+    const cat = defs[buildings[i]!.defId].category;
+    for (let j = i + 1; j < n; j++) {
+      if (defs[buildings[j]!.defId].category !== cat) continue;
+      // Adjacency is symmetric — test j against i's border.
+      if (touchesBorder(buildings[j]!, borders[i]!, defs)) union(i, j);
+    }
   }
-  return 1 + count * rate;
+
+  const compSize = new Map<number, number>();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    compSize.set(r, (compSize.get(r) ?? 0) + 1);
+  }
+
+  const out = new Map<string, number>();
+  for (let i = 0; i < n; i++) {
+    const b = buildings[i]!;
+    const rate = CATEGORY_ADJACENCY_RATE[defs[b.defId].category] ?? 0;
+    const k = compSize.get(find(i)) ?? 1;
+    out.set(b.id, rate === 0 ? 1 : 1 + (k - 1) * rate);
+  }
+  return out;
 }
 
 /**
  * §4.5 buff-adjacency multiplier for the focal building.
  *
- * Returns `categoryAdjacencyMul × Π(exotic-pair bonuses)`. The category term
- * (universal, per-category, linear, uncapped — see `categoryAdjacencyMul`)
- * uses physical same-island neighbours only. The exotic-pair term carries the
+ * Returns `clusterBonusMul × Π(exotic-pair bonuses)`. The cluster term
+ * (uniform per same-category 4-connected cluster — see `clusterBonusMul`) uses
+ * physical same-island buildings only. The exotic-pair term carries the
  * skill-tree `pairBoost` rewards (`skillUnlockedAdjacencyRules`) and keeps its
  * original neighbour semantics: physical neighbours plus any `crossIsland`
  * lattice buildings. Returns 1.0 when nothing applies.
@@ -127,8 +175,11 @@ export function computeBuffStack(
   defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
   crossIsland?: ReadonlyArray<PlacedBuilding>,
   exoticRules?: ReadonlyArray<{ readonly pair: readonly [BuildingDefId, BuildingDefId]; readonly recipeRateBonus: number }>,
+  /** Precomputed cluster multiplier for `b` (from `clusterBonusMuls`). When
+   *  omitted, falls back to a single `clusterBonusMul` call. */
+  clusterMul?: number,
 ): number {
-  let stack = categoryAdjacencyMul(b, buildings, defs);
+  let stack = clusterMul ?? clusterBonusMul(b, buildings, defs);
   if (exoticRules && exoticRules.length > 0) {
     const neighbors = collectNeighbors(b, buildings, defs, crossIsland);
     for (const rule of exoticRules) {
