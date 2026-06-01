@@ -88,6 +88,14 @@ export interface PlacementValidation {
   readonly missing?: Partial<Record<ResourceId, number>>;
 }
 
+export type RelocateResult =
+  | { readonly ok: true; readonly charged: Partial<Record<ResourceId, number>> }
+  | {
+      readonly ok: false;
+      readonly reason: PlacementReason | 'not-found';
+      readonly missing?: Partial<Record<ResourceId, number>>;
+    };
+
 // ---------------------------------------------------------------------------
 // §14 placement-cost helpers
 // ---------------------------------------------------------------------------
@@ -818,6 +826,48 @@ export function applyUpgrade(
     }
   }
   return { ok: true };
+}
+
+/** Relocate an existing building to a new tile on the SAME island for a fee of
+ *  half its total invested cost. Validates geometry/terrain via
+ *  `validatePlacement` (ignoring the building's own footprint, skipping the
+ *  full-cost gate since relocate charges its own half-fee), then charges the
+ *  fee and mutates x/y/rotation in place — all other runtime state persists.
+ *  `spec.buildings` and `state.buildings` are the same array, so the in-place
+ *  mutation is visible to the next tick. */
+export function relocateBuilding(
+  spec: IslandSpec,
+  state: IslandState,
+  id: string,
+  newX: number,
+  newY: number,
+  rotation?: Rotation,
+): RelocateResult {
+  const b = spec.buildings.find((bb) => bb.id === id);
+  if (!b) return { ok: false, reason: 'not-found' };
+  const def = BUILDING_DEFS[b.defId];
+  const rot = (rotation ?? b.rotation ?? 0) as Rotation;
+  const v = validatePlacement(spec, state, b.defId, newX, newY, rot, DEFAULT_GRAPH, id, true);
+  if (!v.ok) {
+    return { ok: false, reason: v.reason ?? 'overlap', missing: v.missing };
+  }
+  const fee: Partial<Record<ResourceId, number>> = {};
+  for (const [r, n] of Object.entries(totalInvestedCost(b, def)) as Array<[ResourceId, number]>) {
+    const half = Math.floor(n / 2);
+    if (half > 0) fee[r] = half;
+  }
+  const missing = affordabilityShortfall(state.inventory, fee);
+  if (Object.keys(missing).length > 0) {
+    return { ok: false, reason: 'insufficient-resources', missing };
+  }
+  for (const [r, n] of Object.entries(fee) as Array<[ResourceId, number]>) {
+    state.inventory[r] = (state.inventory[r] ?? 0) - n;
+  }
+  const mut = b as { x: number; y: number; rotation?: Rotation };
+  mut.x = newX;
+  mut.y = newY;
+  mut.rotation = rot;
+  return { ok: true, charged: fee };
 }
 
 export function demolishBuilding(
