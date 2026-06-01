@@ -798,6 +798,7 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
 // production defs' 25W / 60W consumes via the production catalog. The
 // heavier-draw MINE_PWR_80 needs a one-off catalog where mine consumes 80W.
 const SOLAR: PlacedBuilding = { id: 'b-solar', defId: 'solar', x: 0, y: 0 };
+// Kept off SOLAR's tile (0,0) so the §4.5 power-category cluster bonus doesn't form between them — the tests using both assert power balance, not adjacency.
 const COAL_GEN: PlacedBuilding = { id: 'b-coal-gen', defId: 'coal_gen', x: 10, y: 10 };
 const MINE_PWR: PlacedBuilding = MINE; // mine def already consumes 25W
 const WORKSHOP_PWR: PlacedBuilding = WORKSHOP; // workshop def already consumes 60W
