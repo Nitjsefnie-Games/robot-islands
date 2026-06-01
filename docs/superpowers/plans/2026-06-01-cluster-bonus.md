@@ -13,7 +13,8 @@
 ## File Structure
 
 - `src/adjacency.ts` — **modify.** Remove `categoryAdjacencyMul`; add `clusterBonusMul(b, buildings, defs)` and `clusterBonusMuls(buildings, defs): Map<id, number>`; add optional `clusterMul` param to `computeBuffStack`. Update the module header + doc comments from "neighbour count" to "cluster size".
-- `src/adjacency.test.ts` — **modify.** Rename the `categoryAdjacencyMul` describe block and its calls to `clusterBonusMul`; flip the cross-of-5 / line assertions to uniform; add `M E M` (different-category-doesn't-bridge), disjoint-cluster, ring-with-hole, multi-tile, and batch-vs-single cases. The existing `computeBuffStack` describe block is unchanged (its base values are preserved for those layouts).
+- `src/adjacency.test.ts` — **modify.** Rename the `categoryAdjacencyMul` describe block and its calls to `clusterBonusMul`; flip the cross-of-5 / line assertions to uniform; add `M E M` (different-category-doesn't-bridge), disjoint-cluster, ring-with-hole, multi-tile, and batch-vs-single cases. The existing `computeBuffStack` describe block keeps its base values (preserved for those layouts) — only the one stale test *title* referencing the deleted function is renamed.
+- `src/economy.test.ts:761` — **modify (expected-value fallout).** The "three mines in a line" fixture bakes in the OLD per-neighbour numbers (ends ×1.10). Under the cluster rule all three members are ×1.20; the asserted end rates rise 0.055 → 0.06. This is a *correct* consequence of the mechanic, updated explicitly — not a regression to revert.
 - `src/economy.ts` — **modify.** Import `clusterBonusMuls` instead of `categoryAdjacencyMul`; compute `clusterMuls` once after `validBuildings`; pass the focal building's value into `computeBuffStack` (line ~978) and use it for generator power (line ~1198).
 - `src/inspector-ui.ts` — **modify.** Import `clusterBonusMul` instead of `categoryAdjacencyMul`; rename the local `adjMul → clusterMul`; relabel `adjacency ×` → `cluster ×` (two sites).
 - `SPEC.md §4.5` — **modify.** Rewrite the buff-adjacency paragraph to the cluster formula and cite the new resolver names.
@@ -27,6 +28,7 @@
 - Modify: `src/adjacency.ts`
 - Modify: `src/adjacency.test.ts`
 - Modify: `src/economy.ts:14` (import), after `:772` (compute map), `:978`, `:1198`
+- Modify: `src/economy.test.ts:761-779` (three-mines fixture → uniform values)
 - Modify: `src/inspector-ui.ts:34` (import), `:1294`, `:1356`, `:1362`, `:1384-1386`
 
 - [ ] **Step 1: Rewrite the `categoryAdjacencyMul` test block as `clusterBonusMul` (the failing test)**
@@ -142,6 +144,8 @@ describe('clusterBonusMul — §4.5 per-cluster bonus', () => {
   });
 });
 ```
+
+Also rename the one stale title in the `computeBuffStack` describe block — line 28's `it('equals categoryAdjacencyMul when no exotic rules apply', …)` → `it('equals the cluster term when no exotic rules apply', …)`. Its body and assertion (a pair → 1.1) are unchanged.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -368,25 +372,54 @@ Then update the four downstream uses of the old `adjMul` name:
           : `+${fmtPower(prodAdj)} produced`);
 ```
 
-- [ ] **Step 6: Run the adjacency tests**
+(Cosmetic note: `clusterBonusMul` is fed `state.buildings.filter(isOperationalBuilding)`, so an inspected building that is itself paused/non-operational is absent from the set and reads ×1.0 — fine, since a paused building's rate is 0 anyway. No action needed; do not "fix" by passing the unfiltered list.)
+
+- [ ] **Step 6: Update the `economy.test.ts` three-mines fixture to uniform cluster values**
+
+This fixture bakes in the OLD per-neighbour numbers and MUST be updated (the mechanic change makes the ends ×1.20, not ×1.10). In `src/economy.test.ts`, replace the test at lines 761–779 with:
+
+```ts
+  it('three mines in a line: whole cluster gets uniform +20% (cluster size 3)', () => {
+    // Three 2x2 mines at x = -2, 0, 2 (all y=0) form one same-category
+    // 4-connected cluster of size 3. Per §4.5 the bonus is uniform across the
+    // cluster: 1 + (3 − 1) × 0.10 = ×1.20 for EVERY member (the middle and both
+    // ends alike) — not the old positional centre-1.20 / ends-1.10 split.
+    const west: PlacedBuilding = { id: 'b-w', defId: 'mine', x: -2, y: 0 };
+    const mid: PlacedBuilding = { id: 'b-m', defId: 'mine', x: 0, y: 0 };
+    const east: PlacedBuilding = { id: 'b-e', defId: 'mine', x: 2, y: 0 };
+    const state = makeState({
+      buildings: [west, mid, east],
+      inventory: blankInventory(),
+    });
+    const { byBuilding } = computeRates(state, { defs: POWER_FREE });
+    const midRate = byBuilding.find((r) => r.building === mid)?.effectiveRate;
+    const westRate = byBuilding.find((r) => r.building === west)?.effectiveRate;
+    const eastRate = byBuilding.find((r) => r.building === east)?.effectiveRate;
+    expect(midRate).toBeCloseTo(0.06, 9);
+    expect(westRate).toBeCloseTo(0.06, 9);
+    expect(eastRate).toBeCloseTo(0.06, 9);
+  });
+```
+
+- [ ] **Step 7: Run the adjacency tests**
 
 Run: `npx vitest run src/adjacency.test.ts`
 Expected: PASS — all cluster cases green, including the flipped uniform cross-of-5 / line-of-3 assertions and the batch-vs-single check.
 
-- [ ] **Step 7: Run the full suite**
+- [ ] **Step 8: Run the full suite**
 
 Run: `npm test`
-Expected: PASS — economy and inspector tests still green; no remaining reference to `categoryAdjacencyMul`.
+Expected: PASS. The known three-mines fixture is fixed in Step 6. **If any OTHER test fails**, first classify it before touching anything: a failure where a fixture places **3+ same-category buildings in one connected cluster** and the asserted recipe rate / generator power / accumulated inventory is now **higher** (the old `1 + n × 0.10` for a non-maximally-connected member becoming the uniform `1 + (k − 1) × 0.10`) is **expected, correct fallout** — update that test's expected number and its comment to the cluster value. Do **NOT** revert the mechanic, weaken `clusterBonusMul`, or fudge the new value to match the old assertion. A failure that is *not* of this shape (a pair or singleton changing, a NaN, a crash, an unrelated suite) is a real regression — stop and report it.
 
-- [ ] **Step 8: Typecheck / build**
+- [ ] **Step 9: Typecheck / build**
 
 Run: `npm run build`
 Expected: clean `tsc -b` (no unused-import error, no missing `categoryAdjacencyMul`), then a successful vite build.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add src/adjacency.ts src/adjacency.test.ts src/economy.ts src/inspector-ui.ts
+git add src/adjacency.ts src/adjacency.test.ts src/economy.ts src/economy.test.ts src/inspector-ui.ts
 git commit -m "feat(adjacency): per-cluster bonus replaces per-neighbour buff (§4.5)
 
 Rework categoryAdjacencyMul → clusterBonusMul: every building in a
@@ -456,6 +489,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Inspector relabel → Task 1 Step 5.
 - SPEC §4.5 + rate doc → Task 2.
 - Tests (sizes, uniformity, M E M, diagonal, disjoint, ring-with-hole, multi-tile via 2×2 mines, batch-vs-single) → Task 1 Step 1. (rate-0 short-circuit is covered structurally — all live categories are 0.10, so it is exercised implicitly and asserted by the guard; no dedicated test since no rate-0 category exists to place.)
+- Expected-value fallout in existing suites → Task 1 Step 6 fixes the one confirmed breakage (`economy.test.ts` three-mines, ends 0.055→0.06); Step 8 carries the classify-before-touching rule so any other 3+-cluster fixture is updated, never reverted. Heat-suite multi-building groups (coke-oven / blast-furnace rings) sit around a central heat source — not contiguous with each other — and assert heat fuel/throttle, not the recipe-rate buff, so they are not expected to move.
 
 **Placeholder scan:** none — every code step shows the full replacement text and exact lines.
 
