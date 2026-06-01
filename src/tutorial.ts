@@ -254,7 +254,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     id: '12_adjacency',
     mechanic: 'Adjacency buffs',
     triggerCondition: (w) => hasAdjacentSameType(w),
-    hint: 'Cluster same-type buildings for a +10% output bonus.',
+    hint: 'Cluster same-category buildings: each adjacent same-category building adds a flat +10% to recipe rate (and generator output), uncapped.',
     expectedAction: null,
     dismissalCondition: (w) => stepShownFor(w, '12_adjacency', 30_000),
     priority: 'recommended',
