@@ -883,6 +883,41 @@ describe('demolishBuilding', () => {
     expect(r.refunded.stone).toBe(5);
     expect(state.inventory.stone).toBe(75); // clamped
   });
+
+  it('refund and scrap scale with floor level', () => {
+    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0, floorLevel: 2 } as PlacedBuilding;
+    const spec = makeSpec({ buildings: [m1] });
+    const state = makeState(spec);
+    // Ensure headroom so refund/scrap aren't cap-clamped, and empty stockpiles.
+    state.storageCaps.scrap = 50000;
+    state.storageCaps.stone = 50000;
+    state.storageCaps.wood = 50000;
+    state.inventory.scrap = 0;
+    state.inventory.stone = 0;
+    state.inventory.wood = 0;
+    const r = demolishBuilding(spec, state, 'm1');
+    expect(r.ok).toBe(true);
+    // floor 2 total: stone 200+2×160=520, wood 80+2×64=208.
+    // refund floor(/2): stone 260, wood 104. scrap floor(0.3×728)=218.
+    expect(r.refunded).toEqual({ stone: 260, wood: 104 });
+    expect(r.scrapReturned).toBe(218);
+  });
+
+  it('floor 0 matches the base-cost refund/scrap values', () => {
+    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding; // floor 0
+    const spec = makeSpec({ buildings: [m1] });
+    const state = makeState(spec);
+    state.storageCaps.scrap = 50000;
+    state.storageCaps.stone = 50000;
+    state.storageCaps.wood = 50000;
+    state.inventory.scrap = 0;
+    state.inventory.stone = 0;
+    state.inventory.wood = 0;
+    const r = demolishBuilding(spec, state, 'm1');
+    expect(r.ok).toBe(true);
+    expect(r.refunded).toEqual({ stone: 100, wood: 40 }); // floor(0.5 × {200,80})
+    expect(r.scrapReturned).toBe(84); // floor(0.3 × 280)
+  });
 });
 
 describe('§8.8 coastal placement', () => {
