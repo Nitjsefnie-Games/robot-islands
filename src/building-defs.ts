@@ -398,33 +398,6 @@ export type BuildingDefId =
   | 'heavy_water_distiller'
   | 'geothermal_vent_generator';
 
-/**
- * §4.5 buff-adjacency entry: per matching 4-neighbor, multiply the building's
- * recipe rate by `1 + percentPerMatch / 100`, summed additively up to
- * `maxMatches` matches. Multiple AdjacencyBuff entries on the same def stack
- * MULTIPLICATIVELY (e.g. two entries each yielding ×1.20 → final ×1.44).
- *
- * `matchKind` selects what counts as a "matching" neighbor:
- *   - `'same_def'` — neighbor's `defId === this.defId` (clustering bonus).
- *   - `'same_category'` — neighbor's def category === this def's category.
- *   - `'def_id'` — neighbor's `defId === matchDefId` (cross-def synergy).
- *     `matchDefId` is REQUIRED when `matchKind === 'def_id'`.
- *
- * Resolution lives in `adjacency.ts` (`computeBuffStack`); the economy
- * applies the returned multiplier to the building's recipe `baseRate` in
- * both passes of `computeRates`. Per spec §4.4 the adjacency relation is
- * 4-neighbor over the footprint border, with a multi-tile neighbor sharing
- * multiple border tiles counted as a single match.
- */
-export interface AdjacencyBuff {
-  readonly matchKind: 'same_def' | 'same_category' | 'def_id';
-  /** Required when `matchKind === 'def_id'`; ignored otherwise. */
-  readonly matchDefId?: BuildingDefId;
-  /** Per-match additive percentage (e.g. 10 → +10%/match). */
-  readonly percentPerMatch: number;
-  /** Cap on the number of matches counted. */
-  readonly maxMatches: number;
-}
 
 /**
  * §4.5 universal category-adjacency rate. Each building gains
@@ -434,7 +407,7 @@ export interface AdjacencyBuff {
  * 0.10 — tune per category here. Categories whose buildings neither run a
  * recipe nor generate power (storage / logistics / cooling) are no-ops.
  */
-export const CATEGORY_ADJACENCY_RATE: Record<BuildingCategory, number> = {
+export const CATEGORY_ADJACENCY_RATE: Readonly<Record<BuildingCategory, number>> = {
   extraction: 0.1,
   smelting: 0.1,
   chemistry: 0.1,
@@ -567,11 +540,6 @@ export interface BuildingDef {
    *  proportional-throttle consumer side per rev-16 §5.1. Phase 1
    *  declares only. */
   readonly heatDemandKW?: number;
-  /** §4.5 buff-adjacency entries. Each entry contributes additively up to
-   *  its `maxMatches` cap; entries compose multiplicatively. Undefined or
-   *  empty = no adjacency buff (default). Resolution: `computeBuffStack`
-   *  in `adjacency.ts`, called from `computeRates`. */
-  readonly adjacencyBuffs?: ReadonlyArray<AdjacencyBuff>;
   /** §si-units rev-16 §7.4: CO₂ captured per recipe cycle when this
    *  building is running. Drained from `state.co2Kg` by the integrator
    *  in `advanceIsland`. Clamped at zero — sinks don't go negative. */
@@ -653,11 +621,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // cycle-break (P4C2b): removed iron_ingot per circular-deps invariant.
     placementCost: { stone: 200, wood: 80 },
     glyph: '⛏',
-    // §4.5 placeholder — tune in Appendix A. Mild clustering bonus rewards
-    // packing mines onto adjacent ore/coal veins.
-    adjacencyBuffs: [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ],
   },
   // §8.1 T2 extraction: Deep Mine (2x3, ore vein tile). Higher ore yield
   // than T1 Mine. Skill-tree Mining sub-path gate per §8.1 is enforced
@@ -691,11 +654,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // cycle-break (P4C2b): removed bolt per circular-deps invariant.
     placementCost: { wood: 150, stone: 100, iron_ingot: 30 },
     glyph: '⚙',
-    // §4.5 placeholder — tune in Appendix A. Manufacturing co-location bonus:
-    // small per-match rate boost up to three adjacent Workshops.
-    adjacencyBuffs: [
-      { matchKind: 'same_def', percentPerMatch: 5, maxMatches: 3 },
-    ],
   },
   // §15.6 saltwater-cell bootstrap — T1 manufacturing slot, single tile, 20W draw.
   // Crafts saltwater_cell (T2 component) from saltwater + iron_ingot + wire.
@@ -820,11 +778,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // cycle-break (P4C2b): removed iron_ingot per circular-deps invariant.
     placementCost: { stone: 400, clay: 100, wood: 20 },
     glyph: '△',
-    // §4.5 placeholder — tune in Appendix A. Paired smelters share heat
-    // efficiencies; gentle clustering bonus rewards a two-smelter line.
-    adjacencyBuffs: [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ],
   },
   crate: {
     id: 'crate',
