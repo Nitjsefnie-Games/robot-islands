@@ -15,7 +15,6 @@
 import {
   BUILDING_DEFS,
   CATEGORY_ADJACENCY_RATE,
-  type AdjacencyBuff,
   type BuildingDef,
   type BuildingDefId,
   type GateRequirement,
@@ -78,24 +77,6 @@ export function touchesBorder(
   return false;
 }
 
-/** Predicate: does `neighbor` satisfy the AdjacencyBuff entry relative to
- *  the focal building? Encapsulates the three matchKind variants per §4.5. */
-function neighborMatches(
-  focal: PlacedBuilding,
-  neighbor: PlacedBuilding,
-  entry: AdjacencyBuff,
-  defs: Readonly<Record<BuildingDefId, BuildingDef>>,
-): boolean {
-  switch (entry.matchKind) {
-    case 'same_def':
-      return neighbor.defId === focal.defId;
-    case 'same_category':
-      return defs[neighbor.defId].category === defs[focal.defId].category;
-    case 'def_id':
-      return entry.matchDefId !== undefined && neighbor.defId === entry.matchDefId;
-  }
-}
-
 /**
  * §4.5 universal category-adjacency multiplier. Counts the focal building's
  * distinct same-category physical 4-neighbours (de-duped by id; a multi-tile
@@ -128,21 +109,17 @@ export function categoryAdjacencyMul(
 }
 
 /**
- * Compute the multiplicative §4.5 buff stack for the focal building.
+ * §4.5 buff-adjacency multiplier for the focal building.
  *
- * Walks the focal building's 4-neighbor footprint border once to identify
- * the set of distinct neighboring buildings (de-duplicated by id, so a
- * multi-tile neighbor that shares N border tiles counts as a single
- * neighbor per §4.4's "union of tiles" framing). Then for each
- * AdjacencyBuff entry on the focal def, counts the matching neighbors and
- * applies `1 + min(count, maxMatches) × percentPerMatch/100` to the
- * running product.
+ * Returns `categoryAdjacencyMul × Π(exotic-pair bonuses)`. The category term
+ * (universal, per-category, linear, uncapped — see `categoryAdjacencyMul`)
+ * uses physical same-island neighbours only. The exotic-pair term carries the
+ * skill-tree `pairBoost` rewards (`skillUnlockedAdjacencyRules`) and keeps its
+ * original neighbour semantics: physical neighbours plus any `crossIsland`
+ * lattice buildings. Returns 1.0 when nothing applies.
  *
- * Returns 1.0 when the focal def has no `adjacencyBuffs` or no neighbors
- * match any entry. Pure function: no input is mutated. The `defs` parameter
- * defaults to the canonical `BUILDING_DEFS`; tests pass overrides to wire
- * placeholder buffs without touching the production catalog, and the economy
- * threads its `RatesContext.defs` catalog through.
+ * Signature is unchanged from the previous per-def implementation so the
+ * economy call site (`computeRates`) needs no edit.
  */
 export function computeBuffStack(
   b: PlacedBuilding,
@@ -151,58 +128,12 @@ export function computeBuffStack(
   crossIsland?: ReadonlyArray<PlacedBuilding>,
   exoticRules?: ReadonlyArray<{ readonly pair: readonly [BuildingDefId, BuildingDefId]; readonly recipeRateBonus: number }>,
 ): number {
-  const def = defs[b.defId];
-  const buffs = def.adjacencyBuffs;
-  const hasNativeBuffs = buffs && buffs.length > 0;
-  const hasExotic = exoticRules && exoticRules.length > 0;
-  if (!hasNativeBuffs && !hasExotic) return 1;
-
-  const fp = footprintKeySet(b, defs);
-  const border = borderTiles(fp);
-
-  // Distinct neighboring buildings (by id) whose footprint touches our
-  // border. De-duplication is the §4.4 "union" semantics: a 3×3 neighbor
-  // crossing three of the focal's border tiles counts as one neighbor,
-  // not three. Self is excluded both by border-tile filtering (own
-  // footprint excluded from border) and a defensive id check.
-  const neighbors: PlacedBuilding[] = [];
-  const seen = new Set<string>();
-  for (const other of buildings) {
-    if (other.id === b.id) continue;
-    if (seen.has(other.id)) continue;
-    if (!touchesBorder(other, border, defs)) continue;
-    seen.add(other.id);
-    neighbors.push(other);
-  }
-  // §13.3 Omniscient Lattice: cross-island buildings count as neighbors
-  // despite physical distance. Added unconditionally when provided.
-  if (crossIsland) {
-    for (const other of crossIsland) {
-      if (other.id === b.id) continue;
-      if (seen.has(other.id)) continue;
-      seen.add(other.id);
-      neighbors.push(other);
-    }
-  }
-
-  let stack = 1;
-  if (hasNativeBuffs) {
-    for (const entry of buffs) {
-      let count = 0;
-      for (const n of neighbors) {
-        if (neighborMatches(b, n, entry, defs)) count++;
-      }
-      if (count <= 0) continue;
-      const effective = Math.min(count, entry.maxMatches);
-      stack *= 1 + (effective * entry.percentPerMatch) / 100;
-    }
-  }
-
-  if (exoticRules) {
+  let stack = categoryAdjacencyMul(b, buildings, defs);
+  if (exoticRules && exoticRules.length > 0) {
+    const neighbors = collectNeighbors(b, buildings, defs, crossIsland);
     for (const rule of exoticRules) {
-      if (b.defId === rule.pair[0]) {
-        const hasPair = neighbors.some((n) => n.defId === rule.pair[1]);
-        if (hasPair) stack *= 1 + rule.recipeRateBonus;
+      if (b.defId === rule.pair[0] && neighbors.some((n) => n.defId === rule.pair[1])) {
+        stack *= 1 + rule.recipeRateBonus;
       }
     }
   }
