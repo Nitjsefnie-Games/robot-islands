@@ -13,6 +13,7 @@ import {
   ALL_BUILDING_DEF_IDS,
   BUILDING_DEFS,
   CATEGORY_ADJACENCY_RATE,
+  LAND_TILE_COST,
   buildingUnlocked,
   canPlaceOnIsland,
   unlockedDefs,
@@ -2439,5 +2440,11 @@ describe('CATEGORY_ADJACENCY_RATE', () => {
     for (const def of Object.values(BUILDING_DEFS)) {
       expect(CATEGORY_ADJACENCY_RATE[def.category]).toBeTypeOf('number');
     }
+  });
+});
+
+describe('LAND_TILE_COST', () => {
+  it('is the per-land-tile structural basket', () => {
+    expect(LAND_TILE_COST).toEqual({ steel_beam: 1, concrete: 10 });
   });
 });
