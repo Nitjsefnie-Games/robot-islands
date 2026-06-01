@@ -35,11 +35,15 @@ import {
   formatShortfall,
   placeBuilding,
   placementCostFor,
+  relocateBuilding,
+  totalInvestedCost,
   validatePlacement,
   validateOceanPlacement,
   type OceanPlacementReason,
   type PlacementReason,
 } from './placement.js';
+import type { PlacedBuilding } from './buildings.js';
+import { DEFAULT_GRAPH } from './skilltree.js';
 import { candidateAnchors, type AnchorCandidate } from './anchor-picker.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { ResourceId } from './recipes.js';
@@ -88,6 +92,10 @@ export interface PlacementUiHandle {
   begin(defId: BuildingDefId): void;
   /** Exit placement mode without placing. Idempotent (no-op when inactive). */
   cancel(): void;
+  /** Enter relocate mode for an existing building: ghost follows the cursor,
+   *  validity ignores the building's own footprint, commit charges the
+   *  half-fee via relocateBuilding. */
+  beginRelocate(building: PlacedBuilding): void;
   /** Rotate the in-progress placement clockwise (0 → 1 → 2 → 3 → 0). */
   rotate(): void;
   /** Update the cursor's screen position; recompute the preview's tile snap
@@ -127,6 +135,9 @@ export interface PlacementUiDeps {
   screenToWorldTile(screenX: number, screenY: number): { x: number; y: number };
   /** Called after a successful place so main.ts can rebuild render layers. */
   onPlaced(): void;
+  /** Called after a successful relocate commit so the host rebuilds world
+   *  layers (mirrors the post-placement onPlaced rebuild). Optional. */
+  onRelocated?: () => void;
   /** §4.6 placement-time cargo-label picker. Invoked by `begin()` when the
    *  selected def is generic-storage (`def.storage?.category === 'generic'`);
    *  the returned promise resolves with the player's chosen ResourceId or
@@ -236,6 +247,10 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
    *  captures the counter at dispatch; on resolution it compares against
    *  the current counter and bails if they differ. */
   let beginEpoch = 0;
+  /** Non-null while relocating an existing building (vs. placing a new one).
+   *  Carries the building so the ghost can show the move fee and pass its id
+   *  to validatePlacement as ignoreBuildingId. */
+  let relocating: PlacedBuilding | null = null;
 
   // World-space outline layer (scales with zoom).
   const previewLayer = new Container();
@@ -291,14 +306,9 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     const localX = Math.round(wt.x - targetSpec.cx);
     const localY = Math.round(wt.y - targetSpec.cy);
 
-    const v = validatePlacement(
-      targetSpec,
-      targetState,
-      activeDefId,
-      localX,
-      localY,
-      rotation,
-    );
+    const v = relocating
+      ? validatePlacement(targetSpec, targetState, activeDefId, localX, localY, rotation, DEFAULT_GRAPH, relocating.id, true)
+      : validatePlacement(targetSpec, targetState, activeDefId, localX, localY, rotation);
     const color = v.ok ? OK_COLOR : WARN_COLOR;
 
     // Footprint outline — one stroked rectangle per tile, plus a translucent
@@ -363,7 +373,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     //      red when short and the OK colour when affordable, summarising
     //      the §14 affordability snapshot at a glance even when the
     //      cursor is over a valid tile.
-    const labelMain = `${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}`;
+    const labelMain = `${relocating ? 'MOVE ' : ''}${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}`;
     const labelTail = v.ok
       ? ''
       : v.reason === 'insufficient-resources' && v.missing
@@ -372,7 +382,13 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // §14 cost row — always rendered, summarising the basket regardless of
     // current cursor state. Computed from inventory vs def cost; per-entry
     // sufficiency is the input for the cost-row colour decision.
-    const cost = placementCostFor(def);
+    const cost = relocating
+      ? Object.fromEntries(
+          (Object.entries(totalInvestedCost(relocating, def)) as Array<[ResourceId, number]>)
+            .map(([r, n]) => [r, Math.floor(n / 2)] as const)
+            .filter(([, half]) => half > 0),
+        ) as Partial<Record<ResourceId, number>>
+      : placementCostFor(def);
     const shortfall = affordabilityShortfall(targetState.inventory, cost);
     const costEntries: Array<[ResourceId, number]> = Object.entries(
       cost,
@@ -385,7 +401,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
             .join(', ');
     const costShort = Object.keys(shortfall).length > 0;
     labelText.text =
-      labelMain + labelTail + (costStr ? `\nCOST: ${costStr}` : '');
+      labelMain + labelTail + (costStr ? `\n${relocating ? 'FEE' : 'COST'}: ${costStr}` : '');
     // Cost-row colour: red when ANY cost entry is short on inventory, OK
     // colour otherwise. The validation tail's own colour (which drives the
     // main `color` var) is independent — geometry failures still paint the
@@ -550,6 +566,15 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     activeDefId = defId;
     paintOutlineAndLabel();
   }
+  function beginRelocate(building: PlacedBuilding): void {
+    cancel();                 // clear any in-flight placement (also nulls relocating)
+    relocating = building;
+    active = true;
+    activeDefId = building.defId;
+    rotation = (building.rotation ?? 0) as Rotation;
+    cursorSeen = false;
+    paintOutlineAndLabel();
+  }
   function cancel(): void {
     // Bump the epoch so any in-flight picker promise becomes stale on
     // resolve — covers the case where the player hits Escape, fires a
@@ -557,6 +582,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // resolved yet. The early-return is preserved for the common case
     // where placement was already armed (no picker in flight).
     beginEpoch++;
+    relocating = null;
     if (!active) return;
     active = false;
     activeDefId = null;
@@ -701,6 +727,16 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     const targetState = deps.getTargetState();
     const localX = Math.round(wt.x - targetSpec.cx);
     const localY = Math.round(wt.y - targetSpec.cy);
+    if (relocating) {
+      const result = relocateBuilding(targetSpec, targetState, relocating.id, localX, localY, rotation);
+      if (!result.ok) {
+        recordRejection();
+        return { ok: false, reason: result.reason === 'not-found' ? undefined : result.reason };
+      }
+      deps.onRelocated?.();
+      cancel();
+      return { ok: true };
+    }
     const v = validatePlacement(
       targetSpec,
       targetState,
@@ -745,6 +781,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     statusLayer,
     isActive: () => active,
     begin,
+    beginRelocate,
     cancel,
     rotate,
     setCursorScreenPos,
