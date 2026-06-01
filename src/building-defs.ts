@@ -399,12 +399,13 @@ export type BuildingDefId =
   | 'geothermal_vent_generator';
 
 /**
- * §4.5 universal category-adjacency rate. Each building gains
- * `1 + n × CATEGORY_ADJACENCY_RATE[category]` to its recipe rate (and, for
- * generators, its power output), where `n` is the count of distinct
- * same-category physical 4-neighbours. Linear, uncapped. Seeded uniform at
- * 0.10 — tune per category here. Categories whose buildings neither run a
- * recipe nor generate power (storage / logistics / cooling) are no-ops.
+ * §4.5 universal per-category cluster-bonus rate. Each building gains
+ * `1 + (k − 1) × CATEGORY_ADJACENCY_RATE[category]` to its recipe rate (and,
+ * for generators, its power output), where `k` is the size of the building's
+ * same-category 4-connected cluster. Uniform across the cluster, linear,
+ * uncapped. Seeded uniform at 0.10 — tune per category here. Categories whose
+ * buildings neither run a recipe nor generate power (storage / logistics /
+ * cooling) are no-ops.
  */
 export const CATEGORY_ADJACENCY_RATE: Readonly<Record<BuildingCategory, number>> = {
   extraction: 0.1,
