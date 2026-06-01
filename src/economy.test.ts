@@ -758,10 +758,11 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     }
   });
 
-  it('three mines in a line: middle +20% (two neighbours), outer +10% each', () => {
-    // Three 2x2 mines at x = -2, 0, 2 (all y=0). Middle (0,0) has TWO
-    // same-category neighbours → 1 + 2×0.10 = ×1.20 (linear, uncapped). Outer two each have one
-    // neighbour: rate × 1.10. Verifies linear stacking: two neighbours give exactly +20%.
+  it('three mines in a line: whole cluster gets uniform +20% (cluster size 3)', () => {
+    // Three 2x2 mines at x = -2, 0, 2 (all y=0) form one same-category
+    // 4-connected cluster of size 3. Per §4.5 the bonus is uniform across the
+    // cluster: 1 + (3 − 1) × 0.10 = ×1.20 for EVERY member (the middle and both
+    // ends alike) — not the old positional centre-1.20 / ends-1.10 split.
     const west: PlacedBuilding = { id: 'b-w', defId: 'mine', x: -2, y: 0 };
     const mid: PlacedBuilding = { id: 'b-m', defId: 'mine', x: 0, y: 0 };
     const east: PlacedBuilding = { id: 'b-e', defId: 'mine', x: 2, y: 0 };
@@ -774,8 +775,8 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     const westRate = byBuilding.find((r) => r.building === west)?.effectiveRate;
     const eastRate = byBuilding.find((r) => r.building === east)?.effectiveRate;
     expect(midRate).toBeCloseTo(0.06, 9);
-    expect(westRate).toBeCloseTo(0.055, 9);
-    expect(eastRate).toBeCloseTo(0.055, 9);
+    expect(westRate).toBeCloseTo(0.06, 9);
+    expect(eastRate).toBeCloseTo(0.06, 9);
   });
 
   it('buff stack is observable in actual production over time', () => {
@@ -797,7 +798,7 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
 // production defs' 25W / 60W consumes via the production catalog. The
 // heavier-draw MINE_PWR_80 needs a one-off catalog where mine consumes 80W.
 const SOLAR: PlacedBuilding = { id: 'b-solar', defId: 'solar', x: 0, y: 0 };
-const COAL_GEN: PlacedBuilding = { id: 'b-coal-gen', defId: 'coal_gen', x: 0, y: 0 };
+const COAL_GEN: PlacedBuilding = { id: 'b-coal-gen', defId: 'coal_gen', x: 10, y: 10 };
 const MINE_PWR: PlacedBuilding = MINE; // mine def already consumes 25W
 const WORKSHOP_PWR: PlacedBuilding = WORKSHOP; // workshop def already consumes 60W
 const MINE_PWR_80: PlacedBuilding = { id: 'b-mine-80', defId: 'mine', x: 0, y: 0 };
