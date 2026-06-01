@@ -11,7 +11,7 @@
 // linear and exact. The integration converges in O(events × resources)
 // regardless of `now - lastTick`, so multi-day offline catchup is cheap.
 
-import { borderTiles, checkGates, computeBuffStack, footprintKeySet, touchesBorder } from './adjacency.js';
+import { borderTiles, categoryAdjacencyMul, checkGates, computeBuffStack, footprintKeySet, touchesBorder } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { nextConstructionCompletionMs, tickConstruction } from './construction.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
@@ -1192,7 +1192,11 @@ export function computeRates(
     // currently only `wind_turbine`) get +50% wattage on `high_wind`
     // islands. Non-wind producers ignore the multiplier (defaults to 1×).
     const windFactor = def.power?.kind === 'wind' ? modifierMul.windPowerMul : 1;
-    powerProduced += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction;
+    // §4.5: generator output scales by the building's category-adjacency
+    // multiplier (clustered generators boost each other). Consumption below
+    // is deliberately NOT scaled.
+    const adjMul = categoryAdjacencyMul(b, validBuildings, defs);
+    powerProduced += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction * adjMul;
     // §5.1 rebalance: per-building draw scales by nominal throughput fraction.
     // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
     // so we divide. Default 1.0 leaves draw untouched.

@@ -739,11 +739,11 @@ describe('advanceIsland — magic recipeInputMul reduces input drawdown (real sk
 });
 
 describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
-  it('two adjacent mines each gain the same_def +10% buff (1 match, cap 2)', () => {
-    // Mine placeholder buff: +10% per same_def neighbor, cap 2. Two mines
+  it('two adjacent mines each gain +10% category adjacency (1 same-category neighbour)', () => {
+    // Mine is category 'extraction', rate 0.10 per same-category neighbour. Two mines
     // sharing a footprint border (2x2 at (0,0) and (2,0) → mine-A's east
     // border at column 2 intersects mine-B's western column) → each has
-    // one matching neighbor → rate × 1.10. Base rate 1/50s = 0.02.
+    // one same-category neighbour → rate × 1.10. Base rate 1/50s = 0.02.
     const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
     const mineB: PlacedBuilding = { id: 'b-mine-b', defId: 'mine', x: 2, y: 0 };
     const state = makeState({
@@ -758,11 +758,10 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     }
   });
 
-  it('three mines in a line: middle caps at +20%, outer +10% each', () => {
+  it('three mines in a line: middle +20% (two neighbours), outer +10% each', () => {
     // Three 2x2 mines at x = -2, 0, 2 (all y=0). Middle (0,0) has TWO
-    // neighbors (cap 2 hit): rate × 1.20. Outer two each have one
-    // neighbor: rate × 1.10. Verifies the cap is the right ceiling and
-    // not silently exceeded.
+    // same-category neighbours → 1 + 2×0.10 = ×1.20 (linear, uncapped). Outer two each have one
+    // neighbour: rate × 1.10. Verifies linear stacking: two neighbours give exactly +20%.
     const west: PlacedBuilding = { id: 'b-w', defId: 'mine', x: -2, y: 0 };
     const mid: PlacedBuilding = { id: 'b-m', defId: 'mine', x: 0, y: 0 };
     const east: PlacedBuilding = { id: 'b-e', defId: 'mine', x: 2, y: 0 };
@@ -1106,6 +1105,30 @@ describe('power (§5.1)', () => {
     });
     // Solar ~50W + Coal Gen 5000 kW — same as the identity-modifier run (energy SI rebalance).
     expect(power.produced).toBeGreaterThan(5000);
+  });
+
+  it('clustered generators boost each other output by +10% per same-category neighbour', () => {
+    // Two adjacent Water Wheels (category 'power', 20 kW each, no fuel) → each
+    // has one same-category neighbour → ×1.10 → 22 kW each → 44 kW total.
+    const wwA: PlacedBuilding = { id: 'b-ww-a', defId: 'water_wheel', x: 0, y: 0 };
+    const wwB: PlacedBuilding = { id: 'b-ww-b', defId: 'water_wheel', x: 1, y: 0 };
+    const clustered = makeState({ buildings: [wwA, wwB], inventory: blankInventory() });
+    const solo = makeState({
+      buildings: [{ id: 'b-ww', defId: 'water_wheel', x: 0, y: 0 }],
+      inventory: blankInventory(),
+    });
+    expect(computeRates(clustered).power.produced).toBeCloseTo(44, 5);
+    expect(computeRates(solo).power.produced).toBeCloseTo(20, 5);
+  });
+
+  it('category buff speeds recipes but does NOT inflate power draw', () => {
+    // Two adjacent mines (real defs, 25 W each). Recipe rate is buffed ×1.10
+    // by category adjacency, but power CONSUMPTION is unaffected: 25 + 25 = 50,
+    // not 55.
+    const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
+    const mineB: PlacedBuilding = { id: 'b-mine-b', defId: 'mine', x: 2, y: 0 };
+    const state = makeState({ buildings: [mineA, mineB], inventory: blankInventory() });
+    expect(computeRates(state).power.consumed).toBe(50);
   });
 });
 
@@ -3271,8 +3294,9 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
     const { byBuilding } = computeRates(state, { defs: noPower }, nowMs);
     const rateA = byBuilding.find((r) => r.building.id === 'b-cr-a')!.effectiveRate;
     const rateB = byBuilding.find((r) => r.building.id === 'b-cr-b')!.effectiveRate;
-    // Base rate = 1/2345.4. No other multipliers apply in this fixture.
-    expect(rateB).toBeCloseTo(0.0004263665046473949, 9);
+    // Base rate 1/2345.4 × 1.10 category-adjacency buff: reactorA and reactorB
+    // are adjacent same-category (chemistry) buildings, so each gets +10%.
+    expect(rateB).toBeCloseTo(0.0004690031551121344, 9);
     expect(rateA).toBeCloseTo(rateB * 0.5, 9);
   });
 
