@@ -24,6 +24,7 @@ import type { IslandState } from './economy.js';
 import { hasOperationalBuilding } from './buildings.js';
 import { tierForLevel } from './skilltree.js';
 import { mountModal } from './ui-modal.js';
+import type { ResourceId } from './recipes.js';
 import {
   distSqTiles,
   ISLAND_NAME_MAX_LEN,
@@ -265,26 +266,7 @@ export function mountConstructionUi(
     customName = nameInput.value;
   });
 
-  const steelValue = document.createElement('span');
-  steelValue.classList.add('ri-mono');
-  steelValue.textContent = '—';
-  steelValue.style.color = 'var(--ri-fg-1)';
-  steelValue.style.fontSize = '13px';
-  steelValue.style.fontWeight = '600';
-
-  const ironValue = document.createElement('span');
-  ironValue.classList.add('ri-mono');
-  ironValue.textContent = '—';
-  ironValue.style.color = 'var(--ri-fg-1)';
-  ironValue.style.fontSize = '13px';
-  ironValue.style.fontWeight = '600';
-
-  const woodValue = document.createElement('span');
-  woodValue.classList.add('ri-mono');
-  woodValue.textContent = '—';
-  woodValue.style.color = 'var(--ri-fg-1)';
-  woodValue.style.fontSize = '13px';
-  woodValue.style.fontWeight = '600';
+  let costGrid: HTMLDivElement | undefined;
 
   const statusEl = document.createElement('span');
   statusEl.className = 'ri-muted';
@@ -301,6 +283,25 @@ export function mountConstructionUi(
     tryConstruct();
     constructBtn.blur();
   });
+
+  function makeCostBox(label: string, valueEl: HTMLSpanElement): HTMLDivElement {
+    const wrap = document.createElement('div');
+    wrap.style.border = '1px solid var(--ri-border-strong)';
+    wrap.style.padding = '6px 8px';
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.gap = '2px';
+    wrap.style.background = 'rgba(20, 24, 32, 0.4)';
+    const l = document.createElement('span');
+    l.textContent = label;
+    l.style.color = 'var(--ri-fg-3)';
+    l.style.fontSize = '10px';
+    l.style.letterSpacing = '0.10em';
+    l.style.textTransform = 'uppercase';
+    wrap.appendChild(l);
+    wrap.appendChild(valueEl);
+    return wrap;
+  }
 
   const handle = mountModal(parentEl, {
     title: 'CONSTRUCT',
@@ -424,33 +425,10 @@ export function mountConstructionUi(
       costLabel.className = 'ri-sectionhead';
       costSection.appendChild(costLabel);
 
-      const costGrid = document.createElement('div');
+      costGrid = document.createElement('div');
       costGrid.style.display = 'grid';
-      costGrid.style.gridTemplateColumns = '1fr 1fr 1fr';
+      costGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(100px, 1fr))';
       costGrid.style.gap = '8px';
-
-      function makeCostBox(label: string, valueEl: HTMLSpanElement): HTMLDivElement {
-        const wrap = document.createElement('div');
-        wrap.style.border = '1px solid var(--ri-border-strong)';
-        wrap.style.padding = '6px 8px';
-        wrap.style.display = 'flex';
-        wrap.style.flexDirection = 'column';
-        wrap.style.gap = '2px';
-        wrap.style.background = 'rgba(20, 24, 32, 0.4)';
-        const l = document.createElement('span');
-        l.textContent = label;
-        l.style.color = 'var(--ri-fg-3)';
-        l.style.fontSize = '10px';
-        l.style.letterSpacing = '0.10em';
-        l.style.textTransform = 'uppercase';
-        wrap.appendChild(l);
-        wrap.appendChild(valueEl);
-        return wrap;
-      }
-
-      costGrid.appendChild(makeCostBox('Steel', steelValue));
-      costGrid.appendChild(makeCostBox('Iron Ingot', ironValue));
-      costGrid.appendChild(makeCostBox('Wood', woodValue));
       costSection.appendChild(costGrid);
       body.appendChild(costSection);
     },
@@ -524,9 +502,22 @@ export function mountConstructionUi(
     const founder = selectedFounder
       ? eligible.find((e) => e.spec.id === selectedFounder)
       : null;
-    paintCostRow(steelValue, cost.steel, founder?.state.inventory.steel ?? 0);
-    paintCostRow(ironValue, cost.iron_ingot, founder?.state.inventory.iron_ingot ?? 0);
-    paintCostRow(woodValue, cost.wood, founder?.state.inventory.wood ?? 0);
+    // Rebuild cost rows dynamically from basket
+    if (costGrid) {
+      costGrid.innerHTML = '';
+      for (const [resource, amount] of Object.entries(cost)) {
+        const valueSpan = document.createElement('span');
+        valueSpan.classList.add('ri-mono');
+        valueSpan.textContent = '—';
+        valueSpan.style.color = 'var(--ri-fg-1)';
+        valueSpan.style.fontSize = '13px';
+        valueSpan.style.fontWeight = '600';
+        const label = resource.toUpperCase().replace(/_/g, ' ');
+        costGrid.appendChild(makeCostBox(label, valueSpan));
+        const have = founder?.state.inventory[resource as ResourceId] ?? 0;
+        paintCostRow(valueSpan, amount, have);
+      }
+    }
 
     let reason: ValidationReason | 'overlap' | null = null;
     if (!founder) {
