@@ -11,7 +11,7 @@
 // linear and exact. The integration converges in O(events × resources)
 // regardless of `now - lastTick`, so multi-day offline catchup is cheap.
 
-import { borderTiles, categoryAdjacencyMul, checkGates, computeBuffStack, footprintKeySet, touchesBorder } from './adjacency.js';
+import { borderTiles, checkGates, clusterBonusMuls, computeBuffStack, footprintKeySet, touchesBorder } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { nextConstructionCompletionMs, tickConstruction } from './construction.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
@@ -770,6 +770,10 @@ export function computeRates(
   // neither power nor recipe inputs, contribute zero output, and are
   // invisible to adjacency-buff scans until they finish.
   const validBuildings = state.buildings.filter((b) => isOperationalBuilding(b));
+  // §4.5 cluster-bonus multipliers — labelled once per tick for the whole
+  // island; recipe-rate (computeBuffStack) and generator-power both read from
+  // this map instead of re-deriving each building's cluster.
+  const clusterMuls = clusterBonusMuls(validBuildings, defs);
   // §2.7 day-night cycle. `nowMs` defaults to `state.lastTick` so existing
   // callers (and tests) that don't pass an explicit time see the multiplier
   // for the state's own clock. The integrator in `advanceIsland` passes the
@@ -975,7 +979,7 @@ export function computeRates(
     // sees the same factor and producer/consumer supply ratios stay correct.
     // Returns 1.0 when no same-category neighbour and no exotic rule applies.
     const exoticRules = skillUnlockedAdjacencyRules(state);
-    const buffStack = computeBuffStack(b, validBuildings, defs, undefined, exoticRules);
+    const buffStack = computeBuffStack(b, validBuildings, defs, undefined, exoticRules, clusterMuls.get(b.id) ?? 1);
     // §9.7 Tier Reset runtime gate: a building above the island's current
     // tier band is fully inactive — same shape as the heat / output stall,
     // baseRate=0 + skipped in the pass-3 power balance.
@@ -1195,7 +1199,7 @@ export function computeRates(
     // §4.5: generator output scales by the building's category-adjacency
     // multiplier (clustered generators boost each other). Consumption below
     // is deliberately NOT scaled.
-    const adjMul = categoryAdjacencyMul(b, validBuildings, defs);
+    const adjMul = clusterMuls.get(b.id) ?? 1;
     powerProduced += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction * adjMul;
     // §5.1 rebalance: per-building draw scales by nominal throughput fraction.
     // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
