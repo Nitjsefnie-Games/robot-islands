@@ -1080,6 +1080,9 @@ async function main(): Promise<void> {
     onPlaced: () => {
       rebuildWorldLayers();
     },
+    onRelocated: () => {
+      rebuildWorldLayers();
+    },
     pickCargoLabel: () => cargoLabelPicker.pick(),
     pickTerrainTarget: () => terrainTargetPicker.pick(),
     getWorld: () => worldState,
@@ -1259,6 +1262,14 @@ async function main(): Promise<void> {
       repaintHover();
       repaintSelection();
       rebuildWorldLayers();
+    },
+    onMove: (target: InspectorTarget) => {
+      inspector.close();
+      selectedSpec = null;
+      hoveredBuilding = null;
+      repaintHover();
+      repaintSelection();
+      placementUi.beginRelocate(target.building);
     },
     onToggleDisabled: (target: InspectorTarget) => {
       const b = target.building;

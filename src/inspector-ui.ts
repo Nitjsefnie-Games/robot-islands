@@ -33,7 +33,7 @@ import {
 } from './building-defs.js';
 import { categoryAdjacencyMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { affordabilityShortfall, formatShortfall, inProgressBuildCount, parallelBuildSlots, totalInvestedCost, upgradeCost } from './placement.js';
+import { affordabilityShortfall, formatShortfall, inProgressBuildCount, parallelBuildSlots, relocateFee, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
 import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
@@ -178,6 +178,7 @@ export interface InspectorDeps {
    *  caller wants to refuse with no state change), but the step-2.5 path
    *  always succeeds. */
   onDemolish(target: InspectorTarget): void;
+  onMove(target: InspectorTarget): void;
   /** Toggle target.building.disabled. Called from the new disableBtn.
    *  main.ts flips the flag, drains routes on the false→true
    *  transition (per p_routes_disabled_source=route_drains_and_removes
@@ -1109,6 +1110,25 @@ export function mountInspectorUi(
   });
   footerSection.appendChild(demolishBtn);
 
+  const moveBtn = document.createElement('button');
+  styled(
+    moveBtn,
+    [
+      `color: ${'var(--ri-accent)'}`,
+      'padding: 5px 10px',
+      'font-family: ui-monospace, monospace',
+      'font-size: 11px',
+      'letter-spacing: 0.14em',
+      'text-transform: uppercase',
+    ].join(';'),
+  );
+  moveBtn.addEventListener('click', () => {
+    if (!target) return;
+    if (moveBtn.disabled) return;
+    deps.onMove(target);
+  });
+  footerSection.appendChild(moveBtn);
+
   body.appendChild(nameRow);
   body.appendChild(titleRow);
   body.appendChild(subtitleRow);
@@ -1717,6 +1737,22 @@ export function mountInspectorUi(
     // doesn't have to click before learning the cost.
     const credit = previewScrapForBuilding(building);
     demolishBtn.textContent = `▼ DEMOLISH · +${credit} SCRAP`;
+
+    // Move button — relocate fee preview, ocean defs can't relocate, greyed
+    // when the fee is unaffordable.
+    if (def.oceanPlacement === true) {
+      moveBtn.style.display = 'none';
+    } else {
+      moveBtn.style.display = '';
+      const fee = relocateFee(building, def);
+      const feeStr = Object.entries(fee)
+        .map(([r, n]) => `${n} ${r.toUpperCase().replace(/_/g, ' ')}`)
+        .join(', ');
+      const cantAfford = Object.keys(affordabilityShortfall(state.inventory, fee)).length > 0;
+      moveBtn.textContent = feeStr ? `✥ MOVE · −${feeStr}` : '✥ MOVE';
+      moveBtn.disabled = cantAfford;
+      moveBtn.style.opacity = cantAfford ? '0.5' : '1';
+    }
   }
 
   function open(t: InspectorTarget): void {
