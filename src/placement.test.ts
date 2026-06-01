@@ -17,6 +17,7 @@ import {
   formatShortfall,
   placeBuilding,
   placementCostFor,
+  relocateBuilding,
   sortByFillDesc,
   totalInvestedCost,
   upgradeCost,
@@ -1722,6 +1723,80 @@ describe('formatShortfall', () => {
   it('skips non-positive entries and returns "" for an empty record', () => {
     expect(formatShortfall({})).toBe('');
     expect(formatShortfall({ stone: 0 })).toBe('');
+  });
+});
+
+describe('relocateBuilding', () => {
+  it('moves the building, charges floor(0.5 × total), preserves state', () => {
+    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0, constructionRemainingMs: 5000, disabled: true } as PlacedBuilding;
+    const spec = makeSpec({ buildings: [m1] });
+    const state = makeState(spec);
+    const stone0 = state.inventory.stone;
+    const wood0 = state.inventory.wood;
+    const r = relocateBuilding(spec, state, 'm1', 4, 0);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.charged).toEqual({ stone: 100, wood: 40 }); // floor(0.5 × {200,80})
+    expect(state.inventory.stone).toBe(stone0 - 100);
+    expect(state.inventory.wood).toBe(wood0 - 40);
+    expect(spec.buildings.length).toBe(1);
+    expect(m1.x).toBe(4);
+    expect(m1.y).toBe(0);
+    // "just teleport": all other state preserved
+    expect(m1.constructionRemainingMs).toBe(5000);
+    expect(m1.disabled).toBe(true);
+    expect(m1.defId).toBe('mine');
+  });
+
+  it('allows a 1-tile shift overlapping its own current footprint', () => {
+    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+    const spec = makeSpec({ buildings: [m1] });
+    const state = makeState(spec);
+    const r = relocateBuilding(spec, state, 'm1', 1, 0);
+    expect(r.ok).toBe(true);
+    expect(m1.x).toBe(1);
+  });
+
+  it('rejects overlap with another building (inventory + position unchanged)', () => {
+    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+    const m2 = { id: 'm2', defId: 'mine', x: 4, y: 0 } as PlacedBuilding;
+    const spec = makeSpec({ buildings: [m1, m2] });
+    const state = makeState(spec);
+    const stone0 = state.inventory.stone;
+    const r = relocateBuilding(spec, state, 'm1', 4, 0);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('overlap');
+    expect(m1.x).toBe(0);
+    expect(state.inventory.stone).toBe(stone0);
+  });
+
+  it('rejects when destination fails the terrain requiredTile', () => {
+    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+    const spec = makeSpec({ buildings: [m1], terrainAt: () => 'grass' });
+    const state = makeState(spec);
+    const r = relocateBuilding(spec, state, 'm1', 2, 0);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('tile-requirement-not-met');
+    expect(m1.x).toBe(0);
+  });
+
+  it('rejects insufficient-resources for the fee and does not move', () => {
+    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+    const spec = makeSpec({ buildings: [m1] });
+    const state = makeState(spec);
+    state.inventory.stone = 0;
+    state.inventory.wood = 0;
+    const r = relocateBuilding(spec, state, 'm1', 4, 0);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('insufficient-resources');
+    expect(m1.x).toBe(0);
+  });
+
+  it('returns not-found for an unknown id', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const r = relocateBuilding(spec, state, 'nope', 4, 0);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('not-found');
   });
 });
 
