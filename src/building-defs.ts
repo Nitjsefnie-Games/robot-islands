@@ -398,7 +398,6 @@ export type BuildingDefId =
   | 'heavy_water_distiller'
   | 'geothermal_vent_generator';
 
-
 /**
  * §4.5 universal category-adjacency rate. Each building gains
  * `1 + n × CATEGORY_ADJACENCY_RATE[category]` to its recipe rate (and, for

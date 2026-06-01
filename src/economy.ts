@@ -865,9 +865,9 @@ export function computeRates(
     readonly recipe: Recipe;
     /** Base cycles/sec before input-availability throttling. */
     readonly baseRate: number;
-    /** §4.5 buff-adjacency multiplier for this building, captured in pass-1
-     *  and reused in pass-2's nominal-rate computation. 1.0 when the def
-     *  has no `adjacencyBuffs` or no matching neighbors. */
+    /** §4.5 category-adjacency × exotic-pair multiplier for this building,
+     *  captured in pass-1 and reused in pass-2's nominal-rate computation.
+     *  1.0 when no same-category neighbour and no exotic rule applies. */
     readonly buffStack: number;
     /** §4.5 soft-gate multiplier: 1.0 when no gate applies, 0.0 for hard-gate
      *  zero, and between 0 and 1 for soft gates. Carried into pass-2 so
@@ -973,7 +973,7 @@ export function computeRates(
     // §4.5 buff-adjacency multiplier — computed once per building from its
     // 4-neighbor footprint border. Captured here so pass 2's nominal-rate
     // sees the same factor and producer/consumer supply ratios stay correct.
-    // Returns 1.0 when the def has no `adjacencyBuffs` or no matches.
+    // Returns 1.0 when no same-category neighbour and no exotic rule applies.
     const exoticRules = skillUnlockedAdjacencyRules(state);
     const buffStack = computeBuffStack(b, validBuildings, defs, undefined, exoticRules);
     // §9.7 Tier Reset runtime gate: a building above the island's current
