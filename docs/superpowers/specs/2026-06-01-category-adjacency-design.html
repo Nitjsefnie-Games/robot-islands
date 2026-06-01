@@ -352,7 +352,7 @@
 
     <div class="summary">
       <div class="cell"><div class="k">Scope</div><div class="v accent">Replace buff layer</div></div>
-      <div class="cell"><div class="k">Files touched</div><div class="v">5 + tests</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">6 + tests</div></div>
       <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
       <div class="cell"><div class="k">Migration</div><div class="v ok">None</div></div>
     </div>
@@ -452,6 +452,7 @@
           <tr><td class="slate">Recipe rate</td><td class="mono">economy.ts:1063</td><td><code>buffStack</code> already multiplies <code>baseRate</code>; it becomes <code>categoryMul × exoticPairs</code>. Inputs + outputs scale together.</td></tr>
           <tr><td class="slate">Generator output</td><td class="mono">economy.ts:1195</td><td><strong>New.</strong> Multiply <code>powerProduced</code> by the power building's <code>categoryMul</code>. Clustered generators produce more.</td></tr>
           <tr><td class="slate">Power consumption</td><td class="mono">economy.ts:1199</td><td><strong>Unchanged.</strong> <code>powerConsumed</code> already excludes the buff. Buffed consumer runs faster, draws same wattage.</td></tr>
+          <tr><td class="slate">Inspector display</td><td class="mono">inspector-ui.ts</td><td><strong>New.</strong> Surface the live multiplier — fold into the <code>BONUSES</code> line for recipe buildings, annotate the <code>Power</code> section for generators, via <code>categoryAdjacencyMul</code>.</td></tr>
         </tbody>
       </table>
     </section>
@@ -481,6 +482,13 @@
             type + def field.</div>
         </div>
         <div class="change">
+          <div class="file">inspector-ui.ts</div>
+          <div class="what"><span class="lead">Show the bonus.</span> Display the
+            live category-adjacency multiplier in the building inspector — folded
+            into the <code>BONUSES</code> line for recipe buildings and the
+            <code>Power</code> section for generators.</div>
+        </div>
+        <div class="change">
           <div class="file">tutorial.ts:257</div>
           <div class="what"><span class="lead">Fix the hint.</span> Same-<em>category</em>,
             flat per-neighbour, uncapped wording. Trigger still fires (two mines are
@@ -501,6 +509,7 @@
         <div class="check"><div class="box"></div><div class="ck-text"><strong>adjacency.test.ts.</strong> Same-category linear count; uncapped (5 neighbours → ×1.50); distinct-by-id de-dup; multi-tile border ring; cross-island excluded from the category term; exotic pairs still stack on top.</div></div>
         <div class="check"><div class="box"></div><div class="ck-text"><strong>economy power-gen test.</strong> Clustered generators produce more power; clustered consumer runs faster but draws unchanged wattage.</div></div>
         <div class="check"><div class="box"></div><div class="ck-text"><strong>tutorial.test.ts.</strong> Existing <code>12_adjacency</code> trigger still passes.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Inspector display.</strong> A building with 2 same-category neighbours surfaces <code>adjacency ×1.20</code> in the inspector.</div></div>
         <div class="check"><div class="box"></div><div class="ck-text"><strong>npm run build + npm test.</strong> Clean under strict tsconfig; full suite green.</div></div>
       </div>
     </section>
