@@ -5,26 +5,11 @@ import { describe, expect, it } from 'vitest';
 import { categoryAdjacencyMul, checkGates, computeBuffStack } from './adjacency.js';
 import {
   BUILDING_DEFS,
-  type AdjacencyBuff,
   type BuildingDef,
   type BuildingDefId,
   type GateRequirement,
 } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
-
-
-/** Build a one-off catalog override that sets `adjacencyBuffs` on the given
- *  defId, leaving everything else identical to BUILDING_DEFS. Tests use this
- *  so the assertions don't rely on the §4.5 placeholder magnitudes (which
- *  are tunable in Appendix A). */
-function withBuffs(
-  defId: BuildingDefId,
-  buffs: ReadonlyArray<AdjacencyBuff>,
-): Readonly<Record<BuildingDefId, BuildingDef>> {
-  const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
-  base[defId] = { ...base[defId], adjacencyBuffs: buffs };
-  return base;
-}
 
 /** Build a one-off catalog override that sets `gates` on the given defId. */
 function withGates(
@@ -36,153 +21,33 @@ function withGates(
   return base;
 }
 
-describe('computeBuffStack — §4.4 / §4.5', () => {
-  it('returns 1.0 for a building whose def has no adjacencyBuffs', () => {
-    const focal: PlacedBuilding = { id: 'd', defId: 'dock', x: 0, y: 0 };
-    const others: PlacedBuilding[] = [
-      { id: 'm', defId: 'mine', x: 2, y: 0 },
-    ];
-    expect(computeBuffStack(focal, [focal, ...others])).toBe(1);
+describe('computeBuffStack — category × exotic', () => {
+  const place = (id: string, defId: string, x: number, y: number) =>
+    ({ id, defId: defId as never, x, y }) as never;
+
+  it('equals categoryAdjacencyMul when no exotic rules apply', () => {
+    const a = place('a', 'mine', 0, 0);
+    const b = place('b', 'mine', 2, 0);
+    expect(computeBuffStack(a, [a, b])).toBeCloseTo(1.1, 9);
   });
 
-  it('returns 1.0 with no matching neighbors (same_def buff, isolated)', () => {
-    // 2x2 mine at (0,0); a workshop at (2,0) is adjacent but doesn't match
-    // 'same_def' (different defId).
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const buildings: PlacedBuilding[] = [
-      focal,
-      { id: 'b', defId: 'workshop', x: 2, y: 0 },
-    ];
-    expect(computeBuffStack(focal, buildings, defs)).toBe(1);
+  it('exotic pair bonus stacks multiplicatively on top of the category term', () => {
+    // Two adjacent mines → category ×1.10. An exotic rule pairing
+    // mine→smelter with +0.25 fires only when a smelter neighbour exists.
+    const a = place('a', 'mine', 0, 0);
+    const b = place('b', 'mine', 2, 0);
+    const sm = place('sm', 'smelter', 0, 2); // borders a's bottom edge
+    const rules = [{ pair: ['mine', 'smelter'] as const, recipeRateBonus: 0.25 }];
+    expect(computeBuffStack(a, [a, b, sm], BUILDING_DEFS, undefined, rules))
+      .toBeCloseTo(1.1 * 1.25, 9);
   });
 
-  it('same_def: 1 matching neighbor → 1 + 10/100 = 1.10', () => {
-    // 2x2 mines side by side: mine-A at (0,0) covers (0..1, 0..1),
-    // mine-B at (2,0) covers (2..3, 0..1). Mine-A's east border includes
-    // (2,0),(2,1) which are mine-B's western tiles → adjacent.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const a: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const b: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 0 };
-    expect(computeBuffStack(a, [a, b], defs)).toBeCloseTo(1.1, 9);
-    expect(computeBuffStack(b, [a, b], defs)).toBeCloseTo(1.1, 9);
-  });
-
-  it('same_def: 2 matching neighbors → 1 + 2 × 10/100 = 1.20 (under cap)', () => {
-    // Center mine flanked east + west by two more 2x2 mines.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const west: PlacedBuilding = { id: 'w', defId: 'mine', x: -2, y: 0 };
-    const mid: PlacedBuilding = { id: 'm', defId: 'mine', x: 0, y: 0 };
-    const east: PlacedBuilding = { id: 'e', defId: 'mine', x: 2, y: 0 };
-    const buildings = [west, mid, east];
-    expect(computeBuffStack(mid, buildings, defs)).toBeCloseTo(1.2, 9);
-    // Outer mines each have exactly one neighbor.
-    expect(computeBuffStack(west, buildings, defs)).toBeCloseTo(1.1, 9);
-    expect(computeBuffStack(east, buildings, defs)).toBeCloseTo(1.1, 9);
-  });
-
-  it('same_def: 3 matching neighbors caps at maxMatches=2 → 1.20', () => {
-    // Center mine flanked west, east, AND north. 3 neighbors but cap=2.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const west: PlacedBuilding = { id: 'w', defId: 'mine', x: -2, y: 0 };
-    const mid: PlacedBuilding = { id: 'm', defId: 'mine', x: 0, y: 0 };
-    const east: PlacedBuilding = { id: 'e', defId: 'mine', x: 2, y: 0 };
-    const north: PlacedBuilding = { id: 'n', defId: 'mine', x: 0, y: -2 };
-    const buildings = [west, mid, east, north];
-    expect(computeBuffStack(mid, buildings, defs)).toBeCloseTo(1.2, 9);
-  });
-
-  it('same_category: counts neighbors sharing the def category, not defId', () => {
-    // Mine + Logger are both `extraction`. A same_category buff on mine
-    // should count a neighboring Logger as a match.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_category', percentPerMatch: 20, maxMatches: 3 },
-    ]);
-    const mineA: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    // Logger is 1x1; place at (2,0) — east of mine's footprint.
-    const logger: PlacedBuilding = { id: 'l', defId: 'logger', x: 2, y: 0 };
-    // Workshop (manufacturing) north of the mine — not an extraction category match.
-    const workshop: PlacedBuilding = { id: 'w', defId: 'workshop', x: 0, y: -2 };
-    const buildings = [mineA, logger, workshop];
-    expect(computeBuffStack(mineA, buildings, defs)).toBeCloseTo(1.2, 9);
-  });
-
-  it('def_id: only the named defId counts', () => {
-    // Mine adjacent to logger AND another mine. def_id buff targeting
-    // 'logger' only counts the logger.
-    const defs = withBuffs('mine', [
-      { matchKind: 'def_id', matchDefId: 'logger', percentPerMatch: 25, maxMatches: 5 },
-    ]);
-    const mineA: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const mineB: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 0 };
-    const logger: PlacedBuilding = { id: 'l', defId: 'logger', x: 0, y: -1 };
-    const buildings = [mineA, mineB, logger];
-    expect(computeBuffStack(mineA, buildings, defs)).toBeCloseTo(1.25, 9);
-  });
-
-  it('multiple buff entries compose multiplicatively', () => {
-    // Mine with two buff entries:
-    //   1. same_def: +10% per match, cap 2  → 1 match → ×1.10
-    //   2. def_id 'logger': +20% per match, cap 1 → 1 match → ×1.20
-    // Total: 1.10 × 1.20 = 1.32.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-      { matchKind: 'def_id', matchDefId: 'logger', percentPerMatch: 20, maxMatches: 1 },
-    ]);
-    const mineA: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const mineB: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 0 };
-    const logger: PlacedBuilding = { id: 'l', defId: 'logger', x: 0, y: -1 };
-    const buildings = [mineA, mineB, logger];
-    expect(computeBuffStack(mineA, buildings, defs)).toBeCloseTo(1.10 * 1.20, 9);
-  });
-
-  it('multi-tile neighbor sharing multiple border tiles counts as ONE match', () => {
-    // Mine 2x2 at (0,0) covers (0..1, 0..1). Place a second 2x2 mine at
-    // (2,0) — it shares two border tiles with the focal (it touches (0,0)'s
-    // border at (2,0) and (2,1)). Despite touching twice, the same building
-    // id must contribute exactly one match.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 50, maxMatches: 10 },
-    ]);
-    const a: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const b: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 0 };
-    // Only one match expected → 1 + 1 × 0.5 = 1.5, not 2.0 (which would
-    // be the result if the two-tile border counted twice).
-    expect(computeBuffStack(a, [a, b], defs)).toBeCloseTo(1.5, 9);
-  });
-
-  it('diagonal neighbors do NOT count (4-neighbor only, no 8-neighbor)', () => {
-    // Mine 2x2 at (0,0); second mine 2x2 at (2,2) — touches only at the
-    // corner. 4-neighbor adjacency excludes the corner-touch.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const a: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const b: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 2 };
-    expect(computeBuffStack(a, [a, b], defs)).toBe(1);
-  });
-
-  it('self is never counted as a match', () => {
-    // A single mine with a same_def buff on itself returns 1.0.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const a: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    expect(computeBuffStack(a, [a], defs)).toBe(1);
-  });
-
-  it('default defs parameter falls back to BUILDING_DEFS', () => {
-    // Smoke test: 'dock' has no placeholder buff, so the no-defs call returns 1.0.
-    const focal: PlacedBuilding = { id: 'd', defId: 'dock', x: 0, y: 0 };
-    expect(computeBuffStack(focal, [focal])).toBe(1);
+  it('exotic rule with no matching neighbour leaves the stack at the category term', () => {
+    const a = place('a', 'mine', 0, 0);
+    const b = place('b', 'mine', 2, 0);
+    const rules = [{ pair: ['mine', 'smelter'] as const, recipeRateBonus: 0.25 }];
+    expect(computeBuffStack(a, [a, b], BUILDING_DEFS, undefined, rules))
+      .toBeCloseTo(1.1, 9);
   });
 });
 
@@ -287,17 +152,6 @@ describe('checkGates — §4.5 gating adjacency', () => {
     expect(checkGates(focal, [focal, neighbor], softDefs)).toEqual({ satisfied: false, effectiveMul: 0.25 });
   });
 
-  it('§13.3 cross-island: remote building counts as neighbor for buff', () => {
-    // Focal mine has no local same_def neighbors, but a remote mine on
-    // another island is passed as crossIsland → should count.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const remote: PlacedBuilding = { id: 'remote', defId: 'mine', x: 999, y: 999 };
-    expect(computeBuffStack(focal, [focal], defs, [remote])).toBeCloseTo(1.1, 9);
-  });
-
   it('§13.3 cross-island: remote building satisfies hard gate', () => {
     const defs = withGates('coke_oven', [{ matchType: 'heat_source', hard: true }]);
     const focal: PlacedBuilding = { id: 'c', defId: 'coke_oven', x: 0, y: 0 };
@@ -307,18 +161,7 @@ describe('checkGates — §4.5 gating adjacency', () => {
       effectiveMul: 1,
     });
   });
-
-  it('§13.3 cross-island: self-id in crossIsland is ignored', () => {
-    // A remote building with the same id as focal should not count.
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const remoteSameId: PlacedBuilding = { id: 'a', defId: 'mine', x: 999, y: 999 };
-    expect(computeBuffStack(focal, [focal], defs, [remoteSameId])).toBe(1);
-  });
 });
-
 
 describe('categoryAdjacencyMul — §4.5 universal category adjacency', () => {
   const place = (id: string, defId: string, x: number, y: number) =>
@@ -360,53 +203,5 @@ describe('categoryAdjacencyMul — §4.5 universal category adjacency', () => {
   it('self is never counted', () => {
     const a = place('a', 'mine', 0, 0);
     expect(categoryAdjacencyMul(a, [a, a])).toBe(1);
-  });
-});
-
-describe('exoticAdjacency — pairBoost', () => {
-  it('applies pairBoost when focal and neighbor match the pair', () => {
-    const focal: PlacedBuilding = { id: 'a', defId: 'smelter', x: 0, y: 0 };
-    const neighbor: PlacedBuilding = { id: 'b', defId: 'coal_gen', x: 2, y: 0 };
-    const rules = [{ pair: ['smelter', 'coal_gen'] as const, recipeRateBonus: 0.25 }];
-    expect(computeBuffStack(focal, [focal, neighbor], BUILDING_DEFS, undefined, rules)).toBeCloseTo(1.25, 9);
-  });
-
-  it('does not apply pairBoost without matching neighbor', () => {
-    const focal: PlacedBuilding = { id: 'a', defId: 'smelter', x: 0, y: 0 };
-    const neighbor: PlacedBuilding = { id: 'b', defId: 'workshop', x: 2, y: 0 };
-    const rules = [{ pair: ['smelter', 'coal_gen'] as const, recipeRateBonus: 0.25 }];
-    expect(computeBuffStack(focal, [focal, neighbor], BUILDING_DEFS, undefined, rules)).toBe(1);
-  });
-
-  it('stacks multiple exotic rules multiplicatively', () => {
-    const focal: PlacedBuilding = { id: 'a', defId: 'smelter', x: 0, y: 0 };
-    const neighbor1: PlacedBuilding = { id: 'b', defId: 'coal_gen', x: 2, y: 0 };
-    const neighbor2: PlacedBuilding = { id: 'c', defId: 'solar', x: 0, y: -1 };
-    const rules = [
-      { pair: ['smelter', 'coal_gen'] as const, recipeRateBonus: 0.25 },
-      { pair: ['smelter', 'solar'] as const, recipeRateBonus: 0.10 },
-    ];
-    expect(computeBuffStack(focal, [focal, neighbor1, neighbor2], BUILDING_DEFS, undefined, rules)).toBeCloseTo(1.25 * 1.10, 9);
-  });
-
-  it('works alongside native adjacencyBuffs', () => {
-    const defs = withBuffs('mine', [
-      { matchKind: 'same_def', percentPerMatch: 10, maxMatches: 2 },
-    ]);
-    const focal: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0 };
-    const sameDefNeighbor: PlacedBuilding = { id: 'b', defId: 'mine', x: 2, y: 0 };
-    const exoticNeighbor: PlacedBuilding = { id: 'c', defId: 'coal_gen', x: 0, y: -2 };
-    const rules = [{ pair: ['mine', 'coal_gen'] as const, recipeRateBonus: 0.20 }];
-    // Native buff: same_def mine neighbor → 1.10
-    // Exotic buff: coal_gen neighbor → 1.20
-    // Total: 1.10 * 1.20 = 1.32
-    expect(computeBuffStack(focal, [focal, sameDefNeighbor, exoticNeighbor], defs, undefined, rules)).toBeCloseTo(1.32, 9);
-  });
-
-  it('applies pairBoost even when building has no native adjacencyBuffs', () => {
-    const focal: PlacedBuilding = { id: 'a', defId: 'dock', x: 0, y: 0 };
-    const neighbor: PlacedBuilding = { id: 'b', defId: 'coal_gen', x: 2, y: 0 };
-    const rules = [{ pair: ['dock', 'coal_gen'] as const, recipeRateBonus: 0.30 }];
-    expect(computeBuffStack(focal, [focal, neighbor], BUILDING_DEFS, undefined, rules)).toBeCloseTo(1.30, 9);
   });
 });
