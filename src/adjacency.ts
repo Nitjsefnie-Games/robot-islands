@@ -135,7 +135,7 @@ export function clusterBonusMuls(
     const cat = defs[buildings[i]!.defId].category;
     for (let j = i + 1; j < n; j++) {
       if (defs[buildings[j]!.defId].category !== cat) continue;
-      // Adjacency is symmetric — test j against i's border.
+      // 4-adjacency is mutual for non-overlapping footprints (real placements never overlap), so testing one direction (j vs i's border) suffices.
       if (touchesBorder(buildings[j]!, borders[i]!, defs)) union(i, j);
     }
   }

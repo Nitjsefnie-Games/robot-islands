@@ -1196,11 +1196,11 @@ export function computeRates(
     // currently only `wind_turbine`) get +50% wattage on `high_wind`
     // islands. Non-wind producers ignore the multiplier (defaults to 1×).
     const windFactor = def.power?.kind === 'wind' ? modifierMul.windPowerMul : 1;
-    // §4.5: generator output scales by the building's category-adjacency
+    // §4.5: generator output scales by the building's cluster-bonus
     // multiplier (clustered generators boost each other). Consumption below
     // is deliberately NOT scaled.
-    const adjMul = clusterMuls.get(b.id) ?? 1;
-    powerProduced += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction * adjMul;
+    const clusterMul = clusterMuls.get(b.id) ?? 1;
+    powerProduced += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction * clusterMul;
     // §5.1 rebalance: per-building draw scales by nominal throughput fraction.
     // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
     // so we divide. Default 1.0 leaves draw untouched.
