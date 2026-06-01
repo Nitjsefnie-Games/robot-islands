@@ -31,7 +31,7 @@ import {
   type BuildingDefId,
   type GateRequirement,
 } from './building-defs.js';
-import { gateSatisfied } from './adjacency.js';
+import { categoryAdjacencyMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, formatShortfall, inProgressBuildCount, parallelBuildSlots, placementCostFor, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
@@ -1270,6 +1270,11 @@ export function mountInspectorUi(
     // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1).
     const recipe = resolveRecipe(BUILDING_DEFS[building.defId], building, spec.terrainAt);
     const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
+    const adjMul = categoryAdjacencyMul(
+      building,
+      state.buildings.filter(isOperationalBuilding),
+      BUILDING_DEFS,
+    );
     if (!recipe) {
       recipeStatus.textContent = '— no recipe';
       recipeStatus.style.color = 'var(--ri-fg-4)';
@@ -1327,12 +1332,13 @@ export function mountInspectorUi(
       // §9 fledgling boost: a fresh island (<L10) runs every recipe faster; show
       // it here so the player sees why the rate is high and that it tapers.
       const fledgMul = fledglingRecipeMul(state.level);
-      const compositeMul = catMul * mineLogBonus * fledgMul;
+      const compositeMul = catMul * mineLogBonus * fledgMul * adjMul;
       if (compositeMul > 1.0001) {
         const parts: string[] = [];
         if (fledgMul > 1.0001) parts.push(`fledgling ×${fledgMul.toFixed(2)}`);
         if (catMul > 1.0001) parts.push(`${recipe.category} ×${catMul.toFixed(2)}`);
         if (mineLogBonus > 1.0001) parts.push(`yield ×${mineLogBonus.toFixed(2)}`);
+        if (adjMul > 1.0001) parts.push(`adjacency ×${adjMul.toFixed(2)}`);
         bonusesValue.textContent = parts.join(' · ') + ` = ×${compositeMul.toFixed(2)}`;
         bonusesRow.style.display = '';
       } else {
@@ -1353,7 +1359,12 @@ export function mountInspectorUi(
         skillMul.powerProduction, skillMul.powerConsumption,
       );
       const parts: string[] = [];
-      if (prod > 0) parts.push(`+${fmtPower(prod)} produced`);
+      if (prod > 0) {
+        const prodAdj = prod * adjMul;
+        parts.push(adjMul > 1.0001
+          ? `+${fmtPower(prodAdj)} produced (adjacency ×${adjMul.toFixed(2)})`
+          : `+${fmtPower(prodAdj)} produced`);
+      }
       if (cons > 0) parts.push(`-${fmtPower(cons)} consumed`);
       powerLine.textContent = parts.join('  ·  ');
       powerLine.style.color = 'var(--ri-fg-1)';
