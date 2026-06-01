@@ -1114,7 +1114,7 @@ export function mountInspectorUi(
   styled(
     moveBtn,
     [
-      `color: ${'var(--ri-accent)'}`,
+      'color: var(--ri-accent)',
       'padding: 5px 10px',
       'font-family: ui-monospace, monospace',
       'font-size: 11px',
@@ -1122,6 +1122,7 @@ export function mountInspectorUi(
       'text-transform: uppercase',
     ].join(';'),
   );
+  moveBtn.classList.add('ri-accentbtn');
   moveBtn.addEventListener('click', () => {
     if (!target) return;
     if (moveBtn.disabled) return;
