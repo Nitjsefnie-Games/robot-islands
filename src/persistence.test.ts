@@ -2174,8 +2174,8 @@ describe('v17 -> v18 migration', () => {
     // Push a queued building onto the spec's buildings array.
     homeSpec.buildings.push({ id: 'mine-q1', defId: 'mine', x: 5, y: 5, queued: true, queueSeq: 1 });
     const homeState = makeInitialIslandState(homeSpec, 0);
-    // Annotate nextQueueSeq on the state (it is optional on IslandState per economy.ts).
-    (homeState as unknown as Record<string, unknown>).nextQueueSeq = 2;
+    // nextQueueSeq is a real optional field on IslandState (economy.ts).
+    homeState.nextQueueSeq = 2;
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
     // The snapshot must be at v18 (SCHEMA_VERSION).
@@ -2187,6 +2187,18 @@ describe('v17 -> v18 migration', () => {
     expect(queued.queued).toBe(true);
     expect(queued.queueSeq).toBe(1);
     const rState = restoredStates.get('home')!;
-    expect((rState as unknown as Record<string, unknown>).nextQueueSeq).toBe(2);
+    expect(rState.nextQueueSeq).toBe(2);
+  });
+  it('a building with NO queue fields loads as not-queued (absent ≡ default, no backfill)', () => {
+    const world = makeInitialWorld(0);
+    const homeSpec = world.islands.find((s) => s.id === 'home')!;
+    homeSpec.buildings.push({ id: 'mine-noq', defId: 'mine', x: 6, y: 6 });
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    const rSpec = restored.islands.find((s) => s.id === 'home')!;
+    const b = rSpec.buildings.find((bld) => bld.id === 'mine-noq')!;
+    expect(b.queued).toBeFalsy();
+    expect(b.queueSeq).toBeUndefined();
   });
 });

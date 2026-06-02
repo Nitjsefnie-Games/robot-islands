@@ -82,7 +82,7 @@ describe('loadWorld IDB walker', () => {
 
     expect(store.has(STORAGE_KEY)).toBe(true);
     const migrated = store.get(STORAGE_KEY) as { v: number };
-    expect(migrated.v).toBe(17);
+    expect(migrated.v).toBe(18);
 
     expect(store.has(v7Key)).toBe(false);
   });
