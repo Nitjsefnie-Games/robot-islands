@@ -992,6 +992,119 @@ export function demolishBuilding(
   return { ok: true, scrapReturned, refunded };
 }
 
+/** Result of a `cancelConstruction` call. `refunded` is the per-resource
+ *  amount actually credited back (post-cap-clamp). On the failure branches
+ *  `refunded` is empty and `reason` is populated. */
+export interface CancelResult {
+  readonly ok: boolean;
+  /** Resources actually credited back (post-cap-clamp). */
+  readonly refunded: Partial<Record<ResourceId, number>>;
+  readonly reason?: 'not-found' | 'not-building';
+}
+
+/** Cancel an in-progress (running OR queued) construction job for a 100%
+ *  material refund. Distinct from §6.7 demolish (30% scrap) and relocate
+ *  (half-fee). Two shapes by floorLevel:
+ *    - floorLevel 0 → fresh placement: remove building, refund placement cost
+ *      (incl. terrain-modifier upfront cost), strip storage contribution, free slot.
+ *    - floorLevel >= 1 → in-progress upgrade: keep building, revert to
+ *      floorLevel-1, clear the timer + queued flag, refund the upgrade cost,
+ *      strip the storage delta the upgrade granted.
+ *  Valid only while constructionRemainingMs > 0. Pure mutation. */
+export function cancelConstruction(
+  spec: IslandSpec,
+  state: IslandState,
+  buildingId: string,
+): CancelResult {
+  const idx = spec.buildings.findIndex((b) => b.id === buildingId);
+  if (idx < 0) return { ok: false, refunded: {}, reason: 'not-found' };
+  const b = spec.buildings[idx]!;
+  if ((b.constructionRemainingMs ?? 0) <= 0) {
+    return { ok: false, refunded: {}, reason: 'not-building' };
+  }
+  const def = BUILDING_DEFS[b.defId];
+  const L = floorLevel(b);
+
+  // Helper: credit resources back into inventory, clamped to storageCaps.
+  // Returns the actually-credited amounts (what actually landed in inventory).
+  const creditRefund = (cost: Partial<Record<ResourceId, number>>): Partial<Record<ResourceId, number>> => {
+    const refunded: Partial<Record<ResourceId, number>> = {};
+    for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+      if (n <= 0) continue;
+      const have = state.inventory[r] ?? 0;
+      const cap = state.storageCaps[r] ?? 0;
+      const next = Math.min(cap, have + n);
+      const credited = next - have;
+      if (credited > 0) {
+        state.inventory[r] = next;
+        refunded[r] = credited;
+      }
+    }
+    return refunded;
+  };
+
+  if (L === 0) {
+    // Fresh placement cancel: build the same fullCost basket placeBuilding paid.
+    const fullCost: Partial<Record<ResourceId, number>> = { ...placementCostFor(def) };
+    if (def.terrainModifier === true && b.terrainTarget !== undefined) {
+      for (const [r, n] of Object.entries(conversionCostForTarget(b.terrainTarget)) as Array<[ResourceId, number]>) {
+        fullCost[r] = (fullCost[r] ?? 0) + n;
+      }
+    }
+    // Splice the building out BEFORE crediting refund (mirrors demolishBuilding's
+    // storage-strip-then-credit ordering, so refund lands into post-strip caps).
+    spec.buildings.splice(idx, 1);
+    // Strip storage-cap contribution — mirrors demolishBuilding exactly.
+    const storage = def.storage;
+    if (storage) {
+      const stripResource = (r: ResourceId): void => {
+        const next = (state.storageCaps[r] ?? 0) - floorScaledCapacity(b, storage.capacity);
+        state.storageCaps[r] = next < 0 ? 0 : next;
+        const have = state.inventory[r] ?? 0;
+        const newCap = state.storageCaps[r] ?? 0;
+        if (have > newCap) state.inventory[r] = newCap;
+      };
+      if (storage.category === 'generic') {
+        if (b.cargoLabel !== undefined) stripResource(b.cargoLabel);
+      } else {
+        for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+          if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) stripResource(r);
+        }
+      }
+    }
+    return { ok: true, refunded: creditRefund(fullCost) };
+  }
+
+  // In-progress upgrade cancel: revert to floorLevel-1, clear timer + queued,
+  // strip the storage delta that applyUpgrade granted, refund the upgrade cost.
+  const newL = L - 1;
+  b.floorLevel = newL;
+  (b as { constructionRemainingMs?: number }).constructionRemainingMs = 0;
+  (b as { queued?: boolean }).queued = false;
+
+  // Strip the +storage.capacity delta applyUpgrade granted immediately
+  // (applyUpgrade grants +base capacity = +storage.capacity, not floor-scaled).
+  const storage = def.storage;
+  if (storage) {
+    const delta = storage.capacity;
+    const stripDelta = (r: ResourceId): void => {
+      const next = (state.storageCaps[r] ?? 0) - delta;
+      state.storageCaps[r] = next < 0 ? 0 : next;
+      const have = state.inventory[r] ?? 0;
+      const newCap = state.storageCaps[r] ?? 0;
+      if (have > newCap) state.inventory[r] = newCap;
+    };
+    if (storage.category === 'generic') {
+      if (b.cargoLabel !== undefined) stripDelta(b.cargoLabel);
+    } else {
+      for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+        if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) stripDelta(r);
+      }
+    }
+  }
+  return { ok: true, refunded: creditRefund(upgradeCost(def)) };
+}
+
 // ---------------------------------------------------------------------------
 // Ocean-layer §3 / §4 — sibling validator for ocean-placed buildings.
 // ---------------------------------------------------------------------------
