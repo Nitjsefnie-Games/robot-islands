@@ -12,6 +12,7 @@ import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
   applyUpgrade,
   buildingAtTile,
+  cancelConstruction,
   demolishBuilding,
   findOceanBuildingAt,
   formatShortfall,
@@ -2030,5 +2031,122 @@ describe('enqueue when slots full', () => {
     if (!r.ok) expect(r.reason).toBe('already-building');
     // No mutation: floorLevel unchanged.
     expect(target.floorLevel).toBe(floorBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cancelConstruction — 100% refund for in-progress builds and upgrades
+// ---------------------------------------------------------------------------
+describe('cancelConstruction full refund', () => {
+  it('cancel fresh in-progress placement → building removed + 100% refund', () => {
+    // Mine costs stone:200 + wood:80. Place it (goes under construction),
+    // then cancel — inventory must be fully restored and building removed.
+    // Use large caps and controlled starting inventory to avoid clamp surprises.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.storageCaps.stone = 50000;
+    state.storageCaps.wood = 50000;
+    state.inventory.stone = 1000;
+    state.inventory.wood = 500;
+
+    const stoneBefore = state.inventory.stone;
+    const woodBefore = state.inventory.wood;
+
+    const r = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'cancel-fresh-1');
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('expected ok');
+    const b = r.placed;
+    // Must be under construction (not instantBuild).
+    expect((b.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+    expect(b.floorLevel ?? 0).toBe(0);
+
+    const cr = cancelConstruction(spec, state, b.id);
+    expect(cr.ok).toBe(true);
+    // Building is gone.
+    expect(spec.buildings.find((x) => x.id === b.id)).toBeUndefined();
+    // Inventory fully restored — 100% refund.
+    expect(state.inventory.stone).toBe(stoneBefore);
+    expect(state.inventory.wood).toBe(woodBefore);
+  });
+
+  it('cancel in-progress upgrade → level reverted, timer cleared, queued cleared, upgrade cost refunded', () => {
+    // Start from an operational mine at floorLevel 0 (no constructionRemainingMs),
+    // applyUpgrade to level 1 (deducts upgradeCost, sets constructionRemainingMs),
+    // then cancel — upgrade cost must be fully refunded and building kept.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.storageCaps.stone = 50000;
+    state.storageCaps.wood = 50000;
+    state.inventory.stone = 1000;
+    state.inventory.wood = 500;
+
+    // Plant a pre-built operational mine (floorLevel 0, no constructionRemainingMs).
+    const target: PlacedBuilding = { id: 'upg-mine', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(target);
+
+    // Record inventory before upgrade.
+    const stoneBefore = state.inventory.stone;
+    const woodBefore = state.inventory.wood;
+
+    const ur = applyUpgrade(spec, state, 'upg-mine');
+    expect(ur.ok).toBe(true);
+    // Now at floorLevel 1, constructionRemainingMs > 0.
+    expect(target.floorLevel).toBe(1);
+    expect((target.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+
+    const cr = cancelConstruction(spec, state, 'upg-mine');
+    expect(cr.ok).toBe(true);
+    // Building persists.
+    expect(spec.buildings.find((x) => x.id === 'upg-mine')).toBeDefined();
+    // Level reverted to 0.
+    expect(target.floorLevel ?? 0).toBe(0);
+    // Timer cleared.
+    expect(target.constructionRemainingMs ?? 0).toBe(0);
+    // queued cleared.
+    expect(target.queued).toBeFalsy();
+    // Inventory fully restored to pre-upgrade values — 100% refund.
+    expect(state.inventory.stone).toBe(stoneBefore);
+    expect(state.inventory.wood).toBe(woodBefore);
+  });
+
+  it('cancel a queued placement → building removed, queue count decreases', () => {
+    // Occupy the running slot, then enqueue a placement. Cancel the queued build.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.storageCaps.stone = 50000;
+    state.storageCaps.wood = 50000;
+    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+
+    const before = queuedBuildCount(state);
+    const r = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'q-cancel');
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.placed.queued).toBe(true);
+    expect(queuedBuildCount(state)).toBe(before + 1);
+
+    const cr = cancelConstruction(spec, state, r.placed.id);
+    expect(cr.ok).toBe(true);
+    expect(spec.buildings.find((x) => x.id === r.placed.id)).toBeUndefined();
+    expect(queuedBuildCount(state)).toBe(before);
+  });
+
+  it('cancel a finished/operational building → rejected with not-building', () => {
+    // A building with no constructionRemainingMs is operational — cancel must reject.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    spec.buildings.push({ id: 'done', defId: 'mine', x: 0, y: 0 });
+
+    const cr = cancelConstruction(spec, state, 'done');
+    expect(cr.ok).toBe(false);
+    if (!cr.ok) expect(cr.reason).toBe('not-building');
+  });
+
+  it('cancel unknown id → rejected with not-found', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+
+    const cr = cancelConstruction(spec, state, 'no-such-id');
+    expect(cr.ok).toBe(false);
+    if (!cr.ok) expect(cr.reason).toBe('not-found');
   });
 });
