@@ -2003,4 +2003,32 @@ describe('enqueue when slots full', () => {
     // queued flag is set on the building.
     expect(target.queued).toBe(true);
   });
+
+  it('applyUpgrade rejects with already-building when the target is already queued (no stacking)', () => {
+    // Regression: a queued build has constructionRemainingMs > 0, so the
+    // already-building guard must block a SECOND applyUpgrade — otherwise it
+    // would stack floorLevel, re-grant storage, re-stamp queueSeq, and re-pay.
+    // (No promotion logic exists yet — Task 7 — so a queued build stays queued
+    // and is otherwise upgradeable repeatedly.)
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // A building that is already queued (queued upgrade in flight).
+    const target: PlacedBuilding = {
+      id: 'b1',
+      defId: 'mine',
+      x: 0,
+      y: 0,
+      floorLevel: 1,
+      queued: true,
+      constructionRemainingMs: 5000,
+      queueSeq: 0,
+    };
+    spec.buildings.push(target);
+    const floorBefore = target.floorLevel;
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('already-building');
+    // No mutation: floorLevel unchanged.
+    expect(target.floorLevel).toBe(floorBefore);
+  });
 });
