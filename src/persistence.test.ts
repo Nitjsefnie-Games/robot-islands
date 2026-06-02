@@ -2211,15 +2211,17 @@ describe('v18 -> v19 migration (everProduced seen-set)', () => {
     expect(SCHEMA_VERSION).toBe(19);
   });
 
-  it('migrateV18toV19 backfills everProduced from each island inventory keys', () => {
+  it('migrateV18toV19 backfills everProduced only from POSITIVE-stock resources', () => {
     // Build a current snapshot, then forge a v18 shape from it by stripping
-    // everProduced and dropping the version to 18. The migration must
-    // reconstruct everProduced unconditionally from the inventory keys.
+    // everProduced and dropping the version to 18. The migration must seed
+    // everProduced from resources held at positive stock only — a zero-stock
+    // resource (the raw inventory zero-fills the whole catalog) must NOT be
+    // marked ever-produced, or the trade "get" gate would be bypassed.
     const world = makeInitialWorld(0);
     const homeSpec = world.islands.find((s) => s.id === 'home')!;
     const homeState = makeInitialIslandState(homeSpec, 0);
-    // Pin a known inventory so the expected key set is deterministic.
-    homeState.inventory = { iron_ore: 10, coal: 5 } as typeof homeState.inventory;
+    // Pin a known inventory: two positive-stock resources + one zero-stock.
+    homeState.inventory = { iron_ore: 10, coal: 5, bolt: 0 } as typeof homeState.inventory;
     const states = new Map<string, IslandState>([['home', homeState]]);
     const current = serializeWorld(world, states, 0, 0);
 
@@ -2236,7 +2238,11 @@ describe('v18 -> v19 migration (everProduced seen-set)', () => {
     const out = migrateV18toV19(v18);
     expect(out.v).toBe(19);
     const homeEntry = out.islandStates.find((e) => e.id === 'home')!;
-    expect(new Set(homeEntry.state.everProduced)).toEqual(new Set(['iron_ore', 'coal']));
+    const ever = new Set(homeEntry.state.everProduced);
+    expect(ever.has('iron_ore')).toBe(true);  // positive stock → seeded
+    expect(ever.has('coal')).toBe(true);       // positive stock → seeded
+    expect(ever.has('bolt')).toBe(false);      // zero stock → NOT seeded
+    expect(ever).toEqual(new Set(['iron_ore', 'coal']));
   });
 
   it('round-trips everProduced identity: Set → serialize → deserialize → same contents', () => {
