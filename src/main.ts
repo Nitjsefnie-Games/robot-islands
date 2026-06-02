@@ -83,7 +83,14 @@ import {
 } from './world.js';
 import { mountDronesUi } from './drones-ui.js';
 import { tickDrones } from './drones.js';
-import { tickTradeOffers, applyOffer, tuningFor, type TradeRuntime } from './trade.js';
+import {
+  tickTradeOffers,
+  applyOffer,
+  tuningFor,
+  effectiveCadenceMs,
+  ONLINE_DT_CAP_MS,
+  type TradeRuntime,
+} from './trade.js';
 import { mountTradeUi } from './trade-ui.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import { SONAR_BUOY_DEF_ID, SONAR_BUOY_RADIUS_TILES, tickSonarBuoys } from './sonar-buoy.js';
@@ -1701,7 +1708,7 @@ async function main(): Promise<void> {
 
   // Trade offer runtime — ephemeral, not persisted. Offer spawning only
   // happens while the tab is visible (gated in the ticker via document.hidden).
-  const tradeRuntime: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
+  const tradeRuntime: TradeRuntime = { offers: [] };
 
   // Trade offer overlay — card shown on the active island when a signal_exchange
   // is present and an offer has spawned. Acceptance mutates the island's inventory
@@ -1710,6 +1717,14 @@ async function main(): Promise<void> {
     const st = islandStates.get(offer.islandId);
     if (!st) return;
     applyOffer(st, offer);
+    // Each accepted trade compounds this island's next offer 1% sooner; the
+    // cooldown is reset HERE (on resolution) so the increment lands on the
+    // very next offer. tuningFor folds in the Logistics-Network frequency node.
+    st.tradeAcceptCount += 1;
+    st.tradeCooldownMs = effectiveCadenceMs(
+      st.tradeAcceptCount,
+      tuningFor(effectiveSkillMultipliers(st)).cadenceMs,
+    );
     tradeRuntime.offers = tradeRuntime.offers.filter((o) => o.id !== offer.id);
   });
 
@@ -1883,19 +1898,22 @@ async function main(): Promise<void> {
       islandPower.set(s.id, power);
     }
     if (needRebuild) rebuildWorldLayers();
-    // Trade offer lifecycle — only while tab is visible so offers accrue on
-    // online time only (document.hidden = true when the tab is backgrounded).
-    if (!document.hidden) {
-      // Per-island tuning resolves from each island's skill multipliers
-      // (same accessor the economy uses — default graph, no crystal fold).
-      tickTradeOffers(
-        tradeRuntime,
-        islandStates,
-        Math.random,
-        (state) => tuningFor(effectiveSkillMultipliers(state)),
-        now,
-      );
-    }
+    // Trade offer lifecycle. Online = tab visible AND focused (hasFocus covers
+    // another window on top / focus loss; visibility covers minimize/other-tab;
+    // "covered but focused" isn't JS-detectable — accepted limit). onlineDtMs is
+    // the capped online time elapsed this frame and is 0 when not online, so the
+    // persisted cooldown only burns down on focused time. Called every frame so
+    // expiry pruning stays current.
+    const tradeOnline = document.visibilityState === 'visible' && document.hasFocus();
+    const onlineDtMs = tradeOnline ? Math.min(elapsedSec * 1000, ONLINE_DT_CAP_MS) : 0;
+    tickTradeOffers(
+      tradeRuntime,
+      islandStates,
+      Math.random,
+      (state) => tuningFor(effectiveSkillMultipliers(state)),
+      now,
+      onlineDtMs,
+    );
     // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
     // islands for ellipse overlaps. At most ONE merge runs per tick — the
     // pair with the largest combined tile count wins; remaining overlaps
