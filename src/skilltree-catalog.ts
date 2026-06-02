@@ -135,6 +135,14 @@ export const ROBOTICS_NOTABLES: RawSkillNode[] = [
     description: 'Parallel Foundries — parallel build slots'
   },
   {
+    id: 'robotics.notable.queueFoundries' as NodeId,
+    subPath: 'robotics',
+    depth: 5,
+    cost: 5,
+    effect: { kind: 'queueCapAdd' },
+    description: 'Queue Foundries — build queue slots'
+  },
+  {
     id: 'robotics.notable.droneOptics' as NodeId,
     subPath: 'robotics',
     depth: 3,
@@ -810,6 +818,12 @@ export const RULE_BREAKER_KEYSTONES: RawSkillNode[] = [
     description: 'Parallel Construction — +1 concurrent build slot'
   },
   {
+    id: 'robotics.keystone.queueConstruction' as NodeId,
+    subPath: 'robotics', depth: 7, cost: 8,
+    effect: { kind: 'structural', description: 'Queue Construction +2 queue', data: { kind: 'parallelQueue', bonus: 2 } },
+    description: 'Queue Construction — +2 build queue slots'
+  },
+  {
     id: 'forestry.keystone.charcoalUnlock' as NodeId,
     subPath: 'forestry', depth: 7, cost: 8, effect: { kind: 'unlockRecipe', targetBuilding: 'logger', recipe: { cycleSec: 20, inputs: { wood: 2 }, outputs: { coal: 1 }, category: 'extraction' } },
     description: 'Charcoal Kiln — Loggers gain a charcoal output recipe'
@@ -951,6 +965,7 @@ export const KEYSTONE_PREREQS: KeystonePrereq[] = [
   ksp('storage.keystone.masterCache', ['storage.notable.verticalSilo', 'storage.notable.predictiveMaintenance'], 10),
   ksp('power_systems.keystone.researchBeacon', ['power_systems.notable.turbineStaging', 'power_systems.notable.fusionPilot'], 10),
   ksp('robotics.keystone.parallelConstruction', ['robotics.notable.swarmAssembly', 'robotics.notable.parallelFoundries'], 8),
+  ksp('robotics.keystone.queueConstruction', ['robotics.notable.swarmAssembly', 'robotics.notable.queueFoundries'], 8),
   ksp('forestry.keystone.charcoalUnlock', ['forestry.notable.selectiveHarvest', 'forestry.notable.silvicultureHub'], 8),
   ksp('drilling.keystone.earlyRig', ['drilling.notable.pressurizedRecovery', 'drilling.notable.deepBore'], 8),
   ksp('smelting.keystone.pyroforgeBypass', ['smelting.notable.heatRecapture', 'smelting.notable.refractoryLining'], 8),
