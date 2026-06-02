@@ -43,6 +43,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §9.5 Biome-locked uniques | L | All six biome uniques in catalog; placement gated by biome; artificial-island block honoured. |
 | §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) N. |
 | §9.7 Tier Reset | L | Reset logic + cost formula + cooldown + spec'd preserve/clear sets. Merged-island reset operates on the absorber's IslandState transparently (no merge-specific code needed). UI cost preview in the Skill Tree's reset row + confirm dialog. |
+| §9.8 Trade Offers | L | Signal Exchange (T1 logistics) building + online-only expiring barter offers (`trade.ts`/`trade-ui.ts`). Ever-produced get-gate, fill-biased give/get pick, tier-reach cap, `xp_weight`-ratio pricing × `0.8^Δtier` spread, size cap to give-stock % clamped to output headroom; accept grants no XP. Persisted per-island online-time cooldown (`tradeCooldownMs`, refresh-proof) + 1%/accept compounding speedup floored at ~1 min (`tradeAcceptCount`), both at schema v20. Logistics-Network skill cluster tunes frequency/size/reach/spread. Offers themselves ephemeral (not serialized). |
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
 | §11 Drones | P | T1/T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Drone Pad (T2) is the gate; once built, the tier picker lets the player launch any tier from T1 up to the launching island's current tier (T1 = biofuel = cheap entry option for short scouts). Fuel auto-computed per click. |
 | §11.7 Fuel / range / dispatch | L | Per-tier fuel matching, range = fuel × efficiency, per-craft concurrency caps, lost-on-timeout failure model. |
@@ -1212,6 +1213,71 @@ A player may pay to revert an island to Tier 1, primarily to redo skill-tree cho
 **Skill-point economics (a net gain, not a neutral respec).** The refund and the re-climb interact: reset returns *every* SP the player had spent, then re-leveling 1→L re-grants the entire level→SP curve a second time, because SP is granted per level-up (`skillPointsForLevelUp` in §9.1) with no per-level high-water-mark — nothing tracks "already earned this level." After one cycle back to the prior level the player therefore holds ~2× their cumulative SP, and because the grant is geometric (`floor(1.1^level)`) almost all of that value sits in the handful of top levels re-crossed. This is intentional, not an exploit: Tier Reset is the engine that produces the post-cap SP overflow that §9.1 routes into late-game prestige-style spending — it is a prestige loop, not merely a skill-tree redo. The loop is **rate-limited, not SP-priced**: the 24h cooldown, the level²-component cost, and the fact that T2+ buildings sit inactive (throttling production) until the island re-crosses their tier band are what keep re-climbing from being free SP. Balancing this loop means tuning those three brakes, not the refund itself.
 
 **Merged islands:** a Tier Reset on a merged island (§3.6) operates on the entire merged identity. All constituent ellipses, all buildings on each, the unified inventory — all reset together. There is no way to "split" a merged island via Tier Reset; merge remains permanent.
+
+### 9.8 Trade Offers
+
+A short-cadence engagement loop layered over the hours-long tier climb. A cheap Tier-1 **Signal Exchange** building periodically surfaces a single expiring **barter offer** on the island that hosts it: dump some of your fullest stockpile for an under-stocked resource you already make. The world advances on a live per-frame ticker but its reward cadence runs on the scale of hour-long tier climbs; Trade Offers add a seconds-scale decision the player can act on minute-to-minute.
+
+The mechanic is also a **cap-stall pressure-valve**. Per §9.1 a resource sitting at its storage cap halts its producer and earns zero XP — a capped silo is dead weight. An offer biased toward dumping overflow stock relieves that stall, converting a stuck resource into one the player is short on.
+
+**No XP from trades.** Accepting an offer shifts inventory and nothing else — trades grant zero XP. Progression stays strictly production-only; trading is logistics convenience, not a leveling path. This is a deliberate exclusion, not an oversight: pricing a swap to grant XP would turn the barter window into a leveling printer.
+
+**The Signal Exchange building.** A Logistics-category Tier-1 building, 1×1 footprint, cheap placement cost (placeholder: 40 wood + 20 stone), no recipe and no power draw (so it accrues no §4.7 maintenance). Its sole effect is to make its island eligible to receive offers. Each island either has a Signal Exchange (eligible) or does not (no offers); the building is the gate.
+
+#### 9.8.1 Offer generation
+
+When an eligible island's spawn cooldown reaches zero (§9.8.3), the engine attempts to generate one offer for it:
+
+* **Give pool** = every resource the island currently holds in positive stock (`inv > 0`). **Get pool** = every resource the island has *ever produced* (`everProduced`), regardless of current inventory. The ever-produced filter is the structural guard against chain-skipping: **you can only receive a resource you already make**, so a trade can never shortcut a production chain you haven't built, and the eligible pool self-scales with progression. If either pool is empty, no offer is generated.
+* **Fill-biased selection.** Each side rolls `biasK` candidates (placeholder: 2) from its pool and keeps the most extreme by fill fraction (`inv / cap`): the give side keeps the *highest* fill (prime to dump), the get side keeps the *lowest* fill (most under-stocked). A resource at `cap == 0` with positive stock reads as fully overflowing. If the two sides collide on the same resource, the engine falls back to any distinct give candidate; if none exists the attempt is abandoned and retried.
+* **Tier-reach gate.** Reject and retry if `|tier(get) − tier(give)|` exceeds the offer's reach (placeholder `maxReach` = 2). Resource tier is read off the §9.1 `xp\_weight` ladder (weights 1, 3, 10, 30, 100, 300, 1000 map to tiers T0–T6, nearest-rung).
+* **Pricing.** The fair baseline output-per-input is the per-unit weight ratio `xp\_weight[give] / xp\_weight[get]` — verified fair against the recipe table, whose realized tier-up multiplier tracks the ≈3.16×/tier ladder. That baseline is multiplied by a rolled **spread** centred on `0.8^Δtier` (with bounded random variance and the skill-tuned favourability shift). The spread is the deal-quality signal: near-tier swaps land favourable, far-tier swaps land lossy, and offers average ≈neutral. The flat tier-distance tax is what stops a full silo of bulk T0 from converting into a fortune of endgame components — quantity, not per-unit price, is where exploits would live, so the size cap and ever-produced gate (below) carry that load.
+* **Size.** The give quantity is a fraction of current give-stock (placeholder `sizePct` = 10%), clamped so the received quantity never exceeds the get resource's output **headroom** (`cap[get] − inv[get]`). Whichever side binds, the other is back-computed from the price so the swap is exact. If either side clamps to zero the attempt is abandoned.
+
+A generated offer records its give/get resources and quantities, a spawn timestamp, and an expiry timestamp (`spawnedAt + expiryMs`, placeholder expiry = 5 minutes).
+
+#### 9.8.2 Acceptance
+
+On accept, the engine re-clamps the offer against the island's *current* give-stock and *current* output headroom — production may have moved stock between spawn and accept — then subtracts the (re-clamped) give quantity and adds the get quantity in place. **No XP is granted.** The offer is consumed and its slot frees.
+
+#### 9.8.3 Lifecycle — online-only, refresh-proof cadence
+
+Offers exist only while the player is present, and the cadence that paces them is persisted so it cannot be farmed by reloading.
+
+* **Online predicate.** An island's offer machinery only advances on **online** frames, defined as `document.visibilityState === 'visible' && document.hasFocus()`. "Visible" excludes a minimized window or a backgrounded tab; `hasFocus()` additionally excludes another window sitting on top with focus lost. ("Covered but still focused" is not detectable from JS and is the accepted limit.) On any non-online frame, zero online time is credited.
+* **One offer per island.** At most one active offer per Signal-Exchange island at a time. While an offer is live, no new one spawns for that island.
+* **Persisted online-time cooldown.** The spawn timer is a per-island `tradeCooldownMs` field that lives in persisted island state, *not* in ephemeral runtime. Each online frame an eligible island with no active offer burns its cooldown down by the frame's online time, and spawns an offer the moment the cooldown reaches zero. The per-frame credit is capped (`ONLINE\_DT\_CAP\_MS`, placeholder 3 s) so a long hidden→focused jump cannot dump accumulated wall-clock time into the countdown and spawn instantly.
+* **Offers themselves stay ephemeral.** Active offers are runtime-only and are never serialized (§9.8.5). Reloading with an offer on screen forfeits it; the already-running cooldown is unaffected. Because the *cooldown* (not the offer) is what persists, the original ephemeral-cadence behaviour — which let a player load, accept the immediately-spawned offer, reload, and repeat — is closed: a fresh load reads the mid-countdown cooldown and no offer appears until real online time elapses.
+* **Reset on resolution.** When an offer resolves — by accept *or* by expiry — that island's cooldown is reset to its effective cadence (§9.8.4), starting the next wait. The cooldown is reset only on resolution, never at spawn, so an accept's compounding increment (below) lands on the very next offer. The first offer after the building is placed is immediate (cooldown seeds to 0).
+
+#### 9.8.4 Compounding speedup
+
+Each island carries a `tradeAcceptCount`. Every accepted trade on that island increments it, and the island's **effective cadence** is
+
+```
+effective\_cadence\_ms = max(FLOOR\_MS, base\_cadence\_ms \* 0.99^tradeAcceptCount)
+```
+
+so every accept makes that island's next offer arrive ≈1% sooner — "every trade you accept makes the next one come a little faster." `base\_cadence\_ms` is the per-island base spawn interval (placeholder 2 hours of online time, already folded with the frequency skill of §9.8.6). The result is floored at `FLOOR\_MS` (placeholder ~1 minute) so an enthusiastic trader cannot drive cadence toward zero and re-open the farm by another route. The accept counter is per-island, matching the per-island Signal Exchange / cadence / state.
+
+#### 9.8.5 Persistence
+
+`tradeCooldownMs` and `tradeAcceptCount` persist per island (schema v20; backfilled to 0 for pre-v20 saves via `migrateV19toV20`). Active offers do **not** persist — they are regenerated fresh after load once the cooldown elapses.
+
+#### 9.8.6 Skill tuning
+
+A **Logistics → Network** cluster tunes four offer parameters (skill nodes; all base values above are placeholders the cluster modulates upward — multipliers are clamped so a node can never worsen the base tuning):
+
+* **Frequency** — divides the base cadence (more frequent offers).
+* **Size** — multiplies the per-offer fraction of give-stock.
+* **Tier reach** — adds to the maximum `|Δtier|` between give and get (wider swaps).
+* **Spread favourability** — shifts the spread centre toward better deals.
+
+The 1%-per-accept compounding speedup (§9.8.4) is a flat mechanic, not a tunable node, and stacks on top of the frequency skill.
+
+#### 9.8.7 Offline parity
+
+Trade Offers preserve the offline-parity pillar of §15.5. Both the cooldown countdown and the accept accumulator advance on **focused online time only** — offline (or unfocused) time advances neither. An absent player simply misses optional offers; the base economic simulation and offline catch-up are unchanged. Wall-clock pacing was rejected precisely because a returning player would otherwise get an instant offer, softening the online-only contract.
 
 \---
 
