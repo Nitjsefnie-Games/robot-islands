@@ -1002,6 +1002,8 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     unlockedNodes: new Set(),
     unlockedEdges: new Set(),
     everProduced: new Set(),
+    tradeCooldownMs: 0,
+    tradeAcceptCount: 0,
     auraAmpVersion: 0,
     auraAmpCache: null,
     auraAmpCacheVersion: -1,   // -1 forces miss on first computeAuraAmplifiers call

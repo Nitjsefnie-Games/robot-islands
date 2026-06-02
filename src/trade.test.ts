@@ -326,3 +326,11 @@ describe('tuningFor', () => {
     expect(tuningFor({ ...base, tradeSizeMul: 0.5 }).sizePct).toBe(DEFAULT_TRADE_TUNING.sizePct);
   });
 });
+
+describe('persisted trade-cadence fields', () => {
+  it('makeInitialIslandState seeds tradeCooldownMs and tradeAcceptCount to 0', () => {
+    const s = homeState();
+    expect(s.tradeCooldownMs).toBe(0);
+    expect(s.tradeAcceptCount).toBe(0);
+  });
+});
