@@ -33,6 +33,7 @@ describe('computeSharedNetworkState', () => {
       batteryStoredWs: 0,
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
+      everProduced: new Set(),
       lastTick: 0,
     } as IslandState;
 
@@ -63,6 +64,7 @@ describe('computeSharedNetworkState', () => {
       batteryStoredWs: 0,
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
+      everProduced: new Set(),
       lastTick: 0,
     } as IslandState;
 
@@ -147,6 +149,7 @@ describe('computeSharedNetworkState', () => {
       batteryStoredWs: 0,
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
+      everProduced: new Set(),
       lastTick: 0,
     } as IslandState;
 
@@ -177,6 +180,7 @@ describe('computeSharedNetworkState', () => {
       batteryStoredWs: 0,
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
+      everProduced: new Set(),
       lastTick: 0,
     } as IslandState;
 
@@ -262,6 +266,7 @@ describe('computeSharedNetworkState', () => {
       batteryStoredWs: 0,
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
+      everProduced: new Set(),
       lastTick: 0,
     } as IslandState;
 
@@ -343,6 +348,7 @@ describe('computeSharedNetworkState', () => {
       batteryStoredWs: 0,
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
+      everProduced: new Set(),
       lastTick: 0,
     } as IslandState;
 
@@ -373,6 +379,7 @@ describe('computeSharedNetworkState', () => {
       batteryStoredWs: 0,
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
+      everProduced: new Set(),
       lastTick: 0,
     } as IslandState;
 
