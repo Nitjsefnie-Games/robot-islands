@@ -1612,11 +1612,33 @@ describe('applyUpgrade', () => {
     expect(b.floorLevel).toBeUndefined(); // no mutation
   });
 
-  it('rejects with queue-full when the parallel-build cap is already taken', () => {
+  it('enqueues (ok:true, queued=true) when the running cap is taken but queue has room', () => {
+    // New contract (Task 6): running slots full + queue room → enqueue, not reject.
     const spec = makeSpec();
     const state = makeState(spec);
     // One OTHER building occupies the island's single (no-skill) build slot.
     spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(target);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    // floorLevel is advanced immediately (queued upgrade holds its level advance).
+    expect(target.floorLevel).toBe(1);
+    // queued flag is set on the building.
+    expect(target.queued).toBe(true);
+  });
+
+  it('rejects with queue-full when BOTH running slots AND queue are full', () => {
+    // Hard-reject still fires when there is truly no room anywhere.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // Occupy the running slot.
+    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    // Fill the queue (base capacity 2) with queued builds.
+    const qSlots = queuedBuildSlots(state);
+    for (let i = 0; i < qSlots; i++) {
+      spec.buildings.push({ id: `qb${i}`, defId: 'mine', x: i * 3, y: 10, constructionRemainingMs: 1, queued: true });
+    }
     const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
     spec.buildings.push(target);
     const r = applyUpgrade(spec, state, 'b1');
@@ -1907,5 +1929,78 @@ describe('queue capacities', () => {
     );
     expect(inProgressBuildCount(s)).toBe(1);
     expect(queuedBuildCount(s)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// enqueue when slots full (Task 6)
+// ---------------------------------------------------------------------------
+describe('enqueue when slots full', () => {
+  it('placeBuilding returns ok:true with queued=true and numeric queueSeq when running slots full but queue has room', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // Occupy the single base parallel-build slot with an in-progress build.
+    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    const stoneBefore = state.inventory.stone;
+    const woodBefore = state.inventory.wood;
+    // Mine costs 200 stone + 80 wood; seed is already plentiful.
+    const r = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'q-1');
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.placed.queued).toBe(true);
+    expect(typeof r.placed.queueSeq).toBe('number');
+    // Cost deducted at enqueue.
+    expect(state.inventory.stone).toBe(stoneBefore - 200);
+    expect(state.inventory.wood).toBe(woodBefore - 80);
+  });
+
+  it('second enqueue gets queueSeq one greater than the first (FIFO stamp increments via state.nextQueueSeq)', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // Occupy the single base slot.
+    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    const r1 = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'q-2a');
+    const r2 = placeBuilding(spec, state, 'mine', 10, 0, 0, () => 'q-2b');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (!r1.ok || !r2.ok) throw new Error('expected both ok');
+    expect(r1.placed.queueSeq).toBeDefined();
+    expect(r2.placed.queueSeq).toBeDefined();
+    expect(r2.placed.queueSeq!).toBe(r1.placed.queueSeq! + 1);
+  });
+
+  it('placeBuilding hard-rejects when running slots full AND queue is full', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // Occupy the single base running slot.
+    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    // Fill the queue (base capacity 2) with 2 queued builds.
+    const qSlots = queuedBuildSlots(state);
+    for (let i = 0; i < qSlots; i++) {
+      spec.buildings.push({ id: `q${i}`, defId: 'mine', x: i * 3, y: 10, constructionRemainingMs: 1, queued: true });
+    }
+    const r = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'q-overflow');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe('queue-full');
+    }
+  });
+
+  it('applyUpgrade returns ok:true with queued=true on the building when running slots full and queue has room', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.stone = 10000;
+    state.inventory.wood = 10000;
+    // Occupy the single base running slot.
+    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    // The target building is NOT under construction itself.
+    const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(target);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    // floorLevel was still incremented (queued upgrade holds its level advance).
+    expect(target.floorLevel).toBe(1);
+    // queued flag is set on the building.
+    expect(target.queued).toBe(true);
   });
 });
