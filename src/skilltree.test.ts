@@ -1317,3 +1317,11 @@ describe('queueCapBonus aggregation', () => {
     expect(effectiveSkillMultipliers(fresh, LG).queueCapBonus).toBe(0);
   });
 });
+
+describe('queue mirror nodes', () => {
+  it('queueFoundries + queueConstruction exist in the graph', () => {
+    const ids = new Set(DEFAULT_GRAPH.nodes.map((n) => n.id));
+    expect(ids.has('robotics.notable.queueFoundries')).toBe(true);
+    expect(ids.has('robotics.keystone.queueConstruction')).toBe(true);
+  });
+});
