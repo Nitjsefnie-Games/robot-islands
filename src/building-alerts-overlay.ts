@@ -68,8 +68,11 @@ export function mountBuildingAlertsOverlay(
 
   const rebuild = (): void => {
     gfx.clear();
-    // Remove all Text objects from the previous rebuild before re-adding them.
-    badgeLayer.removeChildren();
+    // Destroy (not just detach) all Text objects from the previous rebuild
+    // before re-adding them — `removeChildren()` returns the removed array;
+    // `destroy(true)` releases each badge's text texture deterministically
+    // rather than leaving it to Pixi's texture GC.
+    for (const c of badgeLayer.removeChildren()) c.destroy(true);
     for (const [islandId, state] of islandStates) {
       const spec = world.islands.find((i) => i.id === islandId);
       if (!spec) continue;
