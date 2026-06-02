@@ -28,7 +28,7 @@ import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
 import { computeSharedNetworkState } from './network.js';
 
-import { tierForLevel } from './skilltree.js';
+import { tierForLevel, effectiveSkillMultipliers } from './skilltree.js';
 import { renderCellGrid } from './grid.js';
 import { mountHud, mountIslandBar } from './hud.js';
 import { mountBuildQueuePanel } from './build-queue-ui.js';
@@ -76,7 +76,7 @@ import {
 } from './world.js';
 import { mountDronesUi } from './drones-ui.js';
 import { tickDrones } from './drones.js';
-import { tickTradeOffers, applyOffer, DEFAULT_TRADE_TUNING, type TradeRuntime } from './trade.js';
+import { tickTradeOffers, applyOffer, tuningFor, type TradeRuntime } from './trade.js';
 import { mountTradeUi } from './trade-ui.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import { SONAR_BUOY_DEF_ID, SONAR_BUOY_RADIUS_TILES, tickSonarBuoys } from './sonar-buoy.js';
@@ -1860,7 +1860,15 @@ async function main(): Promise<void> {
     // Trade offer lifecycle — only while tab is visible so offers accrue on
     // online time only (document.hidden = true when the tab is backgrounded).
     if (!document.hidden) {
-      tickTradeOffers(tradeRuntime, islandStates, Math.random, DEFAULT_TRADE_TUNING, now);
+      // Per-island tuning resolves from each island's skill multipliers
+      // (same accessor the economy uses — default graph, no crystal fold).
+      tickTradeOffers(
+        tradeRuntime,
+        islandStates,
+        Math.random,
+        (state) => tuningFor(effectiveSkillMultipliers(state)),
+        now,
+      );
     }
     // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
     // islands for ellipse overlaps. At most ONE merge runs per tick — the

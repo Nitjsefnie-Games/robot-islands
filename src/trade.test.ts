@@ -266,9 +266,9 @@ describe('offer lifecycle', () => {
     const s = ready();
     const rt: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, DEFAULT_TRADE_TUNING, 0);
+    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 0);
     expect(rt.offers.filter((o) => o.islandId === s.id).length).toBe(1);
-    tickTradeOffers(rt, states, Math.random, DEFAULT_TRADE_TUNING, 1000);
+    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 1000);
     expect(rt.offers.filter((o) => o.islandId === s.id).length).toBe(1);
   });
 
@@ -276,9 +276,24 @@ describe('offer lifecycle', () => {
     const s = ready();
     const rt: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, DEFAULT_TRADE_TUNING, 0);
+    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 0);
     expect(rt.offers.length).toBe(1);
-    tickTradeOffers(rt, states, Math.random, DEFAULT_TRADE_TUNING, 6 * 60 * 1000);
+    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 6 * 60 * 1000);
+    expect(rt.offers.length).toBe(0);
+  });
+
+  it('does NOT respawn after expiry until the cadence has elapsed', () => {
+    const s = ready();
+    const rt: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
+    const states = new Map([[s.id, s]]);
+    // t=0: one offer spawns; nextSpawnAt = 0 + 2h cadence.
+    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 0);
+    expect(rt.offers.length).toBe(1);
+    // t=6min: offer is past its 5-min expiry, pruned to zero.
+    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 6 * 60 * 1000);
+    expect(rt.offers.length).toBe(0);
+    // t=7min: still before the 2h cadence — nextSpawnAt gate blocks respawn.
+    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 7 * 60 * 1000);
     expect(rt.offers.length).toBe(0);
   });
 });
