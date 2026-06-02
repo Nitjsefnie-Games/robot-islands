@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { advanceIsland, type DefCatalog, type IslandState } from './economy.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
-import { generateOffer, applyOffer, DEFAULT_TRADE_TUNING, tierOf, tickTradeOffers, islandHasSignalExchange, type TradeOffer, type TradeRuntime } from './trade.js';
+import { generateOffer, applyOffer, DEFAULT_TRADE_TUNING, tierOf, tickTradeOffers, tuningFor, islandHasSignalExchange, type TradeOffer, type TradeRuntime } from './trade.js';
+import { blankMultipliers } from './skilltree.js';
 import type { ResourceId } from './recipes.js';
 
 /** Strip power from the given defIds so tests exercise production/consumption
@@ -295,5 +296,33 @@ describe('offer lifecycle', () => {
     // t=7min: still before the 2h cadence — nextSpawnAt gate blocks respawn.
     tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 7 * 60 * 1000);
     expect(rt.offers.length).toBe(0);
+  });
+});
+
+describe('tuningFor', () => {
+  const base = blankMultipliers();
+
+  it('tradeFrequencyMul divides cadence', () => {
+    expect(tuningFor({ ...base, tradeFrequencyMul: 4 }).cadenceMs).toBe(DEFAULT_TRADE_TUNING.cadenceMs / 4);
+  });
+
+  it('tradeSizeMul multiplies sizePct', () => {
+    expect(tuningFor({ ...base, tradeSizeMul: 3 }).sizePct).toBeCloseTo(DEFAULT_TRADE_TUNING.sizePct * 3, 9);
+  });
+
+  it('tradeReachAdd adds (rounded) to maxReach', () => {
+    expect(tuningFor({ ...base, tradeReachAdd: 1 }).maxReach).toBe(DEFAULT_TRADE_TUNING.maxReach + 1);
+  });
+
+  it('tradeSpreadShiftAdd adds to spreadShift', () => {
+    expect(tuningFor({ ...base, tradeSpreadShiftAdd: 0.08 }).spreadShift).toBeCloseTo(0.08, 9);
+  });
+
+  it('clamps a <1 frequency multiplier so cadence never lengthens', () => {
+    expect(tuningFor({ ...base, tradeFrequencyMul: 0.5 }).cadenceMs).toBe(DEFAULT_TRADE_TUNING.cadenceMs);
+  });
+
+  it('clamps a <1 size multiplier so volume never shrinks', () => {
+    expect(tuningFor({ ...base, tradeSizeMul: 0.5 }).sizePct).toBe(DEFAULT_TRADE_TUNING.sizePct);
   });
 });
