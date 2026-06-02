@@ -71,7 +71,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 17 as const;
+export const SCHEMA_VERSION = 18 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -79,7 +79,7 @@ export const SCHEMA_VERSION = 17 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -509,6 +509,20 @@ export function migrateV16toV17(s: SerializedSnapshotV16): SaveSnapshot {
   } as unknown as SaveSnapshot;
 }
 
+/** v17 top-level snapshot shape. Structurally identical to v18 (SaveSnapshot)
+ *  except the v literal. The v17 → v18 migration is a pure version bump:
+ *  the new build-queue fields (`queued`/`queueSeq` per building,
+ *  `nextQueueSeq` per island state) are all optional with absent ≡ default. */
+export type SerializedSnapshotV17 = Omit<SaveSnapshot, 'v'> & { readonly v: 17 };
+
+/** v17 → v18: build-queue fields shipped. `queued`/`queueSeq` (per building)
+ *  and `nextQueueSeq` (per island state) are all optional with absent ≡ default
+ *  (not queued / seq 0), so old saves need no backfill — every in-progress build
+ *  loads as running, nothing queued. Pure version bump. */
+export function migrateV17toV18(s: SerializedSnapshotV17): SaveSnapshot {
+  return { ...s, v: 18 as const } as unknown as SaveSnapshot;
+}
+
 export interface SaveSnapshot {
   readonly v: typeof SCHEMA_VERSION;
   /** `Date.now()` wall-clock ms at save time. Used to compute the offline
@@ -686,6 +700,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 16) {
     snapshot = migrateV16toV17(snapshot as unknown as SerializedSnapshotV16);
+  }
+  if ((snapshot as unknown as { v: number }).v === 17) {
+    snapshot = migrateV17toV18(snapshot as unknown as SerializedSnapshotV17);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {

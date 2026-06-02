@@ -37,6 +37,7 @@ import { cumulativeSkillPointsForLevel } from './skilltree.js';
 
 import {
   SCHEMA_VERSION,
+  SUPPORTED_LOAD_VERSIONS,
   STORAGE_KEY,
   STORAGE_KEY_DISPLAY,
   deserializeWorld,
@@ -48,6 +49,7 @@ import {
   migrateV13toV14,
   migrateV15toV16,
   migrateV16toV17,
+  migrateV17toV18,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -57,6 +59,7 @@ import {
   type SerializedSnapshotV13,
   type SerializedSnapshotV15,
   type SerializedSnapshotV16,
+  type SerializedSnapshotV17,
   type SerializedIslandStateV11,
   type SerializedWorld,
 } from './persistence.js';
@@ -140,7 +143,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(17);
+    expect(snap.v).toBe(18);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1472,7 +1475,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(17);
+    expect(snap.v).toBe(18);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -2146,5 +2149,44 @@ describe('PlacedBuilding.floorLevel persistence', () => {
     const b = restoredHome.buildings.find((bld) => bld.id === 'solar-1')!;
     expect(b.floorLevel).toBeUndefined();
     expect(floorLevel(b)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v17 → v18 migration (build-queue fields)
+// ---------------------------------------------------------------------------
+
+describe('v17 -> v18 migration', () => {
+  it('SCHEMA_VERSION is 18 and both 17 and 18 are supported', () => {
+    expect(SCHEMA_VERSION).toBe(18);
+    expect(SUPPORTED_LOAD_VERSIONS.has(17)).toBe(true);
+    expect(SUPPORTED_LOAD_VERSIONS.has(18)).toBe(true);
+  });
+  it('migrateV17toV18 bumps v and preserves islandStates/world', () => {
+    const v17: SerializedSnapshotV17 = { v: 17, savedAt: 1, savedAtPerf: 0, world: { islands: [] }, islandStates: [] } as unknown as SerializedSnapshotV17;
+    const out = migrateV17toV18(v17);
+    expect(out.v).toBe(18);
+    expect(out.islandStates).toEqual([]);
+  });
+  it('round-trip: building with queued/queueSeq and nextQueueSeq on island state survive serialize→loadWorld', () => {
+    const world = makeInitialWorld(0);
+    const homeSpec = world.islands.find((s) => s.id === 'home')!;
+    // Push a queued building onto the spec's buildings array.
+    homeSpec.buildings.push({ id: 'mine-q1', defId: 'mine', x: 5, y: 5, queued: true, queueSeq: 1 });
+    const homeState = makeInitialIslandState(homeSpec, 0);
+    // Annotate nextQueueSeq on the state (it is optional on IslandState per economy.ts).
+    (homeState as unknown as Record<string, unknown>).nextQueueSeq = 2;
+    const states = new Map<string, IslandState>([['home', homeState]]);
+    const snap = serializeWorld(world, states, 0, 0);
+    // The snapshot must be at v18 (SCHEMA_VERSION).
+    expect(snap.v).toBe(18);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
+    const rSpec = restored.islands.find((s) => s.id === 'home')!;
+    const queued = rSpec.buildings.find((b) => b.id === 'mine-q1')!;
+    expect(queued.queued).toBe(true);
+    expect(queued.queueSeq).toBe(1);
+    const rState = restoredStates.get('home')!;
+    expect((rState as unknown as Record<string, unknown>).nextQueueSeq).toBe(2);
   });
 });
