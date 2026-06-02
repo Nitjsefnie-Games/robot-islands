@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { advanceIsland, type DefCatalog, type IslandState } from './economy.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
-import { generateOffer, applyOffer, DEFAULT_TRADE_TUNING, tierOf, type TradeOffer } from './trade.js';
+import { generateOffer, applyOffer, DEFAULT_TRADE_TUNING, tierOf, tickTradeOffers, islandHasSignalExchange, type TradeOffer, type TradeRuntime } from './trade.js';
 import type { ResourceId } from './recipes.js';
 
 /** Strip power from the given defIds so tests exercise production/consumption
@@ -230,5 +230,55 @@ describe('applyOffer', () => {
     s.storageCaps.wood = 100; s.inventory.wood = 90;
     applyOffer(s, offerOn(s, 'stone', 50, 'wood', 40));
     expect(s.inventory.wood).toBe(100);
+  });
+});
+
+describe('signal exchange building', () => {
+  it('exists as a cheap T1 logistics 1x1 building with no recipe, power, or storage', () => {
+    const def = (BUILDING_DEFS as Record<string, any>)['signal_exchange'];
+    expect(def).toBeDefined();
+    expect(def.category).toBe('logistics');
+    expect(def.tier).toBe(1);
+    expect(def.recipe).toBeUndefined();
+    expect(def.power).toBeUndefined();
+    expect(def.storage).toBeUndefined();
+    const total = Object.values(def.placementCost as Record<string, number>).reduce((a, b) => a + b, 0);
+    expect(total).toBeLessThanOrEqual(110); // <= crate's 80+30
+  });
+});
+
+describe('offer lifecycle', () => {
+  function ready(): IslandState {
+    const s = homeState();
+    s.storageCaps.stone = 100; s.inventory.stone = 90;
+    s.everProduced.add('stone'); s.everProduced.add('wood');
+    s.storageCaps.wood = 100; s.inventory.wood = 5;
+    s.buildings = [...s.buildings, { id: 'b-sx', defId: 'signal_exchange', x: 1, y: 1 }];
+    return s;
+  }
+
+  it('detects the Signal Exchange building', () => {
+    expect(islandHasSignalExchange(ready())).toBe(true);
+    expect(islandHasSignalExchange(homeState())).toBe(false);
+  });
+
+  it('spawns at most one active offer per island and not before cadence', () => {
+    const s = ready();
+    const rt: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, Math.random, DEFAULT_TRADE_TUNING, 0);
+    expect(rt.offers.filter((o) => o.islandId === s.id).length).toBe(1);
+    tickTradeOffers(rt, states, Math.random, DEFAULT_TRADE_TUNING, 1000);
+    expect(rt.offers.filter((o) => o.islandId === s.id).length).toBe(1);
+  });
+
+  it('expires offers past expiresAt', () => {
+    const s = ready();
+    const rt: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, Math.random, DEFAULT_TRADE_TUNING, 0);
+    expect(rt.offers.length).toBe(1);
+    tickTradeOffers(rt, states, Math.random, DEFAULT_TRADE_TUNING, 6 * 60 * 1000);
+    expect(rt.offers.length).toBe(0);
   });
 });
