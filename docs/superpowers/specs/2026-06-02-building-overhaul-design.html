@@ -1,0 +1,649 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Building overhaul (cancel · queue · level badge)</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 1040px; }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 860px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ---------- toc ---------- */
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 28px 0 56px;
+    }
+    .toc a {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--gray-700);
+      background: var(--white);
+      border: var(--border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      text-decoration: none;
+      transition: border-color .15s, color .15s;
+    }
+    .toc a:hover { color: var(--clay); border-color: var(--clay); }
+
+    /* ---------- summary strip ---------- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 60px; scroll-margin-top: 24px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 800px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    ul.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ul.body li { margin: 6px 0; }
+    ul.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      color: #C9B98A;
+      overflow-x: auto;
+      max-width: 820px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* ---------- comparison ("X vs Y") cards ---------- */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- checklist ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- risk table ---------- */
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    /* ---------- deferred / out-of-scope cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · branch feat/building-overhaul</div>
+      <h1>Building overhaul — cancel construction, build queue, level badge</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        The construction system already supports parallel build slots (base 1, up to 4 via the
+        Robotics skill sub-path) and per-building construction timers, but a placement is hard-blocked
+        when all slots are full, and there is no way to abort a build. This spec adds four related
+        mechanics: cancel-for-full-refund, a FIFO build queue that feeds the existing slots, mirror
+        skill nodes that scale queue capacity, and a persistent floor-level badge on every building.
+      </div>
+    </header>
+
+    <nav class="toc">
+      <a href="#s-existing">00 · Existing system</a>
+      <a href="#s-repr">01 · Queued-build representation</a>
+      <a href="#s-cap">02 · Two capacities</a>
+      <a href="#s-mat">03 · Materials timing</a>
+      <a href="#s-cancel">04 · Cancel = full refund</a>
+      <a href="#s-promote">05 · Promotion</a>
+      <a href="#s-ui">06 · UI</a>
+      <a href="#s-persist">07 · Persistence v17→v18</a>
+      <a href="#s-changes">08 · Change inventory</a>
+      <a href="#s-verify">09 · Verification</a>
+      <a href="#s-risks">10 · Risks</a>
+      <a href="#s-scope">11 · Out of scope</a>
+    </nav>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Scope</div><div class="v accent">4 mechanics</div></div>
+      <div class="cell"><div class="k">Schema</div><div class="v">v17 → v18</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low–Med</div></div>
+      <div class="cell"><div class="k">Queue ratio</div><div class="v">1 : 2 (slots : queue)</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">A queued build is a <code>PlacedBuilding</code> flagged <code>queued</code>, paid at enqueue, cancellable for a 100% refund.</div>
+      <div class="d-body">Representing a queued build as a committed-but-not-ticking building (rather than a
+        separate pending array) reuses the existing overlap/footprint validation, reserves tiles at enqueue,
+        and makes <strong>cancel a single uniform operation</strong> (remove + refund) for both queued and running
+        builds. Materials are deducted at enqueue — the analog of today's pay-at-placement — so "refund every
+        spent material" applies the same way whether a build is queued or running.</div>
+      <div class="d-body">Queue capacity tracks a fixed <strong>1:2 ratio</strong> with running slots via mirror skill
+        nodes (one per existing parallel-slot grantor, granting 2× into queue). Cancel is deliberately distinct from
+        §6.7 demolish (30% scrap) and relocate (half-fee): it is a <em>full</em> refund, available only while
+        construction is incomplete.</div>
+    </div>
+
+    <section id="s-existing">
+      <div class="sec-head"><span class="num">00</span><h2>Existing system we build on</h2></div>
+      <p class="sec-intro">The invariants the design must preserve.</p>
+      <ul class="body">
+        <li>Construction is per-building: <code>PlacedBuilding.constructionRemainingMs</code>. While <code>&gt; 0</code>, the building does not produce, contribute power, or accrue maintenance; it ticks down each <code>advanceIsland</code> segment and flips operational at 0. (<code>src/construction.ts</code>)</li>
+        <li><strong>Parallel build slots</strong> = <code>parallelBuildSlots(state)</code> = <code>1 + floor(parallelBuildBonus) + (parallelConstruction ? 1 : 0)</code>. Today: <code>robotics.notable.parallelFoundries</code> (<code>parallelBuildCapAdd</code>, magnitude 2.0 → +2) and <code>robotics.keystone.parallelConstruction</code> (structural +1). <strong>Full tree = 4 running slots.</strong></li>
+        <li><code>inProgressBuildCount</code> counts <code>constructionRemainingMs &gt; 0</code>. Both <code>placeBuilding</code> and <code>applyUpgrade</code> reject with <code>reason: 'queue-full'</code> when the count reaches the slot cap; materials deduct at commit.</li>
+        <li>Demolish ≈ 30% scrap (§6.7); relocate = half-fee. Cancel is new and distinct (full refund).</li>
+        <li>Persistence at <strong>SCHEMA_VERSION 17</strong>; AGENTS.md: <strong>bump = migrate</strong>. Skill-tree budget guard: ≤ 23 nodes &amp; ≤ 2 filler lever-families per sub-path.</li>
+      </ul>
+    </section>
+
+    <section id="s-repr">
+      <div class="sec-head"><span class="num">01</span><h2>Queued-build representation</h2></div>
+      <p class="sec-intro">Why a flagged building beats a separate pending array.</p>
+      <p class="body">A queued build is a <code>PlacedBuilding</code> committed to the map with <code>queued: true</code>.
+        It occupies its tiles immediately (footprint reserved at enqueue, reusing existing overlap validation), carries
+        its full <code>constructionRemainingMs</code> but <strong>does not tick while queued</strong>, and holds a
+        <code>queueSeq</code> (monotonic per-island enqueue counter — sourced from <code>IslandState</code>, not wall-clock,
+        since the pure layer forbids <code>Date.now()</code>) for deterministic FIFO order.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Separate queue array</div>
+          <div class="col-body"><ul>
+            <li>Duplicates footprint validation off-map.</li>
+            <li>Must re-validate the footprint at promotion (tile may be taken).</li>
+            <li>Cancel has two code paths (queued vs running).</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">Flagged PlacedBuilding (chosen)</div>
+          <div class="col-body"><ul>
+            <li>Reuses overlap validation; tiles reserved at enqueue.</li>
+            <li>No promotion-time re-validation, no "tile got taken" race.</li>
+            <li>Cancel is one uniform remove+refund for queued and running.</li>
+          </ul></div>
+        </div>
+      </div>
+      <p class="body" style="margin-top:18px;"><strong>Predicate changes:</strong> <code>inProgressBuildCount</code> counts
+        running only (<code>constructionRemainingMs &gt; 0 &amp;&amp; !queued</code>); new <code>queuedBuildCount</code>
+        counts <code>queued === true</code>. <code>tickConstruction</code> and <code>nextConstructionCompletionMs</code>
+        skip queued buildings (no decrement, no scheduled completion). <code>computeRates</code> already zeros production
+        for <code>constructionRemainingMs &gt; 0</code>, which correctly covers queued builds — no change there.</p>
+    </section>
+
+    <section id="s-cap">
+      <div class="sec-head"><span class="num">02</span><h2>Two capacities + mirror skill nodes</h2></div>
+      <p class="sec-intro">Queue capacity mirrors running slots at a fixed 1:2 ratio.</p>
+      <table class="tbl">
+        <thead><tr><th>Capacity</th><th>Function</th><th>Base</th><th>Full tree</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Running slots</td><td><code>parallelBuildSlots</code> (unchanged)</td><td>1</td><td>4</td></tr>
+          <tr><td class="slate">Queue capacity</td><td><code>queuedBuildSlots</code> (new)</td><td>2</td><td>8</td></tr>
+        </tbody>
+      </table>
+      <pre>queuedBuildSlots = 2 + floor(queueCapBonus) + (parallelQueue ? 2 : 0)
+  empty: 1 : 2          full: (1+2+1) : (2+4+2) = 4 : 8 = 1 : 2  ✓</pre>
+      <p class="body">For <strong>each</strong> node that grants a parallel build slot, add a mirror node granting 2× into queue capacity:</p>
+      <table class="tbl">
+        <thead><tr><th>Parallel grantor</th><th>Mirror queue node (new)</th><th>Grant</th></tr></thead>
+        <tbody>
+          <tr><td><code>robotics.notable.parallelFoundries</code> (+2 slots)</td><td class="slate"><code>robotics.notable.queueFoundries</code> (<code>queueCapAdd</code> 4.0)</td><td>+4 queue</td></tr>
+          <tr><td><code>robotics.keystone.parallelConstruction</code> (+1 slot)</td><td class="slate"><code>robotics.keystone.queueConstruction</code> (structural <code>parallelQueue</code>)</td><td>+2 queue</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top:18px;">New effect kind <code>queueCapAdd</code> (additive, parallels <code>parallelBuildCapAdd</code>) aggregated into
+        <code>queueCapBonus</code>; magnitude in <code>skilltree-derive-magnitudes.ts</code> (<code>queueCapAdd: 4.0</code>); label +
+        hover formatter. New structural kind <code>parallelQueue</code> read via <code>hasStructuralEffect</code>. Both nodes are
+        notable/keystone (not filler) → no new filler lever-family, but they count toward the ≤ 23-node guard:
+        <strong>verify Robotics stays ≤ 23 before merge.</strong></p>
+    </section>
+
+    <section id="s-mat">
+      <div class="sec-head"><span class="num">03</span><h2>Materials timing — deduct at enqueue</h2></div>
+      <p class="sec-intro">Enqueue is the analog of today's placement commit.</p>
+      <ul class="body">
+        <li>Affordability checked once, at enqueue; inventory deducted immediately (full placement cost incl. terrain-modifier upfront cost per §8.9, or upgrade cost for an upgrade job).</li>
+        <li>Each enqueue sees the post-deduction balance, so the next enqueue gates against the right inventory.</li>
+        <li>No promotion-time "can't afford it now" failure mode to handle.</li>
+        <li><strong>Cancel refunds the stored cost</strong> — "refund every spent material" applies uniformly because materials <em>were</em> spent at enqueue.</li>
+      </ul>
+    </section>
+
+    <section id="s-cancel">
+      <div class="sec-head"><span class="num">04</span><h2>Cancel = 100% refund</h2></div>
+      <p class="sec-intro">One action, two shapes — available whenever construction is incomplete (queued or running).</p>
+      <ul class="body">
+        <li><strong>Cancel a fresh placement</strong> → remove the building entirely; refund full placement cost (incl. terrain-modifier upfront); strip any storage-cap contribution the placement added; free the slot and trigger promotion (§05). A <em>queued</em> placement uses this same path — it never started ticking.</li>
+        <li><strong>Cancel an in-progress upgrade</strong> → building persists; revert to pre-upgrade floor level; clear <code>constructionRemainingMs</code>; refund the <em>upgrade</em> cost only.</li>
+      </ul>
+      <p class="body">New pure function <code>cancelConstruction(spec, state, buildingId): CancelResult</code> in <code>placement.ts</code>,
+        returning the refunded basket (mirrors <code>DemolishResult</code>'s shape). Storage-cap mutation ordering follows
+        <code>demolishBuilding</code>'s discipline.</p>
+    </section>
+
+    <section id="s-promote">
+      <div class="sec-head"><span class="num">05</span><h2>Promotion (pure economy hook)</h2></div>
+      <p class="sec-intro">FIFO promotion at the construction-completion boundary the integrator already splits on.</p>
+      <p class="body">When a <strong>running</strong> build completes inside <code>advanceIsland</code> — at the
+        <code>nextConstructionCompletionMs</code> boundary — and a slot frees, promote the FIFO head (lowest
+        <code>queueSeq</code>): clear its <code>queued</code> flag so it begins ticking that same tick. Promote repeatedly
+        if multiple slots free in one segment, until slots are full or the queue is empty. No separate scheduler;
+        deterministic for both 1-frame and 24h offline-catchup.</p>
+    </section>
+
+    <section id="s-ui">
+      <div class="sec-head"><span class="num">06</span><h2>UI</h2></div>
+      <p class="sec-intro">A draggable queue window (top-left) and a persistent level badge (bottom-right).</p>
+      <ul class="body">
+        <li><strong>Build-queue window</strong> — windowed, draggable panel reusing <code>mountPanel</code> + <code>makePanelDraggable</code> (the bottom-right HUD's pattern), registered in the top-left zone (<code>Zone.TL</code>, currently unused). Lists running builds (with progress) then queued builds (FIFO), each with a full-refund <strong>Cancel</strong> button; shows <code>running N/slots</code> and <code>queued M/queueSlots</code>. All handlers dispatch through the <code>input.ts</code> registry (<code>dispatchAction</code>) — no ad-hoc DOM handlers.</li>
+        <li><strong>Enqueue path</strong> — when running slots are full but queue has space, the existing <code>'queue-full'</code> reject becomes an <em>enqueue</em>; only a full queue hard-blocks.</li>
+        <li><strong>Level badge</strong> — added to <code>building-alerts-overlay.ts</code> (already imports <code>floorLevel</code>). Persistent, always shown (incl. L1), bottom-right corner. Bottom-left stays free; top corners remain construction (TL) / maintenance (TR). Pure PixiJS Graphics on the existing throttle.</li>
+      </ul>
+    </section>
+
+    <section id="s-persist">
+      <div class="sec-head"><span class="num">07</span><h2>Persistence — bump v17 → v18</h2></div>
+      <p class="sec-intro">AGENTS.md: bump = migrate.</p>
+      <ul class="body">
+        <li><code>SerializedSnapshotV17</code> type alias capturing the current shape.</li>
+        <li><code>migrateV17toV18</code> — default new per-building fields (<code>queued: false</code>; absent <code>queueSeq</code> → 0 / placement order) and the per-island <code>queueSeq</code> counter (0). Old saves keep working: nothing queued, every in-progress build running.</li>
+        <li>Wire into <code>loadWorld</code>'s version dispatch; add <code>18</code> to <code>SUPPORTED_LOAD_VERSIONS</code>.</li>
+        <li>Tests: v17 fixture → v18; v18 round-trips identity; defaults exercised.</li>
+      </ul>
+    </section>
+
+    <section id="s-changes">
+      <div class="sec-head"><span class="num">08</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Files the implementation touches.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/placement.ts</div>
+          <div class="what"><span class="lead">Queue + cancel core.</span> <code>queuedBuildSlots</code>, <code>queuedBuildCount</code>; <code>inProgressBuildCount</code> → running-only; enqueue path on slot-full; <code>cancelConstruction</code> (placement + upgrade shapes).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/construction.ts</div>
+          <div class="what"><span class="lead">Skip queued.</span> <code>tickConstruction</code> / <code>nextConstructionCompletionMs</code> ignore <code>queued</code> builds.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts</div>
+          <div class="what"><span class="lead">Promotion hook.</span> At the completion boundary in <code>advanceIsland</code>, promote FIFO queue head(s) into freed slots.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/buildings.ts</div>
+          <div class="what"><span class="lead">Model fields.</span> <code>queued?: boolean</code>, <code>queueSeq?: number</code> on <code>PlacedBuilding</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/skilltree.ts · skilltree-catalog.ts · skilltree-derive-magnitudes.ts · skilltree-archetypes.ts</div>
+          <div class="what"><span class="lead">Mirror nodes.</span> <code>queueCapAdd</code> + <code>parallelQueue</code> effect kinds, two new Robotics nodes, magnitude/label/hover wiring.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">Migration.</span> v17→v18 alias + <code>migrateV17toV18</code> + <code>SUPPORTED_LOAD_VERSIONS</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/ui-zones.ts (Zone.TL) · new queue-window module · input.ts</div>
+          <div class="what"><span class="lead">Queue window.</span> Draggable top-left panel + cancel actions via the input registry.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-alerts-overlay.ts</div>
+          <div class="what"><span class="lead">Level badge.</span> Persistent bottom-right level number, always shown.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md (§9.3, §4, §15.1, §15.3)</div>
+          <div class="what"><span class="lead">Spec alignment.</span> Document queue capacity, mirror nodes, cancel, promotion.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s-verify">
+      <div class="sec-head"><span class="num">09</span><h2>Verification</h2></div>
+      <p class="sec-intro">Pure-layer + TDD; renderer not required for logic tests.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Enqueue.</strong> Deducts materials; affordability gate; blocks only when <code>queuedBuildCount &gt;= queuedBuildSlots</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Count split.</strong> <code>inProgressBuildCount</code> excludes queued; running gate unaffected by queued builds.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Promotion.</strong> FIFO order; multiple promotions in one segment; offline-catchup correctness.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Cancel placement.</strong> Building removed (running + queued), full refund, storage caps restored, slot freed + promotion fires.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Cancel upgrade.</strong> Level reverted, upgrade cost refunded, building persists.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Capacity math.</strong> <code>queuedBuildSlots</code> at empty/partial/full tree; 1:2 ratio at empty and full.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Guards.</strong> Budget guard passes (Robotics ≤ 23); migration tests (§07) green; <code>npm run build</code> + <code>npm test</code> clean.</div></div>
+      </div>
+    </section>
+
+    <section id="s-risks">
+      <div class="sec-head"><span class="num">10</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell"><code>inProgressBuildCount</code> consumers elsewhere assume it counts all incomplete builds; narrowing to running-only could shift a gate.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell"><code>findReferences</code> on the symbol before editing; audit every call site; add the queued/running split intentionally per site.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Adding two Robotics nodes breaches the ≤ 23-node budget guard.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Notable/keystone (no filler family); run <code>skilltree-budget.test.ts</code> and confirm headroom before merge.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Migration default leaves an old in-progress build mis-flagged (queued vs running).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Default <code>queued: false</code> → all legacy in-progress builds are running, matching prior behaviour exactly; covered by v17→v18 fixture test.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s-scope">
+      <div class="sec-head"><span class="num">11</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Considered, deliberately deferred for v1.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Queue reordering / drag-to-reorder</div>
+          <div class="dd">FIFO only for v1; reordering adds UI + ordering complexity with no proven need.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">"Cancel all queued" bulk button</div>
+          <div class="dd">Per-item cancel only unless requested — keeps the action surface small.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands · generated 2026-06-02 · pairs with docs/superpowers/specs/2026-06-02-building-overhaul-design.md · next step: writing-plans</p>
+    </div>
+
+  </div>
+</body>
+</html>
