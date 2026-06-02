@@ -14,6 +14,7 @@
 import { borderTiles, checkGates, clusterBonusMuls, computeBuffStack, footprintKeySet, touchesBorder } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { nextConstructionCompletionMs, tickConstruction } from './construction.js';
+import { promoteQueuedBuilds } from './placement.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
   BUILDING_DEFS,
@@ -1953,6 +1954,10 @@ export function advanceIsland(
         if (Object.keys(recipe.outputs).length === 0) continue;
         accrueOperatingTime(b, dtMs);
       }
+      // §queue: after construction ticks, a running slot may have just
+      // freed up (build completed). Promote the FIFO queue head so it
+      // begins ticking within the same advance call.
+      promoteQueuedBuilds(state);
     }
     // Advance t. If no progress was made (dt = 0 and segEnd === t) but we
     // haven't reached nowMs, force advance to avoid an infinite loop. This
