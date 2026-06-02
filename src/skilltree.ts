@@ -123,6 +123,15 @@ export type SkillEffect =
   // route dispatch (cost added so "Network reach" scales something; teleporters
   // were previously free + instant).
   | { readonly kind: 'teleporterEfficiencyMul' }
+  // Logistics-Network trade-offer tuning (trade.ts `tuningFor`):
+  //   - tradeFrequencyMul     → divides offer cadence (more frequent offers)
+  //   - tradeSizeMul          → multiplies the fraction of give-stock per offer
+  //   - tradeReachAdd         → ADDS to the max |Δtier| reach (rounded)
+  //   - tradeSpreadShiftAdd   → ADDS to the spread favorability shift
+  | { readonly kind: 'tradeFrequencyMul' }
+  | { readonly kind: 'tradeSizeMul' }
+  | { readonly kind: 'tradeReachAdd' }
+  | { readonly kind: 'tradeSpreadShiftAdd' }
   // Extraction-family secondary themes — per-building yield bonuses.
   //   - mineYieldBonusMul       → per-Mine recipe rate bonus (vein depth)
   //   - mineRareTrickleMul      → per-Mine continuous helium_3 trickle
@@ -840,6 +849,19 @@ export interface SkillMultipliers {
   /** Network sub-path primary axis — divides the per-tile biofuel cost of
    *  teleporter route dispatch. Default 1 (full cost). */
   readonly teleporterEfficiency: number;
+  /** Logistics-Network trade tuning — multiplies trade-offer spawn frequency
+   *  (divides cadence). Default 1. */
+  readonly tradeFrequencyMul: number;
+  /** Logistics-Network trade tuning — multiplies trade-offer volume
+   *  (sizePct). Default 1. */
+  readonly tradeSizeMul: number;
+  /** Logistics-Network trade tuning — additive bonus to offer tier reach
+   *  (maxReach). Stored as the additive bonus; rounded at the caller.
+   *  Default 0. */
+  readonly tradeReachAdd: number;
+  /** Logistics-Network trade tuning — additive favorability shift on the
+   *  offer spread center. Default 0. */
+  readonly tradeSpreadShiftAdd: number;
   /** Mining secondary axis — multiplies Mine-building recipe rates. Stacks
    *  with the global recipeRate.extraction multiplier. */
   readonly mineYieldBonus: number;
@@ -897,6 +919,10 @@ function blankMultipliers(): SkillMultipliers {
     parallelBuildBonus: 0,
     queueCapBonus: 0,
     teleporterEfficiency: 1,
+    tradeFrequencyMul: 1,
+    tradeSizeMul: 1,
+    tradeReachAdd: 0,
+    tradeSpreadShiftAdd: 0,
     mineYieldBonus: 1,
     mineRareTrickleRate: 0,
     loggerYieldBonus: 1,
@@ -947,6 +973,10 @@ export function effectiveSkillMultipliers(
   let parallelBuildBonus = 0;
   let queueCapBonus = 0;
   let teleporterEfficiency = 1;
+  let tradeFrequencyMul = 1;
+  let tradeSizeMul = 1;
+  let tradeReachAdd = 0;
+  let tradeSpreadShiftAdd = 0;
   let mineYieldBonus = 1;
   let mineRareTrickleRate = 0;
   let loggerYieldBonus = 1;
@@ -1047,6 +1077,20 @@ export function effectiveSkillMultipliers(
       case 'teleporterEfficiencyMul':
         teleporterEfficiency *= m;
         break;
+      case 'tradeFrequencyMul':
+        tradeFrequencyMul *= m;
+        break;
+      case 'tradeSizeMul':
+        tradeSizeMul *= m;
+        break;
+      case 'tradeReachAdd':
+        // Additive — sum per-node magnitudes (rounded at the consumer).
+        tradeReachAdd += node.magnitude;
+        break;
+      case 'tradeSpreadShiftAdd':
+        // Additive — sum per-node magnitudes.
+        tradeSpreadShiftAdd += node.magnitude;
+        break;
       case 'mineYieldBonusMul':
         mineYieldBonus *= m;
         break;
@@ -1118,6 +1162,10 @@ export function effectiveSkillMultipliers(
     parallelBuildBonus,
     queueCapBonus,
     teleporterEfficiency,
+    tradeFrequencyMul,
+    tradeSizeMul,
+    tradeReachAdd,
+    tradeSpreadShiftAdd,
     mineYieldBonus,
     mineRareTrickleRate,
     loggerYieldBonus,
