@@ -534,13 +534,14 @@ export function placeBuilding(
   if (Object.keys(missing).length > 0) {
     return { ok: false, reason: 'insufficient-resources', missing };
   }
-  // §9.3 Robotics parallel-build cap. Base 1 + per-island skill bonus. The
-  // player can only place when there's a free construction slot on the
-  // island. Refunding the cost on a queue-full reject is handled below
-  // (we reject BEFORE the deduction).
+  // §9.3 Robotics parallel-build cap. Base 1 + per-island skill bonus. When
+  // running slots are full but the build queue has room, the build is committed
+  // as `queued` (paid, FIFO-stamped). Only when the queue is also full do we
+  // hard-reject.
   const slots = parallelBuildSlots(state);
   const inProgress = inProgressBuildCount(state);
-  if (inProgress >= slots) {
+  const mustQueue = inProgress >= slots;
+  if (mustQueue && queuedBuildCount(state) >= queuedBuildSlots(state)) {
     return { ok: false, reason: 'queue-full', inProgress, slots };
   }
   // Deduct cost BEFORE committing the building so any subsequent error
@@ -613,8 +614,10 @@ export function placeBuilding(
     operatingMs: 0,
     maintainedAt: nowMs,
     ...(construction > 0 && def.instantBuild !== true ? { constructionRemainingMs: construction } : {}),
+    ...(mustQueue ? { queued: true as const, queueSeq: state.nextQueueSeq ?? 0 } : {}),
   };
   spec.buildings.push(placed);
+  if (mustQueue) state.nextQueueSeq = (state.nextQueueSeq ?? 0) + 1;
   // Bump storage caps per §4.6 categorized routing. Specialized buildings
   // bump every resource matching their category; generic buildings bump
   // only the cargoLabel resource. Both paths mirror `aggregateStorageCaps`.
@@ -831,10 +834,13 @@ export function applyUpgrade(
   // is already building/upgrading, and it consumes a parallel-build slot just
   // like a placement — mirror `placeBuilding`'s gate so upgrades can't bypass
   // the concurrent-construction cap.
-  if ((b.constructionRemainingMs ?? 0) > 0) return { ok: false, reason: 'already-building' };
+  if ((b.constructionRemainingMs ?? 0) > 0 && b.queued !== true) return { ok: false, reason: 'already-building' };
   const slots = parallelBuildSlots(state);
   const inProgress = inProgressBuildCount(state);
-  if (inProgress >= slots) return { ok: false, reason: 'queue-full', inProgress, slots };
+  const mustQueue = inProgress >= slots;
+  if (mustQueue && queuedBuildCount(state) >= queuedBuildSlots(state)) {
+    return { ok: false, reason: 'queue-full', inProgress, slots };
+  }
   const cost = upgradeCost(def);
   const missing = affordabilityShortfall(state.inventory, cost);
   if (Object.keys(missing).length > 0) {
@@ -865,6 +871,11 @@ export function applyUpgrade(
         }
       }
     }
+  }
+  if (mustQueue) {
+    b.queued = true;
+    b.queueSeq = state.nextQueueSeq ?? 0;
+    state.nextQueueSeq = (state.nextQueueSeq ?? 0) + 1;
   }
   return { ok: true };
 }
