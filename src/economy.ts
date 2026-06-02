@@ -324,6 +324,9 @@ export interface IslandState {
    *  `declaredAt`, so the cooldown gate reads a real elapsed value across
    *  save/load. */
   lastResetAt: number | null;
+  /** §queue: next FIFO sequence number to stamp on an enqueued build.
+   *  Incremented on each enqueue. Optional; absent ≡ 0 (forward-compat). */
+  nextQueueSeq?: number;
   /** Wall-clock timestamp of the last advance, in milliseconds. */
   lastTick: number;
   /** §13.3 Time Lock banked time in minutes. One per Time Lock building. */
