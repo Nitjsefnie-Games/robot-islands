@@ -4471,4 +4471,58 @@ describe('queue promotion on completion', () => {
     expect(qBuilding.queued).toBeFalsy();
     expect(qBuilding.constructionRemainingMs).toBeLessThan(5000);
   });
+
+  it('promotes the LOWEST queueSeq first, not the array-first queued build', () => {
+    // Base 1 running slot, occupied by R (finishes 1000 ms into the advance).
+    // TWO queued builds, deliberately ordered so the LOWER queueSeq is NOT
+    // first in the array: [Qb(seq1), Qa(seq0)]. When R completes and frees
+    // the single slot, ONLY ONE promotion happens — it must be Qa (seq 0),
+    // proving the sort-by-queueSeq drives selection, not array position.
+    // (If promoteQueuedBuilds selected by array order, Qb would promote and
+    // this test would fail: the Qb-still-queued / Qa-promoted assertions invert.)
+    const R: PlacedBuilding = {
+      id: 'b-running',
+      defId: 'mine',
+      x: 0,
+      y: 0,
+      constructionRemainingMs: 1000,
+    };
+    const Qb: PlacedBuilding = {
+      id: 'b-queued-b',
+      defId: 'mine',
+      x: 3,
+      y: 0,
+      constructionRemainingMs: 5000,
+      queued: true,
+      queueSeq: 1,
+    };
+    const Qa: PlacedBuilding = {
+      id: 'b-queued-a',
+      defId: 'mine',
+      x: 6,
+      y: 0,
+      constructionRemainingMs: 5000,
+      queued: true,
+      queueSeq: 0,
+    };
+    const state = makeState({
+      // Array order: Qb (seq 1) BEFORE Qa (seq 0) — lower seq is NOT first.
+      buildings: [R, Qb, Qa],
+      lastTick: 0,
+      unlockedNodes: new Set(),
+      unlockedEdges: new Set(),
+    });
+    advanceIsland(state, 2000, { defs: POWER_FREE });
+    // R operational.
+    expect((state.buildings[0] as { constructionRemainingMs?: number }).constructionRemainingMs)
+      .toBe(0);
+    // Qa (queueSeq 0) — promoted and ticking.
+    const qaB = state.buildings[2] as { queued?: boolean; constructionRemainingMs?: number };
+    expect(qaB.queued).toBeFalsy();
+    expect(qaB.constructionRemainingMs).toBeLessThan(5000);
+    // Qb (queueSeq 1) — still queued, untouched.
+    const qbB = state.buildings[1] as { queued?: boolean; constructionRemainingMs?: number };
+    expect(qbB.queued).toBe(true);
+    expect(qbB.constructionRemainingMs).toBe(5000);
+  });
 });
