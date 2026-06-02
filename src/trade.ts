@@ -28,13 +28,14 @@ export const DEFAULT_TRADE_TUNING: TradeTuning = {
   expiryMs: 5 * 60 * 1000,       // 5 minutes
 };
 
+const TIER_LADDER = [1, 3, 10, 30, 100, 300, 1000];
+
 /** Resource tier from the XP-weight ladder (1,3,10,30,100,300,1000 -> T0..T6). */
 export function tierOf(res: ResourceId): number {
   const w = XP_WEIGHT[res] ?? 1;
-  const LADDER = [1, 3, 10, 30, 100, 300, 1000];
   let best = 0, bestDist = Infinity;
-  for (let t = 0; t < LADDER.length; t++) {
-    const d = Math.abs(LADDER[t]! - w);
+  for (let t = 0; t < TIER_LADDER.length; t++) {
+    const d = Math.abs(TIER_LADDER[t]! - w);
     if (d < bestDist) { bestDist = d; best = t; }
   }
   return best;
@@ -56,10 +57,10 @@ function biasPick(
   k: number,
   dir: 1 | -1,
 ): ResourceId {
-  let chosen = pool[Math.floor(rng() * pool.length)]!;
+  let chosen = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
   let chosenFill = fillPct(state, chosen);
   for (let r = 1; r < k; r++) {
-    const cand = pool[Math.floor(rng() * pool.length)]!;
+    const cand = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
     const f = fillPct(state, cand);
     if (dir === 1 ? f > chosenFill : f < chosenFill) { chosen = cand; chosenFill = f; }
   }
@@ -78,6 +79,7 @@ function priceMultiplier(give: ResourceId, get: ResourceId, rng: () => number, t
   return (wGive / wGet) * Math.max(0.05, spread);
 }
 
+// process-local id counter; offers are ephemeral/runtime-only (never persisted), so reset-per-process is fine
 let _offerSeq = 0;
 
 /** Generate one trade offer for an island, or null if no valid pair exists. */
@@ -94,6 +96,7 @@ export function generateOffer(
   for (let attempt = 0; attempt < 12; attempt++) {
     let give = biasPick(givePool, state, rng, tuning.biasK, 1);
     const get = biasPick(getPool, state, rng, tuning.biasK, -1);
+    // collision: fall back to first distinct give candidate (bias skipped for this attempt)
     if (give === get) {
       const alt = givePool.find((r) => r !== get);
       if (!alt) continue;

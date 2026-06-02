@@ -119,6 +119,21 @@ describe('generateOffer — candidate selection', () => {
     expect(stoneGives).toBeGreaterThan(woodGives);
   });
 
+  it('returns null when the only give-resource equals the only ever-produced resource', () => {
+    const s = homeState();
+    for (const k of Object.keys(s.inventory) as ResourceId[]) s.inventory[k] = 0;
+    s.storageCaps.wood = 100; s.inventory.wood = 50;
+    s.everProduced.clear(); s.everProduced.add('wood');
+    expect(generateOffer(s, () => 0.0, DEFAULT_TRADE_TUNING, 1000)).toBeNull();
+  });
+
+  it('returns null when nothing has ever been produced', () => {
+    const s = homeState();
+    s.storageCaps.stone = 100; s.inventory.stone = 50;
+    s.everProduced.clear();
+    expect(generateOffer(s, () => 0.0, DEFAULT_TRADE_TUNING, 1000)).toBeNull();
+  });
+
   it('respects the tier-reach cap', () => {
     const s = stocked();
     for (let k = 0; k < 200; k++) {
@@ -156,13 +171,23 @@ describe('generateOffer — pricing & size', () => {
     expect(o.get.qty).toBeLessThanOrEqual(5 + 1e-6);
   });
 
-  it('prices per-unit by weight ratio at Δtier 0 (spread center 1)', () => {
-    const s = pair('stone', 'wood', 1000, 0, 100000);
+  it('applies the rolled spread envelope at Δtier 0 (±25% around center 1)', () => {
+    // give-only pool: stone (T0) is the sole inv>0; wood (T0) is the sole ever-produced, headroom present.
+    const s = homeState();
+    for (const k of Object.keys(s.inventory) as ResourceId[]) s.inventory[k] = 0;
+    s.storageCaps.stone = 100000; s.inventory.stone = 1000;
+    s.storageCaps.wood = 100000; s.inventory.wood = 0;
     s.everProduced.clear(); s.everProduced.add('wood');
-    const o = generateOffer(s, () => 0.5, { ...DEFAULT_TRADE_TUNING, sizePct: 0.10, biasK: 1, spreadShift: 0 }, 1000)!;
-    const ratio = o.get.qty / o.give.qty;
-    expect(ratio).toBeGreaterThan(0.7);
-    expect(ratio).toBeLessThan(1.4);
+
+    // rng=0 -> spread = 1*(1 + (0-0.5)*2*0.25) = 0.75
+    const lo = generateOffer(s, () => 0.0, { ...DEFAULT_TRADE_TUNING, sizePct: 0.10, biasK: 1 }, 1000)!;
+    expect(lo).not.toBeNull();
+    expect(lo.give.res).toBe('stone'); expect(lo.get.res).toBe('wood');
+    expect(lo.get.qty / lo.give.qty).toBeCloseTo(0.75, 2);
+
+    // rng=1 -> spread = 1*(1 + (1-0.5)*2*0.25) = 1.25
+    const hi = generateOffer(s, () => 1.0, { ...DEFAULT_TRADE_TUNING, sizePct: 0.10, biasK: 1 }, 1000)!;
+    expect(hi.get.qty / hi.give.qty).toBeCloseTo(1.25, 2);
   });
 });
 
