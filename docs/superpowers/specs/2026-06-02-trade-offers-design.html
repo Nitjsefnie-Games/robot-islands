@@ -591,7 +591,7 @@
         </div>
         <div class="defer">
           <div class="dt">Offer persistence across reload</div>
-          <div class="dd">Ephemeral by design — fresh offers regenerate on load, keeping them out of the save/offline-replay path.</div>
+          <div class="dd">Offers themselves stay ephemeral — fresh offers regenerate on load. <strong>Amended 2026-06-02:</strong> the spawn <em>cadence</em> is now persisted per island as an online-time cooldown (the ephemeral cadence was a refresh-farm exploit) — see the trade-persist-compounding design.</div>
         </div>
         <div class="defer">
           <div class="dt">Auto-accept / automation</div>
