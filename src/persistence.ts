@@ -535,9 +535,13 @@ export type SerializedSnapshotV18 = Omit<SaveSnapshot, 'v'> & { readonly v: 18 }
 
 /** v18 → v19: per-island `everProduced` seen-set shipped. A v18 save never
  *  carries a valid `everProduced` (the field didn't exist), so we backfill it
- *  unconditionally from the keys of each island's current inventory — every
- *  resource already stockpiled is immediately tradeable. Deserialize rebuilds
- *  the array into a `Set`. */
+ *  from the resources the island currently holds a POSITIVE stock of. This is
+ *  the best available proxy for "has ever produced" on a legacy save, since no
+ *  production history exists — legacy players keep trading what they actually
+ *  deal in without getting the whole catalog for free. (The raw inventory map
+ *  zero-fills every resource, so an unfiltered key dump would mark all of them
+ *  ever-produced and bypass the trade "get" gate entirely.) Deserialize
+ *  rebuilds the array into a `Set`. */
 export function migrateV18toV19(s: SerializedSnapshotV18): SaveSnapshot {
   return {
     ...s,
@@ -546,7 +550,8 @@ export function migrateV18toV19(s: SerializedSnapshotV18): SaveSnapshot {
       ...entry,
       state: {
         ...entry.state,
-        everProduced: Object.keys(entry.state.inventory ?? {}) as ResourceId[],
+        everProduced: (Object.keys(entry.state.inventory ?? {}) as ResourceId[])
+          .filter((r) => (entry.state.inventory[r] ?? 0) > 0),
       },
     })),
   } as unknown as SaveSnapshot;
