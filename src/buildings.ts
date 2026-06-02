@@ -76,6 +76,17 @@ export interface PlacedBuilding {
    *  Optional for forward-compat with saves minted before this field shipped
    *  (legacy = treat as 0 = fully constructed). */
   constructionRemainingMs?: number;
+  /** §queue: true while this placement/upgrade waits in the build queue. A
+   *  queued build occupies its footprint and has paid its cost, but does NOT
+   *  tick (`tickConstruction`/`nextConstructionCompletionMs` skip it) and is
+   *  excluded from the running-slot count. Promoted to running (flag cleared)
+   *  at the construction-completion boundary in `advanceIsland`. Optional;
+   *  absent ≡ false (forward-compat: pre-v18 saves omit it). */
+  queued?: boolean;
+  /** §queue: monotonic per-island enqueue order, for deterministic FIFO
+   *  promotion (lowest seq promotes first). Sourced from `IslandState.nextQueueSeq`,
+   *  never wall-clock. Optional; absent ≡ 0 (placement order). */
+  queueSeq?: number;
   /** §4.7 accumulated operating time since last maintenance, in ms. Ticks
    *  every advanceIsland segment regardless of whether the building actually
    *  ran (§4.7: "Idle buildings ... accrue maintenance time the same as
