@@ -66,6 +66,7 @@ export function isOperational(b: PlacedBuilding): boolean {
 /** Decrement `constructionRemainingMs` by `dtMs`, clamping at 0. Returns
  *  true if the building JUST FINISHED (the call crossed the threshold). */
 export function tickConstruction(b: PlacedBuilding, dtMs: number): boolean {
+  if (b.queued === true) return false;
   const remaining = b.constructionRemainingMs ?? 0;
   if (remaining <= 0) return false;
   const next = remaining - dtMs;
@@ -87,6 +88,7 @@ export function nextConstructionCompletionMs(
 ): number | null {
   let best: number | null = null;
   for (const b of buildings) {
+    if (b.queued === true) continue;
     const r = b.constructionRemainingMs ?? 0;
     if (r <= 0) continue;
     const eventMs = tMs + r;
