@@ -101,8 +101,9 @@ export interface SerializedIslandState
   readonly unlockedEdges: ReadonlyArray<EdgeId>;
   readonly socketBindings: ReadonlyArray<[string, CrystalId]>;
   /** Resources this island has ever produced. Optional for forward-compat:
-   *  a pre-v19 save lacks it and the v18→v19 migration backfills from
-   *  inventory keys. Deserialize rebuilds the `Set`. */
+   *  a pre-v19 save lacks it and the v18→v19 migration backfills it from the
+   *  resources the island holds at positive stock. Deserialize rebuilds the
+   *  `Set`. */
   readonly everProduced?: ReadonlyArray<ResourceId>;
   readonly batteryStoredWs: number;
 }
