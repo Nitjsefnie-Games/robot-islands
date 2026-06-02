@@ -65,6 +65,15 @@ export const POOL_TARGETS: Readonly<Record<string, number>> = {
   't5ExtractorYieldBonusMul': Math.sqrt(10),
 };
 
+/** Per-effect-kind SUM targets for ADDITIVE effect kinds (Σ magnitude across
+ *  the kind's nodes) — the additive analog of POOL_TARGETS. These kinds are
+ *  SUMMED at consumption (launchSuccessBonus, parallelBuildBonus), not
+ *  multiplied, so deriveMagnitudes distributes the sum, not the product. */
+export const ADDITIVE_POOL_TARGETS: Readonly<Record<string, number>> = {
+  launchSuccessAdditive: 0.50,
+  parallelBuildCapAdd: 2.0,
+};
+
 /** Canonical effect-key for grouping. Matches the existing scripts/
  *  skilltree-magnitudes.ts logic exactly so POOL_TARGETS keys line up. */
 export function effectKey(e: SkillEffect): string {
@@ -139,7 +148,7 @@ export function deriveMagnitudes(
   const fillerExponents = new Map<string, number[]>();
   for (const n of rawNodes) {
     const k = effectKey(n.effect);
-    if (!(k in POOL_TARGETS)) continue;  // non-multiplier kinds — magnitude irrelevant
+    if (!(k in POOL_TARGETS) && !(k in ADDITIVE_POOL_TARGETS)) continue;  // unknown kinds → magnitude 0
     const t = inferTier(n, archetypePrefixes);
     tiers.set(n.id, t);
     keys.set(n.id, k);
@@ -159,18 +168,31 @@ export function deriveMagnitudes(
   const mN = new Map<string, number>();
   const fillerBase = new Map<string, number>();
   for (const [k, b] of buckets) {
-    const C = POOL_TARGETS[k]!;
+    const additive = k in ADDITIVE_POOL_TARGETS;
+    const C = additive ? ADDITIVE_POOL_TARGETS[k]! : POOL_TARGETS[k]!;
     let wK = b.K > 0 ? TIER_WEIGHTS.keystone : 0;
     let wN = b.N > 0 ? TIER_WEIGHTS.notable : 0;
     let wF = b.F > 0 ? TIER_WEIGHTS.filler : 0;
     const sum = wK + wN + wF;
     if (sum === 0) continue;
     wK /= sum; wN /= sum; wF /= sum;
-    if (b.K > 0) mK.set(k, Math.pow(C, wK / b.K) - 1);
-    if (b.N > 0) mN.set(k, Math.pow(C, wN / b.N) - 1);
-    if (b.F > 0) {
-      const exponents = fillerExponents.get(k)!;
-      fillerBase.set(k, solveFillerBaseMag(Math.pow(C, wF), exponents, FILLER_GROWTH));
+    if (additive) {
+      // Distribute the SUM target C across tiers; fillers ramp by FILLER_GROWTH
+      // so Σ over fillers of base·g^(d-1) = C·wF.
+      if (b.K > 0) mK.set(k, (C * wK) / b.K);
+      if (b.N > 0) mN.set(k, (C * wN) / b.N);
+      if (b.F > 0) {
+        const exponents = fillerExponents.get(k)!;
+        const denom = exponents.reduce((s, e) => s + Math.pow(FILLER_GROWTH, e), 0);
+        fillerBase.set(k, denom > 0 ? (C * wF) / denom : 0);
+      }
+    } else {
+      if (b.K > 0) mK.set(k, Math.pow(C, wK / b.K) - 1);
+      if (b.N > 0) mN.set(k, Math.pow(C, wN / b.N) - 1);
+      if (b.F > 0) {
+        const exponents = fillerExponents.get(k)!;
+        fillerBase.set(k, solveFillerBaseMag(Math.pow(C, wF), exponents, FILLER_GROWTH));
+      }
     }
   }
 
