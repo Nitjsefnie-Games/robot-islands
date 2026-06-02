@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { advanceIsland, type DefCatalog, type IslandState } from './economy.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
-import { generateOffer, applyOffer, DEFAULT_TRADE_TUNING, tierOf, tickTradeOffers, tuningFor, islandHasSignalExchange, type TradeOffer, type TradeRuntime } from './trade.js';
+import { generateOffer, applyOffer, DEFAULT_TRADE_TUNING, tierOf, tickTradeOffers, tuningFor, islandHasSignalExchange, effectiveCadenceMs, FLOOR_MS, ONLINE_DT_CAP_MS, type TradeOffer, type TradeRuntime } from './trade.js';
 import { blankMultipliers } from './skilltree.js';
 import type { ResourceId } from './recipes.js';
 
@@ -332,5 +332,30 @@ describe('persisted trade-cadence fields', () => {
     const s = homeState();
     expect(s.tradeCooldownMs).toBe(0);
     expect(s.tradeAcceptCount).toBe(0);
+  });
+});
+
+describe('effectiveCadenceMs', () => {
+  it('returns the base cadence at zero accepts', () => {
+    expect(effectiveCadenceMs(0, 1_000_000)).toBe(1_000_000);
+  });
+
+  it('compounds 1% faster per accept', () => {
+    expect(effectiveCadenceMs(1, 1_000_000)).toBeCloseTo(990_000, 5);
+    expect(effectiveCadenceMs(2, 1_000_000)).toBeCloseTo(980_100, 5);
+  });
+
+  it('roughly halves by ~69 accepts', () => {
+    expect(effectiveCadenceMs(69, 1_000_000)).toBeLessThan(505_000);
+    expect(effectiveCadenceMs(69, 1_000_000)).toBeGreaterThan(495_000);
+  });
+
+  it('never drops below FLOOR_MS no matter the accept count', () => {
+    expect(effectiveCadenceMs(100_000, DEFAULT_TRADE_TUNING.cadenceMs)).toBe(FLOOR_MS);
+    expect(FLOOR_MS).toBe(60_000);
+  });
+
+  it('exposes a positive online-dt cap', () => {
+    expect(ONLINE_DT_CAP_MS).toBeGreaterThan(0);
   });
 });
