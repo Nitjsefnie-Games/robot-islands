@@ -409,6 +409,36 @@ export type PlaceBuildingResult =
    *  of letting two buildings share an id silently. */
   | { readonly ok: false; readonly reason: 'overlap' };
 
+/** Credit `amount` to `state.storageCaps` for a storage building, using the
+ *  §4.6 categorized routing: a generic-category building bumps ONLY the
+ *  resource named on its `cargoLabel`; a specialized-category building bumps
+ *  every resource whose `RESOURCE_STORAGE_CATEGORY` matches `def.storage.category`.
+ *  No-op when the def carries no `storage` block. Shared by the
+ *  construction-completion hook in economy.ts so the place/upgrade-completion
+ *  credit and the demolish/cancel strip can't drift on which resources a
+ *  storage building affects. Pure mutation on `state.storageCaps`. */
+export function creditStorageCaps(
+  state: IslandState,
+  building: PlacedBuilding,
+  def: BuildingDef,
+  amount: number,
+): void {
+  const storage = def.storage;
+  if (!storage) return;
+  if (storage.category === 'generic') {
+    if (building.cargoLabel !== undefined) {
+      state.storageCaps[building.cargoLabel] =
+        (state.storageCaps[building.cargoLabel] ?? 0) + amount;
+    }
+  } else {
+    for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
+        state.storageCaps[r] = (state.storageCaps[r] ?? 0) + amount;
+      }
+    }
+  }
+}
+
 /** §9.3 Robotics: how many concurrent under-construction slots this island
  *  has right now. Base 1 + Robotics `parallelBuildBonus` (additive) +
  *  structural keystone `parallelConstruction` (+1 when owned). */
@@ -467,11 +497,12 @@ export function queuedBuildSlots(state: IslandState): number {
  *   - `spec.buildings` — push the new instance. `IslandState.buildings` is
  *     a live reference to the same array (see `makeInitialIslandState`),
  *     so the economy loop sees the new building on the next tick.
- *   - `state.storageCaps` — if the def carries a `storage` block, bump every
- *     resource's nominal cap by the contribution. Mirrors
- *     `aggregateStorageCaps` used at init; the field's `readonly` modifier
- *     on the IslandState interface protects the record reference, not its
- *     key values.
+ *
+ * §storage-timing: `placeBuilding` does NOT credit `state.storageCaps`. A
+ * fresh placement starts under construction; its storage cap is granted by
+ * the construction-completion hook in `advanceIsland` the tick the build
+ * becomes operational (base `floorScaledCapacity` at floorLevel 0). This
+ * defers the cap to match production/power, which also wait for the timer.
  *
  * `idGenerator` returns a fresh unique id for the new instance. The caller
  * picks the id-shape (artificial-island.ts uses `art-N`; placement-ui uses
@@ -618,24 +649,11 @@ export function placeBuilding(
   };
   spec.buildings.push(placed);
   if (mustQueue) state.nextQueueSeq = (state.nextQueueSeq ?? 0) + 1;
-  // Bump storage caps per §4.6 categorized routing. Specialized buildings
-  // bump every resource matching their category; generic buildings bump
-  // only the cargoLabel resource. Both paths mirror `aggregateStorageCaps`.
-  const storage = def.storage;
-  if (storage) {
-    if (storage.category === 'generic') {
-      if (cargoLabel !== undefined) {
-        state.storageCaps[cargoLabel] =
-          (state.storageCaps[cargoLabel] ?? 0) + floorScaledCapacity(placed, storage.capacity);
-      }
-    } else {
-      for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
-        if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
-          state.storageCaps[r] = (state.storageCaps[r] ?? 0) + floorScaledCapacity(placed, storage.capacity);
-        }
-      }
-    }
-  }
+  // §storage-timing: storage caps are NO LONGER credited here. A freshly-
+  // placed building starts under construction and grants no cap until it
+  // becomes operational — the construction-completion hook in economy.ts
+  // (`advanceIsland`) credits `floorScaledCapacity(b, storage.capacity)` the
+  // tick the build crosses to operational. See `creditStorageCaps`.
   return { ok: true, placed };
 }
 
@@ -816,8 +834,11 @@ export type UpgradeResult =
  *  - Rejects when current floorLevel === 9 (already at max).
  *  - Rejects when inventory can't afford `upgradeCost(def)`.
  *  - On success: deducts cost, increments floorLevel by 1, sets
- *    constructionRemainingMs = upgradeConstructionMs(def, newL), and adds
- *    +storage.capacity (base ×1) to the relevant storageCaps.
+ *    constructionRemainingMs = upgradeConstructionMs(def, newL). It does NOT
+ *    credit storageCaps — the +storage.capacity delta is granted by the
+ *    construction-completion hook in `advanceIsland` once the upgrade
+ *    becomes operational (§storage-timing), matching the deferred-cap
+ *    treatment of a fresh placement.
  *  - The building pauses during construction (existing isOperational gating).
  */
 export function applyUpgrade(
@@ -853,25 +874,13 @@ export function applyUpgrade(
   const newL = L + 1;
   b.floorLevel = newL;
   (b as { constructionRemainingMs?: number }).constructionRemainingMs = upgradeConstructionMs(def, newL);
-  // Storage-cap delta: +base capacity (the ×1 increment).
-  // Intentional asymmetry: the +storage.capacity cap delta is granted
-  // IMMEDIATELY on upgrade (mirroring placeBuilding's immediate storage
-  // credit), while production/power scaling waits for the construction timer.
-  const storage = def.storage;
-  if (storage) {
-    const delta = storage.capacity;
-    if (storage.category === 'generic') {
-      if (b.cargoLabel !== undefined) {
-        state.storageCaps[b.cargoLabel] = (state.storageCaps[b.cargoLabel] ?? 0) + delta;
-      }
-    } else {
-      for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
-        if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
-          state.storageCaps[r] = (state.storageCaps[r] ?? 0) + delta;
-        }
-      }
-    }
-  }
+  // §storage-timing: the +storage.capacity cap delta is NO LONGER credited
+  // here. An upgrade IS a construction job; the cap delta is granted by the
+  // construction-completion hook in `advanceIsland` the tick the upgrade
+  // becomes operational. Because the building is then at floorLevel >= 1 the
+  // hook credits the flat `storage.capacity` delta (the per-level increment
+  // floorScaledCapacity(L) − floorScaledCapacity(L−1) = storage.capacity),
+  // matching production/power scaling which also waits for the timer.
   if (mustQueue) {
     b.queued = true;
     b.queueSeq = state.nextQueueSeq ?? 0;
@@ -1006,10 +1015,12 @@ export interface CancelResult {
  *  material refund. Distinct from §6.7 demolish (30% scrap) and relocate
  *  (half-fee). Two shapes by floorLevel:
  *    - floorLevel 0 → fresh placement: remove building, refund placement cost
- *      (incl. terrain-modifier upfront cost), strip storage contribution, free slot.
+ *      (incl. terrain-modifier upfront cost), free slot.
  *    - floorLevel >= 1 → in-progress upgrade: keep building, revert to
- *      floorLevel-1, clear the timer + queued flag, refund the upgrade cost,
- *      strip the storage delta the upgrade granted.
+ *      floorLevel-1, clear the timer + queued flag, refund the upgrade cost.
+ *  §storage-timing: NO storage strip in either branch — storage caps are
+ *  credited only at construction completion, so an unfinished build never
+ *  held a cap to strip.
  *  Valid only while constructionRemainingMs > 0. Pure mutation. */
 export function cancelConstruction(
   spec: IslandSpec,
@@ -1051,57 +1062,23 @@ export function cancelConstruction(
         fullCost[r] = (fullCost[r] ?? 0) + n;
       }
     }
-    // Splice the building out BEFORE crediting refund (mirrors demolishBuilding's
-    // storage-strip-then-credit ordering, so refund lands into post-strip caps).
+    // §storage-timing: no storage strip. A fresh placement never received a
+    // storage cap while under construction (the cap is credited only at
+    // construction completion), so there is nothing to strip on cancel —
+    // just splice out the building and refund the materials.
     spec.buildings.splice(idx, 1);
-    // Strip storage-cap contribution — mirrors demolishBuilding exactly.
-    const storage = def.storage;
-    if (storage) {
-      const stripResource = (r: ResourceId): void => {
-        const next = (state.storageCaps[r] ?? 0) - floorScaledCapacity(b, storage.capacity);
-        state.storageCaps[r] = next < 0 ? 0 : next;
-        const have = state.inventory[r] ?? 0;
-        const newCap = state.storageCaps[r] ?? 0;
-        if (have > newCap) state.inventory[r] = newCap;
-      };
-      if (storage.category === 'generic') {
-        if (b.cargoLabel !== undefined) stripResource(b.cargoLabel);
-      } else {
-        for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
-          if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) stripResource(r);
-        }
-      }
-    }
     return { ok: true, refunded: creditRefund(fullCost) };
   }
 
   // In-progress upgrade cancel: revert to floorLevel-1, clear timer + queued,
-  // strip the storage delta that applyUpgrade granted, refund the upgrade cost.
+  // refund the upgrade cost.
   const newL = L - 1;
   b.floorLevel = newL;
-  (b as { constructionRemainingMs?: number }).constructionRemainingMs = 0;
-  (b as { queued?: boolean }).queued = false;
-
-  // Strip the +storage.capacity delta applyUpgrade granted immediately
-  // (applyUpgrade grants +base capacity = +storage.capacity, not floor-scaled).
-  const storage = def.storage;
-  if (storage) {
-    const delta = storage.capacity;
-    const stripDelta = (r: ResourceId): void => {
-      const next = (state.storageCaps[r] ?? 0) - delta;
-      state.storageCaps[r] = next < 0 ? 0 : next;
-      const have = state.inventory[r] ?? 0;
-      const newCap = state.storageCaps[r] ?? 0;
-      if (have > newCap) state.inventory[r] = newCap;
-    };
-    if (storage.category === 'generic') {
-      if (b.cargoLabel !== undefined) stripDelta(b.cargoLabel);
-    } else {
-      for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
-        if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) stripDelta(r);
-      }
-    }
-  }
+  b.constructionRemainingMs = 0;
+  b.queued = false;
+  // §storage-timing: no storage strip. The +storage.capacity delta was never
+  // credited while the upgrade was under construction (it lands only at
+  // completion), so reverting the level is all that's needed.
   return { ok: true, refunded: creditRefund(upgradeCost(def)) };
 }
 

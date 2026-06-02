@@ -44,7 +44,7 @@ import {
   layerConditionalBonuses,
 } from './economy.js';
 import { checkGates } from './adjacency.js';
-import { placeBuilding, validatePlacement } from './placement.js';
+import { applyUpgrade, placeBuilding, validatePlacement } from './placement.js';
 import { ALL_RESOURCES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
 import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
@@ -4524,5 +4524,103 @@ describe('queue promotion on completion', () => {
     const qbB = state.buildings[1] as { queued?: boolean; constructionRemainingMs?: number };
     expect(qbB.queued).toBe(true);
     expect(qbB.constructionRemainingMs).toBe(5000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §storage-timing: storage caps are credited at construction COMPLETION,
+// not at placement/upgrade commit. (advanceIsland's tickConstruction hook.)
+// ---------------------------------------------------------------------------
+describe('storage caps granted on construction completion', () => {
+  // A spec the placeBuilding geometry/tier gates accept (large ellipse,
+  // populated, level high enough for T1 storage defs).
+  function storageSpec(): import('./world.js').IslandSpec {
+    return {
+      id: 's', name: 's', biome: 'plains', cx: 0, cy: 0,
+      majorRadius: 14, minorRadius: 14,
+      populated: true, discovered: true, buildings: [], modifiers: [],
+    };
+  }
+
+  it('fresh Crate: no cap on placement; +500 (base) credited at completion', () => {
+    const spec = storageSpec();
+    const state = makeState({ buildings: spec.buildings, lastTick: 0 });
+    state.inventory.wood = 1000;
+    state.inventory.stone = 1000;
+    const ironBefore = state.storageCaps.iron_ore ?? 0;
+
+    const r = placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'c1');
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('expected ok');
+    // cargoLabel defaults to iron_ore; building is under construction (T1=30s).
+    expect(r.placed.cargoLabel).toBe('iron_ore');
+    expect((r.placed.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+    // No cap credited yet — still building.
+    expect(state.storageCaps.iron_ore).toBe(ironBefore);
+
+    // Advance past the 30s T1 build. Cap appears now.
+    advanceIsland(state, 31_000, { defs: POWER_FREE });
+    expect((state.buildings[0]!.constructionRemainingMs ?? 0)).toBe(0);
+    expect(state.storageCaps.iron_ore).toBe(ironBefore + 500);
+  });
+
+  it('Crate upgrade: no delta on commit; +500 delta credited at completion', () => {
+    const spec = storageSpec();
+    // Plant an OPERATIONAL L0 crate (its base cap already aggregated at init).
+    spec.buildings.push({ id: 'c1', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' });
+    const state = makeInitialIslandState(spec, 0);
+    state.level = 10;
+    state.inventory.wood = 1000;
+    state.inventory.stone = 1000;
+    const capBefore = state.storageCaps.iron_ore ?? 0; // includes the L0 +500
+
+    const ur = applyUpgrade(spec, state, 'c1');
+    expect(ur.ok).toBe(true);
+    expect(spec.buildings[0]!.floorLevel).toBe(1);
+    expect((spec.buildings[0]!.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+    // Delta NOT yet credited (upgrade under construction).
+    expect(state.storageCaps.iron_ore).toBe(capBefore);
+
+    // L1 upgrade time = base × (1+1) = 30s × 2 = 60s. Advance past it.
+    advanceIsland(state, 61_000, { defs: POWER_FREE });
+    expect((spec.buildings[0]!.constructionRemainingMs ?? 0)).toBe(0);
+    // Flat +500 delta credited at completion.
+    expect(state.storageCaps.iron_ore).toBe(capBefore + 500);
+  });
+
+  it('queued storage build grants no cap (never started ticking)', () => {
+    const spec = storageSpec();
+    // Occupy the single running slot with a long non-storage build.
+    spec.buildings.push({ id: 'busy', defId: 'mine', x: 6, y: 6, constructionRemainingMs: 5_000_000 });
+    const state = makeState({ buildings: spec.buildings, lastTick: 0 });
+    state.inventory.wood = 1000;
+    state.inventory.stone = 1000;
+    const ironBefore = state.storageCaps.iron_ore ?? 0;
+
+    const r = placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'c-queued');
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.placed.queued).toBe(true);
+
+    // Advance a short span — the queued crate never starts (busy slot held).
+    advanceIsland(state, 31_000, { defs: POWER_FREE });
+    const crate = state.buildings.find((b) => b.id === 'c-queued')!;
+    expect(crate.queued).toBe(true);
+    expect(state.storageCaps.iron_ore).toBe(ironBefore);
+  });
+
+  it('offline catchup: a Crate completing mid-advance is credited', () => {
+    const spec = storageSpec();
+    const state = makeState({ buildings: spec.buildings, lastTick: 0 });
+    state.inventory.wood = 1000;
+    state.inventory.stone = 1000;
+    const ironBefore = state.storageCaps.iron_ore ?? 0;
+
+    const r = placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'c-offline');
+    expect(r.ok).toBe(true);
+    // One big advance spanning many segments (well past the 30s build).
+    advanceIsland(state, 24 * 60 * 60 * 1000, { defs: POWER_FREE });
+    expect((state.buildings[0]!.constructionRemainingMs ?? 0)).toBe(0);
+    expect(state.storageCaps.iron_ore).toBe(ironBefore + 500);
   });
 });

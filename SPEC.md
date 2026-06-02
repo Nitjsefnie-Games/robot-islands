@@ -484,7 +484,7 @@ Two categories:
 
 ### 4.6 Storage Caps
 
-Storage is per-resource and assigned at placement. Buildings come in two flavors.
+Storage is per-resource. A storage building's capacity is credited to the island's caps **when the building becomes operational** (construction completes), not at the moment it is placed or upgraded — a still-under-construction storage shell contributes nothing. This matches the deferral of production and power, which likewise wait for the construction timer (§4.8, §15.3). A fresh placement credits its base capacity on completion; an in-progress floor upgrade credits its flat per-level capacity increment on completion. Cancelling an unfinished build therefore strips no cap (none was ever granted); only demolition of a finished building removes a cap (§6.7). Buildings come in two flavors.
 
 **Specialized storage** holds resources of one category only:
 
@@ -562,7 +562,7 @@ The player's responsibility is to keep maintenance supplies flowing — plant Wo
 
 **Promotion.** Whenever a running build completes its timer (construction-completion boundary inside `advanceIsland`), `promoteQueuedBuilds` immediately promotes the FIFO head of the queue (lowest `queueSeq`) into the freed slot. Promotion happens within the same advance/offline-catchup pass.
 
-**Cancel.** An in-progress build (running OR queued) can be cancelled for a **100% material refund**. This is distinct from §6.7 demolish (~30% Scrap recovery) and from relocate (half-fee). For a fresh placement (`floorLevel === 0`), cancel removes the building entirely; for an in-progress upgrade it reverts the building to `floorLevel − 1` and clears the construction timer. Cancel is only valid while `constructionRemainingMs > 0`.
+**Cancel.** An in-progress build (running OR queued) can be cancelled for a **100% material refund**. This is distinct from §6.7 demolish (~30% Scrap recovery) and from relocate (half-fee). For a fresh placement (`floorLevel === 0`), cancel removes the building entirely; for an in-progress upgrade it reverts the building to `floorLevel − 1` and clears the construction timer. Because storage caps are granted only at construction completion (§4.6), an unfinished build holds no cap and cancel strips none — it touches only the building/level and the material refund. Cancel is only valid while `constructionRemainingMs > 0`.
 
 **Level badge.** Every placed building shows its current floor level (displayed as `floorLevel + 1`, range 1–10) as a persistent badge in the bottom-right corner of its tile footprint, rendered via the building-alerts overlay regardless of construction state.
 
@@ -1902,7 +1902,7 @@ function computeRates(island: Island) {
 
 `findNextCapEvent` returns the timestamp at which any inventory hits its cap or empties given current rates, or `now` if nothing changes within the interval.
 
-Construction completions are also event boundaries: when `constructionRemainingMs` reaches zero during a segment, the loop iterates there. Immediately after each segment `promoteQueuedBuilds` promotes the FIFO head of the build queue (lowest `queueSeq`) into any newly freed running slot, so queued builds start ticking within the same advance/offline-catchup call (§4.8).
+Construction completions are also event boundaries: when `constructionRemainingMs` reaches zero during a segment, the loop iterates there. At that completion point a storage building's capacity is credited to the island's caps (§4.6) — base capacity for a fresh placement (floorLevel 0), the flat per-level increment for a completed floor upgrade (floorLevel ≥ 1); the same loop runs every segment, so a build completing mid-offline-catchup is credited correctly. Immediately after each segment `promoteQueuedBuilds` promotes the FIFO head of the build queue (lowest `queueSeq`) into any newly freed running slot, so queued builds start ticking within the same advance/offline-catchup call (§4.8).
 
 ### 15.4 Inter-Island Flow Resolution
 
