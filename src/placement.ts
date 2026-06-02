@@ -418,13 +418,31 @@ export function parallelBuildSlots(state: IslandState): number {
   return 1 + skillBonus + structuralBonus;
 }
 
-/** Count of currently-under-construction buildings on the island. */
+/** Count of currently-RUNNING (ticking) construction jobs — excludes queued. */
 export function inProgressBuildCount(state: IslandState): number {
   let n = 0;
   for (const b of state.buildings) {
-    if ((b.constructionRemainingMs ?? 0) > 0) n++;
+    if ((b.constructionRemainingMs ?? 0) > 0 && b.queued !== true) n++;
   }
   return n;
+}
+
+/** Count of builds currently waiting in the queue. */
+export function queuedBuildCount(state: IslandState): number {
+  let n = 0;
+  for (const b of state.buildings) {
+    if (b.queued === true) n++;
+  }
+  return n;
+}
+
+/** §queue mirror of `parallelBuildSlots`: base 2 + floor(queueCapBonus)
+ *  + structural `parallelQueue` (+2 when owned). Holds a 1:2 ratio with
+ *  running slots at empty and full skill tree. */
+export function queuedBuildSlots(state: IslandState): number {
+  const skillBonus = Math.floor(effectiveSkillMultipliers(state).queueCapBonus);
+  const structural = hasStructuralEffect('parallelQueue', state, DEFAULT_GRAPH) ? 2 : 0;
+  return 2 + skillBonus + structural;
 }
 
 /**
