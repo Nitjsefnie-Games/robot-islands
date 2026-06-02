@@ -4,6 +4,7 @@ import {
   deriveMagnitudes,
   effectKey,
   POOL_TARGETS,
+  ADDITIVE_POOL_TARGETS,
   FILLER_GROWTH,
   type RawSkillNode,
 } from './skilltree-derive-magnitudes.js';
@@ -101,6 +102,25 @@ describe('recipeInputMul shared pool (§v2-rebalance magic chain)', () => {
     expect(recipeInputNodes.length).toBe(12);
     const product = recipeInputNodes.reduce((acc, n) => acc * (1 + n.magnitude), 1);
     expect(product).toBeCloseTo(POOL_TARGETS['recipeInputMul']!, 9);
+  });
+});
+
+describe('deriveMagnitudes — additive sum invariant', () => {
+  it('launchSuccessAdditive nodes sum to the additive target (K+N+F shape)', () => {
+    const raws: RawSkillNode[] = [];
+    raws.push(node('launch.keystone.padMastery', { kind: 'launchSuccessAdditive' }));
+    raws.push(node('launch.notable.padRedundancy', { kind: 'launchSuccessAdditive' }));
+    for (let i = 1; i <= 7; i++) raws.push(node(`launch.success.${i}`, { kind: 'launchSuccessAdditive' }));
+    const derived = deriveMagnitudes(raws, ['launch.success']);
+    const sum = derived.reduce((acc, n) => acc + n.magnitude, 0);
+    expect(sum).toBeCloseTo(ADDITIVE_POOL_TARGETS['launchSuccessAdditive']!, 6);
+    // No dead / quantifier-less nodes:
+    expect(derived.every((n) => n.magnitude > 0)).toBe(true);
+  });
+  it('parallelBuildCapAdd lone notable gets the full additive target', () => {
+    const raws = [node('robotics.notable.parallelFoundries', { kind: 'parallelBuildCapAdd' })];
+    const derived = deriveMagnitudes(raws, []);
+    expect(derived[0]!.magnitude).toBeCloseTo(ADDITIVE_POOL_TARGETS['parallelBuildCapAdd']!, 6);
   });
 });
 

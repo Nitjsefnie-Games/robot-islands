@@ -191,6 +191,19 @@ describe('GRAFT_SOCKET_CATALOG', () => {
   });
 });
 
+describe('additive-effect magnitudes are derived (not zeroed)', () => {
+  it('launchSuccessAdditive nodes sum to 0.50 across the catalog', () => {
+    const sum = FULL_CATALOG.filter((n) => n.effect.kind === 'launchSuccessAdditive')
+      .reduce((acc, n) => acc + n.magnitude, 0);
+    expect(sum).toBeCloseTo(0.50, 6);
+  });
+  it('parallelBuildCapAdd nodes sum to 2.0 across the catalog', () => {
+    const sum = FULL_CATALOG.filter((n) => n.effect.kind === 'parallelBuildCapAdd')
+      .reduce((acc, n) => acc + n.magnitude, 0);
+    expect(sum).toBeCloseTo(2.0, 6);
+  });
+});
+
 describe('bridge integration with costToUnlock', () => {
   function makeTestState(unlockedEdges: string[]): { unlockedEdges: Set<string> } {
     return { unlockedEdges: new Set(unlockedEdges) };
