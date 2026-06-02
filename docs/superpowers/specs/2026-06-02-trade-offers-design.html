@@ -1,0 +1,629 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Trade Offers</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 980px; }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ---------- TOC ---------- */
+    nav.toc {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 22px;
+      margin-bottom: 48px;
+      columns: 2;
+      column-gap: 32px;
+    }
+    @media (max-width: 720px) { nav.toc { columns: 1; } }
+    nav.toc .toc-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+      column-span: all;
+    }
+    nav.toc a {
+      display: block;
+      color: var(--gray-700);
+      text-decoration: none;
+      font-size: 14px;
+      padding: 4px 0;
+      border-bottom: 1px solid transparent;
+    }
+    nav.toc a:hover { color: var(--clay); }
+    nav.toc a .n { font-family: var(--mono); font-size: 11px; color: var(--gray-500); margin-right: 8px; }
+
+    /* ---------- summary strip ---------- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 60px; scroll-margin-top: 20px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 820px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    ol.body, ul.body { max-width: 820px; margin: 0 0 14px 22px; font-size: 14.5px; }
+    ol.body li, ul.body li { margin: 7px 0; }
+    ol.body li strong, ul.body li strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12.5px; color: #C9B98A; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* ---------- comparison ("X vs Y") cards ---------- */
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .file .tag { display: inline-block; font-size: 10px; background: var(--oat); color: var(--olive); border-radius: 5px; padding: 1px 6px; margin-left: 4px; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- checklist ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+    .check {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: var(--white); border: var(--border); border-radius: 10px; padding: 12px 16px;
+    }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500); flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- risk table ---------- */
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    /* ---------- deferred / out-of-scope cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer { background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500); border-radius: 10px; padding: 16px 20px; }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    /* ---------- review panel ---------- */
+    .review { background: var(--white); border: var(--border); border-left: 4px solid var(--olive); border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px; }
+    .review h3 { font-family: var(--serif); font-weight: 500; font-size: 20px; color: var(--slate); margin-bottom: 6px; }
+    .review .sub { font-size: 13.5px; color: var(--gray-500); margin-bottom: 18px; max-width: 760px; }
+    .dq { border-top: 1px solid var(--gray-300); padding: 14px 0; }
+    .dq:first-of-type { border-top: none; }
+    .dq .q { font-size: 14px; color: var(--slate); font-weight: 600; margin-bottom: 8px; }
+    .dq .opts { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 8px; }
+    .dq label { font-size: 13.5px; color: var(--gray-700); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .dq input[type=radio] { accent-color: var(--clay); }
+    .dq textarea { width: 100%; background: var(--ivory); border: var(--border); border-radius: 8px; color: var(--gray-700); font-family: var(--sans); font-size: 13px; padding: 8px 10px; resize: vertical; min-height: 38px; }
+    .review .actions { margin-top: 18px; display: flex; gap: 12px; align-items: center; }
+    .review button { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; background: var(--clay); color: #1B1A17; border: none; border-radius: 8px; padding: 9px 16px; cursor: pointer; font-weight: 700; }
+    .review button:hover { background: var(--rust); }
+    .review .hint { font-size: 12px; color: var(--gray-500); }
+    .review #reviewOut { width: 100%; margin-top: 14px; background: var(--ivory); border: var(--border); border-radius: 8px; color: var(--gray-700); font-family: var(--mono); font-size: 12px; padding: 10px 12px; min-height: 90px; display: none; }
+
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands</div>
+      <h1>Trade Offers — a presence-rewarding barter mechanic</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        robot-islands is a keep-it-open idle game whose reward cadence runs on the
+        scale of hours-long tier climbs, leaving nothing to <em>do</em> minute-to-minute.
+        Trade Offers add a short-cadence decision loop: a cheap building periodically
+        surfaces an expiring barter offer biased toward dumping overflow stock for an
+        under-stocked resource. This spec decides the mechanic's rules, valuation,
+        lifecycle, and code boundaries.
+      </div>
+    </header>
+
+    <nav class="toc">
+      <div class="toc-title">Contents</div>
+      <a href="#decision"><span class="n">—</span>Decision</a>
+      <a href="#review"><span class="n">★</span>Your review (tunables)</a>
+      <a href="#s01"><span class="n">01</span>Background &amp; motivation</a>
+      <a href="#s02"><span class="n">02</span>Why these rules (rejected vs chosen)</a>
+      <a href="#s03"><span class="n">03</span>The offer algorithm</a>
+      <a href="#s04"><span class="n">04</span>Tuning constants &amp; skill nodes</a>
+      <a href="#s05"><span class="n">05</span>Change inventory</a>
+      <a href="#s06"><span class="n">06</span>Verification</a>
+      <a href="#s07"><span class="n">07</span>Risks</a>
+      <a href="#s08"><span class="n">08</span>Out of scope</a>
+    </nav>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Mechanic</div><div class="v accent">Trade Offers</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v">2</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+      <div class="cell"><div class="k">XP impact</div><div class="v ok">None</div></div>
+    </div>
+
+    <div class="decision" id="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">A cheap T1 Signal Exchange building surfaces periodic, online-only, expiring barter offers — biased to dump your fullest stock for your emptiest <em>ever-produced</em> resource, priced at fair per-unit XP-weight value modulated by a tier-distance spread.</div>
+      <div class="d-body">The mechanic is a self-correcting inventory pressure-valve (a capped resource stalls its producer and earns zero XP per §9.1; trades relieve that) and a seconds-scale decision loop the game otherwise lacks. <strong>Chain-skipping is foreclosed at the root</strong> by the ever-produced output filter: you can only receive a resource you already make, so trades reshape the economy you've unlocked rather than shortcutting it.</div>
+      <div class="d-body">Deliberately <em>not</em> done: trades grant <strong>no XP</strong> (progression stays production-only), offers are <strong>not persisted</strong> (ephemeral, excluded from offline replay), and there is no cross-island or multi-party trading.</div>
+    </div>
+
+    <div class="review" id="review">
+      <h3>★ Your review — the tunable decisions</h3>
+      <div class="sub">These constants were chosen as defaults during brainstorming and are the most likely things to adjust. Mark each, add notes, and hit <em>Copy review as prompt</em> to paste your verdict back into the conversation.</div>
+
+      <div class="dq" data-q="cadence">
+        <div class="q">Base cadence — 1 offer every 2 h of online time per island (skill reduces)</div>
+        <div class="opts">
+          <label><input type="radio" name="cadence" value="approve" checked> Approve</label>
+          <label><input type="radio" name="cadence" value="change"> Change</label>
+        </div>
+        <textarea placeholder="notes (optional)"></textarea>
+      </div>
+
+      <div class="dq" data-q="expiry">
+        <div class="q">Expiry — 5 min before an unaccepted offer lapses</div>
+        <div class="opts">
+          <label><input type="radio" name="expiry" value="approve" checked> Approve</label>
+          <label><input type="radio" name="expiry" value="change"> Change</label>
+        </div>
+        <textarea placeholder="notes (optional)"></textarea>
+      </div>
+
+      <div class="dq" data-q="size">
+        <div class="q">Offer size — min(10% of give-stock, output free headroom)</div>
+        <div class="opts">
+          <label><input type="radio" name="size" value="approve" checked> Approve</label>
+          <label><input type="radio" name="size" value="change"> Change</label>
+        </div>
+        <textarea placeholder="notes (optional)"></textarea>
+      </div>
+
+      <div class="dq" data-q="reach">
+        <div class="q">Tier reach — base Δtier ≤ 2 (skill to 3–4); bias k = 2</div>
+        <div class="opts">
+          <label><input type="radio" name="reach" value="approve" checked> Approve</label>
+          <label><input type="radio" name="reach" value="change"> Change</label>
+        </div>
+        <textarea placeholder="notes (optional)"></textarea>
+      </div>
+
+      <div class="dq" data-q="home">
+        <div class="q">Home — name "Signal Exchange"; skill nodes as a cluster in Logistics → Network (not a 5th sub-path)</div>
+        <div class="opts">
+          <label><input type="radio" name="home" value="approve" checked> Approve</label>
+          <label><input type="radio" name="home" value="change"> Change</label>
+        </div>
+        <textarea placeholder="notes (optional)"></textarea>
+      </div>
+
+      <div class="actions">
+        <button onclick="buildReview()">Copy review as prompt</button>
+        <span class="hint">assembles a paste-ready summary below</span>
+      </div>
+      <textarea id="reviewOut" readonly></textarea>
+    </div>
+
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Background &amp; motivation</h2></div>
+      <p class="sec-intro">What the reader needs to know to evaluate the rest.</p>
+      <p class="body">The world advances on a live per-frame ticker, so it is visually alive while watched, but its <strong>reward cadence is hours-long</strong> (tier climbs, milestones). There is no minute-to-minute reason to be present. Trade Offers supply that: an occasional, expiring offer the player judges and accepts.</p>
+      <p class="body">Two problems are solved at once. First, the <strong>cap-stall</strong> failure mode — per §9.1 a resource at its storage cap halts its producer and earns zero XP — is relieved by an offer that dumps overflow. Second, offers run <strong>online-only</strong>, so being present is rewarded while offline parity (§15.5) is untouched: an absent player simply misses optional offers; the base simulation is unchanged.</p>
+      <p class="body">A per-unit analysis of the live recipe table confirmed the valuation basis: across tier-up recipes the realized XP-weight multiplier is <strong>median ≈ 3.20 / tier</strong>, matching the nominal §9.1 ladder (1, 3, 10, 30, 100, 300, 1000 → ≈ 3.16×/tier). So pricing a swap at the per-unit weight ratio is fair value; quantity, not per-unit price, is where exploits live — hence the size cap and the ever-produced gate.</p>
+    </section>
+
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>Why these rules (rejected vs chosen)</h2></div>
+      <p class="sec-intro">The chain-skip exploit and how the design forecloses it.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Rejected — naive value-neutral trades</div>
+          <div class="col-body"><ul>
+            <li>Pricing purely on <code>xp_weight</code> lets a full silo of T0 bulk convert into hundreds of endgame components.</li>
+            <li>A tier-distance cap alone is a blunt restriction unrelated to the player's actual progress.</li>
+            <li>A flat <code>0.8</code>/tier tax barely dents the ≈3.16×/tier value ramp — far trades stay favorable.</li>
+            <li>Granting XP on swaps turns trading into a leveling printer.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">Chosen — ever-produced + per-unit + spread</div>
+          <div class="col-body"><ul>
+            <li><strong>Ever-produced output filter</strong>: you can only receive a resource you already make, so trades never shortcut a production chain — and the eligible pool self-scales with progression.</li>
+            <li><strong>Per-unit weight-ratio pricing</strong> is fair value, verified against the recipe table.</li>
+            <li><strong>Rolled spread centered on 0.8^Δtier</strong> becomes the deal-quality signal — near-tier swaps tend favorable, far-tier tend lossy — making each offer a judgment call that averages ≈ neutral.</li>
+            <li><strong>No XP</strong>: progression stays production-only.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>The offer algorithm</h2></div>
+      <p class="sec-intro">Per Signal-Exchange island, when its spawn timer fires (online time only).</p>
+      <ol class="body">
+        <li><strong>Build pools (per island).</strong> <em>Give pool</em> = resources with <code>inv &gt; 0</code>. <em>Get pool</em> = resources in <code>everProduced</code> (regardless of current inventory). Fill% = <code>inv / cap</code>; treat <code>cap == 0 &amp;&amp; inv &gt; 0</code> as ≥ 100% (prime to dump); exclude <code>inv == 0 &amp;&amp; cap == 0</code>.</li>
+        <li><strong>Bias-sample.</strong> Give: roll <code>k = 2</code> from the give pool, keep the <em>higher</em> fill%. Get: roll <code>k = 2</code> from the get pool, keep the <em>lower</em> fill%. Resample if <code>get == give</code>. Higher <code>k</code> (skill) sharpens the bias.</li>
+        <li><strong>Tier gate.</strong> Reject and resample if <code>Δtier = |tier(get) − tier(give)|</code> exceeds the reach (base 2, skill 3–4). Tier is read from <code>XP_WEIGHT</code> via the §9.1 ladder.</li>
+        <li><strong>Price.</strong> Baseline output-per-input = <code>weight[give] / weight[get]</code> (fair per unit). Multiply by a rolled spread centered on <code>0.8^Δtier</code> with variance.</li>
+        <li><strong>Size.</strong> <code>giveQty = min(sizePct · inv[give], headroomLimit)</code> where the output is clamped to <code>getQty ≤ cap[get] − inv[get]</code>; whichever side binds, back-compute the other so the swap is exact.</li>
+        <li><strong>Emit</strong> a <code>TradeOffer</code> with <code>spawnedAt</code> / <code>expiresAt</code>.</li>
+      </ol>
+      <p class="body"><strong>Acceptance.</strong> On accept, re-clamp against current <code>inv[give]</code> and current headroom (production may have moved stock since spawn), then instantly subtract <code>giveQty</code> and add <code>getQty</code>. The offer is consumed. <strong>No XP is granted.</strong></p>
+      <p class="body"><strong>Lifecycle.</strong> The spawn timer advances only while the tab is focused (<code>visibilityState === 'visible'</code>). One active offer per island (skill may allow a small queue). On accept or expiry the slot frees; the next offer spawns after the cadence. Offers are runtime-only and never persisted.</p>
+      <p class="body"><strong>Surface.</strong> A detailed offer card on the active island (if it has a Signal Exchange) plus a global badge — "<em>N offers waiting elsewhere</em>" — so distant offers can be reached before they lapse.</p>
+    </section>
+
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>Tuning constants &amp; skill nodes</h2></div>
+      <p class="sec-intro">All placeholders; skill nodes live as a cluster in Logistics → Network.</p>
+      <table class="tbl">
+        <thead><tr><th>Knob</th><th>Base default</th><th>Skill-tuned to</th><th>Effect kind</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Cadence</td><td>1 offer / 2 h online</td><td>more frequent</td><td class="mono">tradeOfferFrequencyMul</td></tr>
+          <tr><td class="slate">Expiry</td><td>5 min</td><td>(fixed)</td><td class="mono">—</td></tr>
+          <tr><td class="slate">Bias k</td><td>2</td><td>3+</td><td class="mono">tradeBiasKAdd</td></tr>
+          <tr><td class="slate">Tier reach Δ</td><td>2</td><td>3–4</td><td class="mono">tradeReachAdd</td></tr>
+          <tr><td class="slate">Size %</td><td>10% of give-stock</td><td>higher</td><td class="mono">tradeSizeMul</td></tr>
+          <tr><td class="slate">Spread center</td><td>0.8^Δtier</td><td>shift favorable</td><td class="mono">tradeSpreadShift</td></tr>
+          <tr><td class="slate">Concurrency</td><td>1 active / island</td><td>small queue</td><td class="mono">tradeQueueAdd (opt.)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches. Pure-layer logic stays free of PixiJS, per the repo's pure/render split.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/trade.ts <span class="tag">NEW · pure</span></div>
+          <div class="what"><span class="lead">Core logic.</span> <code>TradeOffer</code> type, <code>generateOffer(islandState, rng) → TradeOffer | null</code>, <code>applyOffer(islandState, offer)</code>. No PixiJS; fully unit-testable.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/trade-ui.ts <span class="tag">NEW · render</span></div>
+          <div class="what"><span class="lead">DOM overlay.</span> Active-island offer card + global "N waiting" badge + countdown, in the existing vanilla-DOM idiom.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts &amp; src/world.ts</div>
+          <div class="what"><span class="lead">everProduced field + hook.</span> Add <code>everProduced: Set&lt;ResourceId&gt;</code> to <code>IslandState</code>; set the flag where inventory first goes positive in <code>advanceIsland</code> (one-liner).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.ts &amp; src/buildings.ts</div>
+          <div class="what"><span class="lead">Signal Exchange catalog row.</span> Logistics, T1, 1×1, cheap cost (≈ a Crate), no recipe, no power (so no §4.7 maintenance accrual).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/skilltree-catalog.ts &amp; src/skilltree.ts</div>
+          <div class="what"><span class="lead">Node cluster + effect kinds.</span> 3–4 notables in Logistics → Network (frequency, reach, size, spread); new effect kinds + aggregation + hover formatter. <code>skilltree-budget.test.ts</code> (≤23 nodes/sub-path) must still pass.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">Schema bump + migration.</span> Add <code>everProduced</code>; <code>migrateV18toV19</code> defaults it to the keys of current inventory. Master is at <code>SCHEMA_VERSION = 18</code> (building-overhaul already landed), so this is a <strong>v18 → v19</strong> bump. Offers themselves are not serialized.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/main.ts</div>
+          <div class="what"><span class="lead">Ticker wiring.</span> Drive spawn/expiry timers on online-focused time; mount the trade-ui overlay.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2>Verification</h2></div>
+      <p class="sec-intro">Pure-layer tests in <code>src/trade.test.ts</code> plus a migration test; render layer smoke-tested manually.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Ever-produced gate.</strong> <code>generateOffer</code> never outputs a resource absent from <code>everProduced</code>; never gives a resource with <code>inv == 0</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Bias direction.</strong> Over many rolls, give skews to high fill% and get skews to low fill% (statistical assertion).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Tier reach.</strong> No emitted offer exceeds the configured Δtier; raising reach via effect widens it.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Size + headroom.</strong> <code>giveQty</code> ≤ sizePct·stock and <code>getQty</code> ≤ output headroom, with the swap exact at the binding constraint.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Pricing.</strong> Output/input ≈ <code>weight[give]/weight[get]</code> × spread; spread center tracks <code>0.8^Δtier</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Accept semantics.</strong> <code>applyOffer</code> shifts inventory exactly, grants zero XP, and re-clamps if stock changed since spawn.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Migration.</strong> v18 fixture loads into v19 with <code>everProduced</code> defaulted to inventory keys; v19 round-trips identity.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Budget guard.</strong> <code>skilltree-budget.test.ts</code> still passes after adding the node cluster.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Manual.</strong> Build a Signal Exchange, fast-forward the spawn timer (test hook), accept an offer, confirm inventory shifts and the badge updates.</div></div>
+      </div>
+    </section>
+
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Residual marginal-cost skip — convert overflow into <em>extra</em> units of something you already make.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Per-unit fair pricing + size cap + zero XP make it a logistics convenience, not a break; it only amplifies production you're already set up for.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Online-only timer mis-wired so hidden-tab time counts (browsers throttle the ticker when hidden).</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Gate the spawn timer strictly on <code>visibilityState === 'visible'</code>; cover with a focus/blur test of timer advancement.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Migration correctness for the <code>v18 → v19</code> bump (master already at v18 post building-overhaul).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Follow the repo's bump=migrate discipline: add <code>SerializedSnapshotV18</code> alias, <code>migrateV18toV19</code>, wire into <code>loadWorld</code>, add 19 to <code>SUPPORTED_LOAD_VERSIONS</code>, round-trip test.</div>
+        </div>
+        <div class="row">
+          <div class="cell"><code>everProduced</code> unbounded growth.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">It is a Set of resource ids, bounded by the catalog (≈250); negligible save size.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Explicitly deferred — considered, not missed.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Cross-island / pooled offers</div>
+          <div class="dd">Offers are per-island, sourced from that island's inventory and ever-produced set. A network-wide combined offer is a later idea.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Multi-party / faction trading</div>
+          <div class="dd">No backend exists; offers are generated locally as anonymous barter (scavenger-network fiction). No real counterparties.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Offer persistence across reload</div>
+          <div class="dd">Ephemeral by design — fresh offers regenerate on load, keeping them out of the save/offline-replay path.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Auto-accept / automation</div>
+          <div class="dd">Acceptance is a manual decision — that's the engagement point. Automation would defeat it.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands · 2026-06-02 · branch <code>feat/trade-offers</code> · next step: writing-plans</p>
+    </div>
+
+  </div>
+
+  <script>
+    function buildReview() {
+      var qs = document.querySelectorAll('.dq');
+      var lines = ['Trade Offers spec review:', ''];
+      qs.forEach(function (dq) {
+        var key = dq.getAttribute('data-q');
+        var q = dq.querySelector('.q').textContent.trim();
+        var sel = dq.querySelector('input[type=radio]:checked');
+        var verdict = sel ? sel.value.toUpperCase() : '—';
+        var note = dq.querySelector('textarea').value.trim();
+        lines.push('• [' + verdict + '] ' + q + (note ? ' — ' + note : ''));
+      });
+      var out = document.getElementById('reviewOut');
+      out.value = lines.join('\n');
+      out.style.display = 'block';
+      out.select();
+      try { document.execCommand('copy'); } catch (e) {}
+    }
+  </script>
+</body>
+</html>
