@@ -87,6 +87,7 @@ function makeTestIsland(id: string): { spec: IslandSpec; state: IslandState } {
     batteryStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),
+    everProduced: new Set(),
     lastTick: 0,
   };
   return { spec, state };

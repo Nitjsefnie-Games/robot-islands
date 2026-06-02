@@ -91,6 +91,7 @@ function makeFounderState(
     batteryStoredWs: 0,
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),
+    everProduced: new Set(),
     lastTick: 0,
   };
 }
