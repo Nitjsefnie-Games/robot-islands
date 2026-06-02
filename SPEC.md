@@ -1209,6 +1209,8 @@ A player may pay to revert an island to Tier 1, primarily to redo skill-tree cho
 
 **Cooldown:** placeholder 24 real-time hours between resets on the same island. Prevents spam-resets to grind funneling XP.
 
+**Skill-point economics (a net gain, not a neutral respec).** The refund and the re-climb interact: reset returns *every* SP the player had spent, then re-leveling 1→L re-grants the entire level→SP curve a second time, because SP is granted per level-up (`skillPointsForLevelUp` in §9.1) with no per-level high-water-mark — nothing tracks "already earned this level." After one cycle back to the prior level the player therefore holds ~2× their cumulative SP, and because the grant is geometric (`floor(1.1^level)`) almost all of that value sits in the handful of top levels re-crossed. This is intentional, not an exploit: Tier Reset is the engine that produces the post-cap SP overflow that §9.1 routes into late-game prestige-style spending — it is a prestige loop, not merely a skill-tree redo. The loop is **rate-limited, not SP-priced**: the 24h cooldown, the level²-component cost, and the fact that T2+ buildings sit inactive (throttling production) until the island re-crosses their tier band are what keep re-climbing from being free SP. Balancing this loop means tuning those three brakes, not the refund itself.
+
 **Merged islands:** a Tier Reset on a merged island (§3.6) operates on the entire merged identity. All constituent ellipses, all buildings on each, the unified inventory — all reset together. There is no way to "split" a merged island via Tier Reset; merge remains permanent.
 
 \---
