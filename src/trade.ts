@@ -162,8 +162,7 @@ export function applyOffer(state: IslandState, offer: TradeOffer): { give: numbe
 
 
 export interface TradeRuntime {
-  offers: TradeOffer[];                 // active offers (runtime-only, never persisted)
-  nextSpawnAt: Map<string, number>;     // islandId -> earliest next spawn (ms)
+  offers: TradeOffer[]; // active offers (runtime-only, never persisted)
 }
 
 export function islandHasSignalExchange(state: IslandState): boolean {
@@ -187,8 +186,12 @@ export function tuningFor(mult: SkillMultipliers): TradeTuning {
 }
 
 /**
- * Advance offer spawning/expiry. Pure given (rng, nowMs); the caller invokes this
- * ONLY while the tab is visible, so spawns accrue on online time only. Mutates `rt`.
+ * Advance offer spawning/expiry. `nowMs` (a `performance.now()` value) stamps
+ * ephemeral offer `spawnedAt`/`expiresAt`; `onlineDtMs` is the capped online
+ * time elapsed this frame (0 when the tab isn't visible+focused) and is what
+ * burns down each island's persisted `tradeCooldownMs`. The cadence gate thus
+ * lives in persisted island state, not in ephemeral runtime — refresh-proof.
+ * Mutates `rt` and each island's `tradeCooldownMs`.
  */
 export function tickTradeOffers(
   rt: TradeRuntime,
@@ -196,22 +199,37 @@ export function tickTradeOffers(
   rng: () => number,
   tuningFor: (state: IslandState) => TradeTuning,
   nowMs: number,
+  onlineDtMs: number,
 ): void {
-  // 1. prune expired
-  rt.offers = rt.offers.filter((o) => o.expiresAt > nowMs);
+  // 1. prune expired offers; an expiry is a resolution, so it resets that
+  //    island's cooldown to its (compounded) effective cadence — exactly like
+  //    an accept does, starting the next wait. Track which islands just expired
+  //    so step 2 doesn't also decrement their freshly-reset cooldown this tick.
+  const live: TradeOffer[] = [];
+  const justExpired = new Set<string>();
+  for (const o of rt.offers) {
+    if (o.expiresAt > nowMs) { live.push(o); continue; }
+    const st = islandStates.get(o.islandId);
+    if (st) {
+      st.tradeCooldownMs = effectiveCadenceMs(st.tradeAcceptCount, tuningFor(st).cadenceMs);
+      justExpired.add(o.islandId);
+    }
+  }
+  rt.offers = live;
 
-  // 2. spawn for eligible islands with no active offer and cadence elapsed.
-  // NOTE: `nextSpawnAt` entries are intentionally never pruned — island count
-  // is bounded, and a rebuilt signal exchange on the same island id reuses its
-  // elapsed entry (not a leak).
+  // 2. for each eligible island with no active offer: burn the online-time
+  //    cooldown, spawn when it reaches 0. Cooldown is NOT touched at spawn —
+  //    it's reset only on resolution (accept/expiry), so an accept's increment
+  //    lands on the very next offer. Islands whose offer just expired this tick
+  //    skip decrement — their cooldown was just set fresh.
   for (const [id, state] of islandStates) {
     if (!islandHasSignalExchange(state)) continue;
     if (rt.offers.some((o) => o.islandId === id)) continue;
-    const due = rt.nextSpawnAt.get(id) ?? 0;
-    if (nowMs < due) continue;
+    if (justExpired.has(id)) continue;
+    state.tradeCooldownMs = Math.max(0, state.tradeCooldownMs - onlineDtMs);
+    if (state.tradeCooldownMs > 0) continue;
     const tuning = tuningFor(state);
     const offer = generateOffer(state, rng, tuning, nowMs);
     if (offer) rt.offers.push(offer);
-    rt.nextSpawnAt.set(id, nowMs + tuning.cadenceMs);
   }
 }
