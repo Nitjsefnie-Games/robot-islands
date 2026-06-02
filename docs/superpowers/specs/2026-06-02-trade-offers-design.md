@@ -174,5 +174,9 @@ Pure-layer tests in `src/trade.test.ts` + a migration test; render layer manual.
 - **Multi-party / faction trading** — no backend; anonymous barter
   (scavenger-network fiction), no real counterparties.
 - **Offer persistence across reload** — ephemeral by design.
+  > **Amended 2026-06-02 (trade-persist-compounding):** offers remain ephemeral,
+  > but the spawn *cadence* is now persisted per island as an online-time
+  > cooldown — see `2026-06-02-trade-persist-compounding-design`. The original
+  > ephemeral-cadence behavior was the source of a refresh-farm exploit.
 - **Auto-accept / automation** — acceptance is the engagement point; automation
   would defeat it.
