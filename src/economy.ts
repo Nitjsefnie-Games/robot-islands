@@ -257,6 +257,9 @@ export interface IslandState {
    *  Mutations must bump `auraAmpVersion` — see §05 of the
    *  adjacency-cache spec for the enumerated mutation sites. */
   unlockedEdges: Set<EdgeId>;
+  /** Resources this island has ever produced (inventory raised above 0 at least
+   *  once). Gates the "get" side of Trade Offers. Persisted. */
+  everProduced: Set<ResourceId>;
   /** §perf-2026-05-27 adjacency-cache Layer 2: bumped on every mutation
    *  of `unlockedNodes` / `unlockedEdges`. Cache key for
    *  computeAuraAmplifiers' per-state aura-amp memoization. Starts at 0;
@@ -1518,6 +1521,7 @@ function applyRates(
     const next = inv(state, r) + rate * dtSec;
     const clamped = Math.min(cap(state, r, caps, undefined, baseMult), Math.max(0, next));
     state.inventory[r] = clamped;
+    if (rate > 0) state.everProduced.add(r);
   }
 }
 
