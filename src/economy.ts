@@ -258,7 +258,11 @@ export interface IslandState {
    *  adjacency-cache spec for the enumerated mutation sites. */
   unlockedEdges: Set<EdgeId>;
   /** Resources this island has ever produced (inventory raised above 0 at least
-   *  once). Gates the "get" side of Trade Offers. Persisted. */
+   *  once). Gates the "get" side of Trade Offers. Persisted.
+   *
+   *  Recording is on NET production (`rate > 0`), i.e. surplus, not gross — a
+   *  resource produced and fully consumed within the same integration segment
+   *  (net rate 0) is not recorded. */
   everProduced: Set<ResourceId>;
   /** §perf-2026-05-27 adjacency-cache Layer 2: bumped on every mutation
    *  of `unlockedNodes` / `unlockedEdges`. Cache key for

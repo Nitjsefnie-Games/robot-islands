@@ -50,6 +50,7 @@ import {
   migrateV15toV16,
   migrateV16toV17,
   migrateV17toV18,
+  migrateV18toV19,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -60,6 +61,7 @@ import {
   type SerializedSnapshotV15,
   type SerializedSnapshotV16,
   type SerializedSnapshotV17,
+  type SerializedSnapshotV18,
   type SerializedIslandStateV11,
   type SerializedWorld,
 } from './persistence.js';
@@ -144,7 +146,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(18);
+    expect(snap.v).toBe(19);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1476,7 +1478,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(18);
+    expect(snap.v).toBe(19);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -2158,10 +2160,10 @@ describe('PlacedBuilding.floorLevel persistence', () => {
 // ---------------------------------------------------------------------------
 
 describe('v17 -> v18 migration', () => {
-  it('SCHEMA_VERSION is 18 and both 17 and 18 are supported', () => {
-    expect(SCHEMA_VERSION).toBe(18);
+  it('17, 18 and 19 are all supported', () => {
     expect(SUPPORTED_LOAD_VERSIONS.has(17)).toBe(true);
     expect(SUPPORTED_LOAD_VERSIONS.has(18)).toBe(true);
+    expect(SUPPORTED_LOAD_VERSIONS.has(19)).toBe(true);
   });
   it('migrateV17toV18 bumps v and preserves islandStates/world', () => {
     const v17: SerializedSnapshotV17 = { v: 17, savedAt: 1, savedAtPerf: 0, world: { islands: [] }, islandStates: [] } as unknown as SerializedSnapshotV17;
@@ -2179,8 +2181,8 @@ describe('v17 -> v18 migration', () => {
     homeState.nextQueueSeq = 2;
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    // The snapshot must be at v18 (SCHEMA_VERSION).
-    expect(snap.v).toBe(18);
+    // The snapshot must be at v19 (SCHEMA_VERSION).
+    expect(snap.v).toBe(19);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
     const rSpec = restored.islands.find((s) => s.id === 'home')!;
@@ -2201,5 +2203,54 @@ describe('v17 -> v18 migration', () => {
     const b = rSpec.buildings.find((bld) => bld.id === 'mine-noq')!;
     expect(b.queued).toBeFalsy();
     expect(b.queueSeq).toBeUndefined();
+  });
+});
+
+describe('v18 -> v19 migration (everProduced seen-set)', () => {
+  it('SCHEMA_VERSION is 19', () => {
+    expect(SCHEMA_VERSION).toBe(19);
+  });
+
+  it('migrateV18toV19 backfills everProduced from each island inventory keys', () => {
+    // Build a current snapshot, then forge a v18 shape from it by stripping
+    // everProduced and dropping the version to 18. The migration must
+    // reconstruct everProduced unconditionally from the inventory keys.
+    const world = makeInitialWorld(0);
+    const homeSpec = world.islands.find((s) => s.id === 'home')!;
+    const homeState = makeInitialIslandState(homeSpec, 0);
+    // Pin a known inventory so the expected key set is deterministic.
+    homeState.inventory = { iron_ore: 10, coal: 5 } as typeof homeState.inventory;
+    const states = new Map<string, IslandState>([['home', homeState]]);
+    const current = serializeWorld(world, states, 0, 0);
+
+    const v18: SerializedSnapshotV18 = {
+      ...current,
+      v: 18,
+      islandStates: current.islandStates.map((entry) => {
+        // Drop everProduced to emulate a genuine v18 save (field absent).
+        const { everProduced: _ep, ...stateRest } = entry.state;
+        return { id: entry.id, state: stateRest };
+      }),
+    } as unknown as SerializedSnapshotV18;
+
+    const out = migrateV18toV19(v18);
+    expect(out.v).toBe(19);
+    const homeEntry = out.islandStates.find((e) => e.id === 'home')!;
+    expect(new Set(homeEntry.state.everProduced)).toEqual(new Set(['iron_ore', 'coal']));
+  });
+
+  it('round-trips everProduced identity: Set → serialize → deserialize → same contents', () => {
+    const world = makeInitialWorld(0);
+    const homeSpec = world.islands.find((s) => s.id === 'home')!;
+    const homeState = makeInitialIslandState(homeSpec, 0);
+    homeState.everProduced = new Set(['bolt', 'iron_ingot']);
+    const states = new Map<string, IslandState>([['home', homeState]]);
+    const snap = serializeWorld(world, states, 0, 0);
+    expect(snap.v).toBe(19);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    const rState = restored.get('home')!;
+    expect(rState.everProduced).toBeInstanceOf(Set);
+    expect(rState.everProduced).toEqual(new Set(['bolt', 'iron_ingot']));
   });
 });
