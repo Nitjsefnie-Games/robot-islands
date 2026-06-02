@@ -53,6 +53,7 @@ import { _seedVehicleIdCounter } from './settlement.js';
 
 import type { VictoryCondition } from './endgame.js';
 import type { NodeId } from './skilltree.js';
+import type { ResourceId } from './recipes.js';
 import { cumulativeSkillPointsForLevel } from './skilltree.js';
 import type { CrystalId, EdgeId } from './skilltree-graph.js';
 import type { OceanCellSpec } from './ocean-cell.js';
@@ -71,7 +72,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 18 as const;
+export const SCHEMA_VERSION = 19 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -79,7 +80,7 @@ export const SCHEMA_VERSION = 18 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -95,10 +96,14 @@ export type SerializedIslandSpec = Omit<IslandSpec, 'terrainAt'>;
 
 /** IslandState with Set and Map fields converted to arrays for JSON. */
 export interface SerializedIslandState
-  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings' | 'auraAmpVersion' | 'auraAmpCache' | 'auraAmpCacheVersion'> {
+  extends Omit<IslandState, 'unlockedNodes' | 'unlockedEdges' | 'socketBindings' | 'everProduced' | 'auraAmpVersion' | 'auraAmpCache' | 'auraAmpCacheVersion'> {
   readonly unlockedNodes: ReadonlyArray<NodeId>;
   readonly unlockedEdges: ReadonlyArray<EdgeId>;
   readonly socketBindings: ReadonlyArray<[string, CrystalId]>;
+  /** Resources this island has ever produced. Optional for forward-compat:
+   *  a pre-v19 save lacks it and the v18→v19 migration backfills from
+   *  inventory keys. Deserialize rebuilds the `Set`. */
+  readonly everProduced?: ReadonlyArray<ResourceId>;
   readonly batteryStoredWs: number;
 }
 
@@ -519,8 +524,32 @@ export type SerializedSnapshotV17 = Omit<SaveSnapshot, 'v'> & { readonly v: 17 }
  *  and `nextQueueSeq` (per island state) are all optional with absent ≡ default
  *  (not queued / seq 0), so old saves need no backfill — every in-progress build
  *  loads as running, nothing queued. Pure version bump. */
-export function migrateV17toV18(s: SerializedSnapshotV17): SaveSnapshot {
-  return { ...s, v: 18 as const } as unknown as SaveSnapshot;
+export function migrateV17toV18(s: SerializedSnapshotV17): SerializedSnapshotV18 {
+  return { ...s, v: 18 as const } as unknown as SerializedSnapshotV18;
+}
+
+/** v18 top-level snapshot shape. Structurally identical to v19 (SaveSnapshot)
+ *  except the v literal and the per-island `everProduced` seen-set, which a
+ *  v18 save lacks entirely. */
+export type SerializedSnapshotV18 = Omit<SaveSnapshot, 'v'> & { readonly v: 18 };
+
+/** v18 → v19: per-island `everProduced` seen-set shipped. A v18 save never
+ *  carries a valid `everProduced` (the field didn't exist), so we backfill it
+ *  unconditionally from the keys of each island's current inventory — every
+ *  resource already stockpiled is immediately tradeable. Deserialize rebuilds
+ *  the array into a `Set`. */
+export function migrateV18toV19(s: SerializedSnapshotV18): SaveSnapshot {
+  return {
+    ...s,
+    v: 19 as const,
+    islandStates: s.islandStates.map((entry) => ({
+      ...entry,
+      state: {
+        ...entry.state,
+        everProduced: Object.keys(entry.state.inventory ?? {}) as ResourceId[],
+      },
+    })),
+  } as unknown as SaveSnapshot;
 }
 
 export interface SaveSnapshot {
@@ -567,7 +596,7 @@ export function serializeWorld(
   const stateEntries: SerializedIslandStateEntry[] = [];
   for (const [id, state] of islandStates) {
     const {
-      unlockedNodes, unlockedEdges, socketBindings,
+      unlockedNodes, unlockedEdges, socketBindings, everProduced,
       auraAmpVersion: _v,
       auraAmpCache: _c,
       auraAmpCacheVersion: _cv,
@@ -578,6 +607,7 @@ export function serializeWorld(
       unlockedNodes: [...unlockedNodes],
       unlockedEdges: [...unlockedEdges],
       socketBindings: [...socketBindings],
+      everProduced: [...everProduced],
     };
     stateEntries.push({ id, state: serialized });
   }
@@ -702,7 +732,10 @@ export function deserializeWorld(
     snapshot = migrateV16toV17(snapshot as unknown as SerializedSnapshotV16);
   }
   if ((snapshot as unknown as { v: number }).v === 17) {
-    snapshot = migrateV17toV18(snapshot as unknown as SerializedSnapshotV17);
+    snapshot = migrateV17toV18(snapshot as unknown as SerializedSnapshotV17) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 18) {
+    snapshot = migrateV18toV19(snapshot as unknown as SerializedSnapshotV18);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
@@ -843,6 +876,7 @@ export function deserializeWorld(
       starterInventoryGrace: { ...s.starterInventoryGrace },
       unlockedNodes: new Set(s.unlockedNodes),
       unlockedEdges: new Set(s.unlockedEdges ?? []),
+      everProduced: new Set(s.everProduced ?? []),
       auraAmpVersion: 0,
       auraAmpCache: null,
       auraAmpCacheVersion: -1,
