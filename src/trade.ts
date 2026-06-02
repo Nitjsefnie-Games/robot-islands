@@ -1,5 +1,6 @@
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
 import { inv, cap, type IslandState } from './economy.js';
+import type { PlacedBuilding } from './buildings.js';
 
 export interface TradeOffer {
   readonly id: string;
@@ -139,4 +140,40 @@ export function applyOffer(state: IslandState, offer: TradeOffer): { give: numbe
   state.inventory[offer.give.res] = haveGive - giveQty;
   state.inventory[offer.get.res] = inv(state, offer.get.res) + getQty;
   return { give: giveQty, get: getQty };
+}
+
+
+export interface TradeRuntime {
+  offers: TradeOffer[];                 // active offers (runtime-only, never persisted)
+  nextSpawnAt: Map<string, number>;     // islandId -> earliest next spawn (ms)
+}
+
+export function islandHasSignalExchange(state: IslandState): boolean {
+  return state.buildings.some((b: PlacedBuilding) => b.defId === 'signal_exchange');
+}
+
+/**
+ * Advance offer spawning/expiry. Pure given (rng, nowMs); the caller invokes this
+ * ONLY while the tab is visible, so spawns accrue on online time only. Mutates `rt`.
+ */
+export function tickTradeOffers(
+  rt: TradeRuntime,
+  islandStates: ReadonlyMap<string, IslandState>,
+  rng: () => number,
+  tuning: TradeTuning,
+  nowMs: number,
+): void {
+  // 1. prune expired
+  rt.offers = rt.offers.filter((o) => o.expiresAt > nowMs);
+
+  // 2. spawn for eligible islands with no active offer and cadence elapsed
+  for (const [id, state] of islandStates) {
+    if (!islandHasSignalExchange(state)) continue;
+    if (rt.offers.some((o) => o.islandId === id)) continue;
+    const due = rt.nextSpawnAt.get(id) ?? 0;
+    if (nowMs < due) continue;
+    const offer = generateOffer(state, rng, tuning, nowMs);
+    if (offer) rt.offers.push(offer);
+    rt.nextSpawnAt.set(id, nowMs + tuning.cadenceMs);
+  }
 }

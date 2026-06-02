@@ -63,6 +63,7 @@ export type BuildingDefId =
   | 'logger'
   | 'smelter'
   | 'crate'
+  | 'signal_exchange'
   | 'silo'
   | 'biomass_plant'
   | 'plant_a_tree'
@@ -806,6 +807,18 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 80 wood slats + 30 stone base = 110 kg.
     placementCost: { wood: 80, stone: 30 },
     glyph: '▦',
+  },
+  signal_exchange: {
+    id: 'signal_exchange',
+    displayName: 'Signal Exchange',
+    category: 'logistics',
+    tier: 1,
+    footprint: SHAPES.single,
+    fill: 0x2f6f7a,
+    stroke: 0x123942,
+    // analog: vernacular signal-post + relay cabinet — small wood frame + stone footing.
+    placementCost: { wood: 40, stone: 20 },
+    glyph: '⇄',
   },
   silo: {
     id: 'silo',
