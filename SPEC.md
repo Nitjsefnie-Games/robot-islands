@@ -552,8 +552,8 @@ The player's responsibility is to keep maintenance supplies flowing — plant Wo
 | `robotics.notable.parallelFoundries` (+2) | 3 | 2 |
 | `robotics.notable.queueFoundries` (+4) | 1 | 6 |
 | Both notables | 3 | 6 |
-| + `robotics.keystone.parallelConstruction` (+1) | 4 | 6 |
-| + `robotics.keystone.queueConstruction` (+2) | 3 | 8 |
+| Both notables + `robotics.keystone.parallelConstruction` (+1) | 4 | 6 |
+| Both notables + `robotics.keystone.queueConstruction` (+2) | 3 | 8 |
 | All four nodes | 4 | 8 |
 
 `parallelConstruction` is a structural keystone (AND-prereqs: `swarmAssembly` + `parallelFoundries`); `queueConstruction` is its mirror keystone (AND-prereqs: `swarmAssembly` + `queueFoundries`).
