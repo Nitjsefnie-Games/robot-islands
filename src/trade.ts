@@ -30,6 +30,23 @@ export const DEFAULT_TRADE_TUNING: TradeTuning = {
   expiryMs: 5 * 60 * 1000,       // 5 minutes
 };
 
+/** Minimum effective cadence (ms). The compounding accept-speedup can't drive
+ *  offers below this, keeping the loop fast-but-bounded so it can't soft-reopen
+ *  the refresh farm. ~1 minute. */
+export const FLOOR_MS = 60_000;
+
+/** Max online time (ms) credited to a cooldown in a single tick. The caller
+ *  passes `min(frameElapsedMs, ONLINE_DT_CAP_MS)` so a long unfocused gap can't
+ *  dump hours into the countdown on the first focused frame. */
+export const ONLINE_DT_CAP_MS = 3_000;
+
+/** Effective per-island cadence: the base cadence compounded 1% faster per
+ *  accepted trade (`0.99^acceptCount`), floored at `FLOOR_MS`. Pure on numbers
+ *  so both the ticker and the accept handler can reuse it. */
+export function effectiveCadenceMs(acceptCount: number, baseCadenceMs: number): number {
+  return Math.max(FLOOR_MS, baseCadenceMs * Math.pow(0.99, acceptCount));
+}
+
 const TIER_LADDER = [1, 3, 10, 30, 100, 300, 1000];
 
 /** Resource tier from the XP-weight ladder (1,3,10,30,100,300,1000 -> T0..T6). */
