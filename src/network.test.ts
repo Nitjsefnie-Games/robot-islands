@@ -34,6 +34,8 @@ describe('computeSharedNetworkState', () => {
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
       everProduced: new Set(),
+      tradeCooldownMs: 0,
+      tradeAcceptCount: 0,
       lastTick: 0,
     } as IslandState;
 
@@ -65,6 +67,8 @@ describe('computeSharedNetworkState', () => {
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
       everProduced: new Set(),
+      tradeCooldownMs: 0,
+      tradeAcceptCount: 0,
       lastTick: 0,
     } as IslandState;
 
@@ -150,6 +154,8 @@ describe('computeSharedNetworkState', () => {
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
       everProduced: new Set(),
+      tradeCooldownMs: 0,
+      tradeAcceptCount: 0,
       lastTick: 0,
     } as IslandState;
 
@@ -181,6 +187,8 @@ describe('computeSharedNetworkState', () => {
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
       everProduced: new Set(),
+      tradeCooldownMs: 0,
+      tradeAcceptCount: 0,
       lastTick: 0,
     } as IslandState;
 
@@ -267,6 +275,8 @@ describe('computeSharedNetworkState', () => {
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
       everProduced: new Set(),
+      tradeCooldownMs: 0,
+      tradeAcceptCount: 0,
       lastTick: 0,
     } as IslandState;
 
@@ -349,6 +359,8 @@ describe('computeSharedNetworkState', () => {
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
       everProduced: new Set(),
+      tradeCooldownMs: 0,
+      tradeAcceptCount: 0,
       lastTick: 0,
     } as IslandState;
 
@@ -380,6 +392,8 @@ describe('computeSharedNetworkState', () => {
       starterInventoryGrace: {} as any,
       socketBindings: new Map(),
       everProduced: new Set(),
+      tradeCooldownMs: 0,
+      tradeAcceptCount: 0,
       lastTick: 0,
     } as IslandState;
 
