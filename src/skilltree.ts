@@ -115,6 +115,7 @@ export type SkillEffect =
   | { readonly kind: 'storageCategoryCapMul'; readonly category: StorageCategory }
   //   - constructionTimeMul   → construction.ts (divides placement-time)
   //   - parallelBuildCapAdd   → adds to concurrent under-construction slots
+  //   - queueCapAdd           → adds to build-QUEUE capacity (base 2)
   | { readonly kind: 'constructionTimeMul' }
   | { readonly kind: 'parallelBuildCapAdd' }
   | { readonly kind: 'queueCapAdd' }
