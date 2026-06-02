@@ -1151,7 +1151,7 @@ export function promoteQueuedBuilds(state: IslandState): void {
     .sort((a, b) => (a.queueSeq ?? 0) - (b.queueSeq ?? 0));
   for (const b of queued) {
     if (free <= 0) break;
-    (b as { queued?: boolean }).queued = false;
+    b.queued = false;
     free--;
   }
 }
