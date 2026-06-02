@@ -95,6 +95,19 @@ describe('nextConstructionCompletionMs', () => {
   });
 });
 
+describe('queued builds do not tick', () => {
+  it('tickConstruction leaves a queued build untouched and returns false', () => {
+    const b: PlacedBuilding = { id: 'q', defId: 'mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 5000, queued: true };
+    expect(tickConstruction(b, 9999)).toBe(false);
+    expect(b.constructionRemainingMs).toBe(5000);
+  });
+  it('nextConstructionCompletionMs ignores queued builds', () => {
+    const running: PlacedBuilding = { id: 'r', defId: 'mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 3000 };
+    const queued: PlacedBuilding = { id: 'q', defId: 'mine', x: 1, y: 0, rotation: 0, constructionRemainingMs: 1000, queued: true };
+    expect(nextConstructionCompletionMs([queued, running], 0)).toBe(3000);
+  });
+});
+
 describe('constructionProgress', () => {
   const mine = BUILDING_DEFS.mine; // tier 1
   const BASE = BASE_CONSTRUCTION_MS_BY_TIER[1];
