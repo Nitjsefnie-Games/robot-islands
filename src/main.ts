@@ -2035,7 +2035,7 @@ async function main(): Promise<void> {
       islandPower,
     );
     islandBar.update(activeIslandId, islandPower, saveAgeSec);
-    tradeUi.update(tradeRuntime, activeIslandId, islandStates, now);
+    tradeUi.update(tradeRuntime, activeIslandId, now);
     // §13.3 Omniscient Lattice banner visibility.
     latticeBanner.style.display = worldState.latticeActive ? 'block' : 'none';
     // Skill tree only repaints while visible — DOM writes are wasted

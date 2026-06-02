@@ -1,40 +1,92 @@
+// Trade offer card — house panel mounted in Zone.TL (below the build-queue
+// panel, order 1 so they stack rather than overlap). Shows the active
+// island's pending signal_exchange offer (give→get, countdown, ACCEPT) plus a
+// "N waiting elsewhere" hint for offers on non-active islands.
+//
+// Styling tracks the theme via the .ri-panel chrome classes + CSS custom
+// properties (var(--ri-*)) — no hardcoded hex, no raw z-index (mountPanel
+// owns placement + z-index via the Z tokens in ui-tokens.ts).
+
 import type { TradeRuntime, TradeOffer } from './trade.js';
-import type { IslandState } from './economy.js';
+import { mountPanel, Zone } from './ui-zones.js';
 
 export interface TradeUiHandle {
   readonly el: HTMLDivElement;
-  update(rt: TradeRuntime, activeIslandId: string, islandStates: ReadonlyMap<string, IslandState>, nowMs: number): void;
+  update(rt: TradeRuntime, activeIslandId: string, nowMs: number): void;
 }
 
 export function mountTradeUi(onAccept: (offer: TradeOffer) => void): TradeUiHandle {
   const el = document.createElement('div');
-  el.className = 'ri-trade-ui';
-  el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:40;font:13px system-ui;color:#e8e6df;max-width:280px;';
-  document.body.appendChild(el);
+  el.classList.add('ri-panel');
+  el.id = 'trade-offer-panel';
 
-  function update(rt: TradeRuntime, activeIslandId: string, _islandStates: ReadonlyMap<string, IslandState>, nowMs: number): void {
+  const head = document.createElement('div');
+  head.classList.add('ri-panel__head');
+  const titleEl = document.createElement('span');
+  titleEl.classList.add('ri-panel__title');
+  titleEl.textContent = 'TRADE OFFER';
+  head.appendChild(titleEl);
+  el.appendChild(head);
+
+  const body = document.createElement('div');
+  body.classList.add('ri-panel__body');
+  el.appendChild(body);
+
+  const panel = mountPanel(el, {
+    id: 'trade-offer-panel',
+    zone: Zone.TL,
+    // Build-queue panel mounts at Zone.TL order 0; order 1 stacks the trade
+    // card directly below it (the zone manager offsets by prev height + gap).
+    order: 1,
+    minWidth: 220,
+    maxWidth: 320,
+  });
+
+  // Content-key early-out: update() runs ~60fps but only the 1s countdown
+  // changes between most frames. Skip the innerHTML rebuild + onclick rebind
+  // when the rendered content is identical to last frame. `''` forces the
+  // first render after each (re)show.
+  let lastKey = '';
+
+  function update(rt: TradeRuntime, activeIslandId: string, nowMs: number): void {
     const here = rt.offers.find((o) => o.islandId === activeIslandId);
     const elsewhere = rt.offers.filter((o) => o.islandId !== activeIslandId).length;
-    if (!here && elsewhere === 0) { el.style.display = 'none'; return; }
-    el.style.display = 'block';
+    if (!here && elsewhere === 0) {
+      if (el.style.display !== 'none') {
+        el.style.display = 'none';
+        panel.requestLayout();
+      }
+      lastKey = '';
+      return;
+    }
+    if (el.style.display === 'none') {
+      el.style.display = '';
+      panel.requestLayout();
+    }
+
+    const secs = here ? Math.max(0, Math.ceil((here.expiresAt - nowMs) / 1000)) : 0;
+    const key = `${here?.id ?? 'none'}:${secs}:${elsewhere}`;
+    if (key === lastKey) return;
+    lastKey = key;
 
     const parts: string[] = [];
     if (here) {
-      const secs = Math.max(0, Math.ceil((here.expiresAt - nowMs) / 1000));
       parts.push(
-        '<div style="background:#252420;border:1.5px solid #3a3833;border-radius:10px;padding:12px 14px;margin-bottom:8px;">' +
-          '<div style="color:#8f8d82;font:11px ui-monospace;text-transform:uppercase;letter-spacing:.06em;">Trade offer · ' + secs + 's</div>' +
-          '<div style="margin:6px 0;">Give <b>' + here.give.qty.toFixed(0) + ' ' + here.give.res + '</b> → Get <b style="color:#8FA56E;">' + here.get.qty.toFixed(0) + ' ' + here.get.res + '</b></div>' +
-          '<button data-accept="' + here.id + '" style="font:11px ui-monospace;background:#D97757;color:#1B1A17;border:none;border-radius:7px;padding:7px 14px;cursor:pointer;font-weight:700;">ACCEPT</button>' +
-        '</div>',
+        '<div class="ri-sectionhead">Offer · ' + secs + 's</div>' +
+          '<div class="ri-kv" style="margin:4px 0 8px;">' +
+            '<span class="ri-kv__k">Give <b class="ri-mono">' + here.give.qty.toFixed(0) + ' ' + here.give.res + '</b></span>' +
+            '<span class="ri-kv__v ri-mono" style="color:var(--ri-accent);">→</span>' +
+            '<span class="ri-kv__v">Get <b class="ri-mono" style="color:var(--ri-success);">' + here.get.qty.toFixed(0) + ' ' + here.get.res + '</b></span>' +
+          '</div>' +
+          '<button class="ri-accentbtn" data-accept="' + here.id + '">Accept</button>',
       );
     }
     if (elsewhere > 0) {
-      parts.push('<div style="color:#8f8d82;font-size:12px;">' + elsewhere + ' offer' + (elsewhere === 1 ? '' : 's') + ' waiting elsewhere</div>');
+      parts.push('<div class="ri-muted" style="margin-top:8px;font-size:11px;">' + elsewhere + ' offer' + (elsewhere === 1 ? '' : 's') + ' waiting elsewhere</div>');
     }
-    el.innerHTML = parts.join('');
+    body.innerHTML = parts.join('');
 
-    const btn = el.querySelector<HTMLButtonElement>('button[data-accept]');
+    const btn = body.querySelector<HTMLButtonElement>('button[data-accept]');
     if (btn && here) btn.onclick = () => onAccept(here);
   }
 
