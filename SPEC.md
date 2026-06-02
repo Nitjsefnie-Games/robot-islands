@@ -1264,6 +1264,8 @@ so every accept makes that island's next offer arrive ≈1% sooner — "every tr
 
 `tradeCooldownMs` and `tradeAcceptCount` persist per island (schema v20; backfilled to 0 for pre-v20 saves via `migrateV19toV20`). Active offers do **not** persist — they are regenerated fresh after load once the cooldown elapses.
 
+Both fields are **preserved across Tier Reset (§9.7)** — `tradeAcceptCount` is a permanent per-island accumulator and is never cleared; the §9.7 preserve-set extends to it.
+
 #### 9.8.6 Skill tuning
 
 A **Logistics → Network** cluster tunes four offer parameters (skill nodes; all base values above are placeholders the cluster modulates upward — multipliers are clamped so a node can never worsen the base tuning):
