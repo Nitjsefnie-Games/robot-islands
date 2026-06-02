@@ -31,6 +31,7 @@ import { computeSharedNetworkState } from './network.js';
 import { tierForLevel } from './skilltree.js';
 import { renderCellGrid } from './grid.js';
 import { mountHud, mountIslandBar } from './hud.js';
+import { mountBuildQueuePanel } from './build-queue-ui.js';
 import {
   bind,
   defineAction,
@@ -1657,6 +1658,18 @@ async function main(): Promise<void> {
     if (document.visibilityState === 'hidden') triggerSave();
   });
 
+  // Build-queue panel — draggable top-left window listing running/queued
+  // construction jobs for the active island, each with a cancel button.
+  // Mounted after triggerSave so the onCancel callback can call it.
+  const buildQueueUi = mountBuildQueuePanel(reg, {
+    getSpec: activeSpec,
+    getState: activeState,
+    onCancel: (_islandId: string) => {
+      rebuildWorldLayers();
+      buildingAlertsOverlay.invalidate();
+      triggerSave();
+    },
+  });
 
   // Update tick: apply held pan flags + sync camera state to the world
   // container, advance every populated island's economy, advance drone fleet,
@@ -2033,6 +2046,8 @@ async function main(): Promise<void> {
     // §4 inspector: refresh while open so the live rate / power / inventory
     // numbers track the per-frame economy. Cheap when closed (one branch).
     inspector.refresh();
+    // Build-queue panel — refreshes every frame so progress % stays live.
+    buildQueueUi.refresh();
     // Selection outline stays in sync with the inspector target — if the
     // selected building was demolished externally (won't happen in step 2.5
     // but defensive for future tooling) the repaint clears the outline.
