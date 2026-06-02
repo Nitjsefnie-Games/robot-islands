@@ -76,6 +76,8 @@ import {
 } from './world.js';
 import { mountDronesUi } from './drones-ui.js';
 import { tickDrones } from './drones.js';
+import { tickTradeOffers, applyOffer, DEFAULT_TRADE_TUNING, type TradeRuntime } from './trade.js';
+import { mountTradeUi } from './trade-ui.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import { SONAR_BUOY_DEF_ID, SONAR_BUOY_RADIUS_TILES, tickSonarBuoys } from './sonar-buoy.js';
 import {
@@ -1671,6 +1673,20 @@ async function main(): Promise<void> {
     },
   });
 
+  // Trade offer runtime — ephemeral, not persisted. Offer spawning only
+  // happens while the tab is visible (gated in the ticker via document.hidden).
+  const tradeRuntime: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
+
+  // Trade offer overlay — card shown on the active island when a signal_exchange
+  // is present and an offer has spawned. Acceptance mutates the island's inventory
+  // via applyOffer and removes the offer from the runtime list.
+  const tradeUi = mountTradeUi((offer) => {
+    const st = islandStates.get(offer.islandId);
+    if (!st) return;
+    applyOffer(st, offer);
+    tradeRuntime.offers = tradeRuntime.offers.filter((o) => o.id !== offer.id);
+  });
+
   // Update tick: apply held pan flags + sync camera state to the world
   // container, advance every populated island's economy, advance drone fleet,
   // advance inter-island routes, and update the HUD + side panels. One pass
@@ -1841,6 +1857,11 @@ async function main(): Promise<void> {
       islandPower.set(s.id, power);
     }
     if (needRebuild) rebuildWorldLayers();
+    // Trade offer lifecycle — only while tab is visible so offers accrue on
+    // online time only (document.hidden = true when the tab is backgrounded).
+    if (!document.hidden) {
+      tickTradeOffers(tradeRuntime, islandStates, Math.random, DEFAULT_TRADE_TUNING, now);
+    }
     // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
     // islands for ellipse overlaps. At most ONE merge runs per tick — the
     // pair with the largest combined tile count wins; remaining overlaps
@@ -2014,6 +2035,7 @@ async function main(): Promise<void> {
       islandPower,
     );
     islandBar.update(activeIslandId, islandPower, saveAgeSec);
+    tradeUi.update(tradeRuntime, activeIslandId, islandStates, now);
     // §13.3 Omniscient Lattice banner visibility.
     latticeBanner.style.display = worldState.latticeActive ? 'block' : 'none';
     // Skill tree only repaints while visible — DOM writes are wasted
