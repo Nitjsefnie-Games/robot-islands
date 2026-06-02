@@ -1139,3 +1139,19 @@ export function validateOceanPlacement(
   }
   return { ok: true };
 }
+
+/** Promote queued builds into free running slots, FIFO by queueSeq, until
+ *  slots are full or the queue is empty. A promoted build clears its `queued`
+ *  flag and begins ticking on the next segment. Pure mutation on `state`. */
+export function promoteQueuedBuilds(state: IslandState): void {
+  let free = parallelBuildSlots(state) - inProgressBuildCount(state);
+  if (free <= 0) return;
+  const queued = state.buildings
+    .filter((b) => b.queued === true)
+    .sort((a, b) => (a.queueSeq ?? 0) - (b.queueSeq ?? 0));
+  for (const b of queued) {
+    if (free <= 0) break;
+    (b as { queued?: boolean }).queued = false;
+    free--;
+  }
+}

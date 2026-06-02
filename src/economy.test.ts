@@ -4426,3 +4426,49 @@ describe('fledglingRecipeMul (§9 fledgling island boost)', () => {
     expect(rLo / rHi).toBeCloseTo(2.5, 6);
   });
 });
+
+// ---------------------------------------------------------------------------
+// queue promotion on completion
+// ---------------------------------------------------------------------------
+describe('queue promotion on completion', () => {
+  it('promotes FIFO head into the freed slot when a running build completes', () => {
+    // One running slot (base parallelBuildSlots = 1; no skill nodes unlocked).
+    // Build R: running, completes 1000 ms into the advance.
+    // Build Q: queued (queued=true), constructionRemainingMs=5000, queueSeq=0 — inert until promoted.
+    // Advance 2000 ms past lastTick=0 → R completes, slot frees, Q is promoted
+    // and begins ticking within the same advance call.
+    const R: PlacedBuilding = {
+      id: 'b-running',
+      defId: 'mine',
+      x: 0,
+      y: 0,
+      constructionRemainingMs: 1000,
+    };
+    const Q: PlacedBuilding = {
+      id: 'b-queued',
+      defId: 'mine',
+      x: 3,
+      y: 0,
+      constructionRemainingMs: 5000,
+      queued: true,
+      queueSeq: 0,
+    };
+    const state = makeState({
+      buildings: [R, Q],
+      lastTick: 0,
+      // No skill nodes — parallelBuildSlots stays at 1.
+      unlockedNodes: new Set(),
+      unlockedEdges: new Set(),
+    });
+    advanceIsland(state, 2000, { defs: POWER_FREE });
+    // R must be operational (constructionRemainingMs === 0).
+    expect((state.buildings[0] as { constructionRemainingMs?: number }).constructionRemainingMs)
+      .toBe(0);
+    // Q must have been promoted (queued cleared) AND have started ticking
+    // (remaining must be less than 5000 — it ticked for the 1000 ms after
+    // R completed within the same advance call).
+    const qBuilding = state.buildings[1] as { queued?: boolean; constructionRemainingMs?: number };
+    expect(qBuilding.queued).toBeFalsy();
+    expect(qBuilding.constructionRemainingMs).toBeLessThan(5000);
+  });
+});
