@@ -15,8 +15,11 @@ import {
   demolishBuilding,
   findOceanBuildingAt,
   formatShortfall,
+  inProgressBuildCount,
   placeBuilding,
   placementCostFor,
+  queuedBuildCount,
+  queuedBuildSlots,
   relocateBuilding,
   sortByFillDesc,
   totalInvestedCost,
@@ -1883,5 +1886,26 @@ describe('terrain_modifier placement charges the conversion cost upfront', () =>
     const r = placeBuilding(spec, state, 'terrain_modifier', 0, 0, 0, () => 'tm', undefined, undefined, undefined, 'copper_vein');
     expect(r.ok).toBe(false);
     expect(spec.buildings).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// queue capacities
+// ---------------------------------------------------------------------------
+describe('queue capacities', () => {
+  it('base queuedBuildSlots is 2', () => {
+    const spec = makeSpec();
+    const s = makeState(spec);
+    expect(queuedBuildSlots(s)).toBe(2);
+  });
+  it('inProgressBuildCount counts running only; queuedBuildCount counts queued', () => {
+    const spec = makeSpec();
+    const s = makeState(spec);
+    s.buildings.push(
+      { id: 'a', defId: 'mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 1000 },
+      { id: 'b', defId: 'mine', x: 1, y: 0, rotation: 0, constructionRemainingMs: 1000, queued: true },
+    );
+    expect(inProgressBuildCount(s)).toBe(1);
+    expect(queuedBuildCount(s)).toBe(1);
   });
 });
