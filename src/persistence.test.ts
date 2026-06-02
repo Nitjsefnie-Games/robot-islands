@@ -51,6 +51,7 @@ import {
   migrateV16toV17,
   migrateV17toV18,
   migrateV18toV19,
+  migrateV19toV20,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -148,7 +149,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(19);
+    expect(snap.v).toBe(20);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1480,7 +1481,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(19);
+    expect(snap.v).toBe(20);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -2183,8 +2184,8 @@ describe('v17 -> v18 migration', () => {
     homeState.nextQueueSeq = 2;
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    // The snapshot must be at v19 (SCHEMA_VERSION).
-    expect(snap.v).toBe(19);
+    // The snapshot must be at v20 (SCHEMA_VERSION).
+    expect(snap.v).toBe(20);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
     const rSpec = restored.islands.find((s) => s.id === 'home')!;
@@ -2209,8 +2210,8 @@ describe('v17 -> v18 migration', () => {
 });
 
 describe('v18 -> v19 migration (everProduced seen-set)', () => {
-  it('SCHEMA_VERSION is 19', () => {
-    expect(SCHEMA_VERSION).toBe(19);
+  it('SCHEMA_VERSION is 20', () => {
+    expect(SCHEMA_VERSION).toBe(20);
   });
 
   it('migrateV18toV19 backfills everProduced only from POSITIVE-stock resources', () => {
@@ -2254,11 +2255,38 @@ describe('v18 -> v19 migration (everProduced seen-set)', () => {
     homeState.everProduced = new Set(['bolt', 'iron_ingot']);
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    expect(snap.v).toBe(19);
+    expect(snap.v).toBe(20);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { islandStates: restored } = deserializeWorld(json, 0, 0);
     const rState = restored.get('home')!;
     expect(rState.everProduced).toBeInstanceOf(Set);
     expect(rState.everProduced).toEqual(new Set(['bolt', 'iron_ingot']));
+  });
+});
+
+describe('v19 -> v20 trade-cadence migration', () => {
+  it('backfills tradeCooldownMs and tradeAcceptCount to 0', () => {
+    const v19 = {
+      v: 19,
+      savedAt: 0,
+      savedAtPerf: 0,
+      world: { islands: [] },
+      drones: [],
+      routes: [],
+      vehicles: [],
+      satellites: [],
+      islandStates: [
+        { id: 'home', state: { id: 'home', inventory: { stone: 5 } } },
+      ],
+    } as unknown as Parameters<typeof migrateV19toV20>[0];
+
+    const out = migrateV19toV20(v19);
+    expect(out.v).toBe(20);
+    expect(SCHEMA_VERSION).toBe(20);
+    const st = out.islandStates[0]!.state as unknown as {
+      tradeCooldownMs: number; tradeAcceptCount: number;
+    };
+    expect(st.tradeCooldownMs).toBe(0);
+    expect(st.tradeAcceptCount).toBe(0);
   });
 });
