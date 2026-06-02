@@ -58,6 +58,8 @@ function makeState(id: string, level: number): IslandState {
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),
     everProduced: new Set(),
+    tradeCooldownMs: 0,
+    tradeAcceptCount: 0,
   };
 }
 

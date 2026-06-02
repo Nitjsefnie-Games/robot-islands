@@ -125,6 +125,8 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),
     everProduced: new Set(),
+    tradeCooldownMs: 0,
+    tradeAcceptCount: 0,
     lastTick: 1000,
     ...over,
   };

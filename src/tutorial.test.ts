@@ -88,6 +88,8 @@ function makeTestIsland(id: string): { spec: IslandSpec; state: IslandState } {
     starterInventoryGrace: {} as Record<ResourceId, number>,
     socketBindings: new Map(),
     everProduced: new Set(),
+    tradeCooldownMs: 0,
+    tradeAcceptCount: 0,
     lastTick: 0,
   };
   return { spec, state };
