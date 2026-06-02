@@ -14,7 +14,7 @@
 import { borderTiles, checkGates, clusterBonusMuls, computeBuffStack, footprintKeySet, touchesBorder } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { nextConstructionCompletionMs, tickConstruction } from './construction.js';
-import { promoteQueuedBuilds } from './placement.js';
+import { creditStorageCaps, promoteQueuedBuilds } from './placement.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
   BUILDING_DEFS,
@@ -22,7 +22,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import { hasOperationalBuilding, isOperationalBuilding, floorLevel, floorEffectMul, floorPowerDrawMul, type PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding, floorLevel, floorScaledCapacity, floorEffectMul, floorPowerDrawMul, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { nextRealPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
@@ -1931,7 +1931,30 @@ export function advanceIsland(
         // buildings, not still-under-construction shells).
         const wasUnderConstruction = (b.constructionRemainingMs ?? 0) > 0;
         if (wasUnderConstruction) {
-          tickConstruction(b, dtMs);
+          const justCompleted = tickConstruction(b, dtMs);
+          // §storage-timing: storage caps are granted at construction
+          // COMPLETION, not at placement/upgrade commit. The tick the build
+          // crosses to operational, credit its cap, discriminating by the
+          // building's floorLevel at that moment:
+          //   - floorLevel 0 → a FRESH placement → credit the base
+          //     floorScaledCapacity (== base capacity at L0).
+          //   - floorLevel >= 1 → an UPGRADE → credit the flat per-level
+          //     delta storage.capacity (= floorScaledCapacity(L) −
+          //     floorScaledCapacity(L−1)).
+          // The same loop runs each segment, so offline-catchup builds that
+          // complete mid-advance are credited correctly. Mirrors the amounts
+          // placeBuilding/applyUpgrade used to grant at commit, just deferred.
+          if (justCompleted) {
+            const cdef = BUILDING_DEFS[b.defId];
+            const storage = cdef.storage;
+            if (storage) {
+              const amount =
+                floorLevel(b) === 0
+                  ? floorScaledCapacity(b, storage.capacity)
+                  : storage.capacity;
+              creditStorageCaps(state, b, cdef, amount);
+            }
+          }
           continue;
         }
         // §NEW building-disable: player-disabled buildings freeze in place —
