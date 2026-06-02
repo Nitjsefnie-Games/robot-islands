@@ -72,7 +72,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 19 as const;
+export const SCHEMA_VERSION = 20 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -80,7 +80,7 @@ export const SCHEMA_VERSION = 19 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -543,7 +543,7 @@ export type SerializedSnapshotV18 = Omit<SaveSnapshot, 'v'> & { readonly v: 18 }
  *  zero-fills every resource, so an unfiltered key dump would mark all of them
  *  ever-produced and bypass the trade "get" gate entirely.) Deserialize
  *  rebuilds the array into a `Set`. */
-export function migrateV18toV19(s: SerializedSnapshotV18): SaveSnapshot {
+export function migrateV18toV19(s: SerializedSnapshotV18): SerializedSnapshotV19 {
   return {
     ...s,
     v: 19 as const,
@@ -554,6 +554,26 @@ export function migrateV18toV19(s: SerializedSnapshotV18): SaveSnapshot {
         everProduced: (Object.keys(entry.state.inventory ?? {}) as ResourceId[])
           .filter((r) => (entry.state.inventory[r] ?? 0) > 0),
       },
+    })),
+  } as unknown as SerializedSnapshotV19;
+}
+
+/** v19 top-level snapshot shape. Structurally identical to v20 (SaveSnapshot)
+ *  except the v literal and the per-island trade-cadence fields a v19 save
+ *  lacks entirely (`tradeCooldownMs`, `tradeAcceptCount`). */
+export type SerializedSnapshotV19 = Omit<SaveSnapshot, 'v'> & { readonly v: 19 };
+
+/** v19 → v20: per-island persisted trade cadence shipped. A v19 save carries
+ *  neither field; backfill both to 0 — first offer prompt, base cadence (the
+ *  pre-persistence behavior). This is what closes the refresh-farm exploit for
+ *  legacy saves going forward. Deserialize carries the numbers through. */
+export function migrateV19toV20(s: SerializedSnapshotV19): SaveSnapshot {
+  return {
+    ...s,
+    v: 20 as const,
+    islandStates: s.islandStates.map((entry) => ({
+      ...entry,
+      state: { ...entry.state, tradeCooldownMs: 0, tradeAcceptCount: 0 },
     })),
   } as unknown as SaveSnapshot;
 }
@@ -741,7 +761,10 @@ export function deserializeWorld(
     snapshot = migrateV17toV18(snapshot as unknown as SerializedSnapshotV17) as unknown as SaveSnapshot;
   }
   if ((snapshot as unknown as { v: number }).v === 18) {
-    snapshot = migrateV18toV19(snapshot as unknown as SerializedSnapshotV18);
+    snapshot = migrateV18toV19(snapshot as unknown as SerializedSnapshotV18) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 19) {
+    snapshot = migrateV19toV20(snapshot as unknown as SerializedSnapshotV19);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
