@@ -923,6 +923,30 @@ describe('§9.7 Tier Reset lastResetAt persistence', () => {
 });
 
 // ---------------------------------------------------------------------------
+// §9.8.5 Trade cadence fields — v20 non-zero round-trip
+// ---------------------------------------------------------------------------
+
+describe('§9.8.5 trade cadence fields round-trip', () => {
+  it('preserves non-zero tradeCooldownMs and tradeAcceptCount through serialize → JSON → deserialize', () => {
+    // Exercises the ...rest / ...s spread path in serializeIslandState /
+    // deserializeIslandState so a future Omit change cannot silently drop them.
+    const world = makeInitialWorld(0);
+    const states = new Map<string, IslandState>([
+      [
+        'home',
+        makeIslandState({ id: 'home', tradeCooldownMs: 123_456, tradeAcceptCount: 42 }),
+      ],
+    ]);
+    const snap = serializeWorld(world, states, 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { islandStates: restored } = deserializeWorld(json, 0, 0);
+    const r = restored.get('home')!;
+    expect(r.tradeCooldownMs).toBe(123_456);
+    expect(r.tradeAcceptCount).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Player-mutable display name persistence (separate from immutable `id`).
 // ---------------------------------------------------------------------------
 
