@@ -248,7 +248,7 @@ describe('signal exchange building', () => {
   });
 });
 
-describe('offer lifecycle', () => {
+describe('offer lifecycle (online-time cooldown)', () => {
   function ready(): IslandState {
     const s = homeState();
     s.storageCaps.stone = 100; s.inventory.stone = 90;
@@ -257,45 +257,66 @@ describe('offer lifecycle', () => {
     s.buildings = [...s.buildings, { id: 'b-sx', defId: 'signal_exchange', x: 1, y: 1 }];
     return s;
   }
+  const TUNE = () => DEFAULT_TRADE_TUNING;
 
   it('detects the Signal Exchange building', () => {
     expect(islandHasSignalExchange(ready())).toBe(true);
     expect(islandHasSignalExchange(homeState())).toBe(false);
   });
 
-  it('spawns at most one active offer per island and not before cadence', () => {
+  it('spawns one offer immediately when cooldown is 0, then no more while active', () => {
     const s = ready();
-    const rt: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
+    const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 0);
+    tickTradeOffers(rt, states, Math.random, TUNE, 0, 16);
     expect(rt.offers.filter((o) => o.islandId === s.id).length).toBe(1);
-    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 1000);
+    tickTradeOffers(rt, states, Math.random, TUNE, 1000, 16);
     expect(rt.offers.filter((o) => o.islandId === s.id).length).toBe(1);
   });
 
-  it('expires offers past expiresAt', () => {
+  it('does NOT spawn while cooldown > 0; spawns once online time burns it down', () => {
     const s = ready();
-    const rt: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
+    s.tradeCooldownMs = 5000;
+    const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 0);
+    tickTradeOffers(rt, states, Math.random, TUNE, 0, 1000);
+    expect(rt.offers.length).toBe(0);
+    expect(s.tradeCooldownMs).toBe(4000);
+    for (let i = 0; i < 4; i++) tickTradeOffers(rt, states, Math.random, TUNE, i + 1, 1000);
     expect(rt.offers.length).toBe(1);
-    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 6 * 60 * 1000);
+  });
+
+  it('does NOT decrement cooldown on offline frames (onlineDtMs = 0)', () => {
+    const s = ready();
+    s.tradeCooldownMs = 5000;
+    const rt: TradeRuntime = { offers: [] };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, Math.random, TUNE, 0, 0);
+    expect(s.tradeCooldownMs).toBe(5000);
     expect(rt.offers.length).toBe(0);
   });
 
-  it('does NOT respawn after expiry until the cadence has elapsed', () => {
+  it('expiry prunes the offer AND resets cooldown to the effective cadence', () => {
     const s = ready();
-    const rt: TradeRuntime = { offers: [], nextSpawnAt: new Map() };
+    const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    // t=0: one offer spawns; nextSpawnAt = 0 + 2h cadence.
-    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 0);
+    tickTradeOffers(rt, states, Math.random, TUNE, 0, 16);
     expect(rt.offers.length).toBe(1);
-    // t=6min: offer is past its 5-min expiry, pruned to zero.
-    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 6 * 60 * 1000);
+    tickTradeOffers(rt, states, Math.random, TUNE, 6 * 60 * 1000, 16);
     expect(rt.offers.length).toBe(0);
-    // t=7min: still before the 2h cadence — nextSpawnAt gate blocks respawn.
-    tickTradeOffers(rt, states, Math.random, () => DEFAULT_TRADE_TUNING, 7 * 60 * 1000);
-    expect(rt.offers.length).toBe(0);
+    expect(s.tradeCooldownMs).toBeGreaterThan(DEFAULT_TRADE_TUNING.cadenceMs - 100);
+  });
+
+  it('a higher accept count shortens the post-expiry cooldown (compounding)', () => {
+    const s = ready();
+    s.tradeAcceptCount = 100;
+    const rt: TradeRuntime = { offers: [] };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, Math.random, TUNE, 0, 16);
+    tickTradeOffers(rt, states, Math.random, TUNE, 6 * 60 * 1000, 16);
+    expect(s.tradeCooldownMs).toBe(
+      effectiveCadenceMs(100, DEFAULT_TRADE_TUNING.cadenceMs),
+    );
   });
 });
 
