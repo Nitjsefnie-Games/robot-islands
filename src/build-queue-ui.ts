@@ -15,7 +15,7 @@ import { BUILDING_DEFS } from './building-defs.js';
 import { constructionProgress } from './construction.js';
 import { floorLevel } from './buildings.js';
 import type { IslandState } from './economy.js';
-import { dispatchAction, type InputRegistry } from './input.js';
+import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import {
   cancelConstruction,
   inProgressBuildCount,
@@ -52,6 +52,7 @@ export interface BuildQueueHandle {
 // action handler can read it. Pattern mirrors toggle-building-disable in
 // main.ts (which reads inspector.getSelectedBuildingId() for its target).
 
+// Single-instance assumption: one build-queue panel is mounted; the cancel-build action + this ref are module-global, so a second mount would clobber the first's handler. Fine while the panel is mounted exactly once in main.ts.
 let _pendingCancelBuildingId: string | null = null;
 
 // ── Panel factory ──────────────────────────────────────────────────────────
@@ -93,7 +94,7 @@ export function mountBuildQueuePanel(
   // The handler reads the module-level _pendingCancelBuildingId ref set by
   // the cancel button's click handler just before dispatch. On success it
   // invokes deps.onCancel so main.ts can save + rebuild layers.
-  reg.actions.set('cancel-build', () => {
+  defineAction(reg, 'cancel-build', () => {
     const buildingId = _pendingCancelBuildingId;
     _pendingCancelBuildingId = null;
     if (buildingId === null) return;
