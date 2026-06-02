@@ -72,6 +72,7 @@ export const POOL_TARGETS: Readonly<Record<string, number>> = {
 export const ADDITIVE_POOL_TARGETS: Readonly<Record<string, number>> = {
   launchSuccessAdditive: 0.50,
   parallelBuildCapAdd: 2.0,
+  queueCapAdd: 4.0,
 };
 
 /** Canonical effect-key for grouping. Matches the existing scripts/
