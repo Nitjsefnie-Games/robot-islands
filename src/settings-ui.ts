@@ -20,10 +20,13 @@ import {
   type InputRegistry,
 } from './input.js';
 import {
+  clampSaveIntervalSec,
   clearPrefs,
   clearSave,
   isValidSaveSnapshot,
   importSave,
+  MAX_SAVE_INTERVAL_SEC,
+  MIN_SAVE_INTERVAL_SEC,
   saveWorld,
   serializeWorld,
   STORAGE_KEY_DISPLAY,
@@ -142,6 +145,11 @@ export interface SettingsUiDeps {
    *  save has landed yet. Returned by a getter so the panel reads fresh
    *  values every refresh. */
   getLastSavedAt(): number | null;
+  /** Current autosave cadence in seconds. Seeds the Settings input. */
+  getSaveIntervalSec(): number;
+  /** Apply a new autosave cadence (seconds). The caller clamps, re-arms the
+   *  timer, and persists. The panel passes an already-clamped value. */
+  setSaveIntervalSec(sec: number): void;
 }
 
 export function mountSettingsUi(
@@ -350,6 +358,55 @@ export function mountSettingsUi(
       saveHeading.appendChild(saveHeadingStatus);
 
       saveSection.appendChild(saveHeading);
+
+      // Autosave-interval control. Free numeric entry (seconds), clamped to
+      // [MIN..MAX] on commit via clampSaveIntervalSec — the same pure helper
+      // the persistence layer uses, so the UI and storage agree on bounds.
+      const intervalRow = document.createElement('div');
+      intervalRow.style.display = 'flex';
+      intervalRow.style.alignItems = 'center';
+      intervalRow.style.gap = '8px';
+      intervalRow.style.paddingTop = '6px';
+
+      const intervalLabel = document.createElement('label');
+      intervalLabel.textContent = 'Autosave interval';
+      intervalLabel.style.color = 'var(--ri-fg-3)';
+      intervalLabel.style.fontSize = '11px';
+
+      const intervalInput = document.createElement('input');
+      intervalInput.type = 'number';
+      intervalInput.min = String(MIN_SAVE_INTERVAL_SEC);
+      intervalInput.max = String(MAX_SAVE_INTERVAL_SEC);
+      intervalInput.step = '1';
+      intervalInput.value = String(deps.getSaveIntervalSec());
+      intervalInput.style.width = '64px';
+      intervalInput.style.padding = '3px 6px';
+      intervalInput.style.background = 'var(--ri-pressed)';
+      intervalInput.style.color = 'var(--ri-fg-2)';
+      intervalInput.style.border = '1px solid var(--ri-rule)';
+      intervalInput.style.borderRadius = '3px';
+      intervalInput.style.fontFamily = 'inherit';
+      intervalInput.style.fontSize = '12px';
+      intervalLabel.htmlFor = 'ri-save-interval';
+      intervalInput.id = 'ri-save-interval';
+      // Commit on change/blur (not per-keystroke): parse, clamp, reflect the
+      // clamped value back into the field, then push to the wiring.
+      const commitInterval = (): void => {
+        const clamped = clampSaveIntervalSec(intervalInput.valueAsNumber);
+        intervalInput.value = String(clamped);
+        deps.setSaveIntervalSec(clamped);
+      };
+      intervalInput.addEventListener('change', commitInterval);
+
+      const intervalSuffix = document.createElement('span');
+      intervalSuffix.textContent = `sec  (${MIN_SAVE_INTERVAL_SEC}–${MAX_SAVE_INTERVAL_SEC})`;
+      intervalSuffix.className = 'ri-muted';
+      intervalSuffix.style.fontSize = '10px';
+
+      intervalRow.appendChild(intervalLabel);
+      intervalRow.appendChild(intervalInput);
+      intervalRow.appendChild(intervalSuffix);
+      saveSection.appendChild(intervalRow);
 
       // Save-management button strip — wraps so a narrow viewport doesn't
       // overflow horizontally.

@@ -1131,16 +1131,41 @@ export async function loadWorld(): Promise<
 // that still carry those extra fields parse fine: the loader just doesn't
 // read them, so no schema bump was needed.
 
+// The IDB key keeps its `:v1` suffix even though the in-blob `v` field is now
+// 2 — the suffix is just the storage namespace, and reusing it lets a v1 blob
+// (camera only) be read and migrated in place rather than orphaned. Versioning
+// is done by the internal `v` field; loadPrefs accepts v1 and v2.
 export const PREFS_KEY = 'robot-islands:prefs:v1';
-export const PREFS_VERSION = 1 as const;
+export const PREFS_VERSION = 2 as const;
+
+/** Autosave-interval bounds (seconds). User-configurable in Settings → SAVE. */
+export const DEFAULT_SAVE_INTERVAL_SEC = 30;
+export const MIN_SAVE_INTERVAL_SEC = 1;
+export const MAX_SAVE_INTERVAL_SEC = 600;
 
 export interface UiPrefs {
   readonly v: typeof PREFS_VERSION;
   readonly cam: { readonly tx: number; readonly ty: number; readonly zoom: number };
+  /** Autosave cadence in seconds, clamped to [1, 600]. */
+  readonly saveIntervalSec: number;
 }
 
 function isFiniteNumber(x: unknown): x is number {
   return typeof x === 'number' && Number.isFinite(x);
+}
+
+/**
+ * Coerce an arbitrary value to a valid autosave interval in seconds:
+ * floor to a whole second and clamp to [MIN, MAX]. Anything non-finite or
+ * non-numeric (NaN, Infinity, undefined, a string) falls back to the default.
+ * Pure — exported for tests and reused by the Settings input.
+ */
+export function clampSaveIntervalSec(x: unknown): number {
+  if (!isFiniteNumber(x)) return DEFAULT_SAVE_INTERVAL_SEC;
+  const floored = Math.floor(x);
+  if (floored < MIN_SAVE_INTERVAL_SEC) return MIN_SAVE_INTERVAL_SEC;
+  if (floored > MAX_SAVE_INTERVAL_SEC) return MAX_SAVE_INTERVAL_SEC;
+  return floored;
 }
 
 /**
@@ -1149,7 +1174,11 @@ function isFiniteNumber(x: unknown): x is number {
  */
 export async function savePrefs(prefs: Omit<UiPrefs, 'v'>): Promise<void> {
   try {
-    const blob: UiPrefs = { v: PREFS_VERSION, ...prefs };
+    const blob: UiPrefs = {
+      v: PREFS_VERSION,
+      cam: prefs.cam,
+      saveIntervalSec: clampSaveIntervalSec(prefs.saveIntervalSec),
+    };
     await set(PREFS_KEY, blob);
   } catch (err) {
     console.warn('[robot-islands] savePrefs failed:', err);
@@ -1167,16 +1196,23 @@ export async function loadPrefs(): Promise<UiPrefs | null> {
     const raw = (await get(PREFS_KEY)) as unknown;
     if (typeof raw !== 'object' || raw === null) return null;
     const o = raw as Record<string, unknown>;
-    if (o['v'] !== PREFS_VERSION) return null;
+    // Accept v1 (camera-only) and v2 (camera + saveIntervalSec). v1 blobs
+    // migrate forward in place: camera is preserved, the interval defaults.
+    // Returning null here (as a strict version check would) silently wipes
+    // the saved camera on every schema bump — the migration avoids that.
+    if (o['v'] !== 1 && o['v'] !== PREFS_VERSION) return null;
     const cam = o['cam'];
     if (typeof cam !== 'object' || cam === null) return null;
     const c = cam as Record<string, unknown>;
     if (!isFiniteNumber(c['tx']) || !isFiniteNumber(c['ty']) || !isFiniteNumber(c['zoom'])) {
       return null;
     }
+    // v1 lacks saveIntervalSec; clampSaveIntervalSec maps the missing value to
+    // the default. v2 stores it; clamp defensively in case bounds change.
     return {
       v: PREFS_VERSION,
       cam: { tx: c['tx'], ty: c['ty'], zoom: c['zoom'] },
+      saveIntervalSec: clampSaveIntervalSec(o['saveIntervalSec']),
     };
   } catch (err) {
     console.warn('[robot-islands] loadPrefs failed:', err);
