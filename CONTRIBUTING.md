@@ -1,8 +1,18 @@
 # Contributing
 
-## Development happens on branches
+## Two integration tracks: by size of change
 
-Do **not** commit directly to `master`. All work — features, fixes, docs, refactors — happens on a **feature branch** cut from `master`. `master` is integration-only: it advances solely by fast-forwarding a completed, rebased branch onto it.
+How work reaches `master` depends on the size and risk of the change. Either way, `master` keeps a **linear history** (see below) and must stay green — only land a change once it builds and its tests pass.
+
+### Quick fixes → commit directly to `master`
+
+Small, low-risk, self-contained changes go **straight onto `master`** as a single focused commit: a bug fix, a doc tweak, a copy edit, a small config / tuning / balance change, a one-file adjustment. No branch, no PR. Write a clear commit message and keep one logical change per commit.
+
+### Full new features or massive fixes → feature branch + PR
+
+A new mechanic or subsystem, a multi-file change, or a large / risky refactor happens on a **feature branch** cut from `master`, reviewed via PR, then rebased and fast-forwarded onto `master`. `master` receives such work only after review.
+
+**When in doubt, branch.** A branch is cheap; an un-reviewed half-feature landing on `master` is not.
 
 ```
 git checkout master
@@ -13,7 +23,7 @@ git checkout -b feature-x      # branch per unit of work
 
 Name branches by intent and kind, e.g. `feat/power-brownouts`, `fix/ocean-tint-bleed`, `docs/branch-based-development`, `refactor/economy-rates`.
 
-### Lifecycle: branch → PR → rebase
+#### Lifecycle: branch → PR → rebase
 
 1. **Branch** — cut a feature branch from an up-to-date `master` (above).
 2. **PR** — push the branch and open a pull request for review. The PR is where the work is reviewed and discussed; nothing lands on `master` un-reviewed.
@@ -24,8 +34,6 @@ Name branches by intent and kind, e.g. `feat/power-brownouts`, `fix/ocean-tint-b
 git branch -d feature-x
 git push origin --delete feature-x
 ```
-
-This reverses the repo's earlier "commit straight onto `master`" habit. From now on `master` only ever receives reviewed, rebased branch tips, and merged branches are deleted.
 
 ## History convention: rebase, not merge
 
