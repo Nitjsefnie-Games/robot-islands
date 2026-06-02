@@ -61,6 +61,7 @@ function effectLabel(kind: SkillEffect['kind'], extra?: Record<string, unknown>)
     case 't5ExtractorYieldBonusMul':   return 'T5-extractor yield';
     case 'teleporterEfficiencyMul':    return 'teleporter efficiency';
     case 'parallelBuildCapAdd':        return 'parallel build slots';
+    case 'queueCapAdd':                return 'build queue slots';
     case 'launchSuccessAdditive':      return 'launch success';
     case 'xpGainMul':                  return `${cat}xp gain`;
     default:                           return String(kind);

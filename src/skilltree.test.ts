@@ -1310,3 +1310,10 @@ describe('nodePurchaseStatus — UI/buy parity (§9.3 depth→tier gate)', () =>
     expect(nodePurchaseStatus(g, state, 'R')).toBe('insufficient-sp');
   });
 });
+
+describe('queueCapBonus aggregation', () => {
+  it('default queueCapBonus is 0 on a fresh state', () => {
+    const fresh = makeState();
+    expect(effectiveSkillMultipliers(fresh, LG).queueCapBonus).toBe(0);
+  });
+});
