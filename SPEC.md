@@ -540,6 +540,32 @@ The player's responsibility is to keep maintenance supplies flowing — plant Wo
 
 **Eternal Servitor exemption.** Buildings converted into Eternal Servitors (§13.3) skip both maintenance and fuel-consumption checks entirely.
 
+### 4.8 Construction Queue
+
+**Running slots.** Each island has a fixed number of concurrent under-construction slots (base 1). A newly placed building or upgrade begins ticking its construction timer immediately if a slot is free. When all running slots are occupied, new placements/upgrades are **enqueued** rather than rejected — cost is paid at enqueue time, FIFO order is stamped via `queueSeq`. Only when the queue is also full is placement rejected with `'queue-full'`.
+
+**Queue capacity.** Base queue depth = 2. The 1:2 running:queue ratio holds across all Robotics skill investment:
+
+| State | Running slots | Queue slots |
+|---|---|---|
+| Base (no Robotics) | 1 | 2 |
+| `robotics.notable.parallelFoundries` (+2) | 3 | 2 |
+| `robotics.notable.queueFoundries` (+4) | 1 | 6 |
+| Both notables | 3 | 6 |
+| + `robotics.keystone.parallelConstruction` (+1) | 4 | 6 |
+| + `robotics.keystone.queueConstruction` (+2) | 3 | 8 |
+| All four nodes | 4 | 8 |
+
+`parallelConstruction` is a structural keystone (AND-prereqs: `swarmAssembly` + `parallelFoundries`); `queueConstruction` is its mirror keystone (AND-prereqs: `swarmAssembly` + `queueFoundries`).
+
+**Queued state.** A queued building occupies its footprint and has paid its placement cost, but `queued === true` on the `PlacedBuilding` prevents it from ticking and from being counted as a running slot. Its `constructionRemainingMs` is set at enqueue but does not count down until promoted.
+
+**Promotion.** Whenever a running build completes its timer (construction-completion boundary inside `advanceIsland`), `promoteQueuedBuilds` immediately promotes the FIFO head of the queue (lowest `queueSeq`) into the freed slot. Promotion happens within the same advance/offline-catchup pass.
+
+**Cancel.** An in-progress build (running OR queued) can be cancelled for a **100% material refund**. This is distinct from §6.7 demolish (~30% Scrap recovery) and from relocate (half-fee). For a fresh placement (`floorLevel === 0`), cancel removes the building entirely; for an in-progress upgrade it reverts the building to `floorLevel − 1` and clears the construction timer. Cancel is only valid while `constructionRemainingMs > 0`.
+
+**Level badge.** Every placed building shows its current floor level (displayed as `floorLevel + 1`, range 1–10) as a persistent badge in the bottom-right corner of its tile footprint, rendered via the building-alerts overlay regardless of construction state.
+
 \---
 
 ## 5\. Power System
@@ -624,6 +650,8 @@ Quantum chip, AI core, Antimatter capsule, Exotic alloy, Nuclear fuel rod, Plasm
 Slag (from smelting), Ash (from combustion), Waste heat, Exhaust gas, Wastewater, Trace minerals (from slag reprocessing), Scrap (from demolishing buildings — see below)
 
 **Demolition recovery.** Demolishing any T1+ placed building produces Scrap proportional to its build cost (placeholder recovery rate: ~30% of the building's recipe ingredients, expressed as Scrap rather than the original components). Scrap is a T1 resource in the dry-goods storage category. Steel recipes accept Scrap as a substitute for fresh Pig iron at a 2:1 ratio (2 Scrap = 1 Pig iron's worth of steel input). This makes layout redesign less wasteful: demolishing a building isn't pure loss but a partial credit toward future builds.
+
+**Construction cancel (distinct from demolish).** A building currently under construction (running OR queued, i.e. `constructionRemainingMs > 0`) can be cancelled for a **100% material refund** — no Scrap penalty. For a fresh placement (`floorLevel 0`) the building is removed entirely; for an in-progress upgrade the building reverts to the previous floor level. Demolish (~30% Scrap) applies only to completed buildings; relocate (half-fee) is a third distinct action. See §4.8 for queue/cancel mechanics.
 
 Byproducts must be handled. Untreated wastewater applies an efficiency penalty. Slag can be reprocessed for trace minerals (gold, silver, rare metals at low yield).
 
@@ -1035,7 +1063,7 @@ The skill tree is a **directed graph** of nodes connected by edges. Five top-lev
 * Mining (ore output, vein depth, rare reveal)
 * Forestry (wood output, regrowth, exotic species)
 * Drilling (oil/gas/deep mineral)
-* Robotics (construction speed, parallel building, drone production efficiency)
+* Robotics (construction speed, parallel building + build-queue capacity, drone production efficiency)
 
 **Refinement**
 
@@ -1083,7 +1111,7 @@ The skill tree is a **directed graph** of nodes connected by edges. Five top-lev
 
 * Multiplier effects — `recipeRateMul`, `storageCapMul`, `powerProductionMul`, `powerConsumptionMul`, `routeCapacityMul`, `commRangeMul`, `maintenanceThresholdMul`, `scannerCoverageMul`, `debrisProtectionMul`, `droneFuelEfficiencyMul`, `airshipRangeMul`, `padExplosionReduceMul`, `satBufferCapMul`, `scannerDwellRateMul`, `satFuelReserveMul`, `repairDroneReliabilityMul`, `storageCategoryCapMul`, `constructionTimeMul`, `teleporterEfficiencyMul`, `mineYieldBonusMul`, `mineRareTrickleMul`, `loggerYieldBonusMul`, `loggerExoticTrickleMul`, `droneScanRadiusMul`, `xpGainMul`.
 * Unlock effects — `unlockRecipe` (adds a recipe to a building), `biomeBypass` (removes biome restriction for listed buildings), `tierBypass` (lowers tier requirement by 1 for listed buildings).
-* Structural effects — `exoticAdjacency` (new adjacency pair-boost rules), `structural` (shared power grid, parallel construction), `conditionalBonus` (multiplier active only during storms, night, etc.), `crossIslandShared` (resource pool shared across networked T3+ islands).
+* Structural effects — `exoticAdjacency` (new adjacency pair-boost rules), `structural` (shared power grid, parallel construction (`parallelConstruction` +1 running slot), build-queue capacity (`parallelQueue` +2 queue slots)), `conditionalBonus` (multiplier active only during storms, night, etc.), `crossIslandShared` (resource pool shared across networked T3+ islands).
 * Orbital effects — `launchSuccessAdditive` (flat +% to launch success).
 
 A depth→tier gate caps individual nodes by the island's level-derived tier (`tierRequiredForDepth`: depth ≤2 → T2, 3 → T3, 4 → T4, ≥5 → T5, ≥8 → T6), enforced in both `buyNode` and `costToUnlock`; an under-tier node (or a path through one) is rejected before any SP is charged. Beyond that gate there is no sub-path commitment lock and no sequential-completion restriction. Any node reachable via the graph topology can be bought as soon as the player has both the SP and the required tier. (Keystones are bought via `buyKeystone`, which checks only SP plus its AND-prereqs — it does not apply the depth→tier gate.)
@@ -1716,6 +1744,7 @@ interface Island {
   socketBindings: Map<string, CrystalId>;  // skill-tree v2: crystal sockets keyed by node/socket id
   unspentSkillPoints: number;
   lastTick: number;
+  nextQueueSeq: number;         // monotone counter for build-queue FIFO stamps; incremented on each enqueue
   populated: boolean;  // false if discovered but not yet settled
 }
 
@@ -1724,6 +1753,10 @@ interface PlacedBuilding {
   defId: BuildingDefId;
   x: number; y: number;
   rotation: 0 | 1 | 2 | 3;
+  floorLevel?: number;          // 0-indexed upgrade depth (0 = fresh, 9 = max); displayed as floorLevel+1 (1..10)
+  constructionRemainingMs?: number;  // ms remaining until construction completes; 0 = fully built
+  queued?: boolean;             // true while waiting in the build queue (not yet occupying a running slot)
+  queueSeq?: number;            // FIFO stamp assigned at enqueue; lower = promoted first
   state?: any;
 }
 
@@ -1868,6 +1901,8 @@ function computeRates(island: Island) {
 ```
 
 `findNextCapEvent` returns the timestamp at which any inventory hits its cap or empties given current rates, or `now` if nothing changes within the interval.
+
+Construction completions are also event boundaries: when `constructionRemainingMs` reaches zero during a segment, the loop iterates there. Immediately after each segment `promoteQueuedBuilds` promotes the FIFO head of the build queue (lowest `queueSeq`) into any newly freed running slot, so queued builds start ticking within the same advance/offline-catchup call (§4.8).
 
 ### 15.4 Inter-Island Flow Resolution
 
