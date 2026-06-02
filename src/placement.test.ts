@@ -393,18 +393,23 @@ describe('placeBuilding', () => {
     expect(state.buildings[0]).toBe(placed);
   });
 
-  it('bumps storage caps when placing a generic Crate (only the cargoLabel resource)', () => {
-    // §4.6: Crate is generic storage — it bumps only the resource named on
-    // its `cargoLabel`. `placeBuilding` defaults the label to iron_ore.
+  it('does NOT bump storage caps at placement for a generic Crate (deferred to completion)', () => {
+    // §storage-timing: storage caps are credited at construction COMPLETION,
+    // not at placement commit. A freshly-placed Crate is under construction
+    // and grants NO cap until it becomes operational. (Was: immediate +500
+    // at placement; that model is removed.) Crate is generic storage — when
+    // it does complete it bumps only the cargoLabel resource (default iron_ore).
     const spec = makeSpec();
     const state = makeState(spec);
     const before = { ...state.storageCaps };
     const placed = expectPlaced(placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'p-crate'));
     expect(placed.cargoLabel).toBe('iron_ore');
-    // iron_ore bumps by +500; every other resource stays at baseline.
-    expect(state.storageCaps.iron_ore).toBe((before.iron_ore ?? 0) + 500);
+    // Under construction → no cap credited yet. EVERY resource at baseline.
+    // (The completion-time credit is exercised against the real advanceIsland
+    // hook in economy.test.ts › "storage caps granted on construction
+    // completion".)
+    expect((placed.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
-      if (r === 'iron_ore') continue;
       expect(state.storageCaps[r]).toBe(before[r]);
     }
   });
@@ -413,9 +418,10 @@ describe('placeBuilding', () => {
   // §4.6 placement-time cargo-label picker — `cargoLabelOverride` argument
   // -------------------------------------------------------------------------
   it('honours a placement-time cargoLabelOverride for generic Crate (copper_ore example)', () => {
-    // §4.6: placement-time picker passes the player's choice through.
-    // Verifying the Crate is created with the chosen label AND the storage-
-    // cap bump lands on that label, not the default iron_ore fallback.
+    // §4.6: placement-time picker passes the player's choice through. The
+    // chosen label is stamped on the placed building immediately; the
+    // storage-cap bump itself is DEFERRED to construction completion
+    // (§storage-timing) — so here we only assert the label, not a cap change.
     const spec = makeSpec();
     const state = makeState(spec);
     const before = { ...state.storageCaps };
@@ -433,9 +439,9 @@ describe('placeBuilding', () => {
       ),
     );
     expect(placed.cargoLabel).toBe('copper_ore');
-    // copper_ore bumps by +500; iron_ore stays at baseline since the
-    // default fallback was overridden.
-    expect(state.storageCaps.copper_ore).toBe((before.copper_ore ?? 0) + 500);
+    // No cap credited at placement — building under construction.
+    expect((placed.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+    expect(state.storageCaps.copper_ore).toBe(before.copper_ore);
     expect(state.storageCaps.iron_ore).toBe(before.iron_ore);
   });
 
@@ -491,33 +497,28 @@ describe('placeBuilding', () => {
     expect(silo.cargoLabel).toBeUndefined();
   });
 
-  it('bumps category-matching caps when placing a specialized Silo (dry_goods only)', () => {
-    // §4.6: Silo is specialized for dry_goods. Bumps every dry_goods resource
-    // by +200000, leaves every other category at baseline.
+  it('does NOT bump caps at placement for a specialized Silo (deferred to completion)', () => {
+    // §storage-timing: a freshly-placed Silo is under construction and
+    // credits NO cap until it becomes operational. (Was: immediate +200000
+    // across dry_goods at placement.) EVERY category stays at baseline here.
     const spec = makeSpec();
     const state = makeState(spec);
     const before = { ...state.storageCaps };
-    expectPlaced(placeBuilding(spec, state, 'silo', 0, 0, 0, () => 'p-silo'));
+    const placed = expectPlaced(placeBuilding(spec, state, 'silo', 0, 0, 0, () => 'p-silo'));
+    expect((placed.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
-      const expected =
-        RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods'
-          ? (before[r] ?? 0) + 200000
-          : before[r];
-      expect(state.storageCaps[r]).toBe(expected);
+      expect(state.storageCaps[r]).toBe(before[r]);
     }
   });
 
-  it('bumps category-matching caps when placing a specialized Tank (liquid_gas only)', () => {
+  it('does NOT bump caps at placement for a specialized Tank (deferred to completion)', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     const before = { ...state.storageCaps };
-    expectPlaced(placeBuilding(spec, state, 'tank', 0, 0, 0, () => 'p-tank'));
+    const placed = expectPlaced(placeBuilding(spec, state, 'tank', 0, 0, 0, () => 'p-tank'));
+    expect((placed.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
-      const expected =
-        RESOURCE_STORAGE_CATEGORY[r] === 'liquid_gas'
-          ? (before[r] ?? 0) + 100000
-          : before[r];
-      expect(state.storageCaps[r]).toBe(expected);
+      expect(state.storageCaps[r]).toBe(before[r]);
     }
   });
 
@@ -764,12 +765,16 @@ describe('demolishBuilding', () => {
 
   it('subtracts the storage contribution from category-matching resources when a Silo is demolished', () => {
     // §4.6: Silo is dry_goods-only — its demolition reverses the dry_goods
-    // bump and leaves other categories untouched.
-    const spec = makeSpec();
+    // bump and leaves other categories untouched. demolish targets FINISHED
+    // buildings, so we plant an OPERATIONAL silo (init aggregates its
+    // +200000 cap) — placement no longer credits the cap (§storage-timing).
+    const spec = makeSpec({
+      buildings: [{ id: 'p-silo', defId: 'silo', x: 0, y: 0 }],
+    });
     const state = makeState(spec);
-    const before = { ...state.storageCaps };
-    placeBuilding(spec, state, 'silo', 0, 0, 0, () => 'p-silo');
-    // Sanity: only dry_goods bumped.
+    // Baseline caps WITHOUT the silo's contribution (the post-demolish target).
+    const before = { ...makeState(makeSpec()).storageCaps };
+    // Sanity: only dry_goods bumped at init by the operational silo.
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       const expected =
         RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods'
@@ -786,11 +791,18 @@ describe('demolishBuilding', () => {
 
   it('subtracts the storage contribution from only the cargoLabel resource when a Crate is demolished', () => {
     // §4.6: Crate is generic — demolition reverses only the cargoLabel's
-    // bump, leaving every other resource at its baseline.
-    const spec = makeSpec();
+    // bump, leaving every other resource at its baseline. demolish targets
+    // FINISHED buildings, so we plant an OPERATIONAL crate (init aggregates
+    // its +500 cap) rather than placing a still-under-construction one
+    // (§storage-timing: placement no longer credits the cap).
+    const spec = makeSpec({
+      buildings: [{ id: 'p-crate', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' }],
+    });
     const state = makeState(spec);
-    const before = { ...state.storageCaps };
-    placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'p-crate');
+    // Baseline caps WITHOUT the crate's contribution (what we expect to land
+    // back on after demolish): aggregate a building-free spec.
+    const before = { ...makeState(makeSpec()).storageCaps };
+    // Operational crate's +500 is present at init.
     expect(state.storageCaps.iron_ore).toBe((before.iron_ore ?? 0) + 500);
     const dem = demolishBuilding(spec, state, 'p-crate');
     expect(dem.ok).toBe(true);
@@ -815,9 +827,13 @@ describe('demolishBuilding', () => {
     // reduced cap, the excess is lost — inventory clamps down to the new
     // cap." Place a Silo (+200000 cap), fill iron_ore above the post-demolish
     // baseline cap (100 for dry_goods), then demolish and confirm the excess is dropped.
-    const spec = makeSpec();
+    // demolish targets FINISHED buildings; plant an OPERATIONAL silo so its
+    // +200000 dry_goods cap is aggregated at init (§storage-timing: placement
+    // no longer credits the cap up-front).
+    const spec = makeSpec({
+      buildings: [{ id: 'p-silo', defId: 'silo', x: 0, y: 0 }],
+    });
     const state = makeState(spec);
-    placeBuilding(spec, state, 'silo', 0, 0, 0, () => 'p-silo');
     // Caps are now 200100 for dry_goods. Stuff iron_ore to 3000 (above post-demolish cap of 100).
     state.inventory.iron_ore = 3000;
     const r = demolishBuilding(spec, state, 'p-silo');
@@ -1694,29 +1710,35 @@ describe('applyUpgrade', () => {
     expect(b.constructionRemainingMs).toBeGreaterThan(0);
   });
 
-  it('adds +base capacity to storageCaps for a generic Crate (cargoLabel only)', () => {
+  it('does NOT credit the storage delta at upgrade commit for a generic Crate (deferred)', () => {
+    // §storage-timing: the +500 per-level delta is granted at construction
+    // COMPLETION of the upgrade, not at commit. (Was: immediate +500 here.)
+    // After applyUpgrade the building is under construction and caps are
+    // unchanged from before the upgrade. (Completion crediting is verified
+    // against advanceIsland in economy.test.ts.)
     const spec = makeSpec();
     const state = makeState(spec);
     const b: PlacedBuilding = { id: 'b1', defId: 'crate', x: 0, y: 0, cargoLabel: 'copper_ore' };
     spec.buildings.push(b);
-    // Seed initial cap contribution from the placed crate at L0.
+    // Seed the L0 cap contribution the operational crate already holds.
     const beforeCopper = (state.storageCaps.copper_ore ?? 0) + 500;
     state.storageCaps.copper_ore = beforeCopper;
     const beforeIron = state.storageCaps.iron_ore ?? 0;
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
-    // Delta is exactly +500 (base capacity).
-    expect(state.storageCaps.copper_ore).toBe(beforeCopper + 500);
-    // Unrelated resource untouched.
+    expect(b.floorLevel).toBe(1);
+    expect((b.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+    // No delta credited at commit.
+    expect(state.storageCaps.copper_ore).toBe(beforeCopper);
     expect(state.storageCaps.iron_ore).toBe(beforeIron);
   });
 
-  it('adds +base capacity to storageCaps for a specialized Silo (category-wide)', () => {
+  it('does NOT credit the storage delta at upgrade commit for a specialized Silo (deferred)', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     const b: PlacedBuilding = { id: 'b1', defId: 'silo', x: 0, y: 0 };
     spec.buildings.push(b);
-    // Seed initial cap contribution from the placed silo at L0.
+    // Seed the L0 cap contribution across dry_goods.
     const beforeDry: Partial<Record<ResourceId, number>> = {};
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       if (RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods') {
@@ -1727,13 +1749,14 @@ describe('applyUpgrade', () => {
     const beforeLiquid = state.storageCaps.fresh_water ?? 0;
     const result = applyUpgrade(spec, state, 'b1');
     expect(result.ok).toBe(true);
-    // Every dry_goods resource gets +200000.
+    expect(b.floorLevel).toBe(1);
+    expect((b.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+    // No dry_goods delta credited at commit — caps unchanged.
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       if (RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods') {
-        expect(state.storageCaps[r]).toBe((beforeDry[r] ?? 0) + 200000);
+        expect(state.storageCaps[r]).toBe(beforeDry[r] ?? 0);
       }
     }
-    // Unrelated liquid_gas resource untouched.
     expect(state.storageCaps.fresh_water).toBe(beforeLiquid);
   });
 
@@ -2107,6 +2130,78 @@ describe('cancelConstruction full refund', () => {
     // Inventory fully restored to pre-upgrade values — 100% refund.
     expect(state.inventory.stone).toBe(stoneBefore);
     expect(state.inventory.wood).toBe(woodBefore);
+  });
+
+  it('cancel unfinished fresh storage placement → caps unchanged (nothing to strip)', () => {
+    // §storage-timing: a fresh Crate under construction never received its
+    // +500 cap (credit is deferred to completion), so cancelling it leaves
+    // storageCaps exactly as they were before placement. Materials refunded.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.storageCaps.wood = 50000;
+    state.storageCaps.stone = 50000;
+    state.inventory.wood = 1000;
+    state.inventory.stone = 1000;
+    const capsBefore = { ...state.storageCaps };
+    const woodBefore = state.inventory.wood;
+    const stoneBefore = state.inventory.stone;
+
+    const r = placeBuilding(spec, state, 'crate', 0, 0, 0, () => 'cancel-crate');
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('expected ok');
+    // No cap was granted at placement.
+    for (const res of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      expect(state.storageCaps[res]).toBe(capsBefore[res]);
+    }
+
+    const cr = cancelConstruction(spec, state, r.placed.id);
+    expect(cr.ok).toBe(true);
+    // Building removed.
+    expect(spec.buildings.find((x) => x.id === r.placed.id)).toBeUndefined();
+    // Materials fully refunded.
+    expect(state.inventory.wood).toBe(woodBefore);
+    expect(state.inventory.stone).toBe(stoneBefore);
+    // Caps untouched — nothing was ever granted, so nothing is stripped.
+    for (const res of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      expect(state.storageCaps[res]).toBe(capsBefore[res]);
+    }
+  });
+
+  it('cancel unfinished storage upgrade → level reverted, caps unchanged', () => {
+    // §storage-timing: the upgrade's +500 delta is deferred to completion, so
+    // an in-progress upgrade holds no extra cap; cancelling reverts the level
+    // and refunds the upgrade cost without touching storageCaps.
+    const spec = makeSpec();
+    spec.buildings.push({ id: 'c1', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' });
+    const state = makeInitialIslandState(spec, 0);
+    state.level = 10;
+    // Raise wood/stone caps so the refund isn't clamped (default dry_goods
+    // cap is 100, below our seeded inventory).
+    state.storageCaps.wood = 50000;
+    state.storageCaps.stone = 50000;
+    state.inventory.wood = 1000;
+    state.inventory.stone = 1000;
+    const capsBefore = { ...state.storageCaps }; // includes operational L0 +500
+    const woodBefore = state.inventory.wood;
+    const stoneBefore = state.inventory.stone;
+
+    const ur = applyUpgrade(spec, state, 'c1');
+    expect(ur.ok).toBe(true);
+    expect(spec.buildings[0]!.floorLevel).toBe(1);
+    // No delta credited while upgrading.
+    expect(state.storageCaps.iron_ore).toBe(capsBefore.iron_ore);
+
+    const cr = cancelConstruction(spec, state, 'c1');
+    expect(cr.ok).toBe(true);
+    expect(spec.buildings[0]!.floorLevel ?? 0).toBe(0);
+    expect((spec.buildings[0]!.constructionRemainingMs ?? 0)).toBe(0);
+    // Upgrade cost refunded.
+    expect(state.inventory.wood).toBe(woodBefore);
+    expect(state.inventory.stone).toBe(stoneBefore);
+    // Caps unchanged — the L0 base cap stays, no delta was ever added/stripped.
+    for (const res of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      expect(state.storageCaps[res]).toBe(capsBefore[res]);
+    }
   });
 
   it('cancel a queued placement → building removed, queue count decreases', () => {
