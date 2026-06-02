@@ -1706,8 +1706,9 @@ async function main(): Promise<void> {
     },
   });
 
-  // Trade offer runtime — ephemeral, not persisted. Offer spawning only
-  // happens while the tab is visible (gated in the ticker via document.hidden).
+  // Trade offer runtime — ephemeral, not persisted. Spawn cadence is gated by
+  // each island's persisted tradeCooldownMs, burned down on focused online-dt
+  // in the ticker (visible && hasFocus); offers themselves never persist.
   const tradeRuntime: TradeRuntime = { offers: [] };
 
   // Trade offer overlay — card shown on the active island when a signal_exchange
