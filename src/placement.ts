@@ -439,6 +439,57 @@ export function creditStorageCaps(
   }
 }
 
+/** §4.6 relabel: move a generic-storage building's storage cap from one
+ *  resource label to another, guarded on construction-complete state.
+ *
+ *  The guard "cap was actually credited" is:
+ *    construction complete  →  (building.constructionRemainingMs ?? 0) <= 0
+ *    AND not queued         →  building.queued !== true
+ *
+ *  A disabled building HAS already been credited its cap (disable is a
+ *  per-tick production toggle; it does NOT strip storageCaps), so the
+ *  disable flag is intentionally excluded from this guard.
+ *
+ *  When the building is under construction / queued: only `cargoLabel` is
+ *  updated; cap arithmetic is skipped. `creditStorageCaps` in economy.ts
+ *  will credit the correct (post-relabel) label at completion.
+ *
+ *  When the building is operational (construction complete, not queued):
+ *  the cap is moved — subtract from old label, add to new label — and
+ *  inventory is clamped if the old label's stock would exceed the reduced
+ *  cap.
+ *
+ *  Does NOT set `building.cargoLabel` — the caller is responsible for that
+ *  (keeps this function pure with respect to the building object).
+ *  Returns `'moved'` when cap arithmetic ran, `'label-only'` when it was
+ *  skipped (so callers can assert the correct path in tests). */
+export function applyRelabelStorageCap(
+  state: IslandState,
+  building: PlacedBuilding,
+  def: BuildingDef,
+  oldLabel: ResourceId | undefined,
+  newLabel: ResourceId,
+): 'moved' | 'label-only' {
+  if (!def.storage || def.storage.category !== 'generic') return 'label-only';
+  const constructionComplete =
+    (building.constructionRemainingMs ?? 0) <= 0 && building.queued !== true;
+  if (!constructionComplete) {
+    // Under construction / queued: cap hasn't been credited yet.
+    // Skip cap arithmetic; completion will credit the (new) cargoLabel.
+    return 'label-only';
+  }
+  const cap = floorScaledCapacity(building, def.storage.capacity);
+  if (oldLabel !== undefined) {
+    const next = (state.storageCaps[oldLabel] ?? 0) - cap;
+    state.storageCaps[oldLabel] = next < 0 ? 0 : next;
+    const have = state.inventory[oldLabel] ?? 0;
+    const newCap = state.storageCaps[oldLabel] ?? 0;
+    if (have > newCap) state.inventory[oldLabel] = newCap;
+  }
+  state.storageCaps[newLabel] = (state.storageCaps[newLabel] ?? 0) + cap;
+  return 'moved';
+}
+
 /** §9.3 Robotics: how many concurrent under-construction slots this island
  *  has right now. Base 1 + Robotics `parallelBuildBonus` (additive) +
  *  structural keystone `parallelConstruction` (+1 when owned). */
