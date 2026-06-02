@@ -33,7 +33,7 @@ import {
 } from './building-defs.js';
 import { clusterBonusMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { affordabilityShortfall, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, totalInvestedCost, upgradeCost } from './placement.js';
+import { affordabilityShortfall, applyRelabelStorageCap, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
 import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
@@ -729,16 +729,12 @@ export function mountInspectorUi(
     if (!def.storage || def.storage.category !== 'generic') return;
     const oldLabel = b.cargoLabel;
     if (oldLabel === newLabel) return;
-    const cap = floorScaledCapacity(b, def.storage.capacity);
-    if (oldLabel !== undefined) {
-      const next = (target.state.storageCaps[oldLabel] ?? 0) - cap;
-      target.state.storageCaps[oldLabel] = next < 0 ? 0 : next;
-      const have = target.state.inventory[oldLabel] ?? 0;
-      const newCap = target.state.storageCaps[oldLabel] ?? 0;
-      if (have > newCap) target.state.inventory[oldLabel] = newCap;
-    }
-    target.state.storageCaps[newLabel] =
-      (target.state.storageCaps[newLabel] ?? 0) + cap;
+    // §storage-timing: only move caps when the building is complete.
+    // Under construction / queued, the cap has not yet been credited —
+    // creditStorageCaps in economy.ts will credit the current cargoLabel
+    // at completion. Skipping cap arithmetic here prevents both the
+    // phantom-strip (old label) and the double-credit (new label) bug.
+    applyRelabelStorageCap(target.state, b, def, oldLabel, newLabel);
     b.cargoLabel = newLabel;
     pendingRelabel = null;
   }

@@ -10,9 +10,11 @@ import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
 import {
+  applyRelabelStorageCap,
   applyUpgrade,
   buildingAtTile,
   cancelConstruction,
+  creditStorageCaps,
   demolishBuilding,
   findOceanBuildingAt,
   formatShortfall,
@@ -2243,5 +2245,123 @@ describe('cancelConstruction full refund', () => {
     const cr = cancelConstruction(spec, state, 'no-such-id');
     expect(cr.ok).toBe(false);
     if (!cr.ok) expect(cr.reason).toBe('not-found');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §4.6 relabel storage cap: applyRelabelStorageCap construction guard
+// ---------------------------------------------------------------------------
+// Regression tests for the bug where relabeling a STILL-UNDER-CONSTRUCTION
+// generic-storage building (Crate/Warehouse) would:
+//   1. Strip a base cap that was never granted from the old label (iron_ore 100 → 0).
+//   2. Add a phantom cap to the new label, then creditStorageCaps at completion
+//      doubled it (copper 1000 instead of 500).
+//
+// The fix: applyRelabelStorageCap skips all cap arithmetic when the building is
+// under construction or queued, returning 'label-only'. Completion credits the
+// CURRENT cargoLabel — so changing the label during construction produces the
+// correct result without any double-credit.
+// ---------------------------------------------------------------------------
+describe('applyRelabelStorageCap — construction guard', () => {
+  const CRATE_DEF = BUILDING_DEFS['crate']!;
+  const BASE_CAP = 500; // Crate L0 floorScaledCapacity(500) = 500
+
+  // Helper: minimal IslandState for relabel tests.
+  function relabelState(
+    overrides: Partial<Record<ResourceId, number>> = {},
+  ): { state: ReturnType<typeof makeState>; building: PlacedBuilding } {
+    const spec = makeSpec();
+    const st = makeState(spec);
+    // Zero all storageCaps to make assertions unambiguous.
+    for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      st.storageCaps[r] = 0;
+    }
+    for (const [r, v] of Object.entries(overrides) as [ResourceId, number][]) {
+      st.storageCaps[r] = v;
+    }
+    const building: PlacedBuilding = {
+      id: 'test-crate',
+      defId: 'crate',
+      x: 0,
+      y: 0,
+      cargoLabel: 'iron_ore',
+    };
+    return { state: st, building };
+  }
+
+  it('UNDER CONSTRUCTION → no cap arithmetic; completion credits NEW label once (no double-credit)', () => {
+    // The pre-fix code would FAIL here: relabeling an under-construction Crate
+    // strips iron_ore cap (never granted) and adds phantom copper cap, then
+    // creditStorageCaps at completion doubles it to 1000.
+    const { state, building } = relabelState({ iron_ore: 0, copper_ore: 0 });
+
+    // Mark as under construction (30s remaining).
+    (building as { constructionRemainingMs?: number }).constructionRemainingMs = 30_000;
+
+    const result = applyRelabelStorageCap(state, building, CRATE_DEF, 'iron_ore', 'copper_ore');
+
+    // Must return 'label-only' — cap arithmetic skipped.
+    expect(result).toBe('label-only');
+    // iron_ore cap: was 0, must remain 0 (was never granted — nothing to strip).
+    expect(state.storageCaps.iron_ore).toBe(0);
+    // copper_ore cap: was 0, must remain 0 (phantom add would have set it to 500).
+    expect(state.storageCaps.copper_ore).toBe(0);
+
+    // Caller then sets building.cargoLabel to the new label (as applyRelabel does).
+    building.cargoLabel = 'copper_ore';
+
+    // Simulate construction completion crediting (mirrors economy.ts logic exactly).
+    // floorLevel(building) = 0 → fresh placement → credit floorScaledCapacity.
+    creditStorageCaps(state, building, CRATE_DEF, BASE_CAP);
+
+    // copper_ore cap must be exactly BASE_CAP (500), NOT doubled (1000).
+    expect(state.storageCaps.copper_ore).toBe(BASE_CAP);
+    // iron_ore cap unchanged (completion credits copper only, as the label dictates).
+    expect(state.storageCaps.iron_ore).toBe(0);
+  });
+
+  it('QUEUED → no cap arithmetic; label-only result', () => {
+    const { state, building } = relabelState({ iron_ore: 0, copper_ore: 0 });
+
+    (building as { queued?: boolean; constructionRemainingMs?: number }).queued = true;
+    (building as { constructionRemainingMs?: number }).constructionRemainingMs = 30_000;
+
+    const result = applyRelabelStorageCap(state, building, CRATE_DEF, 'iron_ore', 'copper_ore');
+
+    expect(result).toBe('label-only');
+    expect(state.storageCaps.iron_ore).toBe(0);
+    expect(state.storageCaps.copper_ore).toBe(0);
+  });
+
+  it('OPERATIONAL (construction complete, not queued) → cap moves from old to new label', () => {
+    // Unchanged existing behaviour: a completed Crate has its iron_ore cap
+    // already credited (= BASE_CAP). Relabeling to copper_ore must move it.
+    const { state, building } = relabelState({ iron_ore: BASE_CAP, copper_ore: 0 });
+
+    // Building is complete: constructionRemainingMs absent / 0.
+    // (building has no constructionRemainingMs field, defaulting to 0)
+
+    const result = applyRelabelStorageCap(state, building, CRATE_DEF, 'iron_ore', 'copper_ore');
+
+    expect(result).toBe('moved');
+    // iron_ore cap reduced by BASE_CAP.
+    expect(state.storageCaps.iron_ore).toBe(0);
+    // copper_ore cap increased by BASE_CAP.
+    expect(state.storageCaps.copper_ore).toBe(BASE_CAP);
+  });
+
+  it('DISABLED building (operational but disabled) → cap moves (disable does not strip caps)', () => {
+    // A disabled building HAD its cap credited at construction completion.
+    // Relabeling it must still move the cap (disable = production toggle only).
+    const { state, building } = relabelState({ iron_ore: BASE_CAP, copper_ore: 0 });
+
+    (building as { disabled?: boolean }).disabled = true;
+    // No constructionRemainingMs → 0 by default.
+
+    const result = applyRelabelStorageCap(state, building, CRATE_DEF, 'iron_ore', 'copper_ore');
+
+    expect(result).toBe('moved');
+    expect(state.storageCaps.iron_ore).toBe(0);
+    expect(state.storageCaps.copper_ore).toBe(BASE_CAP);
   });
 });
