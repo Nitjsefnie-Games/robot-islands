@@ -17,7 +17,7 @@
 // imperceptible; construction can flip from "1 sec left" to "operational"
 // inside the throttle window but that's a sub-tick visual lag only.
 
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 
 import { BUILDING_DEFS } from './building-defs.js';
 import type { IslandState } from './economy.js';
@@ -37,6 +37,13 @@ const RED = 0xff5040;
 const CONSTRUCTION_CYAN = 0x60c8e0;
 const DISABLED_RED = 0xE8624A;
 
+// Floor-level badge (bottom-right corner) — dark background disc + white
+// number. Visually distinct from the top-corner badges (cyan arc, amber/red
+// dot) and always present including L1.
+const LEVEL_BADGE_BG = 0x0a1520;
+const LEVEL_BADGE_FG = 0xd8e6f0;
+const LEVEL_BADGE_RADIUS = 6; // px, world-space (zoom-independent via world container)
+
 export interface BuildingAlertsHandle {
   readonly layer: Container;
   refresh(nowMs: number): void;
@@ -50,12 +57,19 @@ export function mountBuildingAlertsOverlay(
   const layer = new Container();
   layer.label = 'building-alerts';
   const gfx = new Graphics();
+  // Badge-text layer sits above the Graphics so numbers paint on top of the
+  // disc backgrounds. Cleared each rebuild (removeChildren) to prevent leaks.
+  const badgeLayer = new Container();
+  badgeLayer.label = 'building-alerts-badges';
   layer.addChild(gfx);
+  layer.addChild(badgeLayer);
   let lastRebuildMs = -Infinity;
   let dirty = true;
 
   const rebuild = (): void => {
     gfx.clear();
+    // Remove all Text objects from the previous rebuild before re-adding them.
+    badgeLayer.removeChildren();
     for (const [islandId, state] of islandStates) {
       const spec = world.islands.find((i) => i.id === islandId);
       if (!spec) continue;
@@ -183,14 +197,43 @@ export function mountBuildingAlertsOverlay(
         // building) so the maintenance check is a no-op for the under-
         // construction case above; reading factor here is still safe.
         const factor = maintenanceFactor(b, def, skillMul.maintenanceThreshold);
-        if (factor >= 0.95) continue;
-        const color = factor <= 0.55 ? RED : AMBER;
-        const worldTx = spec.cx + maxTx;
-        const worldTy = spec.cy + minTy;
-        const px = worldTx * TILE_PX + TILE_PX / 2;
-        const py = worldTy * TILE_PX - TILE_PX / 2;
-        gfx.circle(px, py, 4).fill({ color: 0x000000, alpha: 0.7 });
-        gfx.circle(px, py, 3).fill({ color });
+        if (factor < 0.95) {
+          const color = factor <= 0.55 ? RED : AMBER;
+          const worldTx = spec.cx + maxTx;
+          const worldTy = spec.cy + minTy;
+          const px = worldTx * TILE_PX + TILE_PX / 2;
+          const py = worldTy * TILE_PX - TILE_PX / 2;
+          gfx.circle(px, py, 4).fill({ color: 0x000000, alpha: 0.7 });
+          gfx.circle(px, py, 3).fill({ color });
+        }
+
+        // Floor-level badge — bottom-right corner, always shown (including L1).
+        // Matches the inspector's `${fl + 1}/10` convention: display is
+        // floorLevel(b) + 1 (range 1..10).
+        {
+          const half = TILE_PX / 2;
+          const brPx = (spec.cx + maxTx) * TILE_PX + half;  // right edge x
+          const brPy = (spec.cy + maxTy) * TILE_PX + half;  // bottom edge y
+          const r = LEVEL_BADGE_RADIUS;
+          const inset = r; // badge centre sits one radius from the corner edge
+          const cx = brPx - inset;
+          const cy = brPy - inset;
+          // Outline disc for contrast on any building colour.
+          gfx.circle(cx, cy, r + 1).fill({ color: 0x000000, alpha: 0.65 });
+          gfx.circle(cx, cy, r).fill({ color: LEVEL_BADGE_BG });
+          // Number on top — managed in badgeLayer so it's a real glyph.
+          const lvText = new Text({
+            text: String(floorLevel(b) + 1),
+            style: {
+              fontFamily: 'ui-monospace, monospace',
+              fontSize: 8,
+              fill: LEVEL_BADGE_FG,
+            },
+          });
+          lvText.anchor.set(0.5);
+          lvText.position.set(cx, cy);
+          badgeLayer.addChild(lvText);
+        }
       }
     }
     dirty = false;
