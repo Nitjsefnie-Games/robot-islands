@@ -318,6 +318,68 @@ describe('offer lifecycle (online-time cooldown)', () => {
       effectiveCadenceMs(100, DEFAULT_TRADE_TUNING.cadenceMs),
     );
   });
+
+  it('no-eligible-offer: cooldown stays 0 and no offer spawns; offer spawns once eligible', () => {
+    // An island with a Signal Exchange but empty everProduced → generateOffer
+    // returns null. tradeCooldownMs must stay 0 (no spawn, no reset).
+    const s = ready();
+    s.everProduced.clear(); // nothing ever produced → no valid get-pool
+    const rt: TradeRuntime = { offers: [] };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, Math.random, TUNE, 0, 16);
+    expect(rt.offers.length).toBe(0);
+    expect(s.tradeCooldownMs).toBe(0);
+
+    // Now make it eligible: add an everProduced entry (wood as get candidate)
+    // and ensure stone has stock so it can be the give side.
+    s.everProduced.add('wood'); // wood is the get-pool; stone is give
+    tickTradeOffers(rt, states, Math.random, TUNE, 100, 16);
+    expect(rt.offers.length).toBe(1);
+    expect(rt.offers[0]!.islandId).toBe(s.id);
+  });
+
+  it('two islands with distinct ids track cooldown / offers independently', () => {
+    // Island A: cooldown 0 → spawns immediately.
+    // Island B: cooldown 5000 → does not spawn until burned down.
+    function sxReady(id: string): IslandState {
+      const s = makeInitialIslandState(
+        attachTerrainAt({
+          id, name: id, biome: 'plains', cx: 0, cy: 0,
+          majorRadius: 16, minorRadius: 16, populated: true, discovered: true,
+          buildings: [{ id: `${id}-sx`, defId: 'signal_exchange', x: 1, y: 1 }],
+          modifiers: ['stable'],
+        }),
+        0,
+      );
+      s.storageCaps.stone = 100; s.inventory.stone = 90;
+      s.everProduced.add('stone'); s.everProduced.add('wood');
+      s.storageCaps.wood = 100; s.inventory.wood = 5;
+      return s;
+    }
+    const a = sxReady('island-a');
+    const b = sxReady('island-b');
+    b.tradeCooldownMs = 5000;
+
+    const rt: TradeRuntime = { offers: [] };
+    const states = new Map([['island-a', a], ['island-b', b]]);
+
+    // First tick (onlineDt=1000): A should spawn, B should not.
+    tickTradeOffers(rt, states, Math.random, TUNE, 0, 1000);
+    expect(rt.offers.filter((o) => o.islandId === 'island-a').length).toBe(1);
+    expect(rt.offers.filter((o) => o.islandId === 'island-b').length).toBe(0);
+    expect(b.tradeCooldownMs).toBe(4000);
+
+    // Burn B's cooldown down to zero over 4 more ticks.
+    for (let i = 1; i <= 4; i++) {
+      tickTradeOffers(rt, states, Math.random, TUNE, i * 1000, 1000);
+    }
+    expect(rt.offers.filter((o) => o.islandId === 'island-b').length).toBe(1);
+    // A's offer count stays at 1 (no duplicate spawn while offer is active).
+    expect(rt.offers.filter((o) => o.islandId === 'island-a').length).toBe(1);
+    // Each island's tradeAcceptCount remains independent (both still 0).
+    expect(a.tradeAcceptCount).toBe(0);
+    expect(b.tradeAcceptCount).toBe(0);
+  });
 });
 
 describe('tuningFor', () => {
