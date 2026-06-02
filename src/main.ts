@@ -43,7 +43,14 @@ import { resetUiLayout } from './window-manager.js';
 import { islandInscribedAny, TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
 import { mountFeatureGlyphs, renderOcean, renderOceanFogOverlay } from './ocean.js';
-import { loadPrefs, loadWorld, savePrefs, saveWorld } from './persistence.js';
+import {
+  clampSaveIntervalSec,
+  DEFAULT_SAVE_INTERVAL_SEC,
+  loadPrefs,
+  loadWorld,
+  savePrefs,
+  saveWorld,
+} from './persistence.js';
 import { mountSettingsUi } from './settings-ui.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -1397,11 +1404,24 @@ async function main(): Promise<void> {
   // the getter reads it lazily so the closure stays valid even though the
   // binding currently holds `null` at mount time.
   let lastSaveAt: number | null = null;
+  // Autosave cadence (seconds), restored from prefs or defaulted. The timer
+  // is (re)armed by `armSaveTimer` declared in the persistence block below;
+  // `setSaveIntervalSec` here only fires on user interaction, by which point
+  // that hoisted function and its `let` deps are live.
+  let saveIntervalSec = restoredPrefs?.saveIntervalSec ?? DEFAULT_SAVE_INTERVAL_SEC;
   const settingsUi = mountSettingsUi(document.body, {
     reg,
     world: worldState,
     islandStates,
     getLastSavedAt: () => lastSaveAt,
+    getSaveIntervalSec: () => saveIntervalSec,
+    setSaveIntervalSec: (sec) => {
+      saveIntervalSec = clampSaveIntervalSec(sec);
+      armSaveTimer();
+      // Persist immediately so the new cadence survives a refresh even before
+      // the next world autosave lands.
+      flushPrefsSave();
+    },
   });
   defineAction(reg, 'toggle-settings', () => {
     settingsUi.toggle();
@@ -1598,9 +1618,8 @@ async function main(): Promise<void> {
   // the same domain as the ticker's `now`. The save itself is fire-and-
   // forget (`void`) so the timer / event handler doesn't await — failures
   // are swallowed by `saveWorld`'s try/catch.
-  const SAVE_INTERVAL_MS = 30_000;
   // Debounced prefs save: cam pan/zoom needs a tighter cadence than the
-  // 30s world autosave — a player who pans then refreshes 3 seconds later
+  // world autosave — a player who pans then refreshes 3 seconds later
   // expects their view to come back. We compare the live cam values
   // against the last-saved snapshot once per frame inside the ticker
   // (cheap — three numbers) and re-arm a 500ms debounce timer on any
@@ -1618,6 +1637,7 @@ async function main(): Promise<void> {
     }
     void savePrefs({
       cam: { tx: cam.tx, ty: cam.ty, zoom: cam.zoom },
+      saveIntervalSec,
     });
     lastSavedCam = { tx: cam.tx, ty: cam.ty, zoom: cam.zoom };
   }
@@ -1647,15 +1667,21 @@ async function main(): Promise<void> {
     flushPrefsSave();
     lastSaveAt = performance.now();
   };
-  // setInterval fires the autosave timer; the closure captures the live
+  // The autosave timer fires triggerSave; the closure captures the live
   // worldState/islandStates bindings (which are themselves stable references
-  // even though their contents mutate). The interval id is intentionally
-  // unstored — the page lives until the tab closes, no need to clear.
-  setInterval(triggerSave, SAVE_INTERVAL_MS);
+  // even though their contents mutate). The cadence is user-configurable
+  // (Settings → SAVE), so the interval id is stored and `armSaveTimer`
+  // clears + re-creates it whenever `saveIntervalSec` changes.
+  let saveTimerId: number | null = null;
+  function armSaveTimer(): void {
+    if (saveTimerId !== null) clearInterval(saveTimerId);
+    saveTimerId = window.setInterval(triggerSave, saveIntervalSec * 1000);
+  }
+  armSaveTimer();
   // visibilitychange = tab switch / minimize / close. Saving on `hidden`
   // catches the case where the player closes the tab mid-session before
-  // the next 30s tick — the spec calls this out as the primary "don't
-  // lose 30s of progress" guarantee on top of the timer.
+  // the next autosave tick — the spec calls this out as the primary "don't
+  // lose progress since the last save" guarantee on top of the timer.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') triggerSave();
   });
