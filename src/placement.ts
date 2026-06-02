@@ -834,7 +834,7 @@ export function applyUpgrade(
   // is already building/upgrading, and it consumes a parallel-build slot just
   // like a placement — mirror `placeBuilding`'s gate so upgrades can't bypass
   // the concurrent-construction cap.
-  if ((b.constructionRemainingMs ?? 0) > 0 && b.queued !== true) return { ok: false, reason: 'already-building' };
+  if ((b.constructionRemainingMs ?? 0) > 0) return { ok: false, reason: 'already-building' };
   const slots = parallelBuildSlots(state);
   const inProgress = inProgressBuildCount(state);
   const mustQueue = inProgress >= slots;
