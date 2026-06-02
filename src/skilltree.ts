@@ -891,7 +891,9 @@ export interface SkillMultipliers {
   readonly xpGainByCategory: Record<RecipeCategory, number>;
 }
 
-function blankMultipliers(): SkillMultipliers {
+/** Identity `SkillMultipliers` (all multipliers 1, all additives 0). The base
+ *  `effectiveSkillMultipliers` folds owned nodes into; also a clean test seam. */
+export function blankMultipliers(): SkillMultipliers {
   const recipeRate = {} as Record<RecipeCategory, number>;
   for (const c of ALL_RECIPE_CATEGORIES) recipeRate[c] = 1;
   const storageCategoryCap = {} as Record<StorageCategory, number>;
