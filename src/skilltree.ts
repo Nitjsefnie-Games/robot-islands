@@ -74,7 +74,8 @@ export type AdjacencyEffectData =
 
 export type StructuralEffectData =
   | { readonly kind: 'sharedPowerGrid' }
-  | { readonly kind: 'parallelConstruction'; readonly bonus: number };
+  | { readonly kind: 'parallelConstruction'; readonly bonus: number }
+  | { readonly kind: 'parallelQueue'; readonly bonus: number };
 
 export type SkillEffect =
   | { readonly kind: 'recipeRateMul'; readonly category: RecipeCategory }
@@ -116,6 +117,7 @@ export type SkillEffect =
   //   - parallelBuildCapAdd   → adds to concurrent under-construction slots
   | { readonly kind: 'constructionTimeMul' }
   | { readonly kind: 'parallelBuildCapAdd' }
+  | { readonly kind: 'queueCapAdd' }
   // Network primary mechanic — divides per-tile biofuel cost of teleporter
   // route dispatch (cost added so "Network reach" scales something; teleporters
   // were previously free + instant).
@@ -831,6 +833,9 @@ export interface SkillMultipliers {
    *  slots on top of the base 1. Stored as the additive bonus, not the
    *  total. Integer-typed at the caller (Math.floor). */
   readonly parallelBuildBonus: number;
+  /** §queue mirror of parallelBuildBonus — extra build-QUEUE capacity on top
+   *  of the base 2. Stored as the additive bonus, floored at the caller. */
+  readonly queueCapBonus: number;
   /** Network sub-path primary axis — divides the per-tile biofuel cost of
    *  teleporter route dispatch. Default 1 (full cost). */
   readonly teleporterEfficiency: number;
@@ -889,6 +894,7 @@ function blankMultipliers(): SkillMultipliers {
     storageCategoryCap,
     constructionTime: 1,
     parallelBuildBonus: 0,
+    queueCapBonus: 0,
     teleporterEfficiency: 1,
     mineYieldBonus: 1,
     mineRareTrickleRate: 0,
@@ -938,6 +944,7 @@ export function effectiveSkillMultipliers(
   let repairDroneReliability = 1;
   let constructionTime = 1;
   let parallelBuildBonus = 0;
+  let queueCapBonus = 0;
   let teleporterEfficiency = 1;
   let mineYieldBonus = 1;
   let mineRareTrickleRate = 0;
@@ -1031,6 +1038,11 @@ export function effectiveSkillMultipliers(
         // preserved.
         parallelBuildBonus += node.magnitude;
         break;
+      case 'queueCapAdd':
+        // Additive mirror of parallelBuildCapAdd. The placement.ts consumer
+        // Math.floor()s, so the integer queue-slot count is preserved.
+        queueCapBonus += node.magnitude;
+        break;
       case 'teleporterEfficiencyMul':
         teleporterEfficiency *= m;
         break;
@@ -1103,6 +1115,7 @@ export function effectiveSkillMultipliers(
     storageCategoryCap,
     constructionTime,
     parallelBuildBonus,
+    queueCapBonus,
     teleporterEfficiency,
     mineYieldBonus,
     mineRareTrickleRate,
@@ -1277,6 +1290,7 @@ export function formatNodeMagnitude(node: SkillNode): string {
   if (!('magnitude' in node) || node.magnitude == null || node.magnitude === 0) return '';
   const kind = node.effect.kind;
   if (kind === 'parallelBuildCapAdd') return `+${node.magnitude.toFixed(3)}`;
+  if (kind === 'queueCapAdd') return `+${node.magnitude.toFixed(3)}`;
   if (kind === 'launchSuccessAdditive') return `+${(node.magnitude * 100).toFixed(1)} pp`;
   // Multiplier-style. (1+m) is the per-node factor; reduce effects divide, so
   // show the effective sub-1 multiplier.
