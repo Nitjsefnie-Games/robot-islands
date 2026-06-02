@@ -162,7 +162,9 @@ export function tuningFor(mult: SkillMultipliers): TradeTuning {
     ...DEFAULT_TRADE_TUNING,
     cadenceMs: DEFAULT_TRADE_TUNING.cadenceMs / Math.max(1, mult.tradeFrequencyMul),
     sizePct: DEFAULT_TRADE_TUNING.sizePct * Math.max(1, mult.tradeSizeMul),
-    maxReach: DEFAULT_TRADE_TUNING.maxReach + Math.round(mult.tradeReachAdd),
+    // Floor reach at 0 so a (future) negative reach node can't silently block
+    // all offers — generateOffer rejects any pair when |Δtier| > maxReach.
+    maxReach: Math.max(0, DEFAULT_TRADE_TUNING.maxReach + Math.round(mult.tradeReachAdd)),
     spreadShift: DEFAULT_TRADE_TUNING.spreadShift + mult.tradeSpreadShiftAdd,
   };
 }
