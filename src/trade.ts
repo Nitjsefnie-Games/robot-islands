@@ -1,6 +1,7 @@
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
 import { inv, cap, type IslandState } from './economy.js';
 import type { PlacedBuilding } from './buildings.js';
+import type { SkillMultipliers } from './skilltree.js';
 
 export interface TradeOffer {
   readonly id: string;
@@ -152,6 +153,20 @@ export function islandHasSignalExchange(state: IslandState): boolean {
   return state.buildings.some((b: PlacedBuilding) => b.defId === 'signal_exchange');
 }
 
+/** Resolve a per-island `TradeTuning` from that island's skill multipliers.
+ *  Logistics-Network notables tune frequency/size/reach/spread; the
+ *  `Math.max(1, …)` guards keep multipliers from ever WORSENING the base
+ *  tuning (identity multipliers are 1, additives 0). */
+export function tuningFor(mult: SkillMultipliers): TradeTuning {
+  return {
+    ...DEFAULT_TRADE_TUNING,
+    cadenceMs: DEFAULT_TRADE_TUNING.cadenceMs / Math.max(1, mult.tradeFrequencyMul),
+    sizePct: DEFAULT_TRADE_TUNING.sizePct * Math.max(1, mult.tradeSizeMul),
+    maxReach: DEFAULT_TRADE_TUNING.maxReach + Math.round(mult.tradeReachAdd),
+    spreadShift: DEFAULT_TRADE_TUNING.spreadShift + mult.tradeSpreadShiftAdd,
+  };
+}
+
 /**
  * Advance offer spawning/expiry. Pure given (rng, nowMs); the caller invokes this
  * ONLY while the tab is visible, so spawns accrue on online time only. Mutates `rt`.
@@ -160,18 +175,22 @@ export function tickTradeOffers(
   rt: TradeRuntime,
   islandStates: ReadonlyMap<string, IslandState>,
   rng: () => number,
-  tuning: TradeTuning,
+  tuningFor: (state: IslandState) => TradeTuning,
   nowMs: number,
 ): void {
   // 1. prune expired
   rt.offers = rt.offers.filter((o) => o.expiresAt > nowMs);
 
-  // 2. spawn for eligible islands with no active offer and cadence elapsed
+  // 2. spawn for eligible islands with no active offer and cadence elapsed.
+  // NOTE: `nextSpawnAt` entries are intentionally never pruned — island count
+  // is bounded, and a rebuilt signal exchange on the same island id reuses its
+  // elapsed entry (not a leak).
   for (const [id, state] of islandStates) {
     if (!islandHasSignalExchange(state)) continue;
     if (rt.offers.some((o) => o.islandId === id)) continue;
     const due = rt.nextSpawnAt.get(id) ?? 0;
     if (nowMs < due) continue;
+    const tuning = tuningFor(state);
     const offer = generateOffer(state, rng, tuning, nowMs);
     if (offer) rt.offers.push(offer);
     rt.nextSpawnAt.set(id, nowMs + tuning.cadenceMs);

@@ -435,6 +435,38 @@ export const NETWORK_NOTABLES: RawSkillNode[] = [
     description: 'Mesh Network — communication range',
     aura: { radius: 2, bonus: 0.12 }
   },
+  {
+    id: 'network.notable.exchangeUplink' as NodeId,
+    subPath: 'network',
+    depth: 3,
+    cost: 3,
+    effect: { kind: 'tradeFrequencyMul' },
+    description: 'Exchange Uplink — more frequent trade offers'
+  },
+  {
+    id: 'network.notable.barterReach' as NodeId,
+    subPath: 'network',
+    depth: 4,
+    cost: 4,
+    effect: { kind: 'tradeReachAdd' },
+    description: 'Barter Reach — offers span one more tier'
+  },
+  {
+    id: 'network.notable.bulkBroker' as NodeId,
+    subPath: 'network',
+    depth: 4,
+    cost: 4,
+    effect: { kind: 'tradeSizeMul' },
+    description: 'Bulk Broker — larger trade volumes'
+  },
+  {
+    id: 'network.notable.shrewdHaggler' as NodeId,
+    subPath: 'network',
+    depth: 5,
+    cost: 5,
+    effect: { kind: 'tradeSpreadShiftAdd' },
+    description: 'Shrewd Haggler — offers skew in your favour'
+  },
 ];
 
 export const PATRONAGE_NOTABLES: RawSkillNode[] = [

@@ -55,6 +55,9 @@ export const POOL_TARGETS: Readonly<Record<string, number>> = {
   'xpGainMul:(global)': 3,
   'scannerDwellRateMul': 10,
   'teleporterEfficiencyMul': 10,
+  // Logistics-Network trade tuning — modest pooled multipliers.
+  'tradeFrequencyMul': 4,
+  'tradeSizeMul': 3,
   'repairDroneReliabilityMul': 10,
   'padExplosionReduceMul': 10,
   'satFuelReserveMul': 10,
@@ -73,6 +76,11 @@ export const ADDITIVE_POOL_TARGETS: Readonly<Record<string, number>> = {
   launchSuccessAdditive: 0.50,
   parallelBuildCapAdd: 2.0,
   queueCapAdd: 4.0,
+  // Logistics-Network trade tuning — additive Σ targets. tradeReachAdd ≈ +1
+  // tier of reach (rounded at the consumer); tradeSpreadShiftAdd a small
+  // favorability skew.
+  tradeReachAdd: 1.0,
+  tradeSpreadShiftAdd: 0.08,
 };
 
 /** Canonical effect-key for grouping. Matches the existing scripts/
