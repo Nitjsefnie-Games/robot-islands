@@ -202,6 +202,11 @@ describe('additive-effect magnitudes are derived (not zeroed)', () => {
       .reduce((acc, n) => acc + n.magnitude, 0);
     expect(sum).toBeCloseTo(2.0, 6);
   });
+  it('queueCapAdd nodes sum to 4.0 across the catalog', () => {
+    const sum = FULL_CATALOG.filter((n) => n.effect.kind === 'queueCapAdd')
+      .reduce((acc, n) => acc + n.magnitude, 0);
+    expect(sum).toBeCloseTo(4.0, 6);
+  });
 });
 
 describe('bridge integration with costToUnlock', () => {
