@@ -72,7 +72,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 20 as const;
+export const SCHEMA_VERSION = 21 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -80,7 +80,7 @@ export const SCHEMA_VERSION = 20 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -143,7 +143,7 @@ export interface SerializedWorld {
   /** §14.8 orbital debris fields. */
   readonly debrisFields: ReadonlyArray<import('./orbital.js').DebrisField>;
   /** Tutorial onboarding state. */
-  readonly tutorialState?: { completed: ObjectiveId[]; current: ObjectiveId | null };
+  readonly tutorialState?: { completed: ObjectiveId[]; current: ObjectiveId | null; xpBumpClaimed?: ObjectiveId[] };
   /** §13.4 endgame progress. */
   readonly endgameState?: {
     readonly achieved: ReadonlyArray<VictoryCondition>;
@@ -374,7 +374,7 @@ export interface SerializedSnapshotV12 {
     readonly satellites: ReadonlyArray<import('./orbital.js').Satellite>;
     readonly repairDrones: ReadonlyArray<import('./orbital.js').RepairDrone>;
     readonly debrisFields: ReadonlyArray<import('./orbital.js').DebrisField>;
-    readonly tutorialState?: { completed: ObjectiveId[]; current: ObjectiveId | null };
+    readonly tutorialState?: { completed: ObjectiveId[]; current: ObjectiveId | null; xpBumpClaimed?: ObjectiveId[] };
     readonly endgameState?: {
       readonly achieved: ReadonlyArray<VictoryCondition>;
       readonly firstAchievedMs: number | null;
@@ -567,7 +567,7 @@ export type SerializedSnapshotV19 = Omit<SaveSnapshot, 'v'> & { readonly v: 19 }
  *  neither field; backfill both to 0 — first offer prompt, base cadence (the
  *  pre-persistence behavior). This is what closes the refresh-farm exploit for
  *  legacy saves going forward. Deserialize carries the numbers through. */
-export function migrateV19toV20(s: SerializedSnapshotV19): SaveSnapshot {
+export function migrateV19toV20(s: SerializedSnapshotV19): SerializedSnapshotV20 {
   return {
     ...s,
     v: 20 as const,
@@ -575,6 +575,27 @@ export function migrateV19toV20(s: SerializedSnapshotV19): SaveSnapshot {
       ...entry,
       state: { ...entry.state, tradeCooldownMs: 0, tradeAcceptCount: 0 },
     })),
+  } as unknown as SerializedSnapshotV20;
+}
+
+/** v20 top-level snapshot shape. Structurally identical to v21 (SaveSnapshot)
+ *  except the v literal and the tutorial `xpBumpClaimed` ledger a v20 save lacks. */
+export type SerializedSnapshotV20 = Omit<SaveSnapshot, 'v'> & { readonly v: 20 };
+
+/** v20 -> v21: persisted tutorial `xpBumpClaimed` ledger shipped. A v20 save
+ *  lacks it; backfill from `completed` so already-completed objectives count as
+ *  bump-claimed (an existing player can't restart-farm the bumps they already
+ *  got), while objectives not yet completed still pay out on first completion.
+ *  Snapshots without a tutorialState are passed through untouched. */
+export function migrateV20toV21(s: SerializedSnapshotV20): SaveSnapshot {
+  const ts = s.world.tutorialState;
+  return {
+    ...s,
+    v: 21 as const,
+    world: {
+      ...s.world,
+      tutorialState: ts ? { ...ts, xpBumpClaimed: ts.xpBumpClaimed ?? ts.completed } : ts,
+    },
   } as unknown as SaveSnapshot;
 }
 
@@ -671,6 +692,7 @@ export function serializeWorld(
       tutorialState: {
         completed: Array.from(world.tutorialState?.completed ?? []),
         current: world.tutorialState?.current ?? null,
+        xpBumpClaimed: Array.from(world.tutorialState?.xpBumpClaimed ?? []),
       },
       // §13.4 endgame state.
       endgameState: {
@@ -764,7 +786,10 @@ export function deserializeWorld(
     snapshot = migrateV18toV19(snapshot as unknown as SerializedSnapshotV18) as unknown as SaveSnapshot;
   }
   if ((snapshot as unknown as { v: number }).v === 19) {
-    snapshot = migrateV19toV20(snapshot as unknown as SerializedSnapshotV19);
+    snapshot = migrateV19toV20(snapshot as unknown as SerializedSnapshotV19) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 20) {
+    snapshot = migrateV20toV21(snapshot as unknown as SerializedSnapshotV20);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
@@ -867,6 +892,7 @@ export function deserializeWorld(
       ? {
           completed: new Set(snapshot.world.tutorialState.completed),
           current: snapshot.world.tutorialState.current,
+          xpBumpClaimed: new Set(snapshot.world.tutorialState.xpBumpClaimed ?? []),
         }
       : { completed: new Set(), current: 'place_solar' },
     endgameState: snapshot.world.endgameState
