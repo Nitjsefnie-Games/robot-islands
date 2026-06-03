@@ -52,6 +52,7 @@ import {
   migrateV17toV18,
   migrateV18toV19,
   migrateV19toV20,
+  migrateV20toV21,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -149,7 +150,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(20);
+    expect(snap.v).toBe(21);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1505,7 +1506,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(20);
+    expect(snap.v).toBe(21);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -2208,8 +2209,8 @@ describe('v17 -> v18 migration', () => {
     homeState.nextQueueSeq = 2;
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    // The snapshot must be at v20 (SCHEMA_VERSION).
-    expect(snap.v).toBe(20);
+    // The snapshot must be at v21 (SCHEMA_VERSION).
+    expect(snap.v).toBe(21);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
     const rSpec = restored.islands.find((s) => s.id === 'home')!;
@@ -2234,8 +2235,8 @@ describe('v17 -> v18 migration', () => {
 });
 
 describe('v18 -> v19 migration (everProduced seen-set)', () => {
-  it('SCHEMA_VERSION is 20', () => {
-    expect(SCHEMA_VERSION).toBe(20);
+  it('SCHEMA_VERSION is 21', () => {
+    expect(SCHEMA_VERSION).toBe(21);
   });
 
   it('migrateV18toV19 backfills everProduced only from POSITIVE-stock resources', () => {
@@ -2279,7 +2280,7 @@ describe('v18 -> v19 migration (everProduced seen-set)', () => {
     homeState.everProduced = new Set(['bolt', 'iron_ingot']);
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    expect(snap.v).toBe(20);
+    expect(snap.v).toBe(21);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { islandStates: restored } = deserializeWorld(json, 0, 0);
     const rState = restored.get('home')!;
@@ -2306,11 +2307,53 @@ describe('v19 -> v20 trade-cadence migration', () => {
 
     const out = migrateV19toV20(v19);
     expect(out.v).toBe(20);
-    expect(SCHEMA_VERSION).toBe(20);
     const st = out.islandStates[0]!.state as unknown as {
       tradeCooldownMs: number; tradeAcceptCount: number;
     };
     expect(st.tradeCooldownMs).toBe(0);
     expect(st.tradeAcceptCount).toBe(0);
+  });
+});
+
+describe('v20 -> v21 tutorial xpBumpClaimed migration', () => {
+  it('backfills xpBumpClaimed from completed', () => {
+    const v20 = {
+      v: 20, savedAt: 0, savedAtPerf: 0,
+      world: { islands: [], tutorialState: { completed: ['a', 'b'], current: null } },
+      drones: [], routes: [], vehicles: [], satellites: [], islandStates: [],
+    } as unknown as Parameters<typeof migrateV20toV21>[0];
+    const out = migrateV20toV21(v20);
+    expect(out.v).toBe(21);
+    expect(SCHEMA_VERSION).toBe(21);
+    expect((out.world.tutorialState as unknown as { xpBumpClaimed: string[] }).xpBumpClaimed)
+      .toEqual(['a', 'b']);
+  });
+  it('leaves a snapshot without tutorialState alone', () => {
+    const v20 = {
+      v: 20, savedAt: 0, savedAtPerf: 0,
+      world: { islands: [] },
+      drones: [], routes: [], vehicles: [], satellites: [], islandStates: [],
+    } as unknown as Parameters<typeof migrateV20toV21>[0];
+    expect(migrateV20toV21(v20).v).toBe(21);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v21 xpBumpClaimed round-trip
+// ---------------------------------------------------------------------------
+
+describe('v21 tutorialState.xpBumpClaimed round-trip', () => {
+  it('preserves xpBumpClaimed (Set) through serialize → JSON → deserialize', () => {
+    const world = makeInitialWorld(0);
+    world.tutorialState = {
+      completed: new Set<ObjectiveId>(['a' as ObjectiveId]),
+      current: null,
+      xpBumpClaimed: new Set<ObjectiveId>(['a' as ObjectiveId]),
+    };
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    expect(restored.tutorialState!.xpBumpClaimed).toBeInstanceOf(Set);
+    expect(restored.tutorialState!.xpBumpClaimed!.has('a' as ObjectiveId)).toBe(true);
   });
 });
