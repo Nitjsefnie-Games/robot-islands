@@ -45,6 +45,12 @@ export interface TutorialState {
    *  Transient like `completedAt` — never serialized; a step shown before a
    *  save simply re-stamps on its next show after load (TTL restarts). */
   shownAt?: Record<ObjectiveId, number>;
+  /** Objective ids whose one-shot XP bump has been paid out. PERMANENT —
+   *  preserved across `restart()` and filled by `skipAll`, so re-completing a
+   *  reset tutorial grants no XP (closes the restart/skip XP farm). Optional /
+   *  absent ≡ empty, lazy-initialised by `markBumpClaimed` (mirrors
+   *  `completedAt`/`shownAt`). Persisted (schema v21). */
+  xpBumpClaimed?: Set<ObjectiveId>;
 }
 
 // ---------------------------------------------------------------------------
@@ -903,16 +909,28 @@ export function markShown(world: WorldState, id: ObjectiveId): void {
   }
 }
 
+/** Record that objective `id`'s one-shot tutorial XP bump has been paid.
+ *  Lazily initialises `xpBumpClaimed` (mirrors `markCompleted`/`markShown`). */
+export function markBumpClaimed(world: WorldState, id: ObjectiveId): void {
+  world.tutorialState = world.tutorialState ?? { completed: new Set<ObjectiveId>(), current: null };
+  world.tutorialState.xpBumpClaimed = world.tutorialState.xpBumpClaimed ?? new Set<ObjectiveId>();
+  world.tutorialState.xpBumpClaimed.add(id);
+}
+
 export function skipAll(world: WorldState): void {
   const ids = TUTORIAL_STEPS.map(s => s.id);
-  world.tutorialState = {
-    completed: new Set(ids),
-    current: null,
-  };
+  // Skipping forfeits the tutorial XP: mark every objective's bump claimed so a
+  // later restart -> re-complete grants nothing. Union with any already-claimed.
+  const claimed = new Set<ObjectiveId>(world.tutorialState?.xpBumpClaimed ?? []);
+  for (const id of ids) claimed.add(id);
+  world.tutorialState = { completed: new Set(ids), current: null, xpBumpClaimed: claimed };
 }
 
 export function restart(world: WorldState): void {
-  world.tutorialState = { completed: new Set<ObjectiveId>(), current: null };
+  // Preserve the permanent XP-bump ledger so re-completing the reset tutorial
+  // grants no XP (restart-XP-farm fix). Only completed/current reset.
+  const claimed = world.tutorialState?.xpBumpClaimed;
+  world.tutorialState = { completed: new Set<ObjectiveId>(), current: null, xpBumpClaimed: claimed };
 }
 
 /** Per-objective one-shot XP bump: the N-th completed objective injects
