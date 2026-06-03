@@ -9,6 +9,7 @@ import {
   checkDismissals,
   markCompleted,
   markShown,
+  markBumpClaimed,
   skipAll,
   restart,
 } from './tutorial.js';
@@ -314,6 +315,31 @@ describe('persistence — tutorialState', () => {
       new Set(['01_location', '02_inventory']),
     );
     expect(restored.tutorialState?.current).toBe('03_power');
+  });
+});
+
+describe('xpBumpClaimed ledger (restart/skip XP-farm fix)', () => {
+  it('markBumpClaimed lazy-inits the set and records the id', () => {
+    const w = makeTestWorld();
+    markBumpClaimed(w, '01_location');
+    expect(w.tutorialState?.xpBumpClaimed?.has('01_location')).toBe(true);
+  });
+
+  it('restart clears completed/current but PRESERVES xpBumpClaimed', () => {
+    const w = makeTestWorld();
+    markCompleted(w, '01_location');
+    markBumpClaimed(w, '01_location');
+    restart(w);
+    expect(w.tutorialState?.completed.size).toBe(0);
+    expect(w.tutorialState?.current).toBeNull();
+    expect(w.tutorialState?.xpBumpClaimed?.has('01_location')).toBe(true);
+  });
+
+  it('skipAll fills xpBumpClaimed with every objective id', () => {
+    const w = makeTestWorld();
+    skipAll(w);
+    expect(w.tutorialState?.xpBumpClaimed?.size).toBe(TUTORIAL_STEPS.length);
+    expect(w.tutorialState?.completed.size).toBe(TUTORIAL_STEPS.length);
   });
 });
 
