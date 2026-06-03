@@ -120,7 +120,7 @@ import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
-import { checkDismissals, currentStep, markCompleted, markShown, xpBumpPercentForCompletion } from './tutorial.js';
+import { checkDismissals, currentStep, markBumpClaimed, markCompleted, markShown, xpBumpPercentForCompletion } from './tutorial.js';
 import { refreshTutorialHint } from './tutorial-ui.js';
 
 /** Pan speed for keyboard input, in screen-pixels-per-frame. */
@@ -2148,20 +2148,23 @@ async function main(): Promise<void> {
     // so re-stamping every frame is a no-op after the first show.
     const shownStep = currentStep(worldState);
     if (shownStep) markShown(worldState, shownStep.id);
-    // Capture completed-set size BEFORE dismissals mutate it so the 1-indexed
-    // completionIndex for xpBumpPercentForCompletion stays consistent across
-    // multiple same-tick dismissals.
     const dismissedSteps = checkDismissals(worldState);
     if (dismissedSteps.length > 0) {
-      const preSize = worldState.tutorialState?.completed.size ?? 0;
       const home = worldState.islandStates?.get('home');
+      // Gate the one-shot XP bump on the PERMANENT xpBumpClaimed ledger (not the
+      // resettable `completed` set), and index the 1%..N% ramp off the permanent
+      // claimed-count. restart()/skipAll preserve/fill the ledger, so a reset
+      // tutorial re-completing its still-satisfied objectives grants no XP.
+      let claimedCount = worldState.tutorialState?.xpBumpClaimed?.size ?? 0;
       for (let i = 0; i < dismissedSteps.length; i++) {
-        markCompleted(worldState, dismissedSteps[i]!);
-        if (home) {
-          const completionIndex = preSize + i + 1; // 1-indexed
-          const pct = xpBumpPercentForCompletion(completionIndex);
-          home.xp += (pct / 100) * xpForLevel(home.level + 1);
-        }
+        const id = dismissedSteps[i]!;
+        const already = worldState.tutorialState?.xpBumpClaimed?.has(id) ?? false;
+        markCompleted(worldState, id);
+        if (already) continue;            // bump already paid -> no XP
+        claimedCount += 1;
+        const pct = xpBumpPercentForCompletion(claimedCount);
+        if (home) home.xp += (pct / 100) * xpForLevel(home.level + 1);
+        markBumpClaimed(worldState, id);
       }
     }
     refreshTutorialHint(worldState);
