@@ -22,6 +22,7 @@ import {
 } from './rate-history.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { hasPickableSkill, tierForLevel, type Tier } from './skilltree.js';
+import { islandHasSignalExchange } from './trade.js';
 import { canTierReset } from './tier-reset.js';
 import { toDisplayName } from './ui-tokens.js';
 import { mountPanel, Zone } from './ui-zones.js';
@@ -647,6 +648,28 @@ export function mountHud(
       }
     }
     body.appendChild(modRow);
+
+    // ---- Signal Exchange next-offer countdown -----------------------------
+    // §9.8: an island hosting a Signal Exchange surfaces a barter offer when
+    // its persisted online-time cooldown (`tradeCooldownMs`) burns to zero.
+    // Show that countdown so the player knows when to check back. The cooldown
+    // sits at 0 both while an offer is live and the instant before one spawns,
+    // so 0 reads as "available now". Rendered only for islands that have the
+    // building (no Signal Exchange → no trade machinery → no row).
+    if (islandHasSignalExchange(state)) {
+      const offerKv = document.createElement('div');
+      offerKv.classList.add('ri-kv');
+      const offerK = document.createElement('span');
+      offerK.classList.add('ri-kv__k');
+      offerK.textContent = 'Next offer';
+      const offerV = document.createElement('span');
+      offerV.classList.add('ri-kv__v');
+      offerV.textContent =
+        state.tradeCooldownMs <= 0 ? 'available now' : formatCountdown(state.tradeCooldownMs);
+      offerKv.appendChild(offerK);
+      offerKv.appendChild(offerV);
+      body.appendChild(offerKv);
+    }
 
     // ---- Output rates section ---------------------------------------------
     const ratesHead = document.createElement('div');
