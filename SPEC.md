@@ -41,7 +41,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §9.2 Tier breakpoints | L | T1-T5 by level; T6 by Ascendant-Core-crafted + Spaceport. |
 | §9.3 Skill tree | L | Directed graph: 5 branches × 4 sub-paths = 20 sub-paths. Each sub-path is a chain of filler nodes + hand-curated notables + keystones. Total ~357 nodes (246 filler + 111 notables/keystones). Purchases use `costToUnlock` (Dijkstra over the graph from owned nodes) and `buyNode` (charges cheapest-path SP cost, auto-owns intermediates). Threshold-bridges activate when branch-SP spent crosses a threshold. Keystone AND-prereqs gate deep nodes. Aura-bearing notables amplify adjacent owned nodes up to ×1.50. Depth→tier purchase gate via `tierRequiredForDepth` / `depthTierEligible` (depths 3/4/5/8 require T3/T4/T5/T6), enforced in `buyNode` and as a path-exclusion in `costToUnlock`; no sub-path commitment lock. |
 | §9.5 Biome-locked uniques | L | All six biome uniques in catalog; placement gated by biome; artificial-island block honoured. |
-| §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) N. |
+| §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) L. |
 | §9.7 Tier Reset | L | Reset logic + cost formula + cooldown + spec'd preserve/clear sets. Merged-island reset operates on the absorber's IslandState transparently (no merge-specific code needed). UI cost preview in the Skill Tree's reset row + confirm dialog. |
 | §9.8 Trade Offers | L | Signal Exchange (T1 logistics) building + online-only expiring barter offers (`trade.ts`/`trade-ui.ts`). Ever-produced get-gate, fill-biased give/get pick, tier-reach cap, `xp_weight`-ratio pricing × `0.8^Δtier` spread, size cap to give-stock % clamped to output headroom; accept grants no XP. Persisted per-island online-time cooldown (`tradeCooldownMs`, refresh-proof) + 1%/accept compounding speedup floored at ~1 min (`tradeAcceptCount`), both at schema v20. Logistics-Network skill cluster tunes frequency/size/reach/spread. Offers themselves ephemeral (not serialized). |
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
@@ -89,7 +89,11 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 
 The world is partitioned into invisible square cells of side R (the discovery guarantee radius). Each cell holds at most one island, placed at a random point within the cell using a deterministic seed. The point is the cell centre plus a uniform jitter of ±40% of the cell extent on each axis, snapped to integer tile coordinates. (The ±40% margin off the cell edge reduces inter-cell collisions but does not guarantee an island fits entirely inside its cell; the inter-island spacing check below is the actual overlap guard.) Cell (0,0) is unconditionally reserved for the home island and never receives a generated island. The first-island roll is `density = 0.08` placeholder; cells that fail the roll stay open ocean. Inter-island spacing is enforced by a 16-tile buffer between ellipse edges — a candidate that would land too close to any already-placed neighbour drops, and the cell stays empty.
 
+**Implementation note — ocean terrain layer.** The ocean between islands carries a sparse `World.oceanCells: Map<string, OceanCellSpec>` keyed `"cellX,cellY"`. Cells absent from the map are implicit `'deep'` (the default tier). Five terrain types are seeded during `generateWorld` (after island placement) via `generateOceanTerrain` in `src/ocean-gen.ts`: `'shallows'` (within R=2 cells of any island edge), `'trench'` (0–3 per world; 2×N or rare 3×N rectangles, N=4–8), `'nodule_field'` (2–5 per world; 3×3 clusters in deep zones >R=8 from any island edge), `'hydrothermal_vent'` (0–3 per Volcanic island; 2×2/3×2/2×3 clusters within R=5 cells of the island edge), and `'deep'` (default; not stored). Non-overlap: nodule fields never overwrite trenches; vents never overwrite trenches or nodule fields. Each feature pass uses an isolated RNG stream (`${seed}_ocean_<feature>`) to prevent future generation steps from perturbing existing seeds. Full terrain + building catalog and recipe depth are specified in `docs/superpowers/specs/2026-05-18-ocean-layer-design.md` §2–§6.
+
 The player only sees discovered islands. The cell grid is invisible. From the player's perspective the world is procedurally random; from the engine's perspective it is fully seed-deterministic.
+
+**Implementation note — biome selection.** Once a cell passes the density gate, its island's biome is drawn from a weighted distribution in `world-gen.ts` `rollBiome`. Current weights are a placeholder (sum 100, treated as percentages): `plains` 25, `forest` 20, `coast` 15, `volcanic` 10, `desert` 15, `arctic` 15. These values have no principled basis; they were set from the task brief at §15.7 step 6 and should be rebalanced when biome-encounter pacing is tuned.
 
 ### 2.2 Discovery via Drones
 
@@ -284,7 +288,9 @@ A solar-dependent island must plan for night-time stockpile via Battery (T2) or 
 
 **Mirror Sat boost (§14.3).** A T6 Mirror Sat parked in orbit contributes an additive boost to its ground islands' effective solar multiplier with Lorentzian falloff in lateral distance — `raw = peakBoost / (1 + (d / r_half)²)`, zeroed below `raw < 0.05`. Effective multiplier per island per tick is `min(1, solarMultiplier(t) + Σ mirrorBoost(sat, islandCentre))`, summed over all locked mirror sats reaching the island. The composition is **additive** so mirrors function at night (multiplicative would zero out alongside `solarMultiplier(night) = 0`); the cap at 1.0 makes "fourth mirror is wasted past full sun" visible to the player as saturation.
 
-**Weather modulation by phase:** severe-storm formation rate increases by ~25% during Night and Dawn (placeholder). Other states unchanged.
+**Weather modulation by phase:** severe-storm and catastrophic-event formation rates both increase by ~25% during Night and Dawn (placeholder). Other states unchanged.
+
+**Implementation note — CO₂-driven storm amplification (§2.6 extension).** Each island accumulates `co2Kg` as fossil-fuel buildings run; `sumIslandCo2` totals it across the world. `co2WeatherMultiplier(totalCo2Kg)` returns a band multiplier applied to storm/severe_storm/catastrophic weights inside `weather()`: <100 kg → ×1.0 (baseline); <10 t → ×1.1; <100 t → ×1.3; ≥100 t → ×1.6 (crisis). A companion `rollHeatwave(seed, day, totalCo2Kg)` function (threshold ≥10 t, ~5 % per day) exists as a stub but is not yet wired into `WeatherState` or any game path; its integration is deferred.
 
 The day-night cycle is global, so the player can plan around it: dispatch fuel-hungry tasks on solar-heavy islands during Day, schedule sensitive launches during Day or Dusk if solar power is the launch infrastructure's input. The cycle is purely time-driven and does not depend on the player's session — at offline resolution, day/night is just `phase(t)` evaluated at the relevant tick.
 
@@ -348,7 +354,7 @@ Initial radii by biome (placeholders):
 
 |Biome|Major radius|Minor radius|Notes|
 |-|-|-|-|
-|Plains|14|14|Circular, balanced, large grids|
+|Plains|14|14|Circular, balanced, large grids. **Home island exception:** the starting home island uses major=16, minor=16 per §3.7 — the 14×14 default applies only to procedurally generated Plains islands.|
 |Forest|10|10|Circular, modest size|
 |Coast|14|7|Oval, narrow maritime profile|
 |Volcanic|7|7|Circular, smaller and dangerous|
@@ -369,6 +375,8 @@ Maximum natural size, via Land Reclamation Hub at T2+ (placeholders):
 |Arctic|14|14|
 
 Each Land Reclamation expansion adds 1 to either the major or the minor radius (player-chosen) at a material cost equal to the number of new inscribed tiles gained × the shared per-land-tile structural basket (`LAND_TILE_COST`, `building-defs.ts`). Rotation cannot be changed after generation.
+
+**Implementation note — rotation is metadata-only.** `IslandSpec.rotation` is stored and seeded for Coast islands (see `src/world-gen.ts` `rollCoastRotation`), but no geometry consumer applies it yet. `tileInscribedInEllipse`, `tileInscribedInOffsetEllipse`, `computeIslandTiles`, and `islandsOverlap` all treat the ellipse as axis-aligned; the overlap test uses an axis-aligned Minkowski-sum approximation that becomes a conservative over-estimate once true rotation lands. When rotation is wired into the geometry layer, the tile-inscription functions will need a rotated-ellipse corner test and `islandsOverlap` will need a rotated-ellipse SAT replacement.
 
 ### 3.5 Modifiers
 
@@ -411,6 +419,8 @@ When islands A and B touch:
 * Settlement vehicles whose target or origin is the absorbed island are retargeted to the merged island.
 * The absorber's modifiers are kept; the absorbed island's are voided.
 
+**Implementation note — biome after merge.** The merged island carries a single `biome` field (the absorber's). After merge, `terrainAt` calls `terrainAtForBiome(spec.biome, ...)` for every tile, including tiles inscribed in absorbed constituent ellipses — absorbed tiles are queried under the absorber's biome, not the absorbed island's original biome. No per-constituent biome is stored. Biome-locked unique buildings already placed on the absorbed island remain in place and continue operating (they were placed legally; the island-ownership biome check is at placement time only). No per-constituent biome model is specced; this is the settled behavior.
+
 Joining is permanent — there is no un-merge.
 
 A merged island can continue to expand. If it grows to touch a third island, the same join procedure applies, accumulating ellipses.
@@ -434,6 +444,8 @@ Bootstrap loop: the player places a Solar Panel (Plains' default power source pe
 The starting world seed determines the home island's terrain (positions of ore veins, coal veins, water tiles within the ellipse) and the position and biome of every other island in the world (most of which are dark to the player at session 0).
 
 **Implementation note — bootstrap starter inventory.** The shipped game seeds the home island with `1200 stone + 600 wood + 30 iron_ore + 80 coal + 60 iron_ingot + 25 bolt + 15 limestone + 4 saltwater_cell + 1 foundation_kit + 5000 scrap` instead of the empty-inventory literal above. The §14 placement-cost basket (Mine `30 stone + 15 wood`, Coal Generator `50 + 25`, Antenna T1 `15 + 5`, plus the §12.3 Foundation Kit needed to dispatch the first settlement vehicle) makes the literal empty start unplayable — the player has no path to the first extraction building. The starter kit is sized to reach a first `battery_bank` within ~45 minutes via the `cell_press` chain, and the 5000-scrap salvage cache bootstraps the steel chain (scrap → steel). It still leaves the deeper extraction/refining loop to the player rather than shipping a finished economy. Source of truth: `src/world.ts` `startingInventory()`.
+
+**Implementation note — tutorial onboarding system.** A 72-step guided tutorial (`src/tutorial.ts`) runs alongside normal play. It is a pure state-machine with no DOM dependencies: `TUTORIAL_STEPS` is an ordered array of `TutorialStep` objects each carrying `id`, `mechanic`, `hint`, `expectedAction`, `triggerCondition`, `dismissalCondition`, and optional `targetDefId`. `currentStep(world)` scans the array and returns the first step whose `triggerCondition` fires and whose `id` is not in `TutorialState.completed`. A bottom-left hint overlay (`tutorial-ui.ts`) renders the active step; clicking it calls `markCompleted`. Concept steps auto-dismiss via a `stepShownFor` TTL. `TutorialState` carries: `completed: Set<ObjectiveId>` (persisted), `completedAt` and `shownAt` (transient timestamps, not serialized), and `xpBumpClaimed: Set<ObjectiveId>` (persisted at schema v21 — prevents XP re-grant after `restart()` or `skipAll()`). The `current: ObjectiveId | null` field in `TutorialState` is serialized for forward-compatibility but is **not read by `currentStep`** — the active step is always recomputed. The default value `'place_solar'` seeded in new-game and persistence-fallback paths is a legacy placeholder; no step with that id exists in `TUTORIAL_STEPS`.
 
 \---
 
@@ -465,6 +477,8 @@ A building can be placed if and only if:
 * Every tile in the rotated shape mask is within the island bounds (i.e. its unit square is fully inscribed inside one of the island's constituent ellipses; see §3.4 and §3.6)
 * Every tile in the rotated shape mask is buildable (not occupied by another building, not blocked by uncleared terrain, not requiring a specific tile type the building doesn't allow)
 * All terrain-tile requirements are satisfied (e.g. Mine requires every cell of its footprint to be on an ore/coal vein)
+
+**Implementation note — ocean-placed buildings.** Building defs that carry `oceanPlacement: true` (e.g. `sonar_buoy`, `seawater_intake_rig`, `nodule_harvester`, `trench_drill`, `vent_tap`, and the §5-processor / §6-power ocean catalog) bypass the island-bounds rule entirely — their footprints are validated against `world.oceanCells` instead. `validateOceanPlacement` (`placement.ts`) checks: (1) no land-tile overlap (5-sample test per cell), (2) every footprint cell matches `def.terrainReqs` via `footprintMatches`, and (3) at least one populated island lies within `ANCHOR_MAX_RANGE_CELLS` (= 50 cells, Appendix-A placeholder) of the placement cell — computed by `candidateAnchors` (`anchor-picker.ts`). When validation passes, the anchor-picker modal (`mountAnchorPicker`) opens so the player selects the island that receives the platform's output and supplies its power (§5.3). The chosen anchor id is stored on the `PlacedBuilding` and read by the economy tick. Land defs routed through `validateOceanPlacement` defensively return `def-not-ocean`.
 
 ### 4.4 Adjacency Rules
 
@@ -653,6 +667,8 @@ Quantum chip, AI core, Antimatter capsule, Exotic alloy, Nuclear fuel rod, Plasm
 Slag (from smelting), Ash (from combustion), Waste heat, Exhaust gas, Wastewater, Trace minerals (from slag reprocessing), Scrap (from demolishing buildings — see below)
 
 **Demolition recovery.** Demolishing any T1+ placed building produces Scrap proportional to its build cost (placeholder recovery rate: ~30% of the building's recipe ingredients, expressed as Scrap rather than the original components). Scrap is a T1 resource in the dry-goods storage category. Steel recipes accept Scrap as a substitute for fresh Pig iron at a 2:1 ratio (2 Scrap = 1 Pig iron's worth of steel input). This makes layout redesign less wasteful: demolishing a building isn't pure loss but a partial credit toward future builds.
+
+**Implementation note — demolish also refunds 50% of invested materials.** In addition to the scrap credit, `demolishBuilding` returns `floor(totalInvestedCost[r] / 2)` of each original placement resource (`stone`, `wood`, etc.) directly to inventory, clamped per-resource to the post-demolish storage cap (excess is lost, per §4.6). `totalInvestedCost` = base `placementCost` + `floorLevel × ceil(0.8 × placementCost)`, so upgraded buildings refund proportionally more. This 50% in-kind refund is distinct from the scrap recovery: both fire on every demolish of a completed building. Source of truth: `demolishBuilding` in `src/placement.ts`, `DemolishResult.refunded` field.
 
 **Construction cancel (distinct from demolish).** A building currently under construction (running OR queued, i.e. `constructionRemainingMs > 0`) can be cancelled for a **100% material refund** — no Scrap penalty. For a fresh placement (`floorLevel 0`) the building is removed entirely; for an in-progress upgrade the building reverts to the previous floor level. Demolish (~30% Scrap) applies only to completed buildings; relocate (half-fee) is a third distinct action. See §4.8 for queue/cancel mechanics.
 
@@ -1044,7 +1060,7 @@ XP-to-level curve: superlinear, two-segment.
 
 Levels are uncapped — 50 is the T5 access breakpoint (§13.1), not a hard ceiling. The exponential softcap past 50 means islands continue to accrue progression indefinitely but at a dramatically slowing pace: level 70 costs ~38× more XP per level than level 50, level 100 costs ~9100×. Practical effect: a fully-developed island never permanently stalls, but each new level past 50 represents a real long-haul commitment.
 
-Each level grants skill points to spend, on a geometric ramp: `points\_granted(level) = max(1, floor(1.1^level))` (placeholder; rebalanced from a flat `1 point / level` so the deep nodes are reachable given the `round(1.5^(depth - 1))` cost ramp in §9.3 — flat-1 made full sub-paths require ~500k levels). L1-L7 still grant 1 point each; L50 grants ~117, L70 grants ~789, L100 grants ~13,780. Source of truth: `src/skilltree.ts` `skillPointsForLevelUp`. Because levels are uncapped, skill points eventually outpace the available skill-tree nodes (which are mutual-exclusively capped at ~25-30 accessible per island, see §9.3) — the post-cap excess accumulates and feeds late-game prestige-style spending (see §9.3).
+Each level grants skill points to spend, on a geometric ramp: `points\_granted(level) = max(1, floor(1.031^level))` (placeholder; rebalanced from a flat `1 point / level` so the deep nodes are reachable given the `round(1.5^(depth - 1))` cost ramp in §9.3 — flat-1 made full sub-paths require ~500k levels). L1-L22 still grant 1 SP each (1.031^L stays under 2); first tick to 2 at L23, 4 at L50, 8 at L70, 21 at L100, 97 at L150. Source of truth: `src/skilltree.ts` `skillPointsForLevelUp`. Because levels are uncapped, skill points eventually outpace the available skill-tree nodes (which are mutual-exclusively capped at ~25-30 accessible per island, see §9.3) — the post-cap excess accumulates and feeds late-game prestige-style spending (see §9.3).
 
 ### 9.2 Tier Breakpoints
 
@@ -1108,7 +1124,7 @@ The skill tree is a **directed graph** of nodes connected by edges. Five top-lev
 
 **Aura amplification.** Notables may carry an aura (radius 1–2 edges, bonus up to +15%). Every owned node adjacent to an aura source has its effect magnitude multiplied by the aura bonus. Multiple auras stack multiplicatively per target, capped at ×1.50.
 
-**Node costs.** Filler costs follow a geometric ramp `round(1.5^(depth - 1))` (depth 1 ≈ 1, depth 5 ≈ 5, depth 10 ≈ 38). Notables and keystones have hand-set costs (typically 3–8 SP). Combined with the skill-point grant curve `max(1, floor(1.1^level))` (§9.1), a late-game island at level 70+ has enough points to complete several sub-paths.
+**Node costs.** Filler costs follow a geometric ramp `round(1.5^(depth - 1))` (depth 1 ≈ 1, depth 5 ≈ 5, depth 10 ≈ 38). Notables and keystones have hand-set costs (typically 3–8 SP). Combined with the skill-point grant curve `max(1, floor(1.031^level))` (§9.1), a late-game island at level 70+ has enough points to complete several sub-paths.
 
 **Effect kinds.** Nodes emit one of the following effect types, consumed by the economy and orbital engines:
 
@@ -1177,7 +1193,9 @@ A wide-play goal visible from the start. The buffs below are recipe-production-r
 * 3 islands at Tier 3+: small global production buff (+5%)
 * 5 islands at Tier 3+: moderate global buff (+10%) and unlocks Robotics breadth nodes
 * 10 islands at Tier 3+: large global buff (+25%) and unlocks "Auto-Patronage" passive (see Auto-Patronage details below)
-* 20 islands at Tier 3+: Network Consciousness unlocked, which is a prerequisite for Omniscient Lattice (T5 endgame artifact)
+* 20 islands at Tier 3+: production buff plateaus at +25% (same as the 10-island milestone — no additional numeric buff) and the Network Consciousness gate is satisfied, which is a prerequisite for Omniscient Lattice (T5 endgame artifact); see §13.3 for the Lattice Node count check (`LATTICE_ACTIVATION_THRESHOLD = 20`).
+
+**Implementation note — milestone-4 buff.** `MILESTONE_TABLE` in `network-consciousness.ts` sets `buff: 1.25` for both the ≥10 and ≥20 rows. Reaching milestone 4 does not raise the multiplier; it only satisfies `LATTICE_ACTIVATION_THRESHOLD` so that `computeLatticeActive` in `lattice.ts` can fire.
 
 **Auto-Patronage details.** When a new colony is settled after the 10-island milestone is achieved, the engine automatically establishes three default funneling routes from the nearest Patron Hub island to the new colony:
 
@@ -1212,7 +1230,7 @@ A player may pay to revert an island to Tier 1, primarily to redo skill-tree cho
 
 **Cooldown:** placeholder 24 real-time hours between resets on the same island. Prevents spam-resets to grind funneling XP.
 
-**Skill-point economics (a net gain, not a neutral respec).** The refund and the re-climb interact: reset returns *every* SP the player had spent, then re-leveling 1→L re-grants the entire level→SP curve a second time, because SP is granted per level-up (`skillPointsForLevelUp` in §9.1) with no per-level high-water-mark — nothing tracks "already earned this level." After one cycle back to the prior level the player therefore holds ~2× their cumulative SP, and because the grant is geometric (`floor(1.1^level)`) almost all of that value sits in the handful of top levels re-crossed. This is intentional, not an exploit: Tier Reset is the engine that produces the post-cap SP overflow that §9.1 routes into late-game prestige-style spending — it is a prestige loop, not merely a skill-tree redo. The loop is **rate-limited, not SP-priced**: the 24h cooldown, the level²-component cost, and the fact that T2+ buildings sit inactive (throttling production) until the island re-crosses their tier band are what keep re-climbing from being free SP. Balancing this loop means tuning those three brakes, not the refund itself.
+**Skill-point economics (a net gain, not a neutral respec).** The refund and the re-climb interact: reset returns *every* SP the player had spent, then re-leveling 1→L re-grants the entire level→SP curve a second time, because SP is granted per level-up (`skillPointsForLevelUp` in §9.1) with no per-level high-water-mark — nothing tracks "already earned this level." After one cycle back to the prior level the player therefore holds ~2× their cumulative SP, and because the grant is geometric (`floor(1.031^level)`) almost all of that value sits in the handful of top levels re-crossed. This is intentional, not an exploit: Tier Reset is the engine that produces the post-cap SP overflow that §9.1 routes into late-game prestige-style spending — it is a prestige loop, not merely a skill-tree redo. The loop is **rate-limited, not SP-priced**: the 24h cooldown, the level²-component cost, and the fact that T2+ buildings sit inactive (throttling production) until the island re-crosses their tier band are what keep re-climbing from being free SP. Balancing this loop means tuning those three brakes, not the refund itself.
 
 **Merged islands:** a Tier Reset on a merged island (§3.6) operates on the entire merged identity. All constituent ellipses, all buildings on each, the unified inventory — all reset together. There is no way to "split" a merged island via Tier Reset; merge remains permanent.
 
@@ -1351,6 +1369,10 @@ Drone Pad (T2) gates drone launches; once built, the player picks any tier from 
 * T3: range 3R, scan corridor radius 2W, multi-target — records all islands within the capsule corridor
 * T4: omnidirectional pulse from Launch Tower — single disk of radius `R\_T4 = 3R` centered on origin (no flight path; not corridor-shaped). `R` is the stratification cell side length (§2.1), so T4 covers a 3-cell-radius disk per launch.
 * T5: path-drawn drone with dark-mode telemetry (see Section 11.6)
+
+* T6: Spaceport-launched long-range drone; available only when T6 access is unlocked (`ascendantCoreCrafted && hasSpaceport`). Burns Antimatter Propellant (§11.7 / §14.10). `tier_efficiency = 18` (placeholder), scan corridor radius `= 16 tiles` (placeholder), weather-destruction multiplier `= 0.2` (most rugged tier).
+
+**Implementation note — T6 drone constants are design-spec-locked placeholders.** `DRONE_TIER_EFFICIENCY[6] = 18`, `DRONE_TIER_SCAN_RADIUS[6] = 16`, `DRONE_TIER_MULTIPLIERS[6] = 0.2` in `drones.ts`; launch building is the Spaceport (§14.2).
 
 ### 11.6 T5 Path-Drawn Drone
 
@@ -1614,7 +1636,7 @@ T6 mastery is per-island, like T5. T6 buildings, recipes, and skill nodes appear
 
 **In-place tier upgrade.** Spaceport upgrades are a single-building lifecycle — the same placed Spaceport advances from tier I to II to III by consuming upgrade-recipe components (placeholder: tier I → II requires `5 Phase Converter + 2 Memetic Core + 50 Cryogenic Hydrogen`; tier II → III requires `10 Reality Anchor fragment + 5 Memetic Core + 100 Antimatter Propellant`). Upgrade is one-way; downgrade is not supported. Satellites already deployed by the Spaceport are unaffected by an upgrade — they keep their original launch-time stats.
 
-If the Spaceport is destroyed by a pad explosion (§14.7), it returns at tier I — all upgrade investment is lost. Skill-tree progress and existing satellites in orbit are independent of Spaceport state and persist regardless. Players concerned about tier-loss risk should colocate their highest-tier Spaceport on islands with strong launch-success skill investment.
+If the Spaceport suffers a pad explosion (§14.7), its `tier` field is reset to 1 in-place — the building persists on the island; only the upgrade investment is lost. Skill-tree progress and existing satellites in orbit are independent of Spaceport state and persist regardless. Players concerned about tier-loss risk should colocate their highest-tier Spaceport on islands with strong launch-success skill investment.
 
 **Orbital Tracking Station** (T6, footprint 3x3): ground-based radar. Detects orbital debris within a fixed range from the island. Without Tracking coverage, debris exists but is invisible to the player. Multiple Tracking Stations across multiple islands compose into a wider debris-detection network.
 
@@ -1655,7 +1677,9 @@ The first satellite from a fresh Spaceport must be launched within the Spaceport
 
 A locked Scanner Sat provides:
 
-* **Discovery**: each tick, probability `p` of revealing any undiscovered island within coverage. `p` ramps from a low initial value toward an asymptote over real-time dwell on the cell. A few minutes catches most local islands; deep-orbit islands may take hours of continuous observation to surface. The dwell ramp is per-cell, so moving the satellite resets ramps in cells outside the new coverage. Scanner Sat coverage also reveals ocean cells (both surface + depth) inside its disk, per §5 of the ocean-layer design doc.
+* **Discovery**: each tick, probability `p` of revealing any undiscovered island within coverage. `p` ramps from a low initial value toward an asymptote over real-time dwell on the cell. A few minutes catches most local islands; deep-orbit islands may take hours of continuous observation to surface. The dwell ramp is per-cell, so moving the satellite resets ramps in cells outside the new coverage.
+
+**Implementation note — dwell-ramp formula and Discovery-skill multiplier.** The ramp is a saturating exponential: `p(dwell) = p_initial + (p_asymptote − p_initial) × (1 − exp(−dwell / τ))` with placeholder constants `p_initial = 0.001`, `p_asymptote = 0.05`, `τ = 5 min` (`SCANNER_INITIAL_P_PER_TICK`, `SCANNER_ASYMPTOTE_P_PER_TICK`, `SCANNER_DWELL_TIME_CONSTANT_MS` in `orbital.ts`). The per-cell dwell counter (`dwellByCellKey`) accumulates live `tickDeltaMs` each tick and cells that leave coverage are dropped immediately. The Discovery-skill `scannerDwellRateMul` bonus is a scalar multiplier baked into the sat at launch (`dwellRateMul` field); it inflates *effective* dwell passed to the formula (`effectiveDwell = dwell × dwellRateMul`) so the ramp reaches its asymptote sooner. The live counter itself always tracks real elapsed ms; the multiplier is the only launch-time component. Scanner Sat coverage also reveals ocean cells (both surface + depth) inside its disk, per §5 of the ocean-layer design doc.
 
 Launched sats spawn at the Spaceport and travel to a player-chosen target tile, consuming onboard fuel proportional to distance; coverage / weather effects activate once the sat reaches station.
 
